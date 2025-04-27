@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Google, Mail } from "lucide-react";
+import { Mail, Chrome } from "lucide-react";
 
 const Auth = () => {
   return (
@@ -18,7 +18,7 @@ const Auth = () => {
 
           <div className="space-y-4">
             <Button variant="outline" className="w-full justify-center gap-2">
-              <Google className="h-5 w-5" />
+              <Chrome className="h-5 w-5" />
               Continue with Google
             </Button>
 
