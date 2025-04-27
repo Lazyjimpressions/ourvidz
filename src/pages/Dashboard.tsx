@@ -1,5 +1,4 @@
-
-import { DollarSign, Home, Settings, Video } from "lucide-react";
+import { DollarSign, Home, Settings, Video, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -20,7 +19,6 @@ const Dashboard = () => {
   return (
     <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-white">
-        {/* Sidebar */}
         <Sidebar>
           <SidebarHeader>
             <div className="p-4">
@@ -61,13 +59,19 @@ const Dashboard = () => {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Profile">
+                  <a href="/profile">
+                    <UserRound />
+                    <span>Profile</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Top Navigation */}
           <header className="h-16 border-b border-gray-100 bg-white px-4 flex items-center justify-between">
             <SidebarTrigger />
             <div className="flex items-center gap-4">
@@ -77,7 +81,6 @@ const Dashboard = () => {
             </div>
           </header>
 
-          {/* Dashboard Content */}
           <main className="flex-1 p-6">
             <h1 className="text-3xl font-semibold mb-8">What do you want to do?</h1>
             

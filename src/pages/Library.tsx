@@ -1,4 +1,4 @@
-import { Download, Play, Trash2, Home, Video, DollarSign, Settings } from "lucide-react";
+import { Download, Play, Trash2, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -17,25 +17,24 @@ import { VideoModal } from "@/components/VideoModal";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { EmptyLibrary } from "@/components/EmptyLibrary";
 
-// Mock data for demonstration
 const mockVideos = [
   {
     id: 1,
     thumbnail: "https://images.unsplash.com/photo-1605810230434-7631ac76ec81",
     prompt: "A futuristic city with flying cars and neon lights",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
   },
   {
     id: 2,
     thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5",
     prompt: "Matrix-style digital rain effect with green code",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
   },
   {
     id: 3,
     thumbnail: "https://images.unsplash.com/photo-1500673922987-e212871fec22",
     prompt: "Magical forest with glowing particles",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48), // 2 days ago
+    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48),
   },
 ];
 
@@ -49,13 +48,11 @@ const Library = () => {
   const handleDelete = (videoId: number) => {
     setShowDeleteModal(false);
     setVideoToDelete(null);
-    // In the future: Implement actual delete logic here
   };
 
   return (
     <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-white">
-        {/* Sidebar */}
         <Sidebar>
           <SidebarHeader>
             <div className="p-4">
@@ -96,13 +93,19 @@ const Library = () => {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Profile">
+                  <a href="/profile">
+                    <UserRound />
+                    <span>Profile</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Top Navigation */}
           <header className="h-16 border-b border-gray-100 bg-white px-4 flex items-center justify-between">
             <SidebarTrigger />
             <div className="flex items-center gap-4">
@@ -112,10 +115,8 @@ const Library = () => {
             </div>
           </header>
 
-          {/* Page Content */}
           <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-7xl mx-auto">
-              {/* Header */}
               <div className="flex items-center justify-between mb-8">
                 <h1 className="text-3xl font-semibold">My Videos</h1>
               </div>
@@ -144,7 +145,6 @@ const Library = () => {
           </div>
         </div>
 
-        {/* Modals */}
         <VideoModal
           video={selectedVideo}
           open={showPlayModal}

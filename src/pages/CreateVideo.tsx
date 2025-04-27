@@ -1,4 +1,4 @@
-import { ArrowLeft, Upload, Home, Video, DollarSign, Settings } from "lucide-react";
+import { ArrowLeft, Upload, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -61,7 +61,6 @@ const CreateVideo = () => {
   return (
     <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-white">
-        {/* Sidebar */}
         <Sidebar>
           <SidebarHeader>
             <div className="p-4">
@@ -102,13 +101,19 @@ const CreateVideo = () => {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Profile">
+                  <a href="/profile">
+                    <UserRound />
+                    <span>Profile</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
 
-        {/* Main Content */}
         <div className="flex-1 flex flex-col">
-          {/* Top Navigation */}
           <header className="h-16 border-b border-gray-100 bg-white px-4 flex items-center justify-between">
             <SidebarTrigger />
             <div className="flex items-center gap-4">
@@ -118,10 +123,8 @@ const CreateVideo = () => {
             </div>
           </header>
 
-          {/* Page Content */}
           <div className="min-h-screen bg-gray-50 p-6">
             <div className="max-w-3xl mx-auto">
-              {/* Header with back button */}
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
                   <Button
