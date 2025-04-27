@@ -10,6 +10,7 @@ import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import CreateVideo from "./pages/CreateVideo";
 import Library from "./pages/Library";
+import Profile from "./pages/Profile";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/create-video" element={<CreateVideo />} />
           <Route path="/library" element={<Library />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
