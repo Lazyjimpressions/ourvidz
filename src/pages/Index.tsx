@@ -14,7 +14,7 @@ const Index = () => {
               VideoAI
             </div>
             <Link 
-              to="/signin" 
+              to="/auth" 
               className="text-sm font-medium text-gray-700 hover:text-gray-900"
             >
               Sign In
