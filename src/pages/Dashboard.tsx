@@ -1,4 +1,3 @@
-
 import { DollarSign, Home, Settings, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,11 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  
   return (
     <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full bg-white">
@@ -79,7 +81,10 @@ const Dashboard = () => {
             <h1 className="text-3xl font-semibold mb-8">What do you want to do?</h1>
             
             <div className="grid md:grid-cols-2 gap-6">
-              <Card className="group hover:border-primary/50 transition-colors cursor-pointer">
+              <Card 
+                className="group hover:border-primary/50 transition-colors cursor-pointer"
+                onClick={() => navigate("/create-video")}
+              >
                 <CardContent className="p-6">
                   <h2 className="text-xl font-semibold mb-2">Create a New Video</h2>
                   <p className="text-gray-600">Turn your text into engaging AI-generated videos</p>
