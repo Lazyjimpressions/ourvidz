@@ -1,4 +1,5 @@
 
+import { Link } from "react-router-dom";
 import { Clock, Check, Star, Award } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,24 @@ import { Badge } from "@/components/ui/badge";
 const Pricing = () => {
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-16">
+      {/* Header */}
+      <header className="fixed top-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-100 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="text-xl font-semibold">
+              VideoAI
+            </div>
+            <Link 
+              to="/auth" 
+              className="text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              Sign In
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 py-16 pt-24">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Choose your plan</h1>
           <p className="text-gray-600">Get started with the perfect plan for your needs</p>
