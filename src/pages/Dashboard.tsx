@@ -1,3 +1,4 @@
+
 import { DollarSign, Home, Settings, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +39,7 @@ const Dashboard = () => {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="My Videos">
-                  <a href="/dashboard/videos">
+                  <a href="/library">
                     <Video />
                     <span>My Videos</span>
                   </a>
@@ -46,7 +47,7 @@ const Dashboard = () => {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Pricing">
-                  <a href="/dashboard/pricing">
+                  <a href="/pricing">
                     <DollarSign />
                     <span>Pricing</span>
                   </a>
@@ -54,7 +55,7 @@ const Dashboard = () => {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Settings">
-                  <a href="/dashboard/settings">
+                  <a href="/settings">
                     <Settings />
                     <span>Settings</span>
                   </a>
