@@ -1,85 +1,53 @@
 
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { useToast } from "@/components/ui/use-toast";
+import { ArrowRight } from "lucide-react";
 
 const Index = () => {
-  const { toast } = useToast();
-
   return (
-    <div className="min-h-screen bg-background p-8 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
-        <section className="space-y-4">
-          <h1 className="text-4xl font-bold text-foreground">Base UI System</h1>
-          <p className="text-lg text-muted-foreground">
-            A modern, consistent design system built with shadcn/ui
-          </p>
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-2xl font-semibold">Components</h2>
-          
-          <div className="grid gap-4">
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">Buttons</h3>
-              <div className="flex gap-4">
-                <Button>Primary Button</Button>
-                <Button variant="secondary">Secondary Button</Button>
-                <Button variant="outline">Outline Button</Button>
-              </div>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <header className="fixed top-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-100 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="text-xl font-semibold">
+              VideoAI
             </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">Input Field</h3>
-              <Input placeholder="Enter some text..." className="max-w-sm" />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">Dropdown</h3>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">Open Menu</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem>Option 1</DropdownMenuItem>
-                  <DropdownMenuItem>Option 2</DropdownMenuItem>
-                  <DropdownMenuItem>Option 3</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">Loading Spinners</h3>
-              <div className="flex gap-4 items-center">
-                <LoadingSpinner size="sm" />
-                <LoadingSpinner size="md" />
-                <LoadingSpinner size="lg" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-lg font-medium">Toast Notification</h3>
-              <Button 
-                onClick={() => {
-                  toast({
-                    title: "Action completed",
-                    description: "Your action has been successfully completed.",
-                  });
-                }}
-              >
-                Show Toast
-              </Button>
-            </div>
+            <Link 
+              to="/signin" 
+              className="text-sm font-medium text-gray-700 hover:text-gray-900"
+            >
+              Sign In
+            </Link>
           </div>
-        </section>
-      </div>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="flex flex-col items-center justify-center min-h-screen text-center px-4 sm:px-6 lg:px-8 pt-16">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-gray-900 mb-6">
+            Create stunning AI videos with just a prompt.
+          </h1>
+          <p className="text-xl sm:text-2xl text-gray-600 mb-12">
+            Turn your imagination into reality in seconds.
+          </p>
+          <Button 
+            size="lg"
+            className="h-12 px-8 text-lg"
+          >
+            Get Started For Free
+            <ArrowRight className="ml-2 h-5 w-5" />
+          </Button>
+        </div>
+
+        {/* Trust Bar */}
+        <div className="w-full max-w-4xl mx-auto mt-24 py-8 border-t border-gray-100">
+          <p className="text-sm text-gray-500 text-center">
+            Powered by Stable Video Diffusion
+          </p>
+        </div>
+      </main>
     </div>
   );
 };
