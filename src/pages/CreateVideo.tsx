@@ -60,7 +60,7 @@ const CreateVideo = () => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       
-      const response = await fetch('http://213.173.110.38/generate', {
+      const response = await fetch('http://213.173.110.38:8888/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
