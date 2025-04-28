@@ -1,4 +1,3 @@
-
 import { ArrowLeft, Upload, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -58,11 +57,10 @@ const CreateVideo = () => {
     setApiError(null);
     
     try {
-      // Try to connect with increased timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
-      const response = await fetch('http://213.173.110.38:8000/generate', {
+      const response = await fetch('http://213.173.110.38:8888/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +84,6 @@ const CreateVideo = () => {
     } catch (error) {
       console.error('Video generation error:', error);
       
-      // Provide more specific error messages
       if (error.name === 'AbortError') {
         setApiError("Request timed out. The server might be busy or unreachable.");
       } else if (error.message?.includes('Failed to fetch')) {
