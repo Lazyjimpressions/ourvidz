@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useForm } from "react-hook-form";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface CreateVideoForm {
   prompt: string;
@@ -43,6 +44,7 @@ interface CreateVideoForm {
 const CreateVideo = () => {
   const navigate = useNavigate();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   
   const form = useForm<CreateVideoForm>({
     defaultValues: {
@@ -53,8 +55,13 @@ const CreateVideo = () => {
 
   const onSubmit = async (data: CreateVideoForm) => {
     setIsGenerating(true);
+    setApiError(null);
     
     try {
+      // Try to connect with increased timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+      
       const response = await fetch('http://213.173.110.38:8000/generate', {
         method: 'POST',
         headers: {
@@ -64,10 +71,13 @@ const CreateVideo = () => {
           prompt: data.prompt,
           num_frames: 24,
         }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error('Failed to generate video.');
+        throw new Error(`Server returned error: ${response.status} ${response.statusText}`);
       }
 
       await response.json();
@@ -75,7 +85,17 @@ const CreateVideo = () => {
       navigate("/library");
     } catch (error) {
       console.error('Video generation error:', error);
-      toast.error("Something went wrong. Please try again.");
+      
+      // Provide more specific error messages
+      if (error.name === 'AbortError') {
+        setApiError("Request timed out. The server might be busy or unreachable.");
+      } else if (error.message?.includes('Failed to fetch')) {
+        setApiError("Cannot connect to the video generation server. Please check your connection.");
+      } else {
+        setApiError(error.message || "Something went wrong. Please try again later.");
+      }
+      
+      toast.error("Video generation failed");
     } finally {
       setIsGenerating(false);
     }
@@ -160,6 +180,17 @@ const CreateVideo = () => {
                   <h1 className="text-3xl font-semibold">Create a New Video</h1>
                 </div>
               </div>
+
+              {apiError && (
+                <Alert className="mb-6 border-red-200 bg-red-50 text-red-800">
+                  <AlertDescription>
+                    {apiError}
+                    <div className="mt-2 text-sm">
+                      The video generation service might be temporarily unavailable. You can try again in a few minutes.
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <Card className="p-6">
                 <Form {...form}>
