@@ -1,8 +1,10 @@
+
 import { ArrowLeft, Upload, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { toast } from "sonner";
 import {
   Form,
   FormControl,
@@ -51,11 +53,32 @@ const CreateVideo = () => {
 
   const onSubmit = async (data: CreateVideoForm) => {
     setIsGenerating(true);
-    // Simulate API call
-    setTimeout(() => {
-      setIsGenerating(false);
+    
+    try {
+      const response = await fetch('http://213.173.110.38:8000/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: data.prompt,
+          num_frames: 24,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate video.');
+      }
+
+      await response.json();
+      toast.success("Your video has been generated and saved.");
       navigate("/library");
-    }, 2000);
+    } catch (error) {
+      console.error('Video generation error:', error);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
