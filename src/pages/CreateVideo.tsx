@@ -1,3 +1,4 @@
+
 import { ArrowLeft, Upload, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -31,8 +32,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { useForm } from "react-hook-form";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PromptRefiner } from "@/components/PromptRefiner";
+import { PreviewImageGenerator } from "@/components/PreviewImageGenerator";
+import { VideoGenerationStep } from "@/components/VideoGenerationStep";
 
 interface CreateVideoForm {
   prompt: string;
@@ -42,8 +45,10 @@ interface CreateVideoForm {
 
 const CreateVideo = () => {
   const navigate = useNavigate();
-  const [isGenerating, setIsGenerating] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState<'prompt' | 'refine' | 'preview' | 'generate'>('prompt');
+  const [refinedPrompt, setRefinedPrompt] = useState("");
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   
   const form = useForm<CreateVideoForm>({
     defaultValues: {
@@ -52,51 +57,38 @@ const CreateVideo = () => {
     },
   });
 
-  const onSubmit = async (data: CreateVideoForm) => {
-    setIsGenerating(true);
-    setApiError(null);
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch('http://213.173.110.38:8888/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: data.prompt,
-          num_frames: 24,
-        }),
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
+  const promptValue = form.watch("prompt");
 
-      if (!response.ok) {
-        throw new Error(`Server returned error: ${response.status} ${response.statusText}`);
-      }
-
-      await response.json();
-      toast.success("Your video has been generated and saved.");
-      navigate("/library");
-    } catch (error) {
-      console.error('Video generation error:', error);
-      
-      if (error.name === 'AbortError') {
-        setApiError("Request timed out. The server might be busy or unreachable.");
-      } else if (error.message?.includes('Failed to fetch')) {
-        setApiError("Cannot connect to the video generation server. Please check your connection.");
-      } else {
-        setApiError(error.message || "Something went wrong. Please try again later.");
-      }
-      
-      toast.error("Video generation failed");
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleRefinedPromptApproved = (refined: string) => {
+    setRefinedPrompt(refined);
+    setCurrentStep('preview');
   };
+
+  const handleImageSelected = (imageId: string) => {
+    setSelectedImageId(imageId);
+    setCurrentStep('generate');
+  };
+
+  const handleVideoGenerated = () => {
+    toast.success("Your video has been generated and saved.");
+    navigate("/library");
+  };
+
+  const handleVideoGenerationError = (error: any) => {
+    console.error('Video generation error:', error);
+    
+    if (error.name === 'AbortError') {
+      setApiError("Request timed out. The server might be busy or unreachable.");
+    } else if (error.message?.includes('Failed to fetch')) {
+      setApiError("Cannot connect to the video generation server. Please check your connection.");
+    } else {
+      setApiError(error.message || "Something went wrong. Please try again later.");
+    }
+    
+    toast.error("Video generation failed");
+  };
+
+  const currentPrompt = refinedPrompt || promptValue;
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -191,7 +183,7 @@ const CreateVideo = () => {
 
               <Card className="p-6">
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <form className="space-y-6">
                     <FormField
                       control={form.control}
                       name="prompt"
@@ -201,7 +193,7 @@ const CreateVideo = () => {
                           <FormControl>
                             <Textarea
                               placeholder="Describe your video..."
-                              className="min-h-[120px] resize-none"
+                              className="min-h-[120px] resize-none rounded-lg"
                               {...field}
                             />
                           </FormControl>
@@ -209,6 +201,20 @@ const CreateVideo = () => {
                         </FormItem>
                       )}
                     />
+
+                    {promptValue.trim() && (
+                      <PromptRefiner
+                        originalPrompt={promptValue}
+                        onRefinedPromptApproved={handleRefinedPromptApproved}
+                      />
+                    )}
+
+                    {currentStep === 'preview' && (
+                      <PreviewImageGenerator
+                        prompt={currentPrompt}
+                        onImageSelected={handleImageSelected}
+                      />
+                    )}
 
                     <FormField
                       control={form.control}
@@ -221,7 +227,7 @@ const CreateVideo = () => {
                             defaultValue={field.value}
                           >
                             <FormControl>
-                              <SelectTrigger>
+                              <SelectTrigger className="rounded-lg">
                                 <SelectValue placeholder="Select a style" />
                               </SelectTrigger>
                             </FormControl>
@@ -269,27 +275,22 @@ const CreateVideo = () => {
                       )}
                     />
 
+                    {currentStep === 'generate' && (
+                      <VideoGenerationStep
+                        selectedImageId={selectedImageId}
+                        prompt={currentPrompt}
+                        onVideoGenerated={handleVideoGenerated}
+                      />
+                    )}
+
                     <div className="flex justify-end gap-4 pt-4">
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => navigate("/dashboard")}
+                        className="rounded-lg"
                       >
                         Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        className="bg-primary hover:bg-primary/90"
-                        disabled={isGenerating}
-                      >
-                        {isGenerating ? (
-                          <>
-                            <LoadingSpinner className="mr-2" />
-                            Generating your video...
-                          </>
-                        ) : (
-                          "Generate Video"
-                        )}
                       </Button>
                     </div>
                   </form>
