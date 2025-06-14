@@ -53,7 +53,7 @@ export const PromptRefiner = ({ originalPrompt, onRefinedPromptApproved }: Promp
         type="button"
         variant="outline"
         onClick={handleRefinePrompt}
-        disabled={isRefining || refinedPrompt}
+        disabled={isRefining || Boolean(refinedPrompt)}
         className="w-full sm:w-auto"
       >
         {isRefining ? (
