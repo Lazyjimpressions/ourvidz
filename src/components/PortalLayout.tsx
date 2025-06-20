@@ -1,5 +1,4 @@
-
-import { LogOut, Home, Video, DollarSign, UserRound, Clock } from "lucide-react";
+import { LogOut, Home, Video, DollarSign, UserRound, Clock, Image } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +49,14 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
                   <Link to="/dashboard">
                     <Home />
                     <span>Home</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Image Creation">
+                  <Link to="/image-creation">
+                    <Image />
+                    <span>Image Studio</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

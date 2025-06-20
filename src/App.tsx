@@ -13,6 +13,7 @@ import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import CreateVideo from "./pages/CreateVideo";
 import Characters from "./pages/Characters";
+import ImageCreation from "./pages/ImageCreation";
 import Library from "./pages/Library";
 import Profile from "./pages/Profile";
 
