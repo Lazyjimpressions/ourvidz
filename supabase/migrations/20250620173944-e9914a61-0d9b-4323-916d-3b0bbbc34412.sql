@@ -16,7 +16,7 @@ CREATE POLICY "Users can view their own roles"
   FOR SELECT 
   USING (auth.uid() = user_id);
 
--- Function to check if user has a specific role
+-- Function to check if user has a specific role (FIXED: Added search_path)
 CREATE OR REPLACE FUNCTION public.has_role(_user_id UUID, _role TEXT)
 RETURNS BOOLEAN AS $$
 BEGIN
@@ -25,7 +25,7 @@ BEGIN
     WHERE user_id = _user_id AND role = _role
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Create user profiles table to store additional user data
 CREATE TABLE IF NOT EXISTS public.profiles (
@@ -74,7 +74,7 @@ CREATE POLICY "Users can insert their own profile"
   FOR INSERT 
   WITH CHECK (auth.uid() = id);
 
--- Function to handle new user signup
+-- Function to handle new user signup (FIXED: Added search_path)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -87,7 +87,7 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to automatically create profile when user signs up
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
@@ -95,14 +95,14 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- Function to update updated_at timestamp
+-- Function to update updated_at timestamp (FIXED: Added search_path)
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Trigger to update updated_at on profile changes
 DROP TRIGGER IF EXISTS handle_updated_at ON public.profiles;
@@ -110,7 +110,7 @@ CREATE TRIGGER handle_updated_at
   BEFORE UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- Function to get user role priority (for admin checks)
+-- Function to get user role priority (FIXED: Added search_path)
 CREATE OR REPLACE FUNCTION public.get_user_role_priority(_user_id UUID)
 RETURNS INTEGER AS $$
 DECLARE
@@ -138,4 +138,4 @@ BEGIN
   
   RETURN COALESCE(role_priority, 0);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
