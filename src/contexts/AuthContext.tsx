@@ -128,11 +128,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
+      // Clear state first
       setUser(null);
       setSession(null);
       setProfile(null);
-      window.location.href = '/auth';
+      
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+      
+      // Clean up any remaining auth tokens
+      localStorage.removeItem('supabase.auth.token');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
     } catch (error) {
       console.error('Error signing out:', error);
     }

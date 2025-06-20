@@ -1,34 +1,28 @@
-
-import { Link } from "react-router-dom";
 import { Clock, Check, Star, Award } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AuthHeader } from "@/components/AuthHeader";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Pricing = () => {
+  const { user, profile } = useAuth();
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="fixed top-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-100 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="text-xl font-semibold">
-              VideoAI
-            </div>
-            <Link 
-              to="/auth" 
-              className="text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </header>
+      <AuthHeader />
 
       <div className="container mx-auto px-4 py-16 pt-24">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Choose your plan</h1>
           <p className="text-gray-600">Get started with the perfect plan for your needs</p>
+          {user && profile && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">
+                Current plan: <span className="font-medium capitalize">{profile.subscription_status}</span>
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">

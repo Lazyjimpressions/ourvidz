@@ -1,27 +1,25 @@
 
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { AuthHeader } from "@/components/AuthHeader";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleGetStarted = () => {
+    if (user) {
+      navigate("/dashboard");
+    } else {
+      navigate("/auth");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <header className="fixed top-0 w-full bg-white/80 backdrop-blur-sm border-b border-gray-100 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="text-xl font-semibold">
-              VideoAI
-            </div>
-            <Link 
-              to="/auth" 
-              className="text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </header>
+      <AuthHeader />
 
       {/* Hero Section */}
       <main className="flex flex-col items-center justify-center min-h-screen text-center px-4 sm:px-6 lg:px-8 pt-16">
@@ -35,8 +33,9 @@ const Index = () => {
           <Button 
             size="lg"
             className="h-12 px-8 text-lg"
+            onClick={handleGetStarted}
           >
-            Get Started For Free
+            {user ? "Go to Dashboard" : "Get Started For Free"}
             <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
         </div>

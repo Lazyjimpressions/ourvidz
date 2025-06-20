@@ -1,4 +1,3 @@
-
 import { DollarSign, Home, Settings, Video, UserRound, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +11,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
@@ -41,42 +40,34 @@ const Dashboard = () => {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Home">
-                  <a href="/dashboard">
+                  <Link to="/dashboard">
                     <Home />
                     <span>Home</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="My Videos">
-                  <a href="/library">
+                  <Link to="/library">
                     <Video />
                     <span>My Videos</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Pricing">
-                  <a href="/pricing">
+                  <Link to="/pricing">
                     <DollarSign />
                     <span>Pricing</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Settings">
-                  <a href="/settings">
-                    <Settings />
-                    <span>Settings</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Profile">
-                  <a href="/profile">
+                  <Link to="/profile">
                     <UserRound />
                     <span>Profile</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
