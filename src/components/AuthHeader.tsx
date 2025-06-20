@@ -2,10 +2,10 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { LogOut, User, Shield } from "lucide-react";
+import { LogOut, User } from "lucide-react";
 
 export const AuthHeader = () => {
-  const { user, profile, isAdmin, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -26,12 +26,6 @@ export const AuthHeader = () => {
               <>
                 <span className="text-sm text-gray-600">
                   {profile?.username || user.email}
-                  {isAdmin && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                      <Shield className="h-3 w-3" />
-                      Admin
-                    </span>
-                  )}
                 </span>
                 <Button
                   variant="ghost"

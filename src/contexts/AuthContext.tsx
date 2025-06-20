@@ -6,26 +6,18 @@ import { supabase } from '@/integrations/supabase/client';
 interface Profile {
   id: string;
   username: string | null;
-  subscription_status: string;
-  token_balance: number;
+  subscription_status: 'inactive' | 'starter' | 'pro' | 'creator';
+  credits_remaining: number;
   created_at: string;
   updated_at: string;
-}
-
-interface UserRole {
-  id: string;
-  user_id: string;
-  role: 'admin' | 'moderator' | 'premium_user' | 'basic_user' | 'guest';
-  created_at: string | null;
 }
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
-  userRoles: UserRole[];
   loading: boolean;
-  isAdmin: boolean;
+  isSubscribed: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -48,10 +40,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = userRoles.some(role => role.role === 'admin');
+  const isSubscribed = profile?.subscription_status !== 'inactive';
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -69,24 +60,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
-    }
-  };
-
-  const fetchUserRoles = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('*')
-        .eq('user_id', userId);
-      
-      if (error) {
-        console.error('Error fetching user roles:', error);
-        return;
-      }
-      
-      setUserRoles(data || []);
-    } catch (error) {
-      console.error('Error fetching user roles:', error);
     }
   };
 
@@ -114,14 +87,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(session?.user ?? null);
     
     if (session?.user) {
-      // Defer data fetching to prevent deadlocks
       setTimeout(() => {
         fetchProfile(session.user.id);
-        fetchUserRoles(session.user.id);
       }, 100);
     } else {
       setProfile(null);
-      setUserRoles([]);
     }
     
     setLoading(false);
@@ -130,10 +100,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthStateChange);
 
-    // Check for existing session
     const initializeAuth = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -150,7 +118,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           
           if (session?.user) {
             await fetchProfile(session.user.id);
-            await fetchUserRoles(session.user.id);
           }
           
           setLoading(false);
@@ -165,19 +132,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     initializeAuth();
 
-    // Set up periodic session refresh
     const refreshInterval = setInterval(() => {
       if (session && session.expires_at) {
         const expiresAt = new Date(session.expires_at * 1000);
         const now = new Date();
         const timeUntilExpiry = expiresAt.getTime() - now.getTime();
         
-        // Refresh 5 minutes before expiry
         if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {
           refreshSession();
         }
       }
-    }, 60000); // Check every minute
+    }, 60000);
 
     return () => {
       mounted = false;
@@ -227,13 +192,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      // Clear state first
       setUser(null);
       setSession(null);
       setProfile(null);
-      setUserRoles([]);
       
-      // Sign out from Supabase with minimal cleanup
       await supabase.auth.signOut();
       
     } catch (error) {
@@ -260,9 +222,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     user,
     session,
     profile,
-    userRoles,
     loading,
-    isAdmin,
+    isSubscribed,
     signUp,
     signIn,
     signInWithGoogle,

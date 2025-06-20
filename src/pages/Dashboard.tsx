@@ -3,28 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { PortalLayout } from "@/components/PortalLayout";
-import { Shield } from "lucide-react";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, profile, userRoles, isAdmin } = useAuth();
+  const { user, profile, isSubscribed } = useAuth();
   
   return (
     <PortalLayout>
       <div className="p-6">
         <h1 className="text-3xl font-semibold mb-2">
           Welcome back{profile?.username ? `, ${profile.username}` : ''}!
-          {isAdmin && <span className="text-red-600 ml-2">(Admin)</span>}
         </h1>
         <p className="text-gray-600 mb-8">What do you want to do today?</p>
         
-        {isAdmin && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <h3 className="font-medium text-red-800 mb-2">Admin Status</h3>
-            <div className="text-sm text-red-700">
-              <p>You have administrator privileges.</p>
-              <p>Roles: {userRoles.map(role => role.role).join(', ')}</p>
-              <p>User ID: {user?.id}</p>
+        {!isSubscribed && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="font-medium text-yellow-800 mb-2">No Active Subscription</h3>
+            <div className="text-sm text-yellow-700">
+              <p>You need an active subscription to create videos.</p>
+              <p>Current status: {profile?.subscription_status || 'inactive'}</p>
+              <p>Credits: {profile?.credits_remaining || 0}</p>
             </div>
           </div>
         )}

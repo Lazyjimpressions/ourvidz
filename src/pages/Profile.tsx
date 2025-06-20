@@ -1,5 +1,5 @@
 
-import { CalendarDays, CreditCard, User, Shield } from "lucide-react";
+import { CalendarDays, CreditCard, User } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -9,26 +9,26 @@ import { PortalLayout } from "@/components/PortalLayout";
 const mockBillingHistory = [
   {
     date: "2025-04-26",
-    plan: "Premium Plan",
-    tokens: 1000,
-    amount: 49.99,
+    plan: "Creator Plan",
+    credits: 60,
+    amount: 39.99,
   },
   {
     date: "2025-03-26",
-    plan: "Basic Plan",
-    tokens: 500,
-    amount: 29.99,
+    plan: "Pro Plan", 
+    credits: 25,
+    amount: 19.99,
   },
   {
     date: "2025-02-26",
-    plan: "Premium Plan",
-    tokens: 1000,
-    amount: 49.99,
+    plan: "Starter Plan",
+    credits: 10,
+    amount: 9.99,
   },
 ];
 
 const Profile = () => {
-  const { user, profile, userRoles, isAdmin } = useAuth();
+  const { user, profile } = useAuth();
 
   return (
     <PortalLayout title="My Profile">
@@ -58,48 +58,28 @@ const Profile = () => {
                     {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'Unknown'}
                   </p>
                 </div>
-                {userRoles.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Roles</label>
-                    <div className="flex gap-2 mt-1">
-                      {userRoles.map((role) => (
-                        <span
-                          key={role.id}
-                          className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
-                            role.role === 'admin' 
-                              ? 'bg-red-100 text-red-700' 
-                              : 'bg-blue-100 text-blue-700'
-                          }`}
-                        >
-                          {role.role === 'admin' && <Shield className="h-3 w-3" />}
-                          {role.role}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Token Usage Card */}
+          {/* Credit Usage Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-primary" />
-                Token Usage
+                Credit Usage
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid sm:grid-cols-2 gap-6">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Tokens Remaining</p>
-                  <p className="text-4xl font-semibold text-primary mt-1">{profile?.token_balance || 0}</p>
+                  <p className="text-sm font-medium text-gray-500">Credits Remaining</p>
+                  <p className="text-4xl font-semibold text-primary mt-1">{profile?.credits_remaining || 0}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Subscription Status</p>
                   <p className="text-4xl font-semibold text-gray-600 mt-1 capitalize">
-                    {profile?.subscription_status || 'free'}
+                    {profile?.subscription_status || 'inactive'}
                   </p>
                 </div>
               </div>
@@ -126,7 +106,7 @@ const Profile = () => {
                     <TableRow>
                       <TableHead>Purchase Date</TableHead>
                       <TableHead>Plan</TableHead>
-                      <TableHead>Tokens</TableHead>
+                      <TableHead>Credits</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -135,7 +115,7 @@ const Profile = () => {
                       <TableRow key={index}>
                         <TableCell>{new Date(item.date).toLocaleDateString()}</TableCell>
                         <TableCell>{item.plan}</TableCell>
-                        <TableCell>{item.tokens.toLocaleString()}</TableCell>
+                        <TableCell>{item.credits.toLocaleString()}</TableCell>
                         <TableCell className="text-right">
                           ${item.amount.toFixed(2)}
                         </TableCell>

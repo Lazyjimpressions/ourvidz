@@ -1,5 +1,5 @@
 
-import { LogOut, Home, Video, DollarSign, Settings, UserRound, Shield, Clock } from "lucide-react";
+import { LogOut, Home, Video, DollarSign, UserRound, Clock } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +21,7 @@ interface PortalLayoutProps {
 
 export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
   const navigate = useNavigate();
-  const { user, profile, userRoles, isAdmin, signOut, session } = useAuth();
+  const { user, profile, session, signOut } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -39,12 +39,6 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
                   <p className="text-sm text-gray-600">
                     {profile?.username || user.email}
                   </p>
-                  {isAdmin && (
-                    <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full mt-1">
-                      <Shield className="h-3 w-3" />
-                      Admin Access
-                    </span>
-                  )}
                 </div>
               )}
             </div>
@@ -101,22 +95,16 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Balance: <span className="font-medium">{profile?.token_balance || 0} tokens</span>
+                Balance: <span className="font-medium">{profile?.credits_remaining || 0} credits</span>
               </div>
               <div className="text-sm text-gray-600">
-                Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'free'}</span>
+                Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'inactive'}</span>
               </div>
               {session && (
                 <div className="text-xs text-gray-500 flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   Session Active
                 </div>
-              )}
-              {isAdmin && (
-                <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full">
-                  <Shield className="h-3 w-3" />
-                  Admin
-                </span>
               )}
             </div>
           </header>
