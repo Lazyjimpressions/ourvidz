@@ -57,7 +57,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return;
       }
       
-      setProfile(data);
+      if (data) {
+        // Type cast the subscription_status to ensure it matches our interface
+        const typedProfile: Profile = {
+          ...data,
+          subscription_status: data.subscription_status as 'inactive' | 'starter' | 'pro' | 'creator'
+        };
+        setProfile(typedProfile);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
