@@ -1,17 +1,6 @@
-import { Download, Play, Trash2, Home, Video, DollarSign, Settings, UserRound } from "lucide-react";
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { PortalLayout } from "@/components/PortalLayout";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoModal } from "@/components/VideoModal";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
@@ -39,7 +28,6 @@ const mockVideos = [
 ];
 
 const Library = () => {
-  const navigate = useNavigate();
   const [selectedVideo, setSelectedVideo] = useState<typeof mockVideos[0] | null>(null);
   const [videoToDelete, setVideoToDelete] = useState<typeof mockVideos[0] | null>(null);
   const [showPlayModal, setShowPlayModal] = useState(false);
@@ -51,120 +39,51 @@ const Library = () => {
   };
 
   return (
-    <SidebarProvider defaultOpen={false}>
-      <div className="min-h-screen flex w-full bg-white">
-        <Sidebar>
-          <SidebarHeader>
-            <div className="p-4">
-              <h2 className="font-semibold">VideoAI</h2>
+    <PortalLayout title="My Videos">
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-7xl mx-auto">
+          {mockVideos.length === 0 ? (
+            <EmptyLibrary />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {mockVideos.map((video) => (
+                <VideoCard
+                  key={video.id}
+                  video={video}
+                  onPlay={() => {
+                    setSelectedVideo(video);
+                    setShowPlayModal(true);
+                  }}
+                  onDelete={() => {
+                    setVideoToDelete(video);
+                    setShowDeleteModal(true);
+                  }}
+                />
+              ))}
             </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Home">
-                  <a href="/dashboard">
-                    <Home />
-                    <span>Home</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="My Videos">
-                  <a href="/library">
-                    <Video />
-                    <span>My Videos</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Pricing">
-                  <a href="/pricing">
-                    <DollarSign />
-                    <span>Pricing</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Settings">
-                  <a href="/settings">
-                    <Settings />
-                    <span>Settings</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="Profile">
-                  <a href="/profile">
-                    <UserRound />
-                    <span>Profile</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
-        </Sidebar>
-
-        <div className="flex-1 flex flex-col">
-          <header className="h-16 border-b border-gray-100 bg-white px-4 flex items-center justify-between">
-            <SidebarTrigger />
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-gray-600">
-                Balance: <span className="font-medium">100 tokens</span>
-              </div>
-            </div>
-          </header>
-
-          <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-7xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
-                <h1 className="text-3xl font-semibold">My Videos</h1>
-              </div>
-
-              {mockVideos.length === 0 ? (
-                <EmptyLibrary />
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {mockVideos.map((video) => (
-                    <VideoCard
-                      key={video.id}
-                      video={video}
-                      onPlay={() => {
-                        setSelectedVideo(video);
-                        setShowPlayModal(true);
-                      }}
-                      onDelete={() => {
-                        setVideoToDelete(video);
-                        setShowDeleteModal(true);
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          )}
         </div>
-
-        <VideoModal
-          video={selectedVideo}
-          open={showPlayModal}
-          onClose={() => {
-            setShowPlayModal(false);
-            setSelectedVideo(null);
-          }}
-        />
-
-        <DeleteConfirmationModal
-          video={videoToDelete}
-          open={showDeleteModal}
-          onClose={() => {
-            setShowDeleteModal(false);
-            setVideoToDelete(null);
-          }}
-          onConfirm={() => videoToDelete && handleDelete(videoToDelete.id)}
-        />
       </div>
-    </SidebarProvider>
+
+      <VideoModal
+        video={selectedVideo}
+        open={showPlayModal}
+        onClose={() => {
+          setShowPlayModal(false);
+          setSelectedVideo(null);
+        }}
+      />
+
+      <DeleteConfirmationModal
+        video={videoToDelete}
+        open={showDeleteModal}
+        onClose={() => {
+          setShowDeleteModal(false);
+          setVideoToDelete(null);
+        }}
+        onConfirm={() => videoToDelete && handleDelete(videoToDelete.id)}
+      />
+    </PortalLayout>
   );
 };
 
