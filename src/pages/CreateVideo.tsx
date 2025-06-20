@@ -1,226 +1,161 @@
 
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { toast } from "sonner";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useForm } from "react-hook-form";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { PromptRefiner } from "@/components/PromptRefiner";
-import { PreviewImageGenerator } from "@/components/PreviewImageGenerator";
-import { VideoGenerationStep } from "@/components/VideoGenerationStep";
 import { PortalLayout } from "@/components/PortalLayout";
+import { VideoConfiguration, VideoConfig } from "@/components/VideoConfiguration";
+import { CharacterManager, Character } from "@/components/CharacterManager";
+import { StoryBreakdown } from "@/components/StoryBreakdown";
+import { StoryboardGeneration } from "@/components/StoryboardGeneration";
+import { EnhancedVideoGeneration } from "@/components/EnhancedVideoGeneration";
+import { toast } from "sonner";
 
-interface CreateVideoForm {
-  prompt: string;
-  style: string;
-  image?: File;
+type WorkflowStep = 'config' | 'characters' | 'story' | 'storyboard' | 'generation' | 'complete';
+
+interface Scene {
+  id: string;
+  sceneNumber: number;
+  description: string;
+  enhancedPrompt: string;
+}
+
+interface SceneImage {
+  sceneId: string;
+  imageUrl: string;
+  approved: boolean;
 }
 
 const CreateVideo = () => {
   const navigate = useNavigate();
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<'prompt' | 'refine' | 'preview' | 'generate'>('prompt');
-  const [refinedPrompt, setRefinedPrompt] = useState("");
-  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
-  
-  const form = useForm<CreateVideoForm>({
-    defaultValues: {
-      prompt: "",
-      style: "animated",
-    },
-  });
+  const [currentStep, setCurrentStep] = useState<WorkflowStep>('config');
+  const [videoConfig, setVideoConfig] = useState<VideoConfig | null>(null);
+  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
+  const [approvedScenes, setApprovedScenes] = useState<Scene[]>([]);
+  const [approvedStoryboard, setApprovedStoryboard] = useState<SceneImage[]>([]);
 
-  const promptValue = form.watch("prompt");
-
-  const handleRefinedPromptApproved = (refined: string) => {
-    setRefinedPrompt(refined);
-    setCurrentStep('preview');
+  const stepTitles = {
+    config: 'Video Configuration',
+    characters: 'Character Setup',
+    story: 'Story & Scene Breakdown',
+    storyboard: 'Storyboard Generation',
+    generation: 'Video Generation',
+    complete: 'Complete'
   };
 
-  const handleImageSelected = (imageId: string) => {
-    setSelectedImageId(imageId);
-    setCurrentStep('generate');
+  const steps: WorkflowStep[] = ['config', 'characters', 'story', 'storyboard', 'generation'];
+  const currentStepIndex = steps.indexOf(currentStep);
+
+  const handleConfigurationComplete = (config: VideoConfig) => {
+    setVideoConfig(config);
+    setCurrentStep('characters');
+  };
+
+  const handleCharactersSelected = (characters: Character[]) => {
+    setSelectedCharacters(characters);
+    setCurrentStep('story');
+  };
+
+  const handleScenesApproved = (scenes: Scene[]) => {
+    setApprovedScenes(scenes);
+    setCurrentStep('storyboard');
+  };
+
+  const handleStoryboardApproved = (sceneImages: SceneImage[]) => {
+    setApprovedStoryboard(sceneImages);
+    setCurrentStep('generation');
   };
 
   const handleVideoGenerated = () => {
-    toast.success("Your video has been generated and saved.");
+    toast.success("Your video has been generated successfully!");
     navigate("/library");
   };
 
-  const handleVideoGenerationError = (error: any) => {
-    console.error('Video generation error:', error);
-    
-    if (error.name === 'AbortError') {
-      setApiError("Request timed out. The server might be busy or unreachable.");
-    } else if (error.message?.includes('Failed to fetch')) {
-      setApiError("Cannot connect to the video generation server. Please check your connection.");
-    } else {
-      setApiError(error.message || "Something went wrong. Please try again later.");
+  const handleBackStep = () => {
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(steps[currentIndex - 1]);
     }
-    
-    toast.error("Video generation failed");
   };
 
-  const currentPrompt = refinedPrompt || promptValue;
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 'config':
+        return <VideoConfiguration onConfigurationComplete={handleConfigurationComplete} />;
+      
+      case 'characters':
+        return <CharacterManager onCharactersSelected={handleCharactersSelected} />;
+      
+      case 'story':
+        return (
+          <StoryBreakdown 
+            config={videoConfig!}
+            characters={selectedCharacters}
+            onScenesApproved={handleScenesApproved}
+          />
+        );
+      
+      case 'storyboard':
+        return (
+          <StoryboardGeneration 
+            scenes={approvedScenes}
+            onStoryboardApproved={handleStoryboardApproved}
+          />
+        );
+      
+      case 'generation':
+        return (
+          <EnhancedVideoGeneration 
+            config={videoConfig!}
+            sceneImages={approvedStoryboard}
+            onVideoGenerated={handleVideoGenerated}
+          />
+        );
+      
+      default:
+        return null;
+    }
+  };
 
   return (
     <PortalLayout title="Create a New Video">
       <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4 mb-8">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => {
+                if (currentStepIndex > 0) {
+                  handleBackStep();
+                } else {
+                  navigate("/dashboard");
+                }
+              }}
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
+            
+            <div className="flex-1">
+              <h1 className="text-2xl font-semibold">{stepTitles[currentStep]}</h1>
+              <div className="flex items-center gap-2 mt-2">
+                {steps.map((step, index) => (
+                  <div key={step} className="flex items-center">
+                    <div className={`w-3 h-3 rounded-full ${
+                      index <= currentStepIndex ? 'bg-primary' : 'bg-gray-300'
+                    }`} />
+                    {index < steps.length - 1 && (
+                      <div className={`w-8 h-0.5 ${
+                        index < currentStepIndex ? 'bg-primary' : 'bg-gray-300'
+                      }`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {apiError && (
-            <Alert className="mb-6 border-red-200 bg-red-50 text-red-800">
-              <AlertDescription>
-                {apiError}
-                <div className="mt-2 text-sm">
-                  The video generation service might be temporarily unavailable. You can try again in a few minutes.
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Card className="p-6">
-            <Form {...form}>
-              <form className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="prompt"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Prompt</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Describe your video..."
-                          className="min-h-[120px] resize-none rounded-lg"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {promptValue.trim() && (
-                  <PromptRefiner
-                    originalPrompt={promptValue}
-                    onRefinedPromptApproved={handleRefinedPromptApproved}
-                  />
-                )}
-
-                {currentStep === 'preview' && (
-                  <PreviewImageGenerator
-                    prompt={currentPrompt}
-                    onImageSelected={handleImageSelected}
-                  />
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="style"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Video Style</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="rounded-lg">
-                            <SelectValue placeholder="Select a style" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="animated">Animated</SelectItem>
-                          <SelectItem value="realistic">Realistic</SelectItem>
-                          <SelectItem value="surreal">Surreal</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="image"
-                  render={({ field: { value, onChange, ...field } }) => (
-                    <FormItem>
-                      <FormLabel>Reference Image (Optional)</FormLabel>
-                      <FormControl>
-                        <div className="border-2 border-dashed rounded-lg p-6 hover:border-primary/50 transition-colors">
-                          <label className="flex flex-col items-center gap-2 cursor-pointer">
-                            <Upload className="h-8 w-8 text-gray-400" />
-                            <span className="text-sm text-gray-600">
-                              Click to upload or drag and drop
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              PNG, JPG up to 10MB
-                            </span>
-                            <input
-                              type="file"
-                              className="hidden"
-                              accept=".jpg,.jpeg,.png"
-                              onChange={(e) =>
-                                onChange(e.target.files ? e.target.files[0] : null)
-                              }
-                              {...field}
-                            />
-                          </label>
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {currentStep === 'generate' && (
-                  <VideoGenerationStep
-                    selectedImageId={selectedImageId}
-                    prompt={currentPrompt}
-                    onVideoGenerated={handleVideoGenerated}
-                  />
-                )}
-
-                <div className="flex justify-end gap-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => navigate("/dashboard")}
-                    className="rounded-lg"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </Card>
+          {renderCurrentStep()}
         </div>
       </div>
     </PortalLayout>
