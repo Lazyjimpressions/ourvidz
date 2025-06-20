@@ -39,31 +39,70 @@ const ImageCreation = () => {
   return (
     <PortalLayout title="Image Creation Studio">
       <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto p-6">
-          <div className="flex items-center gap-4 mb-8">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6">
+          <div className="flex items-center gap-4 mb-6 sm:mb-8">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => navigate("/dashboard")}
+              className="transition-all duration-200 hover:scale-110"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             
             <div className="flex-1">
-              <h1 className="text-2xl font-semibold">Image Creation Studio</h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-xl sm:text-2xl font-semibold">Image Creation Studio</h1>
+              <p className="text-gray-600 mt-1 text-sm sm:text-base">
                 Create characters and images with AI-powered enhancement
               </p>
             </div>
           </div>
 
-          <Tabs value={activeMode} onValueChange={(value) => setActiveMode(value as "character" | "general")}>
-            <TabsList className="mb-6">
-              <TabsTrigger value="general">General Images</TabsTrigger>
-              <TabsTrigger value="character">Character Design</TabsTrigger>
+          <Tabs 
+            value={activeMode} 
+            onValueChange={(value) => setActiveMode(value as "character" | "general")}
+            className="animate-fade-in"
+          >
+            <TabsList className="mb-6 w-full sm:w-auto">
+              <TabsTrigger value="general" className="flex-1 sm:flex-none">
+                General Images
+              </TabsTrigger>
+              <TabsTrigger value="character" className="flex-1 sm:flex-none">
+                Character Design
+              </TabsTrigger>
             </TabsList>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Mobile Layout */}
+            <div className="block lg:hidden space-y-6">
+              <TabsContent value="general" className="mt-0">
+                <PromptBuilder
+                  mode="general"
+                  onPromptUpdate={handlePromptUpdate}
+                />
+              </TabsContent>
+              
+              <TabsContent value="character" className="mt-0">
+                <PromptBuilder
+                  mode="character"
+                  onPromptUpdate={handlePromptUpdate}
+                />
+              </TabsContent>
+
+              <ImageGenerator
+                prompt={currentPrompt}
+                enhancedPrompt={enhancedPrompt}
+                mode={activeMode}
+                onImagesGenerated={handleImageGenerated}
+              />
+
+              <ImageLibrary
+                images={generatedImages}
+                mode={activeMode}
+              />
+            </div>
+
+            {/* Desktop Layout */}
+            <div className="hidden lg:grid lg:grid-cols-3 gap-6">
               {/* Left Panel - Prompt Builder */}
               <div className="lg:col-span-1 space-y-6">
                 <TabsContent value="general" className="mt-0">

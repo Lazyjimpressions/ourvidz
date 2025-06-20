@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface StyleSelectorProps {
   mode: "character" | "general";
@@ -90,11 +91,12 @@ export const StyleSelector = ({ mode, selectedStyles, onStylesChange }: StyleSel
         <CardTitle className="text-sm">Style & Enhancement</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={activeCategory === "art" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveCategory("art")}
+            className="transition-all duration-200 hover:scale-105"
           >
             Style
           </Button>
@@ -102,6 +104,7 @@ export const StyleSelector = ({ mode, selectedStyles, onStylesChange }: StyleSel
             variant={activeCategory === "lighting" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveCategory("lighting")}
+            className="transition-all duration-200 hover:scale-105"
           >
             Lighting
           </Button>
@@ -109,6 +112,7 @@ export const StyleSelector = ({ mode, selectedStyles, onStylesChange }: StyleSel
             variant={activeCategory === "quality" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveCategory("quality")}
+            className="transition-all duration-200 hover:scale-105"
           >
             Quality
           </Button>
@@ -120,43 +124,52 @@ export const StyleSelector = ({ mode, selectedStyles, onStylesChange }: StyleSel
               Selected ({selectedStyles.length})
             </Label>
             {selectedStyles.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearStyles}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearStyles}
+                className="transition-all duration-200 hover:scale-105"
+              >
                 Clear All
               </Button>
             )}
           </div>
           
-          <div className="flex flex-wrap gap-2 min-h-[40px] p-2 border rounded-lg bg-gray-50">
-            {selectedStyles.length === 0 ? (
-              <span className="text-sm text-gray-400">No styles selected</span>
-            ) : (
-              selectedStyles.map((style) => (
-                <Badge
-                  key={style}
-                  variant="secondary"
-                  className="cursor-pointer hover:bg-red-100"
-                  onClick={() => toggleStyle(style)}
-                >
-                  {style} ×
-                </Badge>
-              ))
-            )}
-          </div>
+          <ScrollArea className="h-20">
+            <div className="flex flex-wrap gap-2 p-2 border rounded-lg bg-gray-50 min-h-[64px]">
+              {selectedStyles.length === 0 ? (
+                <span className="text-sm text-gray-400 flex items-center">No styles selected</span>
+              ) : (
+                selectedStyles.map((style) => (
+                  <Badge
+                    key={style}
+                    variant="secondary"
+                    className="cursor-pointer hover:bg-red-100 transition-all duration-200 hover:scale-105"
+                    onClick={() => toggleStyle(style)}
+                  >
+                    {style} ×
+                  </Badge>
+                ))
+              )}
+            </div>
+          </ScrollArea>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          {getStyleOptions().map((style) => (
-            <Button
-              key={style}
-              variant={selectedStyles.includes(style) ? "default" : "outline"}
-              size="sm"
-              onClick={() => toggleStyle(style)}
-              className="text-xs justify-start h-8"
-            >
-              {style}
-            </Button>
-          ))}
-        </div>
+        <ScrollArea className="h-48">
+          <div className="grid grid-cols-1 gap-2 pr-4">
+            {getStyleOptions().map((style) => (
+              <Button
+                key={style}
+                variant={selectedStyles.includes(style) ? "default" : "outline"}
+                size="sm"
+                onClick={() => toggleStyle(style)}
+                className="text-xs justify-start h-8 transition-all duration-200 hover:scale-105"
+              >
+                {style}
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
