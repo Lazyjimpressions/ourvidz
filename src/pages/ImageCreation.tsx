@@ -99,7 +99,7 @@ const ImageCreation = () => {
                 />
               </div>
             </div>
-          </div>
+          </Tabs>
         </div>
       </div>
     </PortalLayout>
