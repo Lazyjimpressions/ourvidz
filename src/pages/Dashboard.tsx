@@ -1,4 +1,5 @@
-import { DollarSign, Home, Settings, Video, UserRound } from "lucide-react";
+
+import { DollarSign, Home, Settings, Video, UserRound, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -12,9 +13,15 @@ import {
 } from "@/components/ui/sidebar";
 import { Card, CardContent } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
+  
+  const handleSignOut = async () => {
+    await signOut();
+  };
   
   return (
     <SidebarProvider defaultOpen={false}>
@@ -23,6 +30,11 @@ const Dashboard = () => {
           <SidebarHeader>
             <div className="p-4">
               <h2 className="font-semibold">VideoAI</h2>
+              {user && (
+                <p className="text-sm text-gray-600 mt-1">
+                  {profile?.username || user.email}
+                </p>
+              )}
             </div>
           </SidebarHeader>
           <SidebarContent>
@@ -67,6 +79,12 @@ const Dashboard = () => {
                   </a>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={handleSignOut} tooltip="Sign Out">
+                  <LogOut />
+                  <span>Sign Out</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
@@ -76,13 +94,19 @@ const Dashboard = () => {
             <SidebarTrigger />
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Balance: <span className="font-medium">100 tokens</span>
+                Balance: <span className="font-medium">{profile?.token_balance || 0} tokens</span>
+              </div>
+              <div className="text-sm text-gray-600">
+                Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'free'}</span>
               </div>
             </div>
           </header>
 
           <main className="flex-1 p-6">
-            <h1 className="text-3xl font-semibold mb-8">What do you want to do?</h1>
+            <h1 className="text-3xl font-semibold mb-2">
+              Welcome back{profile?.username ? `, ${profile.username}` : ''}!
+            </h1>
+            <p className="text-gray-600 mb-8">What do you want to do today?</p>
             
             <div className="grid md:grid-cols-2 gap-6">
               <Card 
@@ -95,10 +119,13 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
 
-              <Card className="group hover:border-primary/50 transition-colors cursor-pointer">
+              <Card 
+                className="group hover:border-primary/50 transition-colors cursor-pointer"
+                onClick={() => navigate("/library")}
+              >
                 <CardContent className="p-6">
-                  <h2 className="text-xl font-semibold mb-2">Get Help Crafting a Prompt</h2>
-                  <p className="text-gray-600">Learn how to write effective prompts for better results</p>
+                  <h2 className="text-xl font-semibold mb-2">View Your Videos</h2>
+                  <p className="text-gray-600">Browse and manage your video library</p>
                 </CardContent>
               </Card>
             </div>
