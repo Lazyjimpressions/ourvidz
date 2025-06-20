@@ -22,7 +22,7 @@ const Dashboard = () => {
             <div className="text-sm text-yellow-700">
               <p>You need an active subscription to create videos.</p>
               <p>Current status: {profile?.subscription_status || 'inactive'}</p>
-              <p>Credits: {profile?.credits_remaining || 0}</p>
+              <p>Credits: {profile?.token_balance || 0}</p>
             </div>
           </div>
         )}

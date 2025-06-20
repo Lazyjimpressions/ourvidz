@@ -74,7 +74,7 @@ const Profile = () => {
               <div className="grid sm:grid-cols-2 gap-6">
                 <div>
                   <p className="text-sm font-medium text-gray-500">Credits Remaining</p>
-                  <p className="text-4xl font-semibold text-primary mt-1">{profile?.credits_remaining || 0}</p>
+                  <p className="text-4xl font-semibold text-primary mt-1">{profile?.token_balance || 0}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-500">Subscription Status</p>

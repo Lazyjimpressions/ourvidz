@@ -19,7 +19,7 @@ const Pricing = () => {
           <div className="mt-4 p-4 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-700">
               Current plan: <span className="font-medium capitalize">{profile.subscription_status}</span>
-              {" | "}Credits remaining: <span className="font-medium">{profile.credits_remaining}</span>
+              {" | "}Credits remaining: <span className="font-medium">{profile.token_balance}</span>
             </p>
           </div>
         )}

@@ -95,7 +95,7 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Balance: <span className="font-medium">{profile?.credits_remaining || 0} credits</span>
+                Balance: <span className="font-medium">{profile?.token_balance || 0} credits</span>
               </div>
               <div className="text-sm text-gray-600">
                 Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'inactive'}</span>

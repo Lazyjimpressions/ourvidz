@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,7 +7,7 @@ interface Profile {
   id: string;
   username: string | null;
   subscription_status: 'inactive' | 'starter' | 'pro' | 'creator';
-  credits_remaining: number;
+  token_balance: number;
   created_at: string;
   updated_at: string;
 }
@@ -47,7 +48,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, subscription_status, credits_remaining, created_at, updated_at')
+        .select('id, username, subscription_status, token_balance, created_at, updated_at')
         .eq('id', userId)
         .single();
       
