@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import CreateVideo from "./pages/CreateVideo";
+import Characters from "./pages/Characters";
 import Library from "./pages/Library";
 import Profile from "./pages/Profile";
 
@@ -36,6 +37,11 @@ const App = () => (
             <Route path="/create-video" element={
               <ProtectedRoute>
                 <CreateVideo />
+              </ProtectedRoute>
+            } />
+            <Route path="/characters" element={
+              <ProtectedRoute>
+                <Characters />
               </ProtectedRoute>
             } />
             <Route path="/library" element={

@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PortalLayout } from "@/components/PortalLayout";
 import { VideoConfiguration, VideoConfig } from "@/components/VideoConfiguration";
-import { CharacterManager, Character } from "@/components/CharacterManager";
+import { Character } from "@/components/CharacterManager";
+import { CharacterSelection } from "@/components/CharacterSelection";
 import { StoryBreakdown } from "@/components/StoryBreakdown";
 import { StoryboardGeneration } from "@/components/StoryboardGeneration";
 import { EnhancedVideoGeneration } from "@/components/EnhancedVideoGeneration";
@@ -35,15 +36,26 @@ const CreateVideo = () => {
   const [approvedStoryboard, setApprovedStoryboard] = useState<SceneImage[]>([]);
 
   const stepTitles = {
-    config: 'Video Configuration',
+    config: 'Choose Creation Type',
     characters: 'Character Setup',
-    story: 'Story & Scene Breakdown',
-    storyboard: 'Storyboard Generation',
-    generation: 'Video Generation',
+    story: videoConfig?.mediaType === 'image' ? 'Image Description' : 'Story & Scene Breakdown',
+    storyboard: videoConfig?.mediaType === 'image' ? 'Image Generation' : 'Storyboard Generation',
+    generation: videoConfig?.mediaType === 'image' ? 'Final Image' : 'Video Generation',
     complete: 'Complete'
   };
 
-  const steps: WorkflowStep[] = ['config', 'characters', 'story', 'storyboard', 'generation'];
+  // Dynamic steps based on configuration
+  const getSteps = (): WorkflowStep[] => {
+    const baseSteps: WorkflowStep[] = ['config', 'characters', 'story'];
+    
+    if (videoConfig?.mediaType === 'image') {
+      return [...baseSteps, 'generation'];
+    } else {
+      return [...baseSteps, 'storyboard', 'generation'];
+    }
+  };
+
+  const steps = getSteps();
   const currentStepIndex = steps.indexOf(currentStep);
 
   const handleConfigurationComplete = (config: VideoConfig) => {
@@ -56,9 +68,20 @@ const CreateVideo = () => {
     setCurrentStep('story');
   };
 
+  const handleSkipCharacters = () => {
+    setSelectedCharacters([]);
+    setCurrentStep('story');
+  };
+
   const handleScenesApproved = (scenes: Scene[]) => {
     setApprovedScenes(scenes);
-    setCurrentStep('storyboard');
+    
+    if (videoConfig?.mediaType === 'image') {
+      // For images, skip storyboard and go straight to generation
+      setCurrentStep('generation');
+    } else {
+      setCurrentStep('storyboard');
+    }
   };
 
   const handleStoryboardApproved = (sceneImages: SceneImage[]) => {
@@ -67,7 +90,8 @@ const CreateVideo = () => {
   };
 
   const handleVideoGenerated = () => {
-    toast.success("Your video has been generated successfully!");
+    const mediaType = videoConfig?.mediaType === 'image' ? 'image' : 'video';
+    toast.success(`Your ${mediaType} has been generated successfully!`);
     navigate("/library");
   };
 
@@ -84,7 +108,12 @@ const CreateVideo = () => {
         return <VideoConfiguration onConfigurationComplete={handleConfigurationComplete} />;
       
       case 'characters':
-        return <CharacterManager onCharactersSelected={handleCharactersSelected} />;
+        return (
+          <CharacterSelection 
+            onCharactersSelected={handleCharactersSelected}
+            onSkipCharacters={handleSkipCharacters}
+          />
+        );
       
       case 'story':
         return (
@@ -107,7 +136,7 @@ const CreateVideo = () => {
         return (
           <EnhancedVideoGeneration 
             config={videoConfig!}
-            sceneImages={approvedStoryboard}
+            sceneImages={videoConfig?.mediaType === 'image' ? [] : approvedStoryboard}
             onVideoGenerated={handleVideoGenerated}
           />
         );
@@ -118,7 +147,7 @@ const CreateVideo = () => {
   };
 
   return (
-    <PortalLayout title="Create a New Video">
+    <PortalLayout title={`Create a New ${videoConfig?.mediaType === 'image' ? 'Image' : 'Video'}`}>
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4 mb-8">
