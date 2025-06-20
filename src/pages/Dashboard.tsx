@@ -1,4 +1,4 @@
-import { DollarSign, Home, Settings, Video, UserRound, LogOut } from "lucide-react";
+import { DollarSign, Home, Settings, Video, UserRound, LogOut, Shield, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -16,7 +16,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, userRoles, isAdmin, signOut, session } = useAuth();
   
   const handleSignOut = async () => {
     await signOut();
@@ -30,9 +30,17 @@ const Dashboard = () => {
             <div className="p-4">
               <h2 className="font-semibold">VideoAI</h2>
               {user && (
-                <p className="text-sm text-gray-600 mt-1">
-                  {profile?.username || user.email}
-                </p>
+                <div className="mt-1">
+                  <p className="text-sm text-gray-600">
+                    {profile?.username || user.email}
+                  </p>
+                  {isAdmin && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full mt-1">
+                      <Shield className="h-3 w-3" />
+                      Admin Access
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </SidebarHeader>
@@ -90,14 +98,32 @@ const Dashboard = () => {
               <div className="text-sm text-gray-600">
                 Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'free'}</span>
               </div>
+              {session && (
+                <div className="text-xs text-gray-500 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Session Active
+                </div>
+              )}
             </div>
           </header>
 
           <main className="flex-1 p-6">
             <h1 className="text-3xl font-semibold mb-2">
               Welcome back{profile?.username ? `, ${profile.username}` : ''}!
+              {isAdmin && <span className="text-red-600 ml-2">(Admin)</span>}
             </h1>
             <p className="text-gray-600 mb-8">What do you want to do today?</p>
+            
+            {isAdmin && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h3 className="font-medium text-red-800 mb-2">Admin Status</h3>
+                <div className="text-sm text-red-700">
+                  <p>You have administrator privileges.</p>
+                  <p>Roles: {userRoles.map(role => role.role).join(', ')}</p>
+                  <p>User ID: {user?.id}</p>
+                </div>
+              </div>
+            )}
             
             <div className="grid md:grid-cols-2 gap-6">
               <Card 

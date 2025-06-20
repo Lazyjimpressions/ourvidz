@@ -1,4 +1,4 @@
-import { CalendarDays, CreditCard, User } from "lucide-react";
+import { CalendarDays, CreditCard, User, Shield } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "@/components/ui/table";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { DollarSign, Home, Settings, Video } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const mockBillingHistory = [
   {
@@ -38,6 +39,7 @@ const mockBillingHistory = [
 
 const Profile = () => {
   const navigate = useNavigate();
+  const { user, profile, userRoles, isAdmin } = useAuth();
 
   return (
     <SidebarProvider defaultOpen={false}>
@@ -47,6 +49,19 @@ const Profile = () => {
           <SidebarHeader>
             <div className="p-4">
               <h2 className="font-semibold">VideoAI</h2>
+              {user && (
+                <div className="mt-1">
+                  <p className="text-sm text-gray-600">
+                    {profile?.username || user.email}
+                  </p>
+                  {isAdmin && (
+                    <span className="inline-flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full mt-1">
+                      <Shield className="h-3 w-3" />
+                      Admin
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </SidebarHeader>
           <SidebarContent>
@@ -94,7 +109,10 @@ const Profile = () => {
             <SidebarTrigger />
             <div className="flex items-center gap-4">
               <div className="text-sm text-gray-600">
-                Balance: <span className="font-medium">100 tokens</span>
+                Balance: <span className="font-medium">{profile?.token_balance || 0} tokens</span>
+              </div>
+              <div className="text-sm text-gray-600">
+                Plan: <span className="font-medium capitalize">{profile?.subscription_status || 'free'}</span>
               </div>
             </div>
           </header>
@@ -116,12 +134,38 @@ const Profile = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium text-gray-500">Email</label>
-                      <p className="text-gray-900">user@example.com</p>
+                      <p className="text-gray-900">{user?.email || 'Not available'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Username</label>
+                      <p className="text-gray-900">{profile?.username || 'Not set'}</p>
                     </div>
                     <div>
                       <label className="text-sm font-medium text-gray-500">Member Since</label>
-                      <p className="text-gray-900">April 1, 2025</p>
+                      <p className="text-gray-900">
+                        {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'Unknown'}
+                      </p>
                     </div>
+                    {userRoles.length > 0 && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Roles</label>
+                        <div className="flex gap-2 mt-1">
+                          {userRoles.map((role) => (
+                            <span
+                              key={role.id}
+                              className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
+                                role.role === 'admin' 
+                                  ? 'bg-red-100 text-red-700' 
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {role.role === 'admin' && <Shield className="h-3 w-3" />}
+                              {role.role}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -138,11 +182,13 @@ const Profile = () => {
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Tokens Remaining</p>
-                      <p className="text-4xl font-semibold text-primary mt-1">100</p>
+                      <p className="text-4xl font-semibold text-primary mt-1">{profile?.token_balance || 0}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">Total Tokens Used</p>
-                      <p className="text-4xl font-semibold text-gray-600 mt-1">2,500</p>
+                      <p className="text-sm font-medium text-gray-500">Subscription Status</p>
+                      <p className="text-4xl font-semibold text-gray-600 mt-1 capitalize">
+                        {profile?.subscription_status || 'free'}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
