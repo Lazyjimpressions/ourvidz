@@ -45,6 +45,11 @@ const App = () => (
                 <Characters />
               </ProtectedRoute>
             } />
+            <Route path="/image-creation" element={
+              <ProtectedRoute>
+                <ImageCreation />
+              </ProtectedRoute>
+            } />
             <Route path="/library" element={
               <ProtectedRoute>
                 <Library />
