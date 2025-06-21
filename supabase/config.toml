@@ -1,1 +1,8 @@
+
 project_id = "ulmdmzhcdwfadbvfpckt"
+
+[functions.queue-job]
+verify_jwt = true
+
+[functions.job-callback]
+verify_jwt = false

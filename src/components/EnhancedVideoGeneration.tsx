@@ -1,223 +1,185 @@
-
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Progress } from "@/components/ui/progress";
-import { CheckCircle, Download, Share } from "lucide-react";
-import { VideoConfig } from "./VideoConfiguration";
-import { uploadFinalVideo, getFinalVideoUrl } from "@/lib/storage";
-import { toast } from "sonner";
-
-interface SceneImage {
-  sceneId: string;
-  imageUrl: string;
-  approved: boolean;
-}
+import React, { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { VideoGenerationProgress } from '@/components/VideoGenerationProgress';
+import { generateVideo } from '@/lib/videoGeneration';
+import { useToast } from '@/hooks/use-toast';
+import { Play, Settings, Wand2, Clock } from 'lucide-react';
 
 interface EnhancedVideoGenerationProps {
-  config: VideoConfig;
-  sceneImages: SceneImage[];
-  onVideoGenerated: () => void;
+  projectId: string;
+  scenes?: any[];
+  onComplete?: (videoUrl: string) => void;
 }
 
-export const EnhancedVideoGeneration = ({ 
-  config, 
-  sceneImages, 
-  onVideoGenerated 
-}: EnhancedVideoGenerationProps) => {
+export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = ({
+  projectId,
+  scenes = [],
+  onComplete
+}) => {
+  const [duration, setDuration] = useState([15]);
+  const [resolution, setResolution] = useState('720p');
+  const [format, setFormat] = useState('mp4');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentScene, setCurrentScene] = useState(0);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [currentJob, setCurrentJob] = useState<any>(null);
+  const [currentVideo, setCurrentVideo] = useState<any>(null);
+  const { toast } = useToast();
 
-  const handleGenerateVideo = async () => {
-    setIsGenerating(true);
-    setProgress(0);
-    setCurrentScene(0);
-    setGenerationError(null);
+  // Configuration options
 
+  const handleGenerate = async () => {
     try {
-      // Simulate scene-by-scene video generation
-      for (let i = 0; i < sceneImages.length; i++) {
-        setCurrentScene(i + 1);
-        setProgress(((i + 1) / sceneImages.length) * 90); // Leave 10% for final assembly
-        
-        // Simulate processing time per scene
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        
-        console.log(`Processing scene ${i + 1}...`);
-      }
-
-      // Simulate final video assembly
-      setCurrentScene(0);
-      setProgress(95);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Create a mock video file for demonstration
-      const canvas = document.createElement('canvas');
-      canvas.width = 1280;
-      canvas.height = 720;
-      const ctx = canvas.getContext('2d');
+      setIsGenerating(true);
       
-      if (ctx) {
-        // Create a simple video frame
-        const gradient = ctx.createLinearGradient(0, 0, 1280, 720);
-        gradient.addColorStop(0, '#8B5CF6');
-        gradient.addColorStop(1, '#3B82F6');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 1280, 720);
-        
-        ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Generated Video', 640, 360);
-      }
+      const result = await generateVideo({
+        projectId,
+        duration: duration[0],
+        resolution,
+        format
+      });
 
-      // Convert canvas to blob and upload as video (this is a mock - in real app you'd generate actual video)
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          const file = new File([blob], 'generated-video.mp4', { type: 'video/mp4' });
-          const projectId = (config as any).projectId || 'demo-project';
-          
-          const uploadResult = await uploadFinalVideo(projectId, file);
-          
-          if (uploadResult.error) {
-            throw uploadResult.error;
-          }
+      setCurrentJob(result.job);
+      setCurrentVideo(result.video);
 
-          if (uploadResult.data) {
-            const signedVideoUrl = await getFinalVideoUrl(uploadResult.data.path);
-            setVideoUrl(signedVideoUrl || "/placeholder.svg");
-            setProgress(100);
-            
-            toast.success("Video generated successfully!");
-            onVideoGenerated();
-          }
-        }
-      }, 'image/png'); // Mock as image for demo - real implementation would generate video
+      toast({
+        title: "Video Generation Started",
+        description: "Your video is being generated. This may take a few minutes.",
+      });
 
     } catch (error) {
-      console.error('Video generation error:', error);
-      setGenerationError('Failed to generate video. Please try again.');
-      toast.error("Video generation failed");
-    } finally {
+      console.error('Error starting video generation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start video generation. Please try again.",
+        variant: "destructive",
+      });
       setIsGenerating(false);
     }
   };
 
-  const handleDownload = async () => {
-    if (videoUrl) {
-      try {
-        const response = await fetch(videoUrl);
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'generated-video.mp4';
-        link.click();
-        window.URL.revokeObjectURL(url);
-        toast.success("Download started");
-      } catch (error) {
-        console.error('Download error:', error);
-        toast.error("Download failed");
-      }
+  const handleVideoComplete = (videoUrl: string) => {
+    setIsGenerating(false);
+    if (onComplete) {
+      onComplete(videoUrl);
     }
+    toast({
+      title: "Video Ready!",
+      description: "Your video has been generated successfully.",
+    });
   };
 
-  const handleShare = () => {
-    if (videoUrl) {
-      navigator.clipboard.writeText(videoUrl).then(() => {
-        toast.success("Video URL copied to clipboard");
-      }).catch(() => {
-        toast.error("Failed to copy URL");
-      });
-    }
+  const handleVideoError = (error: string) => {
+    setIsGenerating(false);
+    toast({
+      title: "Generation Failed",
+      description: error,
+      variant: "destructive",
+    });
   };
+
+  if (isGenerating && currentJob) {
+    return (
+      <VideoGenerationProgress
+        jobId={currentJob.id}
+        videoId={currentVideo?.id}
+        onComplete={handleVideoComplete}
+        onError={handleVideoError}
+      />
+    );
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Final Video Generation</CardTitle>
+    <Card className="w-full max-w-2xl mx-auto">
+      <CardHeader className="text-center">
+        <CardTitle className="flex items-center justify-center gap-2">
+          <Wand2 className="h-5 w-5" />
+          Enhanced Video Generation
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <div className="text-sm font-medium">Video Specifications</div>
-          <div className="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg text-sm">
-            <div>Duration: {config.duration} seconds</div>
-            <div>Scenes: {config.sceneCount}</div>
-            <div>Resolution: 720p</div>
-            <div>Frame Rate: 16 fps</div>
+        <div className="grid gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Duration: {duration[0]} seconds</label>
+            <Slider
+              value={duration}
+              onValueChange={setDuration}
+              max={30}
+              min={5}
+              step={5}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>5s</span>
+              <span>15s</span>
+              <span>30s</span>
+            </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Resolution</label>
+              <Select value={resolution} onValueChange={setResolution}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="480p">480p (SD)</SelectItem>
+                  <SelectItem value="720p">720p (HD)</SelectItem>
+                  <SelectItem value="1080p">1080p (Full HD)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Format</label>
+              <Select value={format} onValueChange={setFormat}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mp4">MP4</SelectItem>
+                  <SelectItem value="webm">WebM</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {scenes.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Scenes to Generate ({scenes.length})</label>
+              <div className="flex flex-wrap gap-2">
+                {scenes.map((scene, index) => (
+                  <Badge key={index} variant="secondary">
+                    Scene {scene.scene_number}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {generationError && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-            {generationError}
+        <Separator />
+
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="h-4 w-4" />
+            <span>Estimated generation time: 2-5 minutes</span>
           </div>
-        )}
 
-        {!videoUrl && (
-          <div className="space-y-4">
-            {isGenerating ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <LoadingSpinner size="sm" />
-                  <span className="text-sm">
-                    {currentScene > 0 
-                      ? `Processing scene ${currentScene} of ${sceneImages.length}...`
-                      : 'Assembling final video...'
-                    }
-                  </span>
-                </div>
-                <Progress value={progress} className="w-full" />
-                <div className="text-xs text-gray-600 text-center">
-                  This may take a few minutes. Please don't close this tab.
-                </div>
-              </div>
-            ) : (
-              <Button 
-                onClick={handleGenerateVideo}
-                className="w-full"
-                size="lg"
-              >
-                Generate Final Video ({config.estimatedCost} tokens)
-              </Button>
-            )}
-          </div>
-        )}
-
-        {videoUrl && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle className="h-5 w-5" />
-              <span className="font-medium">Video Generated Successfully!</span>
-            </div>
-
-            <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-              <video 
-                src={videoUrl}
-                controls
-                className="w-full h-full rounded-lg"
-                poster="/placeholder.svg"
-              >
-                Your browser does not support the video tag.
-              </video>
-            </div>
-
-            <div className="flex gap-3">
-              <Button onClick={handleDownload} className="flex-1">
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
-              <Button onClick={handleShare} variant="outline" className="flex-1">
-                <Share className="h-4 w-4 mr-2" />
-                Share
-              </Button>
-            </div>
-          </div>
-        )}
+          <Button 
+            onClick={handleGenerate}
+            disabled={isGenerating || scenes.length === 0}
+            className="w-full"
+            size="lg"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            {isGenerating ? 'Generating...' : 'Generate Video'}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

@@ -115,6 +115,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_verified: boolean | null
           created_at: string | null
           id: string
           subscription_status: string | null
@@ -123,6 +124,7 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          age_verified?: boolean | null
           created_at?: string | null
           id: string
           subscription_status?: string | null
@@ -131,6 +133,7 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          age_verified?: boolean | null
           created_at?: string | null
           id?: string
           subscription_status?: string | null
@@ -149,6 +152,8 @@ export type Database = {
           id: string
           media_type: string
           original_prompt: string
+          preview_url: string | null
+          reference_image_url: string | null
           scene_count: number | null
           title: string | null
           updated_at: string | null
@@ -163,6 +168,8 @@ export type Database = {
           id?: string
           media_type: string
           original_prompt: string
+          preview_url?: string | null
+          reference_image_url?: string | null
           scene_count?: number | null
           title?: string | null
           updated_at?: string | null
@@ -177,6 +184,8 @@ export type Database = {
           id?: string
           media_type?: string
           original_prompt?: string
+          preview_url?: string | null
+          reference_image_url?: string | null
           scene_count?: number | null
           title?: string | null
           updated_at?: string | null
@@ -206,6 +215,7 @@ export type Database = {
           created_at: string | null
           description: string
           enhanced_prompt: string | null
+          final_stitched_url: string | null
           id: string
           image_url: string | null
           project_id: string
@@ -217,6 +227,7 @@ export type Database = {
           created_at?: string | null
           description: string
           enhanced_prompt?: string | null
+          final_stitched_url?: string | null
           id?: string
           image_url?: string | null
           project_id: string
@@ -228,6 +239,7 @@ export type Database = {
           created_at?: string | null
           description?: string
           enhanced_prompt?: string | null
+          final_stitched_url?: string | null
           id?: string
           image_url?: string | null
           project_id?: string
@@ -308,7 +320,9 @@ export type Database = {
           expires_at: string | null
           format: string | null
           id: string
+          preview_url: string | null
           project_id: string
+          reference_image_url: string | null
           resolution: string | null
           status: string | null
           thumbnail_url: string | null
@@ -322,7 +336,9 @@ export type Database = {
           expires_at?: string | null
           format?: string | null
           id?: string
+          preview_url?: string | null
           project_id: string
+          reference_image_url?: string | null
           resolution?: string | null
           status?: string | null
           thumbnail_url?: string | null
@@ -336,7 +352,9 @@ export type Database = {
           expires_at?: string | null
           format?: string | null
           id?: string
+          preview_url?: string | null
           project_id?: string
+          reference_image_url?: string | null
           resolution?: string | null
           status?: string | null
           thumbnail_url?: string | null
