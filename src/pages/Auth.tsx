@@ -43,9 +43,21 @@ const Auth = () => {
         : await signIn(email, password);
 
       if (error) {
+        console.error('Authentication error:', error);
+        
+        // Handle specific error cases
+        let errorMessage = error.message;
+        if (error.message?.includes('User already registered')) {
+          errorMessage = 'An account with this email already exists. Please sign in instead.';
+        } else if (error.message?.includes('Invalid login credentials')) {
+          errorMessage = 'Invalid email or password. Please check your credentials and try again.';
+        } else if (error.message?.includes('Email not confirmed')) {
+          errorMessage = 'Please check your email and click the confirmation link before signing in.';
+        }
+        
         toast({
-          title: "Error",
-          description: error.message,
+          title: "Authentication Error",
+          description: errorMessage,
           variant: "destructive",
         });
       } else {
@@ -54,18 +66,27 @@ const Auth = () => {
             title: "Success",
             description: "Account created successfully! Please check your email for verification.",
           });
+          // Reset form
+          setEmail("");
+          setPassword("");
+          setIsSignUp(false);
         } else {
           toast({
             title: "Success",
             description: "Signed in successfully!",
           });
-          navigate("/dashboard");
+          
+          // Force page reload for clean state
+          setTimeout(() => {
+            window.location.href = '/dashboard';
+          }, 1000);
         }
       }
     } catch (error) {
+      console.error('Unexpected authentication error:', error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -97,6 +118,7 @@ const Auth = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={loading}
                 />
               </div>
 
@@ -109,7 +131,14 @@ const Auth = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={loading}
+                  minLength={6}
                 />
+                {isSignUp && (
+                  <p className="text-xs text-muted-foreground">
+                    Password must be at least 6 characters long
+                  </p>
+                )}
               </div>
 
               <Button 
@@ -129,8 +158,13 @@ const Auth = () => {
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setEmail("");
+                  setPassword("");
+                }}
                 className="text-sm text-blue-600 hover:text-blue-700 underline"
+                disabled={loading}
               >
                 {isSignUp 
                   ? "Already have an account? Sign in"

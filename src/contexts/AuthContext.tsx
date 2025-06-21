@@ -24,6 +24,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: any }>;
   refreshSession: () => Promise<void>;
+  cleanupAuthState: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,6 +45,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profileFetchAttempts, setProfileFetchAttempts] = useState(0);
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
+
+  // Cleanup function to prevent auth limbo states
+  const cleanupAuthState = useCallback(() => {
+    console.log('Cleaning up auth state...');
+    
+    // Clear all auth-related keys from localStorage
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+    
+    // Clear from sessionStorage if available
+    if (typeof sessionStorage !== 'undefined') {
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+    }
+    
+    // Reset local state
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setProfileFetchAttempts(0);
+  }, []);
 
   const fetchProfile = useCallback(async (userId: string, retryCount = 0) => {
     const maxRetries = 3;
@@ -123,7 +151,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(session?.user ?? null);
     
     if (session?.user && event !== 'TOKEN_REFRESHED') {
-      // Only fetch profile on significant auth changes, not token refreshes
+      // Defer profile fetching to prevent deadlocks
       setTimeout(() => {
         fetchProfile(session.user.id);
       }, 100);
@@ -195,21 +223,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []); // Remove session dependency to prevent infinite loop
 
   const signUp = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl
+    try {
+      // Clean up any existing auth state before signup
+      cleanupAuthState();
+      
+      // Attempt global sign out to ensure clean state
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
+        console.log('Global signout failed, continuing with signup');
       }
-    });
-    
-    return { error };
+      
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl
+        }
+      });
+      
+      return { error };
+    } catch (error) {
+      console.error('Sign up error:', error);
+      return { error };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
+      // Clean up any existing auth state before signin
+      cleanupAuthState();
+      
+      // Attempt global sign out to ensure clean state
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
+        console.log('Global signout failed, continuing with signin');
+      }
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -223,45 +278,76 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/`
+    try {
+      // Clean up any existing auth state before Google signin
+      cleanupAuthState();
+      
+      // Attempt global sign out to ensure clean state
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
+        console.log('Global signout failed, continuing with Google signin');
       }
-    });
-    
-    return { error };
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`
+        }
+      });
+      
+      return { error };
+    } catch (error) {
+      console.error('Google sign in error:', error);
+      return { error };
+    }
   };
 
   const signOut = async () => {
     try {
       console.log('Signing out...');
-      setUser(null);
-      setSession(null);
-      setProfile(null);
-      setProfileFetchAttempts(0);
       
-      await supabase.auth.signOut();
+      // Clean up auth state first
+      cleanupAuthState();
+      
+      // Attempt global sign out
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        console.log('Global signout failed, but continuing with local cleanup');
+      }
+      
       console.log('Signed out successfully');
+      
+      // Force page reload for clean state
+      window.location.href = '/auth';
       
     } catch (error) {
       console.error('Error signing out:', error);
+      // Even if signout fails, redirect to auth page
+      window.location.href = '/auth';
     }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) return { error: 'No user logged in' };
     
-    const { error } = await supabase
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id);
-    
-    if (!error && profile) {
-      setProfile({ ...profile, ...updates });
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id);
+      
+      if (!error && profile) {
+        setProfile({ ...profile, ...updates });
+      }
+      
+      return { error };
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      return { error };
     }
-    
-    return { error };
   };
 
   const value = {
@@ -276,6 +362,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     signOut,
     updateProfile,
     refreshSession,
+    cleanupAuthState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
