@@ -65,7 +65,7 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
         enhancedPrompt = `High-quality digital art: ${story}${characters.length > 0 ? ` featuring ${characters.map(c => c.name).join(', ')}` : ''}`;
       } else {
         description = `Scene ${sceneNumber}: ${story} - part ${sceneNumber}`;
-        enhancedPrompt = `Cinematic video scene ${sceneNumber}: ${story}${characters.length > 0 ? ` with characters: ${characters.map(c => `${c.name} (${c.appearanceTags})`).join(', ')}` : ''}`;
+        enhancedPrompt = `Cinematic video scene ${sceneNumber}: ${story}${characters.length > 0 ? ` with characters: ${characters.map(c => `${c.name} (${c.appearance_tags ? c.appearance_tags.join(', ') : 'no appearance details'})`).join(', ')}` : ''}`;
       }
 
       return {
