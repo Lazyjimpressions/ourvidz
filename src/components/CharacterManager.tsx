@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Upload, Plus, User } from "lucide-react";
-import { type Character } from "@/lib/database";
+import { type Character as DatabaseCharacter } from "@/lib/database";
+
+// Export the Character type for use in other components
+export type Character = DatabaseCharacter;
 
 interface CharacterManagerProps {
   onCharactersSelected: (characters: Character[]) => void;

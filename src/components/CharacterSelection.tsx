@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { User, Plus, Users } from "lucide-react";
-import { Character } from "./CharacterManager";
+import { Character } from "@/components/CharacterManager";
 
 interface CharacterSelectionProps {
   onCharactersSelected: (characters: Character[]) => void;
@@ -15,21 +15,36 @@ interface CharacterSelectionProps {
 const existingCharacters: Character[] = [
   {
     id: "1",
+    user_id: "mock-user",
     name: "Alex",
+    description: "Adventurous explorer character",
     traits: "Adventurous explorer, curious and brave",
-    appearanceTags: "brown hair, blue eyes, casual clothing",
+    appearance_tags: ["brown hair", "blue eyes", "casual clothing"],
+    image_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   },
   {
     id: "2", 
+    user_id: "mock-user",
     name: "Maya",
+    description: "Wise mentor character",
     traits: "Wise mentor, calm and thoughtful",
-    appearanceTags: "silver hair, green eyes, elegant robes",
+    appearance_tags: ["silver hair", "green eyes", "elegant robes"],
+    image_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   },
   {
     id: "3",
+    user_id: "mock-user",
     name: "Zoe",
-    traits: "Energetic inventor, creative and enthusiastic", 
-    appearanceTags: "red hair, goggles, lab coat",
+    description: "Energetic inventor character", 
+    traits: "Energetic inventor, creative and enthusiastic",
+    appearance_tags: ["red hair", "goggles", "lab coat"],
+    image_url: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   }
 ];
 
@@ -101,8 +116,8 @@ export const CharacterSelection = ({ onCharactersSelected, onSkipCharacters }: C
                   {character.traits && (
                     <p className="text-sm text-gray-600 mb-1">{character.traits}</p>
                   )}
-                  {character.appearanceTags && (
-                    <p className="text-xs text-gray-500">{character.appearanceTags}</p>
+                  {character.appearance_tags && (
+                    <p className="text-xs text-gray-500">{character.appearance_tags.join(', ')}</p>
                   )}
                 </button>
               ))}

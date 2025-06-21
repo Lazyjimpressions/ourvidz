@@ -11,7 +11,7 @@ import {
 
 interface VideoCardProps {
   video: {
-    id: number;
+    id: string; // Changed from number to string to match database UUID
     thumbnail: string;
     prompt: string;
     createdAt: Date;
