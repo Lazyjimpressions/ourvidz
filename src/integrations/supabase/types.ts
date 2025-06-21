@@ -9,6 +9,110 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      characters: {
+        Row: {
+          appearance_tags: string[] | null
+          created_at: string | null
+          description: string
+          id: string
+          image_url: string | null
+          name: string
+          traits: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          appearance_tags?: string[] | null
+          created_at?: string | null
+          description: string
+          id?: string
+          image_url?: string | null
+          name: string
+          traits?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          appearance_tags?: string[] | null
+          created_at?: string | null
+          description?: string
+          id?: string
+          image_url?: string | null
+          name?: string
+          traits?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "characters_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          attempts: number | null
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          id: string
+          job_type: string
+          max_attempts: number | null
+          metadata: Json | null
+          started_at: string | null
+          status: string | null
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          job_type: string
+          max_attempts?: number | null
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string | null
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          max_attempts?: number | null
+          metadata?: Json | null
+          started_at?: string | null
+          status?: string | null
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -36,6 +140,145 @@ export type Database = {
         }
         Relationships: []
       }
+      projects: {
+        Row: {
+          character_id: string | null
+          created_at: string | null
+          duration: number | null
+          enhanced_prompt: string | null
+          id: string
+          media_type: string
+          original_prompt: string
+          scene_count: number | null
+          title: string | null
+          updated_at: string | null
+          user_id: string
+          workflow_step: string | null
+        }
+        Insert: {
+          character_id?: string | null
+          created_at?: string | null
+          duration?: number | null
+          enhanced_prompt?: string | null
+          id?: string
+          media_type: string
+          original_prompt: string
+          scene_count?: number | null
+          title?: string | null
+          updated_at?: string | null
+          user_id: string
+          workflow_step?: string | null
+        }
+        Update: {
+          character_id?: string | null
+          created_at?: string | null
+          duration?: number | null
+          enhanced_prompt?: string | null
+          id?: string
+          media_type?: string
+          original_prompt?: string
+          scene_count?: number | null
+          title?: string | null
+          updated_at?: string | null
+          user_id?: string
+          workflow_step?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projects_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scenes: {
+        Row: {
+          approved: boolean | null
+          created_at: string | null
+          description: string
+          enhanced_prompt: string | null
+          id: string
+          image_url: string | null
+          project_id: string
+          scene_number: number
+          updated_at: string | null
+        }
+        Insert: {
+          approved?: boolean | null
+          created_at?: string | null
+          description: string
+          enhanced_prompt?: string | null
+          id?: string
+          image_url?: string | null
+          project_id: string
+          scene_number: number
+          updated_at?: string | null
+        }
+        Update: {
+          approved?: boolean | null
+          created_at?: string | null
+          description?: string
+          enhanced_prompt?: string | null
+          id?: string
+          image_url?: string | null
+          project_id?: string
+          scene_number?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scenes_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          credits_consumed: number | null
+          id: string
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          credits_consumed?: number | null
+          id?: string
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          credits_consumed?: number | null
+          id?: string
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -56,6 +299,66 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      videos: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          duration: number | null
+          expires_at: string | null
+          format: string | null
+          id: string
+          project_id: string
+          resolution: string | null
+          status: string | null
+          thumbnail_url: string | null
+          user_id: string
+          video_url: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          duration?: number | null
+          expires_at?: string | null
+          format?: string | null
+          id?: string
+          project_id: string
+          resolution?: string | null
+          status?: string | null
+          thumbnail_url?: string | null
+          user_id: string
+          video_url?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          duration?: number | null
+          expires_at?: string | null
+          format?: string | null
+          id?: string
+          project_id?: string
+          resolution?: string | null
+          status?: string | null
+          thumbnail_url?: string | null
+          user_id?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

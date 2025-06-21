@@ -3,10 +3,14 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Clock, Coins, Image, Video } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { projectAPI, usageAPI } from "@/lib/database";
+import { useToast } from "@/hooks/use-toast";
 
 interface VideoConfigurationProps {
-  onConfigurationComplete: (config: VideoConfig) => void;
+  onConfigurationComplete: (config: VideoConfig & { projectId: string }) => void;
 }
 
 export interface VideoConfig {
@@ -56,24 +60,100 @@ const mediaOptions = [
 ];
 
 export const VideoConfiguration = ({ onConfigurationComplete }: VideoConfigurationProps) => {
-  const [selectedOption, setSelectedOption] = useState(mediaOptions[1]); // Default to 5s video
+  const [selectedOption, setSelectedOption] = useState(mediaOptions[1]);
+  const [prompt, setPrompt] = useState("");
+  const [title, setTitle] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
-  const handleContinue = () => {
-    const config: VideoConfig = {
-      mediaType: selectedOption.type,
-      duration: selectedOption.duration,
-      sceneCount: selectedOption.scenes,
-      estimatedCost: selectedOption.cost,
-    };
-    onConfigurationComplete(config);
+  const handleContinue = async () => {
+    if (!prompt.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a story or description",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to create projects",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Create project in database
+      const project = await projectAPI.create({
+        user_id: user.id,
+        title: title.trim() || 'Untitled Project',
+        original_prompt: prompt.trim(),
+        media_type: selectedOption.type,
+        duration: selectedOption.duration,
+        scene_count: selectedOption.scenes,
+        workflow_step: 'configuration'
+      });
+
+      // Log usage
+      await usageAPI.logAction('project_created', 0, {
+        media_type: selectedOption.type,
+        duration: selectedOption.duration,
+        scene_count: selectedOption.scenes
+      });
+
+      const config: VideoConfig & { projectId: string } = {
+        projectId: project.id,
+        mediaType: selectedOption.type,
+        duration: selectedOption.duration,
+        sceneCount: selectedOption.scenes,
+        estimatedCost: selectedOption.cost,
+      };
+
+      onConfigurationComplete(config);
+    } catch (error) {
+      console.error('Error creating project:', error);
+      toast({
+        title: "Error",
+        description: "Failed to create project. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Choose Your Creation Type</CardTitle>
+        <CardTitle>Create Your Project</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="title">Project Title (Optional)</Label>
+          <Input
+            id="title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="My awesome video project"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="prompt">Story or Description *</Label>
+          <Input
+            id="prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe what you want to create..."
+            required
+          />
+        </div>
+
         <div className="space-y-2">
           <Label>Media Type & Duration</Label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -123,8 +203,12 @@ export const VideoConfiguration = ({ onConfigurationComplete }: VideoConfigurati
           </div>
         </div>
 
-        <Button onClick={handleContinue} className="w-full">
-          Continue to Story Input
+        <Button 
+          onClick={handleContinue} 
+          className="w-full"
+          disabled={loading || !prompt.trim()}
+        >
+          {loading ? "Creating Project..." : "Continue to Character Selection"}
         </Button>
       </CardContent>
     </Card>

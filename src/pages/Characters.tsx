@@ -5,15 +5,43 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PortalLayout } from "@/components/PortalLayout";
 import { CharacterManager } from "@/components/CharacterManager";
-import { Character } from "@/components/CharacterManager";
+import { useQuery } from "@tanstack/react-query";
+import { characterAPI } from "@/lib/database";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+
+// Define Character type to match the database
+export interface Character {
+  id: string;
+  name: string;
+  description: string;
+  traits?: string | null;
+  appearance_tags?: string[] | null;
+  image_url?: string | null;
+  created_at?: string | null;
+}
 
 const Characters = () => {
   const navigate = useNavigate();
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
+  
+  const { data: characters, isLoading } = useQuery({
+    queryKey: ['characters'],
+    queryFn: characterAPI.getAll,
+  });
 
   const handleCharactersCreated = (newCharacters: Character[]) => {
-    setCharacters(newCharacters);
+    setSelectedCharacters(newCharacters);
   };
+
+  if (isLoading) {
+    return (
+      <PortalLayout title="Character Library">
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <LoadingSpinner size="lg" />
+        </div>
+      </PortalLayout>
+    );
+  }
 
   return (
     <PortalLayout title="Character Library">
@@ -36,7 +64,10 @@ const Characters = () => {
             </div>
           </div>
 
-          <CharacterManager onCharactersSelected={handleCharactersCreated} />
+          <CharacterManager 
+            onCharactersSelected={handleCharactersCreated}
+            existingCharacters={characters || []}
+          />
         </div>
       </div>
     </PortalLayout>
