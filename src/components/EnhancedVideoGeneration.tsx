@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { VideoGenerationProgress } from '@/components/VideoGenerationProgress';
 import { generateVideo } from '@/lib/videoGeneration';
 import { useToast } from '@/hooks/use-toast';
-import { Play, Settings, Wand2, Clock } from 'lucide-react';
+import { Play, Wand2, Clock } from 'lucide-react';
 
 interface EnhancedVideoGenerationProps {
   projectId: string;
@@ -28,8 +29,6 @@ export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = (
   const [currentJob, setCurrentJob] = useState<any>(null);
   const [currentVideo, setCurrentVideo] = useState<any>(null);
   const { toast } = useToast();
-
-  // Configuration options
 
   const handleGenerate = async () => {
     try {

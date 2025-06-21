@@ -12,13 +12,15 @@ interface VideoGenerationProgressProps {
   onError?: (error: string) => void;
 }
 
+type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+
 export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = ({
   jobId,
   videoId,
   onComplete,
   onError,
 }) => {
-  const [status, setStatus] = useState<'queued' | 'processing' | 'completed' | 'failed'>('queued');
+  const [status, setStatus] = useState<JobStatus>('queued');
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('Initializing video generation...');
 
@@ -43,9 +45,10 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
         }
 
         if (jobs) {
-          setStatus(jobs.status);
+          const jobStatus = jobs.status as JobStatus;
+          setStatus(jobStatus);
           
-          switch (jobs.status) {
+          switch (jobStatus) {
             case 'queued':
               setProgress(10);
               setMessage('Job queued for processing...');
@@ -57,8 +60,8 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
             case 'completed':
               setProgress(100);
               setMessage('Video generation completed!');
-              if (onComplete && jobs.metadata?.video_url) {
-                onComplete(jobs.metadata.video_url);
+              if (onComplete && jobs.metadata && typeof jobs.metadata === 'object' && 'video_url' in jobs.metadata) {
+                onComplete(jobs.metadata.video_url as string);
               }
               break;
             case 'failed':

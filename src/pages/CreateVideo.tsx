@@ -34,6 +34,7 @@ const CreateVideo = () => {
   const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
   const [approvedScenes, setApprovedScenes] = useState<Scene[]>([]);
   const [approvedStoryboard, setApprovedStoryboard] = useState<SceneImage[]>([]);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
 
   const stepTitles = {
     config: 'Choose Creation Type',
@@ -73,8 +74,11 @@ const CreateVideo = () => {
     setCurrentStep('story');
   };
 
-  const handleScenesApproved = (scenes: Scene[]) => {
+  const handleScenesApproved = (scenes: Scene[], projectId?: string) => {
     setApprovedScenes(scenes);
+    if (projectId) {
+      setCurrentProjectId(projectId);
+    }
     
     if (videoConfig?.mediaType === 'image') {
       // For images, skip storyboard and go straight to generation
@@ -133,13 +137,13 @@ const CreateVideo = () => {
         );
       
       case 'generation':
-        return (
+        return currentProjectId ? (
           <EnhancedVideoGeneration 
-            config={videoConfig!}
-            sceneImages={videoConfig?.mediaType === 'image' ? [] : approvedStoryboard}
-            onVideoGenerated={handleVideoGenerated}
+            projectId={currentProjectId}
+            scenes={approvedScenes}
+            onComplete={handleVideoGenerated}
           />
-        );
+        ) : null;
       
       default:
         return null;
