@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Image, CheckCircle, Edit } from "lucide-react";
+import { uploadScenePreview, getScenePreviewUrl } from "@/lib/storage";
+import { toast } from "sonner";
 
 interface Scene {
   id: string;
@@ -31,25 +33,84 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
   const generateSceneImage = async (scene: Scene) => {
     setGeneratingScenes(prev => new Set(prev).add(scene.id));
     
-    // Simulate image generation - replace with actual RunPod API call
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    const newSceneImage: SceneImage = {
-      sceneId: scene.id,
-      imageUrl: "/placeholder.svg", // Replace with actual generated image
-      approved: false,
-    };
+    try {
+      // Simulate image generation - replace with actual RunPod API call
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      // For demo purposes, create a mock blob/file for the generated image
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // Create a simple gradient as placeholder
+        const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+        gradient.addColorStop(0, '#3B82F6');
+        gradient.addColorStop(1, '#1E40AF');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Add scene number text
+        ctx.fillStyle = 'white';
+        ctx.font = '48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Scene ${scene.sceneNumber}`, 256, 256);
+      }
 
-    setSceneImages(prev => {
-      const filtered = prev.filter(img => img.sceneId !== scene.id);
-      return [...filtered, newSceneImage];
-    });
+      // Convert canvas to blob and upload
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const file = new File([blob], `scene-${scene.sceneNumber}.png`, { type: 'image/png' });
+          const projectId = 'demo-project'; // In real app, get from context/props
+          
+          const uploadResult = await uploadScenePreview(projectId, scene.sceneNumber, file);
+          
+          if (uploadResult.error) {
+            throw uploadResult.error;
+          }
 
-    setGeneratingScenes(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(scene.id);
-      return newSet;
-    });
+          if (uploadResult.data) {
+            // Get the signed URL for the uploaded image
+            const signedUrl = await getScenePreviewUrl(uploadResult.data.path);
+            
+            const newSceneImage: SceneImage = {
+              sceneId: scene.id,
+              imageUrl: signedUrl || "/placeholder.svg",
+              approved: false,
+            };
+
+            setSceneImages(prev => {
+              const filtered = prev.filter(img => img.sceneId !== scene.id);
+              return [...filtered, newSceneImage];
+            });
+
+            toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
+          }
+        }
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('Error generating scene image:', error);
+      toast.error(`Failed to generate scene ${scene.sceneNumber} image`);
+      
+      // Fallback to placeholder
+      const newSceneImage: SceneImage = {
+        sceneId: scene.id,
+        imageUrl: "/placeholder.svg",
+        approved: false,
+      };
+
+      setSceneImages(prev => {
+        const filtered = prev.filter(img => img.sceneId !== scene.id);
+        return [...filtered, newSceneImage];
+      });
+    } finally {
+      setGeneratingScenes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(scene.id);
+        return newSet;
+      });
+    }
   };
 
   const generateAllScenes = async () => {
@@ -137,6 +198,9 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
                         src={sceneImage.imageUrl} 
                         alt={`Scene ${scene.sceneNumber}`}
                         className="w-full h-full object-cover rounded-lg"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/placeholder.svg";
+                        }}
                       />
                       {sceneImage.approved && (
                         <div className="absolute top-2 right-2 bg-green-500 rounded-full p-1">

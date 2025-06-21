@@ -6,6 +6,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Progress } from "@/components/ui/progress";
 import { CheckCircle, Download, Share } from "lucide-react";
 import { VideoConfig } from "./VideoConfiguration";
+import { uploadFinalVideo, getFinalVideoUrl } from "@/lib/storage";
+import { toast } from "sonner";
 
 interface SceneImage {
   sceneId: string;
@@ -40,42 +42,97 @@ export const EnhancedVideoGeneration = ({
       // Simulate scene-by-scene video generation
       for (let i = 0; i < sceneImages.length; i++) {
         setCurrentScene(i + 1);
-        setProgress(((i + 1) / sceneImages.length) * 100);
+        setProgress(((i + 1) / sceneImages.length) * 90); // Leave 10% for final assembly
         
         // Simulate processing time per scene
         await new Promise(resolve => setTimeout(resolve, 5000));
         
-        // Here would be the actual RunPod API call for video generation
         console.log(`Processing scene ${i + 1}...`);
       }
 
       // Simulate final video assembly
       setCurrentScene(0);
-      setProgress(100);
+      setProgress(95);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Set the final video URL (replace with actual generated video)
-      setVideoUrl("/placeholder.svg"); // Replace with actual video URL
-      onVideoGenerated();
+      // Create a mock video file for demonstration
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext('2d');
+      
+      if (ctx) {
+        // Create a simple video frame
+        const gradient = ctx.createLinearGradient(0, 0, 1280, 720);
+        gradient.addColorStop(0, '#8B5CF6');
+        gradient.addColorStop(1, '#3B82F6');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 1280, 720);
+        
+        ctx.fillStyle = 'white';
+        ctx.font = '48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Generated Video', 640, 360);
+      }
+
+      // Convert canvas to blob and upload as video (this is a mock - in real app you'd generate actual video)
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          const file = new File([blob], 'generated-video.mp4', { type: 'video/mp4' });
+          const projectId = (config as any).projectId || 'demo-project';
+          
+          const uploadResult = await uploadFinalVideo(projectId, file);
+          
+          if (uploadResult.error) {
+            throw uploadResult.error;
+          }
+
+          if (uploadResult.data) {
+            const signedVideoUrl = await getFinalVideoUrl(uploadResult.data.path);
+            setVideoUrl(signedVideoUrl || "/placeholder.svg");
+            setProgress(100);
+            
+            toast.success("Video generated successfully!");
+            onVideoGenerated();
+          }
+        }
+      }, 'image/png'); // Mock as image for demo - real implementation would generate video
+
     } catch (error) {
       console.error('Video generation error:', error);
       setGenerationError('Failed to generate video. Please try again.');
+      toast.error("Video generation failed");
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (videoUrl) {
-      // Implement download functionality
-      console.log('Downloading video:', videoUrl);
+      try {
+        const response = await fetch(videoUrl);
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'generated-video.mp4';
+        link.click();
+        window.URL.revokeObjectURL(url);
+        toast.success("Download started");
+      } catch (error) {
+        console.error('Download error:', error);
+        toast.error("Download failed");
+      }
     }
   };
 
   const handleShare = () => {
     if (videoUrl) {
-      // Implement share functionality
-      console.log('Sharing video:', videoUrl);
+      navigator.clipboard.writeText(videoUrl).then(() => {
+        toast.success("Video URL copied to clipboard");
+      }).catch(() => {
+        toast.error("Failed to copy URL");
+      });
     }
   };
 
