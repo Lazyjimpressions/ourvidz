@@ -1,5 +1,5 @@
 # **OurVidz.com - Complete Implementation Guide v2.0**
-*Updated Technical Specification - June 21, 2025*
+*Updated Technical Specification part 2 June 21, 2025*
 
 ## **Executive Summary**
 
@@ -10,6 +10,8 @@ OurVidz.com is an AI-powered video generation platform that creates videos from 
 - **Future Phases**: Video lengths up to 30 minutes via stitching multiple 5-second clips
 - **User Flow**: Text input → AI prompt enhancement → Preview image → User approval → Final video
 - **Character System**: Phase 1 (text descriptions) → Phase 2 (image uploads + IP-Adapter)
+- **Token System**: Phase 2 (simplified access in Phase 1)
+- **Age Verification**: Phase 2 (simplified access in Phase 1)
 - **Architecture**: 4-service stack (Netlify, Supabase, Upstash Redis, RunPod)
 - **AI Model**: Wan 2.1 14B (Apache 2.0, no content restrictions)
 - **Timeline**: 4-week Phase 1 implementation
@@ -49,12 +51,15 @@ Job received → Load Mistral 7B → Enhance prompt → Unload
 - Text-based character descriptions
 - Preview-approve workflow
 - Basic user interface
+- Simple authentication (no age verification)
+- Open access for beta testing
 
-**Phase 2 (Month 2): Character System**
+**Phase 2 (Month 2): User Management & Character System**
 - Character image uploads
 - IP-Adapter integration for consistency
-- Character library management
-- Advanced prompt templates
+- Token-based billing system
+- Age verification implementation
+- Subscription management
 
 **Phase 3 (Month 3): Extended Videos**
 - Video stitching system (5s → 15s → 30s → 30min)
@@ -62,16 +67,18 @@ Job received → Load Mistral 7B → Enhance prompt → Unload
 - Storyboard generation workflow
 - Multi-scene character consistency
 
-### **1.4 Video Length Scaling Strategy**
+### **1.4 Video Length Scaling Strategy (Phase 2+)**
 ```typescript
 const VIDEO_LENGTHS = {
-  "5s": { clips: 1, credits: 1 },      // Phase 1
-  "15s": { clips: 3, credits: 2 },     // Phase 2
-  "30s": { clips: 6, credits: 3 },     // Phase 2
-  "60s": { clips: 12, credits: 5 },    // Phase 3
-  "5min": { clips: 60, credits: 20 },  // Phase 3
-  "30min": { clips: 360, credits: 100 } // Phase 4
+  "5s": { clips: 1, tokens: 1 },      // Phase 2
+  "15s": { clips: 3, tokens: 2 },     // Phase 2
+  "30s": { clips: 6, tokens: 3 },     // Phase 2
+  "60s": { clips: 12, tokens: 5 },    // Phase 3
+  "5min": { clips: 60, tokens: 20 },  // Phase 3
+  "30min": { clips: 360, tokens: 100 } // Phase 4
 }
+
+// Phase 1: Open access for beta testing (no token restrictions)
 ```
 
 ---
@@ -117,21 +124,21 @@ const VIDEO_LENGTHS = {
 
 ### **3.1 Core Tables**
 ```sql
--- User management (unchanged)
-CREATE TABLE users (
+-- User profile management
+CREATE TABLE profiles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT UNIQUE NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    age_verified BOOLEAN DEFAULT FALSE,
-    subscription_status TEXT DEFAULT 'inactive',
-    credits_remaining INTEGER DEFAULT 0,
+    age_verified BOOLEAN DEFAULT FALSE, -- Phase 2
+    subscription_status TEXT DEFAULT 'inactive', -- Phase 2
+    token_balance INTEGER DEFAULT 0, -- Phase 2
     last_login TIMESTAMP
 );
 
 -- Enhanced character library for future image uploads
 CREATE TABLE characters (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     description TEXT NOT NULL, -- Phase 1: text descriptions
     appearance_tags TEXT[], 
@@ -144,7 +151,7 @@ CREATE TABLE characters (
 -- Enhanced projects for multi-scene support
 CREATE TABLE projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     title TEXT,
     original_prompt TEXT NOT NULL,
     enhanced_prompt TEXT,
@@ -159,7 +166,7 @@ CREATE TABLE projects (
 CREATE TABLE videos (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     scene_number INTEGER DEFAULT 1, -- Phase 2: for multi-scene videos
     preview_url TEXT,
     video_url TEXT,
@@ -177,7 +184,7 @@ CREATE TABLE videos (
 CREATE TABLE jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     video_id UUID REFERENCES videos(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     job_type TEXT NOT NULL, -- 'enhance', 'preview', 'video', 'stitch'
     status TEXT DEFAULT 'queued',
     error_message TEXT,
@@ -189,12 +196,12 @@ CREATE TABLE jobs (
     completed_at TIMESTAMP
 );
 
--- Usage tracking
+-- Usage tracking (Phase 2)
 CREATE TABLE usage_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    action TEXT NOT NULL, -- 'video_generated', 'preview_created', 'credit_used'
-    credits_consumed INTEGER DEFAULT 1,
+    user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    action TEXT NOT NULL, -- 'video_generated', 'preview_created', 'token_used'
+    tokens_consumed INTEGER DEFAULT 1, -- Phase 2
     metadata JSONB, -- Additional context
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -214,7 +221,7 @@ CREATE TABLE storyboards (
 ### **3.2 Row Level Security (RLS)**
 ```sql
 -- Enable RLS on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE characters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
@@ -222,7 +229,7 @@ ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_logs ENABLE ROW LEVEL SECURITY;
 
 -- Users can only access their own data
-CREATE POLICY "Users can view own data" ON users FOR ALL USING (auth.uid() = id);
+CREATE POLICY "Users can view own data" ON profiles FOR ALL USING (auth.uid() = id);
 CREATE POLICY "Users can manage own characters" ON characters FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can manage own projects" ON projects FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can view own videos" ON videos FOR ALL USING (auth.uid() = user_id);
@@ -233,7 +240,7 @@ CREATE POLICY "Users can view own usage" ON usage_logs FOR ALL USING (auth.uid()
 ### **3.3 Storage Buckets (Updated)**
 ```yaml
 # Phase 1 Buckets
-videos-preview: # Preview frame images (720p PNG)
+scene-previews: # Preview frame images (720p PNG)
   public: false
   max_size: 10MB
   file_types: ["image/png", "image/jpeg"]
@@ -244,17 +251,17 @@ videos-final: # Individual 5-second videos (720p MP4)
   file_types: ["video/mp4"]
 
 # Phase 2 Buckets  
-character-references: # User uploaded character images
+character-images: # User uploaded character images
   public: false
   max_size: 20MB
   file_types: ["image/png", "image/jpeg", "image/webp"]
 
-character-embeddings: # IP-Adapter processed embeddings
+video-thumbnails: # Auto-generated video thumbnails
   public: false
-  max_size: 50MB
-  file_types: ["application/octet-stream"]
+  max_size: 5MB
+  file_types: ["image/png", "image/jpeg"]
 
-videos-stitched: # Combined multi-scene videos
+videos: # Combined multi-scene videos (Phase 2+)
   public: false
   max_size: 1GB
   file_types: ["video/mp4"]
@@ -309,21 +316,21 @@ serve(async (req) => {
       })
     }
 
-    // Check user credits (skip for preview jobs)
-    if (jobType === 'video') {
-      const { data: userProfile } = await supabase
-        .from('users')
-        .select('credits_remaining')
-        .eq('id', user.id)
-        .single()
+    // Check user tokens (Phase 2 - skip for Phase 1)
+    // if (jobType === 'video') {
+    //   const { data: userProfile } = await supabase
+    //     .from('profiles')
+    //     .select('token_balance')
+    //     .eq('id', user.id)
+    //     .single()
 
-      if (!userProfile || userProfile.credits_remaining <= 0) {
-        return new Response(JSON.stringify({ error: 'Insufficient credits' }), { 
-          status: 402,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-    }
+    //   if (!userProfile || userProfile.token_balance <= 0) {
+    //     return new Response(JSON.stringify({ error: 'Insufficient tokens' }), { 
+    //       status: 402,
+    //       headers: { 'Content-Type': 'application/json' }
+    //     })
+    //   }
+    // }
 
     // Create job record
     const { data: job, error: jobError } = await supabase
@@ -467,26 +474,26 @@ serve(async (req) => {
           console.error('Video update error:', videoUpdateError)
         }
 
-        // If final video completed, deduct credit
-        if (job.job_type === 'video' && status === 'completed') {
-          const { error: creditError } = await supabase.rpc('deduct_credit', {
-            user_id: job.user_id
-          })
+        // If final video completed, deduct token (Phase 2 only)
+        // if (job.job_type === 'video' && status === 'completed') {
+        //   const { error: tokenError } = await supabase.rpc('deduct_token', {
+        //     user_id: job.user_id
+        //   })
 
-          if (creditError) {
-            console.error('Credit deduction error:', creditError)
-          }
+        //   if (tokenError) {
+        //     console.error('Token deduction error:', tokenError)
+        //   }
 
-          // Log usage
-          await supabase
-            .from('usage_logs')
-            .insert({
-              user_id: job.user_id,
-              action: 'video_generated',
-              credits_consumed: 1,
-              metadata: { video_id: job.video_id, job_id: jobId }
-            })
-        }
+        //   // Log usage (Phase 2)
+        //   await supabase
+        //     .from('usage_logs')
+        //     .insert({
+        //       user_id: job.user_id,
+        //       action: 'video_generated',
+        //       tokens_consumed: 1,
+        //       metadata: { video_id: job.video_id, job_id: jobId }
+        //     })
+        // }
       }
     }
 
@@ -512,46 +519,46 @@ serve(async (req) => {
 })
 ```
 
-### **4.2 SQL Functions for Credit Management**
+### **4.2 SQL Functions for Token Management (Phase 2)**
 ```sql
--- Credit management functions
+-- Token management functions (Phase 2)
 -- Run this in Supabase SQL Editor
 
--- Function to deduct credits safely
-CREATE OR REPLACE FUNCTION deduct_credit(user_id UUID)
-RETURNS void AS $$
+-- Function to deduct tokens safely
+CREATE OR REPLACE FUNCTION deduct_token(user_id UUID)
+RETURNS void AS $
 BEGIN
-  UPDATE users 
-  SET credits_remaining = GREATEST(credits_remaining - 1, 0)
+  UPDATE profiles 
+  SET token_balance = GREATEST(token_balance - 1, 0)
   WHERE id = user_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to add credits (for payments/refunds)
-CREATE OR REPLACE FUNCTION add_credits(user_id UUID, amount INTEGER)
-RETURNS void AS $$
+-- Function to add tokens (for payments/refunds)
+CREATE OR REPLACE FUNCTION add_tokens(user_id UUID, amount INTEGER)
+RETURNS void AS $
 BEGIN
-  UPDATE users 
-  SET credits_remaining = credits_remaining + amount
+  UPDATE profiles 
+  SET token_balance = token_balance + amount
   WHERE id = user_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Function to set subscription status and credits
+-- Function to set subscription status and tokens
 CREATE OR REPLACE FUNCTION update_subscription(
   user_id UUID, 
   new_status TEXT, 
-  credit_amount INTEGER
+  token_amount INTEGER
 )
-RETURNS void AS $$
+RETURNS void AS $
 BEGIN
-  UPDATE users 
+  UPDATE profiles 
   SET 
     subscription_status = new_status,
-    credits_remaining = credit_amount
+    token_balance = token_amount
   WHERE id = user_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$ LANGUAGE plpgsql SECURITY DEFINER;
 ```
 
 ### **4.3 Frontend API Service**
@@ -941,7 +948,7 @@ Keep under 200 words. Make it specific and cinematic."""
             image.save(local_path, "PNG", quality=95)
             
             # Upload to Supabase
-            upload_url = self.upload_to_supabase(local_path, f"videos-preview/{filename}")
+            upload_url = self.upload_to_supabase(local_path, f"scene-previews/{filename}")
             
             # Cleanup
             os.remove(local_path)
@@ -1291,18 +1298,23 @@ button {
 
 ### **7.2 Updated Pricing Strategy**
 ```
-Phase 1 Subscription Tiers:
-- Starter: $9.99/month (10 videos × 5s) = $1.00 per video
-- Pro: $19.99/month (25 videos × 5s) = $0.80 per video  
-- Creator: $39.99/month (60 videos × 5s) = $0.67 per video
+Phase 1: Open Beta Access
+- No token restrictions for beta testing
+- Focus on video generation quality and user experience
+- Gather feedback from 2-3 beta users
+
+Phase 2+ Token-Based Pricing:
+- Starter: $9.99/month (10 tokens × 5s videos) = $1.00 per video
+- Pro: $19.99/month (25 tokens × 5s videos) = $0.80 per video  
+- Creator: $39.99/month (60 tokens × 5s videos) = $0.67 per video
 
 Phase 2+ Extended Video Pricing:
-- 15-second videos: 2 credits (3 × 5s clips)
-- 30-second videos: 3 credits (6 × 5s clips)
-- 60-second videos: 5 credits (12 × 5s clips)
+- 15-second videos: 2 tokens (3 × 5s clips)
+- 30-second videos: 3 tokens (6 × 5s clips)
+- 60-second videos: 5 tokens (12 × 5s clips)
 
 Cost per 5-second video: ~$0.40
-Gross margin: 60-85%
+Gross margin: 60-85% (when billing implemented)
 ```
 
 ### **7.3 Break-even Analysis**
@@ -1314,48 +1326,55 @@ Gross margin: 60-85%
 
 ## **8. Security & Compliance**
 
-### **8.1 Age Verification Flow**
+### **8.1 Age Verification Flow (Phase 2)**
 ```typescript
-// Age gate implementation
+// Age gate implementation (Phase 2)
+// Phase 1: Open access for beta testing
 export function AgeGate() {
-  const [isVerified, setIsVerified] = useState(false)
-  
-  const handleVerification = () => {
-    // Set local storage flag
-    localStorage.setItem('age_verified', 'true')
-    setIsVerified(true)
-  }
-  
-  if (isVerified || localStorage.getItem('age_verified') === 'true') {
-    return null
-  }
-  
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-      <div className="bg-white p-8 rounded-lg max-w-md">
-        <h2 className="text-2xl font-bold mb-4">Age Verification Required</h2>
-        <p className="mb-6">
-          This site contains AI-generated content intended for adults. 
-          You must be 18 or older to proceed.
-        </p>
-        <div className="flex gap-4">
-          <button
-            onClick={handleVerification}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg"
-          >
-            I am 18 or older
-          </button>
-          <button
-            onClick={() => window.location.href = 'https://google.com'}
-            className="bg-gray-600 text-white px-6 py-3 rounded-lg"
-          >
-            Exit
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  // Phase 1: No age verification - return null
+  // Phase 2: Implement full age verification
+  return null
 }
+
+// Phase 2 Implementation:
+// export function AgeGate() {
+//   const [isVerified, setIsVerified] = useState(false)
+  
+//   const handleVerification = () => {
+//     localStorage.setItem('age_verified', 'true')
+//     setIsVerified(true)
+//   }
+  
+//   if (isVerified || localStorage.getItem('age_verified') === 'true') {
+//     return null
+//   }
+  
+//   return (
+//     <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
+//       <div className="bg-white p-8 rounded-lg max-w-md">
+//         <h2 className="text-2xl font-bold mb-4">Age Verification Required</h2>
+//         <p className="mb-6">
+//           This site contains AI-generated content intended for adults. 
+//           You must be 18 or older to proceed.
+//         </p>
+//         <div className="flex gap-4">
+//           <button
+//             onClick={handleVerification}
+//             className="bg-blue-600 text-white px-6 py-3 rounded-lg"
+//           >
+//             I am 18 or older
+//           </button>
+//           <button
+//             onClick={() => window.location.href = 'https://google.com'}
+//             className="bg-gray-600 text-white px-6 py-3 rounded-lg"
+//           >
+//             Exit
+//           </button>
+//         </div>
+//       </div>
+//     </div>
+//   )
+// }
 ```
 
 ### **8.2 Data Retention Policy**
@@ -1409,15 +1428,16 @@ SELECT cron.schedule('cleanup-videos', '0 2 * * *', 'SELECT cleanup_expired_vide
 
 **Week 4: Launch Preparation**
 - [ ] End-to-end testing
-- [ ] Age verification
 - [ ] Mobile optimization
 - [ ] Beta user onboarding
+- [ ] Basic usage monitoring
 
-### **9.2 Phase 2: Character Images (Month 2)**
+### **9.2 Phase 2: User Management & Billing (Month 2)**
+- [ ] Age verification system
+- [ ] Token-based billing integration
 - [ ] Character image upload system
 - [ ] IP-Adapter integration with Wan 2.1
-- [ ] Character consistency testing
-- [ ] Enhanced prompt templates
+- [ ] Subscription management interface
 
 ### **9.3 Phase 3: Extended Videos (Month 3)**
 - [ ] Video stitching algorithm
@@ -1562,12 +1582,15 @@ const criticalAlerts = {
 - [ ] <6 minutes average generation time
 - [ ] 2-3 beta users creating videos daily
 - [ ] Mobile-responsive interface
+- [ ] Open access for testing (no billing restrictions)
 
 **Phase 2 (Month 2):**
+- [ ] Age verification system working
+- [ ] Token-based billing implemented
 - [ ] Character image upload working
 - [ ] 90%+ character consistency across videos
 - [ ] 15-30 second video stitching
-- [ ] 20+ active users
+- [ ] 20+ active users with subscriptions
 
 **Phase 3 (Month 3):**
 - [ ] Up to 5-minute videos via stitching
@@ -1579,15 +1602,18 @@ const criticalAlerts = {
 
 ## **13. Deployment Checklist**
 
-### **13.1 Pre-Launch**
+### **13.1 Pre-Launch (Phase 1)**
 - [ ] Legal review completed
-- [ ] Age verification system tested
-- [ ] Payment processor approved (Phase 2)
 - [ ] Wan 2.1 14B models downloaded and tested
 - [ ] Backup systems configured
 - [ ] Monitoring alerts set up
 - [ ] Documentation complete
 - [ ] Support system ready
+
+### **13.1.1 Phase 2 Pre-Launch Additions**
+- [ ] Age verification system tested
+- [ ] Payment processor approved
+- [ ] Token billing system integrated
 
 ### **13.2 Launch Day**
 - [ ] DNS propagated
@@ -1623,14 +1649,16 @@ The system is designed to start simple with 5-second videos and scale systematic
 **Phase 1 Success Criteria:**
 - 100% video generation success rate
 - <6 minutes total generation time
-- 2-3 satisfied beta users
+- 2-3 satisfied beta users with open access
 - Mobile-responsive experience
-- Foundation for Phase 2 scaling
+- Foundation for Phase 2 billing and age verification
 
 **Phase 2+ Vision:**
+- Age verification and content compliance
+- Token-based billing system
 - Character image uploads with IP-Adapter
 - Extended videos via intelligent stitching
 - Storyboard workflow for complex productions
 - Scaling to 30-minute video capabilities
 
-This implementation provides a solid foundation for building OurVidz.com into a leading AI video generation platform for adult content creation.
+This implementation provides a streamlined foundation for building OurVidz.com into a leading AI video generation platform, starting with core functionality and adding business logic in Phase 2.
