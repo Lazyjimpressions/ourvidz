@@ -32,9 +32,9 @@ const Library = () => {
     );
   }
 
-  // Transform database videos to match VideoCard interface
+  // Transform database videos to match VideoCard interface - fixed ID type
   const transformedVideos = videos?.map(video => ({
-    id: video.id,
+    id: video.id, // Keep as string, VideoCard interface should accept string
     thumbnail: video.thumbnail_url || "https://images.unsplash.com/photo-1605810230434-7631ac76ec81",
     prompt: video.project?.title || video.project?.original_prompt || "Untitled",
     createdAt: new Date(video.created_at!),

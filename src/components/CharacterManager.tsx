@@ -6,46 +6,47 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Upload, Plus, User } from "lucide-react";
-
-export interface Character {
-  id: string;
-  name: string;
-  traits: string;
-  appearanceTags: string;
-  imageUrl?: string;
-}
+import { type Character } from "@/lib/database";
 
 interface CharacterManagerProps {
   onCharactersSelected: (characters: Character[]) => void;
+  existingCharacters: Character[];
 }
 
-export const CharacterManager = ({ onCharactersSelected }: CharacterManagerProps) => {
+export const CharacterManager = ({ onCharactersSelected, existingCharacters }: CharacterManagerProps) => {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newCharacter, setNewCharacter] = useState({
     name: "",
+    description: "",
     traits: "",
-    appearanceTags: "",
+    appearance_tags: "",
+    image_url: ""
   });
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       const imageUrl = URL.createObjectURL(file);
-      setNewCharacter(prev => ({ ...prev, imageUrl }));
+      setNewCharacter(prev => ({ ...prev, image_url: imageUrl }));
     }
   };
 
   const handleCreateCharacter = () => {
-    if (newCharacter.name.trim()) {
+    if (newCharacter.name.trim() && newCharacter.description.trim()) {
       const character: Character = {
         id: Date.now().toString(),
+        user_id: "temp-user-id", // This would be populated from auth
         name: newCharacter.name,
-        traits: newCharacter.traits,
-        appearanceTags: newCharacter.appearanceTags,
+        description: newCharacter.description,
+        traits: newCharacter.traits || null,
+        appearance_tags: newCharacter.appearance_tags ? [newCharacter.appearance_tags] : null,
+        image_url: newCharacter.image_url || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       setCharacters(prev => [...prev, character]);
-      setNewCharacter({ name: "", traits: "", appearanceTags: "" });
+      setNewCharacter({ name: "", description: "", traits: "", appearance_tags: "", image_url: "" });
       setShowCreateForm(false);
     }
   };
@@ -70,11 +71,12 @@ export const CharacterManager = ({ onCharactersSelected }: CharacterManagerProps
                     <User className="h-4 w-4" />
                     <span className="font-medium">{character.name}</span>
                   </div>
+                  <p className="text-sm text-gray-600 mb-1">{character.description}</p>
                   {character.traits && (
                     <p className="text-sm text-gray-600 mb-1">{character.traits}</p>
                   )}
-                  {character.appearanceTags && (
-                    <p className="text-xs text-gray-500">{character.appearanceTags}</p>
+                  {character.appearance_tags && (
+                    <p className="text-xs text-gray-500">{character.appearance_tags.join(', ')}</p>
                   )}
                 </div>
               ))}
@@ -95,6 +97,17 @@ export const CharacterManager = ({ onCharactersSelected }: CharacterManagerProps
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="character-description">Character Description</Label>
+              <Textarea
+                id="character-description"
+                value={newCharacter.description}
+                onChange={(e) => setNewCharacter(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Describe the character"
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="character-traits">Character Traits</Label>
               <Textarea
                 id="character-traits"
@@ -109,8 +122,8 @@ export const CharacterManager = ({ onCharactersSelected }: CharacterManagerProps
               <Label htmlFor="appearance-tags">Appearance Tags</Label>
               <Input
                 id="appearance-tags"
-                value={newCharacter.appearanceTags}
-                onChange={(e) => setNewCharacter(prev => ({ ...prev, appearanceTags: e.target.value }))}
+                value={newCharacter.appearance_tags}
+                onChange={(e) => setNewCharacter(prev => ({ ...prev, appearance_tags: e.target.value }))}
                 placeholder="hair color, clothing style, age, etc."
               />
             </div>

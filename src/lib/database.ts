@@ -202,12 +202,19 @@ export const videoAPI = {
   }
 };
 
-// Usage tracking
+// Usage tracking - fixed to include user_id
 export const usageAPI = {
   async logAction(action: string, creditsConsumed: number = 1, metadata?: any) {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error('User must be authenticated to log usage');
+    }
+
     const { error } = await supabase
       .from('usage_logs')
       .insert({
+        user_id: user.id,
         action,
         credits_consumed: creditsConsumed,
         metadata

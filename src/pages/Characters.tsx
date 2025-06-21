@@ -6,19 +6,8 @@ import { Button } from "@/components/ui/button";
 import { PortalLayout } from "@/components/PortalLayout";
 import { CharacterManager } from "@/components/CharacterManager";
 import { useQuery } from "@tanstack/react-query";
-import { characterAPI } from "@/lib/database";
+import { characterAPI, type Character } from "@/lib/database";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-
-// Define Character type to match the database
-export interface Character {
-  id: string;
-  name: string;
-  description: string;
-  traits?: string | null;
-  appearance_tags?: string[] | null;
-  image_url?: string | null;
-  created_at?: string | null;
-}
 
 const Characters = () => {
   const navigate = useNavigate();
