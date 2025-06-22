@@ -55,6 +55,63 @@ serve(async (req) => {
 
     console.log('Job created successfully:', job);
 
+    // Get project details for the prompt
+    let prompt = '';
+    let characterId = null;
+    
+    if (projectId) {
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .select('enhanced_prompt, original_prompt, character_id')
+        .eq('id', projectId)
+        .single();
+      
+      if (!projectError && project) {
+        prompt = project.enhanced_prompt || project.original_prompt || '';
+        characterId = project.character_id;
+      }
+    }
+
+    // Format job payload for RunPod worker
+    const jobPayload = {
+      jobId: job.id,
+      videoId: videoId,
+      userId: user.id,
+      jobType: jobType,
+      prompt: prompt,
+      characterId: characterId,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('Pushing job to Redis queue:', jobPayload);
+
+    // Push job to Upstash Redis using REST API
+    const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
+    const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+
+    if (!redisUrl || !redisToken) {
+      throw new Error('Redis configuration missing');
+    }
+
+    // Use LPUSH to add job to the queue (worker uses RPOP)
+    const redisResponse = await fetch(`${redisUrl}/lpush/ourvidz_job_queue`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${redisToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(jobPayload)
+    });
+
+    if (!redisResponse.ok) {
+      const redisError = await redisResponse.text();
+      console.error('Redis push failed:', redisError);
+      throw new Error(`Failed to queue job in Redis: ${redisError}`);
+    }
+
+    const redisResult = await redisResponse.json();
+    console.log('Job queued in Redis successfully:', redisResult);
+
     // Log usage for credits
     await supabase
       .from('usage_logs')
@@ -65,15 +122,12 @@ serve(async (req) => {
         metadata: { job_id: job.id, project_id: projectId }
       });
 
-    // TODO: Send job to RunPod queue when RunPod integration is ready
-    // For now, we'll simulate the queuing process
-    console.log('Job queued for processing - RunPod integration pending');
-
     return new Response(
       JSON.stringify({ 
         success: true, 
         job,
-        message: 'Job queued successfully' 
+        message: 'Job queued successfully in Redis',
+        queueLength: redisResult.result || 0
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

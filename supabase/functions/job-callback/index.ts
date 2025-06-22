@@ -19,19 +19,25 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    const { jobId, status, result, error: jobError } = await req.json();
+    const { jobId, status, outputUrl, errorMessage } = await req.json();
 
-    console.log('Processing job callback:', { jobId, status });
+    console.log('Processing job callback:', { jobId, status, outputUrl });
 
     // Update job status
+    const updateData: any = {
+      status,
+      completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
+      error_message: errorMessage || null
+    };
+
+    // Add output URL to metadata if successful
+    if (status === 'completed' && outputUrl) {
+      updateData.metadata = { video_url: outputUrl };
+    }
+
     const { data: job, error: updateError } = await supabase
       .from('jobs')
-      .update({
-        status,
-        completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
-        error_message: jobError || null,
-        metadata: result || {}
-      })
+      .update(updateData)
       .eq('id', jobId)
       .select()
       .single();
@@ -44,13 +50,12 @@ serve(async (req) => {
     console.log('Job updated:', job);
 
     // If job completed successfully and has a video_id, update the video
-    if (status === 'completed' && job.video_id && result?.video_url) {
+    if (status === 'completed' && job.video_id && outputUrl) {
       const { error: videoError } = await supabase
         .from('videos')
         .update({
           status: 'completed',
-          video_url: result.video_url,
-          thumbnail_url: result.thumbnail_url || null,
+          video_url: outputUrl,
           completed_at: new Date().toISOString()
         })
         .eq('id', job.video_id);
@@ -58,7 +63,7 @@ serve(async (req) => {
       if (videoError) {
         console.error('Error updating video:', videoError);
       } else {
-        console.log('Video updated successfully');
+        console.log('Video updated successfully with URL:', outputUrl);
       }
     }
 
@@ -67,19 +72,39 @@ serve(async (req) => {
       const { error: videoError } = await supabase
         .from('videos')
         .update({
-          status: 'failed'
+          status: 'failed',
+          error_message: errorMessage
         })
         .eq('id', job.video_id);
 
       if (videoError) {
         console.error('Error updating video status to failed:', videoError);
+      } else {
+        console.log('Video marked as failed');
+      }
+    }
+
+    // If job is processing, update video status
+    if (status === 'processing' && job.video_id) {
+      const { error: videoError } = await supabase
+        .from('videos')
+        .update({
+          status: 'processing'
+        })
+        .eq('id', job.video_id);
+
+      if (videoError) {
+        console.error('Error updating video status to processing:', videoError);
+      } else {
+        console.log('Video marked as processing');
       }
     }
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: 'Job callback processed successfully'
+        message: 'Job callback processed successfully',
+        jobStatus: status
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
