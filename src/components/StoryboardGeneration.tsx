@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -113,8 +112,8 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             supabase.removeChannel(videoSubscription);
           } else if (updatedVideo.status === 'failed') {
-            console.error(`Scene ${scene.sceneNumber} generation failed:`, updatedVideo.error_message);
-            const errorMessage = updatedVideo.error_message || 'Unknown error occurred during generation';
+            console.error(`Scene ${scene.sceneNumber} generation failed`);
+            const errorMessage = 'Generation failed on server - please check server logs for details';
             
             setSceneErrors(prev => {
               const newErrors = new Map(prev);
@@ -140,7 +139,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             
             const { data: updatedVideo, error: pollError } = await supabase
               .from('videos')
-              .select('status, preview_url, error_message')
+              .select('status, preview_url')
               .eq('id', video.id)
               .single();
 
@@ -165,7 +164,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
               toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             } else if (updatedVideo.status === 'failed') {
               clearInterval(pollInterval);
-              const errorMessage = updatedVideo.error_message || 'Generation failed on server';
+              const errorMessage = 'Generation failed on server - please check server logs for details';
               
               setSceneErrors(prev => {
                 const newErrors = new Map(prev);
@@ -334,10 +333,9 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                         className="w-full h-full object-cover rounded-lg"
                         onError={(e) => {
                           console.error('Image load error for scene:', scene.sceneNumber, 'URL:', sceneImage.imageUrl);
-                          // Don't set to placeholder - just show error state
                           setSceneErrors(prev => {
                             const newErrors = new Map(prev);
-                            newErrors.set(scene.id, 'Failed to load generated image - invalid URL');
+                            newErrors.set(scene.id, 'Failed to load generated image - invalid URL from server');
                             return newErrors;
                           });
                           setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
@@ -354,6 +352,9 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                       <div className="text-sm font-medium">Generation Failed</div>
                       <div className="text-xs text-red-400 break-words max-w-full">
                         {errorMessage}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-2">
+                        Check server logs for detailed error information
                       </div>
                     </div>
                   ) : (
