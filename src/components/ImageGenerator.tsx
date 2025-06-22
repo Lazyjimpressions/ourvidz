@@ -43,6 +43,12 @@ export const ImageGenerator = ({
       const imagePrompt = enhancedPrompt || prompt;
       console.log('Generating images with Wan 2.1:', imagePrompt);
 
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+
       // Generate multiple images in parallel using existing queue-job
       const numberOfImages = 4;
       const generationPromises = Array.from({ length: numberOfImages }, async (_, index) => {
@@ -51,6 +57,7 @@ export const ImageGenerator = ({
           .from('videos')
           .insert({
             project_id: projectId,
+            user_id: user.id,
             status: 'draft',
             duration: 0, // 0 for images
             format: 'png'

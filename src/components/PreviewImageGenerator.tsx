@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -34,6 +33,12 @@ export const PreviewImageGenerator = ({ prompt, projectId, onImageSelected }: Pr
     try {
       console.log('Generating preview images with Wan 2.1:', prompt);
       
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+
       const numberOfPreviews = 4;
       const generationPromises = Array.from({ length: numberOfPreviews }, async (_, index) => {
         // Create a video record for preview image generation
@@ -41,6 +46,7 @@ export const PreviewImageGenerator = ({ prompt, projectId, onImageSelected }: Pr
           .from('videos')
           .insert({
             project_id: projectId,
+            user_id: user.id,
             status: 'draft',
             duration: 0, // 0 for images
             format: 'png'

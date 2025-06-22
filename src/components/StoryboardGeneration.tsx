@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,11 +36,18 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
     try {
       console.log('Generating image for scene:', scene.sceneNumber, 'with prompt:', scene.enhancedPrompt);
       
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+
       // Create a video record for scene image generation
       const { data: video, error: videoError } = await supabase
         .from('videos')
         .insert({
           project_id: projectId,
+          user_id: user.id,
           status: 'draft',
           duration: 0, // 0 for images
           format: 'png'
