@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -32,7 +31,7 @@ serve(async (req) => {
 
     // Add output URL to metadata if successful
     if (status === 'completed' && outputUrl) {
-      updateData.metadata = { video_url: outputUrl };
+      updateData.metadata = { output_url: outputUrl };
     }
 
     const { data: job, error: updateError } = await supabase
@@ -49,55 +48,11 @@ serve(async (req) => {
 
     console.log('Job updated:', job);
 
-    // If job completed successfully and has a video_id, update the video
-    if (status === 'completed' && job.video_id && outputUrl) {
-      const { error: videoError } = await supabase
-        .from('videos')
-        .update({
-          status: 'completed',
-          video_url: outputUrl,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', job.video_id);
-
-      if (videoError) {
-        console.error('Error updating video:', videoError);
-      } else {
-        console.log('Video updated successfully with URL:', outputUrl);
-      }
-    }
-
-    // If job failed, mark video as failed
-    if (status === 'failed' && job.video_id) {
-      const { error: videoError } = await supabase
-        .from('videos')
-        .update({
-          status: 'failed',
-          error_message: errorMessage
-        })
-        .eq('id', job.video_id);
-
-      if (videoError) {
-        console.error('Error updating video status to failed:', videoError);
-      } else {
-        console.log('Video marked as failed');
-      }
-    }
-
-    // If job is processing, update video status
-    if (status === 'processing' && job.video_id) {
-      const { error: videoError } = await supabase
-        .from('videos')
-        .update({
-          status: 'processing'
-        })
-        .eq('id', job.video_id);
-
-      if (videoError) {
-        console.error('Error updating video status to processing:', videoError);
-      } else {
-        console.log('Video marked as processing');
-      }
+    // Handle different job types
+    if (job.job_type === 'image' && job.image_id) {
+      await handleImageJobCallback(supabase, job, status, outputUrl, errorMessage);
+    } else if (job.job_type === 'video' && job.video_id) {
+      await handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage);
     }
 
     return new Response(
@@ -126,3 +81,98 @@ serve(async (req) => {
     );
   }
 });
+
+async function handleImageJobCallback(supabase: any, job: any, status: string, outputUrl: string, errorMessage: string) {
+  if (status === 'completed' && outputUrl) {
+    const { error: imageError } = await supabase
+      .from('images')
+      .update({
+        status: 'completed',
+        image_url: outputUrl,
+        thumbnail_url: outputUrl // For now, use same URL for thumbnail
+      })
+      .eq('id', job.image_id);
+
+    if (imageError) {
+      console.error('Error updating image:', imageError);
+    } else {
+      console.log('Image updated successfully with URL:', outputUrl);
+    }
+  } else if (status === 'failed') {
+    const { error: imageError } = await supabase
+      .from('images')
+      .update({
+        status: 'failed'
+      })
+      .eq('id', job.image_id);
+
+    if (imageError) {
+      console.error('Error updating image status to failed:', imageError);
+    } else {
+      console.log('Image marked as failed');
+    }
+  } else if (status === 'processing') {
+    const { error: imageError } = await supabase
+      .from('images')
+      .update({
+        status: 'generating'
+      })
+      .eq('id', job.image_id);
+
+    if (imageError) {
+      console.error('Error updating image status to generating:', imageError);
+    } else {
+      console.log('Image marked as generating');
+    }
+  }
+}
+
+async function handleVideoJobCallback(supabase: any, job: any, status: string, outputUrl: string, errorMessage: string) {
+  if (status === 'completed' && job.video_id && outputUrl) {
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'completed',
+        video_url: outputUrl,
+        completed_at: new Date().toISOString()
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video:', videoError);
+    } else {
+      console.log('Video updated successfully with URL:', outputUrl);
+    }
+  }
+
+  if (status === 'failed' && job.video_id) {
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'failed',
+        error_message: errorMessage
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video status to failed:', videoError);
+    } else {
+      console.log('Video marked as failed');
+    }
+  }
+
+  if (status === 'processing' && job.video_id) {
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'processing'
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video status to processing:', videoError);
+    } else {
+      console.log('Video marked as processing');
+    }
+  }
+}

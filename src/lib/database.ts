@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -24,6 +23,10 @@ export type JobUpdate = Database['public']['Tables']['jobs']['Update'];
 
 export type UsageLog = Database['public']['Tables']['usage_logs']['Row'];
 export type UsageLogInsert = Database['public']['Tables']['usage_logs']['Insert'];
+
+export type Image = Database['public']['Tables']['images']['Row'];
+export type ImageInsert = Database['public']['Tables']['images']['Insert'];
+export type ImageUpdate = Database['public']['Tables']['images']['Update'];
 
 // Character operations
 export const characterAPI = {
@@ -199,6 +202,86 @@ export const videoAPI = {
     
     if (error) throw error;
     return data;
+  }
+};
+
+// Image operations
+export const imageAPI = {
+  async getAll() {
+    const { data, error } = await supabase
+      .from('images')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getByMode(mode: string) {
+    const { data, error } = await supabase
+      .from('images')
+      .select('*')
+      .eq('generation_mode', mode)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async getByProject(projectId: string) {
+    const { data, error } = await supabase
+      .from('images')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async create(image: ImageInsert) {
+    const { data, error } = await supabase
+      .from('images')
+      .insert(image)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async update(id: string, updates: ImageUpdate) {
+    const { data, error } = await supabase
+      .from('images')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async updateStatus(id: string, status: string, additionalUpdates?: ImageUpdate) {
+    const updates = { status, ...additionalUpdates };
+    const { data, error } = await supabase
+      .from('images')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  async delete(id: string) {
+    const { error } = await supabase
+      .from('images')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 };
 

@@ -1,40 +1,32 @@
 
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BaseImageGenerator } from "@/components/generation/BaseImageGenerator";
+import { BaseImageGenerator } from "./BaseImageGenerator";
 import { GenerationContext } from "@/lib/services/ImageGenerationService";
-import { Settings, Zap } from "lucide-react";
+import { Image } from "lucide-react";
 
-interface AdminImageGeneratorProps {
-  prompt?: string;
-  mode?: "character" | "general";
+interface StandaloneImageGeneratorProps {
   onImagesGenerated: (images: any[]) => void;
 }
 
-export const AdminImageGenerator = ({ 
-  prompt = "", 
-  mode = "general",
-  onImagesGenerated 
-}: AdminImageGeneratorProps) => {
+export const StandaloneImageGenerator = ({ onImagesGenerated }: StandaloneImageGeneratorProps) => {
   const context: GenerationContext = {
-    mode: 'admin'
+    mode: 'standalone'
   };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          Admin Image Generator
-          <Zap className="h-4 w-4 text-yellow-500" />
+          <Image className="h-5 w-5" />
+          Generate Standalone Image
         </CardTitle>
       </CardHeader>
       <CardContent>
         <BaseImageGenerator
           context={context}
-          initialPrompt={prompt}
           onImageGenerated={onImagesGenerated}
-          buttonText="Generate Test Image"
+          buttonText="Generate Standalone Image"
         />
       </CardContent>
     </Card>
