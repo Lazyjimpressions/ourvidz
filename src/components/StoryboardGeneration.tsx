@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,9 +30,15 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
   const [sceneImages, setSceneImages] = useState<SceneImage[]>([]);
   const [generatingScenes, setGeneratingScenes] = useState<Set<string>>(new Set());
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
+  const [sceneErrors, setSceneErrors] = useState<Map<string, string>>(new Map());
 
   const generateSceneImage = async (scene: Scene) => {
     setGeneratingScenes(prev => new Set(prev).add(scene.id));
+    setSceneErrors(prev => {
+      const newErrors = new Map(prev);
+      newErrors.delete(scene.id);
+      return newErrors;
+    });
     
     try {
       console.log('Generating image for scene:', scene.sceneNumber, 'with prompt:', scene.enhancedPrompt);
@@ -56,6 +63,8 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
         .single();
 
       if (videoError) throw videoError;
+
+      console.log('Created video record for scene generation:', video.id);
 
       // Queue image generation job using existing infrastructure
       const { data, error } = await supabase.functions.invoke('queue-job', {
@@ -104,8 +113,16 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             supabase.removeChannel(videoSubscription);
           } else if (updatedVideo.status === 'failed') {
-            console.error(`Scene ${scene.sceneNumber} generation failed`);
-            toast.error(`Failed to generate scene ${scene.sceneNumber} image`);
+            console.error(`Scene ${scene.sceneNumber} generation failed:`, updatedVideo.error_message);
+            const errorMessage = updatedVideo.error_message || 'Unknown error occurred during generation';
+            
+            setSceneErrors(prev => {
+              const newErrors = new Map(prev);
+              newErrors.set(scene.id, errorMessage);
+              return newErrors;
+            });
+            
+            toast.error(`Scene ${scene.sceneNumber} generation failed: ${errorMessage}`);
             supabase.removeChannel(videoSubscription);
           }
         })
@@ -123,7 +140,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             
             const { data: updatedVideo, error: pollError } = await supabase
               .from('videos')
-              .select('status, preview_url')
+              .select('status, preview_url, error_message')
               .eq('id', video.id)
               .single();
 
@@ -148,10 +165,26 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
               toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             } else if (updatedVideo.status === 'failed') {
               clearInterval(pollInterval);
-              throw new Error('Image generation failed');
+              const errorMessage = updatedVideo.error_message || 'Generation failed on server';
+              
+              setSceneErrors(prev => {
+                const newErrors = new Map(prev);
+                newErrors.set(scene.id, errorMessage);
+                return newErrors;
+              });
+              
+              throw new Error(errorMessage);
             } else if (pollCount >= maxPolls) {
               clearInterval(pollInterval);
-              throw new Error('Generation timeout after 10 minutes');
+              const timeoutError = 'Generation timeout after 10 minutes - server may be overloaded';
+              
+              setSceneErrors(prev => {
+                const newErrors = new Map(prev);
+                newErrors.set(scene.id, timeoutError);
+                return newErrors;
+              });
+              
+              throw new Error(timeoutError);
             }
           } catch (error) {
             clearInterval(pollInterval);
@@ -164,7 +197,15 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
     } catch (error) {
       console.error('Error generating scene image:', error);
-      toast.error(`Failed to generate scene ${scene.sceneNumber} image: ${error.message}`);
+      const errorMessage = error.message || 'Failed to start generation';
+      
+      setSceneErrors(prev => {
+        const newErrors = new Map(prev);
+        newErrors.set(scene.id, errorMessage);
+        return newErrors;
+      });
+      
+      toast.error(`Failed to generate scene ${scene.sceneNumber} image: ${errorMessage}`);
       
       setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
     } finally {
@@ -181,7 +222,8 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
     
     try {
       const scenesToGenerate = scenes.filter(scene => 
-        !sceneImages.find(img => img.sceneId === scene.id)
+        !sceneImages.find(img => img.sceneId === scene.id) && 
+        !sceneErrors.has(scene.id)
       );
 
       console.log(`Generating images for ${scenesToGenerate.length} scenes`);
@@ -212,6 +254,11 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
   const regenerateScene = (scene: Scene) => {
     setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
+    setSceneErrors(prev => {
+      const newErrors = new Map(prev);
+      newErrors.delete(scene.id);
+      return newErrors;
+    });
     generateSceneImage(scene);
   };
 
@@ -257,6 +304,8 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
           {scenes.map((scene) => {
             const sceneImage = sceneImages.find(img => img.sceneId === scene.id);
             const isGenerating = generatingScenes.has(scene.id);
+            const hasError = sceneErrors.has(scene.id);
+            const errorMessage = sceneErrors.get(scene.id);
 
             return (
               <div key={scene.id} className="border rounded-lg p-4 space-y-3">
@@ -284,8 +333,14 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                         alt={`Scene ${scene.sceneNumber}`}
                         className="w-full h-full object-cover rounded-lg"
                         onError={(e) => {
-                          console.error('Image load error for scene:', scene.sceneNumber);
-                          (e.target as HTMLImageElement).src = "/placeholder.svg";
+                          console.error('Image load error for scene:', scene.sceneNumber, 'URL:', sceneImage.imageUrl);
+                          // Don't set to placeholder - just show error state
+                          setSceneErrors(prev => {
+                            const newErrors = new Map(prev);
+                            newErrors.set(scene.id, 'Failed to load generated image - invalid URL');
+                            return newErrors;
+                          });
+                          setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
                         }}
                       />
                       {sceneImage.approved && (
@@ -293,6 +348,13 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                           <CheckCircle className="h-4 w-4 text-white" />
                         </div>
                       )}
+                    </div>
+                  ) : hasError ? (
+                    <div className="flex flex-col items-center gap-2 text-red-500 p-4 text-center">
+                      <div className="text-sm font-medium">Generation Failed</div>
+                      <div className="text-xs text-red-400 break-words max-w-full">
+                        {errorMessage}
+                      </div>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-gray-400">
@@ -325,8 +387,9 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                       onClick={() => generateSceneImage(scene)}
                       disabled={isGenerating}
                       className="w-full"
+                      variant={hasError ? "destructive" : "default"}
                     >
-                      Generate AI Image
+                      {hasError ? "Retry Generation" : "Generate AI Image"}
                     </Button>
                   )}
                 </div>
