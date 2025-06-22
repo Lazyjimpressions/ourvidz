@@ -2,93 +2,176 @@
 import React, { useEffect, useState } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, CheckCircle, XCircle, Eye, Play } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { queuePreviewJob, queueVideoJob } from '@/lib/videoGeneration';
 
 interface VideoGenerationProgressProps {
-  jobId?: string;
-  videoId?: string;
+  videoId: string;
   onComplete?: (videoUrl: string) => void;
   onError?: (error: string) => void;
 }
 
-type JobStatus = 'queued' | 'processing' | 'completed' | 'failed';
+type VideoStatus = 'draft' | 'processing' | 'preview_ready' | 'completed' | 'failed';
+type CurrentStage = 'enhance' | 'preview' | 'video' | 'completed' | 'failed';
 
 export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = ({
-  jobId,
   videoId,
   onComplete,
   onError,
 }) => {
-  const [status, setStatus] = useState<JobStatus>('queued');
+  const [status, setStatus] = useState<VideoStatus>('draft');
+  const [currentStage, setCurrentStage] = useState<CurrentStage>('enhance');
   const [progress, setProgress] = useState(0);
-  const [message, setMessage] = useState('Initializing video generation...');
+  const [message, setMessage] = useState('Starting video generation...');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!jobId && !videoId) return;
+    if (!videoId) return;
 
-    const checkJobStatus = async () => {
-      try {
-        let query = supabase.from('jobs').select('*');
+    // Set up real-time subscription for video updates
+    const videoSubscription = supabase
+      .channel('video-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'videos',
+        filter: `id=eq.${videoId}`
+      }, (payload) => {
+        console.log('Video update received:', payload);
+        const newVideo = payload.new as any;
+        setStatus(newVideo.status);
+        if (newVideo.preview_url) setPreviewUrl(newVideo.preview_url);
+        if (newVideo.video_url) setVideoUrl(newVideo.video_url);
         
-        if (jobId) {
-          query = query.eq('id', jobId);
-        } else if (videoId) {
-          query = query.eq('video_id', videoId);
-        }
+        updateStageFromStatus(newVideo.status);
+      })
+      .subscribe();
 
-        const { data: jobs, error } = await query.single();
-
-        if (error) {
-          console.error('Error fetching job status:', error);
-          return;
-        }
-
-        if (jobs) {
-          const jobStatus = jobs.status as JobStatus;
-          setStatus(jobStatus);
-          
-          switch (jobStatus) {
-            case 'queued':
-              setProgress(10);
-              setMessage('Job queued for processing...');
-              break;
-            case 'processing':
-              setProgress(50);
-              setMessage('Generating your video...');
-              break;
-            case 'completed':
-              setProgress(100);
-              setMessage('Video generation completed!');
-              if (onComplete && jobs.metadata && typeof jobs.metadata === 'object' && 'video_url' in jobs.metadata) {
-                onComplete(jobs.metadata.video_url as string);
-              }
-              break;
-            case 'failed':
-              setProgress(0);
-              setMessage('Video generation failed');
-              if (onError) {
-                onError(jobs.error_message || 'Unknown error occurred');
-              }
-              break;
+    // Set up real-time subscription for job updates
+    const jobSubscription = supabase
+      .channel('job-updates')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'jobs',
+        filter: `video_id=eq.${videoId}`
+      }, (payload) => {
+        console.log('Job update received:', payload);
+        const job = payload.new as any;
+        
+        if (job.status === 'completed' && job.job_type === 'enhance') {
+          if (job.metadata?.enhanced_prompt) {
+            setEnhancedPrompt(job.metadata.enhanced_prompt);
+            handleEnhanceComplete(job.metadata.enhanced_prompt);
           }
         }
-      } catch (error) {
-        console.error('Error checking job status:', error);
-      }
+        
+        if (job.status === 'failed') {
+          setError(job.error_message || 'Job failed');
+          setCurrentStage('failed');
+          if (onError) onError(job.error_message || 'Job failed');
+        }
+      })
+      .subscribe();
+
+    // Initial status check
+    checkInitialStatus();
+
+    return () => {
+      supabase.removeChannel(videoSubscription);
+      supabase.removeChannel(jobSubscription);
     };
+  }, [videoId]);
 
-    // Check status immediately
-    checkJobStatus();
+  const checkInitialStatus = async () => {
+    try {
+      const { data: video, error } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', videoId)
+        .single();
 
-    // Set up polling every 5 seconds
-    const interval = setInterval(checkJobStatus, 5000);
+      if (error) throw error;
+      
+      setStatus(video.status);
+      if (video.preview_url) setPreviewUrl(video.preview_url);
+      if (video.video_url) setVideoUrl(video.video_url);
+      
+      updateStageFromStatus(video.status);
+    } catch (error) {
+      console.error('Error checking initial status:', error);
+    }
+  };
 
-    return () => clearInterval(interval);
-  }, [jobId, videoId, onComplete, onError]);
+  const updateStageFromStatus = (videoStatus: string) => {
+    switch (videoStatus) {
+      case 'draft':
+        setCurrentStage('enhance');
+        setProgress(10);
+        setMessage('Enhancing your prompt...');
+        break;
+      case 'processing':
+        setCurrentStage('preview');
+        setProgress(40);
+        setMessage('Generating preview image...');
+        break;
+      case 'preview_ready':
+        setCurrentStage('preview');
+        setProgress(60);
+        setMessage('Preview ready! Review and continue to video generation.');
+        break;
+      case 'completed':
+        setCurrentStage('completed');
+        setProgress(100);
+        setMessage('Video generation completed!');
+        break;
+      case 'failed':
+        setCurrentStage('failed');
+        setProgress(0);
+        setMessage('Generation failed');
+        break;
+    }
+  };
+
+  const handleEnhanceComplete = async (prompt: string) => {
+    try {
+      console.log('Starting preview generation with enhanced prompt:', prompt);
+      await queuePreviewJob(videoId, prompt);
+      
+      // Update video status to processing
+      await supabase
+        .from('videos')
+        .update({ status: 'processing' })
+        .eq('id', videoId);
+        
+    } catch (error) {
+      console.error('Error starting preview generation:', error);
+      setError('Failed to start preview generation');
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!previewUrl) return;
+    
+    try {
+      console.log('Starting final video generation');
+      setProgress(80);
+      setMessage('Generating final video...');
+      
+      await queueVideoJob(videoId, previewUrl);
+    } catch (error) {
+      console.error('Error starting video generation:', error);
+      setError('Failed to start video generation');
+    }
+  };
 
   const getStatusIcon = () => {
-    switch (status) {
+    switch (currentStage) {
       case 'completed':
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       case 'failed':
@@ -97,6 +180,11 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
         return <Loader2 className="h-5 w-5 animate-spin text-blue-500" />;
     }
   };
+
+  if (currentStage === 'completed' && videoUrl && onComplete) {
+    onComplete(videoUrl);
+    return null;
+  }
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -111,7 +199,34 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
         <p className="text-sm text-center text-muted-foreground">
           {message}
         </p>
-        {status === 'processing' && (
+        
+        {error && (
+          <p className="text-sm text-center text-red-500">
+            {error}
+          </p>
+        )}
+        
+        {previewUrl && currentStage === 'preview' && status === 'preview_ready' && (
+          <div className="space-y-3">
+            <div className="aspect-video rounded-lg overflow-hidden bg-gray-100">
+              <img 
+                src={previewUrl} 
+                alt="Preview" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <Button 
+              onClick={handleGenerateVideo}
+              className="w-full"
+              size="lg"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Continue to Video Generation
+            </Button>
+          </div>
+        )}
+        
+        {(currentStage === 'enhance' || currentStage === 'preview') && status !== 'preview_ready' && (
           <p className="text-xs text-center text-muted-foreground">
             This may take a few minutes...
           </p>

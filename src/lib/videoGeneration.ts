@@ -1,6 +1,5 @@
 
 import { supabase } from '@/integrations/supabase/client';
-import { usageAPI, videoAPI, projectAPI } from '@/lib/database';
 
 interface VideoGenerationParams {
   projectId: string;
@@ -11,7 +10,7 @@ interface VideoGenerationParams {
 
 export const generateVideo = async (params: VideoGenerationParams) => {
   try {
-    console.log('Starting video generation:', params);
+    console.log('Starting video generation workflow:', params);
 
     // Get the current user
     const { data: { user } } = await supabase.auth.getUser();
@@ -20,60 +19,115 @@ export const generateVideo = async (params: VideoGenerationParams) => {
     }
 
     // Get project details
-    const project = await projectAPI.getById(params.projectId);
-    if (!project) {
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('enhanced_prompt, original_prompt, character_id')
+      .eq('id', params.projectId)
+      .single();
+
+    if (projectError || !project) {
       throw new Error('Project not found');
     }
 
-    // Create video record
-    const video = await videoAPI.create({
-      project_id: params.projectId,
-      user_id: user.id,
-      duration: params.duration,
-      resolution: params.resolution,
-      format: params.format,
-      status: 'processing'
-    });
+    // Create video record with draft status
+    const { data: video, error: videoError } = await supabase
+      .from('videos')
+      .insert({
+        project_id: params.projectId,
+        user_id: user.id,
+        duration: params.duration,
+        resolution: params.resolution,
+        format: params.format,
+        status: 'draft'
+      })
+      .select()
+      .single();
+
+    if (videoError) {
+      console.error('Error creating video:', videoError);
+      throw videoError;
+    }
 
     console.log('Video record created:', video);
 
-    // Queue the video generation job
-    const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
+    // Start with enhance job
+    const { data: enhanceJobData, error: enhanceJobError } = await supabase.functions.invoke('queue-job', {
       body: {
-        jobType: 'video_generation',
+        jobType: 'enhance',
         projectId: params.projectId,
         videoId: video.id,
-        metadata: {
-          duration: params.duration,
-          resolution: params.resolution,
-          format: params.format,
-          enhanced_prompt: project.enhanced_prompt,
-          scenes: project.scenes || []
-        }
+        prompt: project.enhanced_prompt || project.original_prompt,
+        characterId: project.character_id,
+        duration: params.duration,
+        resolution: params.resolution,
+        format: params.format
       }
     });
 
-    if (jobError) {
-      console.error('Error queuing job:', jobError);
-      throw jobError;
+    if (enhanceJobError) {
+      console.error('Error queuing enhance job:', enhanceJobError);
+      throw enhanceJobError;
     }
 
-    console.log('Job queued successfully:', jobData);
+    console.log('Enhance job queued successfully:', enhanceJobData);
 
     // Log usage
-    await usageAPI.logAction('video_generation', 1, {
-      project_id: params.projectId,
-      video_id: video.id,
-      job_id: jobData.job?.id
-    });
+    await supabase
+      .from('usage_logs')
+      .insert({
+        user_id: user.id,
+        action: 'video_generation_started',
+        credits_consumed: 1,
+        metadata: {
+          project_id: params.projectId,
+          video_id: video.id,
+          job_id: enhanceJobData.job?.id
+        }
+      });
 
     return {
       video,
-      job: jobData.job
+      job: enhanceJobData.job
     };
 
   } catch (error) {
     console.error('Error in video generation:', error);
+    throw error;
+  }
+};
+
+export const queuePreviewJob = async (videoId: string, enhancedPrompt: string) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('queue-job', {
+      body: {
+        jobType: 'preview',
+        videoId: videoId,
+        prompt: enhancedPrompt
+      }
+    });
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error queuing preview job:', error);
+    throw error;
+  }
+};
+
+export const queueVideoJob = async (videoId: string, previewUrl: string) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('queue-job', {
+      body: {
+        jobType: 'video',
+        videoId: videoId,
+        previewUrl: previewUrl
+      }
+    });
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error queuing video job:', error);
     throw error;
   }
 };
@@ -90,22 +144,6 @@ export const checkVideoStatus = async (videoId: string) => {
     return video;
   } catch (error) {
     console.error('Error checking video status:', error);
-    throw error;
-  }
-};
-
-export const getVideoProgress = async (jobId: string) => {
-  try {
-    const { data: job, error } = await supabase
-      .from('jobs')
-      .select('*')
-      .eq('id', jobId)
-      .single();
-
-    if (error) throw error;
-    return job;
-  } catch (error) {
-    console.error('Error getting job progress:', error);
     throw error;
   }
 };

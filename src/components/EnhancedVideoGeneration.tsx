@@ -26,8 +26,7 @@ export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = (
   const [resolution, setResolution] = useState('720p');
   const [format, setFormat] = useState('mp4');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [currentJob, setCurrentJob] = useState<any>(null);
-  const [currentVideo, setCurrentVideo] = useState<any>(null);
+  const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleGenerate = async () => {
@@ -41,12 +40,11 @@ export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = (
         format
       });
 
-      setCurrentJob(result.job);
-      setCurrentVideo(result.video);
+      setCurrentVideoId(result.video.id);
 
       toast({
         title: "Video Generation Started",
-        description: "Your video is being generated. This may take a few minutes.",
+        description: "Starting with prompt enhancement, then preview generation.",
       });
 
     } catch (error) {
@@ -80,11 +78,10 @@ export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = (
     });
   };
 
-  if (isGenerating && currentJob) {
+  if (isGenerating && currentVideoId) {
     return (
       <VideoGenerationProgress
-        jobId={currentJob.id}
-        videoId={currentVideo?.id}
+        videoId={currentVideoId}
         onComplete={handleVideoComplete}
         onError={handleVideoError}
       />
@@ -166,17 +163,17 @@ export const EnhancedVideoGeneration: React.FC<EnhancedVideoGenerationProps> = (
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Clock className="h-4 w-4" />
-            <span>Estimated generation time: 2-5 minutes</span>
+            <span>Process: Enhance → Preview → Video (5-10 minutes total)</span>
           </div>
 
           <Button 
             onClick={handleGenerate}
-            disabled={isGenerating || scenes.length === 0}
+            disabled={isGenerating}
             className="w-full"
             size="lg"
           >
             <Play className="h-4 w-4 mr-2" />
-            {isGenerating ? 'Generating...' : 'Generate Video'}
+            {isGenerating ? 'Generating...' : 'Start Video Generation'}
           </Button>
         </div>
       </CardContent>
