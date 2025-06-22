@@ -83,22 +83,6 @@ export const AdminVideoTester = () => {
     });
   };
 
-  const handleVideoError = (error: string) => {
-    if (videoTests.length > 0) {
-      setVideoTests(prev => prev.map(test => 
-        test.status === 'processing' 
-          ? { ...test, status: 'failed', endTime: new Date() }
-          : test
-      ));
-    }
-
-    toast({
-      title: "Video Test Failed",
-      description: error,
-      variant: "destructive"
-    });
-  };
-
   const startNewTest = () => {
     const newTest: VideoTest = {
       id: Date.now().toString(),
@@ -192,7 +176,6 @@ export const AdminVideoTester = () => {
             <EnhancedVideoGeneration
               projectId={currentProjectId}
               onComplete={handleVideoComplete}
-              onError={handleVideoError}
             />
           </div>
 

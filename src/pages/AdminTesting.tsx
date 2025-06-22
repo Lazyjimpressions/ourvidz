@@ -8,7 +8,7 @@ import { AdminPromptTester } from "@/components/admin/AdminPromptTester";
 import { AdminImageTester } from "@/components/admin/AdminImageTester";
 import { AdminVideoTester } from "@/components/admin/AdminVideoTester";
 import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
-import { TestSettings, Clock, Zap, CheckCircle } from "lucide-react";
+import { Settings, Clock, Zap, CheckCircle } from "lucide-react";
 
 const AdminTesting = () => {
   const [activeTab, setActiveTab] = useState("prompts");
@@ -26,7 +26,7 @@ const AdminTesting = () => {
               </p>
             </div>
             <Badge variant="outline" className="text-sm">
-              <TestSettings className="h-4 w-4 mr-1" />
+              <Settings className="h-4 w-4 mr-1" />
               Admin Only
             </Badge>
           </div>
@@ -52,7 +52,7 @@ const AdminTesting = () => {
                 Prompt Testing
               </TabsTrigger>
               <TabsTrigger value="images" className="flex items-center gap-2">
-                <TestSettings className="h-4 w-4" />
+                <Settings className="h-4 w-4" />
                 Image Generation
               </TabsTrigger>
               <TabsTrigger value="videos" className="flex items-center gap-2">
