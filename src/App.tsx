@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { AdminRoute } from "@/components/AdminRoute";
 import { ConnectionHealthMonitor } from "@/components/ConnectionHealthMonitor";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -17,6 +18,7 @@ import Characters from "./pages/Characters";
 import ImageCreation from "./pages/ImageCreation";
 import Library from "./pages/Library";
 import Profile from "./pages/Profile";
+import AdminTesting from "./pages/AdminTesting";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +63,11 @@ const App = () => (
               <ProtectedRoute>
                 <Profile />
               </ProtectedRoute>
+            } />
+            <Route path="/admin/testing" element={
+              <AdminRoute>
+                <AdminTesting />
+              </AdminRoute>
             } />
             <Route path="*" element={<NotFound />} />
           </Routes>
