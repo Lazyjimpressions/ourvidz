@@ -75,10 +75,52 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
       console.log('Image generation job queued:', data);
 
-      // Poll for completion
+      // Set up real-time subscription for this specific video
+      const videoSubscription = supabase
+        .channel(`video-${video.id}`)
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'videos',
+          filter: `id=eq.${video.id}`
+        }, (payload) => {
+          console.log('Video update received:', payload);
+          const updatedVideo = payload.new as any;
+          
+          if (updatedVideo.status === 'completed' && updatedVideo.preview_url) {
+            console.log(`Scene ${scene.sceneNumber} completed with URL:`, updatedVideo.preview_url);
+            
+            const newSceneImage: SceneImage = {
+              sceneId: scene.id,
+              imageUrl: updatedVideo.preview_url,
+              approved: false,
+            };
+
+            setSceneImages(prev => {
+              const filtered = prev.filter(img => img.sceneId !== scene.id);
+              return [...filtered, newSceneImage];
+            });
+
+            toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
+            supabase.removeChannel(videoSubscription);
+          } else if (updatedVideo.status === 'failed') {
+            console.error(`Scene ${scene.sceneNumber} generation failed`);
+            toast.error(`Failed to generate scene ${scene.sceneNumber} image`);
+            supabase.removeChannel(videoSubscription);
+          }
+        })
+        .subscribe();
+
+      // Fallback polling with extended timeout (10 minutes for video generation)
       const pollForCompletion = () => {
+        let pollCount = 0;
+        const maxPolls = 120; // 10 minutes at 5-second intervals
+        
         const pollInterval = setInterval(async () => {
           try {
+            pollCount++;
+            console.log(`Polling scene ${scene.sceneNumber}, attempt ${pollCount}/${maxPolls}`);
+            
             const { data: updatedVideo, error: pollError } = await supabase
               .from('videos')
               .select('status, preview_url')
@@ -89,7 +131,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
             console.log(`Scene ${scene.sceneNumber} status:`, updatedVideo.status);
 
-            if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
+            if (updatedVideo.status === 'completed' && updatedVideo.preview_url) {
               clearInterval(pollInterval);
               
               const newSceneImage: SceneImage = {
@@ -107,18 +149,15 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             } else if (updatedVideo.status === 'failed') {
               clearInterval(pollInterval);
               throw new Error('Image generation failed');
+            } else if (pollCount >= maxPolls) {
+              clearInterval(pollInterval);
+              throw new Error('Generation timeout after 10 minutes');
             }
           } catch (error) {
             clearInterval(pollInterval);
             throw error;
           }
-        }, 3000); // Poll every 3 seconds
-
-        // Timeout after 3 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          throw new Error('Generation timeout');
-        }, 180000);
+        }, 5000); // Poll every 5 seconds
       };
 
       pollForCompletion();
@@ -147,17 +186,17 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
       console.log(`Generating images for ${scenesToGenerate.length} scenes`);
 
-      // Generate all scenes in parallel for better performance
-      const generationPromises = scenesToGenerate.map(scene => 
-        generateSceneImage(scene)
-      );
-
-      await Promise.allSettled(generationPromises);
+      // Generate scenes sequentially to avoid overwhelming the system
+      for (const scene of scenesToGenerate) {
+        await generateSceneImage(scene);
+        // Small delay between generations
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
       
-      toast.success('All scene images generated');
+      toast.success('All scene images queued for generation');
     } catch (error) {
       console.error('Error generating all scenes:', error);
-      toast.error('Failed to generate some scene images');
+      toast.error('Failed to queue some scene images');
     } finally {
       setIsGeneratingAll(false);
     }
@@ -194,6 +233,9 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600">
             Generate AI images for each scene using Wan 2.1 before creating the final video
+            <div className="text-xs text-amber-600 mt-1">
+              ⏱️ Video generation can take up to 10 minutes per scene
+            </div>
           </div>
           <Button 
             onClick={generateAllScenes}
@@ -233,6 +275,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                     <div className="flex flex-col items-center gap-2">
                       <LoadingSpinner />
                       <span className="text-sm text-gray-600">Generating with Wan 2.1...</span>
+                      <span className="text-xs text-gray-500">This may take up to 10 minutes</span>
                     </div>
                   ) : sceneImage ? (
                     <div className="relative w-full h-full">

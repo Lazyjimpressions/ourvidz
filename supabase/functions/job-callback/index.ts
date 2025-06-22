@@ -78,6 +78,8 @@ serve(async (req) => {
       await handleImageJobCallback(supabase, job, status, outputUrl, errorMessage);
     } else if (job.job_type === 'video' && job.video_id) {
       await handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage);
+    } else if (job.job_type === 'preview' && job.video_id) {
+      await handlePreviewJobCallback(supabase, job, status, outputUrl, errorMessage);
     } else if (job.job_type === 'enhance') {
       await handleEnhanceJobCallback(supabase, job, status, enhancedPrompt, errorMessage);
     }
@@ -118,6 +120,58 @@ async function handleEnhanceJobCallback(supabase: any, job: any, status: string,
     console.log('Enhanced prompt stored successfully for job:', job.id);
   } else if (status === 'failed') {
     console.log('Enhance job failed:', job.id, errorMessage);
+  }
+}
+
+async function handlePreviewJobCallback(supabase: any, job: any, status: string, outputUrl: string, errorMessage: string) {
+  console.log('Handling preview job callback:', { jobId: job.id, videoId: job.video_id, status, outputUrl });
+  
+  if (status === 'completed' && job.video_id && outputUrl) {
+    console.log('Updating video with preview URL:', outputUrl);
+    
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'completed',
+        preview_url: outputUrl,
+        completed_at: new Date().toISOString()
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video with preview URL:', videoError);
+    } else {
+      console.log('Video updated successfully with preview URL:', outputUrl);
+    }
+  } else if (status === 'failed' && job.video_id) {
+    console.log('Preview generation failed, updating video status');
+    
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'failed',
+        error_message: errorMessage
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video status to failed:', videoError);
+    } else {
+      console.log('Video marked as failed');
+    }
+  } else if (status === 'processing' && job.video_id) {
+    const { error: videoError } = await supabase
+      .from('videos')
+      .update({
+        status: 'processing'
+      })
+      .eq('id', job.video_id);
+
+    if (videoError) {
+      console.error('Error updating video status to processing:', videoError);
+    } else {
+      console.log('Video marked as processing');
+    }
   }
 }
 
