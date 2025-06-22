@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, AlertCircle, Clock, Database, Zap, Users } from "lucide-react";
+import { CheckCircle, AlertCircle, Clock, Database, Users, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HealthMetric {
@@ -25,12 +25,6 @@ export const SystemHealthMonitor = () => {
       status: 'healthy',
       value: "Checking...",
       icon: <Users className="h-4 w-4" />
-    },
-    {
-      name: "Edge Functions",
-      status: 'warning',
-      value: "Checking...",
-      icon: <Zap className="h-4 w-4" />
     }
   ]);
 
@@ -59,30 +53,6 @@ export const SystemHealthMonitor = () => {
           status: authError ? 'error' : 'healthy',
           value: authError ? 'Auth Failed' : user ? 'Authenticated' : 'No User'
         };
-
-        // Test edge function with a simple health check
-        try {
-          const { data: funcData, error: funcError } = await supabase.functions.invoke('queue-job', {
-            body: { 
-              test: true, 
-              jobType: 'enhance', // Use a valid job type that exists in the database
-              metadata: { healthCheck: true }
-            }
-          });
-          
-          newMetrics[2] = {
-            ...newMetrics[2],
-            status: funcError ? 'warning' : 'healthy',
-            value: funcError ? 'Function Issues' : 'Available'
-          };
-        } catch (funcError) {
-          console.log('Edge function test:', funcError);
-          newMetrics[2] = {
-            ...newMetrics[2],
-            status: 'warning',
-            value: 'Limited Functionality'
-          };
-        }
 
         setMetrics(newMetrics);
       } catch (error) {
@@ -128,31 +98,48 @@ export const SystemHealthMonitor = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {metrics.map((metric) => (
-        <Card key={metric.name} className="relative">
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={getStatusColor(metric.status)}>
-                  {metric.icon}
-                </span>
-                <span className="text-sm font-medium">{metric.name}</span>
+    <div className="space-y-4">
+      {/* Spot Server Warning */}
+      <Card className="border-orange-200 bg-orange-50">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-2 text-orange-700">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="text-sm font-medium">Spot Server Notice</span>
+          </div>
+          <p className="text-sm text-orange-600 mt-1">
+            Edge function testing has been disabled to prevent unnecessary job creation that keeps the spot server active. 
+            Use the testing tabs below for intentional job creation only.
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Health Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {metrics.map((metric) => (
+          <Card key={metric.name} className="relative">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={getStatusColor(metric.status)}>
+                    {metric.icon}
+                  </span>
+                  <span className="text-sm font-medium">{metric.name}</span>
+                </div>
+                <Badge
+                  variant={metric.status === 'healthy' ? 'default' : 'destructive'}
+                  className="text-xs"
+                >
+                  {getStatusIcon(metric.status)}
+                  {metric.status}
+                </Badge>
               </div>
-              <Badge
-                variant={metric.status === 'healthy' ? 'default' : 'destructive'}
-                className="text-xs"
-              >
-                {getStatusIcon(metric.status)}
-                {metric.status}
-              </Badge>
-            </div>
-            <div className="mt-2 text-sm text-gray-600">
-              {metric.value}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              <div className="mt-2 text-sm text-gray-600">
+                {metric.value}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };

@@ -9,7 +9,7 @@ import { AdminImageTester } from "@/components/admin/AdminImageTester";
 import { AdminVideoTester } from "@/components/admin/AdminVideoTester";
 import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
-import { Settings, Clock, Zap, CheckCircle, Database } from "lucide-react";
+import { Settings, Clock, Zap, CheckCircle, Database, AlertTriangle } from "lucide-react";
 
 const AdminTesting = () => {
   const [activeTab, setActiveTab] = useState("prompts");
@@ -31,6 +31,22 @@ const AdminTesting = () => {
               Admin Only
             </Badge>
           </div>
+
+          {/* Spot Server Cost Warning */}
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-700">
+                <AlertTriangle className="h-5 w-5" />
+                Spot Server Cost Notice
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-red-600 text-sm">
+                <strong>Important:</strong> Creating jobs in the testing tabs below will wake up the spot server and incur costs. 
+                Only create jobs when necessary for testing. Use the Database Management tab to clean up unnecessary jobs.
+              </p>
+            </CardContent>
+          </Card>
 
           {/* System Health Overview */}
           <Card>

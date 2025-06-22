@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,7 @@ import { Database, Trash2, Edit, Filter, RefreshCw } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import type { Job } from "@/lib/database";
+import { HealthCheckJobCleaner } from "./HealthCheckJobCleaner";
 
 interface JobStats {
   total: number;
@@ -271,6 +271,9 @@ export const AdminDatabaseManager = () => {
 
   return (
     <div className="space-y-6">
+      {/* Health Check Job Cleaner */}
+      <HealthCheckJobCleaner />
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card>
