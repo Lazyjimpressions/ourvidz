@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +6,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Progress } from "@/components/ui/progress";
 import { Image, Download, RefreshCw, Check } from "lucide-react";
 import { GeneratedImage } from "@/pages/ImageCreation";
-import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
 interface ImageGeneratorProps {
@@ -44,43 +43,79 @@ export const ImageGenerator = ({
       const imagePrompt = enhancedPrompt || prompt;
       console.log('Generating images with Wan 2.1:', imagePrompt);
 
-      // Generate multiple images in parallel
+      // Generate multiple images in parallel using existing queue-job
       const numberOfImages = 4;
       const generationPromises = Array.from({ length: numberOfImages }, async (_, index) => {
-        const { job } = await generateContent({
-          jobType: 'image',
-          prompt: imagePrompt,
-          projectId: projectId,
-          characterId: characterId,
-          metadata: {
-            mode: mode,
-            variation: index + 1,
-            width: 512,
-            height: 512,
-            outputFormat: 'PNG'
+        // Create a video record for image generation (reusing video table)
+        const { data: video, error: videoError } = await supabase
+          .from('videos')
+          .insert({
+            project_id: projectId,
+            status: 'draft',
+            duration: 0, // 0 for images
+            format: 'png'
+          })
+          .select()
+          .single();
+
+        if (videoError) throw videoError;
+
+        // Queue the image generation job using existing infrastructure
+        const { data, error } = await supabase.functions.invoke('queue-job', {
+          body: {
+            jobType: 'preview',
+            videoId: video.id,
+            projectId: projectId,
+            metadata: {
+              prompt: imagePrompt,
+              mode: mode,
+              variation: index + 1,
+              characterId: characterId
+            }
           }
         });
 
-        // Wait for completion with progress tracking
-        const completedJob = await waitForJobCompletion(
-          job.id,
-          (status) => {
-            console.log(`Image ${index + 1} generation status:`, status);
-            // Update progress based on completed jobs
-            setProgress((prev) => Math.min(prev + 20, 90));
-          },
-          120000 // 2 minutes timeout
-        );
+        if (error) throw error;
 
-        return {
-          id: `generated-${Date.now()}-${index}`,
-          url: completedJob.metadata?.imageUrl || "/placeholder.svg",
-          prompt,
-          enhancedPrompt,
-          timestamp: new Date(),
-          isCharacter: mode === "character",
-          jobId: completedJob.id
-        };
+        // Poll for completion
+        return new Promise<GeneratedImage>((resolve, reject) => {
+          const pollInterval = setInterval(async () => {
+            try {
+              const { data: updatedVideo, error: pollError } = await supabase
+                .from('videos')
+                .select('status, preview_url')
+                .eq('id', video.id)
+                .single();
+
+              if (pollError) throw pollError;
+
+              if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
+                clearInterval(pollInterval);
+                setProgress((prev) => Math.min(prev + 25, 100));
+                resolve({
+                  id: `generated-${Date.now()}-${index}`,
+                  url: updatedVideo.preview_url,
+                  prompt,
+                  enhancedPrompt,
+                  timestamp: new Date(),
+                  isCharacter: mode === "character"
+                });
+              } else if (updatedVideo.status === 'failed') {
+                clearInterval(pollInterval);
+                reject(new Error('Image generation failed'));
+              }
+            } catch (error) {
+              clearInterval(pollInterval);
+              reject(error);
+            }
+          }, 3000); // Poll every 3 seconds
+
+          // Timeout after 3 minutes
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            reject(new Error('Generation timeout'));
+          }, 180000);
+        });
       });
 
       const generatedImages = await Promise.allSettled(generationPromises);
@@ -152,7 +187,6 @@ export const ImageGenerator = ({
   };
 
   const downloadImage = (image: GeneratedImage) => {
-    // Create download link for generated image
     const link = document.createElement('a');
     link.href = image.url;
     link.download = `generated-image-${image.id}.png`;

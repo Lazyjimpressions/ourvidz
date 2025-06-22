@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Badge } from "@/components/ui/badge";
 import { RefreshCw } from "lucide-react";
-import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface PreviewImage {
@@ -34,35 +34,73 @@ export const PreviewImageGenerator = ({ prompt, projectId, onImageSelected }: Pr
     try {
       console.log('Generating preview images with Wan 2.1:', prompt);
       
-      // Generate 4 preview variations
       const numberOfPreviews = 4;
       const generationPromises = Array.from({ length: numberOfPreviews }, async (_, index) => {
-        const { job } = await generateContent({
-          jobType: 'preview',
-          prompt: `${prompt}, preview style, concept art`,
-          projectId: projectId,
-          metadata: {
-            variation: index + 1,
-            width: 400,
-            height: 300,
-            outputFormat: 'PNG',
-            style: 'preview'
+        // Create a video record for preview image generation
+        const { data: video, error: videoError } = await supabase
+          .from('videos')
+          .insert({
+            project_id: projectId,
+            status: 'draft',
+            duration: 0, // 0 for images
+            format: 'png'
+          })
+          .select()
+          .single();
+
+        if (videoError) throw videoError;
+
+        // Queue preview generation job using existing infrastructure
+        const { data, error } = await supabase.functions.invoke('queue-job', {
+          body: {
+            jobType: 'preview',
+            videoId: video.id,
+            projectId: projectId,
+            metadata: {
+              prompt: `${prompt}, preview style, concept art`,
+              variation: index + 1
+            }
           }
         });
 
-        // Wait for completion
-        const completedJob = await waitForJobCompletion(
-          job.id,
-          (status) => {
-            console.log(`Preview ${index + 1} generation status:`, status);
-          },
-          90000 // 1.5 minutes timeout for previews
-        );
+        if (error) throw error;
 
-        return {
-          id: `preview-${Date.now()}-${index}`,
-          url: completedJob.metadata?.imageUrl || "/placeholder.svg"
-        };
+        // Poll for completion
+        return new Promise<PreviewImage>((resolve, reject) => {
+          const pollInterval = setInterval(async () => {
+            try {
+              const { data: updatedVideo, error: pollError } = await supabase
+                .from('videos')
+                .select('status, preview_url')
+                .eq('id', video.id)
+                .single();
+
+              if (pollError) throw pollError;
+
+              console.log(`Preview ${index + 1} generation status:`, updatedVideo.status);
+
+              if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
+                clearInterval(pollInterval);
+                resolve({
+                  id: `preview-${Date.now()}-${index}`,
+                  url: updatedVideo.preview_url
+                });
+              } else if (updatedVideo.status === 'failed') {
+                clearInterval(pollInterval);
+                reject(new Error('Preview generation failed'));
+              }
+            } catch (error) {
+              clearInterval(pollInterval);
+              reject(error);
+            }
+          }, 3000); // Poll every 3 seconds
+
+          // Timeout after 90 seconds for previews
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            reject(new Error('Preview generation timeout'));
+          }, 90000);
+        });
       });
 
       const results = await Promise.allSettled(generationPromises);

@@ -4,8 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Image, CheckCircle, Edit } from "lucide-react";
-import { uploadScenePreview, getScenePreviewUrl } from "@/lib/storage";
-import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Scene {
@@ -38,58 +37,90 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
     try {
       console.log('Generating image for scene:', scene.sceneNumber, 'with prompt:', scene.enhancedPrompt);
       
-      // Generate image using Wan 2.1 through RunPod
-      const { job } = await generateContent({
-        jobType: 'image',
-        prompt: scene.enhancedPrompt,
-        projectId: projectId,
-        sceneId: scene.id,
-        metadata: {
-          sceneNumber: scene.sceneNumber,
-          width: 1024,
-          height: 768,
-          outputFormat: 'PNG'
+      // Create a video record for scene image generation
+      const { data: video, error: videoError } = await supabase
+        .from('videos')
+        .insert({
+          project_id: projectId,
+          status: 'draft',
+          duration: 0, // 0 for images
+          format: 'png'
+        })
+        .select()
+        .single();
+
+      if (videoError) throw videoError;
+
+      // Queue image generation job using existing infrastructure
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          jobType: 'preview',
+          videoId: video.id,
+          projectId: projectId,
+          metadata: {
+            prompt: scene.enhancedPrompt,
+            sceneNumber: scene.sceneNumber,
+            sceneId: scene.id
+          }
         }
       });
 
-      console.log('Image generation job created:', job.id);
+      if (error) throw error;
 
-      // Wait for job completion with progress updates
-      const completedJob = await waitForJobCompletion(
-        job.id,
-        (status) => {
-          console.log(`Scene ${scene.sceneNumber} generation status:`, status);
-        },
-        180000 // 3 minutes timeout for image generation
-      );
+      console.log('Image generation job queued:', data);
 
-      console.log('Image generation completed:', completedJob);
+      // Poll for completion
+      const pollForCompletion = () => {
+        const pollInterval = setInterval(async () => {
+          try {
+            const { data: updatedVideo, error: pollError } = await supabase
+              .from('videos')
+              .select('status, preview_url')
+              .eq('id', video.id)
+              .single();
 
-      // Get the generated image URL from job metadata
-      const imageUrl = completedJob.metadata?.imageUrl;
-      
-      if (!imageUrl) {
-        throw new Error('No image URL returned from generation');
-      }
+            if (pollError) throw pollError;
 
-      const newSceneImage: SceneImage = {
-        sceneId: scene.id,
-        imageUrl: imageUrl,
-        approved: false,
+            console.log(`Scene ${scene.sceneNumber} status:`, updatedVideo.status);
+
+            if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
+              clearInterval(pollInterval);
+              
+              const newSceneImage: SceneImage = {
+                sceneId: scene.id,
+                imageUrl: updatedVideo.preview_url,
+                approved: false,
+              };
+
+              setSceneImages(prev => {
+                const filtered = prev.filter(img => img.sceneId !== scene.id);
+                return [...filtered, newSceneImage];
+              });
+
+              toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
+            } else if (updatedVideo.status === 'failed') {
+              clearInterval(pollInterval);
+              throw new Error('Image generation failed');
+            }
+          } catch (error) {
+            clearInterval(pollInterval);
+            throw error;
+          }
+        }, 3000); // Poll every 3 seconds
+
+        // Timeout after 3 minutes
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          throw new Error('Generation timeout');
+        }, 180000);
       };
 
-      setSceneImages(prev => {
-        const filtered = prev.filter(img => img.sceneId !== scene.id);
-        return [...filtered, newSceneImage];
-      });
-
-      toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
+      pollForCompletion();
 
     } catch (error) {
       console.error('Error generating scene image:', error);
       toast.error(`Failed to generate scene ${scene.sceneNumber} image: ${error.message}`);
       
-      // Remove the scene from generating set on error
       setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
     } finally {
       setGeneratingScenes(prev => {
@@ -104,7 +135,6 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
     setIsGeneratingAll(true);
     
     try {
-      // Generate images for all scenes that don't have images yet
       const scenesToGenerate = scenes.filter(scene => 
         !sceneImages.find(img => img.sceneId === scene.id)
       );
@@ -136,9 +166,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
   };
 
   const regenerateScene = (scene: Scene) => {
-    // Remove existing image for this scene
     setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
-    // Generate new image
     generateSceneImage(scene);
   };
 
