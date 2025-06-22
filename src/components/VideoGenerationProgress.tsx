@@ -44,11 +44,12 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
       }, (payload) => {
         console.log('Video update received:', payload);
         const newVideo = payload.new as any;
-        setStatus(newVideo.status);
+        const videoStatus = newVideo.status as VideoStatus;
+        setStatus(videoStatus);
         if (newVideo.preview_url) setPreviewUrl(newVideo.preview_url);
         if (newVideo.video_url) setVideoUrl(newVideo.video_url);
         
-        updateStageFromStatus(newVideo.status);
+        updateStageFromStatus(videoStatus);
       })
       .subscribe();
 
@@ -98,17 +99,18 @@ export const VideoGenerationProgress: React.FC<VideoGenerationProgressProps> = (
 
       if (error) throw error;
       
-      setStatus(video.status);
+      const videoStatus = video.status as VideoStatus;
+      setStatus(videoStatus);
       if (video.preview_url) setPreviewUrl(video.preview_url);
       if (video.video_url) setVideoUrl(video.video_url);
       
-      updateStageFromStatus(video.status);
+      updateStageFromStatus(videoStatus);
     } catch (error) {
       console.error('Error checking initial status:', error);
     }
   };
 
-  const updateStageFromStatus = (videoStatus: string) => {
+  const updateStageFromStatus = (videoStatus: VideoStatus) => {
     switch (videoStatus) {
       case 'draft':
         setCurrentStage('enhance');
