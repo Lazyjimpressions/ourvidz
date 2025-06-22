@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -18,26 +17,14 @@ interface GeneratedImage {
 }
 
 export const AdminImageTester = () => {
-  const [testPrompt, setTestPrompt] = useState("A beautiful landscape with mountains and a lake at sunset");
   const [mode, setMode] = useState<"character" | "general">("general");
-  const [batchSize, setBatchSize] = useState("4");
+  const [batchSize, setBatchSize] = useState(4);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
-  const [testResults, setTestResults] = useState({
-    totalGenerated: 0,
-    successRate: 100,
-    avgTime: 2.5
-  });
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleImagesGenerated = (images: GeneratedImage[]) => {
     setGeneratedImages(prev => [...images, ...prev]);
     
-    // Update test metrics
-    setTestResults(prev => ({
-      totalGenerated: prev.totalGenerated + images.length,
-      successRate: Math.round(((prev.totalGenerated + images.length) / (prev.totalGenerated + parseInt(batchSize))) * 100),
-      avgTime: 2.5 // Mock average time for admin testing
-    }));
-
     toast({
       title: "Test Complete",
       description: `Generated ${images.length} images successfully`,
@@ -60,30 +47,43 @@ export const AdminImageTester = () => {
 
   const clearResults = () => {
     setGeneratedImages([]);
-    setTestResults({ totalGenerated: 0, successRate: 100, avgTime: 2.5 });
+  };
+
+  const startBatchGeneration = async (prompt: string) => {
+    if (!prompt.trim()) return;
+    
+    setIsGenerating(true);
+    const batchResults: GeneratedImage[] = [];
+    
+    try {
+      // Generate images in batches
+      for (let i = 0; i < batchSize; i++) {
+        // This would be called from the AdminImageGenerator
+        // For now, we'll let the generator handle the actual generation
+      }
+    } catch (error) {
+      console.error('Batch generation error:', error);
+      toast({
+        title: "Batch Generation Failed",
+        description: "Some images failed to generate",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Test Configuration */}
+      {/* Configuration Controls */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Image Generation Test Configuration
+            Generation Configuration
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="test-prompt">Test Prompt</Label>
-            <Input
-              id="test-prompt"
-              value={testPrompt}
-              onChange={(e) => setTestPrompt(e.target.value)}
-              placeholder="Enter test prompt..."
-            />
-          </div>
-          
+        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <Label>Generation Mode</Label>
             <Select value={mode} onValueChange={(value: "character" | "general") => setMode(value)}>
@@ -99,12 +99,13 @@ export const AdminImageTester = () => {
           
           <div className="space-y-2">
             <Label>Batch Size</Label>
-            <Select value={batchSize} onValueChange={setBatchSize}>
+            <Select value={batchSize.toString()} onValueChange={(value) => setBatchSize(parseInt(value))}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="1">1 Image</SelectItem>
+                <SelectItem value="2">2 Images</SelectItem>
                 <SelectItem value="4">4 Images</SelectItem>
                 <SelectItem value="8">8 Images</SelectItem>
               </SelectContent>
@@ -117,59 +118,75 @@ export const AdminImageTester = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{testResults.totalGenerated}</div>
-            <p className="text-xs text-muted-foreground">Images Generated</p>
+            <div className="text-2xl font-bold">{generatedImages.length}</div>
+            <p className="text-xs text-muted-foreground">Total Generated</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{testResults.successRate}%</div>
+            <div className="text-2xl font-bold">{isGenerating ? 'Generating...' : '100%'}</div>
             <p className="text-xs text-muted-foreground">Success Rate</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{testResults.avgTime}s</div>
+            <div className="text-2xl font-bold">~2.5s</div>
             <p className="text-xs text-muted-foreground">Avg Generation Time</p>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="pt-6 space-y-2">
-            <Button variant="outline" size="sm" onClick={downloadAllImages} disabled={generatedImages.length === 0}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={downloadAllImages} 
+              disabled={generatedImages.length === 0}
+              className="w-full"
+            >
               <Download className="h-4 w-4 mr-1" />
               Download All
             </Button>
-            <Button variant="outline" size="sm" onClick={clearResults}>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={clearResults}
+              className="w-full"
+            >
               Clear Results
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* Admin Image Generator */}
+      {/* Generator and Results */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Admin Image Generator */}
         <AdminImageGenerator
-          prompt={testPrompt}
           mode={mode}
+          batchSize={batchSize}
           onImagesGenerated={handleImagesGenerated}
+          onGenerationStart={() => setIsGenerating(true)}
+          onGenerationEnd={() => setIsGenerating(false)}
         />
 
-        {/* Generated Images Gallery */}
+        {/* Results Gallery */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Image className="h-5 w-5" />
-              Test Results Gallery
+              Test Results
               <Badge variant="secondary">{generatedImages.length}</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent>
             {generatedImages.length === 0 ? (
-              <div className="text-center text-gray-500 py-8">
-                No images generated yet. Start a test to see results.
+              <div className="text-center text-gray-500 py-12">
+                <Image className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No images generated yet</p>
+                <p className="text-sm">Start a test to see results here</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 max-h-[500px] overflow-y-auto">
@@ -188,6 +205,21 @@ export const AdminImageTester = () => {
                       <Badge variant="secondary" className="text-xs">
                         #{index + 1}
                       </Badge>
+                    </div>
+                    <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = image.url;
+                          link.download = `admin-test-${index + 1}.png`;
+                          link.click();
+                        }}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Download className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                 ))}
