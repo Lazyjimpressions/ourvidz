@@ -85,9 +85,16 @@ export class PromptEnhancementService {
 
       if (error) throw error;
 
+      // Safely handle metadata which could be any Json type
+      let enhancedPrompt: string | undefined;
+      if (data.metadata && typeof data.metadata === 'object' && data.metadata !== null && !Array.isArray(data.metadata)) {
+        const metadata = data.metadata as Record<string, any>;
+        enhancedPrompt = metadata.enhanced_prompt;
+      }
+
       return {
         status: data.status,
-        result: data.metadata?.enhanced_prompt,
+        result: enhancedPrompt,
         error: data.error_message
       };
     } catch (error) {
