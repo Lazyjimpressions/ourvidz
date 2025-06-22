@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { AdminPromptTester } from "@/components/admin/AdminPromptTester";
 import { AdminImageTester } from "@/components/admin/AdminImageTester";
 import { AdminVideoTester } from "@/components/admin/AdminVideoTester";
+import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
-import { Settings, Clock, Zap, CheckCircle } from "lucide-react";
+import { Settings, Clock, Zap, CheckCircle, Database } from "lucide-react";
 
 const AdminTesting = () => {
   const [activeTab, setActiveTab] = useState("prompts");
@@ -46,7 +47,7 @@ const AdminTesting = () => {
 
           {/* Testing Tabs */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
               <TabsTrigger value="prompts" className="flex items-center gap-2">
                 <Zap className="h-4 w-4" />
                 Prompt Testing
@@ -58,6 +59,10 @@ const AdminTesting = () => {
               <TabsTrigger value="videos" className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 Video Generation
+              </TabsTrigger>
+              <TabsTrigger value="database" className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Database Management
               </TabsTrigger>
             </TabsList>
 
@@ -71,6 +76,10 @@ const AdminTesting = () => {
 
             <TabsContent value="videos" className="space-y-6">
               <AdminVideoTester />
+            </TabsContent>
+
+            <TabsContent value="database" className="space-y-6">
+              <AdminDatabaseManager />
             </TabsContent>
           </Tabs>
         </div>
