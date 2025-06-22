@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { VideoConfig } from "./VideoConfiguration";
 import { Character } from "./CharacterManager";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Scene {
   id: string;
@@ -18,7 +20,7 @@ interface Scene {
 interface StoryBreakdownProps {
   config: VideoConfig;
   characters: Character[];
-  onScenesApproved: (scenes: Scene[]) => void;
+  onScenesApproved: (scenes: Scene[], projectId?: string) => void;
 }
 
 // Content templates for different media types
@@ -39,6 +41,7 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
   const [story, setStory] = useState("");
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
 
   const templates = contentTemplates[config.mediaType];
 
@@ -51,33 +54,129 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
 
     setIsProcessing(true);
     
-    // Simulate AI processing - replace with actual RunPod API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Generate scenes based on the story and media type
-    const generatedScenes: Scene[] = Array.from({ length: config.sceneCount }, (_, index) => {
-      const sceneNumber = index + 1;
-      let description = "";
-      let enhancedPrompt = "";
-
-      if (config.mediaType === 'image') {
-        description = `${story}`;
-        enhancedPrompt = `High-quality digital art: ${story}${characters.length > 0 ? ` featuring ${characters.map(c => c.name).join(', ')}` : ''}`;
-      } else {
-        description = `Scene ${sceneNumber}: ${story} - part ${sceneNumber}`;
-        enhancedPrompt = `Cinematic video scene ${sceneNumber}: ${story}${characters.length > 0 ? ` with characters: ${characters.map(c => `${c.name} (${c.appearance_tags ? c.appearance_tags.join(', ') : 'no appearance details'})`).join(', ')}` : ''}`;
+    try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
       }
 
-      return {
-        id: `scene-${sceneNumber}`,
-        sceneNumber,
-        description,
-        enhancedPrompt,
-      };
-    });
+      // Create project record
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          user_id: user.id,
+          title: config.mediaType === 'image' ? 'Image Creation' : 'Video Creation',
+          original_prompt: story,
+          media_type: config.mediaType,
+          scene_count: config.sceneCount
+        })
+        .select()
+        .single();
 
-    setScenes(generatedScenes);
-    setIsProcessing(false);
+      if (projectError) throw projectError;
+      setCurrentProjectId(project.id);
+
+      if (config.mediaType === 'image') {
+        // For images, create a single scene and enhance the prompt
+        const { data: video, error: videoError } = await supabase
+          .from('videos')
+          .insert({
+            project_id: project.id,
+            user_id: user.id,
+            status: 'draft',
+            duration: 0,
+            format: 'text'
+          })
+          .select()
+          .single();
+
+        if (videoError) throw videoError;
+
+        // Queue enhancement job
+        const { data, error } = await supabase.functions.invoke('queue-job', {
+          body: {
+            jobType: 'enhance',
+            videoId: video.id,
+            projectId: project.id,
+            metadata: {
+              prompt: story,
+              characters: characters.map(c => `${c.name} (${c.description || 'no description'})`),
+              mode: 'image'
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        // Poll for enhancement completion
+        const pollForCompletion = () => {
+          const pollInterval = setInterval(async () => {
+            try {
+              const { data: updatedProject, error: pollError } = await supabase
+                .from('projects')
+                .select('enhanced_prompt')
+                .eq('id', project.id)
+                .single();
+
+              if (pollError) throw pollError;
+
+              if (updatedProject.enhanced_prompt) {
+                clearInterval(pollInterval);
+                
+                const enhancedScene: Scene = {
+                  id: 'scene-1',
+                  sceneNumber: 1,
+                  description: story,
+                  enhancedPrompt: updatedProject.enhanced_prompt,
+                };
+
+                setScenes([enhancedScene]);
+                setIsProcessing(false);
+                toast.success('Prompt enhanced successfully!');
+              }
+            } catch (error) {
+              clearInterval(pollInterval);
+              throw error;
+            }
+          }, 2000);
+
+          // Timeout after 30 seconds
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            if (isProcessing) {
+              setIsProcessing(false);
+              throw new Error('Enhancement timeout');
+            }
+          }, 30000);
+        };
+
+        pollForCompletion();
+
+      } else {
+        // For videos, generate scenes based on the story and scene count
+        const generatedScenes: Scene[] = Array.from({ length: config.sceneCount }, (_, index) => {
+          const sceneNumber = index + 1;
+          const description = `Scene ${sceneNumber}: ${story} - part ${sceneNumber}`;
+          const enhancedPrompt = `Cinematic video scene ${sceneNumber}: ${story}${characters.length > 0 ? ` with characters: ${characters.map(c => `${c.name} (${c.appearance_tags ? c.appearance_tags.join(', ') : 'no appearance details'})`).join(', ')}` : ''}`;
+
+          return {
+            id: `scene-${sceneNumber}`,
+            sceneNumber,
+            description,
+            enhancedPrompt,
+          };
+        });
+
+        setScenes(generatedScenes);
+        setIsProcessing(false);
+      }
+
+    } catch (error) {
+      console.error('Error processing story:', error);
+      setIsProcessing(false);
+      toast.error(`Failed to process story: ${error.message}`);
+    }
   };
 
   const handleSceneEdit = (sceneId: string, newDescription: string) => {
@@ -89,7 +188,7 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
   };
 
   const handleApproveScenes = () => {
-    onScenesApproved(scenes);
+    onScenesApproved(scenes, currentProjectId);
   };
 
   return (
@@ -150,17 +249,17 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
           {isProcessing ? (
             <>
               <LoadingSpinner size="sm" className="mr-2" />
-              Processing...
+              {config.mediaType === 'image' ? 'Enhancing prompt...' : 'Processing...'}
             </>
           ) : (
-            config.mediaType === 'image' ? "Generate Image" : "Break Down Into Scenes"
+            config.mediaType === 'image' ? "Enhance Description" : "Break Down Into Scenes"
           )}
         </Button>
 
         {scenes.length > 0 && (
           <div className="space-y-4">
             <Label>
-              {config.mediaType === 'image' ? 'Image Preview' : `Scene Breakdown (${scenes.length} scenes)`}
+              {config.mediaType === 'image' ? 'Enhanced Description' : `Scene Breakdown (${scenes.length} scenes)`}
             </Label>
             <div className="space-y-3">
               {scenes.map((scene) => (
@@ -181,7 +280,7 @@ export const StoryBreakdown = ({ config, characters, onScenesApproved }: StoryBr
             </div>
 
             <Button onClick={handleApproveScenes} className="w-full">
-              {config.mediaType === 'image' ? 'Generate Image' : 'Continue to Storyboard Generation'}
+              {config.mediaType === 'image' ? 'Continue to Image Generation' : 'Continue to Storyboard Generation'}
             </Button>
           </div>
         )}

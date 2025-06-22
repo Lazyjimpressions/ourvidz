@@ -10,6 +10,7 @@ import { CharacterSelection } from "@/components/CharacterSelection";
 import { StoryBreakdown } from "@/components/StoryBreakdown";
 import { StoryboardGeneration } from "@/components/StoryboardGeneration";
 import { EnhancedVideoGeneration } from "@/components/EnhancedVideoGeneration";
+import { ImageGenerationStep } from "@/components/ImageGenerationStep";
 import { toast } from "sonner";
 
 type WorkflowStep = 'config' | 'characters' | 'story' | 'storyboard' | 'generation' | 'complete';
@@ -40,19 +41,17 @@ const CreateVideo = () => {
     config: 'Choose Creation Type',
     characters: 'Character Setup',
     story: videoConfig?.mediaType === 'image' ? 'Image Description' : 'Story & Scene Breakdown',
-    storyboard: videoConfig?.mediaType === 'image' ? 'Image Generation' : 'Storyboard Generation',
-    generation: videoConfig?.mediaType === 'image' ? 'Final Image' : 'Video Generation',
+    storyboard: 'Storyboard Generation',
+    generation: videoConfig?.mediaType === 'image' ? 'Image Generation' : 'Video Generation',
     complete: 'Complete'
   };
 
   // Dynamic steps based on configuration
   const getSteps = (): WorkflowStep[] => {
-    const baseSteps: WorkflowStep[] = ['config', 'characters', 'story'];
-    
     if (videoConfig?.mediaType === 'image') {
-      return [...baseSteps, 'generation'];
+      return ['config', 'characters', 'story', 'generation'];
     } else {
-      return [...baseSteps, 'storyboard', 'generation'];
+      return ['config', 'characters', 'story', 'storyboard', 'generation'];
     }
   };
 
@@ -81,9 +80,10 @@ const CreateVideo = () => {
     }
     
     if (videoConfig?.mediaType === 'image') {
-      // For images, skip storyboard and go straight to generation
+      // For images, go directly to image generation
       setCurrentStep('generation');
     } else {
+      // For videos, go to storyboard generation
       setCurrentStep('storyboard');
     }
   };
@@ -93,7 +93,7 @@ const CreateVideo = () => {
     setCurrentStep('generation');
   };
 
-  const handleVideoGenerated = () => {
+  const handleGenerationComplete = () => {
     const mediaType = videoConfig?.mediaType === 'image' ? 'image' : 'video';
     toast.success(`Your ${mediaType} has been generated successfully!`);
     navigate("/library");
@@ -129,7 +129,7 @@ const CreateVideo = () => {
         );
       
       case 'storyboard':
-        return currentProjectId ? (
+        return currentProjectId && videoConfig?.mediaType === 'video' ? (
           <StoryboardGeneration 
             scenes={approvedScenes}
             projectId={currentProjectId}
@@ -138,13 +138,25 @@ const CreateVideo = () => {
         ) : null;
       
       case 'generation':
-        return currentProjectId ? (
-          <EnhancedVideoGeneration 
-            projectId={currentProjectId}
-            scenes={approvedScenes}
-            onComplete={handleVideoGenerated}
-          />
-        ) : null;
+        if (!currentProjectId) return null;
+        
+        if (videoConfig?.mediaType === 'image') {
+          return (
+            <ImageGenerationStep 
+              scenes={approvedScenes}
+              projectId={currentProjectId}
+              onComplete={handleGenerationComplete}
+            />
+          );
+        } else {
+          return (
+            <EnhancedVideoGeneration 
+              projectId={currentProjectId}
+              scenes={approvedScenes}
+              onComplete={handleGenerationComplete}
+            />
+          );
+        }
       
       default:
         return null;
