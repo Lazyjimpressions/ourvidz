@@ -2,7 +2,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { Badge } from "@/components/ui/badge";
 import { RefreshCw } from "lucide-react";
+import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
+import { toast } from "sonner";
 
 interface PreviewImage {
   id: string;
@@ -12,28 +15,78 @@ interface PreviewImage {
 
 interface PreviewImageGeneratorProps {
   prompt: string;
+  projectId?: string;
   onImageSelected: (imageId: string) => void;
 }
 
-export const PreviewImageGenerator = ({ prompt, onImageSelected }: PreviewImageGeneratorProps) => {
+export const PreviewImageGenerator = ({ prompt, projectId, onImageSelected }: PreviewImageGeneratorProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewImages, setPreviewImages] = useState<PreviewImage[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
 
   const generatePreviews = async () => {
-    setIsGenerating(true);
+    if (!prompt.trim()) return;
     
-    // Simulate preview generation - in real app, this would call your image generation service
-    setTimeout(() => {
-      const mockImages: PreviewImage[] = [
-        { id: "1", url: "https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=300&h=200&fit=crop" },
-        { id: "2", url: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=300&h=200&fit=crop" },
-        { id: "3", url: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=300&h=200&fit=crop" },
-        { id: "4", url: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=300&h=200&fit=crop" },
-      ];
-      setPreviewImages(mockImages);
+    setIsGenerating(true);
+    setPreviewImages([]);
+    setSelectedImageId(null);
+    
+    try {
+      console.log('Generating preview images with Wan 2.1:', prompt);
+      
+      // Generate 4 preview variations
+      const numberOfPreviews = 4;
+      const generationPromises = Array.from({ length: numberOfPreviews }, async (_, index) => {
+        const { job } = await generateContent({
+          jobType: 'preview',
+          prompt: `${prompt}, preview style, concept art`,
+          projectId: projectId,
+          metadata: {
+            variation: index + 1,
+            width: 400,
+            height: 300,
+            outputFormat: 'PNG',
+            style: 'preview'
+          }
+        });
+
+        // Wait for completion
+        const completedJob = await waitForJobCompletion(
+          job.id,
+          (status) => {
+            console.log(`Preview ${index + 1} generation status:`, status);
+          },
+          90000 // 1.5 minutes timeout for previews
+        );
+
+        return {
+          id: `preview-${Date.now()}-${index}`,
+          url: completedJob.metadata?.imageUrl || "/placeholder.svg"
+        };
+      });
+
+      const results = await Promise.allSettled(generationPromises);
+      
+      const successfulPreviews: PreviewImage[] = results
+        .filter((result): result is PromiseFulfilledResult<PreviewImage> => 
+          result.status === 'fulfilled'
+        )
+        .map(result => result.value);
+
+      setPreviewImages(successfulPreviews);
       setIsGenerating(false);
-    }, 3000);
+      
+      if (successfulPreviews.length > 0) {
+        toast.success(`Generated ${successfulPreviews.length} preview images using Wan 2.1`);
+      } else {
+        throw new Error('All preview generations failed');
+      }
+      
+    } catch (error) {
+      console.error('Error generating previews:', error);
+      setIsGenerating(false);
+      toast.error(`Failed to generate previews: ${error.message}`);
+    }
   };
 
   const handleImageSelect = (imageId: string) => {
@@ -42,8 +95,6 @@ export const PreviewImageGenerator = ({ prompt, onImageSelected }: PreviewImageG
   };
 
   const handleRegeneratePreview = () => {
-    setPreviewImages([]);
-    setSelectedImageId(null);
     generatePreviews();
   };
 
@@ -53,33 +104,37 @@ export const PreviewImageGenerator = ({ prompt, onImageSelected }: PreviewImageG
 
   return (
     <div className="space-y-6">
-      <Button
-        type="button"
-        onClick={generatePreviews}
-        disabled={isGenerating}
-        className="bg-blue-500 hover:bg-blue-600 text-white w-full sm:w-auto"
-      >
-        {isGenerating ? (
-          <>
-            <LoadingSpinner className="mr-2" size="sm" />
-            Generating Preview Images...
-          </>
-        ) : (
-          "Generate Preview Images"
-        )}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          onClick={generatePreviews}
+          disabled={isGenerating}
+          className="bg-blue-500 hover:bg-blue-600 text-white w-full sm:w-auto"
+        >
+          {isGenerating ? (
+            <>
+              <LoadingSpinner className="mr-2" size="sm" />
+              Generating Preview Images...
+            </>
+          ) : (
+            "Generate Preview Images"
+          )}
+        </Button>
+        <Badge variant="secondary">Wan 2.1</Badge>
+      </div>
 
       {previewImages.length > 0 && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">
-              Preview Images — Choose one to continue
+              AI Preview Images — Choose one to continue
             </h3>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleRegeneratePreview}
+              disabled={isGenerating}
               className="text-blue-600 hover:text-blue-700"
             >
               <RefreshCw className="h-4 w-4 mr-1" />
@@ -100,8 +155,12 @@ export const PreviewImageGenerator = ({ prompt, onImageSelected }: PreviewImageG
               >
                 <img
                   src={image.url}
-                  alt={`Preview ${image.id}`}
+                  alt={`AI Preview ${image.id}`}
                   className="w-full h-32 object-cover"
+                  onError={(e) => {
+                    console.error('Preview image load error:', image.id);
+                    (e.target as HTMLImageElement).src = "/placeholder.svg";
+                  }}
                 />
                 {selectedImageId === image.id && (
                   <div className="absolute inset-0 bg-blue-500 bg-opacity-20 flex items-center justify-center">

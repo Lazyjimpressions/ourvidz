@@ -7,12 +7,15 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Progress } from "@/components/ui/progress";
 import { Image, Download, RefreshCw, Check } from "lucide-react";
 import { GeneratedImage } from "@/pages/ImageCreation";
+import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
 import { toast } from "@/hooks/use-toast";
 
 interface ImageGeneratorProps {
   prompt: string;
   enhancedPrompt: string;
   mode: "character" | "general";
+  projectId?: string;
+  characterId?: string;
   onImagesGenerated: (images: GeneratedImage[]) => void;
 }
 
@@ -20,6 +23,8 @@ export const ImageGenerator = ({
   prompt, 
   enhancedPrompt, 
   mode, 
+  projectId,
+  characterId,
   onImagesGenerated 
 }: ImageGeneratorProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -35,66 +40,83 @@ export const ImageGenerator = ({
     setSelectedImageIds(new Set());
     setProgress(0);
     
-    // Simulate progress updates
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + 10;
+    try {
+      const imagePrompt = enhancedPrompt || prompt;
+      console.log('Generating images with Wan 2.1:', imagePrompt);
+
+      // Generate multiple images in parallel
+      const numberOfImages = 4;
+      const generationPromises = Array.from({ length: numberOfImages }, async (_, index) => {
+        const { job } = await generateContent({
+          jobType: 'image',
+          prompt: imagePrompt,
+          projectId: projectId,
+          characterId: characterId,
+          metadata: {
+            mode: mode,
+            variation: index + 1,
+            width: 512,
+            height: 512,
+            outputFormat: 'PNG'
+          }
+        });
+
+        // Wait for completion with progress tracking
+        const completedJob = await waitForJobCompletion(
+          job.id,
+          (status) => {
+            console.log(`Image ${index + 1} generation status:`, status);
+            // Update progress based on completed jobs
+            setProgress((prev) => Math.min(prev + 20, 90));
+          },
+          120000 // 2 minutes timeout
+        );
+
+        return {
+          id: `generated-${Date.now()}-${index}`,
+          url: completedJob.metadata?.imageUrl || "/placeholder.svg",
+          prompt,
+          enhancedPrompt,
+          timestamp: new Date(),
+          isCharacter: mode === "character",
+          jobId: completedJob.id
+        };
       });
-    }, 300);
-    
-    // Simulate image generation - in real app, this would call your AI service
-    setTimeout(() => {
-      clearInterval(progressInterval);
+
+      const generatedImages = await Promise.allSettled(generationPromises);
+      
+      const successfulImages: GeneratedImage[] = generatedImages
+        .filter((result): result is PromiseFulfilledResult<GeneratedImage> => 
+          result.status === 'fulfilled'
+        )
+        .map(result => result.value);
+
+      const failedCount = generatedImages.length - successfulImages.length;
+      
       setProgress(100);
+      setCurrentImages(successfulImages);
+      setIsGenerating(false);
       
-      const mockImages: GeneratedImage[] = [
-        {
-          id: `${Date.now()}-1`,
-          url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop",
-          prompt,
-          enhancedPrompt,
-          timestamp: new Date(),
-          isCharacter: mode === "character"
-        },
-        {
-          id: `${Date.now()}-2`, 
-          url: "https://images.unsplash.com/photo-1494790108755-2616b612b692?w=400&h=400&fit=crop",
-          prompt,
-          enhancedPrompt,
-          timestamp: new Date(),
-          isCharacter: mode === "character"
-        },
-        {
-          id: `${Date.now()}-3`,
-          url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
-          prompt,
-          enhancedPrompt,
-          timestamp: new Date(),
-          isCharacter: mode === "character"
-        },
-        {
-          id: `${Date.now()}-4`,
-          url: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop",
-          prompt,
-          enhancedPrompt,
-          timestamp: new Date(),
-          isCharacter: mode === "character"
-        }
-      ];
+      if (successfulImages.length > 0) {
+        toast({
+          title: "Images Generated",
+          description: `Successfully generated ${successfulImages.length} ${mode === "character" ? "character" : "image"} variations using Wan 2.1.${failedCount > 0 ? ` ${failedCount} failed.` : ''}`,
+        });
+      } else {
+        throw new Error('All image generations failed');
+      }
       
-      setCurrentImages(mockImages);
+    } catch (error) {
+      console.error('Error generating images:', error);
       setIsGenerating(false);
       setProgress(0);
       
       toast({
-        title: "Images Generated",
-        description: `Successfully generated ${mockImages.length} ${mode === "character" ? "character" : "image"} variations.`,
+        title: "Generation Failed",
+        description: `Failed to generate images: ${error.message}`,
+        variant: "destructive",
       });
-    }, 3000);
+    }
   };
 
   const toggleImageSelection = (imageId: string) => {
@@ -130,10 +152,10 @@ export const ImageGenerator = ({
   };
 
   const downloadImage = (image: GeneratedImage) => {
-    // In real app, this would download the actual image
+    // Create download link for generated image
     const link = document.createElement('a');
     link.href = image.url;
-    link.download = `generated-image-${image.id}.jpg`;
+    link.download = `generated-image-${image.id}.png`;
     link.click();
     
     toast({
@@ -147,7 +169,8 @@ export const ImageGenerator = ({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Image className="h-5 w-5" />
-          Image Generator
+          AI Image Generator
+          <Badge variant="secondary">Wan 2.1</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -160,7 +183,7 @@ export const ImageGenerator = ({
           {isGenerating ? (
             <>
               <LoadingSpinner className="mr-2" size="sm" />
-              Generating Images...
+              Generating with Wan 2.1...
             </>
           ) : (
             `Generate ${mode === "character" ? "Character" : "Images"}`
@@ -170,12 +193,12 @@ export const ImageGenerator = ({
         {isGenerating && (
           <div className="space-y-3 animate-fade-in">
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Processing prompt...</span>
+              <span>Creating AI images...</span>
               <span>{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
             <p className="text-xs text-gray-500 text-center">
-              Creating high-quality variations...
+              Using Wan 2.1 for high-quality generation...
             </p>
           </div>
         )}
@@ -223,6 +246,10 @@ export const ImageGenerator = ({
                       alt={`Generated ${image.id}`}
                       className="w-full h-full object-cover transition-transform duration-300 hover:scale-110"
                       loading="lazy"
+                      onError={(e) => {
+                        console.error('Generated image load error:', image.id);
+                        (e.target as HTMLImageElement).src = "/placeholder.svg";
+                      }}
                     />
                   </div>
                   

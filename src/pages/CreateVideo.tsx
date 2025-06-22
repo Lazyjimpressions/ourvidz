@@ -129,12 +129,13 @@ const CreateVideo = () => {
         );
       
       case 'storyboard':
-        return (
+        return currentProjectId ? (
           <StoryboardGeneration 
             scenes={approvedScenes}
+            projectId={currentProjectId}
             onStoryboardApproved={handleStoryboardApproved}
           />
-        );
+        ) : null;
       
       case 'generation':
         return currentProjectId ? (

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Image, CheckCircle, Edit } from "lucide-react";
 import { uploadScenePreview, getScenePreviewUrl } from "@/lib/storage";
+import { generateContent, waitForJobCompletion } from "@/lib/contentGeneration";
 import { toast } from "sonner";
 
 interface Scene {
@@ -22,10 +23,11 @@ interface SceneImage {
 
 interface StoryboardGenerationProps {
   scenes: Scene[];
+  projectId: string;
   onStoryboardApproved: (sceneImages: SceneImage[]) => void;
 }
 
-export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: StoryboardGenerationProps) => {
+export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }: StoryboardGenerationProps) => {
   const [sceneImages, setSceneImages] = useState<SceneImage[]>([]);
   const [generatingScenes, setGeneratingScenes] = useState<Set<string>>(new Set());
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
@@ -34,69 +36,45 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
     setGeneratingScenes(prev => new Set(prev).add(scene.id));
     
     try {
-      // Simulate image generation - replace with actual RunPod API call
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('Generating image for scene:', scene.sceneNumber, 'with prompt:', scene.enhancedPrompt);
       
-      // For demo purposes, create a mock blob/file for the generated image
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Create a simple gradient as placeholder
-        const gradient = ctx.createLinearGradient(0, 0, 512, 512);
-        gradient.addColorStop(0, '#3B82F6');
-        gradient.addColorStop(1, '#1E40AF');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 512, 512);
-        
-        // Add scene number text
-        ctx.fillStyle = 'white';
-        ctx.font = '48px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Scene ${scene.sceneNumber}`, 256, 256);
+      // Generate image using Wan 2.1 through RunPod
+      const { job } = await generateContent({
+        jobType: 'image',
+        prompt: scene.enhancedPrompt,
+        projectId: projectId,
+        sceneId: scene.id,
+        metadata: {
+          sceneNumber: scene.sceneNumber,
+          width: 1024,
+          height: 768,
+          outputFormat: 'PNG'
+        }
+      });
+
+      console.log('Image generation job created:', job.id);
+
+      // Wait for job completion with progress updates
+      const completedJob = await waitForJobCompletion(
+        job.id,
+        (status) => {
+          console.log(`Scene ${scene.sceneNumber} generation status:`, status);
+        },
+        180000 // 3 minutes timeout for image generation
+      );
+
+      console.log('Image generation completed:', completedJob);
+
+      // Get the generated image URL from job metadata
+      const imageUrl = completedJob.metadata?.imageUrl;
+      
+      if (!imageUrl) {
+        throw new Error('No image URL returned from generation');
       }
 
-      // Convert canvas to blob and upload
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          const file = new File([blob], `scene-${scene.sceneNumber}.png`, { type: 'image/png' });
-          const projectId = 'demo-project'; // In real app, get from context/props
-          
-          const uploadResult = await uploadScenePreview(projectId, scene.sceneNumber, file);
-          
-          if (uploadResult.error) {
-            throw uploadResult.error;
-          }
-
-          if (uploadResult.data) {
-            // Get the signed URL for the uploaded image
-            const signedUrl = await getScenePreviewUrl(uploadResult.data.path);
-            
-            const newSceneImage: SceneImage = {
-              sceneId: scene.id,
-              imageUrl: signedUrl || "/placeholder.svg",
-              approved: false,
-            };
-
-            setSceneImages(prev => {
-              const filtered = prev.filter(img => img.sceneId !== scene.id);
-              return [...filtered, newSceneImage];
-            });
-
-            toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
-          }
-        }
-      }, 'image/png');
-
-    } catch (error) {
-      console.error('Error generating scene image:', error);
-      toast.error(`Failed to generate scene ${scene.sceneNumber} image`);
-      
-      // Fallback to placeholder
       const newSceneImage: SceneImage = {
         sceneId: scene.id,
-        imageUrl: "/placeholder.svg",
+        imageUrl: imageUrl,
         approved: false,
       };
 
@@ -104,6 +82,15 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
         const filtered = prev.filter(img => img.sceneId !== scene.id);
         return [...filtered, newSceneImage];
       });
+
+      toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
+
+    } catch (error) {
+      console.error('Error generating scene image:', error);
+      toast.error(`Failed to generate scene ${scene.sceneNumber} image: ${error.message}`);
+      
+      // Remove the scene from generating set on error
+      setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
     } finally {
       setGeneratingScenes(prev => {
         const newSet = new Set(prev);
@@ -116,13 +103,28 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
   const generateAllScenes = async () => {
     setIsGeneratingAll(true);
     
-    for (const scene of scenes) {
-      if (!sceneImages.find(img => img.sceneId === scene.id)) {
-        await generateSceneImage(scene);
-      }
+    try {
+      // Generate images for all scenes that don't have images yet
+      const scenesToGenerate = scenes.filter(scene => 
+        !sceneImages.find(img => img.sceneId === scene.id)
+      );
+
+      console.log(`Generating images for ${scenesToGenerate.length} scenes`);
+
+      // Generate all scenes in parallel for better performance
+      const generationPromises = scenesToGenerate.map(scene => 
+        generateSceneImage(scene)
+      );
+
+      await Promise.allSettled(generationPromises);
+      
+      toast.success('All scene images generated');
+    } catch (error) {
+      console.error('Error generating all scenes:', error);
+      toast.error('Failed to generate some scene images');
+    } finally {
+      setIsGeneratingAll(false);
     }
-    
-    setIsGeneratingAll(false);
   };
 
   const toggleSceneApproval = (sceneId: string) => {
@@ -134,6 +136,9 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
   };
 
   const regenerateScene = (scene: Scene) => {
+    // Remove existing image for this scene
+    setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
+    // Generate new image
     generateSceneImage(scene);
   };
 
@@ -154,7 +159,7 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
       <CardContent className="space-y-6">
         <div className="flex justify-between items-center">
           <div className="text-sm text-gray-600">
-            Generate preview images for each scene before creating the final video
+            Generate AI images for each scene using Wan 2.1 before creating the final video
           </div>
           <Button 
             onClick={generateAllScenes}
@@ -164,7 +169,7 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
             {isGeneratingAll ? (
               <>
                 <LoadingSpinner size="sm" className="mr-2" />
-                Generating...
+                Generating All...
               </>
             ) : (
               "Generate All Scenes"
@@ -183,6 +188,9 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
                   <div>
                     <div className="font-medium">Scene {scene.sceneNumber}</div>
                     <div className="text-sm text-gray-600 mt-1">{scene.description}</div>
+                    <div className="text-xs text-gray-400 mt-1 bg-gray-50 p-2 rounded">
+                      AI Prompt: {scene.enhancedPrompt.substring(0, 100)}...
+                    </div>
                   </div>
                 </div>
 
@@ -190,7 +198,7 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
                   {isGenerating ? (
                     <div className="flex flex-col items-center gap-2">
                       <LoadingSpinner />
-                      <span className="text-sm text-gray-600">Generating...</span>
+                      <span className="text-sm text-gray-600">Generating with Wan 2.1...</span>
                     </div>
                   ) : sceneImage ? (
                     <div className="relative w-full h-full">
@@ -199,6 +207,7 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
                         alt={`Scene ${scene.sceneNumber}`}
                         className="w-full h-full object-cover rounded-lg"
                         onError={(e) => {
+                          console.error('Image load error for scene:', scene.sceneNumber);
                           (e.target as HTMLImageElement).src = "/placeholder.svg";
                         }}
                       />
@@ -240,7 +249,7 @@ export const StoryboardGeneration = ({ scenes, onStoryboardApproved }: Storyboar
                       disabled={isGenerating}
                       className="w-full"
                     >
-                      Generate Image
+                      Generate AI Image
                     </Button>
                   )}
                 </div>

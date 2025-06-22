@@ -1,5 +1,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
+import { generateContent } from '@/lib/contentGeneration';
 
 interface VideoGenerationParams {
   projectId: string;
@@ -50,26 +51,21 @@ export const generateVideo = async (params: VideoGenerationParams) => {
 
     console.log('Video record created:', video);
 
-    // Start with enhance job
-    const { data: enhanceJobData, error: enhanceJobError } = await supabase.functions.invoke('queue-job', {
-      body: {
-        jobType: 'enhance',
-        projectId: params.projectId,
-        videoId: video.id,
-        prompt: project.enhanced_prompt || project.original_prompt,
-        characterId: project.character_id,
+    // Start with enhance job using the new content generation system
+    const { job } = await generateContent({
+      jobType: 'enhance',
+      prompt: project.enhanced_prompt || project.original_prompt,
+      projectId: params.projectId,
+      videoId: video.id,
+      characterId: project.character_id,
+      metadata: {
         duration: params.duration,
         resolution: params.resolution,
         format: params.format
       }
     });
 
-    if (enhanceJobError) {
-      console.error('Error queuing enhance job:', enhanceJobError);
-      throw enhanceJobError;
-    }
-
-    console.log('Enhance job queued successfully:', enhanceJobData);
+    console.log('Enhance job queued successfully:', job);
 
     // Log usage
     await supabase
@@ -81,13 +77,13 @@ export const generateVideo = async (params: VideoGenerationParams) => {
         metadata: {
           project_id: params.projectId,
           video_id: video.id,
-          job_id: enhanceJobData.job?.id
+          job_id: job.id
         }
       });
 
     return {
       video,
-      job: enhanceJobData.job
+      job
     };
 
   } catch (error) {
@@ -98,16 +94,13 @@ export const generateVideo = async (params: VideoGenerationParams) => {
 
 export const queuePreviewJob = async (videoId: string, enhancedPrompt: string) => {
   try {
-    const { data, error } = await supabase.functions.invoke('queue-job', {
-      body: {
-        jobType: 'preview',
-        videoId: videoId,
-        prompt: enhancedPrompt
-      }
+    const { job } = await generateContent({
+      jobType: 'preview',
+      prompt: enhancedPrompt,
+      videoId: videoId
     });
 
-    if (error) throw error;
-    return data;
+    return { job };
   } catch (error) {
     console.error('Error queuing preview job:', error);
     throw error;
@@ -116,16 +109,16 @@ export const queuePreviewJob = async (videoId: string, enhancedPrompt: string) =
 
 export const queueVideoJob = async (videoId: string, previewUrl: string) => {
   try {
-    const { data, error } = await supabase.functions.invoke('queue-job', {
-      body: {
-        jobType: 'video',
-        videoId: videoId,
+    const { job } = await generateContent({
+      jobType: 'video',
+      prompt: 'Generate final video',
+      videoId: videoId,
+      metadata: {
         previewUrl: previewUrl
       }
     });
 
-    if (error) throw error;
-    return data;
+    return { job };
   } catch (error) {
     console.error('Error queuing video job:', error);
     throw error;
