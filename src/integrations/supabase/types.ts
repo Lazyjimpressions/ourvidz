@@ -63,6 +63,7 @@ export type Database = {
           job_type: string
           max_attempts: number | null
           metadata: Json | null
+          project_id: string | null
           started_at: string | null
           status: string | null
           user_id: string
@@ -77,6 +78,7 @@ export type Database = {
           job_type: string
           max_attempts?: number | null
           metadata?: Json | null
+          project_id?: string | null
           started_at?: string | null
           status?: string | null
           user_id: string
@@ -91,12 +93,20 @@ export type Database = {
           job_type?: string
           max_attempts?: number | null
           metadata?: Json | null
+          project_id?: string | null
           started_at?: string | null
           status?: string | null
           user_id?: string
           video_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "jobs_user_id_fkey"
             columns: ["user_id"]
