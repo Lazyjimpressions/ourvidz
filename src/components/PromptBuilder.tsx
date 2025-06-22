@@ -13,6 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Wand2, Copy, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { GeneratedImage } from "@/pages/ImageCreation";
+import { supabase } from "@/integrations/supabase/client";
 
 interface PromptBuilderProps {
   mode: "character" | "general";
@@ -48,28 +49,110 @@ export const PromptBuilder = ({
     
     setIsEnhancing(true);
     
-    // Simulate AI enhancement
-    setTimeout(() => {
-      const basePrompt = mode === "character" && characterName 
-        ? `${characterName}, ${originalPrompt}`
-        : originalPrompt;
-      
-      const styleText = selectedStyles.length > 0 
-        ? `, ${selectedStyles.join(", ")}`
-        : "";
-      
-      const enhanced = `${basePrompt}${styleText}, highly detailed, professional quality, cinematic lighting, masterpiece`;
-      
-      setEnhancedPromptState(enhanced);
-      setIsEnhancedExpanded(true);
-      onPromptUpdate(originalPrompt, enhanced);
-      setIsEnhancing(false);
-      
-      toast({
-        title: "Prompt Enhanced",
-        description: "Your prompt has been enhanced with AI improvements.",
+    try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+
+      // Create a temporary project for enhancement
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          user_id: user.id,
+          title: 'Prompt Enhancement',
+          original_prompt: originalPrompt,
+          media_type: 'image'
+        })
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      // Create video record for enhancement job
+      const { data: video, error: videoError } = await supabase
+        .from('videos')
+        .insert({
+          project_id: project.id,
+          user_id: user.id,
+          status: 'draft',
+          duration: 0,
+          format: 'text'
+        })
+        .select()
+        .single();
+
+      if (videoError) throw videoError;
+
+      // Queue enhancement job
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          jobType: 'enhance',
+          videoId: video.id,
+          projectId: project.id,
+          metadata: {
+            prompt: originalPrompt,
+            characterName,
+            styles: selectedStyles,
+            mode
+          }
+        }
       });
-    }, 2000);
+
+      if (error) throw error;
+
+      // Poll for completion
+      const pollForCompletion = () => {
+        const pollInterval = setInterval(async () => {
+          try {
+            const { data: updatedProject, error: pollError } = await supabase
+              .from('projects')
+              .select('enhanced_prompt')
+              .eq('id', project.id)
+              .single();
+
+            if (pollError) throw pollError;
+
+            if (updatedProject.enhanced_prompt) {
+              clearInterval(pollInterval);
+              setEnhancedPromptState(updatedProject.enhanced_prompt);
+              setIsEnhancedExpanded(true);
+              onPromptUpdate(originalPrompt, updatedProject.enhanced_prompt);
+              setIsEnhancing(false);
+              
+              toast({
+                title: "Prompt Enhanced",
+                description: "Your prompt has been enhanced with AI improvements.",
+              });
+            }
+          } catch (error) {
+            clearInterval(pollInterval);
+            throw error;
+          }
+        }, 2000);
+
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          if (isEnhancing) {
+            setIsEnhancing(false);
+            throw new Error('Enhancement timeout');
+          }
+        }, 30000);
+      };
+
+      pollForCompletion();
+
+    } catch (error) {
+      console.error('Error enhancing prompt:', error);
+      setIsEnhancing(false);
+      toast({
+        title: "Enhancement Failed",
+        description: "Failed to enhance prompt. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleGenerateImages = async () => {
@@ -78,70 +161,137 @@ export const PromptBuilder = ({
     setIsGenerating(true);
     setProgress(0);
     
-    // Simulate progress updates
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + 10;
+    try {
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User must be authenticated');
+      }
+
+      // Create project for image generation
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({
+          user_id: user.id,
+          title: mode === "character" ? `Character: ${characterName}` : 'Image Generation',
+          original_prompt: originalPrompt,
+          enhanced_prompt: enhancedPromptState,
+          media_type: 'image'
+        })
+        .select()
+        .single();
+
+      if (projectError) throw projectError;
+
+      const numberOfImages = 4;
+      const generationPromises = Array.from({ length: numberOfImages }, async (_, index) => {
+        // Create video record for image generation
+        const { data: video, error: videoError } = await supabase
+          .from('videos')
+          .insert({
+            project_id: project.id,
+            user_id: user.id,
+            status: 'draft',
+            duration: 0,
+            format: 'png'
+          })
+          .select()
+          .single();
+
+        if (videoError) throw videoError;
+
+        // Queue image generation job
+        const { data, error } = await supabase.functions.invoke('queue-job', {
+          body: {
+            jobType: 'preview',
+            videoId: video.id,
+            projectId: project.id,
+            metadata: {
+              prompt: enhancedPromptState || originalPrompt,
+              variation: index + 1,
+              characterName: mode === "character" ? characterName : undefined,
+              styles: selectedStyles
+            }
+          }
+        });
+
+        if (error) throw error;
+
+        // Poll for completion
+        return new Promise<GeneratedImage>((resolve, reject) => {
+          const pollInterval = setInterval(async () => {
+            try {
+              const { data: updatedVideo, error: pollError } = await supabase
+                .from('videos')
+                .select('status, preview_url')
+                .eq('id', video.id)
+                .single();
+
+              if (pollError) throw pollError;
+
+              if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
+                clearInterval(pollInterval);
+                resolve({
+                  id: video.id,
+                  url: updatedVideo.preview_url,
+                  prompt: originalPrompt,
+                  enhancedPrompt: enhancedPromptState,
+                  timestamp: new Date(),
+                  isCharacter: mode === "character",
+                  characterName: mode === "character" ? characterName : undefined
+                });
+              } else if (updatedVideo.status === 'failed') {
+                clearInterval(pollInterval);
+                reject(new Error('Image generation failed'));
+              }
+            } catch (error) {
+              clearInterval(pollInterval);
+              reject(error);
+            }
+          }, 3000);
+
+          // Timeout after 90 seconds
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            reject(new Error('Image generation timeout'));
+          }, 90000);
+        });
       });
-    }, 300);
-    
-    // Simulate image generation
-    setTimeout(() => {
+
+      // Update progress as images complete
+      const progressInterval = setInterval(() => {
+        setProgress(prev => Math.min(prev + 5, 85));
+      }, 1000);
+
+      const results = await Promise.allSettled(generationPromises);
       clearInterval(progressInterval);
       setProgress(100);
       
-      const mockImages: GeneratedImage[] = [
-        {
-          id: `${Date.now()}-1`,
-          url: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&h=400&fit=crop",
-          prompt: originalPrompt,
-          enhancedPrompt: enhancedPromptState,
-          timestamp: new Date(),
-          isCharacter: mode === "character",
-          characterName: mode === "character" ? characterName : undefined
-        },
-        {
-          id: `${Date.now()}-2`, 
-          url: "https://images.unsplash.com/photo-1494790108755-2616b612b692?w=400&h=400&fit=crop",
-          prompt: originalPrompt,
-          enhancedPrompt: enhancedPromptState,
-          timestamp: new Date(),
-          isCharacter: mode === "character",
-          characterName: mode === "character" ? characterName : undefined
-        },
-        {
-          id: `${Date.now()}-3`,
-          url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop",
-          prompt: originalPrompt,
-          enhancedPrompt: enhancedPromptState,
-          timestamp: new Date(),
-          isCharacter: mode === "character",
-          characterName: mode === "character" ? characterName : undefined
-        },
-        {
-          id: `${Date.now()}-4`,
-          url: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&h=400&fit=crop",
-          prompt: originalPrompt,
-          enhancedPrompt: enhancedPromptState,
-          timestamp: new Date(),
-          isCharacter: mode === "character",
-          characterName: mode === "character" ? characterName : undefined
-        }
-      ];
-      
-      onImagesGenerated(mockImages);
+      const successfulImages: GeneratedImage[] = results
+        .filter((result): result is PromiseFulfilledResult<GeneratedImage> => 
+          result.status === 'fulfilled'
+        )
+        .map(result => result.value);
+
+      onImagesGenerated(successfulImages);
       setIsGenerating(false);
       setProgress(0);
       
       toast({
         title: "Images Generated",
-        description: `Successfully generated ${mockImages.length} ${mode === "character" ? "character" : "image"} variations.`,
+        description: `Successfully generated ${successfulImages.length} ${mode === "character" ? "character" : "image"} variations using Wan 2.1.`,
       });
-    }, 3000);
+
+    } catch (error) {
+      console.error('Error generating images:', error);
+      setIsGenerating(false);
+      setProgress(0);
+      toast({
+        title: "Generation Failed",
+        description: "Failed to generate images. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -252,7 +402,7 @@ export const PromptBuilder = ({
         {isGenerating && (
           <div className="space-y-3 animate-fade-in">
             <div className="flex justify-between text-sm text-gray-600">
-              <span>Creating your {mode === "character" ? "character" : "images"}...</span>
+              <span>Creating your {mode === "character" ? "character" : "images"} with Wan 2.1...</span>
               <span>{Math.round(progress)}%</span>
             </div>
             <Progress value={progress} className="h-2" />
