@@ -74,7 +74,7 @@ export class PromptEnhancementService {
     }
   }
 
-  // Poll for job completion
+  // Poll for job completion with proper enhanced prompt retrieval
   static async pollJobStatus(jobId: string): Promise<{ status: string; result?: string; error?: string }> {
     try {
       const { data, error } = await supabase
@@ -85,12 +85,20 @@ export class PromptEnhancementService {
 
       if (error) throw error;
 
-      // Safely handle metadata which could be any Json type
       let enhancedPrompt: string | undefined;
+      
+      // Check for enhanced_prompt in metadata
       if (data.metadata && typeof data.metadata === 'object' && data.metadata !== null && !Array.isArray(data.metadata)) {
         const metadata = data.metadata as Record<string, any>;
         enhancedPrompt = metadata.enhanced_prompt;
       }
+
+      console.log('Job status check:', { 
+        jobId, 
+        status: data.status, 
+        hasEnhancedPrompt: !!enhancedPrompt,
+        metadata: data.metadata 
+      });
 
       return {
         status: data.status,

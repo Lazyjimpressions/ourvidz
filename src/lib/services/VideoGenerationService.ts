@@ -67,11 +67,11 @@ export class VideoGenerationService {
 
       if (videoError) throw videoError;
 
-      // Queue video generation job
+      // Queue video generation job with proper videoId and metadata
       const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
           jobType: 'video',
-          videoId: video.id,
+          videoId: video.id, // Properly pass videoId
           projectId: params.projectId,
           metadata: {
             prompt: project.enhanced_prompt || project.original_prompt,

@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -18,22 +19,46 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
-    const { jobId, status, outputUrl, errorMessage } = await req.json();
+    const { jobId, status, outputUrl, errorMessage, enhancedPrompt } = await req.json();
 
-    console.log('Processing job callback:', { jobId, status, outputUrl });
+    console.log('Processing job callback:', { jobId, status, outputUrl, enhancedPrompt });
 
-    // Update job status
+    // Get current job to preserve existing metadata
+    const { data: currentJob, error: fetchError } = await supabase
+      .from('jobs')
+      .select('metadata, job_type, image_id, video_id')
+      .eq('id', jobId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching current job:', fetchError);
+      throw fetchError;
+    }
+
+    // Prepare update data
     const updateData: any = {
       status,
       completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
       error_message: errorMessage || null
     };
 
-    // Add output URL to metadata if successful
-    if (status === 'completed' && outputUrl) {
-      updateData.metadata = { output_url: outputUrl };
+    // Merge metadata instead of overwriting
+    let updatedMetadata = currentJob.metadata || {};
+    
+    // Handle enhanced prompt for enhance jobs
+    if (currentJob.job_type === 'enhance' && enhancedPrompt) {
+      updatedMetadata.enhanced_prompt = enhancedPrompt;
+      console.log('Storing enhanced prompt:', enhancedPrompt);
     }
 
+    // Add output URL for completed jobs
+    if (status === 'completed' && outputUrl) {
+      updatedMetadata.output_url = outputUrl;
+    }
+
+    updateData.metadata = updatedMetadata;
+
+    // Update job status
     const { data: job, error: updateError } = await supabase
       .from('jobs')
       .update(updateData)
@@ -53,6 +78,8 @@ serve(async (req) => {
       await handleImageJobCallback(supabase, job, status, outputUrl, errorMessage);
     } else if (job.job_type === 'video' && job.video_id) {
       await handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage);
+    } else if (job.job_type === 'enhance') {
+      await handleEnhanceJobCallback(supabase, job, status, enhancedPrompt, errorMessage);
     }
 
     return new Response(
@@ -81,6 +108,18 @@ serve(async (req) => {
     );
   }
 });
+
+async function handleEnhanceJobCallback(supabase: any, job: any, status: string, enhancedPrompt: string, errorMessage: string) {
+  console.log('Handling enhance job callback:', { jobId: job.id, status, enhancedPrompt });
+  
+  // For enhance jobs, we don't need to update any other tables
+  // The enhanced prompt is already stored in the job metadata
+  if (status === 'completed' && enhancedPrompt) {
+    console.log('Enhanced prompt stored successfully for job:', job.id);
+  } else if (status === 'failed') {
+    console.log('Enhance job failed:', job.id, errorMessage);
+  }
+}
 
 async function handleImageJobCallback(supabase: any, job: any, status: string, outputUrl: string, errorMessage: string) {
   if (status === 'completed' && outputUrl) {

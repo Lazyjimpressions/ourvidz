@@ -30,9 +30,9 @@ serve(async (req) => {
       throw new Error('Authentication required');
     }
 
-    const { jobType, metadata, projectId, videoId } = await req.json();
+    const { jobType, metadata, projectId, videoId, imageId } = await req.json();
 
-    console.log('Creating job:', { jobType, projectId, videoId, userId: user.id });
+    console.log('Creating job:', { jobType, projectId, videoId, imageId, userId: user.id });
 
     // Create job record
     const { data: job, error: jobError } = await supabase
@@ -43,6 +43,7 @@ serve(async (req) => {
         metadata: metadata || {},
         project_id: projectId,
         video_id: videoId,
+        image_id: imageId, // Now properly handling imageId
         status: 'queued'
       })
       .select()
@@ -55,7 +56,7 @@ serve(async (req) => {
 
     console.log('Job created successfully:', job);
 
-    // Get project details for the prompt
+    // Get project details for the prompt (if projectId provided)
     let prompt = '';
     let characterId = null;
     
@@ -72,14 +73,21 @@ serve(async (req) => {
       }
     }
 
-    // Format job payload for RunPod worker
+    // Use prompt from metadata if no project prompt available
+    if (!prompt && metadata?.prompt) {
+      prompt = metadata.prompt;
+    }
+
+    // Format job payload for RunPod worker with standardized structure
     const jobPayload = {
       jobId: job.id,
       videoId: videoId,
+      imageId: imageId, // Include imageId for image jobs
       userId: user.id,
       jobType: jobType,
       prompt: prompt,
       characterId: characterId,
+      metadata: metadata || {},
       timestamp: new Date().toISOString()
     };
 
@@ -119,7 +127,7 @@ serve(async (req) => {
         user_id: user.id,
         action: jobType,
         credits_consumed: 1,
-        metadata: { job_id: job.id, project_id: projectId }
+        metadata: { job_id: job.id, project_id: projectId, image_id: imageId, video_id: videoId }
       });
 
     return new Response(

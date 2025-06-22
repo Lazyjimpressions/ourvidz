@@ -47,11 +47,11 @@ export class ImageGenerationService {
 
       if (imageError) throw imageError;
 
-      // Queue image generation job
+      // Queue image generation job with proper imageId
       const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
         body: {
           jobType: 'image',
-          imageId: image.id,
+          imageId: image.id, // Properly pass imageId
           projectId: params.context.projectId,
           metadata: {
             prompt: params.enhancedPrompt || params.prompt,
