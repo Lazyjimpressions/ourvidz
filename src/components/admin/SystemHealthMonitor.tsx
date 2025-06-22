@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle, AlertCircle, Clock, Database, Zap } from "lucide-react";
+import { CheckCircle, AlertCircle, Clock, Database, Zap, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HealthMetric {
@@ -17,53 +17,77 @@ export const SystemHealthMonitor = () => {
     {
       name: "Database",
       status: 'healthy',
-      value: "Connected",
+      value: "Checking...",
       icon: <Database className="h-4 w-4" />
     },
     {
-      name: "Edge Functions",
+      name: "Authentication",
       status: 'healthy',
-      value: "Available",
-      icon: <Zap className="h-4 w-4" />
+      value: "Checking...",
+      icon: <Users className="h-4 w-4" />
     },
     {
-      name: "Queue Status",
+      name: "Edge Functions",
       status: 'warning',
-      value: "No Workers",
-      icon: <Clock className="h-4 w-4" />
+      value: "Checking...",
+      icon: <Zap className="h-4 w-4" />
     }
   ]);
 
   useEffect(() => {
     const checkSystemHealth = async () => {
+      const newMetrics: HealthMetric[] = [...metrics];
+      
       try {
         // Test database connection
-        const { error: dbError } = await supabase.from('profiles').select('id').limit(1);
+        const { data: dbTest, error: dbError } = await supabase
+          .from('profiles')
+          .select('id')
+          .limit(1);
         
-        // Test edge function
-        const { error: funcError } = await supabase.functions.invoke('queue-job', {
-          body: { test: true }
-        });
+        newMetrics[0] = {
+          ...newMetrics[0],
+          status: dbError ? 'error' : 'healthy',
+          value: dbError ? 'Connection Failed' : 'Connected'
+        };
 
-        setMetrics(prev => prev.map(metric => {
-          if (metric.name === "Database") {
-            return {
-              ...metric,
-              status: dbError ? 'error' : 'healthy',
-              value: dbError ? 'Connection Failed' : 'Connected'
-            };
-          }
-          if (metric.name === "Edge Functions") {
-            return {
-              ...metric,
-              status: funcError ? 'error' : 'healthy',
-              value: funcError ? 'Unavailable' : 'Available'
-            };
-          }
-          return metric;
-        }));
+        // Test authentication
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        
+        newMetrics[1] = {
+          ...newMetrics[1],
+          status: authError ? 'error' : 'healthy',
+          value: authError ? 'Auth Failed' : user ? 'Authenticated' : 'No User'
+        };
+
+        // Test edge function (with basic health check)
+        try {
+          const { data: funcData, error: funcError } = await supabase.functions.invoke('queue-job', {
+            body: { test: true, jobType: 'health-check' }
+          });
+          
+          newMetrics[2] = {
+            ...newMetrics[2],
+            status: funcError ? 'error' : 'healthy',
+            value: funcError ? 'Function Error' : 'Available'
+          };
+        } catch (funcError) {
+          newMetrics[2] = {
+            ...newMetrics[2],
+            status: 'error',
+            value: 'Function Unavailable'
+          };
+        }
+
+        setMetrics(newMetrics);
       } catch (error) {
         console.error('Health check failed:', error);
+        // Update all metrics to error state
+        setMetrics(prev => prev.map(metric => ({
+          ...metric,
+          status: 'error' as const,
+          value: 'Check Failed'
+        })));
       }
     };
 

@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Copy, Wand2, Clock, CheckCircle, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 
 interface TestResult {
   id: string;
@@ -34,57 +33,11 @@ export const AdminPromptTester = () => {
     const startTime = Date.now();
     
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User must be authenticated');
-
-      // Create a test project for enhancement
-      const { data: project, error: projectError } = await supabase
-        .from('projects')
-        .insert({
-          user_id: user.id,
-          title: `Admin Test - ${new Date().toISOString()}`,
-          original_prompt: prompt,
-          media_type: 'test'
-        })
-        .select()
-        .single();
-
-      if (projectError) throw projectError;
-
-      // Create video record for enhancement job
-      const { data: video, error: videoError } = await supabase
-        .from('videos')
-        .insert({
-          project_id: project.id,
-          user_id: user.id,
-          status: 'draft',
-          duration: 0,
-          format: 'text'
-        })
-        .select()
-        .single();
-
-      if (videoError) throw videoError;
-
-      // Queue enhancement job
-      const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: {
-          jobType: 'enhance',
-          videoId: video.id,
-          projectId: project.id,
-          metadata: {
-            prompt,
-            mode: 'test'
-          }
-        }
-      });
-
-      if (error) throw error;
-
-      // Simulate enhancement for testing (since no worker is processing)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Simulate prompt enhancement for testing
+      // In a real implementation, this would call an AI service
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
-      const mockEnhanced = `Enhanced: ${prompt} with cinematic lighting, ultra-high resolution, professional photography, dramatic composition, vibrant colors, masterpiece quality`;
+      const mockEnhanced = `Enhanced: ${prompt} with cinematic lighting, ultra-high resolution, professional photography, dramatic composition, vibrant colors, masterpiece quality, detailed textures, perfect focus`;
       const endTime = Date.now();
       const duration = endTime - startTime;
       
