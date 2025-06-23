@@ -47,6 +47,11 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
         return;
       }
 
+      if (!video) {
+        console.error(`❌ No video found for scene ${sceneNumber} with ID: ${videoId}`);
+        return;
+      }
+
       console.log(`📊 Video status for scene ${sceneNumber}:`, video);
       
       setDebugInfo(prev => {
@@ -225,7 +230,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
           console.log(`📡 Subscription status for scene ${scene.sceneNumber}:`, status);
         });
 
-      // Enhanced polling with better logging
+      // Enhanced polling with better logging and error handling
       const pollForCompletion = () => {
         let pollCount = 0;
         const maxPolls = 120; // 10 minutes at 5-second intervals
@@ -244,6 +249,11 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             if (pollError) {
               console.error(`❌ Poll error for scene ${scene.sceneNumber}:`, pollError);
               throw pollError;
+            }
+
+            if (!updatedVideo) {
+              console.error(`❌ No video data returned for scene ${scene.sceneNumber}`);
+              throw new Error('No video data returned');
             }
 
             console.log(`📊 Poll result for scene ${scene.sceneNumber}:`, updatedVideo);

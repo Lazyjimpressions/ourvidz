@@ -393,6 +393,7 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           duration: number | null
+          error_message: string | null
           expires_at: string | null
           format: string | null
           id: string
@@ -402,6 +403,7 @@ export type Database = {
           resolution: string | null
           status: string | null
           thumbnail_url: string | null
+          updated_at: string | null
           user_id: string
           video_url: string | null
         }
@@ -409,6 +411,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           duration?: number | null
+          error_message?: string | null
           expires_at?: string | null
           format?: string | null
           id?: string
@@ -418,6 +421,7 @@ export type Database = {
           resolution?: string | null
           status?: string | null
           thumbnail_url?: string | null
+          updated_at?: string | null
           user_id: string
           video_url?: string | null
         }
@@ -425,6 +429,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           duration?: number | null
+          error_message?: string | null
           expires_at?: string | null
           format?: string | null
           id?: string
@@ -434,6 +439,7 @@ export type Database = {
           resolution?: string | null
           status?: string | null
           thumbnail_url?: string | null
+          updated_at?: string | null
           user_id?: string
           video_url?: string | null
         }
