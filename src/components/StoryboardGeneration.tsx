@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Image, CheckCircle, Edit } from "lucide-react";
+import { Image, CheckCircle, Edit, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -30,6 +30,87 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
   const [generatingScenes, setGeneratingScenes] = useState<Set<string>>(new Set());
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [sceneErrors, setSceneErrors] = useState<Map<string, string>>(new Map());
+  const [debugInfo, setDebugInfo] = useState<Map<string, any>>(new Map());
+
+  const checkVideoStatus = async (videoId: string, sceneNumber: number) => {
+    try {
+      console.log(`🔍 Manually checking video status for scene ${sceneNumber}, videoId: ${videoId}`);
+      
+      const { data: video, error } = await supabase
+        .from('videos')
+        .select('id, status, preview_url, created_at, updated_at')
+        .eq('id', videoId)
+        .single();
+
+      if (error) {
+        console.error(`❌ Error checking video status for scene ${sceneNumber}:`, error);
+        return;
+      }
+
+      console.log(`📊 Video status for scene ${sceneNumber}:`, video);
+      
+      setDebugInfo(prev => {
+        const newInfo = new Map(prev);
+        newInfo.set(videoId, {
+          lastChecked: new Date().toISOString(),
+          videoData: video
+        });
+        return newInfo;
+      });
+
+      if (video.status === 'completed' && video.preview_url) {
+        console.log(`✅ Found completed video for scene ${sceneNumber} with URL:`, video.preview_url);
+        
+        const scene = scenes.find(s => s.sceneNumber === sceneNumber);
+        if (scene) {
+          const newSceneImage: SceneImage = {
+            sceneId: scene.id,
+            imageUrl: video.preview_url,
+            approved: false,
+          };
+
+          setSceneImages(prev => {
+            const filtered = prev.filter(img => img.sceneId !== scene.id);
+            return [...filtered, newSceneImage];
+          });
+
+          setGeneratingScenes(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(scene.id);
+            return newSet;
+          });
+
+          setSceneErrors(prev => {
+            const newErrors = new Map(prev);
+            newErrors.delete(scene.id);
+            return newErrors;
+          });
+
+          toast.success(`Scene ${sceneNumber} image found and loaded!`);
+        }
+      } else if (video.status === 'failed') {
+        console.log(`❌ Video generation failed for scene ${sceneNumber}`);
+        const scene = scenes.find(s => s.sceneNumber === sceneNumber);
+        if (scene) {
+          setSceneErrors(prev => {
+            const newErrors = new Map(prev);
+            newErrors.set(scene.id, 'Generation failed on server - check logs');
+            return newErrors;
+          });
+          
+          setGeneratingScenes(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(scene.id);
+            return newSet;
+          });
+        }
+      } else {
+        console.log(`⏳ Video still processing for scene ${sceneNumber}, status: ${video.status}`);
+      }
+    } catch (error) {
+      console.error(`💥 Exception checking video status for scene ${sceneNumber}:`, error);
+    }
+  };
 
   const generateSceneImage = async (scene: Scene) => {
     setGeneratingScenes(prev => new Set(prev).add(scene.id));
@@ -40,7 +121,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
     });
     
     try {
-      console.log('Generating image for scene:', scene.sceneNumber, 'with prompt:', scene.enhancedPrompt);
+      console.log(`🚀 Starting generation for scene ${scene.sceneNumber}:`, scene.enhancedPrompt);
       
       // Get authenticated user
       const { data: { user } } = await supabase.auth.getUser();
@@ -63,7 +144,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
       if (videoError) throw videoError;
 
-      console.log('Created video record for scene generation:', video.id);
+      console.log(`📝 Created video record for scene ${scene.sceneNumber}:`, video.id);
 
       // Queue image generation job using existing infrastructure
       const { data, error } = await supabase.functions.invoke('queue-job', {
@@ -81,9 +162,10 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
 
       if (error) throw error;
 
-      console.log('Image generation job queued:', data);
+      console.log(`✅ Job queued for scene ${scene.sceneNumber}:`, data);
 
       // Set up real-time subscription for this specific video
+      console.log(`📡 Setting up real-time subscription for video ${video.id}`);
       const videoSubscription = supabase
         .channel(`video-${video.id}`)
         .on('postgres_changes', {
@@ -92,11 +174,11 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
           table: 'videos',
           filter: `id=eq.${video.id}`
         }, (payload) => {
-          console.log('Video update received:', payload);
+          console.log(`🔔 Real-time update for scene ${scene.sceneNumber}:`, payload);
           const updatedVideo = payload.new as any;
           
           if (updatedVideo.status === 'completed' && updatedVideo.preview_url) {
-            console.log(`Scene ${scene.sceneNumber} completed with URL:`, updatedVideo.preview_url);
+            console.log(`🎉 Scene ${scene.sceneNumber} completed via real-time! URL:`, updatedVideo.preview_url);
             
             const newSceneImage: SceneImage = {
               sceneId: scene.id,
@@ -109,10 +191,16 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
               return [...filtered, newSceneImage];
             });
 
+            setGeneratingScenes(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(scene.id);
+              return newSet;
+            });
+
             toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             supabase.removeChannel(videoSubscription);
           } else if (updatedVideo.status === 'failed') {
-            console.error(`Scene ${scene.sceneNumber} generation failed`);
+            console.error(`❌ Scene ${scene.sceneNumber} generation failed via real-time`);
             const errorMessage = 'Generation failed on server - please check server logs for details';
             
             setSceneErrors(prev => {
@@ -120,14 +208,24 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
               newErrors.set(scene.id, errorMessage);
               return newErrors;
             });
+
+            setGeneratingScenes(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(scene.id);
+              return newSet;
+            });
             
             toast.error(`Scene ${scene.sceneNumber} generation failed: ${errorMessage}`);
             supabase.removeChannel(videoSubscription);
+          } else if (updatedVideo.status === 'processing') {
+            console.log(`⚡ Scene ${scene.sceneNumber} now processing...`);
           }
         })
-        .subscribe();
+        .subscribe((status) => {
+          console.log(`📡 Subscription status for scene ${scene.sceneNumber}:`, status);
+        });
 
-      // Fallback polling with extended timeout (10 minutes for video generation)
+      // Enhanced polling with better logging
       const pollForCompletion = () => {
         let pollCount = 0;
         const maxPolls = 120; // 10 minutes at 5-second intervals
@@ -135,20 +233,24 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
         const pollInterval = setInterval(async () => {
           try {
             pollCount++;
-            console.log(`Polling scene ${scene.sceneNumber}, attempt ${pollCount}/${maxPolls}`);
+            console.log(`🔄 Polling scene ${scene.sceneNumber}, attempt ${pollCount}/${maxPolls} for video ${video.id}`);
             
             const { data: updatedVideo, error: pollError } = await supabase
               .from('videos')
-              .select('status, preview_url')
+              .select('id, status, preview_url, created_at, updated_at')
               .eq('id', video.id)
               .single();
 
-            if (pollError) throw pollError;
+            if (pollError) {
+              console.error(`❌ Poll error for scene ${scene.sceneNumber}:`, pollError);
+              throw pollError;
+            }
 
-            console.log(`Scene ${scene.sceneNumber} status:`, updatedVideo.status);
+            console.log(`📊 Poll result for scene ${scene.sceneNumber}:`, updatedVideo);
 
             if (updatedVideo.status === 'completed' && updatedVideo.preview_url) {
               clearInterval(pollInterval);
+              console.log(`🎉 Scene ${scene.sceneNumber} completed via polling! URL:`, updatedVideo.preview_url);
               
               const newSceneImage: SceneImage = {
                 sceneId: scene.id,
@@ -161,9 +263,16 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                 return [...filtered, newSceneImage];
               });
 
+              setGeneratingScenes(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(scene.id);
+                return newSet;
+              });
+
               toast.success(`Scene ${scene.sceneNumber} image generated successfully`);
             } else if (updatedVideo.status === 'failed') {
               clearInterval(pollInterval);
+              console.error(`❌ Scene ${scene.sceneNumber} failed via polling`);
               const errorMessage = 'Generation failed on server - please check server logs for details';
               
               setSceneErrors(prev => {
@@ -171,10 +280,17 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                 newErrors.set(scene.id, errorMessage);
                 return newErrors;
               });
+
+              setGeneratingScenes(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(scene.id);
+                return newSet;
+              });
               
               throw new Error(errorMessage);
             } else if (pollCount >= maxPolls) {
               clearInterval(pollInterval);
+              console.warn(`⏰ Scene ${scene.sceneNumber} polling timeout after ${maxPolls} attempts`);
               const timeoutError = 'Generation timeout after 10 minutes - server may be overloaded';
               
               setSceneErrors(prev => {
@@ -182,11 +298,20 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                 newErrors.set(scene.id, timeoutError);
                 return newErrors;
               });
+
+              setGeneratingScenes(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(scene.id);
+                return newSet;
+              });
               
               throw new Error(timeoutError);
+            } else {
+              console.log(`⏳ Scene ${scene.sceneNumber} still ${updatedVideo.status}, continuing to poll...`);
             }
           } catch (error) {
             clearInterval(pollInterval);
+            console.error(`💥 Polling error for scene ${scene.sceneNumber}:`, error);
             throw error;
           }
         }, 5000); // Poll every 5 seconds
@@ -195,7 +320,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
       pollForCompletion();
 
     } catch (error) {
-      console.error('Error generating scene image:', error);
+      console.error(`💥 Error generating scene ${scene.sceneNumber}:`, error);
       const errorMessage = error.message || 'Failed to start generation';
       
       setSceneErrors(prev => {
@@ -207,12 +332,44 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
       toast.error(`Failed to generate scene ${scene.sceneNumber} image: ${errorMessage}`);
       
       setSceneImages(prev => prev.filter(img => img.sceneId !== scene.id));
-    } finally {
       setGeneratingScenes(prev => {
         const newSet = new Set(prev);
         newSet.delete(scene.id);
         return newSet;
       });
+    }
+  };
+
+  const refreshSceneStatus = async (scene: Scene) => {
+    console.log(`🔄 Manual refresh requested for scene ${scene.sceneNumber}`);
+    
+    try {
+      // Look for any video records for this scene
+      const { data: videos, error } = await supabase
+        .from('videos')
+        .select('id, status, preview_url, created_at')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching videos:', error);
+        return;
+      }
+
+      console.log(`📋 Found ${videos.length} videos for project ${projectId}:`, videos);
+
+      // Find the most recent video that might correspond to this scene
+      const recentVideo = videos.find(v => v.status === 'completed' && v.preview_url);
+      
+      if (recentVideo) {
+        console.log(`🎯 Found completed video for manual refresh:`, recentVideo);
+        await checkVideoStatus(recentVideo.id, scene.sceneNumber);
+      } else {
+        toast.info(`No completed videos found for scene ${scene.sceneNumber}`);
+      }
+    } catch (error) {
+      console.error('Error during manual refresh:', error);
+      toast.error('Failed to refresh scene status');
     }
   };
 
@@ -305,6 +462,7 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
             const isGenerating = generatingScenes.has(scene.id);
             const hasError = sceneErrors.has(scene.id);
             const errorMessage = sceneErrors.get(scene.id);
+            const debug = debugInfo.get(scene.id);
 
             return (
               <div key={scene.id} className="border rounded-lg p-4 space-y-3">
@@ -315,7 +473,23 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                     <div className="text-xs text-gray-400 mt-1 bg-gray-50 p-2 rounded">
                       AI Prompt: {scene.enhancedPrompt.substring(0, 100)}...
                     </div>
+                    {debug && (
+                      <div className="text-xs text-blue-500 mt-1 bg-blue-50 p-2 rounded">
+                        Last checked: {new Date(debug.lastChecked).toLocaleTimeString()}
+                        <br />
+                        Status: {debug.videoData?.status || 'unknown'}
+                      </div>
+                    )}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refreshSceneStatus(scene)}
+                    disabled={isGenerating}
+                    title="Refresh scene status"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
                 </div>
 
                 <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
@@ -324,6 +498,15 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                       <LoadingSpinner />
                       <span className="text-sm text-gray-600">Generating with Wan 2.1...</span>
                       <span className="text-xs text-gray-500">This may take up to 10 minutes</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshSceneStatus(scene)}
+                        className="mt-2"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Check Status
+                      </Button>
                     </div>
                   ) : sceneImage ? (
                     <div className="relative w-full h-full">
@@ -356,11 +539,28 @@ export const StoryboardGeneration = ({ scenes, projectId, onStoryboardApproved }
                       <div className="text-xs text-gray-500 mt-2">
                         Check server logs for detailed error information
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshSceneStatus(scene)}
+                        className="mt-2"
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Check Again
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-2 text-gray-400">
                       <Image className="h-8 w-8" />
                       <span className="text-sm">No image generated</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => refreshSceneStatus(scene)}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        Check Status
+                      </Button>
                     </div>
                   )}
                 </div>
