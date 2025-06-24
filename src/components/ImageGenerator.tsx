@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -147,12 +146,12 @@ export const ImageGenerator = ({
   const estimatedCredits = getEstimatedCredits(format, quality);
 
   return (
-    <Card className="h-fit">
+    <Card className="h-fit bg-gray-800 border-gray-700">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-white">
           <Image className="h-5 w-5" />
           AI Image Generator
-          <Badge variant="secondary">Wan 2.1</Badge>
+          <Badge variant="secondary" className="bg-gray-700 text-gray-300">Wan 2.1</Badge>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -166,7 +165,7 @@ export const ImageGenerator = ({
         <Button
           onClick={generateImages}
           disabled={!prompt.trim() || isGenerating}
-          className="w-full transition-all duration-200 hover:scale-[1.02]"
+          className="w-full transition-all duration-200 hover:scale-[1.02] bg-blue-600 hover:bg-blue-700"
           size="lg"
         >
           {isGenerating ? (
@@ -181,7 +180,7 @@ export const ImageGenerator = ({
 
         {isGenerating && (
           <div className="space-y-3 animate-fade-in">
-            <div className="flex justify-between text-sm text-gray-600">
+            <div className="flex justify-between text-sm text-gray-400">
               <span>Creating AI images...</span>
               <span>{Math.round(progress)}%</span>
             </div>
@@ -195,13 +194,13 @@ export const ImageGenerator = ({
         {currentImages.length > 0 && (
           <div className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium">Generated Variations</h3>
+              <h3 className="text-sm font-medium text-white">Generated Variations</h3>
               <div className="flex gap-2">
                 <Button 
                   variant="outline" 
                   size="sm" 
                   onClick={selectAllImages}
-                  className="transition-all duration-200"
+                  className="transition-all duration-200 border-gray-600 text-gray-300 hover:bg-gray-700"
                 >
                   {selectedImageIds.size === currentImages.length ? "Deselect All" : "Select All"}
                 </Button>
@@ -209,7 +208,7 @@ export const ImageGenerator = ({
                   variant="outline" 
                   size="sm" 
                   onClick={generateImages}
-                  className="transition-all duration-200 hover:scale-105"
+                  className="transition-all duration-200 hover:scale-105 border-gray-600 text-gray-300 hover:bg-gray-700"
                 >
                   <RefreshCw className="h-4 w-4 mr-1" />
                   Regenerate
@@ -224,7 +223,7 @@ export const ImageGenerator = ({
                   className={`relative cursor-pointer rounded-lg overflow-hidden transition-all duration-300 hover:scale-105 ${
                     selectedImageIds.has(image.id)
                       ? "ring-2 ring-blue-500 shadow-lg"
-                      : "ring-1 ring-gray-200 hover:ring-gray-300"
+                      : "ring-1 ring-gray-600 hover:ring-gray-500"
                   }`}
                   onClick={() => toggleImageSelection(image.id)}
                   style={{ animationDelay: `${index * 100}ms` }}
@@ -250,7 +249,7 @@ export const ImageGenerator = ({
                         e.stopPropagation();
                         downloadImage(image);
                       }}
-                      className="h-8 w-8 p-0 transition-all duration-200 hover:scale-110"
+                      className="h-8 w-8 p-0 transition-all duration-200 hover:scale-110 bg-gray-700 hover:bg-gray-600"
                     >
                       <Download className="h-3 w-3" />
                     </Button>
@@ -269,12 +268,12 @@ export const ImageGenerator = ({
 
             {selectedImageIds.size > 0 && (
               <div className="space-y-2 animate-fade-in">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-400">
                   {selectedImageIds.size} image{selectedImageIds.size > 1 ? 's' : ''} selected
                 </p>
                 <Button
                   onClick={saveToLibrary}
-                  className="w-full transition-all duration-200 hover:scale-[1.02]"
+                  className="w-full transition-all duration-200 hover:scale-[1.02] bg-gray-700 hover:bg-gray-600 text-white"
                   variant="outline"
                 >
                   Save Selected to Library

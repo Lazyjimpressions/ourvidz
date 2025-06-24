@@ -1,8 +1,9 @@
+
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PortalLayout } from "@/components/PortalLayout";
+import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StandaloneImageGenerator } from "@/components/generation/StandaloneImageGenerator";
 import { GeneratedImagesDisplay } from "@/components/GeneratedImagesDisplay";
@@ -47,22 +48,22 @@ const ImageCreation = () => {
   };
 
   return (
-    <PortalLayout title="Image Creation Studio">
-      <div className="min-h-screen bg-gray-50">
+    <OurVidzDashboardLayout>
+      <div className="min-h-screen bg-[#0a0a0a] text-white">
         <div className="max-w-4xl mx-auto p-4 sm:p-6">
           <div className="flex items-center gap-4 mb-6 sm:mb-8">
             <Button
               variant="ghost"
               size="icon"
               onClick={() => navigate("/dashboard")}
-              className="transition-all duration-200 hover:scale-110"
+              className="text-gray-400 hover:text-white hover:bg-gray-800 transition-all duration-200"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             
             <div className="flex-1">
-              <h1 className="text-2xl sm:text-3xl font-bold">Image Creation Studio</h1>
-              <p className="text-gray-600 mt-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white">Image Creation Studio</h1>
+              <p className="text-gray-400 mt-1">
                 Create stunning images with AI
               </p>
             </div>
@@ -74,11 +75,11 @@ const ImageCreation = () => {
             className="animate-fade-in"
           >
             <div className="flex justify-center mb-8">
-              <TabsList className="grid w-full max-w-md grid-cols-2">
-                <TabsTrigger value="general" className="text-base">
+              <TabsList className="grid w-full max-w-md grid-cols-2 bg-gray-800 border-gray-700">
+                <TabsTrigger value="general" className="text-base data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                   General Images
                 </TabsTrigger>
-                <TabsTrigger value="character" className="text-base">
+                <TabsTrigger value="character" className="text-base data-[state=active]:bg-blue-600 data-[state=active]:text-white">
                   Character Design
                 </TabsTrigger>
               </TabsList>
@@ -96,13 +97,13 @@ const ImageCreation = () => {
               {/* Generated Images Display */}
               {generatedImages.length > 0 && (
                 <>
-                  <Separator />
+                  <Separator className="bg-gray-700" />
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <Badge variant="secondary" className="px-3 py-1">
+                      <Badge variant="secondary" className="px-3 py-1 bg-gray-700 text-gray-300">
                         Generated
                       </Badge>
-                      <h2 className="text-xl font-semibold">Generated Images</h2>
+                      <h2 className="text-xl font-semibold text-white">Generated Images</h2>
                     </div>
                     <GeneratedImagesDisplay
                       images={generatedImages}
@@ -114,9 +115,9 @@ const ImageCreation = () => {
               )}
 
               {/* Image Library */}
-              <Separator />
+              <Separator className="bg-gray-700" />
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold">Your Image Library</h2>
+                <h2 className="text-xl font-semibold text-white">Your Image Library</h2>
                 <ImageLibrary
                   images={savedImages}
                   mode={activeMode}
@@ -126,7 +127,7 @@ const ImageCreation = () => {
           </Tabs>
         </div>
       </div>
-    </PortalLayout>
+    </OurVidzDashboardLayout>
   );
 };
 

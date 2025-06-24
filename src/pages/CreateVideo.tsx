@@ -1,8 +1,9 @@
+
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PortalLayout } from "@/components/PortalLayout";
+import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { VideoConfiguration, VideoConfig } from "@/components/VideoConfiguration";
 import { Character } from "@/components/CharacterManager";
 import { CharacterSelection } from "@/components/CharacterSelection";
@@ -163,8 +164,8 @@ const CreateVideo = () => {
   };
 
   return (
-    <PortalLayout title={`Create a New ${videoConfig?.mediaType === 'image' ? 'Image' : 'Video'}`}>
-      <div className="min-h-screen bg-gray-50 p-6">
+    <OurVidzDashboardLayout>
+      <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4 mb-8">
             <Button
@@ -177,21 +178,22 @@ const CreateVideo = () => {
                   navigate("/dashboard");
                 }
               }}
+              className="text-gray-400 hover:text-white hover:bg-gray-800"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
             
             <div className="flex-1">
-              <h1 className="text-2xl font-semibold">{stepTitles[currentStep]}</h1>
+              <h1 className="text-2xl font-semibold text-white">{stepTitles[currentStep]}</h1>
               <div className="flex items-center gap-2 mt-2">
                 {steps.map((step, index) => (
                   <div key={step} className="flex items-center">
                     <div className={`w-3 h-3 rounded-full ${
-                      index <= currentStepIndex ? 'bg-primary' : 'bg-gray-300'
+                      index <= currentStepIndex ? 'bg-blue-500' : 'bg-gray-600'
                     }`} />
                     {index < steps.length - 1 && (
                       <div className={`w-8 h-0.5 ${
-                        index < currentStepIndex ? 'bg-primary' : 'bg-gray-300'
+                        index < currentStepIndex ? 'bg-blue-500' : 'bg-gray-600'
                       }`} />
                     )}
                   </div>
@@ -203,7 +205,7 @@ const CreateVideo = () => {
           {renderCurrentStep()}
         </div>
       </div>
-    </PortalLayout>
+    </OurVidzDashboardLayout>
   );
 };
 
