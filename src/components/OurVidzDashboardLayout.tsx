@@ -2,7 +2,7 @@
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
 import { Home, FileText, Play, Image, Library, Settings, User, CreditCard, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
 interface OurVidzDashboardLayoutProps {
@@ -12,19 +12,64 @@ interface OurVidzDashboardLayoutProps {
 export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps) => {
   const { profile, isSubscribed, signOut } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
   };
 
+  const isActiveRoute = (path: string, mode?: string) => {
+    if (mode && location.pathname === '/workspace') {
+      const urlParams = new URLSearchParams(location.search);
+      return urlParams.get('mode') === mode;
+    }
+    return location.pathname === path;
+  };
+
   const sidebarItems = [
-    { icon: Home, label: "Home", active: true },
-    { icon: FileText, label: "New Storyboard" },
-    { icon: Play, label: "Generate Motion" },
-    { icon: Image, label: "Generate Images" },
-    { icon: Library, label: "Library" },
-    { icon: Settings, label: "Settings" },
+    { 
+      icon: Home, 
+      label: "Home", 
+      path: "/dashboard",
+      onClick: () => navigate("/dashboard"),
+      active: isActiveRoute("/dashboard")
+    },
+    { 
+      icon: FileText, 
+      label: "New Storyboard",
+      path: "/storyboard", 
+      onClick: () => navigate("/storyboard"),
+      active: isActiveRoute("/storyboard")
+    },
+    { 
+      icon: Play, 
+      label: "Generate Motion",
+      path: "/workspace?mode=video",
+      onClick: () => navigate("/workspace?mode=video"),
+      active: isActiveRoute("/workspace", "video")
+    },
+    { 
+      icon: Image, 
+      label: "Generate Images",
+      path: "/workspace?mode=image",
+      onClick: () => navigate("/workspace?mode=image"),
+      active: isActiveRoute("/workspace", "image")
+    },
+    { 
+      icon: Library, 
+      label: "Library",
+      path: "/library",
+      onClick: () => navigate("/library"),
+      active: isActiveRoute("/library")
+    },
+    { 
+      icon: Settings, 
+      label: "Settings",
+      path: "/profile",
+      onClick: () => navigate("/profile"),
+      active: isActiveRoute("/profile")
+    },
   ];
 
   return (
@@ -41,14 +86,17 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
           <ul className="space-y-2">
             {sidebarItems.map((item, index) => (
               <li key={index}>
-                <div className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                  item.active 
-                    ? 'bg-blue-600 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                }`}>
+                <button
+                  onClick={item.onClick}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                    item.active 
+                      ? 'bg-blue-600 text-white' 
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                  }`}
+                >
                   <item.icon className="w-5 h-5" />
                   <span className="text-sm font-medium">{item.label}</span>
-                </div>
+                </button>
               </li>
             ))}
           </ul>
