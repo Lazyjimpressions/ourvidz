@@ -1,14 +1,22 @@
 
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, User, CreditCard } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, User, CreditCard, LogOut } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 interface OurVidzDashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps) => {
-  const { profile, isSubscribed } = useAuth();
+  const { profile, isSubscribed, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
 
   const sidebarItems = [
     { icon: Home, label: "Home", active: true },
@@ -22,9 +30,9 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
       {/* Left Sidebar */}
-      <div className="w-64 bg-[#111111] border-r border-gray-800 flex flex-col">
-        {/* Logo */}
-        <div className="p-6 border-b border-gray-800">
+      <div className="w-64 bg-[#111111] flex flex-col">
+        {/* Logo - No border here */}
+        <div className="p-6">
           <h1 className="text-2xl font-bold text-white">OurVidz</h1>
         </div>
 
@@ -49,7 +57,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Top Header */}
+        {/* Unified Top Header - spans full width with consistent border */}
         <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
           <div className="flex justify-end items-center gap-4">
             {/* User Info */}
@@ -66,6 +74,15 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 <User className="w-4 h-4" />
                 <span>{profile?.username || 'User'}</span>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </header>

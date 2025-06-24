@@ -95,14 +95,15 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white px-4">
-      <Card className="w-full max-w-[400px] p-6">
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a] px-4">
+      <Card className="w-full max-w-[400px] p-6 bg-[#111111] border-gray-800">
         <CardContent className="space-y-6 pt-6">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-semibold tracking-tight">
-              {isSignUp ? "Create Account" : "Welcome to VideoAI"}
+            <h1 className="text-3xl font-bold text-white mb-2">OurVidz</h1>
+            <h2 className="text-xl font-semibold tracking-tight text-white">
+              {isSignUp ? "Create Account" : "Welcome Back"}
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-gray-400 mt-1">
               {isSignUp ? "Sign up to get started" : "Sign in to continue"}
             </p>
           </div>
@@ -110,7 +111,7 @@ const Auth = () => {
           <div className="space-y-4">
             <form onSubmit={handleEmailAuth} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-gray-300">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -119,11 +120,12 @@ const Auth = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
+                  className="bg-[#0a0a0a] border-gray-700 text-white placeholder-gray-500 focus:border-blue-600"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-gray-300">Password</Label>
                 <Input
                   id="password"
                   type="password"
@@ -133,9 +135,10 @@ const Auth = () => {
                   required
                   disabled={loading}
                   minLength={6}
+                  className="bg-[#0a0a0a] border-gray-700 text-white placeholder-gray-500 focus:border-blue-600"
                 />
                 {isSignUp && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-gray-500">
                     Password must be at least 6 characters long
                   </p>
                 )}
@@ -143,7 +146,7 @@ const Auth = () => {
 
               <Button 
                 type="submit" 
-                className="w-full justify-center gap-2"
+                className="w-full justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 disabled={loading}
               >
                 {loading ? (
@@ -163,7 +166,7 @@ const Auth = () => {
                   setEmail("");
                   setPassword("");
                 }}
-                className="text-sm text-blue-600 hover:text-blue-700 underline"
+                className="text-sm text-blue-400 hover:text-blue-300 underline"
                 disabled={loading}
               >
                 {isSignUp 
