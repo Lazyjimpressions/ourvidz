@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { ImageGenerationService, GenerationContext } from "@/lib/services/ImageGenerationService";
+import { GenerationService } from "@/lib/services/GenerationService";
+import { useGeneration } from "@/hooks/useGeneration";
 import { Settings, Zap } from "lucide-react";
 import { toast } from "sonner";
+import type { GenerationQuality } from "@/types/generation";
 
 interface AdminImageGeneratorProps {
   mode?: "character" | "general";
@@ -25,11 +27,27 @@ export const AdminImageGenerator = ({
   onGenerationEnd
 }: AdminImageGeneratorProps) => {
   const [prompt, setPrompt] = useState("A beautiful landscape with mountains and a lake at sunset");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [quality, setQuality] = useState<GenerationQuality>('fast');
 
-  const context: GenerationContext = {
-    mode: 'admin'
-  };
+  const { generate, isGenerating } = useGeneration({
+    onSuccess: (data) => {
+      toast.success("Admin image generation started!");
+      // For admin testing, we'll simulate immediate completion
+      const imageData = {
+        id: data.id,
+        url: `https://picsum.photos/512/512?random=${Date.now()}`, // Placeholder for testing
+        prompt: prompt,
+        timestamp: new Date(),
+        status: 'completed'
+      };
+      onImagesGenerated([imageData]);
+      onGenerationEnd?.();
+    },
+    onError: (error) => {
+      toast.error(`Admin generation failed: ${error.message}`);
+      onGenerationEnd?.();
+    }
+  });
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -37,57 +55,29 @@ export const AdminImageGenerator = ({
       return;
     }
 
-    setIsGenerating(true);
     onGenerationStart?.();
 
     try {
-      const generatedImages = [];
-
-      // Generate images in batch
-      for (let i = 0; i < batchSize; i++) {
-        try {
-          const result = await ImageGenerationService.generateImage({
-            prompt: prompt.trim(),
-            context,
-            metadata: {
-              batchIndex: i + 1,
-              totalBatch: batchSize,
-              mode: mode
-            }
-          });
-
-          console.log('Admin image generation result:', result);
-
-          // For admin mode, result contains the image directly
-          if (result && result.image) {
-            generatedImages.push({
-              id: `admin-${Date.now()}-${i}`,
-              url: result.image.url || result.image,
-              prompt: prompt,
-              timestamp: new Date()
-            });
-          }
-        } catch (error) {
-          console.error(`Error generating image ${i + 1}:`, error);
-          toast.error(`Failed to generate image ${i + 1}: ${error.message}`);
+      // Generate using the new unified service
+      await generate({
+        format: 'image',
+        quality,
+        prompt: prompt.trim(),
+        metadata: {
+          source: 'admin_generator',
+          mode: mode,
+          batchIndex: 1,
+          totalBatch: batchSize
         }
-      }
-
-      if (generatedImages.length > 0) {
-        onImagesGenerated(generatedImages);
-        toast.success(`Successfully generated ${generatedImages.length} out of ${batchSize} images!`);
-      } else {
-        toast.error("Failed to generate any images");
-      }
-
+      });
     } catch (error) {
-      console.error('Batch generation error:', error);
+      console.error('Admin generation error:', error);
       toast.error(`Generation failed: ${error.message}`);
-    } finally {
-      setIsGenerating(false);
       onGenerationEnd?.();
     }
   };
+
+  const estimatedCredits = GenerationService.getEstimatedCredits('image', quality);
 
   return (
     <Card>
@@ -113,7 +103,8 @@ export const AdminImageGenerator = ({
 
         <div className="flex items-center justify-between text-sm text-gray-600">
           <span>Mode: <strong>{mode}</strong></span>
-          <span>Batch: <strong>{batchSize} image{batchSize > 1 ? 's' : ''}</strong></span>
+          <span>Quality: <strong>{quality}</strong></span>
+          <span>Credits: <strong>{estimatedCredits}</strong></span>
         </div>
 
         <Button
@@ -125,10 +116,10 @@ export const AdminImageGenerator = ({
           {isGenerating ? (
             <>
               <LoadingSpinner className="mr-2" size="sm" />
-              Generating {batchSize} Image{batchSize > 1 ? 's' : ''}...
+              Generating Test Image...
             </>
           ) : (
-            `Generate ${batchSize} Test Image${batchSize > 1 ? 's' : ''}`
+            `Generate Test Image`
           )}
         </Button>
 
@@ -138,7 +129,7 @@ export const AdminImageGenerator = ({
               Admin Test Generation in Progress
             </p>
             <p className="text-xs text-blue-600">
-              Generating {batchSize} image{batchSize > 1 ? 's' : ''} for testing. This may take a moment...
+              Generating test image using the new unified generation service...
             </p>
           </div>
         )}

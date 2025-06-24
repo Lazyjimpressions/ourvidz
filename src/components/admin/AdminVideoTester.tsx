@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { EnhancedVideoGeneration } from "@/components/EnhancedVideoGeneration";
+import { SimpleVideoGeneration } from "@/components/SimpleVideoGeneration";
 import { Play, Clock, CheckCircle, AlertCircle } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 interface VideoTest {
@@ -51,18 +51,11 @@ export const AdminVideoTester = () => {
 
       setCurrentProjectId(project.id);
       
-      toast({
-        title: "Test Project Created",
-        description: "Ready to start video generation testing",
-      });
+      toast.success("Test Project Created");
 
     } catch (error) {
       console.error('Error creating test project:', error);
-      toast({
-        title: "Error",
-        description: "Failed to create test project",
-        variant: "destructive"
-      });
+      toast.error("Failed to create test project");
     } finally {
       setIsCreatingProject(false);
     }
@@ -77,10 +70,7 @@ export const AdminVideoTester = () => {
       ));
     }
 
-    toast({
-      title: "Video Test Completed",
-      description: "Test video generation finished successfully",
-    });
+    toast.success("Video Test Completed");
   };
 
   const startNewTest = () => {
@@ -173,7 +163,7 @@ export const AdminVideoTester = () => {
       {currentProjectId && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div onClick={startNewTest}>
-            <EnhancedVideoGeneration
+            <SimpleVideoGeneration
               projectId={currentProjectId}
               onComplete={handleVideoComplete}
             />

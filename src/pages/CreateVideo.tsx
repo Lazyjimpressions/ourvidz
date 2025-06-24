@@ -1,4 +1,3 @@
-
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,7 +8,7 @@ import { Character } from "@/components/CharacterManager";
 import { CharacterSelection } from "@/components/CharacterSelection";
 import { StoryBreakdown } from "@/components/StoryBreakdown";
 import { StoryboardGeneration } from "@/components/StoryboardGeneration";
-import { EnhancedVideoGeneration } from "@/components/EnhancedVideoGeneration";
+import { SimpleVideoGeneration } from "@/components/SimpleVideoGeneration";
 import { ImageGenerationStep } from "@/components/ImageGenerationStep";
 import { toast } from "sonner";
 
@@ -150,7 +149,7 @@ const CreateVideo = () => {
           );
         } else {
           return (
-            <EnhancedVideoGeneration 
+            <SimpleVideoGeneration 
               projectId={currentProjectId}
               scenes={approvedScenes}
               onComplete={handleGenerationComplete}

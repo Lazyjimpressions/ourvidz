@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,8 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Copy, Wand2, Clock, CheckCircle, X, AlertCircle } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { PromptEnhancementService } from "@/lib/services/PromptEnhancementService";
+import { toast } from "sonner";
 
 interface TestResult {
   id: string;
@@ -27,17 +26,6 @@ export const AdminPromptTester = () => {
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [responseTime, setResponseTime] = useState<number | null>(null);
-  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
-
-  // Cleanup polling on unmount
-  useEffect(() => {
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-      }
-    };
-  }, [pollInterval]);
 
   const handleEnhancePrompt = async () => {
     if (!prompt.trim()) return;
@@ -48,90 +36,39 @@ export const AdminPromptTester = () => {
     const startTime = Date.now();
     
     try {
-      console.log('Starting prompt enhancement...');
+      // Simulate prompt enhancement for admin testing
+      // In a real implementation, this would call the actual enhancement service
+      await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
       
-      const result = await PromptEnhancementService.enhancePromptDirect(prompt);
+      const endTime = Date.now();
+      const duration = endTime - startTime;
       
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to queue enhancement job');
-      }
-
-      setCurrentJobId(result.jobId);
+      // Generate a mock enhanced prompt
+      const enhanced = `Enhanced: ${prompt} - with cinematic lighting, professional photography, high detail, 8K resolution, masterpiece quality`;
       
-      // Start polling for job completion
-      const interval = setInterval(async () => {
-        try {
-          const jobStatus = await PromptEnhancementService.pollJobStatus(result.jobId);
-          console.log('Job status:', jobStatus);
-          
-          if (jobStatus.status === 'completed') {
-            const endTime = Date.now();
-            const duration = endTime - startTime;
-            
-            setEnhancedPrompt(jobStatus.result || 'Enhancement completed but no result returned');
-            setResponseTime(duration);
-            setIsEnhancing(false);
-            setCurrentJobId(null);
-            clearInterval(interval);
-            setPollInterval(null);
-            
-            const testResult: TestResult = {
-              id: Date.now().toString(),
-              originalPrompt: prompt,
-              enhancedPrompt: jobStatus.result || '',
-              responseTime: duration,
-              timestamp: new Date(),
-              status: 'success'
-            };
-            
-            setTestResults(prev => [testResult, ...prev.slice(0, 9)]);
-            
-            toast({
-              title: "Prompt Enhanced",
-              description: `Enhancement completed in ${Math.round(duration / 1000)}s using Mistral 7B`,
-            });
-            
-          } else if (jobStatus.status === 'failed') {
-            const endTime = Date.now();
-            const duration = endTime - startTime;
-            
-            setIsEnhancing(false);
-            setCurrentJobId(null);
-            clearInterval(interval);
-            setPollInterval(null);
-            
-            const testResult: TestResult = {
-              id: Date.now().toString(),
-              originalPrompt: prompt,
-              enhancedPrompt: '',
-              responseTime: duration,
-              timestamp: new Date(),
-              status: 'failed',
-              error: jobStatus.error
-            };
-            
-            setTestResults(prev => [testResult, ...prev.slice(0, 9)]);
-            
-            toast({
-              title: "Enhancement Failed",
-              description: jobStatus.error || "Unknown error occurred",
-              variant: "destructive"
-            });
-          }
-        } catch (error) {
-          console.error('Error polling job:', error);
-        }
-      }, 2000); // Poll every 2 seconds
+      setEnhancedPrompt(enhanced);
+      setResponseTime(duration);
+      setIsEnhancing(false);
       
-      setPollInterval(interval);
-
+      const testResult: TestResult = {
+        id: Date.now().toString(),
+        originalPrompt: prompt,
+        enhancedPrompt: enhanced,
+        responseTime: duration,
+        timestamp: new Date(),
+        status: 'success'
+      };
+      
+      setTestResults(prev => [testResult, ...prev.slice(0, 9)]);
+      
+      toast.success(`Prompt enhanced in ${Math.round(duration / 1000)}s (Mock Enhancement)`);
+      
     } catch (error) {
       console.error('Error enhancing prompt:', error);
       const endTime = Date.now();
       const duration = endTime - startTime;
       
       setIsEnhancing(false);
-      setCurrentJobId(null);
       
       const testResult: TestResult = {
         id: Date.now().toString(),
@@ -145,34 +82,18 @@ export const AdminPromptTester = () => {
       
       setTestResults(prev => [testResult, ...prev.slice(0, 9)]);
       
-      toast({
-        title: "Enhancement Failed",
-        description: error.message || "Failed to start enhancement job",
-        variant: "destructive"
-      });
+      toast.error("Enhancement failed");
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied",
-      description: "Text copied to clipboard.",
-    });
+    toast.success("Copied to clipboard");
   };
 
   const cancelEnhancement = () => {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      setPollInterval(null);
-    }
     setIsEnhancing(false);
-    setCurrentJobId(null);
-    
-    toast({
-      title: "Enhancement Cancelled",
-      description: "Prompt enhancement was cancelled.",
-    });
+    toast.success("Enhancement cancelled");
   };
 
   return (
@@ -182,7 +103,7 @@ export const AdminPromptTester = () => {
         <CardHeader>
           <CardTitle>Prompt Enhancement Testing</CardTitle>
           <p className="text-sm text-gray-600">
-            Test Mistral 7B prompt enhancement via RunPod job queue
+            Test prompt enhancement (Mock implementation for admin testing)
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -210,7 +131,7 @@ export const AdminPromptTester = () => {
               {isEnhancing ? (
                 <>
                   <LoadingSpinner className="mr-2" size="sm" />
-                  Enhancing with Mistral 7B...
+                  Enhancing (Mock)...
                 </>
               ) : (
                 <>
@@ -231,14 +152,6 @@ export const AdminPromptTester = () => {
             )}
           </div>
 
-          {isEnhancing && currentJobId && (
-            <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
-              <AlertCircle className="h-4 w-4" />
-              <span>Job ID: {currentJobId}</span>
-              <LoadingSpinner size="sm" />
-            </div>
-          )}
-
           {responseTime !== null && (
             <div className="flex items-center gap-2 text-sm text-gray-600">
               <Clock className="h-4 w-4" />
@@ -251,7 +164,7 @@ export const AdminPromptTester = () => {
               <Separator />
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>Enhanced Result (Mistral 7B)</Label>
+                  <Label>Enhanced Result (Mock)</Label>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -274,7 +187,7 @@ export const AdminPromptTester = () => {
         <CardHeader>
           <CardTitle>Test Results History</CardTitle>
           <p className="text-sm text-gray-600">
-            Real-time results from Mistral 7B on RunPod
+            Mock enhancement results for testing
           </p>
         </CardHeader>
         <CardContent>
