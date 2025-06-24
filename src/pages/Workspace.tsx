@@ -3,11 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, User, CreditCard, WandSparkles } from "lucide-react";
+import { ArrowLeft, Plus, User, CreditCard, WandSparkles, Image, Play, Music, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type WorkspaceMode = 'image' | 'video';
 
@@ -25,10 +22,12 @@ const Workspace = () => {
     videoPrompt: '',
     imageAspectRatio: '16:9',
     videoAspectRatio: '16:9',
-    shotType: '',
-    angle: '',
-    style: '',
-    duration: '5s'
+    shotType: 'Shot Type',
+    angle: 'Angle',
+    style: 'Style',
+    styleRef: 'Style ref',
+    duration: '5s',
+    model: 'LTXV Turbo'
   });
 
   // Update mode when URL params change
@@ -38,15 +37,18 @@ const Workspace = () => {
   }, [searchParams]);
 
   const handleModeSwitch = (newMode: WorkspaceMode) => {
-    if (newMode) {
-      setMode(newMode);
-      // Update URL without navigation
-      window.history.replaceState({}, '', `/workspace?mode=${newMode}`);
-    }
+    setMode(newMode);
+    // Update URL without navigation
+    window.history.replaceState({}, '', `/workspace?mode=${newMode}`);
   };
 
   const updateFormState = (field: string, value: string) => {
     setFormState(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleGenerate = () => {
+    console.log(`Generating ${mode}...`, formState);
+    // TODO: Implement generation logic
   };
 
   // Placeholder images for scattered layout
@@ -153,192 +155,116 @@ const Workspace = () => {
         {/* Control Panel */}
         <div className="bg-[#111111] border-t border-gray-800 p-6">
           <div className="max-w-6xl mx-auto">
-            {/* Prominent Prompt Box with Integrated Mode Toggle */}
-            <div className="bg-[#0a0a0a] rounded-2xl border border-gray-700 p-6 mb-6">
-              {/* Mode Toggle - Integrated at top */}
-              <div className="flex justify-center mb-6">
-                <ToggleGroup 
-                  type="single" 
-                  value={mode} 
-                  onValueChange={handleModeSwitch}
-                  className="bg-gray-800 rounded-lg p-1"
-                >
-                  <ToggleGroupItem 
-                    value="image" 
-                    className="px-6 py-2 text-sm font-medium data-[state=on]:bg-blue-600 data-[state=on]:text-white text-gray-400"
+            {/* Main Prompt Area */}
+            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 mb-6">
+              <div className="flex gap-4 items-start">
+                {/* Left - Mode Buttons Stack */}
+                <div className="flex flex-col gap-2 min-w-[80px]">
+                  <button
+                    onClick={() => handleModeSwitch('image')}
+                    className={`px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      mode === 'image' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                    }`}
                   >
                     IMAGE
-                  </ToggleGroupItem>
-                  <ToggleGroupItem 
-                    value="video"
-                    className="px-6 py-2 text-sm font-medium data-[state=on]:bg-blue-600 data-[state=on]:text-white text-gray-400"
+                  </button>
+                  <button
+                    onClick={() => handleModeSwitch('video')}
+                    className={`px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      mode === 'video' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                    }`}
                   >
                     VIDEO
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-
-              {/* Large Prompt Input */}
-              <div className="relative">
-                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
-                  <WandSparkles className="w-5 h-5" />
+                  </button>
                 </div>
-                <Input
-                  value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
-                  onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
-                  placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
-                  className="w-full h-16 pl-12 pr-4 bg-transparent border-gray-600 text-white placeholder-gray-500 text-lg rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
+
+                {/* Middle - Optional Elements */}
+                <div className="flex gap-3 items-center">
+                  {mode === 'image' ? (
+                    // Image Reference Button
+                    <button className="w-12 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                      <Image className="w-5 h-5 text-gray-400" />
+                    </button>
+                  ) : (
+                    // Start and End Frame Boxes for Video
+                    <>
+                      <button className="w-16 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Plus className="w-5 h-5 text-gray-400" />
+                      </button>
+                      <button className="w-16 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Plus className="w-5 h-5 text-gray-400" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Right - Prompt Input with Integrated Action */}
+                <div className="flex-1 relative">
+                  <Input
+                    value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                    onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
+                    placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
+                    className="w-full h-12 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleGenerate();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleGenerate}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    <WandSparkles className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {/* Horizontal Controls Row */}
-            <div className="flex flex-wrap gap-4 items-end justify-center">
-              {mode === 'image' ? (
-                <>
-                  {/* Image Mode Controls */}
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Aspect Ratio</Label>
-                    <Select 
-                      value={formState.imageAspectRatio} 
-                      onValueChange={(value) => updateFormState('imageAspectRatio', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="16:9">16:9</SelectItem>
-                        <SelectItem value="1:1">1:1</SelectItem>
-                        <SelectItem value="4:3">4:3</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Shot Type</Label>
-                    <Select 
-                      value={formState.shotType} 
-                      onValueChange={(value) => updateFormState('shotType', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="close-up">Close-up</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="wide">Wide</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Angle</Label>
-                    <Select 
-                      value={formState.angle} 
-                      onValueChange={(value) => updateFormState('angle', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="eye-level">Eye Level</SelectItem>
-                        <SelectItem value="low">Low Angle</SelectItem>
-                        <SelectItem value="high">High Angle</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Style</Label>
-                    <Select 
-                      value={formState.style} 
-                      onValueChange={(value) => updateFormState('style', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue placeholder="Select..." />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="realistic">Realistic</SelectItem>
-                        <SelectItem value="artistic">Artistic</SelectItem>
-                        <SelectItem value="cinematic">Cinematic</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Video Mode Controls */}
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Upload Image</Label>
-                    <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="bg-[#0a0a0a] border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 h-10"
-                      >
-                        <Plus className="w-4 h-4 mr-1" />
-                        Add
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Model</Label>
-                    <Select defaultValue="ltvx-turbo">
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="ltvx-turbo">LTVX Turbo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Aspect Ratio</Label>
-                    <Select 
-                      value={formState.videoAspectRatio} 
-                      onValueChange={(value) => updateFormState('videoAspectRatio', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="16:9">16:9</SelectItem>
-                        <SelectItem value="1:1">1:1</SelectItem>
-                        <SelectItem value="9:16">9:16</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[140px]">
-                    <Label className="text-gray-300 mb-2 block text-sm">Duration</Label>
-                    <Select 
-                      value={formState.duration} 
-                      onValueChange={(value) => updateFormState('duration', value)}
-                    >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-gray-800 border-gray-700">
-                        <SelectItem value="3s">3s</SelectItem>
-                        <SelectItem value="5s">5s</SelectItem>
-                        <SelectItem value="10s">10s</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-
-              {/* Generate Button */}
-              <div className="min-w-[140px]">
-                <Label className="text-gray-300 mb-2 block text-sm opacity-0">Generate</Label>
-                <Button 
-                  size="lg"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 h-10 w-full"
-                >
-                  Generate {mode === 'image' ? 'Image' : 'Video'}
-                </Button>
+              {/* Bottom Controls Row - Simple Text/Icon Labels */}
+              <div className="mt-4 flex flex-wrap gap-6 items-center">
+                {mode === 'image' ? (
+                  // Image Mode Controls
+                  <>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.imageAspectRatio}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.shotType}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.angle}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.style}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.styleRef}</span>
+                    </button>
+                  </>
+                ) : (
+                  // Video Mode Controls
+                  <>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.model}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.videoAspectRatio}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <span>{formState.duration}</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-300 transition-colors">
+                      <Music className="w-4 h-4 line-through" />
+                    </button>
+                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                      <Zap className="w-4 h-4" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
