@@ -56,6 +56,10 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Custom dark theme colors
+        'dark-bg': '#0a0a0a',
+        'dark-card': '#111111',
+        'dark-border': '#333333',
       },
       borderRadius: {
         lg: "0.8rem",
@@ -69,6 +73,10 @@ export default {
         '4': '32px',
         '5': '40px',
         '6': '48px',
+      },
+      backgroundImage: {
+        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+        'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
       },
     },
   },
