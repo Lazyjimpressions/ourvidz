@@ -52,8 +52,9 @@ export const useGeneration = ({ onSuccess, onError }: UseGenerationProps = {}) =
         return GenerationService.getGenerationStatus(id, format);
       },
       enabled: !!id,
-      refetchInterval: (data) => {
+      refetchInterval: (query) => {
         // Stop polling when generation is complete or failed
+        const data = query.state.data;
         if (data?.status === 'completed' || data?.status === 'failed') {
           setIsProcessing(false);
           return false;

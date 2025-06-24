@@ -24,7 +24,7 @@ export class GenerationService {
 
       // Create the appropriate record based on format
       let recordId: string;
-      let jobMetadata = {
+      let jobMetadata: Record<string, any> = {
         ...request.metadata,
         format: request.format,
         quality: request.quality,
