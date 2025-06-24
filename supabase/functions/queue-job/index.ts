@@ -36,19 +36,22 @@ serve(async (req) => {
 
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
 
-    console.log('Creating functional job:', {
+    console.log('Creating Wan 2.1 job:', {
       jobType,
       projectId,
       videoId,
       imageId,
-      userId: user.id
+      userId: user.id,
+      modelVariant: metadata?.model_variant
     });
 
-    // Extract format and quality from the new functional job types
-    const [format, quality] = jobType.includes('_') ? jobType.split('_') : [jobType, 'fast'];
-    const modelType = `${format}_${quality}`;
+    // Extract format and quality from metadata (new functional approach)
+    const format = metadata?.format || metadata?.requested_media_type || 'video';
+    const quality = metadata?.quality || metadata?.requested_quality || 'fast';
+    const modelType = metadata?.model_type || `${format}_${quality}`;
+    const modelVariant = metadata?.model_variant || 'wan_2_1_1_3b';
 
-    // Create job record with new functional columns
+    // Create job record with Wan 2.1 model information
     const { data: job, error: jobError } = await supabase
       .from('jobs')
       .insert({
@@ -57,7 +60,11 @@ serve(async (req) => {
         format: format,
         quality: quality,
         model_type: modelType,
-        metadata: metadata || {},
+        metadata: {
+          ...metadata,
+          model_variant: modelVariant,
+          wan_2_1_config: true
+        },
         project_id: projectId,
         video_id: videoId,
         image_id: imageId,
@@ -71,7 +78,7 @@ serve(async (req) => {
       throw jobError;
     }
 
-    console.log('Functional job created successfully:', job);
+    console.log('Wan 2.1 job created successfully:', job);
 
     // Get project details for the prompt (if projectId provided)
     let prompt = '';
@@ -94,7 +101,7 @@ serve(async (req) => {
       prompt = metadata.prompt;
     }
 
-    // Format job payload for RunPod worker with functional structure
+    // Format job payload for RunPod worker with Wan 2.1 configuration
     const jobPayload = {
       jobId: job.id,
       videoId: videoId,
@@ -104,18 +111,24 @@ serve(async (req) => {
       format: format,
       quality: quality,
       modelType: modelType,
+      modelVariant: modelVariant,
       prompt: prompt,
       characterId: characterId,
+      wan21Config: {
+        model: modelVariant,
+        singleFrame: jobType === 'preview',
+        resolution: quality === 'high' ? '1280x720' : '832x480',
+        steps: jobType === 'preview' ? (quality === 'high' ? 25 : 20) : 30
+      },
       metadata: {
         ...metadata,
-        format,
-        quality,
-        model_type: modelType
+        model_variant: modelVariant,
+        wan_2_1_enabled: true
       },
       timestamp: new Date().toISOString()
     };
 
-    console.log('Pushing functional job to Redis queue:', jobPayload);
+    console.log('Pushing Wan 2.1 job to Redis queue:', jobPayload);
 
     // Push job to Upstash Redis using REST API
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -142,14 +155,14 @@ serve(async (req) => {
     }
 
     const redisResult = await redisResponse.json();
-    console.log('Functional job queued in Redis successfully:', redisResult);
+    console.log('Wan 2.1 job queued in Redis successfully:', redisResult);
 
-    // Log usage with new format/quality tracking
+    // Log usage with Wan 2.1 model tracking
     await supabase
       .from('usage_logs')
       .insert({
         user_id: user.id,
-        action: jobType,
+        action: modelType,
         format: format,
         quality: quality,
         credits_consumed: metadata.credits || 1,
@@ -158,15 +171,18 @@ serve(async (req) => {
           project_id: projectId,
           image_id: imageId,
           video_id: videoId,
-          model_type: modelType
+          model_type: modelType,
+          model_variant: modelVariant,
+          wan_2_1_enabled: true
         }
       });
 
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Functional job queued successfully in Redis',
-      queueLength: redisResult.result || 0
+      message: 'Wan 2.1 job queued successfully in Redis',
+      queueLength: redisResult.result || 0,
+      modelVariant: modelVariant
     }), {
       headers: {
         ...corsHeaders,
@@ -176,7 +192,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in functional queue-job function:', error);
+    console.error('Error in Wan 2.1 queue-job function:', error);
     return new Response(JSON.stringify({
       error: error.message,
       success: false

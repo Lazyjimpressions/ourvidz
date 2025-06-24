@@ -17,6 +17,7 @@ export interface GenerationOptions {
   estimatedTime: string;
   resolution: string;
   description: string;
+  modelVariant: string;
 }
 
 export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
@@ -24,33 +25,37 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'image',
     quality: 'fast',
     credits: 0.5,
-    estimatedTime: '10-30 seconds',
-    resolution: '1024x1024',
-    description: 'Quick image generation with good quality'
+    estimatedTime: '2-3 seconds',
+    resolution: '832x480',
+    description: 'Quick image generation (1 frame from Wan 2.1 1.3B)',
+    modelVariant: 'wan_2_1_1_3b'
   },
   'image_high': {
     format: 'image',
     quality: 'high',
     credits: 1,
-    estimatedTime: '1-2 minutes',
-    resolution: '1024x1024',
-    description: 'High-quality image with enhanced details'
+    estimatedTime: '3-4 seconds',
+    resolution: '1280x720',
+    description: 'High-quality image (1 frame from Wan 2.1 14B)',
+    modelVariant: 'wan_2_1_14b'
   },
   'video_fast': {
     format: 'video',
     quality: 'fast',
-    credits: 2,
-    estimatedTime: '2-5 minutes',
-    resolution: '720p',
-    description: 'Quick video generation, good for previews'
+    credits: 3,
+    estimatedTime: '4-6 minutes',
+    resolution: '832x480',
+    description: '5-second video from Wan 2.1 1.3B',
+    modelVariant: 'wan_2_1_1_3b'
   },
   'video_high': {
     format: 'video',
     quality: 'high',
-    credits: 3,
-    estimatedTime: '5-10 minutes',
-    resolution: '1080p',
-    description: 'High-quality video with enhanced details'
+    credits: 5,
+    estimatedTime: '6-8 minutes',
+    resolution: '1280x720',
+    description: '5-second HD video from Wan 2.1 14B',
+    modelVariant: 'wan_2_1_14b'
   }
 };
 
@@ -62,3 +67,14 @@ export const getGenerationConfig = (format: GenerationFormat, quality: Generatio
   const modelType = getModelType(format, quality);
   return GENERATION_CONFIGS[modelType];
 };
+
+// Functional API Types
+export type MediaType = 'image' | 'video';
+export type Quality = 'low' | 'high';
+
+export interface FunctionalGenerationOptions {
+  mediaType: MediaType;
+  quality: Quality;
+  prompt: string;
+  characterId?: string;
+}
