@@ -1,16 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
+import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, User, CreditCard, WandSparkles, Image, Music, Zap } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { Plus, Image, Music, Zap, WandSparkles } from "lucide-react";
 
 type WorkspaceMode = 'image' | 'video';
 
 const Workspace = () => {
   const [searchParams] = useSearchParams();
-  const { profile, isSubscribed } = useAuth();
   
   // Get mode from URL params, fallback to 'image'
   const initialMode = (searchParams.get('mode') as WorkspaceMode) || 'image';
@@ -61,284 +60,247 @@ const Workspace = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col">
-      {/* Top Header */}
-      <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
-        <div className="flex justify-between items-center">
-          {/* Left - Back to Dashboard */}
-          <Link 
-            to="/dashboard" 
-            className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="font-medium">Gen Space</span>
-          </Link>
+    <OurVidzDashboardLayout>
+      <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col">
+        {/* Main Content Area */}
+        <main className="flex-1 flex flex-col">
+          {/* Hero Section with Scattered Images */}
+          <div className="flex-1 flex items-center justify-center px-6 py-12 relative">
+            {/* Scattered Background Images */}
+            <div className="absolute inset-0 overflow-hidden">
+              {/* Mobile-first responsive positioning */}
+              <img 
+                src={placeholderImages[0]} 
+                alt="" 
+                className="absolute w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg opacity-20 top-1/4 left-4 md:left-12 lg:left-24"
+              />
+              <img 
+                src={placeholderImages[1]} 
+                alt="" 
+                className="absolute w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-lg opacity-20 top-1/3 right-6 md:right-16 lg:right-32"
+              />
+              <img 
+                src={placeholderImages[2]} 
+                alt="" 
+                className="absolute w-18 h-18 md:w-22 md:h-22 lg:w-26 lg:h-26 rounded-lg opacity-20 bottom-1/3 left-8 md:left-20 lg:left-40"
+              />
+              <img 
+                src={placeholderImages[3]} 
+                alt="" 
+                className="absolute w-15 h-15 md:w-19 md:h-19 lg:w-22 lg:h-22 rounded-lg opacity-20 top-1/2 right-4 md:right-12 lg:right-28"
+              />
+              <img 
+                src={placeholderImages[4]} 
+                alt="" 
+                className="absolute w-17 h-17 md:w-21 md:h-21 lg:w-25 lg:h-25 rounded-lg opacity-20 bottom-1/4 right-12 md:right-24 lg:right-48"
+              />
+            </div>
 
-          {/* Right - User Info */}
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="bg-blue-600 border-blue-600 text-white hover:bg-blue-700"
-            >
-              Upgrade
-            </Button>
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-2 text-gray-400">
-                <CreditCard className="w-4 h-4" />
-                <span>Credits: {profile?.token_balance || 0}</span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-400">
-                <div className={`w-2 h-2 rounded-full ${isSubscribed ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span>{isSubscribed ? 'Pro' : 'Free'}</span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-300">
-                <User className="w-4 h-4" />
-                <span>{profile?.username || 'User'}</span>
-              </div>
+            {/* Centered Content */}
+            <div className="text-center z-10 max-w-4xl mx-auto">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
+                {mode === 'image' 
+                  ? "Let's start with some image storming"
+                  : "Let's start creating some videos"
+                }
+              </h1>
+              <p className="text-lg md:text-xl text-gray-400">
+                {mode === 'image'
+                  ? "Type your prompt, set your style, and generate your image"
+                  : "Select or upload an image, add a prompt, and watch it go"
+                }
+              </p>
             </div>
           </div>
-        </div>
-      </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col">
-        {/* Hero Section with Scattered Images */}
-        <div className="flex-1 flex items-center justify-center px-6 py-12 relative">
-          {/* Scattered Background Images */}
-          <div className="absolute inset-0 overflow-hidden">
-            {/* Mobile-first responsive positioning */}
-            <img 
-              src={placeholderImages[0]} 
-              alt="" 
-              className="absolute w-16 h-16 md:w-20 md:h-20 lg:w-24 lg:h-24 rounded-lg opacity-20 top-1/4 left-4 md:left-12 lg:left-24"
-            />
-            <img 
-              src={placeholderImages[1]} 
-              alt="" 
-              className="absolute w-14 h-14 md:w-18 md:h-18 lg:w-20 lg:h-20 rounded-lg opacity-20 top-1/3 right-6 md:right-16 lg:right-32"
-            />
-            <img 
-              src={placeholderImages[2]} 
-              alt="" 
-              className="absolute w-18 h-18 md:w-22 md:h-22 lg:w-26 lg:h-26 rounded-lg opacity-20 bottom-1/3 left-8 md:left-20 lg:left-40"
-            />
-            <img 
-              src={placeholderImages[3]} 
-              alt="" 
-              className="absolute w-15 h-15 md:w-19 md:h-19 lg:w-22 lg:h-22 rounded-lg opacity-20 top-1/2 right-4 md:right-12 lg:right-28"
-            />
-            <img 
-              src={placeholderImages[4]} 
-              alt="" 
-              className="absolute w-17 h-17 md:w-21 md:h-21 lg:w-25 lg:h-25 rounded-lg opacity-20 bottom-1/4 right-12 md:right-24 lg:right-48"
-            />
-          </div>
+          {/* Control Panel */}
+          <div className="bg-[#111111] border-t border-gray-800 p-6">
+            <div className="max-w-6xl mx-auto">
+              {/* Main Prompt Area */}
+              <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 space-y-4">
+                
+                {/* Desktop: Row 1 - Mode buttons, optional elements, and prompt */}
+                <div className="hidden md:flex gap-4 items-stretch">
+                  {/* Left - Mode Buttons Stack */}
+                  <div className="flex flex-col gap-2 min-w-[80px]">
+                    <button
+                      onClick={() => handleModeSwitch('image')}
+                      className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
+                        mode === 'image' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                      }`}
+                    >
+                      IMAGE
+                    </button>
+                    <button
+                      onClick={() => handleModeSwitch('video')}
+                      className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
+                        mode === 'video' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                      }`}
+                    >
+                      VIDEO
+                    </button>
+                  </div>
 
-          {/* Centered Content */}
-          <div className="text-center z-10 max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4">
-              {mode === 'image' 
-                ? "Let's start with some image storming"
-                : "Let's start creating some videos"
-              }
-            </h1>
-            <p className="text-lg md:text-xl text-gray-400">
-              {mode === 'image'
-                ? "Type your prompt, set your style, and generate your image"
-                : "Select or upload an image, add a prompt, and watch it go"
-              }
-            </p>
-          </div>
-        </div>
+                  {/* Middle - Optional Elements */}
+                  <div className="flex gap-3 items-stretch">
+                    {mode === 'image' ? (
+                      // Image Reference Button
+                      <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Image className="w-5 h-5 text-gray-400" />
+                      </button>
+                    ) : (
+                      // Start and End Frame Boxes for Video
+                      <>
+                        <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                          <Plus className="w-5 h-5 text-gray-400" />
+                        </button>
+                        <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                          <Plus className="w-5 h-5 text-gray-400" />
+                        </button>
+                      </>
+                    )}
+                  </div>
 
-        {/* Control Panel */}
-        <div className="bg-[#111111] border-t border-gray-800 p-6">
-          <div className="max-w-6xl mx-auto">
-            {/* Main Prompt Area */}
-            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 space-y-4">
-              
-              {/* Desktop: Row 1 - Mode buttons, optional elements, and prompt */}
-              <div className="hidden md:flex gap-4 items-stretch">
-                {/* Left - Mode Buttons Stack */}
-                <div className="flex flex-col gap-2 min-w-[80px]">
-                  <button
-                    onClick={() => handleModeSwitch('image')}
-                    className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
-                      mode === 'image' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    IMAGE
-                  </button>
-                  <button
-                    onClick={() => handleModeSwitch('video')}
-                    className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
-                      mode === 'video' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    VIDEO
-                  </button>
+                  {/* Right - Prompt Input with Integrated Action */}
+                  <div className="flex-1 relative">
+                    <Input
+                      value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                      onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
+                      placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
+                      className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleGenerate();
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={handleGenerate}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      <WandSparkles className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
 
-                {/* Middle - Optional Elements */}
-                <div className="flex gap-3 items-stretch">
-                  {mode === 'image' ? (
-                    // Image Reference Button - wider to better match prompt height
-                    <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                      <Image className="w-5 h-5 text-gray-400" />
+                {/* Mobile: Single Column Stack */}
+                <div className="md:hidden space-y-4">
+                  {/* Mode Buttons - Horizontal on mobile */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleModeSwitch('image')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                        mode === 'image' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                      }`}
+                    >
+                      IMAGE
                     </button>
-                  ) : (
-                    // Start and End Frame Boxes for Video
-                    <>
-                      <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                        <Plus className="w-5 h-5 text-gray-400" />
+                    <button
+                      onClick={() => handleModeSwitch('video')}
+                      className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                        mode === 'video' 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                      }`}
+                    >
+                      VIDEO
+                    </button>
+                  </div>
+
+                  {/* Optional Elements Row */}
+                  <div className="flex gap-3">
+                    {mode === 'image' ? (
+                      <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Image className="w-5 h-5 text-gray-400" />
                       </button>
-                      <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                        <Plus className="w-5 h-5 text-gray-400" />
+                    ) : (
+                      <>
+                        <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                          <Plus className="w-5 h-5 text-gray-400" />
+                        </button>
+                        <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                          <Plus className="w-5 h-5 text-gray-400" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Prompt Input */}
+                  <div className="relative">
+                    <Input
+                      value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                      onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
+                      placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
+                      className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleGenerate();
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={handleGenerate}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      <WandSparkles className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2 - Bottom Controls (Both Desktop and Mobile) */}
+                <div className="flex flex-wrap gap-6 items-center">
+                  {mode === 'image' ? (
+                    // Image Mode Controls
+                    <>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.imageAspectRatio}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.shotType}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.angle}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.style}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.styleRef}</span>
+                      </button>
+                    </>
+                  ) : (
+                    // Video Mode Controls
+                    <>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.model}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.videoAspectRatio}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <span>{formState.duration}</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-300 transition-colors">
+                        <Music className="w-4 h-4 line-through" />
+                      </button>
+                      <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
+                        <Zap className="w-4 h-4" />
                       </button>
                     </>
                   )}
                 </div>
-
-                {/* Right - Prompt Input with Integrated Action */}
-                <div className="flex-1 relative">
-                  <Input
-                    value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
-                    onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
-                    placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
-                    className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleGenerate();
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={handleGenerate}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    <WandSparkles className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile: Single Column Stack */}
-              <div className="md:hidden space-y-4">
-                {/* Mode Buttons - Horizontal on mobile */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleModeSwitch('image')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                      mode === 'image' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    IMAGE
-                  </button>
-                  <button
-                    onClick={() => handleModeSwitch('video')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                      mode === 'video' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    VIDEO
-                  </button>
-                </div>
-
-                {/* Optional Elements Row */}
-                <div className="flex gap-3">
-                  {mode === 'image' ? (
-                    <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                      <Image className="w-5 h-5 text-gray-400" />
-                    </button>
-                  ) : (
-                    <>
-                      <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                        <Plus className="w-5 h-5 text-gray-400" />
-                      </button>
-                      <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
-                        <Plus className="w-5 h-5 text-gray-400" />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Prompt Input */}
-                <div className="relative">
-                  <Input
-                    value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
-                    onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
-                    placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
-                    className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleGenerate();
-                      }
-                    }}
-                  />
-                  <button
-                    onClick={handleGenerate}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
-                  >
-                    <WandSparkles className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 2 - Bottom Controls (Both Desktop and Mobile) */}
-              <div className="flex flex-wrap gap-6 items-center">
-                {mode === 'image' ? (
-                  // Image Mode Controls
-                  <>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.imageAspectRatio}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.shotType}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.angle}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.style}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.styleRef}</span>
-                    </button>
-                  </>
-                ) : (
-                  // Video Mode Controls
-                  <>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.model}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.videoAspectRatio}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <span>{formState.duration}</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-400 hover:text-gray-300 transition-colors">
-                      <Music className="w-4 h-4 line-through" />
-                    </button>
-                    <button className="flex items-center gap-1 text-sm text-gray-300 hover:text-white transition-colors">
-                      <Zap className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
               </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </OurVidzDashboardLayout>
   );
 };
 

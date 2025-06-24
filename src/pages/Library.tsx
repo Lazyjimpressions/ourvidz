@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { PortalLayout } from "@/components/PortalLayout";
+import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { VideoCard } from "@/components/VideoCard";
 import { VideoModal } from "@/components/VideoModal";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
@@ -24,26 +24,28 @@ const Library = () => {
 
   if (isLoading) {
     return (
-      <PortalLayout title="My Videos">
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <OurVidzDashboardLayout>
+        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
           <LoadingSpinner size="lg" />
         </div>
-      </PortalLayout>
+      </OurVidzDashboardLayout>
     );
   }
 
-  // Transform database videos to match VideoCard interface - fixed ID type
+  // Transform database videos to match VideoCard interface
   const transformedVideos = videos?.map(video => ({
-    id: video.id, // Keep as string, VideoCard interface should accept string
+    id: video.id,
     thumbnail: video.thumbnail_url || "https://images.unsplash.com/photo-1605810230434-7631ac76ec81",
     prompt: video.project?.title || video.project?.original_prompt || "Untitled",
     createdAt: new Date(video.created_at!),
   })) || [];
 
   return (
-    <PortalLayout title="My Videos">
-      <div className="min-h-screen bg-gray-50 p-6">
+    <OurVidzDashboardLayout>
+      <div className="min-h-screen bg-[#0a0a0a] p-6">
         <div className="max-w-7xl mx-auto">
+          <h1 className="text-3xl font-bold text-white mb-8">My Videos</h1>
+          
           {transformedVideos.length === 0 ? (
             <EmptyLibrary />
           ) : (
@@ -85,7 +87,7 @@ const Library = () => {
         }}
         onConfirm={() => videoToDelete && handleDelete(videoToDelete.id)}
       />
-    </PortalLayout>
+    </OurVidzDashboardLayout>
   );
 };
 

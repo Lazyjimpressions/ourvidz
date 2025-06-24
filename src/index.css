@@ -27,8 +27,9 @@
     --radius: 0.8rem;
   }
 
-  /* Dark theme variables for the new dashboard */
-  .dark {
+  /* Dark theme variables for the dashboard */
+  .dark, 
+  body {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 3.9%;
@@ -57,6 +58,8 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "ss01", "ss02", "cv01", "cv02", "cv03";
+    background-color: #0a0a0a;
+    color: white;
   }
 
   /* Custom scrollbar for dark theme */
