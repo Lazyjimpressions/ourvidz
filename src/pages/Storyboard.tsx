@@ -42,9 +42,9 @@ const Storyboard = () => {
           {/* Workflow Progress */}
           <div className="flex items-center gap-4 text-sm text-gray-400 mb-6">
             <span className={activeTab === 'concept' ? 'text-blue-400 font-medium' : ''}>CONCEPT</span>
-            <span className="text-gray-600">></span>
+            <span className="text-gray-600">{'>'}</span>
             <span className={activeTab === 'settings' ? 'text-blue-400 font-medium' : ''}>SETTINGS & CAST</span>
-            <span className="text-gray-600">></span>
+            <span className="text-gray-600">{'>'}</span>
             <span className={activeTab === 'breakdown' ? 'text-blue-400 font-medium' : ''}>BREAKDOWN</span>
           </div>
         </div>
