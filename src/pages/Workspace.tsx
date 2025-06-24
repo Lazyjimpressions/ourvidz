@@ -4,7 +4,6 @@ import { useSearchParams } from 'react-router-dom';
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Input } from "@/components/ui/input";
 import { Plus, Image, Music, Zap, WandSparkles } from "lucide-react";
-import { GenerationOptions } from "@/components/GenerationOptions";
 import { useGeneration } from "@/hooks/useGeneration";
 import type { GenerationFormat, GenerationQuality } from '@/types/generation';
 import { toast } from "sonner";
@@ -147,16 +146,6 @@ const Workspace = () => {
           {/* Control Panel */}
           <div className="bg-[#111111] border-t border-gray-800 p-6">
             <div className="max-w-6xl mx-auto">
-              {/* Generation Options */}
-              <div className="mb-6">
-                <GenerationOptions
-                  selectedFormat={mode}
-                  selectedQuality={quality}
-                  onFormatChange={handleModeSwitch}
-                  onQualityChange={setQuality}
-                />
-              </div>
-
               {/* Main Prompt Area */}
               <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 space-y-4">
                 
@@ -298,8 +287,32 @@ const Workspace = () => {
                   </div>
                 </div>
 
-                {/* Row 2 - Bottom Controls (Both Desktop and Mobile) */}
+                {/* Row 2 - Bottom Controls with integrated Quality selector (Both Desktop and Mobile) */}
                 <div className="flex flex-wrap gap-6 items-center">
+                  {/* Quality Selector - Integrated into bottom controls */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setQuality('fast')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        quality === 'fast'
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Fast
+                    </button>
+                    <button
+                      onClick={() => setQuality('high')}
+                      className={`px-3 py-1 text-xs rounded transition-colors ${
+                        quality === 'high'
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      High Quality
+                    </button>
+                  </div>
+
                   <div className="flex items-center gap-2 text-sm text-gray-400">
                     <span>Credits: {estimatedCredits}</span>
                   </div>
