@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Plus, User, CreditCard } from "lucide-react";
+import { ArrowLeft, Plus, User, CreditCard, WandSparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type WorkspaceMode = 'image' | 'video';
 
@@ -37,9 +38,11 @@ const Workspace = () => {
   }, [searchParams]);
 
   const handleModeSwitch = (newMode: WorkspaceMode) => {
-    setMode(newMode);
-    // Update URL without navigation
-    window.history.replaceState({}, '', `/workspace?mode=${newMode}`);
+    if (newMode) {
+      setMode(newMode);
+      // Update URL without navigation
+      window.history.replaceState({}, '', `/workspace?mode=${newMode}`);
+    }
   };
 
   const updateFormState = (field: string, value: string) => {
@@ -150,53 +153,60 @@ const Workspace = () => {
         {/* Control Panel */}
         <div className="bg-[#111111] border-t border-gray-800 p-6">
           <div className="max-w-6xl mx-auto">
-            {/* Mode Toggle */}
-            <div className="flex items-center gap-2 mb-6">
-              <Button
-                variant={mode === 'image' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => handleModeSwitch('image')}
-                className={mode === 'image' ? 'bg-blue-600 hover:bg-blue-700' : 'text-gray-400 hover:text-white hover:bg-gray-800'}
-              >
-                IMAGE
-              </Button>
-              <Button
-                variant={mode === 'video' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => handleModeSwitch('video')}
-                className={mode === 'video' ? 'bg-blue-600 hover:bg-blue-700' : 'text-gray-400 hover:text-white hover:bg-gray-800'}
-              >
-                VIDEO
-              </Button>
-            </div>
-
-            {/* Controls Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Prompt Input */}
-              <div className="lg:col-span-2">
-                <Label htmlFor="prompt" className="text-gray-300 mb-2 block">Prompt</Label>
-                <Input
-                  id="prompt"
-                  value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
-                  onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
-                  placeholder={mode === 'image' ? "Describe the image you want..." : "Describe the video you want..."}
-                  className="bg-[#0a0a0a] border-gray-700 text-white placeholder-gray-500"
-                />
+            {/* Prominent Prompt Box with Integrated Mode Toggle */}
+            <div className="bg-[#0a0a0a] rounded-2xl border border-gray-700 p-6 mb-6">
+              {/* Mode Toggle - Integrated at top */}
+              <div className="flex justify-center mb-6">
+                <ToggleGroup 
+                  type="single" 
+                  value={mode} 
+                  onValueChange={handleModeSwitch}
+                  className="bg-gray-800 rounded-lg p-1"
+                >
+                  <ToggleGroupItem 
+                    value="image" 
+                    className="px-6 py-2 text-sm font-medium data-[state=on]:bg-blue-600 data-[state=on]:text-white text-gray-400"
+                  >
+                    IMAGE
+                  </ToggleGroupItem>
+                  <ToggleGroupItem 
+                    value="video"
+                    className="px-6 py-2 text-sm font-medium data-[state=on]:bg-blue-600 data-[state=on]:text-white text-gray-400"
+                  >
+                    VIDEO
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
 
+              {/* Large Prompt Input */}
+              <div className="relative">
+                <div className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
+                  <WandSparkles className="w-5 h-5" />
+                </div>
+                <Input
+                  value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                  onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
+                  placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
+                  className="w-full h-16 pl-12 pr-4 bg-transparent border-gray-600 text-white placeholder-gray-500 text-lg rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Horizontal Controls Row */}
+            <div className="flex flex-wrap gap-4 items-end justify-center">
               {mode === 'image' ? (
                 <>
                   {/* Image Mode Controls */}
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Aspect Ratio</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Aspect Ratio</Label>
                     <Select 
                       value={formState.imageAspectRatio} 
                       onValueChange={(value) => updateFormState('imageAspectRatio', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="16:9">16:9</SelectItem>
                         <SelectItem value="1:1">1:1</SelectItem>
                         <SelectItem value="4:3">4:3</SelectItem>
@@ -204,16 +214,16 @@ const Workspace = () => {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Shot Type</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Shot Type</Label>
                     <Select 
                       value={formState.shotType} 
                       onValueChange={(value) => updateFormState('shotType', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue placeholder="Select..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="close-up">Close-up</SelectItem>
                         <SelectItem value="medium">Medium</SelectItem>
                         <SelectItem value="wide">Wide</SelectItem>
@@ -221,16 +231,16 @@ const Workspace = () => {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Angle</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Angle</Label>
                     <Select 
                       value={formState.angle} 
                       onValueChange={(value) => updateFormState('angle', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue placeholder="Select..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="eye-level">Eye Level</SelectItem>
                         <SelectItem value="low">Low Angle</SelectItem>
                         <SelectItem value="high">High Angle</SelectItem>
@@ -238,16 +248,16 @@ const Workspace = () => {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Style</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Style</Label>
                     <Select 
                       value={formState.style} 
                       onValueChange={(value) => updateFormState('style', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue placeholder="Select..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="realistic">Realistic</SelectItem>
                         <SelectItem value="artistic">Artistic</SelectItem>
                         <SelectItem value="cinematic">Cinematic</SelectItem>
@@ -258,47 +268,42 @@ const Workspace = () => {
               ) : (
                 <>
                   {/* Video Mode Controls */}
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1 bg-[#0a0a0a] border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Image
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="flex-1 bg-[#0a0a0a] border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Upload
-                    </Button>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Upload Image</Label>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="bg-[#0a0a0a] border-gray-700 text-gray-400 hover:text-white hover:bg-gray-800 h-10"
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Add
+                      </Button>
+                    </div>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Model</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Model</Label>
                     <Select defaultValue="ltvx-turbo">
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="ltvx-turbo">LTVX Turbo</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Aspect Ratio</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Aspect Ratio</Label>
                     <Select 
                       value={formState.videoAspectRatio} 
                       onValueChange={(value) => updateFormState('videoAspectRatio', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="16:9">16:9</SelectItem>
                         <SelectItem value="1:1">1:1</SelectItem>
                         <SelectItem value="9:16">9:16</SelectItem>
@@ -306,16 +311,16 @@ const Workspace = () => {
                     </Select>
                   </div>
 
-                  <div>
-                    <Label className="text-gray-300 mb-2 block">Duration</Label>
+                  <div className="min-w-[140px]">
+                    <Label className="text-gray-300 mb-2 block text-sm">Duration</Label>
                     <Select 
                       value={formState.duration} 
                       onValueChange={(value) => updateFormState('duration', value)}
                     >
-                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white">
+                      <SelectTrigger className="bg-[#0a0a0a] border-gray-700 text-white h-10">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-gray-800 border-gray-700">
                         <SelectItem value="3s">3s</SelectItem>
                         <SelectItem value="5s">5s</SelectItem>
                         <SelectItem value="10s">10s</SelectItem>
@@ -324,16 +329,17 @@ const Workspace = () => {
                   </div>
                 </>
               )}
-            </div>
 
-            {/* Generate Button */}
-            <div className="mt-6 flex justify-center">
-              <Button 
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white px-12 py-3"
-              >
-                Generate {mode === 'image' ? 'Image' : 'Video'}
-              </Button>
+              {/* Generate Button */}
+              <div className="min-w-[140px]">
+                <Label className="text-gray-300 mb-2 block text-sm opacity-0">Generate</Label>
+                <Button 
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 h-10 w-full"
+                >
+                  Generate {mode === 'image' ? 'Image' : 'Video'}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
