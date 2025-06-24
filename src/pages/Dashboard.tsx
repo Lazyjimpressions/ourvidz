@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -14,7 +13,7 @@ const Dashboard = () => {
       subtitle: "Create AI-powered video narratives with intelligent scene planning",
       backgroundImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&h=600&fit=crop",
       buttonText: "Start Creating",
-      onClick: () => navigate("/create-video")
+      onClick: () => navigate("/storyboard")
     },
     {
       title: "Generate Motion",

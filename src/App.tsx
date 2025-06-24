@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,6 +19,7 @@ import ImageCreation from "./pages/ImageCreation";
 import Library from "./pages/Library";
 import Profile from "./pages/Profile";
 import AdminTesting from "./pages/AdminTesting";
+import Storyboard from "./pages/Storyboard";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +42,11 @@ const App = () => (
             <Route path="/workspace" element={
               <ProtectedRoute>
                 <Workspace />
+              </ProtectedRoute>
+            } />
+            <Route path="/storyboard" element={
+              <ProtectedRoute>
+                <Storyboard />
               </ProtectedRoute>
             } />
             <Route path="/pricing" element={<Pricing />} />
