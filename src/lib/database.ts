@@ -285,7 +285,7 @@ export const imageAPI = {
   }
 };
 
-// Updated usage tracking with functional support
+// Updated usage tracking with decimal credit support
 export const usageAPI = {
   async logAction(action: string, creditsConsumed: number = 1, metadata?: any) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -298,18 +298,25 @@ export const usageAPI = {
     const format = metadata?.format || null;
     const quality = metadata?.quality || null;
 
+    console.log('Logging usage:', { action, creditsConsumed, format, quality, metadata });
+
     const { error } = await supabase
       .from('usage_logs')
       .insert({
         user_id: user.id,
         action,
-        credits_consumed: creditsConsumed,
+        credits_consumed: creditsConsumed, // Now supports decimal values
         format,
         quality,
         metadata
       });
     
-    if (error) throw error;
+    if (error) {
+      console.error('Usage logging error:', error);
+      throw error;
+    }
+
+    console.log('Usage logged successfully');
   },
 
   async getUsageAnalytics(userId?: string) {
