@@ -1,8 +1,6 @@
 
-import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BaseImageGenerator } from "./BaseImageGenerator";
-import { GenerationContext } from "@/lib/services/ImageGenerationService";
 import { Image } from "lucide-react";
 
 interface StandaloneImageGeneratorProps {
@@ -10,23 +8,18 @@ interface StandaloneImageGeneratorProps {
 }
 
 export const StandaloneImageGenerator = ({ onImagesGenerated }: StandaloneImageGeneratorProps) => {
-  const context: GenerationContext = {
-    mode: 'standalone'
-  };
-
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Image className="h-5 w-5" />
-          Generate Standalone Image
+          Generate Content
         </CardTitle>
       </CardHeader>
       <CardContent>
         <BaseImageGenerator
-          context={context}
           onImageGenerated={onImagesGenerated}
-          buttonText="Generate Standalone Image"
+          buttonText="Generate Content"
         />
       </CardContent>
     </Card>

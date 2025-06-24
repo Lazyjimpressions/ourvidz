@@ -2,11 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Image, Music, Zap, WandSparkles } from "lucide-react";
+import { GenerationOptions } from "@/components/GenerationOptions";
+import { useGeneration } from "@/hooks/useGeneration";
+import type { GenerationFormat, GenerationQuality } from '@/types/generation';
+import { toast } from "sonner";
 
-type WorkspaceMode = 'image' | 'video';
+type WorkspaceMode = GenerationFormat;
 
 const Workspace = () => {
   const [searchParams] = useSearchParams();
@@ -14,6 +17,7 @@ const Workspace = () => {
   // Get mode from URL params, fallback to 'image'
   const initialMode = (searchParams.get('mode') as WorkspaceMode) || 'image';
   const [mode, setMode] = useState<WorkspaceMode>(initialMode);
+  const [quality, setQuality] = useState<GenerationQuality>('fast');
   
   // Form state that persists across mode changes
   const [formState, setFormState] = useState({
@@ -27,6 +31,15 @@ const Workspace = () => {
     styleRef: 'Style ref',
     duration: '5s',
     model: 'LTXV Turbo'
+  });
+
+  const { generate, isGenerating, getEstimatedCredits } = useGeneration({
+    onSuccess: (data) => {
+      toast.success(`${mode === 'image' ? 'Image' : 'Video'} generation started! ID: ${data.id}`);
+    },
+    onError: (error) => {
+      toast.error(`Generation failed: ${error.message}`);
+    }
   });
 
   // Update mode when URL params change
@@ -46,9 +59,27 @@ const Workspace = () => {
   };
 
   const handleGenerate = () => {
-    console.log(`Generating ${mode}...`, formState);
-    // TODO: Implement generation logic
+    const prompt = mode === 'image' ? formState.imagePrompt : formState.videoPrompt;
+    
+    if (!prompt.trim()) {
+      toast.error('Please enter a prompt');
+      return;
+    }
+
+    generate({
+      format: mode,
+      quality,
+      prompt: prompt.trim(),
+      metadata: {
+        source: 'workspace',
+        aspectRatio: mode === 'image' ? formState.imageAspectRatio : formState.videoAspectRatio,
+        ...(mode === 'video' && { duration: formState.duration, model: formState.model })
+      }
+    });
   };
+
+  const currentPrompt = mode === 'image' ? formState.imagePrompt : formState.videoPrompt;
+  const estimatedCredits = getEstimatedCredits(mode, quality);
 
   // Placeholder images for scattered layout
   const placeholderImages = [
@@ -116,6 +147,16 @@ const Workspace = () => {
           {/* Control Panel */}
           <div className="bg-[#111111] border-t border-gray-800 p-6">
             <div className="max-w-6xl mx-auto">
+              {/* Generation Options */}
+              <div className="mb-6">
+                <GenerationOptions
+                  selectedFormat={mode}
+                  selectedQuality={quality}
+                  onFormatChange={handleModeSwitch}
+                  onQualityChange={setQuality}
+                />
+              </div>
+
               {/* Main Prompt Area */}
               <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 space-y-4">
                 
@@ -168,7 +209,7 @@ const Workspace = () => {
                   {/* Right - Prompt Input with Integrated Action */}
                   <div className="flex-1 relative">
                     <Input
-                      value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                      value={currentPrompt}
                       onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
                       placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
                       className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -177,10 +218,12 @@ const Workspace = () => {
                           handleGenerate();
                         }
                       }}
+                      disabled={isGenerating}
                     />
                     <button
                       onClick={handleGenerate}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                      disabled={isGenerating || !currentPrompt.trim()}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors disabled:text-gray-600"
                     >
                       <WandSparkles className="w-5 h-5" />
                     </button>
@@ -234,7 +277,7 @@ const Workspace = () => {
                   {/* Prompt Input */}
                   <div className="relative">
                     <Input
-                      value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                      value={currentPrompt}
                       onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
                       placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
                       className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
@@ -243,10 +286,12 @@ const Workspace = () => {
                           handleGenerate();
                         }
                       }}
+                      disabled={isGenerating}
                     />
                     <button
                       onClick={handleGenerate}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                      disabled={isGenerating || !currentPrompt.trim()}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors disabled:text-gray-600"
                     >
                       <WandSparkles className="w-5 h-5" />
                     </button>
@@ -255,6 +300,10 @@ const Workspace = () => {
 
                 {/* Row 2 - Bottom Controls (Both Desktop and Mobile) */}
                 <div className="flex flex-wrap gap-6 items-center">
+                  <div className="flex items-center gap-2 text-sm text-gray-400">
+                    <span>Credits: {estimatedCredits}</span>
+                  </div>
+                  
                   {mode === 'image' ? (
                     // Image Mode Controls
                     <>
