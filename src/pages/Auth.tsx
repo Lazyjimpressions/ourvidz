@@ -166,7 +166,7 @@ const Auth = () => {
                   setEmail("");
                   setPassword("");
                 }}
-                className="text-sm text-blue-400 hover:text-blue-300 underline"
+                className="text-sm text-blue-400 hover:text-blue-300 underline transition-colors"
                 disabled={loading}
               >
                 {isSignUp 

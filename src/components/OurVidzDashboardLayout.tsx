@@ -31,7 +31,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     <div className="min-h-screen bg-[#0a0a0a] text-white flex">
       {/* Left Sidebar */}
       <div className="w-64 bg-[#111111] flex flex-col">
-        {/* Logo - No border here */}
+        {/* Logo */}
         <div className="p-6">
           <h1 className="text-2xl font-bold text-white">OurVidz</h1>
         </div>
@@ -57,10 +57,9 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Unified Top Header - spans full width with consistent border */}
+        {/* Unified Top Header */}
         <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
           <div className="flex justify-end items-center gap-4">
-            {/* User Info */}
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2 text-gray-400">
                 <CreditCard className="w-4 h-4" />
@@ -78,7 +77,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
                 variant="ghost"
                 size="sm"
                 onClick={handleSignOut}
-                className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800"
+                className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
               >
                 <LogOut className="h-4 w-4" />
                 Sign Out
@@ -88,7 +87,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 bg-[#0a0a0a]">
           {children}
         </main>
 
