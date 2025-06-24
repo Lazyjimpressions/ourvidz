@@ -115,12 +115,15 @@ export type Database = {
           completed_at: string | null
           created_at: string | null
           error_message: string | null
+          format: string | null
           id: string
           image_id: string | null
           job_type: string
           max_attempts: number | null
           metadata: Json | null
+          model_type: string | null
           project_id: string | null
+          quality: string | null
           started_at: string | null
           status: string | null
           user_id: string
@@ -131,12 +134,15 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           error_message?: string | null
+          format?: string | null
           id?: string
           image_id?: string | null
           job_type: string
           max_attempts?: number | null
           metadata?: Json | null
+          model_type?: string | null
           project_id?: string | null
+          quality?: string | null
           started_at?: string | null
           status?: string | null
           user_id: string
@@ -147,12 +153,15 @@ export type Database = {
           completed_at?: string | null
           created_at?: string | null
           error_message?: string | null
+          format?: string | null
           id?: string
           image_id?: string | null
           job_type?: string
           max_attempts?: number | null
           metadata?: Json | null
+          model_type?: string | null
           project_id?: string | null
+          quality?: string | null
           started_at?: string | null
           status?: string | null
           user_id?: string
@@ -337,24 +346,30 @@ export type Database = {
           action: string
           created_at: string | null
           credits_consumed: number | null
+          format: string | null
           id: string
           metadata: Json | null
+          quality: string | null
           user_id: string
         }
         Insert: {
           action: string
           created_at?: string | null
           credits_consumed?: number | null
+          format?: string | null
           id?: string
           metadata?: Json | null
+          quality?: string | null
           user_id: string
         }
         Update: {
           action?: string
           created_at?: string | null
           credits_consumed?: number | null
+          format?: string | null
           id?: string
           metadata?: Json | null
+          quality?: string | null
           user_id?: string
         }
         Relationships: [

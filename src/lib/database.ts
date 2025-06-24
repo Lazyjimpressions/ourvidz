@@ -285,7 +285,7 @@ export const imageAPI = {
   }
 };
 
-// Usage tracking - fixed to include user_id
+// Updated usage tracking with functional support
 export const usageAPI = {
   async logAction(action: string, creditsConsumed: number = 1, metadata?: any) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -294,15 +294,38 @@ export const usageAPI = {
       throw new Error('User must be authenticated to log usage');
     }
 
+    // Extract format and quality from metadata if available
+    const format = metadata?.format || null;
+    const quality = metadata?.quality || null;
+
     const { error } = await supabase
       .from('usage_logs')
       .insert({
         user_id: user.id,
         action,
         credits_consumed: creditsConsumed,
+        format,
+        quality,
         metadata
       });
     
     if (error) throw error;
+  },
+
+  async getUsageAnalytics(userId?: string) {
+    let query = supabase
+      .from('usage_logs')
+      .select('action, credits_consumed, format, quality, created_at');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    
+    if (error) throw error;
+    return data;
   }
 };
