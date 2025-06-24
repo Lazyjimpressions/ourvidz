@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,8 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Progress } from "@/components/ui/progress";
 import { Image, Download, RefreshCw, Check } from "lucide-react";
+import { GenerationOptions } from "@/components/GenerationOptions";
+import { useGeneration } from "@/hooks/useGeneration";
 import { GeneratedImage } from "@/pages/ImageCreation";
-import { supabase } from "@/integrations/supabase/client";
+import type { GenerationFormat, GenerationQuality } from "@/types/generation";
 import { toast } from "@/hooks/use-toast";
 
 interface ImageGeneratorProps {
@@ -26,139 +29,75 @@ export const ImageGenerator = ({
   characterId,
   onImagesGenerated 
 }: ImageGeneratorProps) => {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [format, setFormat] = useState<GenerationFormat>('image');
+  const [quality, setQuality] = useState<GenerationQuality>('fast');
   const [currentImages, setCurrentImages] = useState<GeneratedImage[]>([]);
   const [selectedImageIds, setSelectedImageIds] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState(0);
+  const [generatedId, setGeneratedId] = useState<string | null>(null);
+
+  const { generate, isGenerating, useGenerationStatus, getEstimatedCredits } = useGeneration({
+    onSuccess: (data) => {
+      setGeneratedId(data.id);
+      toast({
+        title: "Generation Started",
+        description: "Your images are being generated with Wan 2.1.",
+      });
+    },
+    onError: (error) => {
+      console.error('Generation failed:', error);
+      toast({
+        title: "Generation Failed",
+        description: error.message || "Failed to generate images. Please try again.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const { data: generationData } = useGenerationStatus(generatedId, format);
+
+  // Handle generation completion
+  if (generationData?.status === 'completed' && generationData.image_url && generatedId) {
+    const newImage: GeneratedImage = {
+      id: generatedId,
+      url: generationData.image_url,
+      prompt,
+      enhancedPrompt,
+      timestamp: new Date(),
+      isCharacter: mode === "character"
+    };
+    
+    setCurrentImages(prev => [...prev, newImage]);
+    setProgress(100);
+    setGeneratedId(null);
+    
+    toast({
+      title: "Images Generated",
+      description: `Successfully generated image using Wan 2.1.`,
+    });
+  }
 
   const generateImages = async () => {
     if (!prompt.trim()) return;
     
-    setIsGenerating(true);
     setCurrentImages([]);
     setSelectedImageIds(new Set());
     setProgress(0);
     
-    try {
-      const imagePrompt = enhancedPrompt || prompt;
-      console.log('Generating images with Wan 2.1:', imagePrompt);
+    const imagePrompt = enhancedPrompt || prompt;
+    console.log('Generating images with functional approach:', imagePrompt);
 
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('User must be authenticated');
+    generate({
+      format,
+      quality,
+      prompt: imagePrompt,
+      projectId,
+      metadata: {
+        source: 'image_generator',
+        mode: mode,
+        characterId: characterId
       }
-
-      // Generate multiple images in parallel using existing queue-job
-      const numberOfImages = 4;
-      const generationPromises = Array.from({ length: numberOfImages }, async (_, index) => {
-        // Create a video record for image generation (reusing video table)
-        const { data: video, error: videoError } = await supabase
-          .from('videos')
-          .insert({
-            project_id: projectId,
-            user_id: user.id,
-            status: 'draft',
-            duration: 0, // 0 for images
-            format: 'png'
-          })
-          .select()
-          .single();
-
-        if (videoError) throw videoError;
-
-        // Queue the image generation job using existing infrastructure
-        const { data, error } = await supabase.functions.invoke('queue-job', {
-          body: {
-            jobType: 'preview',
-            videoId: video.id,
-            projectId: projectId,
-            metadata: {
-              prompt: imagePrompt,
-              mode: mode,
-              variation: index + 1,
-              characterId: characterId
-            }
-          }
-        });
-
-        if (error) throw error;
-
-        // Poll for completion
-        return new Promise<GeneratedImage>((resolve, reject) => {
-          const pollInterval = setInterval(async () => {
-            try {
-              const { data: updatedVideo, error: pollError } = await supabase
-                .from('videos')
-                .select('status, preview_url')
-                .eq('id', video.id)
-                .single();
-
-              if (pollError) throw pollError;
-
-              if (updatedVideo.status === 'preview_ready' && updatedVideo.preview_url) {
-                clearInterval(pollInterval);
-                setProgress((prev) => Math.min(prev + 25, 100));
-                resolve({
-                  id: `generated-${Date.now()}-${index}`,
-                  url: updatedVideo.preview_url,
-                  prompt,
-                  enhancedPrompt,
-                  timestamp: new Date(),
-                  isCharacter: mode === "character"
-                });
-              } else if (updatedVideo.status === 'failed') {
-                clearInterval(pollInterval);
-                reject(new Error('Image generation failed'));
-              }
-            } catch (error) {
-              clearInterval(pollInterval);
-              reject(error);
-            }
-          }, 3000); // Poll every 3 seconds
-
-          // Timeout after 3 minutes
-          setTimeout(() => {
-            clearInterval(pollInterval);
-            reject(new Error('Generation timeout'));
-          }, 180000);
-        });
-      });
-
-      const generatedImages = await Promise.allSettled(generationPromises);
-      
-      const successfulImages: GeneratedImage[] = generatedImages
-        .filter((result): result is PromiseFulfilledResult<GeneratedImage> => 
-          result.status === 'fulfilled'
-        )
-        .map(result => result.value);
-
-      const failedCount = generatedImages.length - successfulImages.length;
-      
-      setProgress(100);
-      setCurrentImages(successfulImages);
-      setIsGenerating(false);
-      
-      if (successfulImages.length > 0) {
-        toast({
-          title: "Images Generated",
-          description: `Successfully generated ${successfulImages.length} ${mode === "character" ? "character" : "image"} variations using Wan 2.1.${failedCount > 0 ? ` ${failedCount} failed.` : ''}`,
-        });
-      } else {
-        throw new Error('All image generations failed');
-      }
-      
-    } catch (error) {
-      console.error('Error generating images:', error);
-      setIsGenerating(false);
-      setProgress(0);
-      
-      toast({
-        title: "Generation Failed",
-        description: `Failed to generate images: ${error.message}`,
-        variant: "destructive",
-      });
-    }
+    });
   };
 
   const toggleImageSelection = (imageId: string) => {
@@ -205,6 +144,8 @@ export const ImageGenerator = ({
     });
   };
 
+  const estimatedCredits = getEstimatedCredits(format, quality);
+
   return (
     <Card className="h-fit">
       <CardHeader>
@@ -215,6 +156,13 @@ export const ImageGenerator = ({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <GenerationOptions
+          selectedFormat={format}
+          selectedQuality={quality}
+          onFormatChange={setFormat}
+          onQualityChange={setQuality}
+        />
+
         <Button
           onClick={generateImages}
           disabled={!prompt.trim() || isGenerating}
@@ -227,7 +175,7 @@ export const ImageGenerator = ({
               Generating with Wan 2.1...
             </>
           ) : (
-            `Generate ${mode === "character" ? "Character" : "Images"}`
+            `Generate ${mode === "character" ? "Character" : "Images"} (${estimatedCredits} credits)`
           )}
         </Button>
 

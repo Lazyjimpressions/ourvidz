@@ -2,8 +2,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Clock, Coins } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { GenerationOptions } from "@/components/GenerationOptions";
+import { useGeneration } from "@/hooks/useGeneration";
+import { Clock, Coins, Play } from "lucide-react";
+import type { GenerationFormat, GenerationQuality } from "@/types/generation";
 import { toast } from "sonner";
 
 interface VideoGenerationStepProps {
@@ -16,121 +18,95 @@ interface VideoGenerationStepProps {
 export const VideoGenerationStep = ({ 
   selectedImageId, 
   prompt, 
-  projectId,
+  projectId, 
   onVideoGenerated 
 }: VideoGenerationStepProps) => {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [format, setFormat] = useState<GenerationFormat>('video');
+  const [quality, setQuality] = useState<GenerationQuality>('fast');
+  const [generatedId, setGeneratedId] = useState<string | null>(null);
 
-  const handleGenerateVideo = async () => {
-    if (!selectedImageId || !projectId) {
-      toast.error('Missing required data for video generation');
-      return;
-    }
-    
-    setIsGenerating(true);
-    
-    try {
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error('User must be authenticated');
-      }
-
-      // Create video record for final video generation
-      const { data: video, error: videoError } = await supabase
-        .from('videos')
-        .insert({
-          project_id: projectId,
-          user_id: user.id,
-          status: 'draft',
-          duration: 5, // Default 5 second video
-          format: 'mp4',
-          reference_image_url: selectedImageId
-        })
-        .select()
-        .single();
-
-      if (videoError) throw videoError;
-
-      // Queue video generation job using existing infrastructure
-      const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: {
-          jobType: 'video',
-          videoId: video.id,
-          projectId: projectId,
-          metadata: {
-            prompt: prompt,
-            referenceImageId: selectedImageId,
-            duration: 5
-          }
-        }
-      });
-
-      if (error) throw error;
-
-      console.log('Video generation job queued successfully:', data);
-
-      // Poll for completion - video generation takes longer (up to 6 minutes)
-      const pollForCompletion = () => {
-        const pollInterval = setInterval(async () => {
-          try {
-            const { data: updatedVideo, error: pollError } = await supabase
-              .from('videos')
-              .select('status, video_url, thumbnail_url')
-              .eq('id', video.id)
-              .single();
-
-            if (pollError) throw pollError;
-
-            console.log(`Video generation status:`, updatedVideo.status);
-
-            if (updatedVideo.status === 'completed' && updatedVideo.video_url) {
-              clearInterval(pollInterval);
-              setIsGenerating(false);
-              toast.success('Video generated successfully!');
-              onVideoGenerated();
-            } else if (updatedVideo.status === 'failed') {
-              clearInterval(pollInterval);
-              setIsGenerating(false);
-              throw new Error('Video generation failed');
-            }
-          } catch (error) {
-            clearInterval(pollInterval);
-            setIsGenerating(false);
-            throw error;
-          }
-        }, 5000); // Poll every 5 seconds for videos
-
-        // Timeout after 6 minutes (360 seconds)
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          if (isGenerating) {
-            setIsGenerating(false);
-            toast.error('Video generation timeout. Please try again.');
-          }
-        }, 360000);
-      };
-
-      pollForCompletion();
-      toast.success('Video generation started. This may take up to 6 minutes...');
-
-    } catch (error) {
-      console.error('Video generation error:', error);
-      setIsGenerating(false);
+  const { generate, isGenerating, useGenerationStatus, getEstimatedCredits } = useGeneration({
+    onSuccess: (data) => {
+      setGeneratedId(data.id);
+      toast.success("Video generation started!");
+    },
+    onError: (error) => {
       toast.error(`Video generation failed: ${error.message}`);
     }
+  });
+
+  const { data: generationData } = useGenerationStatus(generatedId, format);
+
+  // Check if generation is complete
+  if (generationData?.status === 'completed' && generationData.video_url) {
+    onVideoGenerated();
+    setGeneratedId(null);
+  }
+
+  const handleStartGeneration = () => {
+    if (!selectedImageId && !prompt.trim()) {
+      toast.error("Please select an image or provide a prompt");
+      return;
+    }
+
+    generate({
+      format,
+      quality,
+      prompt: prompt.trim(),
+      projectId,
+      metadata: {
+        source: 'video_generation_step',
+        selectedImageId: selectedImageId
+      }
+    });
   };
 
-  const estimatedCost = 25; // tokens
-  const estimatedTime = "2-6"; // minutes
+  const estimatedCredits = getEstimatedCredits(format, quality);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="text-center">
+        <h2 className="text-2xl font-semibold mb-4">Generate Your Video</h2>
+        <p className="text-gray-600 mb-6">
+          {selectedImageId 
+            ? "Convert your selected image into a dynamic video"
+            : "Generate a video from your prompt"
+          }
+        </p>
+      </div>
+
+      <GenerationOptions
+        selectedFormat={format}
+        selectedQuality={quality}
+        onFormatChange={setFormat}
+        onQualityChange={setQuality}
+      />
+
+      <div className="p-4 bg-gray-50 rounded-lg">
+        <h4 className="font-medium mb-2">Generation Summary</h4>
+        <div className="text-sm text-gray-600 space-y-1">
+          {selectedImageId && <div>Selected Image: ✓</div>}
+          {prompt && <div>Prompt: {prompt.substring(0, 50)}...</div>}
+          <div>Quality: {quality}</div>
+          <div className="flex items-center gap-1">
+            <Coins className="h-4 w-4" />
+            <span>Estimated Credits: {estimatedCredits}</span>
+          </div>
+        </div>
+      </div>
+
+      {generationData?.status && (
+        <div className="flex items-center gap-2 text-sm">
+          <Clock className="h-4 w-4" />
+          <span className="capitalize">Status: {generationData.status}</span>
+        </div>
+      )}
+
       <Button
-        type="button"
-        onClick={handleGenerateVideo}
-        disabled={!selectedImageId || !projectId || isGenerating}
-        className="bg-blue-500 hover:bg-blue-600 text-white w-full sm:w-auto"
+        onClick={handleStartGeneration}
+        disabled={isGenerating || (!selectedImageId && !prompt.trim())}
+        className="w-full"
+        size="lg"
       >
         {isGenerating ? (
           <>
@@ -138,22 +114,12 @@ export const VideoGenerationStep = ({
             Generating Video...
           </>
         ) : (
-          "Generate Video with Wan 2.1"
+          <>
+            <Play className="mr-2 h-4 w-4" />
+            Start Video Generation ({estimatedCredits} credits)
+          </>
         )}
       </Button>
-
-      {selectedImageId && projectId && (
-        <div className="flex items-center gap-4 text-sm text-gray-600">
-          <div className="flex items-center gap-1">
-            <Coins className="h-4 w-4 text-blue-500" />
-            <span>Cost: {estimatedCost} tokens</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Clock className="h-4 w-4 text-green-500" />
-            <span>Time: {estimatedTime} minutes</span>
-          </div>
-        </div>
-      )}
 
       {isGenerating && (
         <div className="p-4 bg-blue-50 rounded-lg border">
@@ -161,8 +127,7 @@ export const VideoGenerationStep = ({
             Video Generation in Progress
           </p>
           <p className="text-xs text-blue-600">
-            Your video is being created with Wan 2.1. This process can take up to 6 minutes. 
-            You can safely navigate away - we'll notify you when it's complete.
+            Your video is being generated using functional generation. This usually takes 2-5 minutes for fast quality, 5-10 minutes for high quality.
           </p>
         </div>
       )}
