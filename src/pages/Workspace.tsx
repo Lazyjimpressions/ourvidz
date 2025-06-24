@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Plus, User, CreditCard, WandSparkles, Image, Play, Music, Zap } from "lucide-react";
+import { ArrowLeft, Plus, User, CreditCard, WandSparkles, Image, Music, Zap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 type WorkspaceMode = 'image' | 'video';
@@ -156,13 +156,15 @@ const Workspace = () => {
         <div className="bg-[#111111] border-t border-gray-800 p-6">
           <div className="max-w-6xl mx-auto">
             {/* Main Prompt Area */}
-            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 mb-6">
-              <div className="flex gap-4 items-start">
+            <div className="bg-[#1a1a1a] rounded-2xl border border-gray-700 p-6 space-y-4">
+              
+              {/* Desktop: Row 1 - Mode buttons, optional elements, and prompt */}
+              <div className="hidden md:flex gap-4 items-stretch">
                 {/* Left - Mode Buttons Stack */}
                 <div className="flex flex-col gap-2 min-w-[80px]">
                   <button
                     onClick={() => handleModeSwitch('image')}
-                    className={`px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
                       mode === 'image' 
                         ? 'bg-blue-600 text-white' 
                         : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
@@ -172,7 +174,7 @@ const Workspace = () => {
                   </button>
                   <button
                     onClick={() => handleModeSwitch('video')}
-                    className={`px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    className={`px-4 py-3.5 text-sm font-medium rounded-lg transition-colors h-7 flex items-center justify-center ${
                       mode === 'video' 
                         ? 'bg-blue-600 text-white' 
                         : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
@@ -183,19 +185,19 @@ const Workspace = () => {
                 </div>
 
                 {/* Middle - Optional Elements */}
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-3 items-stretch">
                   {mode === 'image' ? (
-                    // Image Reference Button
-                    <button className="w-12 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                    // Image Reference Button - wider to better match prompt height
+                    <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
                       <Image className="w-5 h-5 text-gray-400" />
                     </button>
                   ) : (
                     // Start and End Frame Boxes for Video
                     <>
-                      <button className="w-16 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                      <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
                         <Plus className="w-5 h-5 text-gray-400" />
                       </button>
-                      <button className="w-16 h-12 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                      <button className="w-20 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
                         <Plus className="w-5 h-5 text-gray-400" />
                       </button>
                     </>
@@ -208,7 +210,7 @@ const Workspace = () => {
                     value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
                     onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
                     placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
-                    className="w-full h-12 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         handleGenerate();
@@ -224,8 +226,74 @@ const Workspace = () => {
                 </div>
               </div>
 
-              {/* Bottom Controls Row - Simple Text/Icon Labels */}
-              <div className="mt-4 flex flex-wrap gap-6 items-center">
+              {/* Mobile: Single Column Stack */}
+              <div className="md:hidden space-y-4">
+                {/* Mode Buttons - Horizontal on mobile */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleModeSwitch('image')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      mode === 'image' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    IMAGE
+                  </button>
+                  <button
+                    onClick={() => handleModeSwitch('video')}
+                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      mode === 'video' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    VIDEO
+                  </button>
+                </div>
+
+                {/* Optional Elements Row */}
+                <div className="flex gap-3">
+                  {mode === 'image' ? (
+                    <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                      <Image className="w-5 h-5 text-gray-400" />
+                    </button>
+                  ) : (
+                    <>
+                      <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Plus className="w-5 h-5 text-gray-400" />
+                      </button>
+                      <button className="w-16 h-14 bg-gray-800 border border-gray-600 rounded-lg flex items-center justify-center hover:bg-gray-700 transition-colors">
+                        <Plus className="w-5 h-5 text-gray-400" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Prompt Input */}
+                <div className="relative">
+                  <Input
+                    value={mode === 'image' ? formState.imagePrompt : formState.videoPrompt}
+                    onChange={(e) => updateFormState(mode === 'image' ? 'imagePrompt' : 'videoPrompt', e.target.value)}
+                    placeholder={mode === 'image' ? "Describe the image you want to create..." : "Describe the video you want to create..."}
+                    className="w-full h-14 pr-12 bg-gray-800 border-gray-600 text-white placeholder-gray-500 text-base rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleGenerate();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleGenerate}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    <WandSparkles className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Row 2 - Bottom Controls (Both Desktop and Mobile) */}
+              <div className="flex flex-wrap gap-6 items-center">
                 {mode === 'image' ? (
                   // Image Mode Controls
                   <>
