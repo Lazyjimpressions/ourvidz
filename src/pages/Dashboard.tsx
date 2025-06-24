@@ -3,26 +3,32 @@ import React from 'react';
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const featureCards = [
     {
       title: "New Storyboard",
       subtitle: "Create AI-powered video narratives with intelligent scene planning",
       backgroundImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&h=600&fit=crop",
-      buttonText: "Start Creating"
+      buttonText: "Start Creating",
+      onClick: () => navigate("/create-video")
     },
     {
       title: "Generate Motion",
       subtitle: "Transform static images into dynamic motion sequences",
       backgroundImage: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=600&fit=crop",
-      buttonText: "Generate Now"
+      buttonText: "Generate Now",
+      onClick: () => navigate("/workspace?mode=video")
     },
     {
       title: "Generate Images",
       subtitle: "Create stunning visuals with AI-powered image generation",
       backgroundImage: "https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=800&h=600&fit=crop",
-      buttonText: "Create Images"
+      buttonText: "Create Images",
+      onClick: () => navigate("/workspace?mode=image")
     }
   ];
 
@@ -64,6 +70,7 @@ const Dashboard = () => {
                     {card.subtitle}
                   </p>
                   <Button 
+                    onClick={card.onClick}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2"
                   >
                     {card.buttonText}

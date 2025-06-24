@@ -11,6 +11,7 @@ import { ConnectionHealthMonitor } from "@/components/ConnectionHealthMonitor";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Workspace from "./pages/Workspace";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import CreateVideo from "./pages/CreateVideo";
@@ -36,6 +37,11 @@ const App = () => (
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/workspace" element={
+              <ProtectedRoute>
+                <Workspace />
               </ProtectedRoute>
             } />
             <Route path="/pricing" element={<Pricing />} />
