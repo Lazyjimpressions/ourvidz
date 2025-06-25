@@ -1,6 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { usageAPI } from '@/lib/database';
+import { getSignedUrl } from '@/lib/storage';
 import type { GenerationRequest, GenerationFormat, GenerationQuality } from '@/types/generation';
 import { GENERATION_CONFIGS } from '@/types/generation';
 import type { Tables } from '@/integrations/supabase/types';
@@ -128,28 +129,35 @@ export class GenerationService {
 
       console.log('Generation status:', data);
 
-      // Handle multiple image URLs for image generations
-      if (data.status === 'completed') {
-        // Parse image_urls if it's stored as JSON string
-        let imageUrls = data.image_url ? [data.image_url] : [];
-        
-        // Type assertion to access image_urls since TypeScript doesn't know about it yet
-        const imageData = data as any;
-        if (imageData.image_urls) {
-          try {
-            imageUrls = typeof imageData.image_urls === 'string' 
-              ? JSON.parse(imageData.image_urls) 
-              : imageData.image_urls;
-          } catch (e) {
-            console.warn('Failed to parse image_urls:', e);
-            imageUrls = data.image_url ? [data.image_url] : [];
-          }
-        }
+      // Handle file path to signed URL conversion for completed images
+      if (data.status === 'completed' && data.image_url) {
+        try {
+          // Determine the bucket based on quality
+          const bucket = data.quality === 'high' ? 'image_high' : 'image_fast';
+          
+          // Generate signed URL from the file path
+          const { data: signedUrlData, error: urlError } = await getSignedUrl(
+            bucket as any,
+            data.image_url,
+            3600 // 1 hour expiry
+          );
 
-        return {
-          ...data,
-          image_urls: imageUrls
-        };
+          if (urlError) {
+            console.error('Error generating signed URL:', urlError);
+            // Return the data as-is if URL generation fails
+            return data;
+          }
+
+          // Return with image_urls array for consistency
+          return {
+            ...data,
+            image_urls: [signedUrlData?.signedUrl]
+          };
+        } catch (urlError) {
+          console.error('Error processing signed URL:', urlError);
+          // Return the data as-is if URL processing fails
+          return data;
+        }
       }
 
       return data;
@@ -166,6 +174,36 @@ export class GenerationService {
       }
 
       console.log('Generation status:', data);
+
+      // Handle file path to signed URL conversion for completed videos
+      if (data.status === 'completed' && data.video_url) {
+        try {
+          // Determine the bucket based on quality (assuming videos have quality field)
+          const bucket = 'video_fast'; // Default to fast, adjust based on your video quality logic
+          
+          // Generate signed URL from the file path
+          const { data: signedUrlData, error: urlError } = await getSignedUrl(
+            bucket as any,
+            data.video_url,
+            7200 // 2 hours expiry for videos
+          );
+
+          if (urlError) {
+            console.error('Error generating video signed URL:', urlError);
+            return data;
+          }
+
+          // Return with the signed URL
+          return {
+            ...data,
+            video_url: signedUrlData?.signedUrl
+          };
+        } catch (urlError) {
+          console.error('Error processing video signed URL:', urlError);
+          return data;
+        }
+      }
+
       return data;
     }
   }

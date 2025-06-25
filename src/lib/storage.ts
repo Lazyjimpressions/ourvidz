@@ -71,16 +71,21 @@ export const getSignedUrl = async (
   expiresIn: number = 3600
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
+    console.log('Generating signed URL for:', { bucket, filePath, expiresIn });
+    
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(filePath, expiresIn);
 
     if (error) {
+      console.error('Signed URL generation error:', error);
       throw error;
     }
 
+    console.log('Signed URL generated successfully:', data?.signedUrl);
     return { data, error: null };
   } catch (error) {
+    console.error('Error in getSignedUrl:', error);
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')

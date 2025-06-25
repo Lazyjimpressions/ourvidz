@@ -21,12 +21,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { jobId, status, outputUrl, errorMessage, enhancedPrompt } = await req.json();
+    const { jobId, status, filePath, errorMessage, enhancedPrompt } = await req.json();
 
-    console.log('Processing clean job type callback:', {
+    console.log('Processing job callback with filePath:', {
       jobId,
       status,
-      outputUrl,
+      filePath,
       enhancedPrompt
     });
 
@@ -58,9 +58,9 @@ serve(async (req) => {
       console.log('Storing enhanced prompt for image_high job:', enhancedPrompt);
     }
 
-    // Add output URL for completed jobs
-    if (status === 'completed' && outputUrl) {
-      updatedMetadata.output_url = outputUrl;
+    // Add file path for completed jobs
+    if (status === 'completed' && filePath) {
+      updatedMetadata.file_path = filePath;
     }
 
     updateData.metadata = updatedMetadata;
@@ -78,24 +78,25 @@ serve(async (req) => {
       throw updateError;
     }
 
-    console.log('Clean job type updated:', job);
+    console.log('Job updated with filePath:', job);
 
     // Handle different job types based on clean job type format
     const [format, quality] = job.job_type.split('_'); // e.g., 'image_fast' -> ['image', 'fast']
 
     if (format === 'image' && job.image_id) {
-      await handleImageJobCallback(supabase, job, status, outputUrl, errorMessage);
+      await handleImageJobCallback(supabase, job, status, filePath, errorMessage);
     } else if (format === 'video' && job.video_id) {
-      await handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage);
+      await handleVideoJobCallback(supabase, job, status, filePath, errorMessage);
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Clean job type callback processed successfully',
+      message: 'Job callback processed successfully',
       jobStatus: status,
       jobType: job.job_type,
       format: format,
-      quality: quality
+      quality: quality,
+      filePath: filePath
     }), {
       headers: {
         ...corsHeaders,
@@ -105,7 +106,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in clean job type callback function:', error);
+    console.error('Error in job callback function:', error);
     return new Response(JSON.stringify({
       error: error.message,
       success: false
@@ -119,29 +120,29 @@ serve(async (req) => {
   }
 });
 
-async function handleImageJobCallback(supabase, job, status, outputUrl, errorMessage) {
-  console.log('Handling clean image job callback:', {
+async function handleImageJobCallback(supabase, job, status, filePath, errorMessage) {
+  console.log('Handling image job callback:', {
     jobId: job.id,
     imageId: job.image_id,
     status,
-    outputUrl,
+    filePath,
     jobType: job.job_type
   });
 
-  if (status === 'completed' && outputUrl) {
+  if (status === 'completed' && filePath) {
     const { error: imageError } = await supabase
       .from('images')
       .update({
         status: 'completed',
-        image_url: outputUrl,
-        thumbnail_url: outputUrl // For now, use same URL for thumbnail
+        image_url: filePath, // Store the file path, not the full URL
+        thumbnail_url: filePath // For now, use same path for thumbnail
       })
       .eq('id', job.image_id);
 
     if (imageError) {
       console.error('Error updating image:', imageError);
     } else {
-      console.log('Clean image job updated successfully with URL:', outputUrl);
+      console.log('Image job updated successfully with filePath:', filePath);
     }
   } else if (status === 'failed') {
     const { error: imageError } = await supabase
@@ -154,7 +155,7 @@ async function handleImageJobCallback(supabase, job, status, outputUrl, errorMes
     if (imageError) {
       console.error('Error updating image status to failed:', imageError);
     } else {
-      console.log('Clean image job marked as failed');
+      console.log('Image job marked as failed');
     }
   } else if (status === 'processing') {
     const { error: imageError } = await supabase
@@ -167,26 +168,26 @@ async function handleImageJobCallback(supabase, job, status, outputUrl, errorMes
     if (imageError) {
       console.error('Error updating image status to generating:', imageError);
     } else {
-      console.log('Clean image job marked as generating');
+      console.log('Image job marked as generating');
     }
   }
 }
 
-async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage) {
-  console.log('Handling clean video job callback:', {
+async function handleVideoJobCallback(supabase, job, status, filePath, errorMessage) {
+  console.log('Handling video job callback:', {
     jobId: job.id,
     videoId: job.video_id,
     status,
-    outputUrl,
+    filePath,
     jobType: job.job_type
   });
 
-  if (status === 'completed' && job.video_id && outputUrl) {
+  if (status === 'completed' && job.video_id && filePath) {
     const { error: videoError } = await supabase
       .from('videos')
       .update({
         status: 'completed',
-        video_url: outputUrl,
+        video_url: filePath, // Store the file path, not the full URL
         completed_at: new Date().toISOString()
       })
       .eq('id', job.video_id);
@@ -194,7 +195,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video:', videoError);
     } else {
-      console.log('Clean video job updated successfully with URL:', outputUrl);
+      console.log('Video job updated successfully with filePath:', filePath);
     }
   }
 
@@ -210,7 +211,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video status to failed:', videoError);
     } else {
-      console.log('Clean video job marked as failed');
+      console.log('Video job marked as failed');
     }
   }
 
@@ -225,7 +226,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video status to processing:', videoError);
     } else {
-      console.log('Clean video job marked as processing');
+      console.log('Video job marked as processing');
     }
   }
 }
