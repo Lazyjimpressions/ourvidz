@@ -14,6 +14,7 @@ export interface GeneratedImage {
   enhancedPrompt: string;
   timestamp: Date;
   isCharacter?: boolean;
+  characterName?: string;
 }
 
 export const ImageCreation = () => {
