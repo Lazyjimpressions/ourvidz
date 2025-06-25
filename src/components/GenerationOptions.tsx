@@ -53,7 +53,7 @@ export const GenerationOptions: React.FC<GenerationOptionsProps> = ({
             <div className="text-center">
               <div className="text-xl mb-2">🎬</div>
               <div className="font-medium">Video</div>
-              <div className="text-sm opacity-75">5-second video from Wan 2.1</div>
+              <div className="text-sm opacity-75">Short video from Wan 2.1</div>
             </div>
           </button>
         </div>
@@ -102,8 +102,8 @@ export const GenerationOptions: React.FC<GenerationOptionsProps> = ({
                   {GENERATION_CONFIGS[`${selectedFormat}_high`].credits} credits
                 </Badge>
               </div>
-              <div className="font-medium">High Quality (14B)</div>
-              <div className="text-sm opacity-75">Wan 2.1 14B model</div>
+              <div className="font-medium">High Quality (1.3B)</div>
+              <div className="text-sm opacity-75">Wan 2.1 1.3B model</div>
               <div className="flex items-center text-xs opacity-60">
                 <Clock className="w-3 h-3 mr-1" />
                 {GENERATION_CONFIGS[`${selectedFormat}_high`].estimatedTime}
@@ -129,7 +129,7 @@ export const GenerationOptions: React.FC<GenerationOptionsProps> = ({
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Model:</span>
-            <span className="text-white">{currentConfig.modelVariant.replace('_', ' ').toUpperCase()}</span>
+            <span className="text-white">Wan 2.1 1.3B</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-gray-400">Resolution:</span>

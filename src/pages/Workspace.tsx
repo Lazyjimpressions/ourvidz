@@ -39,8 +39,8 @@ const Workspace = () => {
     angle: 'Angle',
     style: 'Style',
     styleRef: 'Style ref',
-    duration: '5s',
-    model: 'LTXV Turbo'
+    duration: '1-2s',                    // Updated from '5s'
+    model: 'Wan 2.1 1.3B'              // Updated from 'LTXV Turbo'
   });
 
   const { generate, isGenerating, useGenerationStatus, getEstimatedCredits } = useGeneration({
@@ -239,7 +239,7 @@ const Workspace = () => {
                 <p className="text-lg md:text-xl text-gray-400">
                   {mode === 'image'
                     ? "Type your prompt, set your style, and generate your image"
-                    : "Select or upload an image, add a prompt, and watch it go"
+                    : "Type your prompt and create short videos with Wan 2.1"
                   }
                 </p>
               </div>
