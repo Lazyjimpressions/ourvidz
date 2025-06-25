@@ -46,23 +46,46 @@ export const BaseImageGenerator = ({
 
   const { data: generationData } = useGenerationStatus(generatedId, format);
 
-  // Check if generation is complete - use type assertion since we know format is 'image'
+  // Check if generation is complete and handle both success/error cases
   if (generationData?.status === 'completed' && generatedId) {
-    const imageData = generationData as any; // Type assertion for image data
+    const imageData = generationData as any;
     
-    if (imageData.image_url) {
-      // Reset state and call callback
-      const imageDataResult = {
-        id: generatedId,
-        url: imageData.image_url,
+    // Handle successful image generation with URLs
+    if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
+      const imageResults = imageData.image_urls.map((url: string, index: number) => ({
+        id: `${generatedId}_${index}`,
+        url,
         prompt,
         timestamp: new Date(),
         status: 'completed'
-      };
+      }));
       
-      onImageGenerated([imageDataResult]);
+      onImageGenerated(imageResults);
       setGeneratedId(null);
     }
+    // Handle URL generation errors
+    else if (imageData.url_error) {
+      console.error('URL generation error:', imageData.url_error);
+      toast.error(`Image ready but URL generation failed: ${imageData.url_error}`);
+      onError?.(new Error(imageData.url_error));
+      setGeneratedId(null);
+    }
+    // Handle missing URLs (fallback)
+    else {
+      console.warn('Generation completed but no image URLs available');
+      toast.error("Generation completed but image URLs are not available");
+      onError?.(new Error("No image URLs available"));
+      setGeneratedId(null);
+    }
+  }
+
+  // Handle failed generation
+  if (generationData?.status === 'failed' && generatedId) {
+    const errorMessage = (generationData as any).error_message || "Generation failed";
+    console.error('Generation failed:', errorMessage);
+    toast.error(`Generation failed: ${errorMessage}`);
+    onError?.(new Error(errorMessage));
+    setGeneratedId(null);
   }
 
   const handleGenerate = async () => {

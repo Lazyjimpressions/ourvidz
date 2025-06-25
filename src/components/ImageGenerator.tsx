@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,29 +56,52 @@ export const ImageGenerator = ({
 
   const { data: generationData } = useGenerationStatus(generatedId, format);
 
-  // Handle generation completion - use type assertion since we know format is 'image'
+  // Handle generation completion - properly handle image_urls array
   if (generationData?.status === 'completed' && generatedId) {
-    const imageData = generationData as any; // Type assertion for image data
+    const imageData = generationData as any;
     
-    if (imageData.image_url) {
-      const newImage: GeneratedImage = {
-        id: generatedId,
-        url: imageData.image_url,
+    // Handle successful URL generation
+    if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
+      const newImages: GeneratedImage[] = imageData.image_urls.map((url: string, index: number) => ({
+        id: `${generatedId}_${index}`,
+        url,
         prompt,
         enhancedPrompt,
         timestamp: new Date(),
         isCharacter: mode === "character"
-      };
+      }));
       
-      setCurrentImages(prev => [...prev, newImage]);
+      setCurrentImages(prev => [...prev, ...newImages]);
       setProgress(100);
       setGeneratedId(null);
       
       toast({
         title: "Images Generated",
-        description: `Successfully generated image using Wan 2.1.`,
+        description: `Successfully generated ${newImages.length} image${newImages.length > 1 ? 's' : ''} using Wan 2.1.`,
       });
     }
+    // Handle URL generation errors
+    else if (imageData.url_error) {
+      console.error('URL generation error:', imageData.url_error);
+      toast({
+        title: "Image Ready",
+        description: "Your image was generated but there was an issue loading it. Please try refreshing.",
+        variant: "destructive",
+      });
+      setGeneratedId(null);
+    }
+  }
+
+  // Handle failed generation
+  if (generationData?.status === 'failed' && generatedId) {
+    const errorMessage = (generationData as any).error_message || "Generation failed";
+    console.error('Generation failed:', errorMessage);
+    toast({
+      title: "Generation Failed",
+      description: errorMessage,
+      variant: "destructive",
+    });
+    setGeneratedId(null);
   }
 
   const generateImages = async () => {

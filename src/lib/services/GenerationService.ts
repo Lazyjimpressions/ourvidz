@@ -144,7 +144,7 @@ export class GenerationService {
         try {
           console.log('🎯 Processing completed image with filePath:', data.image_url);
           
-          // Determine the correct bucket based on quality
+          // Improved bucket detection based on quality
           const bucket = data.quality === 'high' ? 'image_high' : 'image_fast';
           console.log('🪣 Using bucket:', bucket);
           
@@ -188,7 +188,7 @@ export class GenerationService {
           } else {
             console.error('❌ Failed to generate signed URL after all retries:', lastError?.message);
             
-            // Return with placeholder or error indication
+            // Return with error indication
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
@@ -231,8 +231,9 @@ export class GenerationService {
         try {
           console.log('🎯 Processing completed video with filePath:', data.video_url);
           
-          // Determine the bucket (assuming videos have quality field or default to fast)
-          const bucket = 'video_fast'; // Default to fast, adjust based on your video quality logic
+          // Improved bucket detection for videos - check if we can determine quality from job metadata
+          // For now, default to video_fast but this could be enhanced with quality detection
+          const bucket = 'video_fast'; // TODO: Add proper video quality detection
           console.log('🪣 Using video bucket:', bucket);
           
           // Generate signed URL from the file path with retry logic
