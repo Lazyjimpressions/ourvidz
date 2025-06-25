@@ -1,4 +1,3 @@
-
 export type GenerationFormat = 'image' | 'video';
 export type GenerationQuality = 'fast' | 'high';
 
@@ -20,13 +19,13 @@ export interface GenerationOptions {
   modelVariant: string;
 }
 
-// Clean 4-job-type configuration
+// Updated 4-job-type configuration with realistic timing and pricing
 export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
   'image_fast': {
     format: 'image',
     quality: 'fast',
-    credits: 0.5,
-    estimatedTime: '2-3 seconds',
+    credits: 1,                    // Updated from 0.5 to 1
+    estimatedTime: '15-45 seconds', // Updated from '2-3 seconds'
     resolution: '832x480',
     description: 'Quick image generation (1 frame from Wan 2.1 1.3B)',
     modelVariant: 'wan_2_1_1_3b'
@@ -34,8 +33,8 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
   'image_high': {
     format: 'image',
     quality: 'high',
-    credits: 1,
-    estimatedTime: '3-4 seconds',
+    credits: 2,                    // Updated from 1 to 2
+    estimatedTime: '30-60 seconds', // Updated from '3-4 seconds'
     resolution: '1280x720',
     description: 'High-quality image (1 frame from Wan 2.1 14B)',
     modelVariant: 'wan_2_1_14b'
@@ -44,7 +43,7 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'video',
     quality: 'fast',
     credits: 3,
-    estimatedTime: '4-6 minutes',
+    estimatedTime: '2-4 minutes',   // Updated from '4-6 minutes'
     resolution: '832x480',
     description: '5-second video from Wan 2.1 1.3B',
     modelVariant: 'wan_2_1_1_3b'
@@ -53,7 +52,7 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'video',
     quality: 'high',
     credits: 5,
-    estimatedTime: '6-8 minutes',
+    estimatedTime: '8-15 minutes',  // Updated from '6-8 minutes'
     resolution: '1280x720',
     description: '5-second HD video from Wan 2.1 14B',
     modelVariant: 'wan_2_1_14b'
