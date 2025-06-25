@@ -60,10 +60,13 @@ export class GenerationService {
       recordId = video.id;
     }
 
+    // Use the clean job type format
+    const jobType = `${request.format}_${request.quality}`;
+
     // Queue the job using the existing queue-job function
     const { data, error } = await supabase.functions.invoke('queue-job', {
       body: {
-        jobType: request.format === 'image' ? 'image_generation' : 'video_generation',
+        jobType,
         [request.format === 'image' ? 'imageId' : 'videoId']: recordId,
         projectId: request.projectId,
         metadata: {
@@ -71,11 +74,11 @@ export class GenerationService {
           prompt: request.prompt,
           format: request.format,
           quality: request.quality,
-          model_type: `${request.format}_${request.quality}`,
+          model_type: jobType,
           model_variant: config.modelVariant,
           credits: config.credits,
-          generate_variations: true, // Request multiple variations
-          variation_count: 6 // Request 6 variations
+          generate_variations: true,
+          variation_count: 6
         }
       }
     });
@@ -87,12 +90,12 @@ export class GenerationService {
 
     // Log usage
     await usageAPI.logAction(
-      `${request.format}_${request.quality}`,
+      jobType,
       config.credits,
       {
         format: request.format,
         quality: request.quality,
-        model_type: `${request.format}_${request.quality}`,
+        model_type: jobType,
         [request.format === 'image' ? 'image_id' : 'video_id']: recordId,
         project_id: request.projectId
       }

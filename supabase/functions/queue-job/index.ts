@@ -36,7 +36,7 @@ serve(async (req) => {
 
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
 
-    console.log('Creating Wan 2.1 job:', {
+    console.log('Creating clean job type:', {
       jobType,
       projectId,
       videoId,
@@ -45,25 +45,23 @@ serve(async (req) => {
       modelVariant: metadata?.model_variant
     });
 
-    // Extract format and quality from metadata (new functional approach)
-    const format = metadata?.format || metadata?.requested_media_type || 'video';
-    const quality = metadata?.quality || metadata?.requested_quality || 'fast';
-    const modelType = metadata?.model_type || `${format}_${quality}`;
-    const modelVariant = metadata?.model_variant || 'wan_2_1_1_3b';
+    // Extract format and quality from the clean job type
+    const [format, quality] = jobType.split('_'); // e.g., 'image_fast' -> ['image', 'fast']
+    const modelVariant = metadata?.model_variant || (quality === 'high' ? 'wan_2_1_14b' : 'wan_2_1_1_3b');
 
-    // Create job record with Wan 2.1 model information
+    // Create job record with clean job type
     const { data: job, error: jobError } = await supabase
       .from('jobs')
       .insert({
         user_id: user.id,
-        job_type: jobType,
+        job_type: jobType, // Use clean job type directly
         format: format,
         quality: quality,
-        model_type: modelType,
+        model_type: jobType,
         metadata: {
           ...metadata,
           model_variant: modelVariant,
-          wan_2_1_config: true
+          clean_job_type: true
         },
         project_id: projectId,
         video_id: videoId,
@@ -78,7 +76,7 @@ serve(async (req) => {
       throw jobError;
     }
 
-    console.log('Wan 2.1 job created successfully:', job);
+    console.log('Clean job type created successfully:', job);
 
     // Get project details for the prompt (if projectId provided)
     let prompt = '';
@@ -101,34 +99,34 @@ serve(async (req) => {
       prompt = metadata.prompt;
     }
 
-    // Format job payload for RunPod worker with Wan 2.1 configuration
+    // Format job payload for RunPod worker with clean job type
     const jobPayload = {
       jobId: job.id,
       videoId: videoId,
       imageId: imageId,
       userId: user.id,
-      jobType: jobType,
+      jobType: jobType, // Clean job type
       format: format,
       quality: quality,
-      modelType: modelType,
+      modelType: jobType,
       modelVariant: modelVariant,
       prompt: prompt,
       characterId: characterId,
-      wan21Config: {
+      cleanJobTypeConfig: {
         model: modelVariant,
-        singleFrame: jobType === 'preview',
+        singleFrame: format === 'image',
         resolution: quality === 'high' ? '1280x720' : '832x480',
-        steps: jobType === 'preview' ? (quality === 'high' ? 25 : 20) : 30
+        steps: format === 'image' ? (quality === 'high' ? 25 : 20) : 30
       },
       metadata: {
         ...metadata,
         model_variant: modelVariant,
-        wan_2_1_enabled: true
+        clean_job_type: true
       },
       timestamp: new Date().toISOString()
     };
 
-    console.log('Pushing Wan 2.1 job to Redis queue:', jobPayload);
+    console.log('Pushing clean job type to Redis queue:', jobPayload);
 
     // Push job to Upstash Redis using REST API
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
@@ -155,14 +153,14 @@ serve(async (req) => {
     }
 
     const redisResult = await redisResponse.json();
-    console.log('Wan 2.1 job queued in Redis successfully:', redisResult);
+    console.log('Clean job type queued in Redis successfully:', redisResult);
 
-    // Log usage with Wan 2.1 model tracking
+    // Log usage with clean job type tracking
     await supabase
       .from('usage_logs')
       .insert({
         user_id: user.id,
-        action: modelType,
+        action: jobType,
         format: format,
         quality: quality,
         credits_consumed: metadata.credits || 1,
@@ -171,18 +169,19 @@ serve(async (req) => {
           project_id: projectId,
           image_id: imageId,
           video_id: videoId,
-          model_type: modelType,
+          model_type: jobType,
           model_variant: modelVariant,
-          wan_2_1_enabled: true
+          clean_job_type: true
         }
       });
 
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Wan 2.1 job queued successfully in Redis',
+      message: 'Clean job type queued successfully in Redis',
       queueLength: redisResult.result || 0,
-      modelVariant: modelVariant
+      modelVariant: modelVariant,
+      jobType: jobType
     }), {
       headers: {
         ...corsHeaders,
@@ -192,7 +191,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in Wan 2.1 queue-job function:', error);
+    console.error('Error in clean job type queue-job function:', error);
     return new Response(JSON.stringify({
       error: error.message,
       success: false

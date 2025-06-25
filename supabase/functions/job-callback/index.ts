@@ -23,7 +23,7 @@ serve(async (req) => {
 
     const { jobId, status, outputUrl, errorMessage, enhancedPrompt } = await req.json();
 
-    console.log('Processing functional job callback:', {
+    console.log('Processing clean job type callback:', {
       jobId,
       status,
       outputUrl,
@@ -52,10 +52,10 @@ serve(async (req) => {
     // Merge metadata instead of overwriting
     let updatedMetadata = currentJob.metadata || {};
 
-    // Handle enhanced prompt for enhance jobs
-    if (currentJob.job_type === 'enhance' && enhancedPrompt) {
+    // Handle enhanced prompt for image_high jobs (enhancement)
+    if (currentJob.job_type === 'image_high' && enhancedPrompt) {
       updatedMetadata.enhanced_prompt = enhancedPrompt;
-      console.log('Storing enhanced prompt:', enhancedPrompt);
+      console.log('Storing enhanced prompt for image_high job:', enhancedPrompt);
     }
 
     // Add output URL for completed jobs
@@ -78,26 +78,24 @@ serve(async (req) => {
       throw updateError;
     }
 
-    console.log('Functional job updated:', job);
+    console.log('Clean job type updated:', job);
 
-    // Handle different job types based on format and specific job type
-    if (job.format === 'image' && job.image_id) {
+    // Handle different job types based on clean job type format
+    const [format, quality] = job.job_type.split('_'); // e.g., 'image_fast' -> ['image', 'fast']
+
+    if (format === 'image' && job.image_id) {
       await handleImageJobCallback(supabase, job, status, outputUrl, errorMessage);
-    } else if (job.format === 'video' && job.video_id) {
+    } else if (format === 'video' && job.video_id) {
       await handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage);
-    } else if (job.job_type === 'enhance') {
-      await handleEnhanceJobCallback(supabase, job, status, enhancedPrompt, errorMessage);
-    } else if (job.job_type === 'preview' && job.video_id) {
-      await handlePreviewJobCallback(supabase, job, status, outputUrl, errorMessage);
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Functional job callback processed successfully',
+      message: 'Clean job type callback processed successfully',
       jobStatus: status,
-      format: job.format,
-      quality: job.quality,
-      modelType: job.model_type
+      jobType: job.job_type,
+      format: format,
+      quality: quality
     }), {
       headers: {
         ...corsHeaders,
@@ -107,7 +105,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in functional job-callback function:', error);
+    console.error('Error in clean job type callback function:', error);
     return new Response(JSON.stringify({
       error: error.message,
       success: false
@@ -121,85 +119,13 @@ serve(async (req) => {
   }
 });
 
-async function handleEnhanceJobCallback(supabase, job, status, enhancedPrompt, errorMessage) {
-  console.log('Handling enhance job callback:', {
-    jobId: job.id,
-    status,
-    enhancedPrompt
-  });
-
-  // For enhance jobs, we don't need to update any other tables
-  // The enhanced prompt is already stored in the job metadata
-  if (status === 'completed' && enhancedPrompt) {
-    console.log('Enhanced prompt stored successfully for job:', job.id);
-  } else if (status === 'failed') {
-    console.log('Enhance job failed:', job.id, errorMessage);
-  }
-}
-
-async function handlePreviewJobCallback(supabase, job, status, outputUrl, errorMessage) {
-  console.log('Handling preview job callback:', {
-    jobId: job.id,
-    videoId: job.video_id,
-    status,
-    outputUrl
-  });
-
-  if (status === 'completed' && job.video_id && outputUrl) {
-    console.log('Updating video with preview URL:', outputUrl);
-    const { error: videoError } = await supabase
-      .from('videos')
-      .update({
-        status: 'completed',
-        preview_url: outputUrl,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', job.video_id);
-
-    if (videoError) {
-      console.error('Error updating video with preview URL:', videoError);
-    } else {
-      console.log('Video updated successfully with preview URL:', outputUrl);
-    }
-  } else if (status === 'failed' && job.video_id) {
-    console.log('Preview generation failed, updating video status');
-    const { error: videoError } = await supabase
-      .from('videos')
-      .update({
-        status: 'failed',
-        error_message: errorMessage
-      })
-      .eq('id', job.video_id);
-
-    if (videoError) {
-      console.error('Error updating video status to failed:', videoError);
-    } else {
-      console.log('Video marked as failed');
-    }
-  } else if (status === 'processing' && job.video_id) {
-    const { error: videoError } = await supabase
-      .from('videos')
-      .update({
-        status: 'processing'
-      })
-      .eq('id', job.video_id);
-
-    if (videoError) {
-      console.error('Error updating video status to processing:', videoError);
-    } else {
-      console.log('Video marked as processing');
-    }
-  }
-}
-
 async function handleImageJobCallback(supabase, job, status, outputUrl, errorMessage) {
-  console.log('Handling functional image job callback:', {
+  console.log('Handling clean image job callback:', {
     jobId: job.id,
     imageId: job.image_id,
     status,
     outputUrl,
-    format: job.format,
-    quality: job.quality
+    jobType: job.job_type
   });
 
   if (status === 'completed' && outputUrl) {
@@ -215,7 +141,7 @@ async function handleImageJobCallback(supabase, job, status, outputUrl, errorMes
     if (imageError) {
       console.error('Error updating image:', imageError);
     } else {
-      console.log('Functional image updated successfully with URL:', outputUrl);
+      console.log('Clean image job updated successfully with URL:', outputUrl);
     }
   } else if (status === 'failed') {
     const { error: imageError } = await supabase
@@ -228,7 +154,7 @@ async function handleImageJobCallback(supabase, job, status, outputUrl, errorMes
     if (imageError) {
       console.error('Error updating image status to failed:', imageError);
     } else {
-      console.log('Functional image marked as failed');
+      console.log('Clean image job marked as failed');
     }
   } else if (status === 'processing') {
     const { error: imageError } = await supabase
@@ -241,19 +167,18 @@ async function handleImageJobCallback(supabase, job, status, outputUrl, errorMes
     if (imageError) {
       console.error('Error updating image status to generating:', imageError);
     } else {
-      console.log('Functional image marked as generating');
+      console.log('Clean image job marked as generating');
     }
   }
 }
 
 async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMessage) {
-  console.log('Handling functional video job callback:', {
+  console.log('Handling clean video job callback:', {
     jobId: job.id,
     videoId: job.video_id,
     status,
     outputUrl,
-    format: job.format,
-    quality: job.quality
+    jobType: job.job_type
   });
 
   if (status === 'completed' && job.video_id && outputUrl) {
@@ -269,7 +194,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video:', videoError);
     } else {
-      console.log('Functional video updated successfully with URL:', outputUrl);
+      console.log('Clean video job updated successfully with URL:', outputUrl);
     }
   }
 
@@ -285,7 +210,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video status to failed:', videoError);
     } else {
-      console.log('Functional video marked as failed');
+      console.log('Clean video job marked as failed');
     }
   }
 
@@ -300,7 +225,7 @@ async function handleVideoJobCallback(supabase, job, status, outputUrl, errorMes
     if (videoError) {
       console.error('Error updating video status to processing:', videoError);
     } else {
-      console.log('Functional video marked as processing');
+      console.log('Clean video job marked as processing');
     }
   }
 }

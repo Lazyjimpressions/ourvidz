@@ -20,6 +20,7 @@ export interface GenerationOptions {
   modelVariant: string;
 }
 
+// Clean 4-job-type configuration
 export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
   'image_fast': {
     format: 'image',
@@ -68,9 +69,9 @@ export const getGenerationConfig = (format: GenerationFormat, quality: Generatio
   return GENERATION_CONFIGS[modelType];
 };
 
-// Functional API Types
+// Legacy types for backward compatibility
 export type MediaType = 'image' | 'video';
-export type Quality = 'low' | 'high';
+export type Quality = 'fast' | 'high';
 
 export interface FunctionalGenerationOptions {
   mediaType: MediaType;

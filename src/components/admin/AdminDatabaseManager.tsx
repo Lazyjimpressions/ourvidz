@@ -43,6 +43,10 @@ interface JobStats {
   completed: number;
   failed: number;
   healthChecks: number;
+  imageFast: number;
+  imageHigh: number;
+  videoFast: number;
+  videoHigh: number;
 }
 
 export const AdminDatabaseManager = () => {
@@ -55,7 +59,11 @@ export const AdminDatabaseManager = () => {
     queued: 0,
     completed: 0,
     failed: 0,
-    healthChecks: 0
+    healthChecks: 0,
+    imageFast: 0,
+    imageHigh: 0,
+    videoFast: 0,
+    videoHigh: 0
   });
   const [filters, setFilters] = useState({
     status: 'all',
@@ -112,7 +120,11 @@ export const AdminDatabaseManager = () => {
         typeof j.metadata === 'object' && 
         !Array.isArray(j.metadata) &&
         (j.metadata as any).healthCheck === true
-      ).length
+      ).length,
+      imageFast: jobsData.filter(j => j.job_type === 'image_fast').length,
+      imageHigh: jobsData.filter(j => j.job_type === 'image_high').length,
+      videoFast: jobsData.filter(j => j.job_type === 'video_fast').length,
+      videoHigh: jobsData.filter(j => j.job_type === 'video_high').length
     };
     setStats(stats);
   };
@@ -269,13 +281,28 @@ export const AdminDatabaseManager = () => {
     }
   };
 
+  const getJobTypeBadgeVariant = (jobType: string) => {
+    switch (jobType) {
+      case 'image_fast':
+        return 'outline';
+      case 'image_high':
+        return 'default';
+      case 'video_fast':
+        return 'secondary';
+      case 'video_high':
+        return 'destructive';
+      default:
+        return 'outline';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Health Check Job Cleaner */}
       <HealthCheckJobCleaner />
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Stats Cards - Updated for clean job types */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold">{stats.total}</div>
@@ -302,8 +329,26 @@ export const AdminDatabaseManager = () => {
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{stats.healthChecks}</div>
-            <div className="text-sm text-gray-600">Health Checks</div>
+            <div className="text-2xl font-bold text-blue-600">{stats.imageFast}</div>
+            <div className="text-sm text-gray-600">Image Fast</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-purple-600">{stats.imageHigh}</div>
+            <div className="text-sm text-gray-600">Image High</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-orange-600">{stats.videoFast}</div>
+            <div className="text-sm text-gray-600">Video Fast</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-pink-600">{stats.videoHigh}</div>
+            <div className="text-sm text-gray-600">Video High</div>
           </CardContent>
         </Card>
       </div>
@@ -313,7 +358,7 @@ export const AdminDatabaseManager = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Database className="h-5 w-5" />
-            Jobs Table Management
+            Clean Job Types Management
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -385,7 +430,7 @@ export const AdminDatabaseManager = () => {
             )}
           </div>
 
-          {/* Filters */}
+          {/* Filters - Updated for clean job types */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="status-filter">Status</Label>
@@ -410,9 +455,10 @@ export const AdminDatabaseManager = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="enhance">Enhance</SelectItem>
-                  <SelectItem value="generate">Generate</SelectItem>
-                  <SelectItem value="video">Video</SelectItem>
+                  <SelectItem value="image_fast">Image Fast</SelectItem>
+                  <SelectItem value="image_high">Image High</SelectItem>
+                  <SelectItem value="video_fast">Video Fast</SelectItem>
+                  <SelectItem value="video_high">Video High</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -444,7 +490,7 @@ export const AdminDatabaseManager = () => {
                     />
                   </TableHead>
                   <TableHead>ID</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Job Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Attempts</TableHead>
@@ -475,7 +521,11 @@ export const AdminDatabaseManager = () => {
                         />
                       </TableCell>
                       <TableCell className="font-mono text-xs">{job.id.slice(0, 8)}...</TableCell>
-                      <TableCell>{job.job_type}</TableCell>
+                      <TableCell>
+                        <Badge variant={getJobTypeBadgeVariant(job.job_type)}>
+                          {job.job_type}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         {editingCell?.jobId === job.id && editingCell?.field === 'status' ? (
                           <Select
