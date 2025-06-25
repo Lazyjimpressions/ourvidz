@@ -12,7 +12,7 @@ export const useGenerationStatus = (
 ) => {
   const { toast } = useToast();
 
-  // Handle both calling patterns
+  // Handle both calling patterns with proper type declarations
   let id: string | null;
   let actualFormat: GenerationFormat;
   let actualEnabled: boolean;
