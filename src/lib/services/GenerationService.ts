@@ -129,11 +129,14 @@ export class GenerationService {
       if (data.status === 'completed') {
         // Parse image_urls if it's stored as JSON string
         let imageUrls = data.image_url ? [data.image_url] : [];
-        if (data.image_urls) {
+        
+        // Type assertion to access image_urls since TypeScript doesn't know about it yet
+        const imageData = data as any;
+        if (imageData.image_urls) {
           try {
-            imageUrls = typeof data.image_urls === 'string' 
-              ? JSON.parse(data.image_urls) 
-              : data.image_urls;
+            imageUrls = typeof imageData.image_urls === 'string' 
+              ? JSON.parse(imageData.image_urls) 
+              : imageData.image_urls;
           } catch (e) {
             console.warn('Failed to parse image_urls:', e);
             imageUrls = data.image_url ? [data.image_url] : [];

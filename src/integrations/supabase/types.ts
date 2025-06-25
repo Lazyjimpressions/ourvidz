@@ -61,6 +61,7 @@ export type Database = {
           generation_mode: string
           id: string
           image_url: string | null
+          image_urls: Json | null
           metadata: Json | null
           project_id: string | null
           prompt: string
@@ -78,6 +79,7 @@ export type Database = {
           generation_mode?: string
           id?: string
           image_url?: string | null
+          image_urls?: Json | null
           metadata?: Json | null
           project_id?: string | null
           prompt: string
@@ -95,6 +97,7 @@ export type Database = {
           generation_mode?: string
           id?: string
           image_url?: string | null
+          image_urls?: Json | null
           metadata?: Json | null
           project_id?: string | null
           prompt?: string

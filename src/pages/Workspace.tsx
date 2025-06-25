@@ -59,22 +59,41 @@ const Workspace = () => {
 
   // Handle completed generation
   useEffect(() => {
-    if (generationData?.status === 'completed' && generationData.image_urls && currentGenerationId) {
+    if (generationData?.status === 'completed' && currentGenerationId) {
       const currentPrompt = mode === 'image' ? formState.imagePrompt : formState.videoPrompt;
       
-      // Create image objects for each generated image
-      const newImages: GeneratedImage[] = generationData.image_urls.map((url: string, index: number) => ({
-        id: `${currentGenerationId}_${index}`,
-        url,
-        prompt: currentPrompt,
-        timestamp: new Date(),
-        status: 'completed'
-      }));
-
-      setGeneratedImages(newImages);
-      setCurrentGenerationId(null);
+      // Type assertion to handle the different response types
+      const responseData = generationData as any;
       
-      toast.success(`Generated ${newImages.length} ${mode === 'image' ? 'images' : 'videos'}!`);
+      if (responseData.image_urls && mode === 'image') {
+        // Create image objects for each generated image
+        const newImages: GeneratedImage[] = responseData.image_urls.map((url: string, index: number) => ({
+          id: `${currentGenerationId}_${index}`,
+          url,
+          prompt: currentPrompt,
+          timestamp: new Date(),
+          status: 'completed'
+        }));
+
+        setGeneratedImages(newImages);
+        setCurrentGenerationId(null);
+        
+        toast.success(`Generated ${newImages.length} ${mode === 'image' ? 'images' : 'videos'}!`);
+      } else if (responseData.video_url && mode === 'video') {
+        // Handle video completion
+        const newVideo: GeneratedImage = {
+          id: currentGenerationId,
+          url: responseData.video_url,
+          prompt: currentPrompt,
+          timestamp: new Date(),
+          status: 'completed'
+        };
+
+        setGeneratedImages([newVideo]);
+        setCurrentGenerationId(null);
+        
+        toast.success('Video generated successfully!');
+      }
     }
   }, [generationData, currentGenerationId, mode, formState.imagePrompt, formState.videoPrompt]);
 
