@@ -16,6 +16,8 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 Queue-job function called - redeployed version');
+    
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -31,12 +33,15 @@ serve(async (req) => {
     // Get the current user
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
+      console.error('❌ Authentication failed:', userError?.message);
       throw new Error('Authentication required');
     }
 
+    console.log('✅ User authenticated:', user.id);
+
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
 
-    console.log('Creating clean job type:', {
+    console.log('📋 Creating job with clean job type:', {
       jobType,
       projectId,
       videoId,
@@ -72,11 +77,11 @@ serve(async (req) => {
       .single();
 
     if (jobError) {
-      console.error('Error creating job:', jobError);
+      console.error('❌ Error creating job:', jobError);
       throw jobError;
     }
 
-    console.log('Clean job type created successfully:', job);
+    console.log('✅ Job created successfully:', job.id);
 
     // Get project details for the prompt (if projectId provided)
     let prompt = '';
@@ -126,13 +131,14 @@ serve(async (req) => {
       timestamp: new Date().toISOString()
     };
 
-    console.log('Pushing clean job type to Redis queue:', jobPayload);
+    console.log('📤 Pushing job to Redis queue:', { jobId: job.id, jobType });
 
     // Push job to Upstash Redis using REST API
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
     const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
 
     if (!redisUrl || !redisToken) {
+      console.error('❌ Redis configuration missing');
       throw new Error('Redis configuration missing');
     }
 
@@ -148,12 +154,12 @@ serve(async (req) => {
 
     if (!redisResponse.ok) {
       const redisError = await redisResponse.text();
-      console.error('Redis push failed:', redisError);
+      console.error('❌ Redis push failed:', redisError);
       throw new Error(`Failed to queue job in Redis: ${redisError}`);
     }
 
     const redisResult = await redisResponse.json();
-    console.log('Clean job type queued in Redis successfully:', redisResult);
+    console.log('✅ Job queued in Redis successfully:', redisResult);
 
     // Log usage with clean job type tracking
     await supabase
@@ -175,10 +181,12 @@ serve(async (req) => {
         }
       });
 
+    console.log('📈 Usage logged successfully');
+
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Clean job type queued successfully in Redis',
+      message: 'Job queued successfully - redeployed version',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType
@@ -191,7 +199,7 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in clean job type queue-job function:', error);
+    console.error('❌ Error in queue-job function:', error);
     return new Response(JSON.stringify({
       error: error.message,
       success: false
