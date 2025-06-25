@@ -106,8 +106,15 @@ const Workspace = () => {
       setCurrentGenerationId(null);
       setGeneratedImages([]);
       
-      // Show error message with retry option
-      const errorMessage = generationData.error || 'Generation failed due to server error';
+      // Get error message from the appropriate field based on data type
+      let errorMessage = 'Generation failed due to server error';
+      
+      // Check for error_message (videos) or url_error (images with URL issues)
+      if ('error_message' in generationData && generationData.error_message) {
+        errorMessage = generationData.error_message;
+      } else if ('url_error' in generationData && generationData.url_error) {
+        errorMessage = generationData.url_error;
+      }
       
       // Provide specific error messages for common issues
       let userFriendlyMessage = 'Generation failed. Please try again.';
