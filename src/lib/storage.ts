@@ -2,11 +2,11 @@
 import { supabase } from '@/integrations/supabase/client';
 
 export type StorageBucket = 
-  | 'character-images' 
-  | 'scene-previews' 
-  | 'video-thumbnails' 
-  | 'videos-final' 
-  | 'system-assets';
+  | 'image_fast' 
+  | 'image_high' 
+  | 'video_fast' 
+  | 'video_high' 
+  | 'system_assets';
 
 export interface UploadProgress {
   loaded: number;
@@ -34,7 +34,7 @@ export const uploadFile = async (
     }
 
     // Create user-scoped path for private buckets
-    const userScopedPath = bucket === 'system-assets' 
+    const userScopedPath = bucket === 'system_assets' 
       ? filePath 
       : `${user.id}/${filePath}`;
 
@@ -119,64 +119,64 @@ export const deleteFile = async (
   }
 };
 
-// Character image specific functions
-export const uploadCharacterImage = async (
-  characterId: string,
+// Fast image specific functions (character images, quick previews)
+export const uploadFastImage = async (
+  imageId: string,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  const fileName = `${characterId}-${Date.now()}.${file.name.split('.').pop()}`;
-  return uploadFile('character-images', fileName, file, onProgress);
+  const fileName = `${imageId}-${Date.now()}.${file.name.split('.').pop()}`;
+  return uploadFile('image_fast', fileName, file, onProgress);
 };
 
-export const getCharacterImageUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('character-images', filePath);
+export const getFastImageUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('image_fast', filePath);
   return error ? null : data?.signedUrl || null;
 };
 
-// Scene preview specific functions
-export const uploadScenePreview = async (
+// High-quality image specific functions (scene previews, enhanced images)
+export const uploadHighQualityImage = async (
   projectId: string,
   sceneNumber: number,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
   const fileName = `${projectId}/scene-${sceneNumber}-${Date.now()}.${file.name.split('.').pop()}`;
-  return uploadFile('scene-previews', fileName, file, onProgress);
+  return uploadFile('image_high', fileName, file, onProgress);
 };
 
-export const getScenePreviewUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('scene-previews', filePath);
+export const getHighQualityImageUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('image_high', filePath);
   return error ? null : data?.signedUrl || null;
 };
 
-// Video thumbnail specific functions
-export const uploadVideoThumbnail = async (
+// Fast video specific functions (thumbnails, quick video assets)
+export const uploadFastVideo = async (
   videoId: string,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  const fileName = `${videoId}-thumbnail-${Date.now()}.${file.name.split('.').pop()}`;
-  return uploadFile('video-thumbnails', fileName, file, onProgress);
+  const fileName = `${videoId}-fast-${Date.now()}.${file.name.split('.').pop()}`;
+  return uploadFile('video_fast', fileName, file, onProgress);
 };
 
-export const getVideoThumbnailUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('video-thumbnails', filePath);
+export const getFastVideoUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('video_fast', filePath);
   return error ? null : data?.signedUrl || null;
 };
 
-// Final video specific functions
-export const uploadFinalVideo = async (
+// High-quality video specific functions (final videos)
+export const uploadHighQualityVideo = async (
   projectId: string,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
   const fileName = `${projectId}-final-${Date.now()}.${file.name.split('.').pop()}`;
-  return uploadFile('videos-final', fileName, file, onProgress);
+  return uploadFile('video_high', fileName, file, onProgress);
 };
 
-export const getFinalVideoUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('videos-final', filePath, 7200); // 2 hours for videos
+export const getHighQualityVideoUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('video_high', filePath, 7200); // 2 hours for videos
   return error ? null : data?.signedUrl || null;
 };
 
@@ -186,12 +186,22 @@ export const uploadSystemAsset = async (
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  return uploadFile('system-assets', fileName, file, onProgress);
+  return uploadFile('system_assets', fileName, file, onProgress);
 };
 
 export const getSystemAssetUrl = (filePath: string): string => {
-  return getPublicUrl('system-assets', filePath);
+  return getPublicUrl('system_assets', filePath);
 };
+
+// Legacy function names for backward compatibility
+export const uploadCharacterImage = uploadFastImage;
+export const getCharacterImageUrl = getFastImageUrl;
+export const uploadScenePreview = uploadHighQualityImage;
+export const getScenePreviewUrl = getHighQualityImageUrl;
+export const uploadVideoThumbnail = uploadFastVideo;
+export const getVideoThumbnailUrl = getFastVideoUrl;
+export const uploadFinalVideo = uploadHighQualityVideo;
+export const getFinalVideoUrl = getHighQualityVideoUrl;
 
 // Cleanup expired files (utility function)
 export const cleanupExpiredFiles = async (bucket: StorageBucket, olderThanDays: number = 30) => {
