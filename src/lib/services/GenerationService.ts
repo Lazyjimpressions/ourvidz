@@ -209,9 +209,9 @@ export class GenerationService {
         }
       }
 
-      // For non-completed images, return as-is
+      // For non-completed images, return as-is with proper typing
       console.log('ℹ️ Image not completed yet, returning raw data');
-      return data;
+      return data as ImageRecordWithUrl;
     } else {
       const { data, error } = await supabase
         .from('videos')
@@ -296,9 +296,9 @@ export class GenerationService {
         }
       }
 
-      // For non-completed videos, return as-is
+      // For non-completed videos, return as-is with proper typing
       console.log('ℹ️ Video not completed yet, returning raw data');
-      return data;
+      return data as VideoRecordWithUrl;
     }
   }
 

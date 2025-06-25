@@ -40,8 +40,8 @@ export const useGenerationStatus = (
         const result = await GenerationService.getGenerationStatus(id, actualFormat);
         
         // Check for URL generation errors and show user feedback
-        if (result && (result as any).url_error) {
-          console.warn('⚠️ URL generation error detected:', (result as any).url_error);
+        if (result && 'url_error' in result && result.url_error) {
+          console.warn('⚠️ URL generation error detected:', result.url_error);
           toast({
             title: "Image Loading Issue",
             description: "There was a problem loading the image. Please try refreshing.",
