@@ -23,8 +23,8 @@ export const useGenerationStatus = (
     actualFormat = idOrProps.format;
     actualEnabled = idOrProps.enabled ?? true;
   } else {
-    // Old separate arguments pattern
-    id = idOrProps; // This is now correctly typed as string | null
+    // Old separate arguments pattern - idOrProps is string | null here
+    id = idOrProps;
     actualFormat = format!;
     actualEnabled = enabled;
   }
