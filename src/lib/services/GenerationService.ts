@@ -69,7 +69,7 @@ export class GenerationService {
           user_id: user.id,
           project_id: request.projectId || null, // Allow null for standalone generation
           status: 'queued',
-          duration: 5,
+          duration: 2, // FIXED: Changed from 5 to 2 seconds
           format: 'mp4'
         })
         .select()

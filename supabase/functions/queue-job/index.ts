@@ -47,7 +47,7 @@ serve(async (req) => {
 
     // Extract format and quality from the clean job type
     const [format, quality] = jobType.split('_'); // e.g., 'image_fast' -> ['image', 'fast']
-    const modelVariant = metadata?.model_variant || (quality === 'high' ? 'wan_2_1_14b' : 'wan_2_1_1_3b');
+    const modelVariant = metadata?.model_variant || 'wan_2_1_1_3b'; // FIXED: Always use 1.3B model
 
     // Create job record with clean job type
     const { data: job, error: jobError } = await supabase
