@@ -3,6 +3,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { usageAPI } from '@/lib/database';
 import type { GenerationRequest, GenerationFormat, GenerationQuality } from '@/types/generation';
 import { GENERATION_CONFIGS } from '@/types/generation';
+import type { Tables } from '@/integrations/supabase/types';
+
+type ImageRecord = Tables<'images'>;
+type VideoRecord = Tables<'videos'>;
 
 export class GenerationService {
   static async generate(request: GenerationRequest) {
@@ -107,42 +111,57 @@ export class GenerationService {
   static async getGenerationStatus(id: string, format: GenerationFormat) {
     console.log('Checking generation status for:', { id, format });
     
-    const tableName = format === 'image' ? 'images' : 'videos';
-    const { data, error } = await supabase
-      .from(tableName)
-      .select('*')
-      .eq('id', id)
-      .single();
+    if (format === 'image') {
+      const { data, error } = await supabase
+        .from('images')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-    if (error) {
-      console.error('Status check error:', error);
-      throw error;
-    }
-
-    console.log('Generation status:', data);
-
-    // Handle multiple image URLs for image generations
-    if (format === 'image' && data.status === 'completed') {
-      // Parse image_urls if it's stored as JSON string
-      let imageUrls = data.image_url ? [data.image_url] : [];
-      if (data.image_urls) {
-        try {
-          imageUrls = typeof data.image_urls === 'string' 
-            ? JSON.parse(data.image_urls) 
-            : data.image_urls;
-        } catch (e) {
-          console.warn('Failed to parse image_urls:', e);
-          imageUrls = data.image_url ? [data.image_url] : [];
-        }
+      if (error) {
+        console.error('Status check error:', error);
+        throw error;
       }
 
-      return {
-        ...data,
-        image_urls: imageUrls
-      };
-    }
+      console.log('Generation status:', data);
 
-    return data;
+      // Handle multiple image URLs for image generations
+      if (data.status === 'completed') {
+        // Parse image_urls if it's stored as JSON string
+        let imageUrls = data.image_url ? [data.image_url] : [];
+        if (data.image_urls) {
+          try {
+            imageUrls = typeof data.image_urls === 'string' 
+              ? JSON.parse(data.image_urls) 
+              : data.image_urls;
+          } catch (e) {
+            console.warn('Failed to parse image_urls:', e);
+            imageUrls = data.image_url ? [data.image_url] : [];
+          }
+        }
+
+        return {
+          ...data,
+          image_urls: imageUrls
+        };
+      }
+
+      return data;
+    } else {
+      const { data, error } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Status check error:', error);
+        throw error;
+      }
+
+      console.log('Generation status:', data);
+      return data;
+    }
   }
 
   static getEstimatedCredits(format: GenerationFormat, quality: GenerationQuality): number {

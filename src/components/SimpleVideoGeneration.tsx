@@ -35,10 +35,13 @@ export const SimpleVideoGeneration = ({
 
   const { data: generationData } = useGenerationStatus(generatedId, 'video');
 
-  // Check if generation is complete
-  if (generationData?.status === 'completed' && generationData.video_url) {
-    onComplete(generationData.video_url);
-    setGeneratedId(null);
+  // Check if generation is complete - use type assertion since we know format is 'video'
+  if (generationData?.status === 'completed') {
+    const videoData = generationData as any; // Type assertion for video data
+    if (videoData.video_url) {
+      onComplete(videoData.video_url);
+      setGeneratedId(null);
+    }
   }
 
   const handleStartGeneration = () => {

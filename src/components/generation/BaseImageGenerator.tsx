@@ -46,19 +46,23 @@ export const BaseImageGenerator = ({
 
   const { data: generationData } = useGenerationStatus(generatedId, format);
 
-  // Check if generation is complete
-  if (generationData?.status === 'completed' && generationData.image_url) {
-    // Reset state and call callback
-    const imageData = {
-      id: generatedId,
-      url: generationData.image_url,
-      prompt,
-      timestamp: new Date(),
-      status: 'completed'
-    };
+  // Check if generation is complete - use type assertion since we know format is 'image'
+  if (generationData?.status === 'completed' && generatedId) {
+    const imageData = generationData as any; // Type assertion for image data
     
-    onImageGenerated([imageData]);
-    setGeneratedId(null);
+    if (imageData.image_url) {
+      // Reset state and call callback
+      const imageDataResult = {
+        id: generatedId,
+        url: imageData.image_url,
+        prompt,
+        timestamp: new Date(),
+        status: 'completed'
+      };
+      
+      onImageGenerated([imageDataResult]);
+      setGeneratedId(null);
+    }
   }
 
   const handleGenerate = async () => {

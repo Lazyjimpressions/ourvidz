@@ -57,12 +57,14 @@ export type Database = {
         Row: {
           created_at: string
           enhanced_prompt: string | null
+          format: string | null
           generation_mode: string
           id: string
           image_url: string | null
           metadata: Json | null
           project_id: string | null
           prompt: string
+          quality: string | null
           status: string
           thumbnail_url: string | null
           title: string | null
@@ -72,12 +74,14 @@ export type Database = {
         Insert: {
           created_at?: string
           enhanced_prompt?: string | null
+          format?: string | null
           generation_mode?: string
           id?: string
           image_url?: string | null
           metadata?: Json | null
           project_id?: string | null
           prompt: string
+          quality?: string | null
           status?: string
           thumbnail_url?: string | null
           title?: string | null
@@ -87,12 +91,14 @@ export type Database = {
         Update: {
           created_at?: string
           enhanced_prompt?: string | null
+          format?: string | null
           generation_mode?: string
           id?: string
           image_url?: string | null
           metadata?: Json | null
           project_id?: string | null
           prompt?: string
+          quality?: string | null
           status?: string
           thumbnail_url?: string | null
           title?: string | null

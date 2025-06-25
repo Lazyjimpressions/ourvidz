@@ -55,25 +55,29 @@ export const ImageGenerator = ({
 
   const { data: generationData } = useGenerationStatus(generatedId, format);
 
-  // Handle generation completion
-  if (generationData?.status === 'completed' && generationData.image_url && generatedId) {
-    const newImage: GeneratedImage = {
-      id: generatedId,
-      url: generationData.image_url,
-      prompt,
-      enhancedPrompt,
-      timestamp: new Date(),
-      isCharacter: mode === "character"
-    };
+  // Handle generation completion - use type assertion since we know format is 'image'
+  if (generationData?.status === 'completed' && generatedId) {
+    const imageData = generationData as any; // Type assertion for image data
     
-    setCurrentImages(prev => [...prev, newImage]);
-    setProgress(100);
-    setGeneratedId(null);
-    
-    toast({
-      title: "Images Generated",
-      description: `Successfully generated image using Wan 2.1.`,
-    });
+    if (imageData.image_url) {
+      const newImage: GeneratedImage = {
+        id: generatedId,
+        url: imageData.image_url,
+        prompt,
+        enhancedPrompt,
+        timestamp: new Date(),
+        isCharacter: mode === "character"
+      };
+      
+      setCurrentImages(prev => [...prev, newImage]);
+      setProgress(100);
+      setGeneratedId(null);
+      
+      toast({
+        title: "Images Generated",
+        description: `Successfully generated image using Wan 2.1.`,
+      });
+    }
   }
 
   const generateImages = async () => {
