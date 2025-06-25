@@ -21,7 +21,7 @@ type VideoRecordWithUrl = VideoRecord & {
 
 export class GenerationService {
   static async generate(request: GenerationRequest) {
-    console.log('GenerationService.generate called with:', request);
+    console.log('🚀 GenerationService.generate called with:', request);
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -34,15 +34,18 @@ export class GenerationService {
       throw new Error('Invalid format/quality combination');
     }
 
+    console.log('⚙️ Using generation config:', config);
+
     // Create a record in the appropriate table based on format
     let recordId: string;
     
     if (request.format === 'image') {
+      console.log('📷 Creating image record...');
       const { data: image, error: imageError } = await supabase
         .from('images')
         .insert({
           user_id: user.id,
-          project_id: request.projectId,
+          project_id: request.projectId || null, // Allow null for standalone generation
           prompt: request.prompt,
           status: 'queued',
           generation_mode: 'functional',
@@ -52,14 +55,19 @@ export class GenerationService {
         .select()
         .single();
 
-      if (imageError) throw imageError;
+      if (imageError) {
+        console.error('❌ Image creation error:', imageError);
+        throw imageError;
+      }
       recordId = image.id;
+      console.log('✅ Image record created with ID:', recordId);
     } else {
+      console.log('🎬 Creating video record...');
       const { data: video, error: videoError } = await supabase
         .from('videos')
         .insert({
           user_id: user.id,
-          project_id: request.projectId,
+          project_id: request.projectId || null, // Allow null for standalone generation
           status: 'queued',
           duration: 5,
           format: 'mp4'
@@ -67,19 +75,25 @@ export class GenerationService {
         .select()
         .single();
 
-      if (videoError) throw videoError;
+      if (videoError) {
+        console.error('❌ Video creation error:', videoError);
+        throw videoError;
+      }
       recordId = video.id;
+      console.log('✅ Video record created with ID:', recordId);
     }
 
     // Use the clean job type format
     const jobType = `${request.format}_${request.quality}`;
+    console.log('🔧 Using job type:', jobType);
 
     // Queue the job using the existing queue-job function
+    console.log('📋 Queuing job with payload...');
     const { data, error } = await supabase.functions.invoke('queue-job', {
       body: {
         jobType,
         [request.format === 'image' ? 'imageId' : 'videoId']: recordId,
-        projectId: request.projectId,
+        projectId: request.projectId || null,
         metadata: {
           ...request.metadata,
           prompt: request.prompt,
@@ -88,16 +102,18 @@ export class GenerationService {
           model_type: jobType,
           model_variant: config.modelVariant,
           credits: config.credits,
-          generate_variations: true,
-          variation_count: 6
+          generate_variations: request.format === 'image' ? true : false,
+          variation_count: request.format === 'image' ? 6 : 1
         }
       }
     });
 
     if (error) {
-      console.error('Job queue error:', error);
+      console.error('❌ Job queue error:', error);
       throw new Error(`Failed to queue generation job: ${error.message}`);
     }
+
+    console.log('✅ Job queued successfully:', data);
 
     // Log usage
     await usageAPI.logAction(
@@ -108,11 +124,12 @@ export class GenerationService {
         quality: request.quality,
         model_type: jobType,
         [request.format === 'image' ? 'image_id' : 'video_id']: recordId,
-        project_id: request.projectId
+        project_id: request.projectId || null
       }
     );
 
-    console.log('Generation job queued successfully:', data);
+    console.log('📈 Usage logged for job type:', jobType);
+
     return {
       id: recordId,
       jobId: data.job?.id,
@@ -231,9 +248,9 @@ export class GenerationService {
         try {
           console.log('🎯 Processing completed video with filePath:', data.video_url);
           
-          // Improved bucket detection for videos - check if we can determine quality from job metadata
-          // For now, default to video_fast but this could be enhanced with quality detection
-          const bucket = 'video_fast'; // TODO: Add proper video quality detection
+          // Determine bucket based on quality - for now we'll use video_fast as default
+          // TODO: Add proper video quality detection logic
+          const bucket = 'video_fast';
           console.log('🪣 Using video bucket:', bucket);
           
           // Generate signed URL from the file path with retry logic

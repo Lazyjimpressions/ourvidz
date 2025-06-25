@@ -422,7 +422,7 @@ export type Database = {
           format: string | null
           id: string
           preview_url: string | null
-          project_id: string
+          project_id: string | null
           reference_image_url: string | null
           resolution: string | null
           status: string | null
@@ -440,7 +440,7 @@ export type Database = {
           format?: string | null
           id?: string
           preview_url?: string | null
-          project_id: string
+          project_id?: string | null
           reference_image_url?: string | null
           resolution?: string | null
           status?: string | null
@@ -458,7 +458,7 @@ export type Database = {
           format?: string | null
           id?: string
           preview_url?: string | null
-          project_id?: string
+          project_id?: string | null
           reference_image_url?: string | null
           resolution?: string | null
           status?: string | null
