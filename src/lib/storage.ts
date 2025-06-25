@@ -64,28 +64,78 @@ export const uploadFile = async (
   }
 };
 
-// Get signed URL for private files
+// Enhanced signed URL generation with bulletproof error handling
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
   expiresIn: number = 3600
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    console.log('Generating signed URL for:', { bucket, filePath, expiresIn });
+    console.log('🔐 Getting signed URL for:', { bucket, filePath, expiresIn });
     
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(filePath, expiresIn);
-
-    if (error) {
-      console.error('Signed URL generation error:', error);
-      throw error;
+    // Validate inputs
+    if (!bucket || !filePath) {
+      throw new Error('Bucket and filePath are required');
     }
 
-    console.log('Signed URL generated successfully:', data?.signedUrl);
+    // Check if user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      console.error('❌ Auth error in getSignedUrl:', authError);
+      throw new Error('Authentication required');
+    }
+
+    if (!user) {
+      throw new Error('User must be authenticated to access files');
+    }
+
+    // The filePath from database is already user-scoped (user_id/filename)
+    // We need to use it as-is for private buckets
+    const pathToUse = bucket === 'system_assets' ? filePath : filePath;
+    
+    console.log('📁 Using path for signed URL:', pathToUse);
+
+    // First, check if the file exists
+    const { data: fileData, error: listError } = await supabase.storage
+      .from(bucket)
+      .list(pathToUse.split('/').slice(0, -1).join('/') || '', {
+        limit: 1000,
+        search: pathToUse.split('/').pop()
+      });
+
+    if (listError) {
+      console.error('❌ Error checking file existence:', listError);
+      throw new Error(`File existence check failed: ${listError.message}`);
+    }
+
+    const fileName = pathToUse.split('/').pop();
+    const fileExists = fileData?.some(file => file.name === fileName);
+    
+    if (!fileExists) {
+      console.error('❌ File not found:', pathToUse);
+      throw new Error(`File not found: ${pathToUse}`);
+    }
+
+    console.log('✅ File exists, generating signed URL...');
+
+    // Generate signed URL
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(pathToUse, expiresIn);
+
+    if (error) {
+      console.error('❌ Signed URL generation error:', error);
+      throw new Error(`Failed to generate signed URL: ${error.message}`);
+    }
+
+    if (!data?.signedUrl) {
+      throw new Error('No signed URL returned from Supabase');
+    }
+
+    console.log('✅ Signed URL generated successfully');
     return { data, error: null };
   } catch (error) {
-    console.error('Error in getSignedUrl:', error);
+    console.error('❌ Error in getSignedUrl:', error);
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')
