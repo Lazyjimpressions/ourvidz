@@ -24,7 +24,7 @@ export const useGenerationStatus = (
     actualEnabled = idOrProps.enabled ?? true;
   } else {
     // Old separate arguments pattern
-    id = idOrProps;
+    id = idOrProps; // This is now correctly typed as string | null
     actualFormat = format!;
     actualEnabled = enabled;
   }
