@@ -4,30 +4,22 @@ import { GenerationService } from '@/lib/services/GenerationService';
 import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 
-// Support both old and new calling patterns
 export const useGenerationStatus = (
-  idOrProps: string | null | { id: string | null; format: GenerationFormat; enabled?: boolean },
-  format?: GenerationFormat,
+  id: string | null,
+  format: GenerationFormat,
   enabled: boolean = true
 ) => {
   const { toast } = useToast();
 
-  // Handle both calling patterns with proper type narrowing
-  const isObjectPattern = typeof idOrProps === 'object' && idOrProps !== null;
-  
-  const id: string | null = isObjectPattern ? idOrProps.id : idOrProps;
-  const actualFormat: GenerationFormat = isObjectPattern ? idOrProps.format : format!;
-  const actualEnabled: boolean = isObjectPattern ? (idOrProps.enabled ?? true) : enabled;
-
   return useQuery({
-    queryKey: ['generation-status', id, actualFormat],
+    queryKey: ['generation-status', id, format],
     queryFn: async () => {
       if (!id) return null;
       
-      console.log('🔍 Fetching generation status for:', { id, format: actualFormat });
+      console.log('🔍 Fetching generation status for:', { id, format });
       
       try {
-        const result = await GenerationService.getGenerationStatus(id, actualFormat);
+        const result = await GenerationService.getGenerationStatus(id, format);
         
         // Check for URL generation errors and show user feedback
         if (result && 'url_error' in result && result.url_error) {
@@ -50,7 +42,7 @@ export const useGenerationStatus = (
         throw error;
       }
     },
-    enabled: !!id && actualEnabled,
+    enabled: !!id && enabled,
     refetchInterval: (query) => {
       const data = query.state.data;
       
