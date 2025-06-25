@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export type StorageBucket = 
@@ -64,7 +63,7 @@ export const uploadFile = async (
   }
 };
 
-// Enhanced signed URL generation with bulletproof error handling
+// Simplified signed URL generation without file existence check
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
@@ -90,35 +89,12 @@ export const getSignedUrl = async (
     }
 
     // The filePath from database is already user-scoped (user_id/filename)
-    // We need to use it as-is for private buckets
+    // We use it as-is for private buckets
     const pathToUse = bucket === 'system_assets' ? filePath : filePath;
     
     console.log('📁 Using path for signed URL:', pathToUse);
 
-    // First, check if the file exists
-    const { data: fileData, error: listError } = await supabase.storage
-      .from(bucket)
-      .list(pathToUse.split('/').slice(0, -1).join('/') || '', {
-        limit: 1000,
-        search: pathToUse.split('/').pop()
-      });
-
-    if (listError) {
-      console.error('❌ Error checking file existence:', listError);
-      throw new Error(`File existence check failed: ${listError.message}`);
-    }
-
-    const fileName = pathToUse.split('/').pop();
-    const fileExists = fileData?.some(file => file.name === fileName);
-    
-    if (!fileExists) {
-      console.error('❌ File not found:', pathToUse);
-      throw new Error(`File not found: ${pathToUse}`);
-    }
-
-    console.log('✅ File exists, generating signed URL...');
-
-    // Generate signed URL
+    // Generate signed URL directly without existence check
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(pathToUse, expiresIn);

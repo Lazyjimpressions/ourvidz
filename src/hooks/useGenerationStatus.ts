@@ -20,6 +20,7 @@ export const useGenerationStatus = (
       
       try {
         const result = await GenerationService.getGenerationStatus(id, format);
+        console.log('📊 Generation status result:', result);
         
         // Check for URL generation errors and show user feedback
         if (result && 'url_error' in result && result.url_error) {
