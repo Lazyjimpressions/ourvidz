@@ -97,6 +97,35 @@ const Workspace = () => {
     }
   }, [generationData, currentGenerationId, mode, formState.imagePrompt, formState.videoPrompt]);
 
+  // Handle failed generation
+  useEffect(() => {
+    if (generationData?.status === 'failed' && currentGenerationId) {
+      console.log('❌ Generation failed:', generationData);
+      
+      // Reset state
+      setCurrentGenerationId(null);
+      setGeneratedImages([]);
+      
+      // Show error message with retry option
+      const errorMessage = generationData.error || 'Generation failed due to server error';
+      
+      // Provide specific error messages for common issues
+      let userFriendlyMessage = 'Generation failed. Please try again.';
+      if (errorMessage.includes('CUDA out of memory') || errorMessage.includes('memory')) {
+        userFriendlyMessage = 'Server is currently overloaded. Please try again in a few moments.';
+      } else if (errorMessage.includes('timeout')) {
+        userFriendlyMessage = 'Generation timed out. Please try with a simpler prompt.';
+      }
+      
+      toast.error(userFriendlyMessage, {
+        action: {
+          label: 'Retry',
+          onClick: () => handleGenerate()
+        }
+      });
+    }
+  }, [generationData, currentGenerationId]);
+
   // Update mode when URL params change
   useEffect(() => {
     const urlMode = (searchParams.get('mode') as WorkspaceMode) || 'image';
