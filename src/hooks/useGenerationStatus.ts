@@ -4,28 +4,44 @@ import { GenerationService } from '@/lib/services/GenerationService';
 import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 
-interface UseGenerationStatusProps {
-  id: string | null;
-  format: GenerationFormat;
-  enabled?: boolean;
-}
-
-export const useGenerationStatus = ({ id, format, enabled = true }: UseGenerationStatusProps) => {
+// Support both old and new calling patterns
+export const useGenerationStatus = (
+  idOrProps: string | null | { id: string | null; format: GenerationFormat; enabled?: boolean },
+  format?: GenerationFormat,
+  enabled: boolean = true
+) => {
   const { toast } = useToast();
 
+  // Handle both calling patterns
+  let id: string | null;
+  let actualFormat: GenerationFormat;
+  let actualEnabled: boolean;
+
+  if (typeof idOrProps === 'object' && idOrProps !== null) {
+    // New object-based calling pattern
+    id = idOrProps.id;
+    actualFormat = idOrProps.format;
+    actualEnabled = idOrProps.enabled ?? true;
+  } else {
+    // Old separate arguments pattern
+    id = idOrProps;
+    actualFormat = format!;
+    actualEnabled = enabled;
+  }
+
   return useQuery({
-    queryKey: ['generation-status', id, format],
+    queryKey: ['generation-status', id, actualFormat],
     queryFn: async () => {
       if (!id) return null;
       
-      console.log('🔍 Fetching generation status for:', { id, format });
+      console.log('🔍 Fetching generation status for:', { id, format: actualFormat });
       
       try {
-        const result = await GenerationService.getGenerationStatus(id, format);
+        const result = await GenerationService.getGenerationStatus(id, actualFormat);
         
         // Check for URL generation errors and show user feedback
-        if (result?.url_error) {
-          console.warn('⚠️ URL generation error detected:', result.url_error);
+        if (result && (result as any).url_error) {
+          console.warn('⚠️ URL generation error detected:', (result as any).url_error);
           toast({
             title: "Image Loading Issue",
             description: "There was a problem loading the image. Please try refreshing.",
@@ -44,7 +60,7 @@ export const useGenerationStatus = ({ id, format, enabled = true }: UseGeneratio
         throw error;
       }
     },
-    enabled: !!id && enabled,
+    enabled: !!id && actualEnabled,
     refetchInterval: (query) => {
       const data = query.state.data;
       

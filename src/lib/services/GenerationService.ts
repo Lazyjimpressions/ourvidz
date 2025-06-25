@@ -9,6 +9,16 @@ import type { Tables } from '@/integrations/supabase/types';
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
 
+// Extended types to include our custom properties
+type ImageRecordWithUrl = ImageRecord & {
+  image_urls?: string[] | null;
+  url_error?: string;
+};
+
+type VideoRecordWithUrl = VideoRecord & {
+  url_error?: string;
+};
+
 export class GenerationService {
   static async generate(request: GenerationRequest) {
     console.log('GenerationService.generate called with:', request);
@@ -112,7 +122,7 @@ export class GenerationService {
     };
   }
 
-  static async getGenerationStatus(id: string, format: GenerationFormat) {
+  static async getGenerationStatus(id: string, format: GenerationFormat): Promise<ImageRecordWithUrl | VideoRecordWithUrl> {
     console.log('🔍 Checking generation status for:', { id, format });
     
     if (format === 'image') {
@@ -169,7 +179,7 @@ export class GenerationService {
 
           if (signedUrl) {
             // Return with image_urls array for consistency
-            const result = {
+            const result: ImageRecordWithUrl = {
               ...data,
               image_urls: [signedUrl]
             };
@@ -179,21 +189,23 @@ export class GenerationService {
             console.error('❌ Failed to generate signed URL after all retries:', lastError?.message);
             
             // Return with placeholder or error indication
-            return {
+            const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
               url_error: lastError?.message || 'Failed to generate image URL'
             };
+            return result;
           }
         } catch (urlError) {
           console.error('❌ Error processing signed URL:', urlError);
           
           // Return with error indication but don't fail completely
-          return {
+          const result: ImageRecordWithUrl = {
             ...data,
             image_urls: null,
             url_error: urlError instanceof Error ? urlError.message : 'Unknown URL processing error'
           };
+          return result;
         }
       }
 
@@ -254,7 +266,7 @@ export class GenerationService {
 
           if (signedUrl) {
             // Return with the signed URL
-            const result = {
+            const result: VideoRecordWithUrl = {
               ...data,
               video_url: signedUrl
             };
@@ -264,21 +276,23 @@ export class GenerationService {
             console.error('❌ Failed to generate video signed URL after all retries:', lastError?.message);
             
             // Return with error indication
-            return {
+            const result: VideoRecordWithUrl = {
               ...data,
               video_url: null,
               url_error: lastError?.message || 'Failed to generate video URL'
             };
+            return result;
           }
         } catch (urlError) {
           console.error('❌ Error processing video signed URL:', urlError);
           
           // Return with error indication but don't fail completely
-          return {
+          const result: VideoRecordWithUrl = {
             ...data,
             video_url: null,
             url_error: urlError instanceof Error ? urlError.message : 'Unknown video URL processing error'
           };
+          return result;
         }
       }
 
