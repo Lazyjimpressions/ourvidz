@@ -1,212 +1,95 @@
 
-import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
-import { VideoConfiguration, VideoConfig } from "@/components/VideoConfiguration";
-import { Character } from "@/components/CharacterManager";
-import { CharacterSelection } from "@/components/CharacterSelection";
-import { StoryBreakdown } from "@/components/StoryBreakdown";
-import { StoryboardGeneration } from "@/components/StoryboardGeneration";
-import { SimpleVideoGeneration } from "@/components/SimpleVideoGeneration";
-import { ImageGenerationStep } from "@/components/ImageGenerationStep";
-import { toast } from "sonner";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { FastVideoGenerator } from "@/components/generation/FastVideoGenerator";
+import { HighVideoGenerator } from "@/components/generation/HighVideoGenerator";
 
-type WorkflowStep = 'config' | 'characters' | 'story' | 'storyboard' | 'generation' | 'complete';
+export const CreateVideo = () => {
+  const [activeGenerator, setActiveGenerator] = useState<'fast' | 'high'>('fast');
+  const [generatedVideos, setGeneratedVideos] = useState<any[]>([]);
 
-interface Scene {
-  id: string;
-  sceneNumber: number;
-  description: string;
-  enhancedPrompt: string;
-}
-
-interface SceneImage {
-  sceneId: string;
-  imageUrl: string;
-  approved: boolean;
-}
-
-const CreateVideo = () => {
-  const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<WorkflowStep>('config');
-  const [videoConfig, setVideoConfig] = useState<VideoConfig | null>(null);
-  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
-  const [approvedScenes, setApprovedScenes] = useState<Scene[]>([]);
-  const [approvedStoryboard, setApprovedStoryboard] = useState<SceneImage[]>([]);
-  const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
-
-  const stepTitles = {
-    config: 'Choose Creation Type',
-    characters: 'Character Setup',
-    story: videoConfig?.mediaType === 'image' ? 'Image Description' : 'Story & Scene Breakdown',
-    storyboard: 'Storyboard Generation',
-    generation: videoConfig?.mediaType === 'image' ? 'Image Generation' : 'Video Generation',
-    complete: 'Complete'
-  };
-
-  // Dynamic steps based on configuration
-  const getSteps = (): WorkflowStep[] => {
-    if (videoConfig?.mediaType === 'image') {
-      return ['config', 'characters', 'story', 'generation'];
-    } else {
-      return ['config', 'characters', 'story', 'storyboard', 'generation'];
-    }
-  };
-
-  const steps = getSteps();
-  const currentStepIndex = steps.indexOf(currentStep);
-
-  const handleConfigurationComplete = (config: VideoConfig) => {
-    setVideoConfig(config);
-    setCurrentStep('characters');
-  };
-
-  const handleCharactersSelected = (characters: Character[]) => {
-    setSelectedCharacters(characters);
-    setCurrentStep('story');
-  };
-
-  const handleSkipCharacters = () => {
-    setSelectedCharacters([]);
-    setCurrentStep('story');
-  };
-
-  const handleScenesApproved = (scenes: Scene[], projectId?: string) => {
-    setApprovedScenes(scenes);
-    if (projectId) {
-      setCurrentProjectId(projectId);
-    }
-    
-    if (videoConfig?.mediaType === 'image') {
-      // For images, go directly to image generation
-      setCurrentStep('generation');
-    } else {
-      // For videos, go to storyboard generation
-      setCurrentStep('storyboard');
-    }
-  };
-
-  const handleStoryboardApproved = (sceneImages: SceneImage[]) => {
-    setApprovedStoryboard(sceneImages);
-    setCurrentStep('generation');
-  };
-
-  const handleGenerationComplete = () => {
-    const mediaType = videoConfig?.mediaType === 'image' ? 'image' : 'video';
-    toast.success(`Your ${mediaType} has been generated successfully!`);
-    navigate("/library");
-  };
-
-  const handleBackStep = () => {
-    const currentIndex = steps.indexOf(currentStep);
-    if (currentIndex > 0) {
-      setCurrentStep(steps[currentIndex - 1]);
-    }
-  };
-
-  const renderCurrentStep = () => {
-    switch (currentStep) {
-      case 'config':
-        return <VideoConfiguration onConfigurationComplete={handleConfigurationComplete} />;
-      
-      case 'characters':
-        return (
-          <CharacterSelection 
-            onCharactersSelected={handleCharactersSelected}
-            onSkipCharacters={handleSkipCharacters}
-          />
-        );
-      
-      case 'story':
-        return (
-          <StoryBreakdown 
-            config={videoConfig!}
-            characters={selectedCharacters}
-            onScenesApproved={handleScenesApproved}
-          />
-        );
-      
-      case 'storyboard':
-        return currentProjectId && videoConfig?.mediaType === 'video' ? (
-          <StoryboardGeneration 
-            scenes={approvedScenes}
-            projectId={currentProjectId}
-            onStoryboardApproved={handleStoryboardApproved}
-          />
-        ) : null;
-      
-      case 'generation':
-        if (!currentProjectId) return null;
-        
-        if (videoConfig?.mediaType === 'image') {
-          return (
-            <ImageGenerationStep 
-              scenes={approvedScenes}
-              projectId={currentProjectId}
-              onComplete={handleGenerationComplete}
-            />
-          );
-        } else {
-          return (
-            <SimpleVideoGeneration 
-              projectId={currentProjectId}
-              scenes={approvedScenes}
-              onComplete={handleGenerationComplete}
-            />
-          );
-        }
-      
-      default:
-        return null;
-    }
+  const handleVideoGenerated = (video: any) => {
+    setGeneratedVideos(prev => [video, ...prev]);
   };
 
   return (
-    <OurVidzDashboardLayout>
-      <div className="min-h-screen bg-[#0a0a0a] text-white p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-4 mb-8">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                if (currentStepIndex > 0) {
-                  handleBackStep();
-                } else {
-                  navigate("/dashboard");
-                }
-              }}
-              className="text-gray-400 hover:text-white hover:bg-gray-800"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            
-            <div className="flex-1">
-              <h1 className="text-2xl font-semibold text-white">{stepTitles[currentStep]}</h1>
-              <div className="flex items-center gap-2 mt-2">
-                {steps.map((step, index) => (
-                  <div key={step} className="flex items-center">
-                    <div className={`w-3 h-3 rounded-full ${
-                      index <= currentStepIndex ? 'bg-blue-500' : 'bg-gray-600'
-                    }`} />
-                    {index < steps.length - 1 && (
-                      <div className={`w-8 h-0.5 ${
-                        index < currentStepIndex ? 'bg-blue-500' : 'bg-gray-600'
-                      }`} />
-                    )}
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold mb-2">Create Video</h1>
+        <p className="text-gray-600">
+          Generate videos using AI with different quality options
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        {/* Generator Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Generation Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Button
+                variant={activeGenerator === 'fast' ? 'default' : 'outline'}
+                onClick={() => setActiveGenerator('fast')}
+                className="flex-1"
+              >
+                Fast Generation
+                <Badge variant="secondary" className="ml-2">3 credits</Badge>
+              </Button>
+              <Button
+                variant={activeGenerator === 'high' ? 'default' : 'outline'}
+                onClick={() => setActiveGenerator('high')}
+                className="flex-1"
+              >
+                High Quality
+                <Badge variant="secondary" className="ml-2">5 credits</Badge>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Active Generator */}
+        {activeGenerator === 'fast' ? (
+          <FastVideoGenerator
+            onVideoGenerated={handleVideoGenerated}
+            buttonText="Generate Fast Video"
+          />
+        ) : (
+          <HighVideoGenerator
+            onVideoGenerated={handleVideoGenerated}
+            buttonText="Generate High Quality Video"
+          />
+        )}
+
+        {/* Generated Videos Display */}
+        {generatedVideos.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Generated Videos ({generatedVideos.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                {generatedVideos.map((video) => (
+                  <div key={video.id} className="border rounded-lg p-4">
+                    <video
+                      src={video.url}
+                      controls
+                      className="w-full h-40 object-cover rounded-lg mb-2"
+                    />
+                    <p className="text-sm text-gray-600">{video.prompt}</p>
                   </div>
                 ))}
               </div>
-            </div>
-          </div>
-
-          {renderCurrentStep()}
-        </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-    </OurVidzDashboardLayout>
+    </div>
   );
 };
-
-export default CreateVideo;
