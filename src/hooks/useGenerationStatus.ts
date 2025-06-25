@@ -12,22 +12,12 @@ export const useGenerationStatus = (
 ) => {
   const { toast } = useToast();
 
-  // Handle both calling patterns with proper type declarations
-  let id: string | null;
-  let actualFormat: GenerationFormat;
-  let actualEnabled: boolean;
-
-  if (typeof idOrProps === 'object' && idOrProps !== null) {
-    // New object-based calling pattern
-    id = idOrProps.id;
-    actualFormat = idOrProps.format;
-    actualEnabled = idOrProps.enabled ?? true;
-  } else {
-    // Old separate arguments pattern - idOrProps is string | null here
-    id = idOrProps;
-    actualFormat = format!;
-    actualEnabled = enabled;
-  }
+  // Handle both calling patterns with proper type narrowing
+  const isObjectPattern = typeof idOrProps === 'object' && idOrProps !== null;
+  
+  const id: string | null = isObjectPattern ? idOrProps.id : idOrProps;
+  const actualFormat: GenerationFormat = isObjectPattern ? idOrProps.format : format!;
+  const actualEnabled: boolean = isObjectPattern ? (idOrProps.enabled ?? true) : enabled;
 
   return useQuery({
     queryKey: ['generation-status', id, actualFormat],
