@@ -33,13 +33,18 @@ export const useGenerationStatus = (
         }
         
         return result;
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Error fetching generation status:', error);
-        toast({
-          title: "Status Check Failed",
-          description: "Unable to check generation status. Please try again.",
-          variant: "destructive",
-        });
+        
+        // Don't show toast for expected "no rows" errors (normal for video lookups)
+        if (!error.message?.includes('no rows returned')) {
+          toast({
+            title: "Status Check Error",
+            description: "Unable to check generation status. Please try again.",
+            variant: "destructive",
+          });
+        }
+        
         throw error;
       }
     },
@@ -49,20 +54,26 @@ export const useGenerationStatus = (
       
       // Stop polling when generation is complete or failed
       if (data?.status === 'completed' || data?.status === 'failed') {
+        console.log('🛑 Stopping polling for completed/failed generation');
         return false;
       }
       
       // Continue polling while processing
       return 3000; // Poll every 3 seconds
     },
-    retry: (failureCount, error) => {
-      // Retry up to 3 times for network errors
-      if (failureCount < 3) {
+    retry: (failureCount, error: any) => {
+      // Don't retry for expected "no rows" errors
+      if (error.message?.includes('no rows returned')) {
+        return false;
+      }
+      
+      // Retry up to 2 times for other errors
+      if (failureCount < 2) {
         console.log(`🔄 Retrying status check (attempt ${failureCount + 1})`);
         return true;
       }
       return false;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff, max 10s
   });
 };

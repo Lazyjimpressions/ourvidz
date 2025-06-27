@@ -28,18 +28,27 @@ export const Workspace = () => {
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
+  const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
 
   const { generate, isGenerating, useGenerationStatus } = useGeneration({
     onSuccess: (data) => {
+      console.log('🎉 Generation started with ID:', data.id);
       setGeneratedId(data.id);
+      setProcessedIds(new Set()); // Clear processed IDs for new generation
       toast.success(`${mode === 'image' ? 'Image' : 'Video'} generation started!`);
     },
     onError: (error) => {
+      console.error('❌ Generation failed:', error);
       toast.error(`Generation failed: ${error.message}`);
+      setGeneratedId(null);
     }
   });
 
-  const { data: generationData } = useGenerationStatus(generatedId, mode);
+  const { data: generationData, error: statusError } = useGenerationStatus(
+    generatedId, 
+    mode, 
+    !!generatedId
+  );
 
   // Update URL when mode changes
   const handleModeChange = (newMode: 'image' | 'video') => {
@@ -55,39 +64,91 @@ export const Workspace = () => {
     }
   }, [searchParams, mode]);
 
-  // Check if generation is complete
-  if (generationData?.status === 'completed') {
-    const contentData = generationData as any;
-    if (mode === 'image' && contentData.image_urls && contentData.image_urls.length > 0) {
-      const images = contentData.image_urls.map((url: string, index: number) => ({
-        id: `${generatedId}-${index}`,
-        url,
-        prompt,
-        timestamp: new Date(),
-        quality
-      }));
-      setGeneratedContent(images);
-      setHasGeneratedContent(true);
-      setGeneratedId(null);
-    } else if (mode === 'video' && contentData.video_url) {
-      const video: GeneratedContent = {
-        id: generatedId!,
-        url: contentData.video_url,
-        prompt,
-        timestamp: new Date(),
-        quality
-      };
-      setGeneratedContent([video]);
-      setHasGeneratedContent(true);
-      setGeneratedId(null);
+  // Handle generation completion
+  useEffect(() => {
+    if (!generationData || !generatedId) return;
+
+    // Prevent processing the same generation multiple times
+    if (processedIds.has(generatedId)) {
+      console.log('⏭️ Already processed generation:', generatedId);
+      return;
     }
-  }
+
+    console.log('🔄 Processing generation data:', { 
+      id: generatedId, 
+      status: generationData.status, 
+      mode 
+    });
+
+    if (generationData.status === 'completed') {
+      console.log('✅ Generation completed, processing results...');
+      
+      const contentData = generationData as any;
+      
+      if (mode === 'image' && contentData.image_urls && contentData.image_urls.length > 0) {
+        const images = contentData.image_urls.map((url: string, index: number) => ({
+          id: `${generatedId}-${index}`,
+          url,
+          prompt,
+          timestamp: new Date(),
+          quality
+        }));
+        
+        console.log('🖼️ Setting image content:', images);
+        setGeneratedContent(images);
+        setHasGeneratedContent(true);
+        setProcessedIds(prev => new Set(prev).add(generatedId));
+        setGeneratedId(null);
+        
+      } else if (mode === 'video' && contentData.video_url) {
+        const video: GeneratedContent = {
+          id: generatedId,
+          url: contentData.video_url,
+          prompt,
+          timestamp: new Date(),
+          quality
+        };
+        
+        console.log('🎬 Setting video content:', video);
+        setGeneratedContent([video]);
+        setHasGeneratedContent(true);
+        setProcessedIds(prev => new Set(prev).add(generatedId));
+        setGeneratedId(null);
+        
+      } else {
+        console.warn('⚠️ Generation completed but no content found:', contentData);
+      }
+      
+    } else if (generationData.status === 'failed') {
+      console.error('❌ Generation failed:', generationData);
+      toast.error('Generation failed. Please try again.');
+      setGeneratedId(null);
+      setProcessedIds(prev => new Set(prev).add(generatedId));
+    }
+  }, [generationData, generatedId, mode, prompt, quality, processedIds]);
+
+  // Handle status check errors
+  useEffect(() => {
+    if (statusError && generatedId) {
+      console.error('❌ Status check error:', statusError);
+      // Only show toast for unexpected errors, not for normal "no rows" errors
+      if (!statusError.message?.includes('no rows returned')) {
+        toast.error('Unable to check generation status. Please refresh the page.');
+      }
+    }
+  }, [statusError, generatedId]);
 
   const handleGenerate = () => {
     if (!prompt.trim()) {
       toast.error("Please enter a prompt");
       return;
     }
+
+    // Clear any existing content and reset state
+    setGeneratedContent([]);
+    setHasGeneratedContent(false);
+    setGeneratedId(null);
+    setProcessedIds(new Set());
 
     generate({
       format: mode,
@@ -106,6 +167,8 @@ export const Workspace = () => {
   const handleRemoveContent = () => {
     setGeneratedContent([]);
     setHasGeneratedContent(false);
+    setGeneratedId(null);
+    setProcessedIds(new Set());
   };
 
   const handleRegenerateItem = (itemId: string) => {
@@ -117,6 +180,12 @@ export const Workspace = () => {
     // Find the item to regenerate
     const itemToRegenerate = generatedContent.find(item => item.id === itemId);
     if (!itemToRegenerate) return;
+
+    // Clear existing content and regenerate
+    setGeneratedContent([]);
+    setHasGeneratedContent(false);
+    setGeneratedId(null);
+    setProcessedIds(new Set());
 
     // Generate new content with same prompt and quality
     generate({

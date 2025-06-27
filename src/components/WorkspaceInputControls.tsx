@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, Sparkles, Play, Music, RotateCcw, Camera, Brush, Zap } from "lucide-react";
+import { Upload, Sparkles, Play, Music, RotateCcw, Camera, Brush, Zap, Crown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -9,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 
 interface WorkspaceInputControlsProps {
@@ -263,16 +262,29 @@ export const WorkspaceInputControls = ({
             </>
           )}
 
-          {/* Quality Toggle (for both modes) */}
-          <div className="flex items-center gap-2 ml-4">
-            <span className={`text-sm ${quality === 'fast' ? 'text-white' : 'text-gray-400'}`}>Low</span>
-            <Switch
-              checked={quality === 'high'}
-              onCheckedChange={(checked) => onQualityChange(checked ? 'high' : 'fast')}
-              className="data-[state=checked]:bg-blue-600"
-            />
-            <span className={`text-sm ${quality === 'high' ? 'text-white' : 'text-gray-400'}`}>High</span>
-          </div>
+          {/* Compact Quality Toggle Button */}
+          <Button
+            variant="ghost"
+            onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')}
+            className={`flex items-center gap-2 px-3 py-2 h-10 rounded-lg transition-all ${
+              quality === 'high' 
+                ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+            }`}
+            title={`Quality: ${quality === 'high' ? 'High' : 'Fast'}`}
+          >
+            {quality === 'high' ? (
+              <>
+                <Crown className="w-4 h-4" />
+                <span className="text-sm font-medium">High</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                <span className="text-sm font-medium">Fast</span>
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Spacer to align with generate button */}
