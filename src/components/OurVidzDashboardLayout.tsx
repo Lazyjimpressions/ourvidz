@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, User, CreditCard, LogOut } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, User, LogOut } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -10,7 +9,7 @@ interface OurVidzDashboardLayoutProps {
 }
 
 export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps) => {
-  const { profile, isSubscribed, signOut } = useAuth();
+  const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,49 +26,49 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     return location.pathname === path;
   };
 
-  const sidebarItems = [
-    { 
-      icon: Home, 
-      label: "Home", 
-      path: "/dashboard",
-      onClick: () => navigate("/dashboard"),
-      active: isActiveRoute("/dashboard")
-    },
+  const recentItems = [
+    {
+      icon: FileText,
+      label: "Star-Crossed",
+      onClick: () => navigate("/storyboard"),
+      active: false
+    }
+  ];
+
+  const creativeToolsItems = [
     { 
       icon: FileText, 
       label: "New Storyboard",
-      path: "/storyboard", 
       onClick: () => navigate("/storyboard"),
       active: isActiveRoute("/storyboard")
     },
     { 
       icon: Play, 
       label: "Generate Motion",
-      path: "/workspace?mode=video",
       onClick: () => navigate("/workspace?mode=video"),
       active: isActiveRoute("/workspace", "video")
     },
     { 
       icon: Image, 
       label: "Generate Images",
-      path: "/workspace?mode=image",
       onClick: () => navigate("/workspace?mode=image"),
       active: isActiveRoute("/workspace", "image")
-    },
+    }
+  ];
+
+  const otherItems = [
     { 
       icon: Library, 
       label: "Library",
-      path: "/library",
       onClick: () => navigate("/library"),
       active: isActiveRoute("/library")
     },
     { 
       icon: Settings, 
       label: "Settings",
-      path: "/profile",
       onClick: () => navigate("/profile"),
       active: isActiveRoute("/profile")
-    },
+    }
   ];
 
   return (
@@ -82,43 +81,110 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <ul className="space-y-2">
-            {sidebarItems.map((item, index) => (
-              <li key={index}>
-                <button
-                  onClick={item.onClick}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                    item.active 
-                      ? 'bg-blue-600 text-white' 
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{item.label}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+        <nav className="flex-1 px-4 space-y-6">
+          {/* Home */}
+          <div>
+            <button
+              onClick={() => navigate("/dashboard")}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                isActiveRoute("/dashboard") 
+                  ? 'bg-blue-600 text-white' 
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
+            >
+              <Home className="w-5 h-5" />
+              <span className="text-sm font-medium">Home</span>
+            </button>
+          </div>
+
+          {/* Recent Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+              Recent
+            </h3>
+            <ul className="space-y-1">
+              {recentItems.map((item, index) => (
+                <li key={index}>
+                  <button
+                    onClick={item.onClick}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                      item.active 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Creative Tools Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 px-3">
+              Creative Tools
+            </h3>
+            <ul className="space-y-1">
+              {creativeToolsItems.map((item, index) => (
+                <li key={index}>
+                  <button
+                    onClick={item.onClick}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                      item.active 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Other Items */}
+          <div className="pt-4">
+            <ul className="space-y-1">
+              {otherItems.map((item, index) => (
+                <li key={index}>
+                  <button
+                    onClick={item.onClick}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                      item.active 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         </nav>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Unified Top Header */}
+        {/* Simplified Top Header */}
         <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
           <div className="flex justify-end items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-white border-gray-600 hover:bg-gray-800"
+            >
+              Upgrade
+            </Button>
             <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-2 text-gray-400">
-                <CreditCard className="w-4 h-4" />
-                <span>Credits: {profile?.token_balance || 0}</span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-400">
-                <div className={`w-2 h-2 rounded-full ${isSubscribed ? 'bg-green-500' : 'bg-red-500'}`} />
-                <span>{isSubscribed ? 'Pro' : 'Free'}</span>
-              </div>
               <div className="flex items-center gap-2 text-gray-300">
-                <User className="w-4 h-4" />
+                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+                  {profile?.username?.[0]?.toUpperCase() || 'U'}
+                </div>
                 <span>{profile?.username || 'User'}</span>
               </div>
               <Button
@@ -139,7 +205,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
           {children}
         </main>
 
-        {/* Footer */}
+        {/* Keep existing footer */}
         <footer className="bg-[#111111] border-t border-gray-800 px-6 py-4">
           <div className="flex justify-between items-center text-sm text-gray-500">
             <div className="flex items-center gap-6">
