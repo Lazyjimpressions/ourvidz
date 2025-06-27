@@ -2,8 +2,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
-import { Edit } from "lucide-react";
+import { Edit, Sparkles } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface PromptRefinerProps {
   originalPrompt: string;
@@ -21,13 +22,18 @@ export const PromptRefiner = ({ originalPrompt, onRefinedPromptApproved }: Promp
     
     setIsRefining(true);
     
-    // Simulate AI refinement - in real app, this would call your AI service
-    setTimeout(() => {
-      const refined = `Enhanced: ${originalPrompt} with cinematic lighting, high detail, and professional composition`;
+    try {
+      // Simulate AI refinement - in real app, this would call your AI service
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const refined = `Enhanced: ${originalPrompt} with cinematic lighting, high detail, professional composition, and photorealistic quality`;
       setRefinedPrompt(refined);
       setEditedPrompt(refined);
+    } catch (error) {
+      console.error('Error refining prompt:', error);
+    } finally {
       setIsRefining(false);
-    }, 2000);
+    }
   };
 
   const handleEdit = () => {
@@ -39,8 +45,19 @@ export const PromptRefiner = ({ originalPrompt, onRefinedPromptApproved }: Promp
     setIsEditing(false);
   };
 
+  const handleCancelEdit = () => {
+    setEditedPrompt(refinedPrompt);
+    setIsEditing(false);
+  };
+
   const handleApprove = () => {
     onRefinedPromptApproved(refinedPrompt);
+  };
+
+  const handleReset = () => {
+    setRefinedPrompt("");
+    setEditedPrompt("");
+    setIsEditing(false);
   };
 
   if (!originalPrompt.trim()) {
@@ -48,69 +65,100 @@ export const PromptRefiner = ({ originalPrompt, onRefinedPromptApproved }: Promp
   }
 
   return (
-    <div className="space-y-4">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={handleRefinePrompt}
-        disabled={isRefining || Boolean(refinedPrompt)}
-        className="w-full sm:w-auto"
-      >
-        {isRefining ? (
-          <>
-            <LoadingSpinner className="mr-2" size="sm" />
-            Refining Prompt...
-          </>
-        ) : (
-          "Refine Prompt"
-        )}
-      </Button>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5" />
+          AI Prompt Refiner
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="p-3 bg-gray-50 rounded-lg">
+          <p className="text-sm font-medium text-gray-700 mb-1">Original Prompt:</p>
+          <p className="text-sm text-gray-600">{originalPrompt}</p>
+        </div>
 
-      {refinedPrompt && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-gray-700">AI Refined Prompt</label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleEdit}
-              className="text-blue-600 hover:text-blue-700"
-            >
-              <Edit className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-          </div>
-          
-          {isEditing ? (
-            <div className="space-y-2">
-              <Textarea
-                value={editedPrompt}
-                onChange={(e) => setEditedPrompt(e.target.value)}
-                className="min-h-[100px] resize-none rounded-lg"
-              />
+        {!refinedPrompt && (
+          <Button
+            onClick={handleRefinePrompt}
+            disabled={isRefining}
+            className="w-full"
+            variant="outline"
+          >
+            {isRefining ? (
+              <>
+                <LoadingSpinner className="mr-2" size="sm" />
+                Refining with AI...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Refine Prompt with AI
+              </>
+            )}
+          </Button>
+        )}
+
+        {refinedPrompt && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">AI Refined Prompt</label>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleSaveEdit}>Save</Button>
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleEdit}
+                  className="text-blue-600 hover:text-blue-700"
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleReset}
+                  className="text-gray-600 hover:text-gray-700"
+                >
+                  Reset
+                </Button>
               </div>
             </div>
-          ) : (
-            <div className="p-4 bg-gray-50 rounded-lg border">
-              <p className="text-sm text-gray-700">{refinedPrompt}</p>
-            </div>
-          )}
+            
+            {isEditing ? (
+              <div className="space-y-3">
+                <Textarea
+                  value={editedPrompt}
+                  onChange={(e) => setEditedPrompt(e.target.value)}
+                  className="min-h-[120px] resize-none"
+                  placeholder="Edit your refined prompt..."
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSaveEdit}>
+                    Save Changes
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleCancelEdit}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">{refinedPrompt}</p>
+              </div>
+            )}
 
-          {!isEditing && (
-            <Button
-              type="button"
-              onClick={handleApprove}
-              className="bg-blue-500 hover:bg-blue-600 text-white"
-            >
-              Approve Refined Prompt
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
+            {!isEditing && (
+              <Button
+                onClick={handleApprove}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Use Refined Prompt
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };

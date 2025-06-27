@@ -1,205 +1,223 @@
-
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Plus, Users } from "lucide-react";
-import { Character } from "@/components/CharacterManager";
-import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Plus, Edit, Trash2, User } from "lucide-react";
 import { toast } from "sonner";
 
-interface CharacterSelectionProps {
-  onCharactersSelected: (characters: Character[]) => void;
-  onSkipCharacters: () => void;
+interface Character {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl?: string;
+  createdAt: Date;
 }
 
-export const CharacterSelection = ({ onCharactersSelected, onSkipCharacters }: CharacterSelectionProps) => {
-  const [selectedCharacters, setSelectedCharacters] = useState<Character[]>([]);
+interface CharacterSelectionProps {
+  selectedCharacter: Character | null;
+  onCharacterSelect: (character: Character | null) => void;
+  onCharacterCreate: (character: Omit<Character, 'id' | 'createdAt'>) => void;
+}
+
+export const CharacterSelection = ({
+  selectedCharacter,
+  onCharacterSelect,
+  onCharacterCreate,
+}: CharacterSelectionProps) => {
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newCharacter, setNewCharacter] = useState({
+    name: "",
+    description: "",
+    imageUrl: "",
+  });
 
-  useEffect(() => {
-    fetchUserCharacters();
-  }, []);
+  const handleCreateCharacter = async () => {
+    if (!newCharacter.name.trim() || !newCharacter.description.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
 
-  const fetchUserCharacters = async () => {
+    setIsCreating(true);
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // Get authenticated user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setError('User must be authenticated');
-        return;
-      }
-
-      // Fetch user's characters from database
-      const { data, error: fetchError } = await supabase
-        .from('characters')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (fetchError) {
-        console.error('Error fetching characters:', fetchError);
-        setError('Failed to load characters');
-        return;
-      }
-
-      setCharacters(data || []);
+      const character = {
+        ...newCharacter,
+        name: newCharacter.name.trim(),
+        description: newCharacter.description.trim(),
+      };
+      
+      onCharacterCreate(character);
+      
+      // Reset form
+      setNewCharacter({ name: "", description: "", imageUrl: "" });
+      toast.success("Character created successfully!");
+      
     } catch (error) {
-      console.error('Error in fetchUserCharacters:', error);
-      setError('Failed to load characters');
-      toast.error('Failed to load your characters');
+      console.error("Error creating character:", error);
+      toast.error("Failed to create character");
     } finally {
-      setIsLoading(false);
+      setIsCreating(false);
     }
   };
 
-  const toggleCharacter = (character: Character) => {
-    setSelectedCharacters(prev => {
-      const isSelected = prev.find(c => c.id === character.id);
-      if (isSelected) {
-        return prev.filter(c => c.id !== character.id);
-      } else {
-        return [...prev, character];
-      }
-    });
+  const handleSelectCharacter = (character: Character) => {
+    onCharacterSelect(character);
+    toast.success(`Selected character: ${character.name}`);
   };
 
-  const handleContinue = () => {
-    onCharactersSelected(selectedCharacters);
+  const clearSelection = () => {
+    onCharacterSelect(null);
+    toast.success("Character selection cleared");
   };
-
-  const handleCreateNewCharacter = () => {
-    window.open('/characters', '_blank');
-  };
-
-  if (error) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Character Setup (Optional)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="text-center space-y-4">
-            <p className="text-red-600">{error}</p>
-            <div className="flex gap-3 justify-center">
-              <Button variant="outline" onClick={onSkipCharacters}>
-                Skip Characters
-              </Button>
-              <Button variant="outline" onClick={fetchUserCharacters}>
-                Retry
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Character Setup (Optional)</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <User className="h-5 w-5" />
+          Character Selection
+          {selectedCharacter && (
+            <Badge variant="secondary">
+              {selectedCharacter.name}
+            </Badge>
+          )}
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="text-center space-y-4">
-          <p className="text-gray-600">
-            Choose existing characters for your story, or skip to create without specific characters.
-          </p>
-          
-          <div className="flex gap-3 justify-center">
-            <Button variant="outline" onClick={onSkipCharacters}>
-              Skip Characters
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={handleCreateNewCharacter}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create New Character
-            </Button>
+      <CardContent className="space-y-4">
+        {/* Selected Character Display */}
+        {selectedCharacter && (
+          <div className="p-3 border rounded-lg bg-blue-50">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={selectedCharacter.imageUrl} />
+                <AvatarFallback>
+                  {selectedCharacter.name.substring(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-medium text-blue-900">{selectedCharacter.name}</p>
+                <p className="text-sm text-blue-700 line-clamp-1">
+                  {selectedCharacter.description}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearSelection}
+              >
+                Clear
+              </Button>
+            </div>
           </div>
+        )}
+
+        {/* Character Creation Form */}
+        <div className="space-y-3">
+          <h4 className="font-medium">Create New Character</h4>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <Label htmlFor="character-name">Name</Label>
+              <Input
+                id="character-name"
+                value={newCharacter.name}
+                onChange={(e) => setNewCharacter(prev => ({
+                  ...prev,
+                  name: e.target.value
+                }))}
+                placeholder="Character name"
+                disabled={isCreating}
+              />
+            </div>
+            <div>
+              <Label htmlFor="character-description">Description</Label>
+              <Input
+                id="character-description"
+                value={newCharacter.description}
+                onChange={(e) => setNewCharacter(prev => ({
+                  ...prev,
+                  description: e.target.value
+                }))}
+                placeholder="Character description"
+                disabled={isCreating}
+              />
+            </div>
+            <div>
+              <Label htmlFor="character-image">Image URL (optional)</Label>
+              <Input
+                id="character-image"
+                value={newCharacter.imageUrl}
+                onChange={(e) => setNewCharacter(prev => ({
+                  ...prev,
+                  imageUrl: e.target.value
+                }))}
+                placeholder="https://..."
+                disabled={isCreating}
+              />
+            </div>
+          </div>
+          <Button
+            onClick={handleCreateCharacter}
+            disabled={isCreating || !newCharacter.name.trim() || !newCharacter.description.trim()}
+            className="w-full"
+          >
+            {isCreating ? (
+              <>
+                <LoadingSpinner className="mr-2" size="sm" />
+                Creating Character...
+              </>
+            ) : (
+              <>
+                <Plus className="mr-2 h-4 w-4" />
+                Create Character
+              </>
+            )}
+          </Button>
         </div>
 
+        {/* Existing Characters List */}
         {isLoading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex items-center justify-center py-8">
             <LoadingSpinner size="lg" />
           </div>
         ) : characters.length > 0 ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              <Label>Your Characters ({characters.length})</Label>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <h4 className="font-medium">Existing Characters</h4>
+            <div className="grid gap-2 max-h-40 overflow-y-auto">
               {characters.map((character) => (
-                <button
+                <div
                   key={character.id}
-                  onClick={() => toggleCharacter(character)}
-                  className={`p-3 border rounded-lg text-left transition-all hover:bg-gray-50 ${
-                    selectedCharacters.find(c => c.id === character.id)
-                      ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-                      : 'border-gray-200'
+                  className={`p-2 border rounded cursor-pointer hover:bg-gray-50 transition-colors ${
+                    selectedCharacter?.id === character.id ? 'border-blue-500 bg-blue-50' : ''
                   }`}
+                  onClick={() => handleSelectCharacter(character)}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <User className="h-4 w-4" />
-                    <span className="font-medium">{character.name}</span>
-                  </div>
-                  {character.description && (
-                    <p className="text-sm text-gray-600 mb-1 line-clamp-2">{character.description}</p>
-                  )}
-                  {character.traits && (
-                    <p className="text-sm text-gray-600 mb-1 line-clamp-1">{character.traits}</p>
-                  )}
-                  {character.appearance_tags && character.appearance_tags.length > 0 && (
-                    <p className="text-xs text-gray-500 line-clamp-1">{character.appearance_tags.join(', ')}</p>
-                  )}
-                  {character.image_url && (
-                    <div className="mt-2">
-                      <img 
-                        src={character.image_url} 
-                        alt={character.name}
-                        className="w-12 h-12 rounded-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }}
-                      />
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={character.imageUrl} />
+                      <AvatarFallback>
+                        {character.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{character.name}</p>
+                      <p className="text-xs text-gray-600 line-clamp-1">
+                        {character.description}
+                      </p>
                     </div>
-                  )}
-                </button>
+                  </div>
+                </div>
               ))}
             </div>
-
-            {selectedCharacters.length > 0 && (
-              <Button onClick={handleContinue} className="w-full">
-                Continue with {selectedCharacters.length} Character{selectedCharacters.length > 1 ? 's' : ''}
-              </Button>
-            )}
           </div>
         ) : (
-          <div className="text-center py-8 space-y-4">
-            <User className="h-12 w-12 mx-auto text-gray-400" />
-            <div className="space-y-2">
-              <p className="text-gray-600">You haven't created any characters yet.</p>
-              <p className="text-sm text-gray-500">Create characters to add personality and consistency to your stories.</p>
-            </div>
-            <div className="flex gap-3 justify-center">
-              <Button variant="outline" onClick={onSkipCharacters}>
-                Continue Without Characters
-              </Button>
-              <Button onClick={handleCreateNewCharacter}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Character
-              </Button>
-            </div>
-          </div>
+          <p className="text-sm text-gray-500 text-center py-4">
+            No characters created yet
+          </p>
         )}
       </CardContent>
     </Card>
