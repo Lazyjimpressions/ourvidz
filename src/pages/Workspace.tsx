@@ -126,49 +126,33 @@ export const Workspace = () => {
         </div>
       </div>
 
-      {/* Free-Floating Bottom Input Container */}
+      {/* Free-Floating Two-Row Input Container */}
       <div className="pb-8 px-8">
         <div className="max-w-5xl mx-auto">
           <div className="bg-gray-900/95 backdrop-blur-sm rounded-2xl p-6 border border-gray-800/50 shadow-2xl">
-            <div className="flex items-center gap-4">
-              {/* Mode Toggle Buttons */}
-              <div className="flex gap-2">
-                <Button
-                  variant={mode === 'image' ? 'default' : 'ghost'}
-                  onClick={() => handleModeChange('image')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                    mode === 'image' 
-                      ? 'bg-white text-black hover:bg-gray-100' 
-                      : 'bg-transparent text-gray-400 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
-                  <Camera className="w-4 h-4" />
-                  IMAGE
-                </Button>
-                <Button
-                  variant={mode === 'video' ? 'default' : 'ghost'}
-                  onClick={() => handleModeChange('video')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                    mode === 'video' 
-                      ? 'bg-white text-black hover:bg-gray-100' 
-                      : 'bg-transparent text-gray-400 hover:bg-gray-800 hover:text-white'
-                  }`}
-                >
-                  <Play className="w-4 h-4" />
-                  VIDEO
-                </Button>
-              </div>
+            {/* Row 1: IMAGE, Reference Upload, Text Input, Generate Button */}
+            <div className="flex items-center gap-4 mb-4">
+              <Button
+                variant={mode === 'image' ? 'default' : 'ghost'}
+                onClick={() => handleModeChange('image')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  mode === 'image' 
+                    ? 'bg-white text-black hover:bg-gray-100' 
+                    : 'bg-transparent text-gray-400 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                IMAGE
+              </Button>
 
               {/* Reference Image Upload */}
-              <div className="flex-shrink-0">
-                <Button
-                  variant="ghost"
-                  onClick={handleReferenceImageUpload}
-                  className="w-12 h-12 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
-                >
-                  <Upload className="w-5 h-5 text-gray-400" />
-                </Button>
-              </div>
+              <Button
+                variant="ghost"
+                onClick={handleReferenceImageUpload}
+                className="w-12 h-12 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+              >
+                <Upload className="w-5 h-5 text-gray-400" />
+              </Button>
 
               {/* Main Text Input */}
               <div className="flex-1">
@@ -187,14 +171,42 @@ export const Workspace = () => {
                 />
               </div>
 
+              {/* Generate Button */}
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || !prompt.trim()}
+                className="w-12 h-12 p-0 bg-blue-600 hover:bg-blue-700 rounded-full"
+              >
+                <Sparkles className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Row 2: VIDEO and Advanced Controls */}
+            <div className="flex items-center gap-4">
+              <Button
+                variant={mode === 'video' ? 'default' : 'ghost'}
+                onClick={() => handleModeChange('video')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  mode === 'video' 
+                    ? 'bg-white text-black hover:bg-gray-100' 
+                    : 'bg-transparent text-gray-400 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Play className="w-4 h-4" />
+                VIDEO
+              </Button>
+
+              {/* Spacer to align with reference upload button position */}
+              <div className="w-12"></div>
+
               {/* Advanced Controls */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-1">
                 {/* Aspect Ratio */}
                 <Select defaultValue="16:9">
                   <SelectTrigger className="w-20 bg-gray-800 border-gray-700 text-white text-sm h-10">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className="bg-gray-800 border-gray-700 z-50">
                     <SelectItem value="16:9">16:9</SelectItem>
                     <SelectItem value="4:3">4:3</SelectItem>
                     <SelectItem value="1:1">1:1</SelectItem>
@@ -206,7 +218,7 @@ export const Workspace = () => {
                   <SelectTrigger className="w-32 bg-gray-800 border-gray-700 text-white text-sm h-10">
                     <SelectValue placeholder="Shot Type" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className="bg-gray-800 border-gray-700 z-50">
                     <SelectItem value="close-up">Close-up</SelectItem>
                     <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="wide">Wide</SelectItem>
@@ -218,7 +230,7 @@ export const Workspace = () => {
                   <SelectTrigger className="w-24 bg-gray-800 border-gray-700 text-white text-sm h-10">
                     <SelectValue placeholder="Angle" />
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className="bg-gray-800 border-gray-700 z-50">
                     <SelectItem value="front">Front</SelectItem>
                     <SelectItem value="side">Side</SelectItem>
                     <SelectItem value="back">Back</SelectItem>
@@ -233,7 +245,7 @@ export const Workspace = () => {
                       <SelectValue placeholder="Style" />
                     </div>
                   </SelectTrigger>
-                  <SelectContent className="bg-gray-800 border-gray-700">
+                  <SelectContent className="bg-gray-800 border-gray-700 z-50">
                     <SelectItem value="realistic">Realistic</SelectItem>
                     <SelectItem value="artistic">Artistic</SelectItem>
                     <SelectItem value="cartoon">Cartoon</SelectItem>
@@ -247,16 +259,10 @@ export const Workspace = () => {
                 >
                   Style ref
                 </Button>
-
-                {/* Generate Button */}
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !prompt.trim()}
-                  className="w-12 h-12 p-0 bg-blue-600 hover:bg-blue-700 rounded-full"
-                >
-                  <Sparkles className="w-5 h-5" />
-                </Button>
               </div>
+
+              {/* Spacer to align with generate button */}
+              <div className="w-12"></div>
             </div>
           </div>
         </div>
