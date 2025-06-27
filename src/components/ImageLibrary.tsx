@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, Download, Trash2, User, Image, Grid, List, Eye } from "lucide-react";
+import { Search, Download, Trash2, Image, Grid, List, Eye } from "lucide-react";
 import { GeneratedImage } from "@/types/image";
 import { toast } from "@/hooks/use-toast";
 
@@ -35,28 +35,27 @@ interface ImageLibraryProps {
 
 export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "character" | "general">("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "fast" | "high">("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
 
   const filteredImages = images.filter((image) => {
-    const matchesSearch = image.prompt.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (image.characterName?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = image.prompt.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesFilter = activeFilter === "all" || 
-                         (activeFilter === "character" && image.isCharacter) ||
-                         (activeFilter === "general" && !image.isCharacter);
+                         (activeFilter === "fast" && image.quality === "fast") ||
+                         (activeFilter === "high" && image.quality === "high");
     
     return matchesSearch && matchesFilter;
   });
 
-  const characterImages = filteredImages.filter(img => img.isCharacter);
-  const generalImages = filteredImages.filter(img => !img.isCharacter);
+  const fastImages = filteredImages.filter(img => img.quality === "fast");
+  const highImages = filteredImages.filter(img => img.quality === "high");
 
   const downloadImage = (image: GeneratedImage) => {
     const link = document.createElement('a');
     link.href = image.url;
-    link.download = `${image.isCharacter ? 'character' : 'image'}-${image.id}.jpg`;
+    link.download = `image-${image.id}.jpg`;
     link.click();
     
     toast({
@@ -83,7 +82,7 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
       <div className="aspect-square cursor-pointer" onClick={() => setSelectedImage(image)}>
         <img
           src={image.url}
-          alt={image.characterName || "Generated image"}
+          alt="Generated image"
           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
           loading="lazy"
         />
@@ -143,20 +142,13 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
       </div>
 
       <div className="p-3">
-        {image.characterName && (
-          <div className="flex items-center gap-2 mb-1">
-            <User className="h-3 w-3" />
-            <span className="text-xs font-medium truncate">{image.characterName}</span>
-          </div>
-        )}
-        
         <p className="text-xs text-gray-600 line-clamp-2 mb-2" title={image.prompt}>
           {truncateText(image.prompt, 60)}
         </p>
         
         <div className="flex items-center justify-between">
-          <Badge variant={image.isCharacter ? "default" : "secondary"} className="text-xs">
-            {image.isCharacter ? "Character" : "Image"}
+          <Badge variant={image.quality === "high" ? "default" : "secondary"} className="text-xs">
+            {image.quality === "high" ? "High Quality" : "Fast"}
           </Badge>
           <span className="text-xs text-gray-400">
             {image.timestamp.toLocaleDateString()}
@@ -172,8 +164,8 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
         <TableHeader>
           <TableRow>
             <TableHead className="w-16">Preview</TableHead>
-            <TableHead>Name/Prompt</TableHead>
-            <TableHead>Type</TableHead>
+            <TableHead>Prompt</TableHead>
+            <TableHead>Quality</TableHead>
             <TableHead>Created</TableHead>
             <TableHead className="w-24">Actions</TableHead>
           </TableRow>
@@ -195,18 +187,13 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
                 </div>
               </TableCell>
               <TableCell>
-                <div className="space-y-1">
-                  {image.characterName && (
-                    <div className="font-medium text-sm">{image.characterName}</div>
-                  )}
-                  <div className="text-sm text-gray-600" title={image.prompt}>
-                    {truncateText(image.prompt, 80)}
-                  </div>
+                <div className="text-sm text-gray-600" title={image.prompt}>
+                  {truncateText(image.prompt, 80)}
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant={image.isCharacter ? "default" : "secondary"}>
-                  {image.isCharacter ? "Character" : "Image"}
+                <Badge variant={image.quality === "high" ? "default" : "secondary"}>
+                  {image.quality === "high" ? "High Quality" : "Fast"}
                 </Badge>
               </TableCell>
               <TableCell className="text-sm text-gray-500">
@@ -296,11 +283,11 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
             </div>
           </div>
 
-          <Tabs value={activeFilter} onValueChange={(value) => setActiveFilter(value as "all" | "character" | "general")}>
+          <Tabs value={activeFilter} onValueChange={(value) => setActiveFilter(value as "all" | "fast" | "high")}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="all">All ({images.length})</TabsTrigger>
-              <TabsTrigger value="character">Characters ({characterImages.length})</TabsTrigger>
-              <TabsTrigger value="general">Images ({generalImages.length})</TabsTrigger>
+              <TabsTrigger value="fast">Fast ({fastImages.length})</TabsTrigger>
+              <TabsTrigger value="high">High Quality ({highImages.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="all" className="mt-4">
@@ -323,42 +310,42 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
               )}
             </TabsContent>
 
-            <TabsContent value="character" className="mt-4">
-              {characterImages.length === 0 ? (
+            <TabsContent value="fast" className="mt-4">
+              {fastImages.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  <User className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No characters yet</p>
-                  <p className="text-sm">Create some characters to see them here</p>
+                  <Image className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No fast images yet</p>
+                  <p className="text-sm">Generate some fast images to see them here</p>
                 </div>
               ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  {characterImages.map((image) => (
+                  {fastImages.map((image) => (
                     <ImageGridCard key={image.id} image={image} />
                   ))}
                 </div>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
-                  <ImageTableView images={characterImages} />
+                  <ImageTableView images={fastImages} />
                 </div>
               )}
             </TabsContent>
 
-            <TabsContent value="general" className="mt-4">
-              {generalImages.length === 0 ? (
+            <TabsContent value="high" className="mt-4">
+              {highImages.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Image className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No general images yet</p>
-                  <p className="text-sm">Generate some images to see them here</p>
+                  <p>No high quality images yet</p>
+                  <p className="text-sm">Generate some high quality images to see them here</p>
                 </div>
               ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-                  {generalImages.map((image) => (
+                  {highImages.map((image) => (
                     <ImageGridCard key={image.id} image={image} />
                   ))}
                 </div>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
-                  <ImageTableView images={generalImages} />
+                  <ImageTableView images={highImages} />
                 </div>
               )}
             </TabsContent>
@@ -380,18 +367,15 @@ export const ImageLibrary = ({ images, mode }: ImageLibraryProps) => {
               <div className="aspect-square max-h-[70vh]">
                 <img
                   src={selectedImage.url}
-                  alt={selectedImage.characterName || "Generated image"}
+                  alt="Generated image"
                   className="w-full h-full object-contain"
                 />
               </div>
               <div className="p-4 space-y-2">
-                {selectedImage.characterName && (
-                  <h3 className="font-semibold">{selectedImage.characterName}</h3>
-                )}
                 <p className="text-sm text-gray-600">{selectedImage.prompt}</p>
                 <div className="flex justify-between items-center">
-                  <Badge variant={selectedImage.isCharacter ? "default" : "secondary"}>
-                    {selectedImage.isCharacter ? "Character" : "Image"}
+                  <Badge variant={selectedImage.quality === "high" ? "default" : "secondary"}>
+                    {selectedImage.quality === "high" ? "High Quality" : "Fast"}
                   </Badge>
                   <div className="flex gap-2">
                     <Button

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, RefreshCw, Check, Save, Eye } from "lucide-react";
+import { Download, Check, Save, Eye } from "lucide-react";
 import { GeneratedImage } from "@/types/image";
 import { toast } from "@/hooks/use-toast";
 
@@ -181,18 +181,15 @@ export const GeneratedImagesDisplay = ({
               <div className="aspect-square max-h-[70vh]">
                 <img
                   src={selectedImage.url}
-                  alt={selectedImage.characterName || "Generated image"}
+                  alt="Generated image"
                   className="w-full h-full object-contain"
                 />
               </div>
               <div className="p-4 space-y-2">
-                {selectedImage.characterName && (
-                  <h3 className="font-semibold">{selectedImage.characterName}</h3>
-                )}
                 <p className="text-sm text-gray-600">{selectedImage.prompt}</p>
                 <div className="flex justify-between items-center">
-                  <Badge variant={selectedImage.isCharacter ? "default" : "secondary"}>
-                    {selectedImage.isCharacter ? "Character" : "Image"}
+                  <Badge variant="default">
+                    Generated Image
                   </Badge>
                   <div className="flex gap-2">
                     <Button
