@@ -25,7 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Search, Download, Trash2, User, Image, Grid, List, Eye } from "lucide-react";
-import { GeneratedImage } from "@/pages/ImageCreation";
+import { GeneratedImage } from "@/types/image";
 import { toast } from "@/hooks/use-toast";
 
 interface ImageLibraryProps {
