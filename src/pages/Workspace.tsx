@@ -1,23 +1,27 @@
 
-import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
-import { VideoInputControls } from "@/components/VideoInputControls";
-import { ImageInputControls } from "@/components/ImageInputControls";
+import { WorkspaceInputControls } from "@/components/WorkspaceInputControls";
+import type { GenerationQuality } from "@/types/generation";
 
 interface GeneratedContent {
   id: string;
   url: string;
   prompt: string;
   timestamp: Date;
-  quality: 'fast' | 'high';
+  quality: GenerationQuality;
 }
 
 export const Workspace = () => {
   const [searchParams] = useSearchParams();
-  const mode = searchParams.get('mode') || 'image';
+  const navigate = useNavigate();
+  const initialMode = (searchParams.get('mode') as 'image' | 'video') || 'image';
+  
+  const [mode, setMode] = useState<'image' | 'video'>(initialMode);
+  const [quality, setQuality] = useState<GenerationQuality>('fast');
   const [prompt, setPrompt] = useState("");
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
@@ -32,7 +36,21 @@ export const Workspace = () => {
     }
   });
 
-  const { data: generationData } = useGenerationStatus(generatedId, mode as 'image' | 'video');
+  const { data: generationData } = useGenerationStatus(generatedId, mode);
+
+  // Update URL when mode changes
+  const handleModeChange = (newMode: 'image' | 'video') => {
+    setMode(newMode);
+    navigate(`/workspace?mode=${newMode}`, { replace: true });
+  };
+
+  // Sync mode with URL parameter
+  useEffect(() => {
+    const urlMode = searchParams.get('mode') as 'image' | 'video';
+    if (urlMode && urlMode !== mode) {
+      setMode(urlMode);
+    }
+  }, [searchParams, mode]);
 
   // Check if generation is complete
   if (generationData?.status === 'completed') {
@@ -43,7 +61,7 @@ export const Workspace = () => {
         url,
         prompt,
         timestamp: new Date(),
-        quality: 'fast' as const
+        quality
       }));
       setGeneratedContent(prev => [...images, ...prev]);
       setGeneratedId(null);
@@ -53,7 +71,7 @@ export const Workspace = () => {
         url: contentData.video_url,
         prompt,
         timestamp: new Date(),
-        quality: 'fast' as const
+        quality
       };
       setGeneratedContent(prev => [video, ...prev]);
       setGeneratedId(null);
@@ -67,8 +85,8 @@ export const Workspace = () => {
     }
 
     generate({
-      format: mode as 'image' | 'video',
-      quality: 'fast',
+      format: mode,
+      quality,
       prompt: prompt.trim(),
       metadata: {
         source: 'workspace'
@@ -77,7 +95,6 @@ export const Workspace = () => {
   };
 
   const handleReferenceImageUpload = () => {
-    // TODO: Implement reference image upload functionality
     toast.info("Reference image upload coming soon!");
   };
 
@@ -120,26 +137,20 @@ export const Workspace = () => {
         </div>
       </div>
 
-      {/* Free-Floating Input Container */}
+      {/* Unified Input Container */}
       <div className="pb-8 px-8">
         <div className="max-w-5xl mx-auto">
-          {mode === 'video' ? (
-            <VideoInputControls
-              prompt={prompt}
-              setPrompt={setPrompt}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              onReferenceImageUpload={handleReferenceImageUpload}
-            />
-          ) : (
-            <ImageInputControls
-              prompt={prompt}
-              setPrompt={setPrompt}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              onReferenceImageUpload={handleReferenceImageUpload}
-            />
-          )}
+          <WorkspaceInputControls
+            mode={mode}
+            onModeChange={handleModeChange}
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onReferenceImageUpload={handleReferenceImageUpload}
+            quality={quality}
+            onQualityChange={setQuality}
+          />
         </div>
       </div>
 
@@ -166,6 +177,7 @@ export const Workspace = () => {
                   )}
                   <div className="p-2">
                     <p className="text-xs text-gray-400 truncate">{item.prompt}</p>
+                    <p className="text-xs text-gray-500">{item.quality === 'fast' ? 'Low' : 'High'} Quality</p>
                   </div>
                 </div>
               ))}
