@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -8,13 +9,6 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   const featureCards = [
-    {
-      title: "New Storyboard",
-      subtitle: "Create AI-powered video narratives with intelligent scene planning",
-      backgroundImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&h=600&fit=crop",
-      buttonText: "Start Creating",
-      onClick: () => navigate("/storyboard")
-    },
     {
       title: "Generate Motion",
       subtitle: "Transform static images into dynamic motion sequences",
@@ -45,7 +39,7 @@ const Dashboard = () => {
         </div>
 
         {/* Feature Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {featureCards.map((card, index) => (
             <div 
               key={index}

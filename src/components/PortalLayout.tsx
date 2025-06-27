@@ -70,14 +70,6 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip="My Videos">
-                  <Link to="/library">
-                    <Video />
-                    <span>My Library</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
                 <SidebarMenuButton asChild tooltip="Pricing">
                   <Link to="/pricing">
                     <DollarSign />

@@ -4,6 +4,5 @@ export interface GeneratedImage {
   url: string;
   prompt: string;
   timestamp: Date;
-  isCharacter?: boolean;
-  characterName?: string;
+  quality?: 'fast' | 'high';
 }
