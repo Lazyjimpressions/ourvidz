@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, Sparkles, Play, Music } from "lucide-react";
+import { Upload, Sparkles, Play, Music, RotateCcw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -28,34 +28,40 @@ export const VideoInputControls = ({
 }: VideoInputControlsProps) => {
   return (
     <div className="bg-gray-900/95 backdrop-blur-sm rounded-2xl p-6 border border-gray-800/50 shadow-2xl">
-      {/* Row 1: VIDEO, Start/End Ref, Text Input, Generate Button */}
-      <div className="flex items-center gap-4 mb-4">
+      {/* Row 1: IMAGE, Start Ref, Refresh, End Ref, Text Input, Generate Button */}
+      <div className="flex items-center gap-3 mb-4">
         <Button
           variant="default"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100 font-medium"
         >
           <Play className="w-4 h-4" />
-          VIDEO
+          IMAGE
         </Button>
 
-        {/* Start Ref Upload */}
+        {/* Start Ref Upload - small square */}
         <Button
           variant="ghost"
           onClick={onReferenceImageUpload}
-          className="flex flex-col items-center justify-center w-16 h-12 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
         >
-          <Upload className="w-4 h-4 text-gray-400 mb-1" />
-          <span className="text-xs text-gray-400">Start ref</span>
+          <Upload className="w-4 h-4 text-gray-400" />
         </Button>
 
-        {/* End Ref Upload */}
+        {/* Refresh/Cycle icon */}
+        <Button
+          variant="ghost"
+          className="w-8 h-8 p-0 text-gray-400 hover:text-white"
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
+
+        {/* End Ref Upload - small square */}
         <Button
           variant="ghost"
           onClick={onReferenceImageUpload}
-          className="flex flex-col items-center justify-center w-16 h-12 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
         >
-          <Upload className="w-4 h-4 text-gray-400 mb-1" />
-          <span className="text-xs text-gray-400">End ref</span>
+          <Upload className="w-4 h-4 text-gray-400" />
         </Button>
 
         {/* Main Text Input */}
@@ -85,63 +91,58 @@ export const VideoInputControls = ({
         </Button>
       </div>
 
-      {/* Row 2: Video Controls */}
-      <div className="flex items-center gap-4">
-        {/* Spacer to align with VIDEO button */}
-        <div className="w-20"></div>
-        
-        {/* Spacer for ref buttons */}
-        <div className="w-16"></div>
-        <div className="w-16"></div>
+      {/* Row 2: VIDEO, Controls */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="default"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100 font-medium"
+        >
+          <Play className="w-4 h-4" />
+          VIDEO
+        </Button>
 
-        {/* Video Controls */}
-        <div className="flex items-center gap-3 flex-1">
-          {/* Aspect Ratio */}
-          <Select defaultValue="16:9">
-            <SelectTrigger className="w-20 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="16:9">16:9</SelectItem>
-              <SelectItem value="4:3">4:3</SelectItem>
-              <SelectItem value="1:1">1:1</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Aspect Ratio */}
+        <Select defaultValue="16:9">
+          <SelectTrigger className="w-16 bg-gray-800 border-gray-700 text-white text-sm h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-800 border-gray-700 z-50">
+            <SelectItem value="16:9">16:9</SelectItem>
+            <SelectItem value="4:3">4:3</SelectItem>
+            <SelectItem value="1:1">1:1</SelectItem>
+          </SelectContent>
+        </Select>
 
-          {/* Duration */}
-          <Select defaultValue="5s">
-            <SelectTrigger className="w-16 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="3s">3s</SelectItem>
-              <SelectItem value="5s">5s</SelectItem>
-              <SelectItem value="10s">10s</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Duration */}
+        <Select defaultValue="5s">
+          <SelectTrigger className="w-12 bg-gray-800 border-gray-700 text-white text-sm h-10">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-800 border-gray-700 z-50">
+            <SelectItem value="3s">3s</SelectItem>
+            <SelectItem value="5s">5s</SelectItem>
+            <SelectItem value="10s">10s</SelectItem>
+          </SelectContent>
+        </Select>
 
-          {/* Music Button */}
-          <Button
-            variant="ghost"
-            className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 text-white"
-          >
-            <Music className="w-4 h-4" />
-          </Button>
+        {/* Music Button */}
+        <Button
+          variant="ghost"
+          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 text-white rounded-lg"
+        >
+          <Music className="w-4 h-4" />
+        </Button>
 
-          {/* Motion Intensity */}
-          <div className="flex items-center gap-2 min-w-32">
-            <span className="text-sm text-gray-400">Motion</span>
-            <Slider
-              defaultValue={[50]}
-              max={100}
-              step={1}
-              className="flex-1"
-            />
-          </div>
+        {/* Motion Intensity */}
+        <div className="flex items-center gap-2 min-w-32">
+          <span className="text-sm text-gray-400">Motion</span>
+          <Slider
+            defaultValue={[50]}
+            max={100}
+            step={1}
+            className="flex-1"
+          />
         </div>
-
-        {/* Spacer to align with generate button */}
-        <div className="w-12"></div>
       </div>
     </div>
   );
