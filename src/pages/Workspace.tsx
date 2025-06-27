@@ -42,17 +42,17 @@ export const Workspace = () => {
         url,
         prompt,
         timestamp: new Date(),
-        quality: 'fast'
+        quality: 'fast' as const
       }));
       setGeneratedContent(prev => [...images, ...prev]);
       setGeneratedId(null);
     } else if (mode === 'video' && contentData.video_url) {
-      const video = {
-        id: generatedId,
+      const video: GeneratedContent = {
+        id: generatedId!,
         url: contentData.video_url,
         prompt,
         timestamp: new Date(),
-        quality: 'fast'
+        quality: 'fast' as const
       };
       setGeneratedContent(prev => [video, ...prev]);
       setGeneratedId(null);
