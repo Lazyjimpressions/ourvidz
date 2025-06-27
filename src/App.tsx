@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
+import Dashboard from "@/pages/Dashboard";
 import { Workspace } from "@/pages/Workspace";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/workspace" element={<Workspace />} />
             <Route path="/auth" element={<Auth />} />
           </Routes>
