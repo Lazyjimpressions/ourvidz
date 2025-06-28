@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -52,6 +53,49 @@ export const Workspace = () => {
     mode, 
     !!generatedId
   );
+
+  // Map database status to GenerationProgressIndicator status
+  const mapDatabaseStatusToProgressStatus = (dbStatus: string): 'queued' | 'processing' | 'uploading' | 'completed' | 'failed' => {
+    switch (dbStatus) {
+      case 'pending':
+      case 'queued':
+        return 'queued';
+      case 'processing':
+        return 'processing';
+      case 'uploading':
+        return 'uploading';
+      case 'completed':
+        return 'completed';
+      case 'failed':
+        return 'failed';
+      default:
+        return 'queued';
+    }
+  };
+
+  // Calculate progress based on status and elapsed time
+  const calculateProgress = (status: string, startTime: Date | null): number => {
+    if (!startTime) return 0;
+    
+    const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+    const estimatedTotal = getEstimatedTime();
+    
+    switch (status) {
+      case 'queued':
+      case 'pending':
+        return Math.min(10, (elapsed / estimatedTotal) * 100);
+      case 'processing':
+        return Math.min(80, 20 + ((elapsed / estimatedTotal) * 60));
+      case 'uploading':
+        return Math.min(95, 85 + ((elapsed / estimatedTotal) * 10));
+      case 'completed':
+        return 100;
+      case 'failed':
+        return 0;
+      default:
+        return Math.min(50, (elapsed / estimatedTotal) * 100);
+    }
+  };
 
   // Update URL when mode changes
   const handleModeChange = (newMode: 'image' | 'video') => {
@@ -223,8 +267,8 @@ export const Workspace = () => {
             {generatedId && generationData && (
               <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
                 <GenerationProgressIndicator
-                  status={generationData.status}
-                  progress={generationData.progress}
+                  status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                  progress={calculateProgress(generationData.status, generationStartTime)}
                   estimatedTime={getEstimatedTime()}
                   startTime={generationStartTime}
                 />
