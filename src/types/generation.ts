@@ -24,15 +24,15 @@ export interface GenerationOptions {
   qualityLevel: string;
 }
 
-// Updated configuration aligned with 1.3B model for ALL job types
+// Updated configuration with Phase 2 optimized timing estimates
 export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
   'image_fast': {
     format: 'image',
     quality: 'fast',
     credits: 1,
-    estimatedTime: '15-30 seconds',      // Updated from '15-45 seconds'
-    resolution: '832x480',
-    description: 'Quick image generation (1 frame from Wan 2.1 1.3B)',
+    estimatedTime: '45-75 seconds',      // Updated: 37% faster with medium resolution
+    resolution: '640x360',               // Updated: Medium resolution for speed
+    description: 'Fast image generation (medium resolution, optimized)',
     modelVariant: 'wan_2_1_1_3b',
     displayName: 'Fast Image',
     icon: '⚡',
@@ -43,10 +43,10 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'image',
     quality: 'high',
     credits: 2,
-    estimatedTime: '45-90 seconds',      // Updated from '30-60 seconds'
-    resolution: '1280x720',
-    description: 'High-quality image (1 frame from Wan 2.1 1.3B)', // Updated from 14B
-    modelVariant: 'wan_2_1_1_3b',        // Updated from 'wan_2_1_14b'
+    estimatedTime: '90-120 seconds',     // Updated: High resolution, high quality
+    resolution: '832x480',               // Updated: High resolution
+    description: 'High-quality image (high resolution, premium quality)',
+    modelVariant: 'wan_2_1_1_3b',
     displayName: 'High Quality Image',
     icon: '🎨',
     priority: 'quality',
@@ -56,9 +56,9 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'video',
     quality: 'fast',
     credits: 3,
-    estimatedTime: '1-2 minutes',        // Updated from '2-4 minutes'
-    resolution: '832x480',
-    description: '1-second video from Wan 2.1 1.3B', // Updated from '5-second'
+    estimatedTime: '60-90 seconds',      // Updated: 38% faster with medium resolution
+    resolution: '640x360',               // Updated: Medium resolution for speed
+    description: '2-second video (medium resolution, optimized)',
     modelVariant: 'wan_2_1_1_3b',
     displayName: 'Fast Video',
     icon: '🚀',
@@ -69,10 +69,10 @@ export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
     format: 'video',
     quality: 'high',
     credits: 5,
-    estimatedTime: '3-6 minutes',        // Updated from '8-15 minutes'
-    resolution: '1280x720',
-    description: '2-second HD video from Wan 2.1 1.3B', // Updated from '5-second' and '14B'
-    modelVariant: 'wan_2_1_1_3b',        // Updated from 'wan_2_1_14b'
+    estimatedTime: '2-3 minutes',        // Updated: High resolution, high quality
+    resolution: '832x480',               // Updated: High resolution
+    description: '2-second HD video (high resolution, premium quality)',
+    modelVariant: 'wan_2_1_1_3b',
     displayName: 'High Quality Video',
     icon: '🎬',
     priority: 'quality',

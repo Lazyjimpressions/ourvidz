@@ -1,3 +1,4 @@
+
 # worker.py - Phase 2 Optimized: Resolution + Hardware Optimization
 import os
 import json
@@ -81,6 +82,58 @@ class VideoWorker:
             'video': 120    # Baseline for video generation  
         }
 
+        # Job type configurations for existing UI compatibility
+        self.job_configs = {
+            'image_fast': {
+                'content_type': 'image',
+                'resolution': 'medium',     # Use medium resolution for speed
+                'quality': 'fast',
+                'expected_time': '60s',     # 37% faster than baseline
+                'resolution_desc': 'Medium (640×360)',
+                'quality_desc': 'Fast (12 steps)',
+                'size': '640*360',
+                'sample_steps': 12,
+                'sample_guide_scale': 6.0,
+                'frame_num': 16
+            },
+            'image_high': {
+                'content_type': 'image',
+                'resolution': 'high',
+                'quality': 'high',
+                'expected_time': '105s',    # Slightly longer for quality
+                'resolution_desc': 'High (832×480)',
+                'quality_desc': 'High (16 steps)',
+                'size': '832*480',
+                'sample_steps': 16,
+                'sample_guide_scale': 7.0,
+                'frame_num': 16
+            },
+            'video_fast': {
+                'content_type': 'video',
+                'resolution': 'medium',
+                'quality': 'fast',
+                'expected_time': '75s',     # 38% faster than baseline
+                'resolution_desc': 'Medium (640×360)',
+                'quality_desc': 'Fast (12 steps)',
+                'size': '640*360',
+                'sample_steps': 12,
+                'sample_guide_scale': 6.0,
+                'frame_num': 16
+            },
+            'video_high': {
+                'content_type': 'video',
+                'resolution': 'high',
+                'quality': 'high',
+                'expected_time': '120s',    # Baseline for high quality
+                'resolution_desc': 'High (832×480)',
+                'quality_desc': 'High (16 steps)',
+                'size': '832*480',
+                'sample_steps': 16,
+                'sample_guide_scale': 7.0,
+                'frame_num': 16
+            }
+        }
+
         # Environment variables
         self.supabase_url = os.getenv('SUPABASE_URL')
         self.supabase_service_key = os.getenv('SUPABASE_SERVICE_KEY')
@@ -88,7 +141,62 @@ class VideoWorker:
         self.redis_token = os.getenv('UPSTASH_REDIS_REST_TOKEN')
 
         print("🎬 Phase 2 Worker ready")
-        print("⚡ Speed tiers: ultra_fast (45-50s), fast (60-70s), standard (85-95s), high (95-105s)")
+        print("⚡ Speed optimizations: image_fast (60s), image_high (105s), video_fast (75s), video_high (120s)")
+
+    def parse_job_type(self, job_type):
+        """Parse job type into content_type, resolution, and quality components"""
+        if job_type in self.job_configs:
+            config = self.job_configs[job_type]
+            return config['content_type'], config['resolution'], config['quality']
+        
+        # Fallback parsing for new format (future compatibility)
+        try:
+            parts = job_type.split('_')
+            if len(parts) >= 2:
+                content_type = parts[0]  # 'image' or 'video'
+                if len(parts) == 2:
+                    # Old format: image_fast, image_high
+                    quality = parts[1]
+                    resolution = 'medium' if quality == 'fast' else 'high'
+                else:
+                    # New format: image_medium_fast, image_high_high
+                    resolution = parts[1]
+                    quality = parts[2]
+                return content_type, resolution, quality
+        except:
+            pass
+        
+        # Default fallback
+        print(f"⚠️ Unknown job type: {job_type}, using defaults")
+        return 'image', 'medium', 'fast'
+
+    def get_job_config(self, content_type, resolution, quality):
+        """Get configuration for a specific content type, resolution, and quality combination"""
+        # Check if we have a direct mapping first
+        job_type = f"{content_type}_{quality}"
+        if job_type in self.job_configs:
+            return self.job_configs[job_type]
+        
+        # Build configuration dynamically
+        resolution_config = self.resolution_configs.get(resolution, self.resolution_configs['medium'])
+        quality_config = self.quality_configs.get(quality, self.quality_configs['fast'])
+        
+        # Calculate expected time
+        base_time = self.base_times.get(content_type, 95)
+        expected_seconds = int(base_time * resolution_config['multiplier'] * (0.95 if quality == 'fast' else 1.1))
+        
+        return {
+            'content_type': content_type,
+            'resolution': resolution,
+            'quality': quality,
+            'expected_time': f'{expected_seconds}s',
+            'resolution_desc': resolution_config['description'],
+            'quality_desc': quality_config['description'],
+            'size': resolution_config['size'],
+            'sample_steps': quality_config['sample_steps'],
+            'sample_guide_scale': quality_config['sample_guide_scale'],
+            'frame_num': 16
+        }
 
     def init_hardware_optimizations(self):
         """PHASE 2: Initialize hardware optimizations for better performance"""
@@ -165,7 +273,7 @@ class VideoWorker:
         return config.get('expected_time', 'unknown')
 
     def generate(self, prompt, job_type):
-        """PHASE 2: Enhanced generation with separate resolution and quality controls"""
+        """PHASE 2: Enhanced generation with optimized configurations"""
         # Parse job type into components
         content_type, resolution, quality = self.parse_job_type(job_type)
         config = self.get_job_config(content_type, resolution, quality)
@@ -253,6 +361,8 @@ class VideoWorker:
             return None
         finally:
             os.chdir(original_cwd)
+
+    # ... keep existing code (extract_frame_from_video, optimize_file_for_upload, upload_to_supabase, cleanup methods)
 
     def extract_frame_from_video(self, video_path, job_id, job_type):
         """PHASE 2: Enhanced frame extraction with resolution-aware optimization"""
@@ -532,17 +642,14 @@ class VideoWorker:
         return None
 
     def run(self):
-        """PHASE 2: Enhanced main loop with flexible resolution/quality options"""
+        """PHASE 2: Enhanced main loop with optimized job processing"""
         print("⏳ Waiting for jobs...")
-        print("🎯 Phase 2 Performance Matrix:")
-        print("   Resolution × Quality:")
-        print("   • low + fast:    ~45s  (480×320, 12 steps)")
-        print("   • low + high:    ~50s  (480×320, 16 steps)")
-        print("   • medium + fast: ~60s  (640×360, 12 steps)")
-        print("   • medium + high: ~70s  (640×360, 16 steps)")
-        print("   • high + fast:   ~90s  (832×480, 12 steps)")
-        print("   • high + high:   ~105s (832×480, 16 steps)")
-        print("🎨 Users can choose optimal speed/quality balance!")
+        print("🎯 Phase 2 Performance Optimizations:")
+        print("   • image_fast:  ~60s  (37% faster - medium resolution, fast quality)")
+        print("   • image_high:  ~105s (high resolution, high quality)")
+        print("   • video_fast:  ~75s  (38% faster - medium resolution, fast quality)")
+        print("   • video_high:  ~120s (high resolution, high quality)")
+        print("🚀 Backward compatible with existing UI!")
         
         last_cleanup = time.time()
         job_count = 0
@@ -577,6 +684,6 @@ if __name__ == "__main__":
         exit(1)
     
     print("🚀 Starting OurVidz Worker (Phase 2 Optimized)")
-    print("⚡ Resolution-based speed optimization enabled")
+    print("⚡ Optimized for existing UI with faster generation times")
     worker = VideoWorker()
     worker.run()
