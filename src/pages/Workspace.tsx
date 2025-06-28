@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -7,6 +6,7 @@ import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { WorkspaceInputControls } from "@/components/WorkspaceInputControls";
 import { WorkspaceImageGallery } from "@/components/WorkspaceImageGallery";
 import { WorkspaceVideoDisplay } from "@/components/WorkspaceVideoDisplay";
+import { GenerationProgressIndicator } from "@/components/GenerationProgressIndicator";
 import type { GenerationQuality } from "@/types/generation";
 
 interface GeneratedContent {
@@ -29,11 +29,13 @@ export const Workspace = () => {
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
+  const [generationStartTime, setGenerationStartTime] = useState<Date | null>(null);
 
   const { generate, isGenerating, useGenerationStatus } = useGeneration({
     onSuccess: (data) => {
       console.log('🎉 Generation started with ID:', data.id);
       setGeneratedId(data.id);
+      setGenerationStartTime(new Date());
       setProcessedIds(new Set()); // Clear processed IDs for new generation
       toast.success(`${mode === 'image' ? 'Image' : 'Video'} generation started!`);
     },
@@ -41,6 +43,7 @@ export const Workspace = () => {
       console.error('❌ Generation failed:', error);
       toast.error(`Generation failed: ${error.message}`);
       setGeneratedId(null);
+      setGenerationStartTime(null);
     }
   });
 
@@ -99,6 +102,7 @@ export const Workspace = () => {
         setHasGeneratedContent(true);
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
+        setGenerationStartTime(null);
         
       } else if (mode === 'video' && contentData.video_url) {
         const video: GeneratedContent = {
@@ -114,6 +118,7 @@ export const Workspace = () => {
         setHasGeneratedContent(true);
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
+        setGenerationStartTime(null);
         
       } else {
         console.warn('⚠️ Generation completed but no content found:', contentData);
@@ -123,6 +128,7 @@ export const Workspace = () => {
       console.error('❌ Generation failed:', generationData);
       toast.error('Generation failed. Please try again.');
       setGeneratedId(null);
+      setGenerationStartTime(null);
       setProcessedIds(prev => new Set(prev).add(generatedId));
     }
   }, [generationData, generatedId, mode, prompt, quality, processedIds]);
@@ -199,6 +205,11 @@ export const Workspace = () => {
     });
   };
 
+  const getEstimatedTime = () => {
+    // Based on server logs: ~90-100 seconds for image_fast
+    return mode === 'image' ? (quality === 'fast' ? 90 : 180) : 300;
+  };
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Header */}
@@ -208,6 +219,18 @@ export const Workspace = () => {
       <div className="flex-1 flex items-center justify-center px-8">
         {!hasGeneratedContent ? (
           <div className="text-center max-w-4xl">
+            {/* Show progress indicator during generation */}
+            {generatedId && generationData && (
+              <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                <GenerationProgressIndicator
+                  status={generationData.status}
+                  progress={generationData.progress}
+                  estimatedTime={getEstimatedTime()}
+                  startTime={generationStartTime}
+                />
+              </div>
+            )}
+            
             <h1 className="text-4xl font-light mb-4">
               Let's start {mode === 'video' ? 'creating some videos' : 'with some image storming'}
               <span className="inline-flex items-center gap-2">

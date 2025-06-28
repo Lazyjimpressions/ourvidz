@@ -4,6 +4,13 @@ import { GenerationService } from '@/lib/services/GenerationService';
 import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 
+interface GenerationStatusData {
+  status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
+  progress?: number;
+  estimated_time?: number;
+  [key: string]: any;
+}
+
 export const useGenerationStatus = (
   id: string | null,
   format: GenerationFormat,
@@ -50,7 +57,7 @@ export const useGenerationStatus = (
     },
     enabled: !!id && enabled,
     refetchInterval: (query) => {
-      const data = query.state.data;
+      const data = query.state.data as GenerationStatusData | null;
       
       // Stop polling when generation is complete or failed
       if (data?.status === 'completed' || data?.status === 'failed') {
@@ -58,8 +65,17 @@ export const useGenerationStatus = (
         return false;
       }
       
-      // Continue polling while processing
-      return 3000; // Poll every 3 seconds
+      // Adaptive polling based on job status
+      if (data?.status === 'uploading') {
+        console.log('📤 Uploading phase - polling every 500ms');
+        return 500; // Very frequent during upload
+      } else if (data?.status === 'processing') {
+        console.log('⚡ Processing phase - polling every 1 second');
+        return 1000; // Frequent during generation
+      } else {
+        console.log('⏳ Queued phase - polling every 3 seconds');
+        return 3000; // Less frequent when queued
+      }
     },
     retry: (failureCount, error: any) => {
       // Don't retry for expected "no rows" errors
@@ -67,13 +83,15 @@ export const useGenerationStatus = (
         return false;
       }
       
-      // Retry up to 2 times for other errors
-      if (failureCount < 2) {
+      // Reduced retry attempts for faster failure detection
+      if (failureCount < 1) {
         console.log(`🔄 Retrying status check (attempt ${failureCount + 1})`);
         return true;
       }
       return false;
     },
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000), // Exponential backoff, max 10s
+    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 2000), // Faster retry delays
+    staleTime: 0, // Always consider data stale for real-time updates
+    gcTime: 30000, // Keep in cache for 30 seconds for smart caching
   });
 };
