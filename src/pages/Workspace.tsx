@@ -1,11 +1,11 @@
+
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { WorkspaceInputControls } from "@/components/WorkspaceInputControls";
-import { WorkspaceImageGallery } from "@/components/WorkspaceImageGallery";
-import { WorkspaceVideoDisplay } from "@/components/WorkspaceVideoDisplay";
+import { WorkspaceGenerationSets } from "@/components/WorkspaceGenerationSets";
 import { GenerationProgressIndicator } from "@/components/GenerationProgressIndicator";
 import type { GenerationQuality } from "@/types/generation";
 
@@ -17,6 +17,16 @@ interface GeneratedContent {
   quality: GenerationQuality;
 }
 
+interface GenerationSet {
+  id: string;
+  prompt: string;
+  quality: GenerationQuality;
+  mode: 'image' | 'video';
+  timestamp: Date;
+  content: GeneratedContent[];
+  isExpanded?: boolean;
+}
+
 export const Workspace = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -25,9 +35,8 @@ export const Workspace = () => {
   const [mode, setMode] = useState<'image' | 'video'>(initialMode);
   const [quality, setQuality] = useState<GenerationQuality>('fast');
   const [prompt, setPrompt] = useState("");
-  const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
+  const [generationSets, setGenerationSets] = useState<GenerationSet[]>([]);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
-  const [hasGeneratedContent, setHasGeneratedContent] = useState(false);
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
   const [generationStartTime, setGenerationStartTime] = useState<Date | null>(null);
 
@@ -140,9 +149,18 @@ export const Workspace = () => {
           quality
         }));
         
-        console.log('🖼️ Setting image content:', images);
-        setGeneratedContent(images);
-        setHasGeneratedContent(true);
+        console.log('🖼️ Creating new image generation set:', images);
+        const newSet: GenerationSet = {
+          id: generatedId,
+          prompt,
+          quality,
+          mode: 'image',
+          timestamp: new Date(),
+          content: images,
+          isExpanded: true
+        };
+        
+        setGenerationSets(prev => [newSet, ...prev]);
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
         setGenerationStartTime(null);
@@ -156,9 +174,18 @@ export const Workspace = () => {
           quality
         };
         
-        console.log('🎬 Setting video content:', video);
-        setGeneratedContent([video]);
-        setHasGeneratedContent(true);
+        console.log('🎬 Creating new video generation set:', video);
+        const newSet: GenerationSet = {
+          id: generatedId,
+          prompt,
+          quality,
+          mode: 'video',
+          timestamp: new Date(),
+          content: [video],
+          isExpanded: true
+        };
+        
+        setGenerationSets(prev => [newSet, ...prev]);
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
         setGenerationStartTime(null);
@@ -193,9 +220,7 @@ export const Workspace = () => {
       return;
     }
 
-    // Clear any existing content and reset state
-    setGeneratedContent([]);
-    setHasGeneratedContent(false);
+    // DO NOT clear existing generation sets - preserve them
     setGeneratedId(null);
     setProcessedIds(new Set());
 
@@ -213,11 +238,12 @@ export const Workspace = () => {
     toast.info("Reference image upload coming soon!");
   };
 
-  const handleRemoveContent = () => {
-    setGeneratedContent([]);
-    setHasGeneratedContent(false);
-    setGeneratedId(null);
-    setProcessedIds(new Set());
+  const handleRemoveSet = (setId: string) => {
+    setGenerationSets(prev => prev.filter(set => set.id !== setId));
+  };
+
+  const handleClearAll = () => {
+    setGenerationSets([]);
   };
 
   const handleRegenerateItem = (itemId: string) => {
@@ -226,19 +252,28 @@ export const Workspace = () => {
       return;
     }
 
-    // Find the item to regenerate
-    const itemToRegenerate = generatedContent.find(item => item.id === itemId);
-    if (!itemToRegenerate) return;
+    // Find the item to regenerate across all sets
+    let itemToRegenerate: GeneratedContent | null = null;
+    let sourceSet: GenerationSet | null = null;
 
-    // Clear existing content and regenerate
-    setGeneratedContent([]);
-    setHasGeneratedContent(false);
+    for (const set of generationSets) {
+      const item = set.content.find(item => item.id === itemId);
+      if (item) {
+        itemToRegenerate = item;
+        sourceSet = set;
+        break;
+      }
+    }
+
+    if (!itemToRegenerate || !sourceSet) return;
+
+    // Clear processing state and regenerate
     setGeneratedId(null);
     setProcessedIds(new Set());
 
     // Generate new content with same prompt and quality
     generate({
-      format: mode,
+      format: sourceSet.mode,
       quality: itemToRegenerate.quality,
       prompt: itemToRegenerate.prompt,
       metadata: {
@@ -260,6 +295,8 @@ export const Workspace = () => {
     const key = `${mode}_${quality}` as keyof typeof timingMap;
     return timingMap[key] || (mode === 'image' ? 90 : 120);
   };
+
+  const hasGeneratedContent = generationSets.length > 0;
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
@@ -312,20 +349,25 @@ export const Workspace = () => {
             </p>
           </div>
         ) : (
-          <div className="w-full max-w-6xl">
-            {mode === 'image' ? (
-              <WorkspaceImageGallery 
-                images={generatedContent}
-                onRemove={handleRemoveContent}
-                onRegenerateItem={handleRegenerateItem}
-              />
-            ) : (
-              <WorkspaceVideoDisplay 
-                video={generatedContent[0]}
-                onRemove={handleRemoveContent}
-                onRegenerateItem={handleRegenerateItem}
-              />
+          <div className="w-full">
+            {/* Show progress indicator during generation - positioned above existing content */}
+            {generatedId && generationData && (
+              <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700 max-w-4xl mx-auto">
+                <GenerationProgressIndicator
+                  status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                  progress={calculateProgress(generationData.status, generationStartTime)}
+                  estimatedTime={getEstimatedTime()}
+                  startTime={generationStartTime}
+                />
+              </div>
             )}
+            
+            <WorkspaceGenerationSets
+              generationSets={generationSets}
+              onRemoveSet={handleRemoveSet}
+              onClearAll={handleClearAll}
+              onRegenerateItem={handleRegenerateItem}
+            />
           </div>
         )}
       </div>
