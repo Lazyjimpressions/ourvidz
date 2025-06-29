@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export type StorageBucket = 
@@ -181,28 +182,42 @@ export const getHighQualityImageUrl = async (filePath: string): Promise<string |
   return error ? null : data?.signedUrl || null;
 };
 
-// Fast video specific functions (thumbnails, quick video assets)
+// UPDATED: Fast video specific functions with proper video support
 export const uploadFastVideo = async (
   videoId: string,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  const fileName = `${videoId}-fast-${Date.now()}.${file.name.split('.').pop()}`;
+  // Ensure proper video file extension
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
+  const validExtensions = ['mp4', 'webm', 'mov'];
+  const extension = validExtensions.includes(fileExtension || '') ? fileExtension : 'mp4';
+  
+  const fileName = `${videoId}-fast-${Date.now()}.${extension}`;
+  console.log('📹 Uploading fast video:', fileName, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+  
   return uploadFile('video_fast', fileName, file, onProgress);
 };
 
 export const getFastVideoUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('video_fast', filePath);
+  const { data, error } = await getSignedUrl('video_fast', filePath, 7200); // 2 hours for videos
   return error ? null : data?.signedUrl || null;
 };
 
-// High-quality video specific functions (final videos)
+// UPDATED: High-quality video specific functions with proper video support
 export const uploadHighQualityVideo = async (
   projectId: string,
   file: File,
   onProgress?: (progress: UploadProgress) => void
 ): Promise<UploadResult> => {
-  const fileName = `${projectId}-final-${Date.now()}.${file.name.split('.').pop()}`;
+  // Ensure proper video file extension
+  const fileExtension = file.name.split('.').pop()?.toLowerCase();
+  const validExtensions = ['mp4', 'webm', 'mov'];
+  const extension = validExtensions.includes(fileExtension || '') ? fileExtension : 'mp4';
+  
+  const fileName = `${projectId}-final-${Date.now()}.${extension}`;
+  console.log('📹 Uploading high quality video:', fileName, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+  
   return uploadFile('video_high', fileName, file, onProgress);
 };
 
