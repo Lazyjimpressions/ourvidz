@@ -45,7 +45,7 @@ export class GenerationService {
         .from('images')
         .insert({
           user_id: user.id,
-          project_id: request.projectId || null, // Allow null for standalone generation
+          project_id: request.projectId || null,
           prompt: request.prompt,
           status: 'queued',
           generation_mode: 'functional',
@@ -67,9 +67,9 @@ export class GenerationService {
         .from('videos')
         .insert({
           user_id: user.id,
-          project_id: request.projectId || null, // Allow null for standalone generation
+          project_id: request.projectId || null,
           status: 'queued',
-          duration: 2, // FIXED: Changed from 5 to 2 seconds
+          duration: 2,
           format: 'mp4'
         })
         .select()
@@ -156,67 +156,53 @@ export class GenerationService {
 
       console.log('📊 Raw image data from database:', data);
 
-      // Handle completed images with bulletproof URL conversion
+      // Handle completed images with FIXED path handling
       if (data.status === 'completed' && data.image_url) {
         try {
           console.log('🎯 Processing completed image with filePath:', data.image_url);
           
-          // Improved bucket detection based on quality
-          const bucket = data.quality === 'high' ? 'image_high' : 'image_fast';
-          console.log('🪣 Using bucket:', bucket);
+          // FIXED: Extract only the relative path without bucket prefix
+          let relativePath = data.image_url;
           
-          // Generate signed URL from the file path with retry logic
-          const maxRetries = 3;
-          let signedUrl = null;
-          let lastError = null;
-
-          for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            console.log(`🔄 Attempt ${attempt}/${maxRetries} to generate signed URL`);
-            
-            const { data: signedUrlData, error: urlError } = await getSignedUrl(
-              bucket as any,
-              data.image_url,
-              3600 // 1 hour expiry
-            );
-
-            if (!urlError && signedUrlData?.signedUrl) {
-              signedUrl = signedUrlData.signedUrl;
-              console.log('✅ Signed URL generated successfully on attempt', attempt);
-              break;
-            } else {
-              lastError = urlError;
-              console.error(`❌ Attempt ${attempt} failed:`, urlError?.message);
-              
-              // Wait before retry (exponential backoff)
-              if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-              }
+          // Remove bucket prefix if it exists (backwards compatibility)
+          if (relativePath.includes('/')) {
+            const pathParts = relativePath.split('/');
+            // If first part looks like a bucket name, remove it
+            if (pathParts[0] && (pathParts[0].includes('image_') || pathParts[0].includes('video_'))) {
+              relativePath = pathParts.slice(1).join('/');
+              console.log('🔧 Extracted relative path:', relativePath);
             }
           }
+          
+          // Determine bucket based on quality
+          const bucket = data.quality === 'high' ? 'image_high' : 'image_fast';
+          console.log('🪣 Using bucket:', bucket, 'for relative path:', relativePath);
+          
+          // Generate signed URL from the RELATIVE file path
+          const { data: signedUrlData, error: urlError } = await getSignedUrl(
+            bucket as any,
+            relativePath, // Use clean relative path
+            3600 // 1 hour expiry
+          );
 
-          if (signedUrl) {
-            // Return with image_urls array for consistency
+          if (!urlError && signedUrlData?.signedUrl) {
+            console.log('✅ Signed URL generated successfully');
             const result: ImageRecordWithUrl = {
               ...data,
-              image_urls: [signedUrl]
+              image_urls: [signedUrlData.signedUrl]
             };
-            console.log('✅ Successfully processed image with signed URL');
             return result;
           } else {
-            console.error('❌ Failed to generate signed URL after all retries:', lastError?.message);
-            
-            // Return with error indication
+            console.error('❌ Failed to generate signed URL:', urlError?.message);
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
-              url_error: lastError?.message || 'Failed to generate image URL'
+              url_error: urlError?.message || 'Failed to generate image URL'
             };
             return result;
           }
         } catch (urlError) {
           console.error('❌ Error processing signed URL:', urlError);
-          
-          // Return with error indication but don't fail completely
           const result: ImageRecordWithUrl = {
             ...data,
             image_urls: null,
@@ -226,7 +212,7 @@ export class GenerationService {
         }
       }
 
-      // For non-completed images, return as-is with proper typing
+      // For non-completed images, return as-is
       console.log('ℹ️ Image not completed yet, returning raw data');
       return data as ImageRecordWithUrl;
     } else {
@@ -243,68 +229,53 @@ export class GenerationService {
 
       console.log('📊 Raw video data from database:', data);
 
-      // Handle completed videos with bulletproof URL conversion
+      // Handle completed videos with FIXED path handling
       if (data.status === 'completed' && data.video_url) {
         try {
           console.log('🎯 Processing completed video with filePath:', data.video_url);
           
-          // Determine bucket based on quality - for now we'll use video_fast as default
-          // TODO: Add proper video quality detection logic
-          const bucket = 'video_fast';
-          console.log('🪣 Using video bucket:', bucket);
+          // FIXED: Extract only the relative path without bucket prefix
+          let relativePath = data.video_url;
           
-          // Generate signed URL from the file path with retry logic
-          const maxRetries = 3;
-          let signedUrl = null;
-          let lastError = null;
-
-          for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            console.log(`🔄 Video attempt ${attempt}/${maxRetries} to generate signed URL`);
-            
-            const { data: signedUrlData, error: urlError } = await getSignedUrl(
-              bucket as any,
-              data.video_url,
-              7200 // 2 hours expiry for videos
-            );
-
-            if (!urlError && signedUrlData?.signedUrl) {
-              signedUrl = signedUrlData.signedUrl;
-              console.log('✅ Video signed URL generated successfully on attempt', attempt);
-              break;
-            } else {
-              lastError = urlError;
-              console.error(`❌ Video attempt ${attempt} failed:`, urlError?.message);
-              
-              // Wait before retry
-              if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, attempt * 1000));
-              }
+          // Remove bucket prefix if it exists (backwards compatibility)
+          if (relativePath.includes('/')) {
+            const pathParts = relativePath.split('/');
+            // If first part looks like a bucket name, remove it
+            if (pathParts[0] && (pathParts[0].includes('video_') || pathParts[0].includes('image_'))) {
+              relativePath = pathParts.slice(1).join('/');
+              console.log('🔧 Extracted relative path:', relativePath);
             }
           }
+          
+          // Determine bucket - for now we'll use video_fast as default
+          const bucket = 'video_fast';
+          console.log('🪣 Using video bucket:', bucket, 'for relative path:', relativePath);
+          
+          // Generate signed URL from the RELATIVE file path
+          const { data: signedUrlData, error: urlError } = await getSignedUrl(
+            bucket as any,
+            relativePath, // Use clean relative path
+            7200 // 2 hours expiry for videos
+          );
 
-          if (signedUrl) {
-            // Return with the signed URL
+          if (!urlError && signedUrlData?.signedUrl) {
+            console.log('✅ Video signed URL generated successfully');
             const result: VideoRecordWithUrl = {
               ...data,
-              video_url: signedUrl
+              video_url: signedUrlData.signedUrl
             };
-            console.log('✅ Successfully processed video with signed URL');
             return result;
           } else {
-            console.error('❌ Failed to generate video signed URL after all retries:', lastError?.message);
-            
-            // Return with error indication
+            console.error('❌ Failed to generate video signed URL:', urlError?.message);
             const result: VideoRecordWithUrl = {
               ...data,
               video_url: null,
-              url_error: lastError?.message || 'Failed to generate video URL'
+              url_error: urlError?.message || 'Failed to generate video URL'
             };
             return result;
           }
         } catch (urlError) {
           console.error('❌ Error processing video signed URL:', urlError);
-          
-          // Return with error indication but don't fail completely
           const result: VideoRecordWithUrl = {
             ...data,
             video_url: null,
@@ -314,7 +285,7 @@ export class GenerationService {
         }
       }
 
-      // For non-completed videos, return as-is with proper typing
+      // For non-completed videos, return as-is
       console.log('ℹ️ Video not completed yet, returning raw data');
       return data as VideoRecordWithUrl;
     }
