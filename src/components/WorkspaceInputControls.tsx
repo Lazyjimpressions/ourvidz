@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +48,6 @@ export const WorkspaceInputControls = ({
   return (
     <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-2xl">
       {isMobile ? (
-        // Mobile Layout
         <div className="space-y-4">
           {/* Row 1: Mode Toggle and Quality */}
           <div className="flex items-center justify-between gap-3">
@@ -280,8 +278,7 @@ export const WorkspaceInputControls = ({
           )}
         </div>
       ) : (
-        // Desktop Layout - wrapped in a single div
-        <div>
+        <div className="desktop-layout">
           {/* Row 1: Mode Toggle Buttons, Reference Uploads, Text Input, Generate Button */}
           <div className="flex items-center gap-3 mb-4">
             {/* Stacked Mode Toggle Buttons */}
@@ -315,7 +312,6 @@ export const WorkspaceInputControls = ({
 
             {/* Reference Upload Section - Different for Image vs Video */}
             {mode === 'image' ? (
-              // Image Mode: Single reference upload
               <Button
                 variant="ghost"
                 onClick={onReferenceImageUpload}
@@ -324,7 +320,6 @@ export const WorkspaceInputControls = ({
                 <Upload className="w-4 h-4 text-gray-400" />
               </Button>
             ) : (
-              // Video Mode: Start + Refresh + End reference uploads
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -389,7 +384,6 @@ export const WorkspaceInputControls = ({
             {/* Mode-Specific Controls */}
             <div className="flex items-center gap-3 flex-1">
               {mode === 'image' ? (
-                // Image Mode Controls
                 <>
                   {/* Aspect Ratio */}
                   <Select defaultValue="16:9">
@@ -451,7 +445,6 @@ export const WorkspaceInputControls = ({
                   </Button>
                 </>
               ) : (
-                // Video Mode Controls
                 <>
                   {/* Aspect Ratio */}
                   <Select defaultValue="16:9">
