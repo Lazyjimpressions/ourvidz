@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, Sparkles, Play, Music, RotateCcw, Camera, Brush, Zap, Crown, ChevronDown, ChevronUp } from "lucide-react";
@@ -47,8 +46,8 @@ export const WorkspaceInputControls = ({
 
   return (
     <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-2xl">
-      {/* Mobile Layout */}
       {isMobile ? (
+        // Mobile Layout
         <div className="space-y-4">
           {/* Row 1: Mode Toggle and Quality */}
           <div className="flex items-center justify-between gap-3">
