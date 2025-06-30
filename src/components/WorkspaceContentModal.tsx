@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Download, X } from "lucide-react";
 
 interface GeneratedContent {
@@ -37,17 +37,20 @@ export const WorkspaceContentModal = ({ content, type, onClose }: WorkspaceConte
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] bg-black border-gray-800 text-white">
-        <DialogHeader className="flex flex-row items-center justify-between">
-          <DialogTitle className="text-white truncate flex-1">
-            {content.prompt}
-          </DialogTitle>
-          <div className="flex items-center gap-2">
+      <DialogContent className="max-w-5xl max-h-[95vh] bg-black border-gray-800 text-white p-0 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-800">
+          <div className="flex-1 min-w-0 pr-4">
+            <h2 className="text-xl font-semibold text-white leading-relaxed break-words">
+              {content.prompt}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleDownload}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
             >
               <Download className="w-4 h-4 mr-2" />
               Download
@@ -56,33 +59,46 @@ export const WorkspaceContentModal = ({ content, type, onClose }: WorkspaceConte
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="text-gray-400 hover:text-white"
+              className="text-gray-400 hover:text-white hover:bg-gray-800 p-2"
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
-        </DialogHeader>
+        </div>
         
-        <div className="flex items-center justify-center p-4">
+        {/* Content Area */}
+        <div className="flex-1 flex items-center justify-center p-6 min-h-[60vh]">
           {type === 'image' ? (
             <img
               src={content.url}
               alt="Generated content"
-              className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
             />
           ) : (
             <video
               src={content.url}
-              className="max-w-full max-h-[70vh] object-contain rounded-lg"
+              className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
               controls
               autoPlay
             />
           )}
         </div>
         
-        <div className="text-center text-sm text-gray-400">
-          Quality: {content.quality === 'fast' ? 'Low' : 'High'} • 
-          Generated: {content.timestamp.toLocaleString()}
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-800 bg-gray-900/50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-400">
+            <div className="flex items-center gap-4">
+              <span>
+                Quality: <span className="text-white">{content.quality === 'fast' ? 'Fast' : 'High Quality'}</span>
+              </span>
+              <span>
+                Type: <span className="text-white capitalize">{type}</span>
+              </span>
+            </div>
+            <div>
+              Generated: <span className="text-white">{content.timestamp.toLocaleString()}</span>
+            </div>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

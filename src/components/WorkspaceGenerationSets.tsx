@@ -89,39 +89,47 @@ export const WorkspaceGenerationSets = ({
             <Card key={set.id} className="bg-gray-900 border-gray-700">
               <Collapsible open={isExpanded} onOpenChange={() => toggleSetExpansion(set.id)}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-4">
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="flex items-center gap-2 text-left flex-1 justify-start p-0 h-auto">
-                        {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-gray-400" />
-                        ) : (
-                          <ChevronRight className="w-4 h-4 text-gray-400" />
-                        )}
-                        <CardTitle className="text-white text-lg truncate flex-1">
-                          {set.prompt}
-                        </CardTitle>
+                      <Button variant="ghost" className="flex items-start gap-2 text-left flex-1 justify-start p-0 h-auto min-h-[40px]">
+                        <div className="flex-shrink-0 mt-1">
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-white text-lg leading-relaxed break-words">
+                            {set.prompt}
+                          </CardTitle>
+                        </div>
                       </Button>
                     </CollapsibleTrigger>
                     
-                    <div className="flex items-center gap-2 ml-4">
-                      <Badge className={`${getQualityColor(set.quality)} text-white`}>
-                        {set.quality === 'fast' ? 'Fast' : 'High Quality'}
-                      </Badge>
-                      <Badge variant="secondary" className="bg-gray-700 text-gray-300">
-                        {contentCount} {set.mode === 'image' ? 'image' : 'video'}{contentCount !== 1 ? 's' : ''}
-                      </Badge>
-                      <div className="flex items-center gap-1 text-sm text-gray-400">
-                        <Clock className="w-3 h-3" />
-                        {formatTimestamp(set.timestamp)}
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${getQualityColor(set.quality)} text-white text-xs`}>
+                          {set.quality === 'fast' ? 'Fast' : 'High Quality'}
+                        </Badge>
+                        <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
+                          {contentCount} {set.mode === 'image' ? 'image' : 'video'}{contentCount !== 1 ? 's' : ''}
+                        </Badge>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onRemoveSet(set.id)}
-                        className="text-red-400 hover:text-red-300 hover:bg-red-600/10 p-1"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 text-xs text-gray-400">
+                          <Clock className="w-3 h-3" />
+                          <span className="whitespace-nowrap">{formatTimestamp(set.timestamp)}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRemoveSet(set.id)}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-600/10 p-1"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
