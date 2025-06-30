@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { usageAPI } from '@/lib/database';
 import { getSignedUrl } from '@/lib/storage';
@@ -184,6 +185,47 @@ export class GenerationService {
     }
   }
 
+  private static async getVideoQualityFromJob(videoId: string): Promise<GenerationQuality> {
+    console.log('🔍 Getting video quality from job for video:', videoId);
+    
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('quality, job_type')
+        .eq('video_id', videoId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Error fetching job for video quality:', error);
+        return 'fast'; // Default fallback
+      }
+
+      if (job) {
+        if (job.quality) {
+          console.log('✅ Found quality in job record:', job.quality);
+          return job.quality as GenerationQuality;
+        }
+        
+        // Extract quality from job_type if available
+        if (job.job_type) {
+          const qualityFromJobType = job.job_type.split('_')[1]; // e.g., 'video_high' -> 'high'
+          if (qualityFromJobType === 'high' || qualityFromJobType === 'fast') {
+            console.log('✅ Extracted quality from job_type:', qualityFromJobType);
+            return qualityFromJobType as GenerationQuality;
+          }
+        }
+      }
+
+      console.log('⚠️ No job found for video, defaulting to fast quality');
+      return 'fast';
+    } catch (error) {
+      console.error('❌ Error in getVideoQualityFromJob:', error);
+      return 'fast'; // Default fallback
+    }
+  }
+
   static async getGenerationStatus(id: string, format: GenerationFormat): Promise<ImageRecordWithUrl | VideoRecordWithUrl> {
     console.log('🔍 Checking generation status for:', { id, format });
     
@@ -264,7 +306,7 @@ export class GenerationService {
 
       console.log('📊 Raw video data from database:', data);
 
-      // Handle completed videos with FIXED path handling
+      // Handle completed videos with IMPROVED quality detection
       if (data.status === 'completed' && data.video_url) {
         try {
           console.log('🎯 Processing completed video with filePath:', data.video_url);
@@ -272,10 +314,9 @@ export class GenerationService {
           // Extract relative path using improved logic
           const relativePath = this.extractRelativePath(data.video_url);
           
-          // FIXED: Get correct bucket based on video quality from database
-          // First try to get quality from the database record itself
-          const videoQuality = (data as any).quality || 'fast'; // Default to fast if not specified
-          const bucket = this.getBucketForContent('video', videoQuality as GenerationQuality);
+          // Get video quality from the associated job record
+          const videoQuality = await this.getVideoQualityFromJob(data.id);
+          const bucket = this.getBucketForContent('video', videoQuality);
           console.log('🪣 Using video bucket:', bucket, 'for relative path:', relativePath, 'quality:', videoQuality);
           
           // Generate signed URL from the RELATIVE file path
