@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Clock, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Trash2, Info } from "lucide-react";
 import { WorkspaceImageGallery } from "@/components/WorkspaceImageGallery";
 import { WorkspaceVideoDisplay } from "@/components/WorkspaceVideoDisplay";
+import { PromptInfoModal } from "@/components/PromptInfoModal";
 import type { GenerationQuality } from "@/types/generation";
 
 interface GeneratedContent {
@@ -43,6 +44,7 @@ export const WorkspaceGenerationSets = ({
   const [expandedSets, setExpandedSets] = useState<Set<string>>(
     new Set(generationSets.map(set => set.id)) // Start with all sets expanded
   );
+  const [selectedPromptInfo, setSelectedPromptInfo] = useState<GenerationSet | null>(null);
 
   const toggleSetExpansion = (setId: string) => {
     const newExpanded = new Set(expandedSets);
@@ -60,6 +62,16 @@ export const WorkspaceGenerationSets = ({
 
   const getQualityColor = (quality: GenerationQuality) => {
     return quality === 'fast' ? 'bg-blue-600' : 'bg-purple-600';
+  };
+
+  const truncatePrompt = (prompt: string, maxLength: number = 100) => {
+    if (prompt.length <= maxLength) return prompt;
+    return prompt.substring(0, maxLength).trim() + '...';
+  };
+
+  const handleShowPromptInfo = (set: GenerationSet, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedPromptInfo(set);
   };
 
   return (
@@ -84,29 +96,44 @@ export const WorkspaceGenerationSets = ({
         {generationSets.map((set) => {
           const isExpanded = expandedSets.has(set.id);
           const contentCount = set.content.length;
+          const truncatedPrompt = truncatePrompt(set.prompt);
           
           return (
             <Card key={set.id} className="bg-gray-900 border-gray-700">
               <Collapsible open={isExpanded} onOpenChange={() => toggleSetExpansion(set.id)}>
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="flex items-start gap-2 text-left flex-1 justify-start p-0 h-auto min-h-[40px]">
-                        <div className="flex-shrink-0 mt-1">
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Left side - Expand/Collapse and Prompt */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" className="flex-shrink-0 p-1 h-auto">
                           {isExpanded ? (
                             <ChevronDown className="w-4 h-4 text-gray-400" />
                           ) : (
                             <ChevronRight className="w-4 h-4 text-gray-400" />
                           )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-white text-lg leading-relaxed break-words">
-                            {set.prompt}
-                          </CardTitle>
-                        </div>
-                      </Button>
-                    </CollapsibleTrigger>
+                        </Button>
+                      </CollapsibleTrigger>
+                      
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <CardTitle className="text-white text-lg leading-relaxed flex-1 min-w-0">
+                          {truncatedPrompt}
+                        </CardTitle>
+                        
+                        {set.prompt.length > 100 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleShowPromptInfo(set, e)}
+                            className="flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-800 p-1"
+                          >
+                            <Info className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                     
+                    {/* Right side - Badges and Actions */}
                     <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
                       <div className="flex items-center gap-2">
                         <Badge className={`${getQualityColor(set.quality)} text-white text-xs`}>
@@ -166,6 +193,19 @@ export const WorkspaceGenerationSets = ({
             No generated content yet. Create your first generation to get started!
           </p>
         </div>
+      )}
+
+      {/* Prompt Info Modal */}
+      {selectedPromptInfo && (
+        <PromptInfoModal
+          isOpen={true}
+          onClose={() => setSelectedPromptInfo(null)}
+          prompt={selectedPromptInfo.prompt}
+          quality={selectedPromptInfo.quality}
+          mode={selectedPromptInfo.mode}
+          timestamp={selectedPromptInfo.timestamp}
+          contentCount={selectedPromptInfo.content.length}
+        />
       )}
     </div>
   );
