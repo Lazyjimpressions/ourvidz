@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -278,7 +279,7 @@ export const WorkspaceInputControls = ({
           )}
         </div>
       ) : (
-        <div className="desktop-layout">
+        <>
           {/* Row 1: Mode Toggle Buttons, Reference Uploads, Text Input, Generate Button */}
           <div className="flex items-center gap-3 mb-4">
             {/* Stacked Mode Toggle Buttons */}
@@ -521,7 +522,7 @@ export const WorkspaceInputControls = ({
             {/* Spacer to align with generate button */}
             <div className="w-12"></div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
