@@ -11,30 +11,38 @@ interface ModeToggleButtonsProps {
 
 export const ModeToggleButtons = ({ mode, onModeChange, layout }: ModeToggleButtonsProps) => {
   const buttonClass = (isActive: boolean) =>
-    `flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${
-      isActive 
-        ? 'bg-white text-black hover:bg-gray-100' 
-        : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+    `flex items-center gap-1.5 font-medium transition-all ${
+      layout === 'mobile' 
+        ? `px-3 py-1.5 text-sm rounded-lg ${
+            isActive 
+              ? 'bg-white text-black hover:bg-gray-100' 
+              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          }`
+        : `px-4 py-2 rounded-lg ${
+            isActive 
+              ? 'bg-white text-black hover:bg-gray-100' 
+              : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
+          }`
     }`;
 
   if (layout === 'mobile') {
     return (
-      <div className="flex gap-2">
+      <div className="flex gap-1">
         <Button
           onClick={() => onModeChange('image')}
-          variant="default"
+          variant="ghost"
           className={buttonClass(mode === 'image')}
         >
-          <Camera className="w-4 h-4" />
+          <Camera className="w-3.5 h-3.5" />
           IMAGE
         </Button>
         
         <Button
           onClick={() => onModeChange('video')}
-          variant="default"
+          variant="ghost"
           className={buttonClass(mode === 'video')}
         >
-          <Play className="w-4 h-4" />
+          <Play className="w-3.5 h-3.5" />
           VIDEO
         </Button>
       </div>

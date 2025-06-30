@@ -38,22 +38,31 @@ export const MobileLayoutContainer = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   return (
-    <div className="space-y-4">
-      {/* Row 1: Mode Toggle and Quality */}
-      <div className="flex items-center justify-between gap-3">
-        <ModeToggleButtons 
-          mode={mode} 
-          onModeChange={onModeChange} 
-          layout="mobile" 
-        />
-        <QualityToggleSection 
-          quality={quality} 
-          onQualityChange={onQualityChange} 
-        />
+    <div className="space-y-3">
+      {/* Primary Row: Mode + Quality + Reference Upload */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-1">
+          <ModeToggleButtons 
+            mode={mode} 
+            onModeChange={onModeChange} 
+            layout="mobile" 
+          />
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <ReferenceUploadSection
+            mode={mode}
+            onReferenceImageUpload={onReferenceImageUpload}
+          />
+          <QualityToggleSection 
+            quality={quality} 
+            onQualityChange={onQualityChange} 
+          />
+        </div>
       </div>
 
-      {/* Row 2: Text Input and Generate */}
-      <div className="flex items-center gap-3">
+      {/* Text Input Row */}
+      <div className="w-full">
         <TextInputSection
           prompt={prompt}
           setPrompt={setPrompt}
@@ -63,19 +72,12 @@ export const MobileLayoutContainer = ({
         />
       </div>
 
-      {/* Row 3: Reference Upload and Advanced Toggle */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ReferenceUploadSection
-            mode={mode}
-            onReferenceImageUpload={onReferenceImageUpload}
-          />
-        </div>
-        
+      {/* Advanced Controls Toggle */}
+      <div className="flex items-center justify-center">
         <Button
           variant="ghost"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm"
+          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm px-4 py-2 h-8"
         >
           Advanced
           {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -84,7 +86,7 @@ export const MobileLayoutContainer = ({
 
       {/* Collapsible Advanced Controls */}
       {showAdvanced && (
-        <div className="space-y-3 pt-2 border-t border-gray-700">
+        <div className="pt-2 border-t border-gray-700">
           <AdvancedControlsSection
             mode={mode}
             motionIntensity={motionIntensity}
