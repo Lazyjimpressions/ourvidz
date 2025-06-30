@@ -8,6 +8,7 @@ import { ChevronDown, ChevronRight, Clock, Trash2, Info } from "lucide-react";
 import { WorkspaceImageGallery } from "@/components/WorkspaceImageGallery";
 import { WorkspaceVideoDisplay } from "@/components/WorkspaceVideoDisplay";
 import { PromptInfoModal } from "@/components/PromptInfoModal";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { GenerationQuality } from "@/types/generation";
 
 interface GeneratedContent {
@@ -45,6 +46,7 @@ export const WorkspaceGenerationSets = ({
     new Set(generationSets.map(set => set.id)) // Start with all sets expanded
   );
   const [selectedPromptInfo, setSelectedPromptInfo] = useState<GenerationSet | null>(null);
+  const isMobile = useIsMobile();
 
   const toggleSetExpansion = (setId: string) => {
     const newExpanded = new Set(expandedSets);
@@ -78,14 +80,14 @@ export const WorkspaceGenerationSets = ({
     <div className="w-full max-w-6xl space-y-6">
       {/* Header with Clear All button */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-medium text-white">Generated Content</h2>
+        <h2 className="text-xl sm:text-2xl font-medium text-white">Generated Content</h2>
         {generationSets.length > 0 && (
           <Button
             variant="outline"
             onClick={onClearAll}
-            className="border-red-600 text-red-400 hover:bg-red-600/10"
+            className="border-red-600 text-red-400 hover:bg-red-600/10 text-sm sm:text-base"
           >
-            <Trash2 className="w-4 h-4 mr-2" />
+            <Trash2 className="w-4 h-4 mr-1 sm:mr-2" />
             Clear All
           </Button>
         )}
@@ -96,73 +98,128 @@ export const WorkspaceGenerationSets = ({
         {generationSets.map((set) => {
           const isExpanded = expandedSets.has(set.id);
           const contentCount = set.content.length;
-          const truncatedPrompt = truncatePrompt(set.prompt);
+          const truncatedPrompt = truncatePrompt(set.prompt, isMobile ? 60 : 100);
           
           return (
             <Card key={set.id} className="bg-gray-900 border-gray-700">
               <Collapsible open={isExpanded} onOpenChange={() => toggleSetExpansion(set.id)}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between gap-4">
-                    {/* Left side - Expand/Collapse and Prompt */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" className="flex-shrink-0 p-1 h-auto">
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                      
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <CardTitle className="text-white text-lg leading-relaxed flex-1 min-w-0">
-                          {truncatedPrompt}
-                        </CardTitle>
-                        
-                        {set.prompt.length > 100 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => handleShowPromptInfo(set, e)}
-                            className="flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-800 p-1"
-                          >
-                            <Info className="w-4 h-4" />
+                <CardHeader className={`pb-3 ${isMobile ? 'p-4' : ''}`}>
+                  {isMobile ? (
+                    // Mobile Layout - Stacked vertically
+                    <div className="space-y-3">
+                      {/* Top row: Expand button and info icon */}
+                      <div className="flex items-center justify-between">
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" className="p-1 h-auto">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                            )}
                           </Button>
-                        )}
+                        </CollapsibleTrigger>
+                        
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleShowPromptInfo(set, e)}
+                          className="text-gray-400 hover:text-white hover:bg-gray-800 p-2"
+                        >
+                          <Info className="w-4 h-4" />
+                        </Button>
                       </div>
-                    </div>
-                    
-                    {/* Right side - Badges and Actions */}
-                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
-                      <div className="flex items-center gap-2">
-                        <Badge className={`${getQualityColor(set.quality)} text-white text-xs`}>
-                          {set.quality === 'fast' ? 'Fast' : 'High Quality'}
-                        </Badge>
-                        <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
-                          {contentCount} {set.mode === 'image' ? 'image' : 'video'}{contentCount !== 1 ? 's' : ''}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1 text-xs text-gray-400">
-                          <Clock className="w-3 h-3" />
-                          <span className="whitespace-nowrap">{formatTimestamp(set.timestamp)}</span>
+                      
+                      {/* Middle row: Badges and metadata */}
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className={`${getQualityColor(set.quality)} text-white text-xs`}>
+                            {set.quality === 'fast' ? 'Fast' : 'High Quality'}
+                          </Badge>
+                          <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
+                            {contentCount} {set.mode === 'image' ? 'image' : 'video'}{contentCount !== 1 ? 's' : ''}
+                          </Badge>
                         </div>
+                        
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => onRemoveSet(set.id)}
-                          className="text-red-400 hover:text-red-300 hover:bg-red-600/10 p-1"
+                          className="text-red-400 hover:text-red-300 hover:bg-red-600/10 p-2"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
+                      
+                      {/* Bottom row: Timestamp */}
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{formatTimestamp(set.timestamp)}</span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    // Desktop Layout - Original horizontal layout
+                    <div className="flex items-center justify-between gap-4">
+                      {/* Left side - Expand/Collapse and Prompt */}
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" className="flex-shrink-0 p-1 h-auto">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-gray-400" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <CardTitle className="text-white text-lg leading-relaxed flex-1 min-w-0">
+                            {truncatedPrompt}
+                          </CardTitle>
+                          
+                          {set.prompt.length > 100 && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => handleShowPromptInfo(set, e)}
+                              className="flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-800 p-1"
+                            >
+                              <Info className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Right side - Badges and Actions */}
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                          <Badge className={`${getQualityColor(set.quality)} text-white text-xs`}>
+                            {set.quality === 'fast' ? 'Fast' : 'High Quality'}
+                          </Badge>
+                          <Badge variant="secondary" className="bg-gray-700 text-gray-300 text-xs">
+                            {contentCount} {set.mode === 'image' ? 'image' : 'video'}{contentCount !== 1 ? 's' : ''}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1 text-xs text-gray-400">
+                            <Clock className="w-3 h-3" />
+                            <span className="whitespace-nowrap">{formatTimestamp(set.timestamp)}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onRemoveSet(set.id)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-600/10 p-1"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardHeader>
 
                 <CollapsibleContent>
-                  <CardContent className="pt-0">
+                  <CardContent className={`pt-0 ${isMobile ? 'p-4 pt-0' : ''}`}>
                     {set.mode === 'image' ? (
                       <WorkspaceImageGallery
                         images={set.content}
@@ -189,7 +246,7 @@ export const WorkspaceGenerationSets = ({
       {/* Empty State */}
       {generationSets.length === 0 && (
         <div className="text-center py-12">
-          <p className="text-gray-400 text-lg">
+          <p className="text-gray-400 text-base sm:text-lg">
             No generated content yet. Create your first generation to get started!
           </p>
         </div>
