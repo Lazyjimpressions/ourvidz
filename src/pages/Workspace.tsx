@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -119,6 +118,24 @@ export const Workspace = () => {
     }
   }, [searchParams, mode]);
 
+  // Add timeout mechanism for stuck generations
+  useEffect(() => {
+    if (!generatedId || !generationStartTime) return;
+
+    const timeoutId = setTimeout(() => {
+      const elapsed = Date.now() - generationStartTime.getTime();
+      if (elapsed > 5 * 60 * 1000) { // 5 minutes
+        console.log('⏰ Generation timeout reached, clearing progress dialog');
+        toast.error('Generation timed out. Please try again.');
+        setGeneratedId(null);
+        setGenerationStartTime(null);
+        setProcessedIds(prev => new Set(prev).add(generatedId));
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearTimeout(timeoutId);
+  }, [generatedId, generationStartTime]);
+
   // Handle generation completion
   useEffect(() => {
     if (!generationData || !generatedId) return;
@@ -132,8 +149,18 @@ export const Workspace = () => {
     console.log('🔄 Processing generation data:', { 
       id: generatedId, 
       status: generationData.status, 
-      mode 
+      mode,
+      hasUrlError: 'url_error' in generationData && generationData.url_error
     });
+
+    // Handle URL errors - clear progress dialog and mark as processed
+    if ('url_error' in generationData && generationData.url_error) {
+      console.log('❌ URL error detected, clearing progress dialog');
+      setGeneratedId(null);
+      setGenerationStartTime(null);
+      setProcessedIds(prev => new Set(prev).add(generatedId));
+      return;
+    }
 
     if (generationData.status === 'completed') {
       console.log('✅ Generation completed, processing results...');
@@ -192,6 +219,10 @@ export const Workspace = () => {
         
       } else {
         console.warn('⚠️ Generation completed but no content found:', contentData);
+        // Clear progress dialog even if no content is found
+        setGeneratedId(null);
+        setGenerationStartTime(null);
+        setProcessedIds(prev => new Set(prev).add(generatedId));
       }
       
     } else if (generationData.status === 'failed') {
@@ -209,7 +240,8 @@ export const Workspace = () => {
       console.error('❌ Status check error:', statusError);
       // Only show toast for unexpected errors, not for normal "no rows" errors
       if (!statusError.message?.includes('no rows returned')) {
-        toast.error('Unable to check generation status. Please refresh the page.');
+        // Don't show additional toast here as useGenerationStatus already handles it
+        console.log('ℹ️ Status error handled by useGenerationStatus hook');
       }
     }
   }, [statusError, generatedId]);
@@ -296,6 +328,14 @@ export const Workspace = () => {
     return timingMap[key] || (mode === 'image' ? 90 : 120);
   };
 
+  // Add cancel function for stuck generations
+  const handleCancelGeneration = () => {
+    console.log('🛑 User cancelled generation');
+    setGeneratedId(null);
+    setGenerationStartTime(null);
+    toast.info('Generation cancelled');
+  };
+
   const hasGeneratedContent = generationSets.length > 0;
 
   return (
@@ -316,6 +356,13 @@ export const Workspace = () => {
                   estimatedTime={getEstimatedTime()}
                   startTime={generationStartTime}
                 />
+                {/* Add cancel button for stuck generations */}
+                <button
+                  onClick={handleCancelGeneration}
+                  className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                >
+                  Cancel Generation
+                </button>
               </div>
             )}
             
@@ -359,6 +406,13 @@ export const Workspace = () => {
                   estimatedTime={getEstimatedTime()}
                   startTime={generationStartTime}
                 />
+                {/* Add cancel button for stuck generations */}
+                <button
+                  onClick={handleCancelGeneration}
+                  className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                >
+                  Cancel Generation
+                </button>
               </div>
             )}
             

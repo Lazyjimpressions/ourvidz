@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { GenerationService } from '@/lib/services/GenerationService';
 import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
+import { useRef } from 'react';
 
 interface GenerationStatusData {
   status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
@@ -30,6 +31,9 @@ export const useGenerationStatus = (
   enabled: boolean = true
 ) => {
   const { toast } = useToast();
+  const shownErrorsRef = useRef<Set<string>>(new Set());
+  const maxRetriesRef = useRef<number>(0);
+  const startTimeRef = useRef<number>(Date.now());
 
   return useQuery({
     queryKey: ['generation-status', id, format],
@@ -42,27 +46,41 @@ export const useGenerationStatus = (
         const result = await GenerationService.getGenerationStatus(id, format);
         console.log('📊 Generation status result:', result);
         
-        // Check for URL generation errors and show user feedback
+        // Check for URL generation errors and show user feedback (with deduplication)
         if (result && 'url_error' in result && result.url_error) {
-          console.warn('⚠️ URL generation error detected:', result.url_error);
-          toast({
-            title: "Image Loading Issue",
-            description: "There was a problem loading the image. Please try refreshing.",
-            variant: "destructive",
-          });
+          const errorKey = `${id}-url-error`;
+          if (!shownErrorsRef.current.has(errorKey)) {
+            console.warn('⚠️ URL generation error detected:', result.url_error);
+            toast({
+              title: "Content Loading Issue",
+              description: "There was a problem loading your content. This may be temporary - please try refreshing in a moment.",
+              variant: "destructive",
+            });
+            shownErrorsRef.current.add(errorKey);
+          }
         }
+        
+        // Reset retry counter on successful response
+        maxRetriesRef.current = 0;
         
         return result;
       } catch (error: any) {
         console.error('❌ Error fetching generation status:', error);
         
+        // Increment retry counter
+        maxRetriesRef.current++;
+        
         // Don't show toast for expected "no rows" errors (normal for video lookups)
         if (!error.message?.includes('no rows returned')) {
-          toast({
-            title: "Status Check Error",
-            description: "Unable to check generation status. Please try again.",
-            variant: "destructive",
-          });
+          const errorKey = `${id}-status-error`;
+          if (!shownErrorsRef.current.has(errorKey)) {
+            toast({
+              title: "Status Check Error",
+              description: "Unable to check generation status. Please try again.",
+              variant: "destructive",
+            });
+            shownErrorsRef.current.add(errorKey);
+          }
         }
         
         throw error;
@@ -75,6 +93,19 @@ export const useGenerationStatus = (
       // Stop polling when generation is complete or failed
       if (data?.status === 'completed' || data?.status === 'failed') {
         console.log('🛑 Stopping polling for completed/failed generation');
+        return false;
+      }
+      
+      // Stop polling if we have persistent URL errors (after a few attempts)
+      if (data && 'url_error' in data && data.url_error && maxRetriesRef.current > 3) {
+        console.log('🛑 Stopping polling due to persistent URL errors');
+        return false;
+      }
+      
+      // Stop polling after 5 minutes to prevent infinite loops
+      const elapsed = Date.now() - startTimeRef.current;
+      if (elapsed > 5 * 60 * 1000) { // 5 minutes
+        console.log('🛑 Stopping polling due to timeout (5 minutes)');
         return false;
       }
       
@@ -96,14 +127,16 @@ export const useGenerationStatus = (
         return false;
       }
       
-      // Reduced retry attempts for faster failure detection
-      if (failureCount < 1) {
-        console.log(`🔄 Retrying status check (attempt ${failureCount + 1})`);
-        return true;
+      // Stop retrying after 3 attempts to prevent infinite loops
+      if (failureCount >= 3) {
+        console.log('🛑 Max retries reached, stopping');
+        return false;
       }
-      return false;
+      
+      console.log(`🔄 Retrying status check (attempt ${failureCount + 1})`);
+      return true;
     },
-    retryDelay: (attemptIndex) => Math.min(500 * 2 ** attemptIndex, 2000), // Faster retry delays
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000), // Exponential backoff, max 5 seconds
     staleTime: 0, // Always consider data stale for real-time updates
     gcTime: 30000, // Keep in cache for 30 seconds for smart caching
   });

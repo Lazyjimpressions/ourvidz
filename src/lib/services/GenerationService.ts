@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { usageAPI } from '@/lib/database';
 import { getSignedUrl } from '@/lib/storage';
@@ -139,6 +138,52 @@ export class GenerationService {
     };
   }
 
+  private static extractRelativePath(filePath: string): string {
+    console.log('🔧 Extracting relative path from:', filePath);
+    
+    if (!filePath) {
+      throw new Error('File path is required');
+    }
+
+    // If the path doesn't contain a slash, it's already relative
+    if (!filePath.includes('/')) {
+      console.log('✅ Path is already relative:', filePath);
+      return filePath;
+    }
+
+    // Check if path starts with a known bucket prefix
+    const bucketPrefixes = ['image_fast', 'image_high', 'video_fast', 'video_high'];
+    const pathParts = filePath.split('/');
+    
+    // If first part is a bucket name, remove it
+    if (pathParts.length > 1 && bucketPrefixes.includes(pathParts[0])) {
+      const relativePath = pathParts.slice(1).join('/');
+      console.log('🔧 Removed bucket prefix, relative path:', relativePath);
+      return relativePath;
+    }
+
+    // If path starts with bucket name followed by slash, it's legacy format
+    for (const prefix of bucketPrefixes) {
+      if (filePath.startsWith(`${prefix}/`)) {
+        const relativePath = filePath.substring(prefix.length + 1);
+        console.log('🔧 Removed legacy bucket prefix, relative path:', relativePath);
+        return relativePath;
+      }
+    }
+
+    // Otherwise, assume it's already in the correct format
+    console.log('✅ Path appears to be relative already:', filePath);
+    return filePath;
+  }
+
+  private static getBucketForContent(format: GenerationFormat, quality: GenerationQuality): string {
+    if (format === 'image') {
+      return quality === 'high' ? 'image_high' : 'image_fast';
+    } else {
+      return quality === 'high' ? 'video_high' : 'video_fast';
+    }
+  }
+
   static async getGenerationStatus(id: string, format: GenerationFormat): Promise<ImageRecordWithUrl | VideoRecordWithUrl> {
     console.log('🔍 Checking generation status for:', { id, format });
     
@@ -161,39 +206,29 @@ export class GenerationService {
         try {
           console.log('🎯 Processing completed image with filePath:', data.image_url);
           
-          // FIXED: Extract only the relative path without bucket prefix
-          let relativePath = data.image_url;
+          // Extract relative path using improved logic
+          const relativePath = this.extractRelativePath(data.image_url);
           
-          // Remove bucket prefix if it exists (backwards compatibility)
-          if (relativePath.includes('/')) {
-            const pathParts = relativePath.split('/');
-            // If first part looks like a bucket name, remove it
-            if (pathParts[0] && (pathParts[0].includes('image_') || pathParts[0].includes('video_'))) {
-              relativePath = pathParts.slice(1).join('/');
-              console.log('🔧 Extracted relative path:', relativePath);
-            }
-          }
-          
-          // Determine bucket based on quality
-          const bucket = data.quality === 'high' ? 'image_high' : 'image_fast';
-          console.log('🪣 Using bucket:', bucket, 'for relative path:', relativePath);
+          // Get correct bucket based on image quality
+          const bucket = this.getBucketForContent('image', data.quality as GenerationQuality);
+          console.log('🪣 Using image bucket:', bucket, 'for relative path:', relativePath);
           
           // Generate signed URL from the RELATIVE file path
           const { data: signedUrlData, error: urlError } = await getSignedUrl(
             bucket as any,
-            relativePath, // Use clean relative path
+            relativePath,
             3600 // 1 hour expiry
           );
 
           if (!urlError && signedUrlData?.signedUrl) {
-            console.log('✅ Signed URL generated successfully');
+            console.log('✅ Image signed URL generated successfully');
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: [signedUrlData.signedUrl]
             };
             return result;
           } else {
-            console.error('❌ Failed to generate signed URL:', urlError?.message);
+            console.error('❌ Failed to generate image signed URL:', urlError?.message);
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
@@ -202,7 +237,7 @@ export class GenerationService {
             return result;
           }
         } catch (urlError) {
-          console.error('❌ Error processing signed URL:', urlError);
+          console.error('❌ Error processing image signed URL:', urlError);
           const result: ImageRecordWithUrl = {
             ...data,
             image_urls: null,
@@ -234,27 +269,19 @@ export class GenerationService {
         try {
           console.log('🎯 Processing completed video with filePath:', data.video_url);
           
-          // FIXED: Extract only the relative path without bucket prefix
-          let relativePath = data.video_url;
+          // Extract relative path using improved logic
+          const relativePath = this.extractRelativePath(data.video_url);
           
-          // Remove bucket prefix if it exists (backwards compatibility)
-          if (relativePath.includes('/')) {
-            const pathParts = relativePath.split('/');
-            // If first part looks like a bucket name, remove it
-            if (pathParts[0] && (pathParts[0].includes('video_') || pathParts[0].includes('image_'))) {
-              relativePath = pathParts.slice(1).join('/');
-              console.log('🔧 Extracted relative path:', relativePath);
-            }
-          }
-          
-          // Determine bucket - for now we'll use video_fast as default
-          const bucket = 'video_fast';
-          console.log('🪣 Using video bucket:', bucket, 'for relative path:', relativePath);
+          // FIXED: Get correct bucket based on video quality from database
+          // First try to get quality from the database record itself
+          const videoQuality = (data as any).quality || 'fast'; // Default to fast if not specified
+          const bucket = this.getBucketForContent('video', videoQuality as GenerationQuality);
+          console.log('🪣 Using video bucket:', bucket, 'for relative path:', relativePath, 'quality:', videoQuality);
           
           // Generate signed URL from the RELATIVE file path
           const { data: signedUrlData, error: urlError } = await getSignedUrl(
             bucket as any,
-            relativePath, // Use clean relative path
+            relativePath,
             7200 // 2 hours expiry for videos
           );
 
