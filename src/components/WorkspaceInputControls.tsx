@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Upload, Sparkles, Play, Music, RotateCcw, Camera, Brush, Zap, Crown, ChevronDown, ChevronUp } from "lucide-react";
@@ -279,7 +280,7 @@ export const WorkspaceInputControls = ({
         </div>
       ) : (
         // Desktop Layout
-        <div>
+        <>
           {/* Row 1: Mode Toggle Buttons, Reference Uploads, Text Input, Generate Button */}
           <div className="flex items-center gap-3 mb-4">
             {/* Stacked Mode Toggle Buttons */}
@@ -526,7 +527,7 @@ export const WorkspaceInputControls = ({
             {/* Spacer to align with generate button */}
             <div className="w-12"></div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
