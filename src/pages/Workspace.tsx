@@ -26,6 +26,15 @@ interface GenerationSet {
   isExpanded?: boolean;
 }
 
+// Helper function to get timeout based on format
+const getTimeoutForFormat = (format: 'image' | 'video'): number => {
+  if (format === 'video') {
+    return 8 * 60 * 1000; // 8 minutes for videos
+  } else {
+    return 5 * 60 * 1000; // 5 minutes for images
+  }
+};
+
 export const Workspace = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -122,19 +131,20 @@ export const Workspace = () => {
   useEffect(() => {
     if (!generatedId || !generationStartTime) return;
 
+    const timeout = getTimeoutForFormat(mode);
     const timeoutId = setTimeout(() => {
       const elapsed = Date.now() - generationStartTime.getTime();
-      if (elapsed > 5 * 60 * 1000) { // 5 minutes
-        console.log('⏰ Generation timeout reached, clearing progress dialog');
+      if (elapsed > timeout) {
+        console.log(`⏰ Generation timeout reached (${mode === 'video' ? '8 minutes' : '5 minutes'}), clearing progress dialog`);
         toast.error('Generation timed out. Please try again.');
         setGeneratedId(null);
         setGenerationStartTime(null);
         setProcessedIds(prev => new Set(prev).add(generatedId));
       }
-    }, 5 * 60 * 1000); // 5 minutes
+    }, timeout);
 
     return () => clearTimeout(timeoutId);
-  }, [generatedId, generationStartTime]);
+  }, [generatedId, generationStartTime, mode]);
 
   // Handle generation completion
   useEffect(() => {

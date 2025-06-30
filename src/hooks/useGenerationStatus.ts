@@ -25,6 +25,15 @@ const getOptimizedEstimatedTime = (format: GenerationFormat, quality: string): n
   return timingMap[key] || (format === 'image' ? 90 : 120);
 };
 
+// Helper function to get timeout based on format
+const getTimeoutForFormat = (format: GenerationFormat): number => {
+  if (format === 'video') {
+    return 8 * 60 * 1000; // 8 minutes for videos
+  } else {
+    return 5 * 60 * 1000; // 5 minutes for images
+  }
+};
+
 export const useGenerationStatus = (
   id: string | null,
   format: GenerationFormat,
@@ -102,10 +111,11 @@ export const useGenerationStatus = (
         return false;
       }
       
-      // Stop polling after 5 minutes to prevent infinite loops
+      // Stop polling after format-specific timeout to prevent infinite loops
       const elapsed = Date.now() - startTimeRef.current;
-      if (elapsed > 5 * 60 * 1000) { // 5 minutes
-        console.log('🛑 Stopping polling due to timeout (5 minutes)');
+      const timeout = getTimeoutForFormat(format);
+      if (elapsed > timeout) {
+        console.log(`🛑 Stopping polling due to timeout (${format === 'video' ? '8 minutes' : '5 minutes'})`);
         return false;
       }
       
