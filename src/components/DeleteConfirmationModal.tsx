@@ -12,7 +12,7 @@ import {
 
 interface DeleteConfirmationModalProps {
   video: {
-    id: number;
+    id: string;
     prompt: string;
   } | null;
   open: boolean;
