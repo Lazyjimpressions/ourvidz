@@ -281,8 +281,7 @@ const Library = () => {
       <DeleteConfirmationModal
         video={assetToDelete ? { 
           id: assetToDelete.id, 
-          prompt: assetToDelete.prompt,
-          createdAt: assetToDelete.createdAt
+          prompt: assetToDelete.prompt
         } : null}
         open={!!assetToDelete}
         onClose={() => setAssetToDelete(null)}
@@ -298,8 +297,7 @@ const Library = () => {
       <DeleteConfirmationModal
         video={selectedAssets.size > 0 ? {
           id: 'bulk',
-          prompt: `${selectedAssets.size} selected assets`,
-          createdAt: new Date()
+          prompt: `${selectedAssets.size} selected assets`
         } : null}
         open={showBulkDelete}
         onClose={() => setShowBulkDelete(false)}
