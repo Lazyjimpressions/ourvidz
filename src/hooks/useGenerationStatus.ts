@@ -59,13 +59,16 @@ export const useGenerationStatus = (
         const result = await GenerationService.getGenerationStatus(id, format);
         console.log('📊 Generation status result:', result);
         
-        // Handle image URL format consistency - convert single image_url to image_urls array
+        // Handle image URL format consistency - only for image format
         if (format === 'image' && result.status === 'completed') {
-          if (result.image_url && !result.image_urls) {
+          // Type guard to ensure we're working with image data
+          const imageResult = result as any;
+          
+          if (imageResult.image_url && !imageResult.image_urls) {
             console.log('🔄 Converting single image_url to image_urls array');
-            result.image_urls = [result.image_url];
-          } else if (result.image_urls && Array.isArray(result.image_urls) && result.image_urls.length > 0) {
-            console.log('✅ Image URLs already in array format:', result.image_urls.length, 'images');
+            imageResult.image_urls = [imageResult.image_url];
+          } else if (imageResult.image_urls && Array.isArray(imageResult.image_urls) && imageResult.image_urls.length > 0) {
+            console.log('✅ Image URLs already in array format:', imageResult.image_urls.length, 'images');
           }
         }
         
