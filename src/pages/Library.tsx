@@ -3,14 +3,16 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
-import { AssetFilters, AssetType, QualityFilter, StatusFilter, SortOption, ViewMode } from "@/components/AssetFilters";
+import { AssetFilters, AssetType, QualityFilter, StatusFilter, ViewMode } from "@/components/AssetFilters";
 import { AssetPreviewModal } from "@/components/AssetPreviewModal";
+import { AssetTableView } from "@/components/AssetTableView";
+import { SortDropdown, SortOption } from "@/components/SortDropdown";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { AssetService, UnifiedAsset } from "@/lib/services/AssetService";
 import { toast } from "sonner";
-import { Download, Trash2 } from "lucide-react";
+import { Download, Trash2, Broom } from "lucide-react";
 
 const Library = () => {
   // Data fetching
@@ -35,6 +37,9 @@ const Library = () => {
   const [previewAsset, setPreviewAsset] = useState<UnifiedAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<UnifiedAsset | null>(null);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
+
+  // Cleanup states
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   // Clear selection when exiting selection mode
   useEffect(() => {
@@ -163,6 +168,29 @@ const Library = () => {
     }
   };
 
+  const handleCleanupOrphaned = async () => {
+    setIsCleaningUp(true);
+    try {
+      const result = await AssetService.cleanupOrphanedAssets();
+      if (result.cleaned > 0) {
+        toast.success(`Cleaned up ${result.cleaned} orphaned assets`);
+        refetch();
+      } else {
+        toast.info("No orphaned assets found");
+      }
+      
+      if (result.errors.length > 0) {
+        console.warn('Cleanup errors:', result.errors);
+        toast.warning(`Cleanup completed with ${result.errors.length} warnings`);
+      }
+    } catch (error) {
+      console.error('Cleanup error:', error);
+      toast.error("Failed to cleanup orphaned assets");
+    } finally {
+      setIsCleaningUp(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
@@ -186,29 +214,47 @@ const Library = () => {
               </p>
             </div>
 
-            {/* Bulk Actions */}
-            {selectionMode && selectedAssets.size > 0 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={handleBulkDownload}
-                  variant="outline"
-                  size="sm"
-                  className="border-gray-600"
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Download ({selectedAssets.size})
-                </Button>
-                <Button
-                  onClick={() => setShowBulkDelete(true)}
-                  variant="outline"
-                  size="sm"
-                  className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete ({selectedAssets.size})
-                </Button>
-              </div>
-            )}
+            {/* Header Actions */}
+            <div className="flex items-center gap-2">
+              {/* Cleanup Button */}
+              <Button
+                onClick={handleCleanupOrphaned}
+                variant="outline"
+                size="sm"
+                disabled={isCleaningUp}
+                className="border-gray-600 text-gray-300 hover:bg-gray-700"
+              >
+                <Broom className={`h-4 w-4 mr-1 ${isCleaningUp ? 'animate-spin' : ''}`} />
+                {isCleaningUp ? 'Cleaning...' : 'Clean Library'}
+              </Button>
+
+              {/* Sort Dropdown */}
+              <SortDropdown sortBy={sortBy} onSortChange={setSortBy} />
+
+              {/* Bulk Actions */}
+              {selectionMode && selectedAssets.size > 0 && (
+                <>
+                  <Button
+                    onClick={handleBulkDownload}
+                    variant="outline"
+                    size="sm"
+                    className="border-gray-600"
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download ({selectedAssets.size})
+                  </Button>
+                  <Button
+                    onClick={() => setShowBulkDelete(true)}
+                    variant="outline"
+                    size="sm"
+                    className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete ({selectedAssets.size})
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Filters */}
@@ -233,7 +279,7 @@ const Library = () => {
             onToggleSelectionMode={() => setSelectionMode(!selectionMode)}
           />
 
-          {/* Assets Grid */}
+          {/* Assets Display */}
           {filteredAssets.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">📁</div>
@@ -247,12 +293,18 @@ const Library = () => {
                 }
               </p>
             </div>
+          ) : viewMode === "table" ? (
+            <AssetTableView
+              assets={filteredAssets}
+              selectedAssets={selectedAssets}
+              onAssetSelection={handleAssetSelection}
+              onPreview={setPreviewAsset}
+              onDelete={setAssetToDelete}
+              onDownload={handleDownload}
+              selectionMode={selectionMode}
+            />
           ) : (
-            <div className={
-              viewMode === "grid" 
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6"
-                : "space-y-4"
-            }>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
               {filteredAssets.map((asset) => (
                 <AssetCard
                   key={asset.id}

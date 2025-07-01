@@ -1,6 +1,5 @@
-
 import { supabase } from '@/integrations/supabase/client';
-import { getSignedUrl } from '@/lib/storage';
+import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
 
 type ImageRecord = Tables<'images'>;
@@ -200,6 +199,26 @@ export class AssetService {
   static async deleteAsset(assetId: string, assetType: 'image' | 'video'): Promise<void> {
     console.log('🗑️ Deleting asset:', assetId, assetType);
     
+    // Get asset details before deletion to clean up storage
+    let assetData: any = null;
+    
+    if (assetType === 'image') {
+      const { data } = await supabase
+        .from('images')
+        .select('image_url, quality')
+        .eq('id', assetId)
+        .single();
+      assetData = data;
+    } else {
+      const { data } = await supabase
+        .from('videos')
+        .select('video_url, thumbnail_url')
+        .eq('id', assetId)
+        .single();
+      assetData = data;
+    }
+
+    // Delete from database first
     if (assetType === 'image') {
       const { error } = await supabase
         .from('images')
@@ -215,43 +234,148 @@ export class AssetService {
       
       if (error) throw error;
     }
+
+    // Clean up storage files
+    if (assetData) {
+      try {
+        if (assetType === 'image' && assetData.image_url) {
+          const bucket = assetData.quality === 'high' ? 'image_high' : 'image_fast';
+          await deleteFile(bucket as any, assetData.image_url);
+        } else if (assetType === 'video') {
+          if (assetData.video_url) {
+            // Determine quality from job data
+            const { data: jobData } = await supabase
+              .from('jobs')
+              .select('quality, job_type')
+              .eq('video_id', assetId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            let videoQuality = 'fast';
+            if (jobData?.quality) {
+              videoQuality = jobData.quality;
+            } else if (jobData?.job_type) {
+              const qualityFromJobType = jobData.job_type.split('_')[1];
+              if (qualityFromJobType === 'high' || qualityFromJobType === 'fast') {
+                videoQuality = qualityFromJobType;
+              }
+            }
+
+            const bucket = videoQuality === 'high' ? 'video_high' : 'video_fast';
+            await deleteFile(bucket as any, assetData.video_url);
+          }
+          
+          if (assetData.thumbnail_url) {
+            await deleteFile('image_fast' as any, assetData.thumbnail_url);
+          }
+        }
+      } catch (storageError) {
+        console.warn('⚠️ Storage cleanup failed (file may not exist):', storageError);
+        // Don't throw error - database deletion succeeded
+      }
+    }
     
-    console.log('✅ Asset deleted successfully');
+    console.log('✅ Asset and storage files deleted successfully');
   }
 
   static async bulkDeleteAssets(assets: { id: string; type: 'image' | 'video' }[]): Promise<void> {
     console.log('🗑️ Bulk deleting assets:', assets.length);
     
-    const imageIds = assets.filter(a => a.type === 'image').map(a => a.id);
-    const videoIds = assets.filter(a => a.type === 'video').map(a => a.id);
+    // Delete each asset individually to ensure proper storage cleanup
+    const deletePromises = assets.map(asset => 
+      this.deleteAsset(asset.id, asset.type)
+    );
 
-    const promises = [];
-
-    if (imageIds.length > 0) {
-      promises.push(
-        supabase
-          .from('images')
-          .delete()
-          .in('id', imageIds)
-      );
-    }
-
-    if (videoIds.length > 0) {
-      promises.push(
-        supabase
-          .from('videos')
-          .delete()
-          .in('id', videoIds)
-      );
-    }
-
-    const results = await Promise.all(promises);
-    const errors = results.filter(r => r.error).map(r => r.error);
-    
-    if (errors.length > 0) {
-      throw new Error(`Failed to delete some assets: ${errors.map(e => e!.message).join(', ')}`);
-    }
-    
+    await Promise.all(deletePromises);
     console.log('✅ Bulk delete completed successfully');
+  }
+
+  static async cleanupOrphanedAssets(): Promise<{ cleaned: number; errors: string[] }> {
+    console.log('🧹 Starting orphaned asset cleanup...');
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
+    const errors: string[] = [];
+    let cleanedCount = 0;
+
+    try {
+      // Get all user images
+      const { data: images } = await supabase
+        .from('images')
+        .select('id, image_url, quality')
+        .eq('user_id', user.id);
+
+      // Get all user videos
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('id, video_url, thumbnail_url')
+        .eq('user_id', user.id);
+
+      // Check images for orphaned database records
+      if (images) {
+        for (const image of images) {
+          if (image.image_url) {
+            try {
+              const bucket = image.quality === 'high' ? 'image_high' : 'image_fast';
+              const { data } = await getSignedUrl(bucket as any, image.image_url, 60);
+              
+              if (!data?.signedUrl) {
+                // File doesn't exist in storage, remove database record
+                await supabase.from('images').delete().eq('id', image.id);
+                cleanedCount++;
+                console.log('🗑️ Cleaned orphaned image record:', image.id);
+              }
+            } catch (error) {
+              errors.push(`Image ${image.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          }
+        }
+      }
+
+      // Check videos for orphaned database records
+      if (videos) {
+        for (const video of videos) {
+          if (video.video_url) {
+            try {
+              // Get quality from jobs table
+              const { data: jobData } = await supabase
+                .from('jobs')
+                .select('quality, job_type')
+                .eq('video_id', video.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+              let videoQuality = 'fast';
+              if (jobData?.quality) {
+                videoQuality = jobData.quality;
+              }
+
+              const bucket = videoQuality === 'high' ? 'video_high' : 'video_fast';
+              const { data } = await getSignedUrl(bucket as any, video.video_url, 60);
+              
+              if (!data?.signedUrl) {
+                // File doesn't exist in storage, remove database record
+                await supabase.from('videos').delete().eq('id', video.id);
+                cleanedCount++;
+                console.log('🗑️ Cleaned orphaned video record:', video.id);
+              }
+            } catch (error) {
+              errors.push(`Video ${video.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          }
+        }
+      }
+
+      console.log(`✅ Cleanup completed: ${cleanedCount} orphaned records removed`);
+      return { cleaned: cleanedCount, errors };
+    } catch (error) {
+      console.error('❌ Cleanup failed:', error);
+      throw error;
+    }
   }
 }

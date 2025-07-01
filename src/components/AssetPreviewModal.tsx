@@ -2,7 +2,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, X, Calendar, Clock, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
+import { Download, Calendar, Clock, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { UnifiedAsset } from "@/lib/services/AssetService";
 
 interface AssetPreviewModalProps {
@@ -34,24 +34,14 @@ export const AssetPreviewModal = ({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] bg-gray-900 border-gray-700 text-white">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2">
-              {asset.type === 'image' ? (
-                <ImageIcon className="h-5 w-5" />
-              ) : (
-                <VideoIcon className="h-5 w-5" />
-              )}
-              {asset.title || 'Asset Preview'}
-            </DialogTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <DialogTitle className="flex items-center gap-2 text-left">
+            {asset.type === 'image' ? (
+              <ImageIcon className="h-5 w-5" />
+            ) : (
+              <VideoIcon className="h-5 w-5" />
+            )}
+            <span className="truncate">{asset.title || 'Asset Preview'}</span>
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -80,7 +70,7 @@ export const AssetPreviewModal = ({
                   <div className="text-center">
                     <div className="text-4xl mb-2">⚠️</div>
                     <div>Failed to load {asset.type}</div>
-                    <div className="text-sm text-red-400 mt-1">{asset.error}</div>
+                    <div className="text-sm text-red-400 mt-1 px-4 break-words">{asset.error}</div>
                   </div>
                 ) : (
                   <div className="text-center">
@@ -102,15 +92,15 @@ export const AssetPreviewModal = ({
             <div className="space-y-3">
               <div>
                 <h3 className="font-semibold text-gray-300 mb-1">Prompt</h3>
-                <p className="text-sm text-gray-400 bg-gray-800 p-3 rounded-md">
-                  {asset.prompt}
-                </p>
+                <div className="text-sm text-gray-400 bg-gray-800 p-3 rounded-md max-h-32 overflow-y-auto">
+                  <p className="break-words">{asset.prompt}</p>
+                </div>
               </div>
 
               {asset.projectTitle && (
                 <div>
                   <h3 className="font-semibold text-gray-300 mb-1">Project</h3>
-                  <p className="text-sm text-gray-400">{asset.projectTitle}</p>
+                  <p className="text-sm text-gray-400 break-words">{asset.projectTitle}</p>
                 </div>
               )}
             </div>
@@ -147,19 +137,19 @@ export const AssetPreviewModal = ({
 
               <div className="space-y-2 text-sm text-gray-400">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  <span>Created: {formatDate(asset.createdAt)}</span>
+                  <Calendar className="h-4 w-4 flex-shrink-0" />
+                  <span className="break-words">Created: {formatDate(asset.createdAt)}</span>
                 </div>
 
                 {asset.format && (
                   <div className="flex items-center gap-2">
-                    <span>Format: {asset.format.toUpperCase()}</span>
+                    <span className="break-words">Format: {asset.format.toUpperCase()}</span>
                   </div>
                 )}
 
                 {asset.type === 'video' && asset.duration && (
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
+                    <Clock className="h-4 w-4 flex-shrink-0" />
                     <span>Duration: {asset.duration}s</span>
                   </div>
                 )}
