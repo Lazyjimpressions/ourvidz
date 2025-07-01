@@ -1,9 +1,10 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Clock, Trash2, Info } from "lucide-react";
+import { ChevronDown, ChevronRight, Clock, Trash2, Info, RotateCcw } from "lucide-react";
 import { WorkspaceImageGallery } from "@/components/WorkspaceImageGallery";
 import { WorkspaceVideoDisplay } from "@/components/WorkspaceVideoDisplay";
 import { PromptInfoModal } from "@/components/PromptInfoModal";
@@ -26,6 +27,8 @@ interface GenerationSet {
   timestamp: Date;
   content: GeneratedContent[];
   isExpanded?: boolean;
+  isRegeneration?: boolean;
+  sourceSetId?: string;
 }
 
 interface WorkspaceGenerationSetsProps {
@@ -124,23 +127,37 @@ export const WorkspaceGenerationSets = ({
           const truncatedPrompt = truncatePrompt(set.prompt, isMobile ? 60 : 100);
           
           return (
-            <Card key={set.id} className="bg-gray-900 border-gray-700">
+            <Card 
+              key={set.id} 
+              className={`bg-gray-900 border-gray-700 ${
+                set.isRegeneration ? 'ml-4 sm:ml-8 border-l-4 border-l-blue-500/50' : ''
+              }`}
+            >
               <Collapsible open={isExpanded} onOpenChange={() => toggleSetExpansion(set.id)}>
                 <CardHeader className={`pb-3 ${isMobile ? 'p-4' : ''}`}>
                   {isMobile ? (
                     // Mobile Layout - Stacked vertically
                     <div className="space-y-3">
-                      {/* Top row: Expand button and info icon */}
+                      {/* Top row: Expand button, regeneration indicator, and info icon */}
                       <div className="flex items-center justify-between">
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" className="p-1 h-auto">
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-gray-400" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-gray-400" />
-                            )}
-                          </Button>
-                        </CollapsibleTrigger>
+                        <div className="flex items-center gap-2">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" className="p-1 h-auto">
+                              {isExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                              )}
+                            </Button>
+                          </CollapsibleTrigger>
+                          
+                          {set.isRegeneration && (
+                            <Badge variant="secondary" className="bg-blue-600/20 text-blue-400 text-xs">
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Regenerated
+                            </Badge>
+                          )}
+                        </div>
                         
                         <Button
                           variant="ghost"
@@ -180,7 +197,7 @@ export const WorkspaceGenerationSets = ({
                       </div>
                     </div>
                   ) : (
-                    // Desktop Layout - Original horizontal layout
+                    // Desktop Layout - Original horizontal layout with regeneration indicators
                     <div className="flex items-center justify-between gap-4">
                       {/* Left side - Expand/Collapse and Prompt */}
                       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -195,9 +212,18 @@ export const WorkspaceGenerationSets = ({
                         </CollapsibleTrigger>
                         
                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <CardTitle className="text-white text-lg leading-relaxed flex-1 min-w-0">
-                            {truncatedPrompt}
-                          </CardTitle>
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <CardTitle className="text-white text-lg leading-relaxed flex-1 min-w-0">
+                              {truncatedPrompt}
+                            </CardTitle>
+                            
+                            {set.isRegeneration && (
+                              <Badge variant="secondary" className="bg-blue-600/20 text-blue-400 text-xs flex-shrink-0">
+                                <RotateCcw className="w-3 h-3 mr-1" />
+                                Regenerated
+                              </Badge>
+                            )}
+                          </div>
                           
                           <Button
                             variant="ghost"

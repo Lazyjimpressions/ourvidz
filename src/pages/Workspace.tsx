@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -24,6 +25,8 @@ interface GenerationSet {
   timestamp: Date;
   content: GeneratedContent[];
   isExpanded?: boolean;
+  isRegeneration?: boolean;
+  sourceSetId?: string;
 }
 
 // Helper function to get timeout based on format
@@ -47,6 +50,7 @@ export const Workspace = () => {
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [processedIds, setProcessedIds] = useState<Set<string>>(new Set());
   const [generationStartTime, setGenerationStartTime] = useState<Date | null>(null);
+  const [currentRegenerationSource, setCurrentRegenerationSource] = useState<string | null>(null);
 
   const { generate, isGenerating, useGenerationStatus } = useGeneration({
     onSuccess: (data) => {
@@ -61,6 +65,7 @@ export const Workspace = () => {
       toast.error(`Generation failed: ${error.message}`);
       setGeneratedId(null);
       setGenerationStartTime(null);
+      setCurrentRegenerationSource(null);
     }
   });
 
@@ -140,13 +145,14 @@ export const Workspace = () => {
         setGeneratedId(null);
         setGenerationStartTime(null);
         setProcessedIds(prev => new Set(prev).add(generatedId));
+        setCurrentRegenerationSource(null);
       }
     }, timeout);
 
     return () => clearTimeout(timeoutId);
   }, [generatedId, generationStartTime, mode]);
 
-  // Handle generation completion
+  // Enhanced generation completion handler with regeneration support
   useEffect(() => {
     if (!generationData || !generatedId) return;
 
@@ -160,7 +166,8 @@ export const Workspace = () => {
       id: generatedId, 
       status: generationData.status, 
       mode,
-      hasUrlError: 'url_error' in generationData && generationData.url_error
+      hasUrlError: 'url_error' in generationData && generationData.url_error,
+      isRegeneration: !!currentRegenerationSource
     });
 
     // Handle URL errors - clear progress dialog and mark as processed
@@ -169,6 +176,7 @@ export const Workspace = () => {
       setGeneratedId(null);
       setGenerationStartTime(null);
       setProcessedIds(prev => new Set(prev).add(generatedId));
+      setCurrentRegenerationSource(null);
       return;
     }
 
@@ -194,13 +202,30 @@ export const Workspace = () => {
           mode: 'image',
           timestamp: new Date(),
           content: images,
-          isExpanded: true
+          isExpanded: true,
+          isRegeneration: !!currentRegenerationSource,
+          sourceSetId: currentRegenerationSource || undefined
         };
         
-        setGenerationSets(prev => [newSet, ...prev]);
+        // Position regenerated sets directly below their source
+        if (currentRegenerationSource) {
+          setGenerationSets(prev => {
+            const sourceIndex = prev.findIndex(set => set.id === currentRegenerationSource);
+            if (sourceIndex !== -1) {
+              const newSets = [...prev];
+              newSets.splice(sourceIndex + 1, 0, newSet);
+              return newSets;
+            }
+            return [newSet, ...prev];
+          });
+        } else {
+          setGenerationSets(prev => [newSet, ...prev]);
+        }
+        
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
         setGenerationStartTime(null);
+        setCurrentRegenerationSource(null);
         
       } else if (mode === 'video' && contentData.video_url) {
         const video: GeneratedContent = {
@@ -219,13 +244,30 @@ export const Workspace = () => {
           mode: 'video',
           timestamp: new Date(),
           content: [video],
-          isExpanded: true
+          isExpanded: true,
+          isRegeneration: !!currentRegenerationSource,
+          sourceSetId: currentRegenerationSource || undefined
         };
         
-        setGenerationSets(prev => [newSet, ...prev]);
+        // Position regenerated sets directly below their source
+        if (currentRegenerationSource) {
+          setGenerationSets(prev => {
+            const sourceIndex = prev.findIndex(set => set.id === currentRegenerationSource);
+            if (sourceIndex !== -1) {
+              const newSets = [...prev];
+              newSets.splice(sourceIndex + 1, 0, newSet);
+              return newSets;
+            }
+            return [newSet, ...prev];
+          });
+        } else {
+          setGenerationSets(prev => [newSet, ...prev]);
+        }
+        
         setProcessedIds(prev => new Set(prev).add(generatedId));
         setGeneratedId(null);
         setGenerationStartTime(null);
+        setCurrentRegenerationSource(null);
         
       } else {
         console.warn('⚠️ Generation completed but no content found:', contentData);
@@ -233,6 +275,7 @@ export const Workspace = () => {
         setGeneratedId(null);
         setGenerationStartTime(null);
         setProcessedIds(prev => new Set(prev).add(generatedId));
+        setCurrentRegenerationSource(null);
       }
       
     } else if (generationData.status === 'failed') {
@@ -241,8 +284,9 @@ export const Workspace = () => {
       setGeneratedId(null);
       setGenerationStartTime(null);
       setProcessedIds(prev => new Set(prev).add(generatedId));
+      setCurrentRegenerationSource(null);
     }
-  }, [generationData, generatedId, mode, prompt, quality, processedIds]);
+  }, [generationData, generatedId, mode, prompt, quality, processedIds, currentRegenerationSource]);
 
   // Handle status check errors
   useEffect(() => {
@@ -262,7 +306,8 @@ export const Workspace = () => {
       return;
     }
 
-    // DO NOT clear existing generation sets - preserve them
+    // Clear regeneration state for new generations
+    setCurrentRegenerationSource(null);
     setGeneratedId(null);
     setProcessedIds(new Set());
 
@@ -309,7 +354,8 @@ export const Workspace = () => {
 
     if (!itemToRegenerate || !sourceSet) return;
 
-    // Clear processing state and regenerate
+    // Set regeneration context
+    setCurrentRegenerationSource(sourceSet.id);
     setGeneratedId(null);
     setProcessedIds(new Set());
 
@@ -325,7 +371,7 @@ export const Workspace = () => {
     });
   };
 
-  // NEW: Enhanced regeneration with prompt editing and advanced options
+  // Enhanced regeneration with prompt editing and advanced options
   const handleRegenerateWithPrompt = (params: {
     itemId: string;
     prompt: string;
@@ -336,6 +382,12 @@ export const Workspace = () => {
     preserveSeed?: boolean;
   }) => {
     console.log('🔄 Regenerating with enhanced params:', params);
+
+    // Find the source set for positioning
+    const sourceSet = generationSets.find(set => set.id === params.itemId);
+    if (sourceSet) {
+      setCurrentRegenerationSource(sourceSet.id);
+    }
 
     // Clear processing state and regenerate
     setGeneratedId(null);
@@ -382,114 +434,120 @@ export const Workspace = () => {
     console.log('🛑 User cancelled generation');
     setGeneratedId(null);
     setGenerationStartTime(null);
+    setCurrentRegenerationSource(null);
     toast.info('Generation cancelled');
   };
 
   const hasGeneratedContent = generationSets.length > 0;
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col">
+    <div className="min-h-screen bg-black text-white">
       {/* Header */}
       <WorkspaceHeader />
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex items-center justify-center px-8">
-        {!hasGeneratedContent ? (
-          <div className="text-center max-w-4xl">
-            {/* Show progress indicator during generation */}
-            {generatedId && generationData && (
-              <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
-                <GenerationProgressIndicator
-                  status={mapDatabaseStatusToProgressStatus(generationData.status)}
-                  progress={calculateProgress(generationData.status, generationStartTime)}
-                  estimatedTime={getEstimatedTime()}
-                  startTime={generationStartTime}
+      {/* Main Content Container - Fixed layout structure */}
+      <div className="flex flex-col min-h-screen">
+        {/* Content Area - Takes available space */}
+        <div className="flex-1 px-4 sm:px-8 py-4 sm:py-8 pb-32 sm:pb-24">
+          <div className="max-w-6xl mx-auto">
+            {!hasGeneratedContent ? (
+              <div className="text-center max-w-4xl mx-auto">
+                {/* Show progress indicator during generation */}
+                {generatedId && generationData && (
+                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                    <GenerationProgressIndicator
+                      status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                      progress={calculateProgress(generationData.status, generationStartTime)}
+                      estimatedTime={getEstimatedTime()}
+                      startTime={generationStartTime}
+                    />
+                    {/* Add cancel button for stuck generations */}
+                    <button
+                      onClick={handleCancelGeneration}
+                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                    >
+                      Cancel Generation
+                    </button>
+                  </div>
+                )}
+                
+                <h1 className="text-3xl sm:text-4xl font-light mb-4">
+                  Let's start {mode === 'video' ? 'creating some videos' : 'with some image storming'}
+                  <span className="inline-flex items-center gap-2">
+                    <div className="flex gap-1 ml-2">
+                      <img 
+                        src="https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=32&h=32&fit=crop&crop=center" 
+                        alt="" 
+                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
+                      />
+                      <img 
+                        src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=32&h=32&fit=crop&crop=center" 
+                        alt="" 
+                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
+                      />
+                      <img 
+                        src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=32&h=32&fit=crop&crop=center" 
+                        alt="" 
+                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
+                      />
+                    </div>
+                  </span>
+                </h1>
+                <p className="text-base sm:text-lg text-gray-400 mb-8">
+                  {mode === 'video' 
+                    ? "Type your prompt, set your style, and generate your video"
+                    : "Type your prompt, set your style, and generate your image"
+                  }
+                </p>
+              </div>
+            ) : (
+              <div className="w-full">
+                {/* Show progress indicator during generation - positioned above existing content */}
+                {generatedId && generationData && (
+                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                    <GenerationProgressIndicator
+                      status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                      progress={calculateProgress(generationData.status, generationStartTime)}
+                      estimatedTime={getEstimatedTime()}
+                      startTime={generationStartTime}
+                    />
+                    {/* Add cancel button for stuck generations */}
+                    <button
+                      onClick={handleCancelGeneration}
+                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                    >
+                      Cancel Generation
+                    </button>
+                  </div>
+                )}
+                
+                <WorkspaceGenerationSets
+                  generationSets={generationSets}
+                  onRemoveSet={handleRemoveSet}
+                  onClearAll={handleClearAll}
+                  onRegenerateItem={handleRegenerateItem}
+                  onRegenerateWithPrompt={handleRegenerateWithPrompt}
                 />
-                {/* Add cancel button for stuck generations */}
-                <button
-                  onClick={handleCancelGeneration}
-                  className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
-                >
-                  Cancel Generation
-                </button>
               </div>
             )}
-            
-            <h1 className="text-4xl font-light mb-4">
-              Let's start {mode === 'video' ? 'creating some videos' : 'with some image storming'}
-              <span className="inline-flex items-center gap-2">
-                <div className="flex gap-1 ml-2">
-                  <img 
-                    src="https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=32&h=32&fit=crop&crop=center" 
-                    alt="" 
-                    className="w-8 h-8 rounded object-cover"
-                  />
-                  <img 
-                    src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=32&h=32&fit=crop&crop=center" 
-                    alt="" 
-                    className="w-8 h-8 rounded object-cover"
-                  />
-                  <img 
-                    src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=32&h=32&fit=crop&crop=center" 
-                    alt="" 
-                    className="w-8 h-8 rounded object-cover"
-                  />
-                </div>
-              </span>
-            </h1>
-            <p className="text-lg text-gray-400 mb-8">
-              {mode === 'video' 
-                ? "Type your prompt, set your style, and generate your video"
-                : "Type your prompt, set your style, and generate your image"
-              }
-            </p>
           </div>
-        ) : (
-          <div className="w-full">
-            {/* Show progress indicator during generation - positioned above existing content */}
-            {generatedId && generationData && (
-              <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700 max-w-4xl mx-auto">
-                <GenerationProgressIndicator
-                  status={mapDatabaseStatusToProgressStatus(generationData.status)}
-                  progress={calculateProgress(generationData.status, generationStartTime)}
-                  estimatedTime={getEstimatedTime()}
-                  startTime={generationStartTime}
-                />
-                {/* Add cancel button for stuck generations */}
-                <button
-                  onClick={handleCancelGeneration}
-                  className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
-                >
-                  Cancel Generation
-                </button>
-              </div>
-            )}
-            
-            <WorkspaceGenerationSets
-              generationSets={generationSets}
-              onRemoveSet={handleRemoveSet}
-              onClearAll={handleClearAll}
-              onRegenerateItem={handleRegenerateItem}
-              onRegenerateWithPrompt={handleRegenerateWithPrompt}
+        </div>
+
+        {/* Fixed Input Container - Always at bottom */}
+        <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-sm border-t border-gray-700/50 p-4 sm:p-8 z-50">
+          <div className="max-w-5xl mx-auto">
+            <WorkspaceInputControls
+              mode={mode}
+              onModeChange={handleModeChange}
+              prompt={prompt}
+              setPrompt={setPrompt}
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
+              onReferenceImageUpload={handleReferenceImageUpload}
+              quality={quality}
+              onQualityChange={setQuality}
             />
           </div>
-        )}
-      </div>
-
-      {/* Unified Input Container */}
-      <div className="pb-8 px-8">
-        <div className="max-w-5xl mx-auto">
-          <WorkspaceInputControls
-            mode={mode}
-            onModeChange={handleModeChange}
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onReferenceImageUpload={handleReferenceImageUpload}
-            quality={quality}
-            onQualityChange={setQuality}
-          />
         </div>
       </div>
     </div>
