@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -34,13 +33,23 @@ interface WorkspaceGenerationSetsProps {
   onRemoveSet: (setId: string) => void;
   onRegenerateItem: (itemId: string) => void;
   onClearAll: () => void;
+  onRegenerateWithPrompt?: (params: {
+    itemId: string;
+    prompt: string;
+    quality: GenerationQuality;
+    mode: 'image' | 'video';
+    strength?: number;
+    referenceImageUrl?: string;
+    preserveSeed?: boolean;
+  }) => void;
 }
 
 export const WorkspaceGenerationSets = ({ 
   generationSets, 
   onRemoveSet, 
   onRegenerateItem, 
-  onClearAll 
+  onClearAll,
+  onRegenerateWithPrompt
 }: WorkspaceGenerationSetsProps) => {
   const [expandedSets, setExpandedSets] = useState<Set<string>>(
     new Set(generationSets.map(set => set.id)) // Start with all sets expanded
@@ -74,6 +83,20 @@ export const WorkspaceGenerationSets = ({
   const handleShowPromptInfo = (set: GenerationSet, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedPromptInfo(set);
+  };
+
+  const handleRegenerateWithPrompt = (params: {
+    itemId: string;
+    prompt: string;
+    quality: GenerationQuality;
+    mode: 'image' | 'video';
+    strength?: number;
+    referenceImageUrl?: string;
+    preserveSeed?: boolean;
+  }) => {
+    if (onRegenerateWithPrompt) {
+      onRegenerateWithPrompt(params);
+    }
   };
 
   return (
@@ -176,16 +199,14 @@ export const WorkspaceGenerationSets = ({
                             {truncatedPrompt}
                           </CardTitle>
                           
-                          {set.prompt.length > 100 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => handleShowPromptInfo(set, e)}
-                              className="flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-800 p-1"
-                            >
-                              <Info className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => handleShowPromptInfo(set, e)}
+                            className="flex-shrink-0 text-gray-400 hover:text-white hover:bg-gray-800 p-1"
+                          >
+                            <Info className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                       
@@ -252,7 +273,7 @@ export const WorkspaceGenerationSets = ({
         </div>
       )}
 
-      {/* Prompt Info Modal */}
+      {/* Enhanced Prompt Info Modal */}
       {selectedPromptInfo && (
         <PromptInfoModal
           isOpen={true}
@@ -262,6 +283,9 @@ export const WorkspaceGenerationSets = ({
           mode={selectedPromptInfo.mode}
           timestamp={selectedPromptInfo.timestamp}
           contentCount={selectedPromptInfo.content.length}
+          itemId={selectedPromptInfo.id}
+          originalImageUrl={selectedPromptInfo.mode === 'image' && selectedPromptInfo.content.length > 0 ? selectedPromptInfo.content[0].url : undefined}
+          onRegenerate={handleRegenerateWithPrompt}
         />
       )}
     </div>

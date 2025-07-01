@@ -325,6 +325,45 @@ export const Workspace = () => {
     });
   };
 
+  // NEW: Enhanced regeneration with prompt editing and advanced options
+  const handleRegenerateWithPrompt = (params: {
+    itemId: string;
+    prompt: string;
+    quality: GenerationQuality;
+    mode: 'image' | 'video';
+    strength?: number;
+    referenceImageUrl?: string;
+    preserveSeed?: boolean;
+  }) => {
+    console.log('🔄 Regenerating with enhanced params:', params);
+
+    // Clear processing state and regenerate
+    setGeneratedId(null);
+    setProcessedIds(new Set());
+
+    // Generate new content with enhanced regeneration request
+    generate({
+      format: params.mode,
+      quality: params.quality,
+      prompt: params.prompt,
+      metadata: {
+        source: 'workspace',
+        regenerateId: params.itemId,
+        is_regeneration: true,
+        strength: params.strength,
+        reference_image_url: params.referenceImageUrl,
+        preserve_seed: params.preserveSeed
+      },
+      // Pass regeneration-specific data
+      strength: params.strength,
+      referenceImageUrl: params.referenceImageUrl,
+      preserveSeed: params.preserveSeed,
+      originalItemId: params.itemId
+    } as any);
+
+    toast.success('Regenerating with updated prompt and settings...');
+  };
+
   // Phase 2 optimized timing estimates
   const getEstimatedTime = () => {
     const timingMap = {
@@ -431,6 +470,7 @@ export const Workspace = () => {
               onRemoveSet={handleRemoveSet}
               onClearAll={handleClearAll}
               onRegenerateItem={handleRegenerateItem}
+              onRegenerateWithPrompt={handleRegenerateWithPrompt}
             />
           </div>
         )}

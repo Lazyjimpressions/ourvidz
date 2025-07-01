@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { usageAPI } from '@/lib/database';
 import { getSignedUrl } from '@/lib/storage';
@@ -19,8 +18,16 @@ type VideoRecordWithUrl = VideoRecord & {
   url_error?: string;
 };
 
+// Enhanced generation request for regeneration with advanced options
+interface RegenerationRequest extends GenerationRequest {
+  strength?: number;
+  referenceImageUrl?: string;
+  preserveSeed?: boolean;
+  originalItemId?: string;
+}
+
 export class GenerationService {
-  static async generate(request: GenerationRequest) {
+  static async generate(request: GenerationRequest | RegenerationRequest) {
     console.log('🚀 GenerationService.generate called with:', request);
     
     const { data: { user } } = await supabase.auth.getUser();
@@ -35,6 +42,12 @@ export class GenerationService {
     }
 
     console.log('⚙️ Using generation config:', config);
+
+    // Get seed from original generation if preserveSeed is requested
+    let originalSeed: string | undefined;
+    if ('preserveSeed' in request && request.preserveSeed && 'originalItemId' in request && request.originalItemId) {
+      originalSeed = await this.getOriginalSeed(request.originalItemId, request.format);
+    }
 
     // Create a record in the appropriate table based on format
     let recordId: string;
@@ -87,24 +100,38 @@ export class GenerationService {
     const jobType = `${request.format}_${request.quality}`;
     console.log('🔧 Using job type:', jobType);
 
+    // Enhanced metadata for WAN 2.1 regeneration features
+    const enhancedMetadata = {
+      ...request.metadata,
+      prompt: request.prompt,
+      format: request.format,
+      quality: request.quality,
+      model_type: jobType,
+      model_variant: config.modelVariant,
+      credits: config.credits,
+      generate_variations: request.format === 'image' ? true : false,
+      variation_count: request.format === 'image' ? 6 : 1,
+      // WAN 2.1 specific parameters
+      ...(('strength' in request && request.strength) && { strength: request.strength }),
+      ...(('referenceImageUrl' in request && request.referenceImageUrl) && { 
+        reference_image_url: request.referenceImageUrl,
+        image_to_image: true
+      }),
+      ...(originalSeed && { seed: originalSeed, preserve_seed: true }),
+      ...(('originalItemId' in request && request.originalItemId) && { 
+        regeneration_source: request.originalItemId,
+        is_regeneration: true 
+      })
+    };
+
     // Queue the job using the existing queue-job function
-    console.log('📋 Queuing job with payload...');
+    console.log('📋 Queuing job with enhanced payload...');
     const { data, error } = await supabase.functions.invoke('queue-job', {
       body: {
         jobType,
         [request.format === 'image' ? 'imageId' : 'videoId']: recordId,
         projectId: request.projectId || null,
-        metadata: {
-          ...request.metadata,
-          prompt: request.prompt,
-          format: request.format,
-          quality: request.quality,
-          model_type: jobType,
-          model_variant: config.modelVariant,
-          credits: config.credits,
-          generate_variations: request.format === 'image' ? true : false,
-          variation_count: request.format === 'image' ? 6 : 1
-        }
+        metadata: enhancedMetadata
       }
     });
 
@@ -115,16 +142,17 @@ export class GenerationService {
 
     console.log('✅ Job queued successfully:', data);
 
-    // Log usage
+    // Log usage with regeneration tracking
     await usageAPI.logAction(
-      jobType,
+      'originalItemId' in request && request.originalItemId ? `${jobType}_regeneration` : jobType,
       config.credits,
       {
         format: request.format,
         quality: request.quality,
         model_type: jobType,
         [request.format === 'image' ? 'image_id' : 'video_id']: recordId,
-        project_id: request.projectId || null
+        project_id: request.projectId || null,
+        ...('originalItemId' in request && request.originalItemId && { regeneration_source: request.originalItemId })
       }
     );
 
@@ -137,6 +165,37 @@ export class GenerationService {
       quality: request.quality,
       estimatedTime: config.estimatedTime
     };
+  }
+
+  // Helper method to retrieve seed from original generation
+  private static async getOriginalSeed(originalItemId: string, format: GenerationFormat): Promise<string | undefined> {
+    console.log('🔍 Retrieving seed for original item:', originalItemId);
+    
+    try {
+      const { data: job, error } = await supabase
+        .from('jobs')
+        .select('metadata')
+        .eq(format === 'image' ? 'image_id' : 'video_id', originalItemId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Error fetching original job:', error);
+        return undefined;
+      }
+
+      if (job?.metadata && typeof job.metadata === 'object' && 'seed' in job.metadata) {
+        console.log('✅ Found original seed:', job.metadata.seed);
+        return job.metadata.seed as string;
+      }
+
+      console.log('⚠️ No seed found in original job metadata');
+      return undefined;
+    } catch (error) {
+      console.error('❌ Error in getOriginalSeed:', error);
+      return undefined;
+    }
   }
 
   private static extractRelativePath(filePath: string): string {
