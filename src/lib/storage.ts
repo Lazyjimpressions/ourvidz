@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export type StorageBucket = 
@@ -64,55 +63,91 @@ export const uploadFile = async (
   }
 };
 
-// Simplified signed URL generation without file existence check
+// ENHANCED signed URL generation with comprehensive debugging
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
   expiresIn: number = 3600
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    console.log('🔐 Getting signed URL for:', { bucket, filePath, expiresIn });
+    console.log('🔐 getSignedUrl called with:');
+    console.log('   - Bucket:', bucket);
+    console.log('   - File path:', filePath);
+    console.log('   - Expires in:', expiresIn, 'seconds');
     
     // Validate inputs
     if (!bucket || !filePath) {
-      throw new Error('Bucket and filePath are required');
+      const errorMsg = `Missing required params - bucket: ${bucket}, filePath: ${filePath}`;
+      console.error('❌', errorMsg);
+      throw new Error(errorMsg);
     }
 
     // Check if user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError) {
       console.error('❌ Auth error in getSignedUrl:', authError);
-      throw new Error('Authentication required');
+      throw new Error('Authentication error: ' + authError.message);
     }
 
     if (!user) {
+      console.error('❌ No authenticated user found');
       throw new Error('User must be authenticated to access files');
     }
 
-    // The filePath from database is already user-scoped (user_id/filename)
-    // We use it as-is for private buckets
-    const pathToUse = bucket === 'system_assets' ? filePath : filePath;
-    
+    console.log('✅ User authenticated:', user.id);
+
+    // Use the filePath as-is (it should already be user-scoped from the database)
+    const pathToUse = filePath;
     console.log('📁 Using path for signed URL:', pathToUse);
 
-    // Generate signed URL directly without existence check
+    // Test if the file exists first
+    console.log('📋 Checking if file exists...');
+    const { data: fileList, error: listError } = await supabase.storage
+      .from(bucket)
+      .list(pathToUse.split('/').slice(0, -1).join('/') || '', {
+        limit: 100,
+        search: pathToUse.split('/').pop()
+      });
+
+    if (listError) {
+      console.warn('⚠️ Could not list files (might be normal):', listError.message);
+    } else {
+      console.log('📁 File listing result:', fileList?.length, 'files found');
+      if (fileList) {
+        const fileName = pathToUse.split('/').pop();
+        const fileExists = fileList.some(f => f.name === fileName);
+        console.log('🔍 File exists check:', fileExists, 'for file:', fileName);
+      }
+    }
+
+    // Generate signed URL
+    console.log('🔗 Generating signed URL...');
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(pathToUse, expiresIn);
 
     if (error) {
-      console.error('❌ Signed URL generation error:', error);
-      throw new Error(`Failed to generate signed URL: ${error.message}`);
+      console.error('❌ Signed URL generation failed:');
+      console.error('   - Error code:', error.message);
+      console.error('   - Full error:', error);
+      throw new Error(`Signed URL generation failed: ${error.message}`);
     }
 
     if (!data?.signedUrl) {
+      console.error('❌ No signed URL returned from Supabase');
       throw new Error('No signed URL returned from Supabase');
     }
 
     console.log('✅ Signed URL generated successfully');
+    console.log('   - URL length:', data.signedUrl.length);
+    console.log('   - URL starts with:', data.signedUrl.substring(0, 60) + '...');
+    
     return { data, error: null };
   } catch (error) {
-    console.error('❌ Error in getSignedUrl:', error);
+    console.error('❌ Exception in getSignedUrl:');
+    console.error('   - Error:', error);
+    console.error('   - Stack:', error instanceof Error ? error.stack : 'No stack');
+    
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')

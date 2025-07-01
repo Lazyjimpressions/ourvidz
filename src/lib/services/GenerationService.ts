@@ -209,34 +209,9 @@ export class GenerationService {
       throw new Error('File path is required');
     }
 
-    // If the path doesn't contain a slash, it's already relative
-    if (!filePath.includes('/')) {
-      console.log('✅ Path is already relative:', filePath);
-      return filePath;
-    }
-
-    // Check if path starts with a known bucket prefix
-    const bucketPrefixes = ['image_fast', 'image_high', 'video_fast', 'video_high'];
-    const pathParts = filePath.split('/');
-    
-    // If first part is a bucket name, remove it
-    if (pathParts.length > 1 && bucketPrefixes.includes(pathParts[0])) {
-      const relativePath = pathParts.slice(1).join('/');
-      console.log('🔧 Removed bucket prefix, relative path:', relativePath);
-      return relativePath;
-    }
-
-    // If path starts with bucket name followed by slash, it's legacy format
-    for (const prefix of bucketPrefixes) {
-      if (filePath.startsWith(`${prefix}/`)) {
-        const relativePath = filePath.substring(prefix.length + 1);
-        console.log('🔧 Removed legacy bucket prefix, relative path:', relativePath);
-        return relativePath;
-      }
-    }
-
-    // Otherwise, assume it's already in the correct format
-    console.log('✅ Path appears to be relative already:', filePath);
+    // The filePath from database is already user-scoped (user_id/filename)
+    // We should use it as-is for signed URL generation
+    console.log('✅ Using file path as-is for signed URL:', filePath);
     return filePath;
   }
 
@@ -329,27 +304,39 @@ export class GenerationService {
         console.warn('⚠️ Could not fetch job metadata for regeneration detection:', jobError);
       }
 
-      // Handle completed images with FIXED path handling
+      // Handle completed images with ENHANCED debugging
       if (data.status === 'completed' && data.image_url) {
         try {
-          console.log('🎯 Processing completed image with filePath:', data.image_url);
-          
-          // Extract relative path using improved logic
-          const relativePath = this.extractRelativePath(data.image_url);
+          console.log('🎯 Processing completed image:');
+          console.log('   - Image ID:', id);
+          console.log('   - File path from DB:', data.image_url);
+          console.log('   - Image quality:', data.quality);
           
           // Get correct bucket based on image quality
           const bucket = this.getBucketForContent('image', data.quality as GenerationQuality);
-          console.log('🪣 Using image bucket:', bucket, 'for relative path:', relativePath);
+          console.log('🪣 Determined bucket:', bucket);
           
-          // Generate signed URL from the RELATIVE file path
+          // Use the file path directly as stored in database (it's already user-scoped)
+          const pathForSigning = data.image_url;
+          console.log('📁 Path for signing:', pathForSigning);
+          
+          // Check authentication context
+          const { data: { user } } = await supabase.auth.getUser();
+          console.log('🔐 Auth context - User ID:', user?.id);
+          
+          // Generate signed URL
+          console.log('🔗 Attempting to generate signed URL...');
           const { data: signedUrlData, error: urlError } = await getSignedUrl(
             bucket as any,
-            relativePath,
+            pathForSigning,
             3600 // 1 hour expiry
           );
 
           if (!urlError && signedUrlData?.signedUrl) {
-            console.log('✅ Image signed URL generated successfully');
+            console.log('✅ Signed URL generated successfully');
+            console.log('   - URL length:', signedUrlData.signedUrl.length);
+            console.log('   - URL preview:', signedUrlData.signedUrl.substring(0, 100) + '...');
+            
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: [signedUrlData.signedUrl],
@@ -357,17 +344,23 @@ export class GenerationService {
             };
             return result;
           } else {
-            console.error('❌ Failed to generate image signed URL:', urlError?.message);
+            console.error('❌ Failed to generate signed URL:');
+            console.error('   - Error:', urlError?.message);
+            console.error('   - Signed URL data:', signedUrlData);
+            
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
-              url_error: urlError?.message || 'Failed to generate image URL',
+              url_error: urlError?.message || 'Failed to generate signed URL',
               ...regenerationInfo
             };
             return result;
           }
         } catch (urlError) {
-          console.error('❌ Error processing image signed URL:', urlError);
+          console.error('❌ Exception in signed URL processing:');
+          console.error('   - Error:', urlError);
+          console.error('   - Stack:', urlError instanceof Error ? urlError.stack : 'No stack');
+          
           const result: ImageRecordWithUrl = {
             ...data,
             image_urls: null,
@@ -379,7 +372,7 @@ export class GenerationService {
       }
 
       // For non-completed images, return as-is with regeneration info
-      console.log('ℹ️ Image not completed yet, returning raw data');
+      console.log('ℹ️ Image not completed yet, status:', data.status);
       return { ...data, ...regenerationInfo } as ImageRecordWithUrl;
     } else {
       const { data, error } = await supabase
