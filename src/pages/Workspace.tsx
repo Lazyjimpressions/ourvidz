@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -152,7 +151,7 @@ export const Workspace = () => {
     return () => clearTimeout(timeoutId);
   }, [generatedId, generationStartTime, mode]);
 
-  // Enhanced generation completion handler with regeneration support
+  // Enhanced generation completion handler with improved regeneration detection
   useEffect(() => {
     if (!generationData || !generatedId) return;
 
@@ -167,7 +166,8 @@ export const Workspace = () => {
       status: generationData.status, 
       mode,
       hasUrlError: 'url_error' in generationData && generationData.url_error,
-      isRegeneration: !!currentRegenerationSource
+      isRegeneration: generationData.is_regeneration || !!currentRegenerationSource,
+      regenerationSource: generationData.regeneration_source || currentRegenerationSource
     });
 
     // Handle URL errors - clear progress dialog and mark as processed
@@ -195,6 +195,11 @@ export const Workspace = () => {
         }));
         
         console.log('🖼️ Creating new image generation set:', images);
+        
+        // Determine if this is a regeneration from either the current context or the data
+        const isRegeneration = contentData.is_regeneration || !!currentRegenerationSource;
+        const sourceSetId = contentData.regeneration_source || currentRegenerationSource;
+        
         const newSet: GenerationSet = {
           id: generatedId,
           prompt,
@@ -203,22 +208,27 @@ export const Workspace = () => {
           timestamp: new Date(),
           content: images,
           isExpanded: true,
-          isRegeneration: !!currentRegenerationSource,
-          sourceSetId: currentRegenerationSource || undefined
+          isRegeneration,
+          sourceSetId
         };
         
+        console.log('📍 Positioning regenerated set:', { isRegeneration, sourceSetId });
+        
         // Position regenerated sets directly below their source
-        if (currentRegenerationSource) {
+        if (isRegeneration && sourceSetId) {
           setGenerationSets(prev => {
-            const sourceIndex = prev.findIndex(set => set.id === currentRegenerationSource);
+            const sourceIndex = prev.findIndex(set => set.id === sourceSetId);
             if (sourceIndex !== -1) {
               const newSets = [...prev];
               newSets.splice(sourceIndex + 1, 0, newSet);
+              console.log('✅ Positioned regenerated set below source at index:', sourceIndex + 1);
               return newSets;
             }
+            console.warn('⚠️ Source set not found, adding to top');
             return [newSet, ...prev];
           });
         } else {
+          console.log('📌 Adding new original set to top');
           setGenerationSets(prev => [newSet, ...prev]);
         }
         
@@ -237,6 +247,11 @@ export const Workspace = () => {
         };
         
         console.log('🎬 Creating new video generation set:', video);
+        
+        // Determine if this is a regeneration from either the current context or the data
+        const isRegeneration = contentData.is_regeneration || !!currentRegenerationSource;
+        const sourceSetId = contentData.regeneration_source || currentRegenerationSource;
+        
         const newSet: GenerationSet = {
           id: generatedId,
           prompt,
@@ -245,14 +260,14 @@ export const Workspace = () => {
           timestamp: new Date(),
           content: [video],
           isExpanded: true,
-          isRegeneration: !!currentRegenerationSource,
-          sourceSetId: currentRegenerationSource || undefined
+          isRegeneration,
+          sourceSetId
         };
         
         // Position regenerated sets directly below their source
-        if (currentRegenerationSource) {
+        if (isRegeneration && sourceSetId) {
           setGenerationSets(prev => {
-            const sourceIndex = prev.findIndex(set => set.id === currentRegenerationSource);
+            const sourceIndex = prev.findIndex(set => set.id === sourceSetId);
             if (sourceIndex !== -1) {
               const newSets = [...prev];
               newSets.splice(sourceIndex + 1, 0, newSet);
@@ -383,10 +398,13 @@ export const Workspace = () => {
   }) => {
     console.log('🔄 Regenerating with enhanced params:', params);
 
-    // Find the source set for positioning
+    // Find the source set for positioning - use the set ID, not individual item ID
     const sourceSet = generationSets.find(set => set.id === params.itemId);
     if (sourceSet) {
+      console.log('🎯 Found source set for regeneration:', sourceSet.id);
       setCurrentRegenerationSource(sourceSet.id);
+    } else {
+      console.warn('⚠️ Source set not found for regeneration:', params.itemId);
     }
 
     // Clear processing state and regenerate
@@ -402,6 +420,7 @@ export const Workspace = () => {
         source: 'workspace',
         regenerateId: params.itemId,
         is_regeneration: true,
+        regeneration_source: params.itemId,
         strength: params.strength,
         reference_image_url: params.referenceImageUrl,
         preserve_seed: params.preserveSeed

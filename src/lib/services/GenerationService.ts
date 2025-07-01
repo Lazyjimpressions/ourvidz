@@ -12,10 +12,14 @@ type VideoRecord = Tables<'videos'>;
 type ImageRecordWithUrl = ImageRecord & {
   image_urls?: string[] | null;
   url_error?: string;
+  is_regeneration?: boolean;
+  regeneration_source?: string;
 };
 
 type VideoRecordWithUrl = VideoRecord & {
   url_error?: string;
+  is_regeneration?: boolean;
+  regeneration_source?: string;
 };
 
 // Enhanced generation request for regeneration with advanced options
@@ -302,6 +306,29 @@ export class GenerationService {
 
       console.log('📊 Raw image data from database:', data);
 
+      // Check if this is a regeneration by looking at job metadata
+      let regenerationInfo = { is_regeneration: false, regeneration_source: undefined };
+      try {
+        const { data: jobData } = await supabase
+          .from('jobs')
+          .select('metadata')
+          .eq('image_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (jobData?.metadata) {
+          const metadata = jobData.metadata as any;
+          if (metadata.is_regeneration || metadata.regeneration_source || metadata.regenerateId) {
+            regenerationInfo.is_regeneration = true;
+            regenerationInfo.regeneration_source = metadata.regeneration_source || metadata.regenerateId;
+            console.log('🔄 Detected regeneration:', regenerationInfo);
+          }
+        }
+      } catch (jobError) {
+        console.warn('⚠️ Could not fetch job metadata for regeneration detection:', jobError);
+      }
+
       // Handle completed images with FIXED path handling
       if (data.status === 'completed' && data.image_url) {
         try {
@@ -325,7 +352,8 @@ export class GenerationService {
             console.log('✅ Image signed URL generated successfully');
             const result: ImageRecordWithUrl = {
               ...data,
-              image_urls: [signedUrlData.signedUrl]
+              image_urls: [signedUrlData.signedUrl],
+              ...regenerationInfo
             };
             return result;
           } else {
@@ -333,7 +361,8 @@ export class GenerationService {
             const result: ImageRecordWithUrl = {
               ...data,
               image_urls: null,
-              url_error: urlError?.message || 'Failed to generate image URL'
+              url_error: urlError?.message || 'Failed to generate image URL',
+              ...regenerationInfo
             };
             return result;
           }
@@ -342,15 +371,16 @@ export class GenerationService {
           const result: ImageRecordWithUrl = {
             ...data,
             image_urls: null,
-            url_error: urlError instanceof Error ? urlError.message : 'Unknown URL processing error'
+            url_error: urlError instanceof Error ? urlError.message : 'Unknown URL processing error',
+            ...regenerationInfo
           };
           return result;
         }
       }
 
-      // For non-completed images, return as-is
+      // For non-completed images, return as-is with regeneration info
       console.log('ℹ️ Image not completed yet, returning raw data');
-      return data as ImageRecordWithUrl;
+      return { ...data, ...regenerationInfo } as ImageRecordWithUrl;
     } else {
       const { data, error } = await supabase
         .from('videos')
@@ -364,6 +394,29 @@ export class GenerationService {
       }
 
       console.log('📊 Raw video data from database:', data);
+
+      // Check if this is a regeneration by looking at job metadata
+      let regenerationInfo = { is_regeneration: false, regeneration_source: undefined };
+      try {
+        const { data: jobData } = await supabase
+          .from('jobs')
+          .select('metadata')
+          .eq('video_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (jobData?.metadata) {
+          const metadata = jobData.metadata as any;
+          if (metadata.is_regeneration || metadata.regeneration_source || metadata.regenerateId) {
+            regenerationInfo.is_regeneration = true;
+            regenerationInfo.regeneration_source = metadata.regeneration_source || metadata.regenerateId;
+            console.log('🔄 Detected video regeneration:', regenerationInfo);
+          }
+        }
+      } catch (jobError) {
+        console.warn('⚠️ Could not fetch job metadata for video regeneration detection:', jobError);
+      }
 
       // Handle completed videos with IMPROVED quality detection
       if (data.status === 'completed' && data.video_url) {
@@ -389,7 +442,8 @@ export class GenerationService {
             console.log('✅ Video signed URL generated successfully');
             const result: VideoRecordWithUrl = {
               ...data,
-              video_url: signedUrlData.signedUrl
+              video_url: signedUrlData.signedUrl,
+              ...regenerationInfo
             };
             return result;
           } else {
@@ -397,7 +451,8 @@ export class GenerationService {
             const result: VideoRecordWithUrl = {
               ...data,
               video_url: null,
-              url_error: urlError?.message || 'Failed to generate video URL'
+              url_error: urlError?.message || 'Failed to generate video URL',
+              ...regenerationInfo
             };
             return result;
           }
@@ -406,15 +461,16 @@ export class GenerationService {
           const result: VideoRecordWithUrl = {
             ...data,
             video_url: null,
-            url_error: urlError instanceof Error ? urlError.message : 'Unknown video URL processing error'
+            url_error: urlError instanceof Error ? urlError.message : 'Unknown video URL processing error',
+            ...regenerationInfo
           };
           return result;
         }
       }
 
-      // For non-completed videos, return as-is
+      // For non-completed videos, return as-is with regeneration info
       console.log('ℹ️ Video not completed yet, returning raw data');
-      return data as VideoRecordWithUrl;
+      return { ...data, ...regenerationInfo } as VideoRecordWithUrl;
     }
   }
 

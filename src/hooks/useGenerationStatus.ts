@@ -9,6 +9,10 @@ interface GenerationStatusData {
   status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
   progress?: number;
   estimated_time?: number;
+  image_url?: string;
+  image_urls?: string[];
+  video_url?: string;
+  url_error?: string;
   [key: string]: any;
 }
 
@@ -54,6 +58,16 @@ export const useGenerationStatus = (
       try {
         const result = await GenerationService.getGenerationStatus(id, format);
         console.log('📊 Generation status result:', result);
+        
+        // Handle image URL format consistency - convert single image_url to image_urls array
+        if (format === 'image' && result.status === 'completed') {
+          if (result.image_url && !result.image_urls) {
+            console.log('🔄 Converting single image_url to image_urls array');
+            result.image_urls = [result.image_url];
+          } else if (result.image_urls && Array.isArray(result.image_urls) && result.image_urls.length > 0) {
+            console.log('✅ Image URLs already in array format:', result.image_urls.length, 'images');
+          }
+        }
         
         // Check for URL generation errors and show user feedback (with deduplication)
         if (result && 'url_error' in result && result.url_error) {
