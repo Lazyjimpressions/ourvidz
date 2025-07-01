@@ -103,8 +103,8 @@ export const WorkspaceGenerationSets = ({
   };
 
   return (
-    <div className="w-full max-w-6xl space-y-6">
-      {/* Header with Clear All button */}
+    <div className="w-full max-w-6xl space-y-8">
+      {/* Header with Clear All button - improved spacing */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl sm:text-2xl font-medium text-white">Generated Content</h2>
         {generationSets.length > 0 && (
@@ -119,9 +119,9 @@ export const WorkspaceGenerationSets = ({
         )}
       </div>
 
-      {/* Generation Sets */}
-      <div className="space-y-4">
-        {generationSets.map((set) => {
+      {/* Generation Sets - Improved spacing and visual separation */}
+      <div className="space-y-6">
+        {generationSets.map((set, index) => {
           const isExpanded = expandedSets.has(set.id);
           const contentCount = set.content.length;
           const truncatedPrompt = truncatePrompt(set.prompt, isMobile ? 60 : 100);
@@ -129,14 +129,16 @@ export const WorkspaceGenerationSets = ({
           return (
             <Card 
               key={set.id} 
-              className={`bg-gray-900 border-gray-700 ${
-                set.isRegeneration ? 'ml-4 sm:ml-8 border-l-4 border-l-blue-500/50' : ''
-              }`}
+              className={`bg-gray-900 border-gray-700 transition-all duration-200 hover:border-gray-600 ${
+                set.isRegeneration 
+                  ? 'ml-4 sm:ml-8 border-l-4 border-l-blue-500/60 bg-gray-900/80' 
+                  : 'border-l-4 border-l-transparent'
+              } ${index > 0 ? 'mt-6' : ''}`}
             >
               <Collapsible open={isExpanded} onOpenChange={() => toggleSetExpansion(set.id)}>
                 <CardHeader className={`pb-3 ${isMobile ? 'p-4' : ''}`}>
                   {isMobile ? (
-                    // Mobile Layout - Stacked vertically
+                    // Mobile Layout - Enhanced spacing and visual hierarchy
                     <div className="space-y-3">
                       {/* Top row: Expand button, regeneration indicator, and info icon */}
                       <div className="flex items-center justify-between">
@@ -197,7 +199,7 @@ export const WorkspaceGenerationSets = ({
                       </div>
                     </div>
                   ) : (
-                    // Desktop Layout - Original horizontal layout with regeneration indicators
+                    // Desktop Layout - Enhanced with better regeneration indicators
                     <div className="flex items-center justify-between gap-4">
                       {/* Left side - Expand/Collapse and Prompt */}
                       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -218,10 +220,13 @@ export const WorkspaceGenerationSets = ({
                             </CardTitle>
                             
                             {set.isRegeneration && (
-                              <Badge variant="secondary" className="bg-blue-600/20 text-blue-400 text-xs flex-shrink-0">
-                                <RotateCcw className="w-3 h-3 mr-1" />
-                                Regenerated
-                              </Badge>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="w-1 h-6 bg-blue-500/50 rounded-full"></div>
+                                <Badge variant="secondary" className="bg-blue-600/20 text-blue-400 text-xs flex-shrink-0">
+                                  <RotateCcw className="w-3 h-3 mr-1" />
+                                  Regenerated
+                                </Badge>
+                              </div>
                             )}
                           </div>
                           
@@ -267,21 +272,24 @@ export const WorkspaceGenerationSets = ({
 
                 <CollapsibleContent>
                   <CardContent className={`pt-0 ${isMobile ? 'p-4 pt-0' : ''}`}>
-                    {set.mode === 'image' ? (
-                      <WorkspaceImageGallery
-                        images={set.content}
-                        onRemove={() => onRemoveSet(set.id)}
-                        onRegenerateItem={onRegenerateItem}
-                      />
-                    ) : (
-                      set.content.length > 0 && (
-                        <WorkspaceVideoDisplay
-                          video={set.content[0]}
+                    {/* Content container with improved spacing */}
+                    <div className="space-y-4">
+                      {set.mode === 'image' ? (
+                        <WorkspaceImageGallery
+                          images={set.content}
                           onRemove={() => onRemoveSet(set.id)}
                           onRegenerateItem={onRegenerateItem}
                         />
-                      )
-                    )}
+                      ) : (
+                        set.content.length > 0 && (
+                          <WorkspaceVideoDisplay
+                            video={set.content[0]}
+                            onRemove={() => onRemoveSet(set.id)}
+                            onRegenerateItem={onRegenerateItem}
+                          />
+                        )
+                      )}
+                    </div>
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>
@@ -299,20 +307,22 @@ export const WorkspaceGenerationSets = ({
         </div>
       )}
 
-      {/* Enhanced Prompt Info Modal */}
+      {/* Enhanced Prompt Info Modal with improved z-index */}
       {selectedPromptInfo && (
-        <PromptInfoModal
-          isOpen={true}
-          onClose={() => setSelectedPromptInfo(null)}
-          prompt={selectedPromptInfo.prompt}
-          quality={selectedPromptInfo.quality}
-          mode={selectedPromptInfo.mode}
-          timestamp={selectedPromptInfo.timestamp}
-          contentCount={selectedPromptInfo.content.length}
-          itemId={selectedPromptInfo.id}
-          originalImageUrl={selectedPromptInfo.mode === 'image' && selectedPromptInfo.content.length > 0 ? selectedPromptInfo.content[0].url : undefined}
-          onRegenerate={handleRegenerateWithPrompt}
-        />
+        <div className="fixed inset-0 z-50">
+          <PromptInfoModal
+            isOpen={true}
+            onClose={() => setSelectedPromptInfo(null)}
+            prompt={selectedPromptInfo.prompt}
+            quality={selectedPromptInfo.quality}
+            mode={selectedPromptInfo.mode}
+            timestamp={selectedPromptInfo.timestamp}
+            contentCount={selectedPromptInfo.content.length}
+            itemId={selectedPromptInfo.id}
+            originalImageUrl={selectedPromptInfo.mode === 'image' && selectedPromptInfo.content.length > 0 ? selectedPromptInfo.content[0].url : undefined}
+            onRegenerate={handleRegenerateWithPrompt}
+          />
+        </div>
       )}
     </div>
   );

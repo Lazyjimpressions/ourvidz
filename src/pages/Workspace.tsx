@@ -464,16 +464,16 @@ export const Workspace = () => {
       {/* Header */}
       <WorkspaceHeader />
 
-      {/* Main Content Container - Fixed layout structure */}
+      {/* Main Content Container - Improved layout structure */}
       <div className="flex flex-col min-h-screen">
-        {/* Content Area - Takes available space */}
-        <div className="flex-1 px-4 sm:px-8 py-4 sm:py-8 pb-32 sm:pb-24">
-          <div className="max-w-6xl mx-auto">
+        {/* Content Area - Improved scrolling and spacing */}
+        <div className="flex-1 px-4 sm:px-8 py-4 sm:py-8 pb-48 sm:pb-40 overflow-y-auto">
+          <div className="max-w-6xl mx-auto space-y-8">
             {!hasGeneratedContent ? (
               <div className="text-center max-w-4xl mx-auto">
                 {/* Show progress indicator during generation */}
                 {generatedId && generationData && (
-                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-10">
                     <GenerationProgressIndicator
                       status={mapDatabaseStatusToProgressStatus(generationData.status)}
                       progress={calculateProgress(generationData.status, generationStartTime)}
@@ -520,10 +520,10 @@ export const Workspace = () => {
                 </p>
               </div>
             ) : (
-              <div className="w-full">
-                {/* Show progress indicator during generation - positioned above existing content */}
+              <div className="w-full space-y-6">
+                {/* Show progress indicator during generation - positioned above existing content with better spacing */}
                 {generatedId && generationData && (
-                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-20 backdrop-blur-sm">
                     <GenerationProgressIndicator
                       status={mapDatabaseStatusToProgressStatus(generationData.status)}
                       progress={calculateProgress(generationData.status, generationStartTime)}
@@ -552,8 +552,8 @@ export const Workspace = () => {
           </div>
         </div>
 
-        {/* Fixed Input Container - Always at bottom */}
-        <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-sm border-t border-gray-700/50 p-4 sm:p-8 z-50">
+        {/* Fixed Input Container - Improved positioning and reduced height */}
+        <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-700/50 p-3 sm:p-6 z-30">
           <div className="max-w-5xl mx-auto">
             <WorkspaceInputControls
               mode={mode}
