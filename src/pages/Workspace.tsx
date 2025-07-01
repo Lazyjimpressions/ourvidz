@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useGeneration } from "@/hooks/useGeneration";
@@ -464,109 +465,106 @@ export const Workspace = () => {
       {/* Header */}
       <WorkspaceHeader />
 
-      {/* Main Content Container - Improved layout structure */}
-      <div className="flex flex-col min-h-screen">
-        {/* Content Area - Improved scrolling and spacing */}
-        <div className="flex-1 px-4 sm:px-8 py-4 sm:py-8 pb-48 sm:pb-40 overflow-y-auto">
-          <div className="max-w-6xl mx-auto space-y-8">
-            {!hasGeneratedContent ? (
-              <div className="text-center max-w-4xl mx-auto">
-                {/* Show progress indicator during generation */}
-                {generatedId && generationData && (
-                  <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-10">
-                    <GenerationProgressIndicator
-                      status={mapDatabaseStatusToProgressStatus(generationData.status)}
-                      progress={calculateProgress(generationData.status, generationStartTime)}
-                      estimatedTime={getEstimatedTime()}
-                      startTime={generationStartTime}
+      {/* Main Content Container - Simplified layout without fixed footer conflicts */}
+      <div className="px-4 sm:px-8 py-4 sm:py-8">
+        <div className="max-w-6xl mx-auto space-y-8">
+          {!hasGeneratedContent ? (
+            <div className="text-center max-w-4xl mx-auto">
+              {/* Show progress indicator during generation */}
+              {generatedId && generationData && (
+                <div className="mb-8 p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-10">
+                  <GenerationProgressIndicator
+                    status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                    progress={calculateProgress(generationData.status, generationStartTime)}
+                    estimatedTime={getEstimatedTime()}
+                    startTime={generationStartTime}
+                  />
+                  {/* Add cancel button for stuck generations */}
+                  <button
+                    onClick={handleCancelGeneration}
+                    className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                  >
+                    Cancel Generation
+                  </button>
+                </div>
+              )}
+              
+              <h1 className="text-3xl sm:text-4xl font-light mb-4">
+                Let's start {mode === 'video' ? 'creating some videos' : 'with some image storming'}
+                <span className="inline-flex items-center gap-2">
+                  <div className="flex gap-1 ml-2">
+                    <img 
+                      src="https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=32&h=32&fit=crop&crop=center" 
+                      alt="" 
+                      className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
                     />
-                    {/* Add cancel button for stuck generations */}
-                    <button
-                      onClick={handleCancelGeneration}
-                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
-                    >
-                      Cancel Generation
-                    </button>
-                  </div>
-                )}
-                
-                <h1 className="text-3xl sm:text-4xl font-light mb-4">
-                  Let's start {mode === 'video' ? 'creating some videos' : 'with some image storming'}
-                  <span className="inline-flex items-center gap-2">
-                    <div className="flex gap-1 ml-2">
-                      <img 
-                        src="https://images.unsplash.com/photo-1523712999610-f77fbcfc3843?w=32&h=32&fit=crop&crop=center" 
-                        alt="" 
-                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
-                      />
-                      <img 
-                        src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=32&h=32&fit=crop&crop=center" 
-                        alt="" 
-                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
-                      />
-                      <img 
-                        src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=32&h=32&fit=crop&crop=center" 
-                        alt="" 
-                        className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
-                      />
-                    </div>
-                  </span>
-                </h1>
-                <p className="text-base sm:text-lg text-gray-400 mb-8">
-                  {mode === 'video' 
-                    ? "Type your prompt, set your style, and generate your video"
-                    : "Type your prompt, set your style, and generate your image"
-                  }
-                </p>
-              </div>
-            ) : (
-              <div className="w-full space-y-6">
-                {/* Show progress indicator during generation - positioned above existing content with better spacing */}
-                {generatedId && generationData && (
-                  <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-20 backdrop-blur-sm">
-                    <GenerationProgressIndicator
-                      status={mapDatabaseStatusToProgressStatus(generationData.status)}
-                      progress={calculateProgress(generationData.status, generationStartTime)}
-                      estimatedTime={getEstimatedTime()}
-                      startTime={generationStartTime}
+                    <img 
+                      src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=32&h=32&fit=crop&crop=center" 
+                      alt="" 
+                      className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
                     />
-                    {/* Add cancel button for stuck generations */}
-                    <button
-                      onClick={handleCancelGeneration}
-                      className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
-                    >
-                      Cancel Generation
-                    </button>
+                    <img 
+                      src="https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=32&h=32&fit=crop&crop=center" 
+                      alt="" 
+                      className="w-6 h-6 sm:w-8 sm:h-8 rounded object-cover"
+                    />
                   </div>
-                )}
-                
-                <WorkspaceGenerationSets
-                  generationSets={generationSets}
-                  onRemoveSet={handleRemoveSet}
-                  onClearAll={handleClearAll}
-                  onRegenerateItem={handleRegenerateItem}
-                  onRegenerateWithPrompt={handleRegenerateWithPrompt}
-                />
-              </div>
-            )}
-          </div>
+                </span>
+              </h1>
+              <p className="text-base sm:text-lg text-gray-400 mb-8">
+                {mode === 'video' 
+                  ? "Type your prompt, set your style, and generate your video"
+                  : "Type your prompt, set your style, and generate your image"
+                }
+              </p>
+            </div>
+          ) : (
+            <div className="w-full space-y-6">
+              {/* Show progress indicator during generation - positioned above existing content with better spacing */}
+              {generatedId && generationData && (
+                <div className="p-6 bg-gray-800/50 rounded-lg border border-gray-700 sticky top-4 z-20 backdrop-blur-sm">
+                  <GenerationProgressIndicator
+                    status={mapDatabaseStatusToProgressStatus(generationData.status)}
+                    progress={calculateProgress(generationData.status, generationStartTime)}
+                    estimatedTime={getEstimatedTime()}
+                    startTime={generationStartTime}
+                  />
+                  {/* Add cancel button for stuck generations */}
+                  <button
+                    onClick={handleCancelGeneration}
+                    className="mt-4 px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 hover:border-gray-400 rounded transition-colors"
+                  >
+                    Cancel Generation
+                  </button>
+                </div>
+              )}
+              
+              <WorkspaceGenerationSets
+                generationSets={generationSets}
+                onRemoveSet={handleRemoveSet}
+                onClearAll={handleClearAll}
+                onRegenerateItem={handleRegenerateItem}
+                onRegenerateWithPrompt={handleRegenerateWithPrompt}
+              />
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Fixed Input Container - Improved positioning and reduced height */}
-        <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur-md border-t border-gray-700/50 p-3 sm:p-6 z-30">
-          <div className="max-w-5xl mx-auto">
-            <WorkspaceInputControls
-              mode={mode}
-              onModeChange={handleModeChange}
-              prompt={prompt}
-              setPrompt={setPrompt}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              onReferenceImageUpload={handleReferenceImageUpload}
-              quality={quality}
-              onQualityChange={setQuality}
-            />
-          </div>
+      {/* Input Container - Now flows naturally at bottom instead of being fixed */}
+      <div className="bg-black/95 backdrop-blur-md border-t border-gray-700/50 p-3 sm:p-6 mt-8">
+        <div className="max-w-5xl mx-auto">
+          <WorkspaceInputControls
+            mode={mode}
+            onModeChange={handleModeChange}
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onReferenceImageUpload={handleReferenceImageUpload}
+            quality={quality}
+            onQualityChange={setQuality}
+          />
         </div>
       </div>
     </div>
