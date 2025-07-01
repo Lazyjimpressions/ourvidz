@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
+import Library from "@/pages/Library";
 import { Workspace } from "@/pages/Workspace";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/workspace" element={<Workspace />} />
+              <Route path="/library" element={<Library />} />
               <Route path="/auth" element={<Auth />} />
             </Routes>
           </BrowserRouter>
