@@ -12,7 +12,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { AssetService, UnifiedAsset } from "@/lib/services/AssetService";
 import { toast } from "sonner";
-import { Download, Trash2, Broom } from "lucide-react";
+import { Download, Trash2, RotateCcw } from "lucide-react";
 
 const Library = () => {
   // Data fetching
@@ -224,7 +224,7 @@ const Library = () => {
                 disabled={isCleaningUp}
                 className="border-gray-600 text-gray-300 hover:bg-gray-700"
               >
-                <Broom className={`h-4 w-4 mr-1 ${isCleaningUp ? 'animate-spin' : ''}`} />
+                <RotateCcw className={`h-4 w-4 mr-1 ${isCleaningUp ? 'animate-spin' : ''}`} />
                 {isCleaningUp ? 'Cleaning...' : 'Clean Library'}
               </Button>
 
