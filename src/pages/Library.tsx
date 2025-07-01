@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
@@ -293,7 +292,7 @@ const Library = () => {
                 }
               </p>
             </div>
-          ) : viewMode === "table" ? (
+          ) : viewMode === "list" ? (
             <AssetTableView
               assets={filteredAssets}
               selectedAssets={selectedAssets}
