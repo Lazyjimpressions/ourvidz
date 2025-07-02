@@ -1,15 +1,12 @@
-
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, Sparkles, Play, Music, RotateCcw } from "lucide-react";
+import { Image, Upload, Sparkles, Play, RotateCcw, Music } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface VideoInputControlsProps {
   prompt: string;
@@ -26,42 +23,55 @@ export const VideoInputControls = ({
   isGenerating,
   onReferenceImageUpload
 }: VideoInputControlsProps) => {
+  const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [duration, setDuration] = useState("5s");
+
   return (
-    <div className="bg-gray-900/95 backdrop-blur-sm rounded-2xl p-6 border border-gray-800/50 shadow-2xl">
-      {/* Row 1: IMAGE, Start Ref, Refresh, End Ref, Text Input, Generate Button */}
-      <div className="flex items-center gap-3 mb-4">
-        <Button
-          variant="default"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100 font-medium"
-        >
-          <Play className="w-4 h-4" />
-          IMAGE
-        </Button>
+    <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
+      {/* Main Row */}
+      <div className="flex items-center gap-3">
+        {/* Stacked IMAGE/VIDEO Buttons */}
+        <div className="flex flex-col gap-1">
+          <Button
+            variant="ghost"
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium"
+          >
+            <Image className="w-3.5 h-3.5" />
+            IMAGE
+          </Button>
+          <Button
+            variant="default"
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+          >
+            <Play className="w-3.5 h-3.5" />
+            VIDEO
+          </Button>
+        </div>
 
         {/* Start Ref Upload - small square */}
         <Button
           variant="ghost"
           onClick={onReferenceImageUpload}
-          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
         >
-          <Upload className="w-4 h-4 text-gray-400" />
+          <Upload className="w-3.5 h-3.5 text-gray-400" />
         </Button>
 
         {/* Refresh/Cycle icon */}
         <Button
           variant="ghost"
-          className="w-8 h-8 p-0 text-gray-400 hover:text-white"
+          className="w-6 h-6 p-0 text-gray-400 hover:text-white"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="w-3.5 h-3.5" />
         </Button>
 
         {/* End Ref Upload - small square */}
         <Button
           variant="ghost"
           onClick={onReferenceImageUpload}
-          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
         >
-          <Upload className="w-4 h-4 text-gray-400" />
+          <Upload className="w-3.5 h-3.5 text-gray-400" />
         </Button>
 
         {/* Main Text Input */}
@@ -70,7 +80,7 @@ export const VideoInputControls = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A close-up of a woman talking on the phone..."
-            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 resize-none"
+            className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
             onKeyDown={(e) => {
@@ -86,52 +96,68 @@ export const VideoInputControls = ({
         <Button
           onClick={onGenerate}
           disabled={isGenerating || !prompt.trim()}
-          className="w-12 h-12 p-0 bg-blue-600 hover:bg-blue-700 rounded-full"
+          className="w-10 h-10 p-0 bg-blue-600 hover:bg-blue-700 rounded-md"
         >
-          <Sparkles className="w-5 h-5" />
+          <Sparkles className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Row 2: VIDEO, Controls */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="default"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100 font-medium"
-        >
-          <Play className="w-4 h-4" />
-          VIDEO
-        </Button>
-
+      {/* Controls Row */}
+      <div className="flex items-center gap-2 mt-3 ml-20">
         {/* Aspect Ratio */}
-        <Select defaultValue="16:9">
-          <SelectTrigger className="w-16 bg-gray-800 border-gray-700 text-white text-sm h-10">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-800 border-gray-700 z-50">
-            <SelectItem value="16:9">16:9</SelectItem>
-            <SelectItem value="4:3">4:3</SelectItem>
-            <SelectItem value="1:1">1:1</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {aspectRatio}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-32 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["16:9", "4:3", "1:1"].map((ratio) => (
+                <Button
+                  key={ratio}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAspectRatio(ratio)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {ratio}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Duration */}
-        <Select defaultValue="5s">
-          <SelectTrigger className="w-12 bg-gray-800 border-gray-700 text-white text-sm h-10">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-800 border-gray-700 z-50">
-            <SelectItem value="3s">3s</SelectItem>
-            <SelectItem value="5s">5s</SelectItem>
-            <SelectItem value="10s">10s</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {duration}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-28 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["3s", "5s", "10s"].map((dur) => (
+                <Button
+                  key={dur}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDuration(dur)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {dur}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Music Button */}
         <Button
           variant="ghost"
-          className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 text-white rounded-lg"
+          className="w-8 h-8 p-0 bg-gray-800 hover:bg-gray-700 text-white rounded"
         >
-          <Music className="w-4 h-4" />
+          <Music className="w-3.5 h-3.5" />
         </Button>
       </div>
     </div>

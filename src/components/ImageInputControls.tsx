@@ -1,14 +1,12 @@
-
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, Upload, Sparkles, Brush, Play } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface ImageInputControlsProps {
   prompt: string;
@@ -27,25 +25,42 @@ export const ImageInputControls = ({
   onReferenceImageUpload,
   onSwitchToVideo
 }: ImageInputControlsProps) => {
-  return (
-    <div className="bg-gray-900/95 backdrop-blur-sm rounded-2xl p-6 border border-gray-800/50 shadow-2xl">
-      {/* Row 1: IMAGE, Reference Upload, Text Input, Generate Button */}
-      <div className="flex items-center gap-4 mb-4">
-        <Button
-          variant="default"
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black hover:bg-gray-100"
-        >
-          <Camera className="w-4 h-4" />
-          IMAGE
-        </Button>
+  const [aspectRatio, setAspectRatio] = useState("16:9");
+  const [shotType, setShotType] = useState("");
+  const [angle, setAngle] = useState("");
+  const [style, setStyle] = useState("");
+  const [quality, setQuality] = useState<'fast' | 'high'>('fast');
 
-        {/* Reference Image Upload */}
+  return (
+    <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
+      {/* Main Row */}
+      <div className="flex items-center gap-3">
+        {/* Stacked IMAGE/VIDEO Buttons */}
+        <div className="flex flex-col gap-1">
+          <Button
+            variant="default"
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+          >
+            <Image className="w-3.5 h-3.5" />
+            IMAGE
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={onSwitchToVideo}
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium"
+          >
+            <Play className="w-3.5 h-3.5" />
+            VIDEO
+          </Button>
+        </div>
+
+        {/* Reference Upload Square */}
         <Button
           variant="ghost"
           onClick={onReferenceImageUpload}
-          className="w-12 h-12 p-0 bg-gray-800 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg"
+          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
         >
-          <Upload className="w-5 h-5 text-gray-400" />
+          <Upload className="w-3.5 h-3.5 text-gray-400" />
         </Button>
 
         {/* Main Text Input */}
@@ -54,7 +69,7 @@ export const ImageInputControls = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A close-up of a woman talking on the phone..."
-            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 resize-none"
+            className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
             onKeyDown={(e) => {
@@ -70,94 +85,140 @@ export const ImageInputControls = ({
         <Button
           onClick={onGenerate}
           disabled={isGenerating || !prompt.trim()}
-          className="w-12 h-12 p-0 bg-blue-600 hover:bg-blue-700 rounded-full"
+          className="w-10 h-10 p-0 bg-blue-600 hover:bg-blue-700 rounded-md"
         >
-          <Sparkles className="w-5 h-5" />
+          <Sparkles className="w-4 h-4" />
         </Button>
       </div>
 
-      {/* Row 2: Image Controls */}
-      <div className="flex items-center gap-4">
-        {/* Spacer to align with IMAGE button */}
-        <div className="w-20"></div>
-        
-        {/* Spacer to align with reference upload button position */}
-        <div className="w-12"></div>
+      {/* Controls Row */}
+      <div className="flex items-center gap-2 mt-3 ml-20">
+        {/* Aspect Ratio */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {aspectRatio}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-32 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["16:9", "4:3", "1:1"].map((ratio) => (
+                <Button
+                  key={ratio}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAspectRatio(ratio)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {ratio}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-        {/* Advanced Controls */}
-        <div className="flex items-center gap-3 flex-1">
-          {/* Aspect Ratio */}
-          <Select defaultValue="16:9">
-            <SelectTrigger className="w-20 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="16:9">16:9</SelectItem>
-              <SelectItem value="4:3">4:3</SelectItem>
-              <SelectItem value="1:1">1:1</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Shot Type */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {shotType || "Shot type"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-36 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["Close-up", "Medium", "Wide"].map((type) => (
+                <Button
+                  key={type}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShotType(type)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {type}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-          {/* Shot Type */}
-          <Select>
-            <SelectTrigger className="w-32 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <SelectValue placeholder="Shot Type" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="close-up">Close-up</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="wide">Wide</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Angle */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {angle || "Angle"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-28 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["Front", "Side", "Back"].map((ang) => (
+                <Button
+                  key={ang}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAngle(ang)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {ang}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-          {/* Angle */}
-          <Select>
-            <SelectTrigger className="w-24 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <SelectValue placeholder="Angle" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="front">Front</SelectItem>
-              <SelectItem value="side">Side</SelectItem>
-              <SelectItem value="back">Back</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Style */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded">
+              {style || "Style"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-32 p-2 bg-gray-800 border-gray-700" side="top">
+            <div className="flex flex-col gap-1">
+              {["Realistic", "Artistic", "Cartoon"].map((st) => (
+                <Button
+                  key={st}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStyle(st)}
+                  className="justify-start text-xs h-6 text-white hover:bg-gray-700"
+                >
+                  {st}
+                </Button>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-          {/* Style */}
-          <Select>
-            <SelectTrigger className="w-28 bg-gray-800 border-gray-700 text-white text-sm h-10">
-              <div className="flex items-center gap-2">
-                <Brush className="w-4 h-4" />
-                <SelectValue placeholder="Style" />
-              </div>
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700 z-50">
-              <SelectItem value="realistic">Realistic</SelectItem>
-              <SelectItem value="artistic">Artistic</SelectItem>
-              <SelectItem value="cartoon">Cartoon</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Style ref */}
+        <Button
+          variant="ghost"
+          className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded"
+        >
+          Style ref
+        </Button>
 
-          {/* Style Ref */}
-          <Button
-            variant="ghost"
-            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm h-10"
-          >
-            Style ref
-          </Button>
-
-          {/* Video Button */}
-          <Button
-            variant="ghost"
-            onClick={onSwitchToVideo}
-            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm h-10 flex items-center gap-2"
-          >
-            <Play className="w-4 h-4" />
-            VIDEO
-          </Button>
-        </div>
-
-        {/* Spacer to align with generate button */}
-        <div className="w-12"></div>
+        {/* Fast/High Quality Toggle */}
+        <Button
+          variant="ghost"
+          onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
+          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+            quality === 'high' 
+              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+              : 'bg-gray-800 hover:bg-gray-700 text-white'
+          }`}
+        >
+          {quality === 'high' ? (
+            <>
+              <Crown className="w-3 h-3" />
+              High
+            </>
+          ) : (
+            <>
+              <Zap className="w-3 h-3" />
+              Fast
+            </>
+          )}
+        </Button>
       </div>
     </div>
   );
