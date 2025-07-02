@@ -22,12 +22,17 @@ serve(async (req) => {
     );
 
     const requestBody = await req.json();
-    const { jobId, status, filePath, errorMessage, enhancedPrompt } = requestBody;
+    const { jobId, status, filePath, outputUrl, errorMessage, enhancedPrompt } = requestBody;
+    
+    // Handle parameter compatibility: WAN workers send outputUrl, SDXL workers send filePath
+    const resolvedFilePath = filePath || outputUrl;
     
     console.log('🔍 ENHANCED CALLBACK DEBUGGING - Received request:', {
       jobId,
       status,
       filePath,
+      outputUrl,
+      resolvedFilePath,
       errorMessage,
       enhancedPrompt,
       fullRequestBody: requestBody,
@@ -40,12 +45,15 @@ serve(async (req) => {
       throw new Error('jobId is required');
     }
 
-    if (!filePath && status === 'completed') {
-      console.error('❌ CRITICAL: No filePath provided for completed job', {
+    if (!resolvedFilePath && status === 'completed') {
+      console.error('❌ CRITICAL: No file path provided for completed job', {
         jobId,
         status,
         hasFilePath: !!filePath,
-        filePathValue: filePath
+        hasOutputUrl: !!outputUrl,
+        resolvedFilePath,
+        filePathValue: filePath,
+        outputUrlValue: outputUrl
       });
     }
 
@@ -95,28 +103,34 @@ serve(async (req) => {
     }
 
     // Add file path for completed jobs with enhanced validation
-    if (status === 'completed' && filePath) {
+    if (status === 'completed' && resolvedFilePath) {
       console.log('📁 Processing completed job with file path:', {
         jobId,
         originalFilePath: filePath,
-        filePathLength: filePath.length,
-        filePathPattern: filePath.includes('/') ? 'contains slash' : 'no slash',
-        filePathStartsWith: filePath.substring(0, 50),
-        filePathEndsWith: filePath.substring(filePath.length - 20)
+        originalOutputUrl: outputUrl,
+        resolvedFilePath: resolvedFilePath,
+        filePathLength: resolvedFilePath.length,
+        filePathPattern: resolvedFilePath.includes('/') ? 'contains slash' : 'no slash',
+        filePathStartsWith: resolvedFilePath.substring(0, 50),
+        filePathEndsWith: resolvedFilePath.substring(resolvedFilePath.length - 20)
       });
       
-      updatedMetadata.file_path = filePath;
+      updatedMetadata.file_path = resolvedFilePath;
       updatedMetadata.callback_processed_at = new Date().toISOString();
       updatedMetadata.callback_debug = {
         received_file_path: filePath,
+        received_output_url: outputUrl,
+        resolved_file_path: resolvedFilePath,
         job_type: currentJob.job_type,
         processing_timestamp: new Date().toISOString()
       };
-    } else if (status === 'completed' && !filePath) {
+    } else if (status === 'completed' && !resolvedFilePath) {
       console.error('❌ CRITICAL: Completed job has no file path!', {
         jobId,
         status,
         filePath,
+        outputUrl,
+        resolvedFilePath,
         jobType: currentJob.job_type
       });
       
@@ -124,7 +138,9 @@ serve(async (req) => {
         issue: 'completed_without_file_path',
         timestamp: new Date().toISOString(),
         received_status: status,
-        received_file_path: filePath
+        received_file_path: filePath,
+        received_output_url: outputUrl,
+        resolved_file_path: resolvedFilePath
       };
     }
 
@@ -187,10 +203,10 @@ serve(async (req) => {
     // Handle different job types based on parsed format
     if (format === 'image' && job.image_id) {
       console.log('🖼️ Processing image job callback...');
-      await handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL);
+      await handleImageJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isSDXL);
     } else if (format === 'video' && job.video_id) {
       console.log('📹 Processing video job callback...');
-      await handleVideoJobCallback(supabase, job, status, filePath, errorMessage, quality);
+      await handleVideoJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality);
     } else {
       console.error('❌ CRITICAL: Unknown job format or missing ID:', {
         format,
@@ -207,6 +223,8 @@ serve(async (req) => {
       quality,
       isSDXL,
       filePath,
+      outputUrl,
+      resolvedFilePath,
       processingTimestamp: new Date().toISOString()
     });
 
@@ -220,7 +238,7 @@ serve(async (req) => {
         format: format,
         quality: quality,
         isSDXL: isSDXL,
-        filePath: filePath,
+        filePath: resolvedFilePath,
         processingTimestamp: new Date().toISOString()
       }
     }), {
