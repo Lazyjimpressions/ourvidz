@@ -208,11 +208,13 @@ serve(async (req) => {
       prompt: prompt,
       characterId: characterId,
       isSDXL: isSDXL,
+      numImages: format === 'video' ? 1 : 6, // Generate 6 images for image generations, 1 for video
       bucket: metadata?.bucket || (isSDXL ? `sdxl_${quality}` : `${format}_${quality}`),
       metadata: {
         ...metadata,
         model_variant: modelVariant,
         dual_worker_routing: true,
+        num_images: format === 'video' ? 1 : 6,
         queue_timestamp: new Date().toISOString()
       },
       timestamp: new Date().toISOString()

@@ -1,22 +1,29 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
-import { WorkspaceInputControls } from '@/components/WorkspaceInputControls';
 import { useGeneration } from '@/hooks/useGeneration';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { GenerationFormat } from '@/types/generation';
-import { WorkspaceImageDisplay } from '@/components/WorkspaceImageDisplay';
+import { ImageGrid } from '@/components/ImageGrid';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft } from 'lucide-react';
+import { ImageInputControls } from '@/components/ImageInputControls';
+import { VideoInputControls } from '@/components/VideoInputControls';
 
 const Workspace = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
+  
+  // Get mode from URL params, default to image
+  const mode = searchParams.get('mode') || 'image';
+  const isVideoMode = mode === 'video';
   
   // Generation state
-  const [selectedMode, setSelectedMode] = useState<GenerationFormat>('sdxl_image_fast');
+  const [selectedMode, setSelectedMode] = useState<GenerationFormat>(
+    isVideoMode ? 'video_fast' : 'sdxl_image_fast'
+  );
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
@@ -37,6 +44,11 @@ const Workspace = () => {
       return;
     }
   }, [user, navigate]);
+
+  // Update selected mode when URL mode changes
+  useEffect(() => {
+    setSelectedMode(isVideoMode ? 'video_fast' : 'sdxl_image_fast');
+  }, [isVideoMode]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -83,100 +95,80 @@ const Workspace = () => {
   }
 
   return (
-    <OurVidzDashboardLayout>
-      <div className="min-h-screen bg-[#0a0a0a] text-white">
-        {/* Main Workspace Container */}
-        <div className="container mx-auto px-4 py-8 max-w-7xl">
-          {/* Header Section */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">AI Generation Workspace</h1>
-            <p className="text-gray-400">Create stunning images and videos with advanced AI models</p>
-          </div>
-
-          {/* Input Controls Section */}
-          <div className="mb-8">
-            <WorkspaceInputControls
-              selectedMode={selectedMode}
-              setSelectedMode={setSelectedMode}
-              prompt={prompt}
-              setPrompt={setPrompt}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              referenceImage={referenceImage}
-              setReferenceImage={setReferenceImage}
-              referenceImageUrl={referenceImageUrl}
-              setReferenceImageUrl={setReferenceImageUrl}
-              generationProgress={generationProgress}
-              currentJob={currentJob}
-              generationError={generationError}
-              onRegenerate={handleRegenerate}
-              onClearError={clearError}
-            />
-          </div>
-
-          {/* Generation Status Section */}
-          {(isGenerating || currentJob) && (
-            <div className="mb-8">
-              <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 border border-gray-700/50">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white">Generation Status</h3>
-                  <div className="flex items-center gap-2">
-                    {isGenerating && (
-                      <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
-                    )}
-                    <span className="text-sm text-gray-400">
-                      {isGenerating ? 'Processing...' : 'Completed'}
-                    </span>
-                  </div>
-                </div>
-                
-                {generationProgress > 0 && (
-                  <div className="w-full bg-gray-700 rounded-full h-2 mb-4">
-                    <div 
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${generationProgress}%` }}
-                    ></div>
-                  </div>
-                )}
-
-                {currentJob && (
-                  <div className="text-sm text-gray-300">
-                    <p>Job ID: <span className="font-mono text-blue-400">{currentJob.id}</span></p>
-                    <p>Format: <span className="text-green-400">{currentJob.format}</span></p>
-                    {currentJob.estimatedTimeRemaining && (
-                      <p>Estimated time: <span className="text-yellow-400">{currentJob.estimatedTimeRemaining}s</span></p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Error Display */}
-          {generationError && (
-            <div className="mb-8">
-              <div className="bg-red-900/20 backdrop-blur-sm rounded-2xl p-6 border border-red-500/30">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-red-400">Generation Error</h3>
-                  <button
-                    onClick={clearError}
-                    className="text-red-400 hover:text-red-300 text-sm font-medium"
-                  >
-                    Dismiss
-                  </button>
-                </div>
-                <p className="text-red-300">{generationError}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Results Area - Generated Images Display */}
-          <div className="min-h-[400px] bg-gray-800/20 backdrop-blur-sm rounded-2xl border border-gray-700/30 p-6">
-            <WorkspaceImageDisplay onRegenerateItem={handleRegenerate} />
-          </div>
-        </div>
+    <div className="min-h-screen bg-black text-white flex flex-col">
+      {/* Back Button */}
+      <div className="absolute top-6 left-6 z-50">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/dashboard')}
+          className="text-white hover:text-gray-300 p-2"
+        >
+          <ArrowLeft className="w-6 h-6" />
+        </Button>
       </div>
-    </OurVidzDashboardLayout>
+
+      {/* Main Content Area */}
+      <div className="flex-1 pt-20">
+        {/* Image Grid - Only show for image mode */}
+        {!isVideoMode && (
+          <ImageGrid onRegenerateItem={handleRegenerate} />
+        )}
+        
+        {/* Video mode placeholder */}
+        {isVideoMode && (
+          <div className="flex items-center justify-center h-96">
+            <div className="text-center">
+              <h3 className="text-lg font-medium text-gray-400 mb-2">Video workspace</h3>
+              <p className="text-gray-600">Video generation coming soon</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Input Controls */}
+      <div className="p-6 bg-black">
+        {isVideoMode ? (
+          <VideoInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onReferenceImageUpload={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = 'image/*';
+              input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                  setReferenceImage(file);
+                }
+              };
+              input.click();
+            }}
+          />
+        ) : (
+          <ImageInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onReferenceImageUpload={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = 'image/*';
+              input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                  setReferenceImage(file);
+                }
+              };
+              input.click();
+            }}
+          />
+        )}
+      </div>
+    </div>
   );
 };
 
