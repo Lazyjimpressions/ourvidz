@@ -5,6 +5,8 @@ export type StorageBucket =
   | 'image_high' 
   | 'video_fast' 
   | 'video_high' 
+  | 'sdxl_fast'
+  | 'sdxl_high'
   | 'system_assets';
 
 export interface UploadProgress {
@@ -214,6 +216,35 @@ export const uploadHighQualityImage = async (
 
 export const getHighQualityImageUrl = async (filePath: string): Promise<string | null> => {
   const { data, error } = await getSignedUrl('image_high', filePath);
+  return error ? null : data?.signedUrl || null;
+};
+
+// SDXL image specific functions
+export const uploadSDXLFastImage = async (
+  imageId: string,
+  file: File,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<UploadResult> => {
+  const fileName = `${imageId}-${Date.now()}.${file.name.split('.').pop()}`;
+  return uploadFile('sdxl_fast', fileName, file, onProgress);
+};
+
+export const getSDXLFastImageUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('sdxl_fast', filePath);
+  return error ? null : data?.signedUrl || null;
+};
+
+export const uploadSDXLHighImage = async (
+  imageId: string,
+  file: File,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<UploadResult> => {
+  const fileName = `${imageId}-${Date.now()}.${file.name.split('.').pop()}`;
+  return uploadFile('sdxl_high', fileName, file, onProgress);
+};
+
+export const getSDXLHighImageUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('sdxl_high', filePath);
   return error ? null : data?.signedUrl || null;
 };
 

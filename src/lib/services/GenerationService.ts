@@ -1,474 +1,121 @@
+
 import { supabase } from '@/integrations/supabase/client';
-import { usageAPI } from '@/lib/database';
-import { getSignedUrl } from '@/lib/storage';
-import type { GenerationRequest, GenerationFormat, GenerationQuality } from '@/types/generation';
-import { GENERATION_CONFIGS } from '@/types/generation';
-import type { Tables } from '@/integrations/supabase/types';
-
-type ImageRecord = Tables<'images'>;
-type VideoRecord = Tables<'videos'>;
-
-// Extended types to include our custom properties
-type ImageRecordWithUrl = ImageRecord & {
-  image_urls?: string[] | null;
-  url_error?: string;
-  is_regeneration?: boolean;
-  regeneration_source?: string;
-};
-
-type VideoRecordWithUrl = VideoRecord & {
-  url_error?: string;
-  is_regeneration?: boolean;
-  regeneration_source?: string;
-};
-
-// Enhanced generation request for regeneration with advanced options
-interface RegenerationRequest extends GenerationRequest {
-  strength?: number;
-  referenceImageUrl?: string;
-  preserveSeed?: boolean;
-  originalItemId?: string;
-}
+import { GenerationRequest, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
+import { videoAPI, imageAPI, usageAPI } from '@/lib/database';
 
 export class GenerationService {
-  static async generate(request: GenerationRequest | RegenerationRequest) {
-    console.log('🚀 GenerationService.generate called with:', request);
+  static async queueGeneration(request: GenerationRequest): Promise<string> {
+    console.log('🎬 GenerationService.queueGeneration called with:', request);
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated to generate content');
     }
 
-    // Get generation config for credits and metadata
-    const config = GENERATION_CONFIGS[`${request.format}_${request.quality}`];
+    const config = GENERATION_CONFIGS[request.format];
     if (!config) {
-      throw new Error('Invalid format/quality combination');
+      throw new Error(`Unknown generation format: ${request.format}`);
     }
 
-    console.log('⚙️ Using generation config:', config);
+    try {
+      // Create record in appropriate table
+      let videoId: string | undefined;
+      let imageId: string | undefined;
 
-    // Get seed from original generation if preserveSeed is requested
-    let originalSeed: string | undefined;
-    if ('preserveSeed' in request && request.preserveSeed && 'originalItemId' in request && request.originalItemId) {
-      originalSeed = await this.getOriginalSeed(request.originalItemId, request.format);
-    }
-
-    // Create a record in the appropriate table based on format
-    let recordId: string;
-    
-    if (request.format === 'image') {
-      console.log('📷 Creating image record...');
-      const { data: image, error: imageError } = await supabase
-        .from('images')
-        .insert({
+      if (config.isVideo) {
+        console.log('📹 Creating video record...');
+        const video = await videoAPI.create({
           user_id: user.id,
-          project_id: request.projectId || null,
+          project_id: request.projectId,
+          status: 'queued',
+          format: 'mp4',
+          resolution: config.format.includes('high') ? '1280x720' : '832x480'
+        });
+        videoId = video.id;
+        console.log('✅ Video record created:', videoId);
+      } else {
+        console.log('🖼️ Creating image record...');
+        const image = await imageAPI.create({
+          user_id: user.id,
+          project_id: request.projectId,
           prompt: request.prompt,
+          generation_mode: 'standalone',
           status: 'queued',
-          generation_mode: 'functional',
           format: 'png',
-          quality: request.quality
-        })
-        .select()
-        .single();
-
-      if (imageError) {
-        console.error('❌ Image creation error:', imageError);
-        throw imageError;
+          quality: config.format.includes('high') ? 'high' : 'fast'
+        });
+        imageId = image.id;
+        console.log('✅ Image record created:', imageId);
       }
-      recordId = image.id;
-      console.log('✅ Image record created with ID:', recordId);
-    } else {
-      console.log('🎬 Creating video record...');
-      const { data: video, error: videoError } = await supabase
-        .from('videos')
-        .insert({
-          user_id: user.id,
-          project_id: request.projectId || null,
-          status: 'queued',
-          duration: 2,
-          format: 'mp4'
-        })
-        .select()
-        .single();
 
-      if (videoError) {
-        console.error('❌ Video creation error:', videoError);
-        throw videoError;
+      // Queue the job with proper routing
+      console.log('📤 Queueing job via edge function...');
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          jobType: request.format,
+          metadata: {
+            ...request.metadata,
+            credits: config.credits,
+            model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
+            prompt: request.prompt,
+            queue: config.queue,
+            bucket: config.bucket
+          },
+          projectId: request.projectId,
+          videoId,
+          imageId
+        }
+      });
+
+      if (error) {
+        console.error('❌ Edge function error:', error);
+        throw new Error(`Failed to queue generation: ${error.message}`);
       }
-      recordId = video.id;
-      console.log('✅ Video record created with ID:', recordId);
+
+      if (!data?.success) {
+        console.error('❌ Edge function returned failure:', data);
+        throw new Error(data?.error || 'Failed to queue generation');
+      }
+
+      console.log('✅ Job queued successfully:', data);
+      
+      // Log usage
+      await usageAPI.logAction(request.format, config.credits, {
+        format: config.isVideo ? 'video' : 'image',
+        quality: config.format.includes('high') ? 'high' : 'fast',
+        model_type: config.isSDXL ? 'sdxl' : 'wan',
+        job_id: data.job?.id
+      });
+
+      return data.job?.id || 'unknown';
+    } catch (error) {
+      console.error('❌ GenerationService.queueGeneration failed:', error);
+      throw error;
     }
+  }
 
-    // Use the clean job type format
-    const jobType = `${request.format}_${request.quality}`;
-    console.log('🔧 Using job type:', jobType);
-
-    // Enhanced metadata for WAN 2.1 regeneration features
-    const enhancedMetadata = {
-      ...request.metadata,
-      prompt: request.prompt,
-      format: request.format,
-      quality: request.quality,
-      model_type: jobType,
-      model_variant: config.modelVariant,
-      credits: config.credits,
-      generate_variations: request.format === 'image' ? true : false,
-      variation_count: request.format === 'image' ? 6 : 1,
-      // WAN 2.1 specific parameters
-      ...(('strength' in request && request.strength) && { strength: request.strength }),
-      ...(('referenceImageUrl' in request && request.referenceImageUrl) && { 
-        reference_image_url: request.referenceImageUrl,
-        image_to_image: true
-      }),
-      ...(originalSeed && { seed: originalSeed, preserve_seed: true }),
-      ...(('originalItemId' in request && request.originalItemId) && { 
-        regeneration_source: request.originalItemId,
-        is_regeneration: true 
-      })
-    };
-
-    // Queue the job using the existing queue-job function
-    console.log('📋 Queuing job with enhanced payload...');
-    const { data, error } = await supabase.functions.invoke('queue-job', {
-      body: {
-        jobType,
-        [request.format === 'image' ? 'imageId' : 'videoId']: recordId,
-        projectId: request.projectId || null,
-        metadata: enhancedMetadata
-      }
-    });
+  static async getGenerationStatus(jobId: string) {
+    const { data, error } = await supabase
+      .from('jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
 
     if (error) {
-      console.error('❌ Job queue error:', error);
-      throw new Error(`Failed to queue generation job: ${error.message}`);
+      throw new Error(`Failed to get job status: ${error.message}`);
     }
 
-    console.log('✅ Job queued successfully:', data);
-
-    // Log usage with regeneration tracking
-    await usageAPI.logAction(
-      'originalItemId' in request && request.originalItemId ? `${jobType}_regeneration` : jobType,
-      config.credits,
-      {
-        format: request.format,
-        quality: request.quality,
-        model_type: jobType,
-        [request.format === 'image' ? 'image_id' : 'video_id']: recordId,
-        project_id: request.projectId || null,
-        ...('originalItemId' in request && request.originalItemId && { regeneration_source: request.originalItemId })
-      }
-    );
-
-    console.log('📈 Usage logged for job type:', jobType);
-
-    return {
-      id: recordId,
-      jobId: data.job?.id,
-      format: request.format,
-      quality: request.quality,
-      estimatedTime: config.estimatedTime
-    };
+    return data;
   }
 
-  // Helper method to retrieve seed from original generation
-  private static async getOriginalSeed(originalItemId: string, format: GenerationFormat): Promise<string | undefined> {
-    console.log('🔍 Retrieving seed for original item:', originalItemId);
-    
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('metadata')
-        .eq(format === 'image' ? 'image_id' : 'video_id', originalItemId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+  static async cancelGeneration(jobId: string) {
+    const { error } = await supabase
+      .from('jobs')
+      .update({ status: 'cancelled' })
+      .eq('id', jobId);
 
-      if (error) {
-        console.error('❌ Error fetching original job:', error);
-        return undefined;
-      }
-
-      if (job?.metadata && typeof job.metadata === 'object' && 'seed' in job.metadata) {
-        console.log('✅ Found original seed:', job.metadata.seed);
-        return job.metadata.seed as string;
-      }
-
-      console.log('⚠️ No seed found in original job metadata');
-      return undefined;
-    } catch (error) {
-      console.error('❌ Error in getOriginalSeed:', error);
-      return undefined;
+    if (error) {
+      throw new Error(`Failed to cancel generation: ${error.message}`);
     }
-  }
-
-  private static extractRelativePath(filePath: string): string {
-    console.log('🔧 Extracting relative path from:', filePath);
-    
-    if (!filePath) {
-      throw new Error('File path is required');
-    }
-
-    // The filePath from database is already user-scoped (user_id/filename)
-    // We should use it as-is for signed URL generation
-    console.log('✅ Using file path as-is for signed URL:', filePath);
-    return filePath;
-  }
-
-  private static getBucketForContent(format: GenerationFormat, quality: GenerationQuality): string {
-    if (format === 'image') {
-      return quality === 'high' ? 'image_high' : 'image_fast';
-    } else {
-      return quality === 'high' ? 'video_high' : 'video_fast';
-    }
-  }
-
-  private static async getVideoQualityFromJob(videoId: string): Promise<GenerationQuality> {
-    console.log('🔍 Getting video quality from job for video:', videoId);
-    
-    try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .select('quality, job_type')
-        .eq('video_id', videoId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error('❌ Error fetching job for video quality:', error);
-        return 'fast'; // Default fallback
-      }
-
-      if (job) {
-        if (job.quality) {
-          console.log('✅ Found quality in job record:', job.quality);
-          return job.quality as GenerationQuality;
-        }
-        
-        // Extract quality from job_type if available
-        if (job.job_type) {
-          const qualityFromJobType = job.job_type.split('_')[1]; // e.g., 'video_high' -> 'high'
-          if (qualityFromJobType === 'high' || qualityFromJobType === 'fast') {
-            console.log('✅ Extracted quality from job_type:', qualityFromJobType);
-            return qualityFromJobType as GenerationQuality;
-          }
-        }
-      }
-
-      console.log('⚠️ No job found for video, defaulting to fast quality');
-      return 'fast';
-    } catch (error) {
-      console.error('❌ Error in getVideoQualityFromJob:', error);
-      return 'fast'; // Default fallback
-    }
-  }
-
-  static async getGenerationStatus(id: string, format: GenerationFormat): Promise<ImageRecordWithUrl | VideoRecordWithUrl> {
-    console.log('🔍 Checking generation status for:', { id, format });
-    
-    if (format === 'image') {
-      const { data, error } = await supabase
-        .from('images')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        console.error('❌ Status check error:', error);
-        throw error;
-      }
-
-      console.log('📊 Raw image data from database:', data);
-
-      // Check if this is a regeneration by looking at job metadata
-      let regenerationInfo = { is_regeneration: false, regeneration_source: undefined };
-      try {
-        const { data: jobData } = await supabase
-          .from('jobs')
-          .select('metadata')
-          .eq('image_id', id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (jobData?.metadata) {
-          const metadata = jobData.metadata as any;
-          if (metadata.is_regeneration || metadata.regeneration_source || metadata.regenerateId) {
-            regenerationInfo.is_regeneration = true;
-            regenerationInfo.regeneration_source = metadata.regeneration_source || metadata.regenerateId;
-            console.log('🔄 Detected regeneration:', regenerationInfo);
-          }
-        }
-      } catch (jobError) {
-        console.warn('⚠️ Could not fetch job metadata for regeneration detection:', jobError);
-      }
-
-      // Handle completed images with ENHANCED debugging
-      if (data.status === 'completed' && data.image_url) {
-        try {
-          console.log('🎯 Processing completed image:');
-          console.log('   - Image ID:', id);
-          console.log('   - File path from DB:', data.image_url);
-          console.log('   - Image quality:', data.quality);
-          
-          // Get correct bucket based on image quality
-          const bucket = this.getBucketForContent('image', data.quality as GenerationQuality);
-          console.log('🪣 Determined bucket:', bucket);
-          
-          // Use the file path directly as stored in database (it's already user-scoped)
-          const pathForSigning = data.image_url;
-          console.log('📁 Path for signing:', pathForSigning);
-          
-          // Check authentication context
-          const { data: { user } } = await supabase.auth.getUser();
-          console.log('🔐 Auth context - User ID:', user?.id);
-          
-          // Generate signed URL
-          console.log('🔗 Attempting to generate signed URL...');
-          const { data: signedUrlData, error: urlError } = await getSignedUrl(
-            bucket as any,
-            pathForSigning,
-            3600 // 1 hour expiry
-          );
-
-          if (!urlError && signedUrlData?.signedUrl) {
-            console.log('✅ Signed URL generated successfully');
-            console.log('   - URL length:', signedUrlData.signedUrl.length);
-            console.log('   - URL preview:', signedUrlData.signedUrl.substring(0, 100) + '...');
-            
-            const result: ImageRecordWithUrl = {
-              ...data,
-              image_urls: [signedUrlData.signedUrl],
-              ...regenerationInfo
-            };
-            return result;
-          } else {
-            console.error('❌ Failed to generate signed URL:');
-            console.error('   - Error:', urlError?.message);
-            console.error('   - Signed URL data:', signedUrlData);
-            
-            const result: ImageRecordWithUrl = {
-              ...data,
-              image_urls: null,
-              url_error: urlError?.message || 'Failed to generate signed URL',
-              ...regenerationInfo
-            };
-            return result;
-          }
-        } catch (urlError) {
-          console.error('❌ Exception in signed URL processing:');
-          console.error('   - Error:', urlError);
-          console.error('   - Stack:', urlError instanceof Error ? urlError.stack : 'No stack');
-          
-          const result: ImageRecordWithUrl = {
-            ...data,
-            image_urls: null,
-            url_error: urlError instanceof Error ? urlError.message : 'Unknown URL processing error',
-            ...regenerationInfo
-          };
-          return result;
-        }
-      }
-
-      // For non-completed images, return as-is with regeneration info
-      console.log('ℹ️ Image not completed yet, status:', data.status);
-      return { ...data, ...regenerationInfo } as ImageRecordWithUrl;
-    } else {
-      const { data, error } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        console.error('❌ Video status check error:', error);
-        throw error;
-      }
-
-      console.log('📊 Raw video data from database:', data);
-
-      // Check if this is a regeneration by looking at job metadata
-      let regenerationInfo = { is_regeneration: false, regeneration_source: undefined };
-      try {
-        const { data: jobData } = await supabase
-          .from('jobs')
-          .select('metadata')
-          .eq('video_id', id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (jobData?.metadata) {
-          const metadata = jobData.metadata as any;
-          if (metadata.is_regeneration || metadata.regeneration_source || metadata.regenerateId) {
-            regenerationInfo.is_regeneration = true;
-            regenerationInfo.regeneration_source = metadata.regeneration_source || metadata.regenerateId;
-            console.log('🔄 Detected video regeneration:', regenerationInfo);
-          }
-        }
-      } catch (jobError) {
-        console.warn('⚠️ Could not fetch job metadata for video regeneration detection:', jobError);
-      }
-
-      // Handle completed videos with IMPROVED quality detection
-      if (data.status === 'completed' && data.video_url) {
-        try {
-          console.log('🎯 Processing completed video with filePath:', data.video_url);
-          
-          // Extract relative path using improved logic
-          const relativePath = this.extractRelativePath(data.video_url);
-          
-          // Get video quality from the associated job record
-          const videoQuality = await this.getVideoQualityFromJob(data.id);
-          const bucket = this.getBucketForContent('video', videoQuality);
-          console.log('🪣 Using video bucket:', bucket, 'for relative path:', relativePath, 'quality:', videoQuality);
-          
-          // Generate signed URL from the RELATIVE file path
-          const { data: signedUrlData, error: urlError } = await getSignedUrl(
-            bucket as any,
-            relativePath,
-            7200 // 2 hours expiry for videos
-          );
-
-          if (!urlError && signedUrlData?.signedUrl) {
-            console.log('✅ Video signed URL generated successfully');
-            const result: VideoRecordWithUrl = {
-              ...data,
-              video_url: signedUrlData.signedUrl,
-              ...regenerationInfo
-            };
-            return result;
-          } else {
-            console.error('❌ Failed to generate video signed URL:', urlError?.message);
-            const result: VideoRecordWithUrl = {
-              ...data,
-              video_url: null,
-              url_error: urlError?.message || 'Failed to generate video URL',
-              ...regenerationInfo
-            };
-            return result;
-          }
-        } catch (urlError) {
-          console.error('❌ Error processing video signed URL:', urlError);
-          const result: VideoRecordWithUrl = {
-            ...data,
-            video_url: null,
-            url_error: urlError instanceof Error ? urlError.message : 'Unknown video URL processing error',
-            ...regenerationInfo
-          };
-          return result;
-        }
-      }
-
-      // For non-completed videos, return as-is with regeneration info
-      console.log('ℹ️ Video not completed yet, returning raw data');
-      return { ...data, ...regenerationInfo } as VideoRecordWithUrl;
-    }
-  }
-
-  static getEstimatedCredits(format: GenerationFormat, quality: GenerationQuality): number {
-    const config = GENERATION_CONFIGS[`${format}_${quality}`];
-    return config?.credits || 1;
   }
 }

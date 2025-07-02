@@ -1,101 +1,117 @@
 
-export type GenerationFormat = 'image' | 'video';
+export type GenerationFormat = 
+  | 'sdxl_image_fast' 
+  | 'sdxl_image_high'
+  | 'image_fast' 
+  | 'image_high' 
+  | 'video_fast' 
+  | 'video_high';
+
 export type GenerationQuality = 'fast' | 'high';
 
-export interface GenerationRequest {
+export interface GenerationConfig {
   format: GenerationFormat;
-  quality: GenerationQuality;
-  prompt: string;
-  projectId?: string;
-  metadata?: Record<string, any>;
-}
-
-export interface GenerationOptions {
-  format: GenerationFormat;
-  quality: GenerationQuality;
-  credits: number;
-  estimatedTime: string;
-  resolution: string;
-  description: string;
-  modelVariant: string;
   displayName: string;
-  icon: string;
-  priority: string;
-  qualityLevel: string;
+  description: string;
+  estimatedTime: string;
+  credits: number;
+  isVideo: boolean;
+  isSDXL: boolean;
+  bucket: string;
+  queue: string;
 }
 
-// Updated configuration with Phase 2 optimized timing estimates
-export const GENERATION_CONFIGS: Record<string, GenerationOptions> = {
-  'image_fast': {
-    format: 'image',
-    quality: 'fast',
+export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
+  sdxl_image_fast: {
+    format: 'sdxl_image_fast',
+    displayName: 'SDXL Fast',
+    description: 'Ultra-fast NSFW image generation',
+    estimatedTime: '5 seconds',
     credits: 1,
-    estimatedTime: '45-75 seconds',      // Updated: 37% faster with medium resolution
-    resolution: '640x360',               // Updated: Medium resolution for speed
-    description: 'Fast image generation (medium resolution, optimized)',
-    modelVariant: 'wan_2_1_1_3b',
-    displayName: 'Fast Image',
-    icon: '⚡',
-    priority: 'speed',
-    qualityLevel: 'Good'
+    isVideo: false,
+    isSDXL: true,
+    bucket: 'sdxl_fast',
+    queue: 'sdxl_queue'
   },
-  'image_high': {
-    format: 'image',
-    quality: 'high',
+  sdxl_image_high: {
+    format: 'sdxl_image_high',
+    displayName: 'SDXL High',
+    description: 'High-quality NSFW image generation',
+    estimatedTime: '8 seconds',
     credits: 2,
-    estimatedTime: '90-120 seconds',     // Updated: High resolution, high quality
-    resolution: '832x480',               // Updated: High resolution
-    description: 'High-quality image (high resolution, premium quality)',
-    modelVariant: 'wan_2_1_1_3b',
-    displayName: 'High Quality Image',
-    icon: '🎨',
-    priority: 'quality',
-    qualityLevel: 'High'
+    isVideo: false,
+    isSDXL: true,
+    bucket: 'sdxl_high',
+    queue: 'sdxl_queue'
   },
-  'video_fast': {
-    format: 'video',
-    quality: 'fast',
+  image_fast: {
+    format: 'image_fast',
+    displayName: 'WAN Fast',
+    description: 'Fast standard image generation',
+    estimatedTime: '73 seconds',
+    credits: 1,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'image_fast',
+    queue: 'wan_queue'
+  },
+  image_high: {
+    format: 'image_high',
+    displayName: 'WAN High',
+    description: 'High-quality standard image generation',
+    estimatedTime: '90 seconds',
+    credits: 2,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'image_high',
+    queue: 'wan_queue'
+  },
+  video_fast: {
+    format: 'video_fast',
+    displayName: 'Video Fast',
+    description: 'Fast video generation',
+    estimatedTime: '180 seconds',
     credits: 3,
-    estimatedTime: '60-90 seconds',      // Updated: 38% faster with medium resolution
-    resolution: '640x360',               // Updated: Medium resolution for speed
-    description: '2-second video (medium resolution, optimized)',
-    modelVariant: 'wan_2_1_1_3b',
-    displayName: 'Fast Video',
-    icon: '🚀',
-    priority: 'speed',
-    qualityLevel: 'Good'
+    isVideo: true,
+    isSDXL: false,
+    bucket: 'video_fast',
+    queue: 'wan_queue'
   },
-  'video_high': {
-    format: 'video',
-    quality: 'high',
+  video_high: {
+    format: 'video_high',
+    displayName: 'Video High',
+    description: 'High-quality video generation',
+    estimatedTime: '280 seconds',
     credits: 5,
-    estimatedTime: '2-3 minutes',        // Updated: High resolution, high quality
-    resolution: '832x480',               // Updated: High resolution
-    description: '2-second HD video (high resolution, premium quality)',
-    modelVariant: 'wan_2_1_1_3b',
-    displayName: 'High Quality Video',
-    icon: '🎬',
-    priority: 'quality',
-    qualityLevel: 'High'
+    isVideo: true,
+    isSDXL: false,
+    bucket: 'video_high',
+    queue: 'wan_queue'
   }
 };
 
-export const getModelType = (format: GenerationFormat, quality: GenerationQuality): string => {
-  return `${format}_${quality}`;
-};
-
-export const getGenerationConfig = (format: GenerationFormat, quality: GenerationQuality): GenerationOptions => {
-  const modelType = getModelType(format, quality);
-  return GENERATION_CONFIGS[modelType];
-};
-
-// Legacy types for backward compatibility
-export type MediaType = 'image' | 'video';
-export type Quality = 'fast' | 'high';
-
-export interface FunctionalGenerationOptions {
-  mediaType: MediaType;
-  quality: Quality;
+export interface GenerationRequest {
+  format: GenerationFormat;
   prompt: string;
-  characterId?: string;
+  projectId?: string;
+  videoId?: string;
+  imageId?: string;
+  metadata?: {
+    model_variant?: string;
+    credits?: number;
+    [key: string]: any;
+  };
+}
+
+export interface GenerationStatus {
+  id: string;
+  status: 'queued' | 'processing' | 'completed' | 'failed';
+  format: GenerationFormat;
+  progress?: number;
+  estimatedTimeRemaining?: number;
+  error?: string;
+  result?: {
+    url?: string;
+    filePath?: string;
+  };
 }

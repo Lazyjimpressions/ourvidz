@@ -1,61 +1,92 @@
 
-import { useState, useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from 'react';
 import { GenerationService } from '@/lib/services/GenerationService';
-import { useGenerationStatus } from '@/hooks/useGenerationStatus';
-import { useToast } from '@/hooks/use-toast';
-import type { GenerationRequest, GenerationFormat, GenerationQuality } from '@/types/generation';
+import { GenerationRequest, GenerationStatus, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
+import { supabase } from '@/integrations/supabase/client';
 
-interface UseGenerationProps {
-  onSuccess?: (data: { id: string; jobId?: string }) => void;
-  onError?: (error: Error) => void;
-}
+export const useGeneration = () => {
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [currentJob, setCurrentJob] = useState<GenerationStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-export const useGeneration = ({ onSuccess, onError }: UseGenerationProps = {}) => {
-  const { toast } = useToast();
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const generateMutation = useMutation({
-    mutationFn: async (request: GenerationRequest) => {
-      console.log('🚀 Starting generation with functional approach:', request);
-      return await GenerationService.generate(request);
-    },
-    onSuccess: (data) => {
-      console.log('✅ Generation started successfully:', data);
-      setIsProcessing(true);
-      toast({
-        title: "Generation Started",
-        description: "Your content is being generated. You'll be notified when it's ready.",
+  const generateContent = useCallback(async (request: GenerationRequest) => {
+    try {
+      setError(null);
+      setIsGenerating(true);
+      setGenerationProgress(0);
+      
+      console.log('🎬 Starting generation with request:', request);
+      
+      // Queue the generation job
+      const jobId = await GenerationService.queueGeneration(request);
+      
+      const config = GENERATION_CONFIGS[request.format];
+      
+      // Set initial job status
+      setCurrentJob({
+        id: jobId,
+        status: 'queued',
+        format: request.format,
+        progress: 0,
+        estimatedTimeRemaining: parseInt(config.estimatedTime)
       });
-      onSuccess?.(data);
-    },
-    onError: (error: Error) => {
+
+      console.log('✅ Job queued successfully:', jobId);
+      
+    } catch (error) {
       console.error('❌ Generation failed:', error);
-      setIsProcessing(false);
-      toast({
-        title: "Generation Failed",
-        description: error.message || "Failed to start generation. Please try again.",
-        variant: "destructive",
-      });
-      onError?.(error);
-    },
-  });
-
-  const generate = useCallback((request: GenerationRequest) => {
-    generateMutation.mutate(request);
-  }, [generateMutation]);
-
-  const getEstimatedCredits = useCallback((format: GenerationFormat, quality: GenerationQuality) => {
-    return GenerationService.getEstimatedCredits(format, quality);
+      setError(error instanceof Error ? error.message : 'Generation failed');
+      setIsGenerating(false);
+      setCurrentJob(null);
+    }
   }, []);
 
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // Poll for job status updates
+  useEffect(() => {
+    if (!currentJob || currentJob.status === 'completed' || currentJob.status === 'failed') {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const jobStatus = await GenerationService.getGenerationStatus(currentJob.id);
+        
+        setCurrentJob(prev => prev ? {
+          ...prev,
+          status: jobStatus.status,
+          progress: jobStatus.status === 'processing' ? 50 : prev.progress,
+          error: jobStatus.error_message || undefined
+        } : null);
+
+        if (jobStatus.status === 'completed') {
+          setIsGenerating(false);
+          setGenerationProgress(100);
+          console.log('✅ Generation completed:', jobStatus);
+        } else if (jobStatus.status === 'failed') {
+          setIsGenerating(false);
+          setError(jobStatus.error_message || 'Generation failed');
+          console.error('❌ Generation failed:', jobStatus.error_message);
+        }
+        
+      } catch (error) {
+        console.error('❌ Failed to poll job status:', error);
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [currentJob]);
+
   return {
-    generate,
-    isGenerating: generateMutation.isPending,
-    isProcessing,
-    setIsProcessing,
-    useGenerationStatus: useGenerationStatus,
-    getEstimatedCredits,
-    error: generateMutation.error,
+    generateContent,
+    isGenerating,
+    generationProgress,
+    currentJob,
+    error,
+    clearError
   };
 };
