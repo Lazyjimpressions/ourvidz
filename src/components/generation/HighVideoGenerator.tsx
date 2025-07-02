@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useGeneration } from "@/hooks/useGeneration";
+import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 import { Play, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,17 +26,8 @@ export const HighVideoGenerator = ({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
 
-  const { generate, isGenerating, useGenerationStatus } = useGeneration({
-    onSuccess: (data) => {
-      setGeneratedId(data.id);
-      toast.success("High quality video generation started!");
-    },
-    onError: (error) => {
-      toast.error(`High quality video generation failed: ${error.message}`);
-    }
-  });
-
-  const { data: generationData } = useGenerationStatus(generatedId, 'video');
+  const { generateContent, isGenerating, currentJob, error } = useGeneration();
+  const { data: generationData } = useGenerationStatus(generatedId, 'video_high');
 
   // Check if generation is complete
   if (generationData?.status === 'completed') {
@@ -53,21 +45,29 @@ export const HighVideoGenerator = ({
     }
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error("Please enter a prompt");
       return;
     }
 
-    generate({
-      format: 'video',
-      quality: 'high',
-      prompt: prompt.trim(),
-      projectId,
-      metadata: {
-        source: 'high_video_generator'
+    try {
+      await generateContent({
+        format: 'video_high',
+        prompt: prompt.trim(),
+        projectId,
+        metadata: {
+          source: 'high_video_generator'
+        }
+      });
+      
+      if (currentJob?.id) {
+        setGeneratedId(currentJob.id);
+        toast.success("High quality video generation started!");
       }
-    });
+    } catch (error) {
+      toast.error(`High quality video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   return (
@@ -124,6 +124,15 @@ export const HighVideoGenerator = ({
             <p className="text-xs text-purple-600">
               Generating your high-quality video using the premium model. This usually takes 3-6 minutes.
             </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+            <p className="text-sm text-red-800 font-medium mb-2">
+              Generation Error
+            </p>
+            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
       </CardContent>

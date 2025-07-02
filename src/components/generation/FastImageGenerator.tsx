@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useGeneration } from "@/hooks/useGeneration";
+import { useGenerationStatus } from "@/hooks/useGenerationStatus";
 import { Image, Zap } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,17 +26,8 @@ export const FastImageGenerator = ({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
 
-  const { generate, isGenerating, useGenerationStatus } = useGeneration({
-    onSuccess: (data) => {
-      setGeneratedId(data.id);
-      toast.success("Fast image generation started!");
-    },
-    onError: (error) => {
-      toast.error(`Fast image generation failed: ${error.message}`);
-    }
-  });
-
-  const { data: generationData } = useGenerationStatus(generatedId, 'image');
+  const { generateContent, isGenerating, currentJob, error } = useGeneration();
+  const { data: generationData } = useGenerationStatus(generatedId, 'image_fast');
 
   // Check if generation is complete
   if (generationData?.status === 'completed') {
@@ -53,21 +45,29 @@ export const FastImageGenerator = ({
     }
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error("Please enter a prompt");
       return;
     }
 
-    generate({
-      format: 'image',
-      quality: 'fast',
-      prompt: prompt.trim(),
-      projectId,
-      metadata: {
-        source: 'fast_image_generator'
+    try {
+      await generateContent({
+        format: 'image_fast',
+        prompt: prompt.trim(),
+        projectId,
+        metadata: {
+          source: 'fast_image_generator'
+        }
+      });
+      
+      if (currentJob?.id) {
+        setGeneratedId(currentJob.id);
+        toast.success("Fast image generation started!");
       }
-    });
+    } catch (error) {
+      toast.error(`Fast image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   return (
@@ -124,6 +124,15 @@ export const FastImageGenerator = ({
             <p className="text-xs text-blue-600">
               Generating your image using the fast model. This usually takes 15-30 seconds.
             </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+            <p className="text-sm text-red-800 font-medium mb-2">
+              Generation Error
+            </p>
+            <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
       </CardContent>

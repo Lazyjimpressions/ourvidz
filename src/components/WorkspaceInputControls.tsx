@@ -3,68 +3,82 @@ import React, { useState } from 'react';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileLayoutContainer } from './workspace/MobileLayoutContainer';
 import { DesktopLayoutContainer } from './workspace/DesktopLayoutContainer';
+import { GenerationFormat } from '@/types/generation';
 
 interface WorkspaceInputControlsProps {
-  mode: 'image' | 'video';
-  onModeChange: (mode: 'image' | 'video') => void;
+  selectedMode: GenerationFormat;
+  setSelectedMode: (mode: GenerationFormat) => void;
   prompt: string;
   setPrompt: (prompt: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  onReferenceImageUpload: () => void;
-  quality: 'fast' | 'high';
-  onQualityChange: (quality: 'fast' | 'high') => void;
+  referenceImage: File | null;
+  setReferenceImage: (file: File | null) => void;
+  referenceImageUrl: string;
+  setReferenceImageUrl: (url: string) => void;
+  generationProgress: number;
+  currentJob: any;
+  generationError: string | null;
+  onRegenerate: () => void;
+  onClearError: () => void;
 }
 
 export const WorkspaceInputControls = ({
-  mode,
-  onModeChange,
+  selectedMode,
+  setSelectedMode,
   prompt,
   setPrompt,
   onGenerate,
   isGenerating,
-  onReferenceImageUpload,
-  quality,
-  onQualityChange
+  referenceImage,
+  setReferenceImage,
+  referenceImageUrl,
+  setReferenceImageUrl,
+  generationProgress,
+  currentJob,
+  generationError,
+  onRegenerate,
+  onClearError
 }: WorkspaceInputControlsProps) => {
-  const [motionIntensity, setMotionIntensity] = useState<'low' | 'medium' | 'high'>('medium');
   const isMobile = useIsMobile();
-
-  const handleMotionClick = () => {
-    const nextIntensity = motionIntensity === 'low' ? 'medium' : 
-                         motionIntensity === 'medium' ? 'high' : 'low';
-    setMotionIntensity(nextIntensity);
-  };
 
   return (
     <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-2xl">
       {isMobile ? (
         <MobileLayoutContainer
-          mode={mode}
-          onModeChange={onModeChange}
+          selectedMode={selectedMode}
+          setSelectedMode={setSelectedMode}
           prompt={prompt}
           setPrompt={setPrompt}
           onGenerate={onGenerate}
           isGenerating={isGenerating}
-          onReferenceImageUpload={onReferenceImageUpload}
-          quality={quality}
-          onQualityChange={onQualityChange}
-          motionIntensity={motionIntensity}
-          onMotionClick={handleMotionClick}
+          referenceImage={referenceImage}
+          setReferenceImage={setReferenceImage}
+          referenceImageUrl={referenceImageUrl}
+          setReferenceImageUrl={setReferenceImageUrl}
+          generationProgress={generationProgress}
+          currentJob={currentJob}
+          generationError={generationError}
+          onRegenerate={onRegenerate}
+          onClearError={onClearError}
         />
       ) : (
         <DesktopLayoutContainer
-          mode={mode}
-          onModeChange={onModeChange}
+          selectedMode={selectedMode}
+          setSelectedMode={setSelectedMode}
           prompt={prompt}
           setPrompt={setPrompt}
           onGenerate={onGenerate}
           isGenerating={isGenerating}
-          onReferenceImageUpload={onReferenceImageUpload}
-          quality={quality}
-          onQualityChange={onQualityChange}
-          motionIntensity={motionIntensity}
-          onMotionClick={handleMotionClick}
+          referenceImage={referenceImage}
+          setReferenceImage={setReferenceImage}
+          referenceImageUrl={referenceImageUrl}
+          setReferenceImageUrl={setReferenceImageUrl}
+          generationProgress={generationProgress}
+          currentJob={currentJob}
+          generationError={generationError}
+          onRegenerate={onRegenerate}
+          onClearError={onClearError}
         />
       )}
     </div>
