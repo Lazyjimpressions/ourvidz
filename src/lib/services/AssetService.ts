@@ -43,7 +43,7 @@ export class AssetService {
       metadata: metadata,
       jobType: jobData?.job_type,
       modelType: jobData?.model_type,
-      expectedBucket: isSDXL ? (quality === 'high' ? 'sdxl_high' : 'sdxl_fast') : (quality === 'high' ? 'image_high' : 'image_fast')
+      expectedBucket: isSDXL ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast') : (quality === 'high' ? 'image_high' : 'image_fast')
     });
     
     if (isSDXL) {

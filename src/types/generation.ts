@@ -30,7 +30,7 @@ export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
     credits: 1,
     isVideo: false,
     isSDXL: true,
-    bucket: 'sdxl_fast',
+    bucket: 'sdxl_image_fast',
     queue: 'sdxl_queue'
   },
   sdxl_image_high: {
@@ -41,7 +41,7 @@ export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
     credits: 2,
     isVideo: false,
     isSDXL: true,
-    bucket: 'sdxl_high',
+    bucket: 'sdxl_image_high',
     queue: 'sdxl_queue'
   },
   image_fast: {
