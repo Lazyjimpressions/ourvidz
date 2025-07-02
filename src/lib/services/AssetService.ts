@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
@@ -26,18 +27,18 @@ export interface UnifiedAsset {
 }
 
 export class AssetService {
-  private static determineImageBucket(image: ImageRecord, jobData?: any): string {
-    // Check if this is an SDXL image from metadata
-    const metadata = image.metadata as any;
+  private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: any): string {
+    // Check if this is an SDXL image from metadata or job data
+    const metadata = imageData.metadata as any;
     const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl' || 
                    jobData?.job_type?.startsWith('sdxl_') ||
                    jobData?.model_type === 'sdxl_image_fast' ||
                    jobData?.model_type === 'sdxl_image_high';
     
-    const quality = image.quality || jobData?.quality || 'fast';
+    const quality = imageData.quality || jobData?.quality || 'fast';
     
     console.log('🔍 Determining image bucket:', {
-      imageId: image.id,
+      imageId: imageData.id,
       quality,
       isSDXL,
       metadata: metadata,
