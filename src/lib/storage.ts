@@ -72,7 +72,7 @@ export const getSignedUrl = async (
   expiresIn: number = 3600
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    console.log('🔐 getSignedUrl called with:');
+    console.log('🔐 getSignedUrl called with enhanced SDXL support:');
     console.log('   - Bucket:', bucket);
     console.log('   - File path:', filePath);
     console.log('   - Expires in:', expiresIn, 'seconds');
@@ -84,23 +84,25 @@ export const getSignedUrl = async (
       throw new Error(errorMsg);
     }
 
-    // Check if user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      console.error('❌ Auth error in getSignedUrl:', authError);
-      throw new Error('Authentication error: ' + authError.message);
-    }
+    // Check if user is authenticated for private buckets
+    if (!['system_assets'].includes(bucket)) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('❌ Auth error in getSignedUrl:', authError);
+        throw new Error('Authentication error: ' + authError.message);
+      }
 
-    if (!user) {
-      console.error('❌ No authenticated user found');
-      throw new Error('User must be authenticated to access files');
-    }
+      if (!user) {
+        console.error('❌ No authenticated user found');
+        throw new Error('User must be authenticated to access files');
+      }
 
-    console.log('✅ User authenticated:', user.id);
+      console.log('✅ User authenticated:', user.id);
+    }
 
     // Use the filePath as-is (it should already be user-scoped from the database)
     const pathToUse = filePath;
-    console.log('📁 Using path for signed URL:', pathToUse);
+    console.log('📁 Using path for signed URL with SDXL support:', pathToUse);
 
     // Test if the file exists first
     console.log('📋 Checking if file exists...');
@@ -118,12 +120,12 @@ export const getSignedUrl = async (
       if (fileList) {
         const fileName = pathToUse.split('/').pop();
         const fileExists = fileList.some(f => f.name === fileName);
-        console.log('🔍 File exists check:', fileExists, 'for file:', fileName);
+        console.log('🔍 File exists check:', fileExists, 'for file:', fileName, 'in bucket:', bucket);
       }
     }
 
     // Generate signed URL
-    console.log('🔗 Generating signed URL...');
+    console.log('🔗 Generating signed URL for SDXL/WAN content...');
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(pathToUse, expiresIn);
@@ -131,6 +133,8 @@ export const getSignedUrl = async (
     if (error) {
       console.error('❌ Signed URL generation failed:');
       console.error('   - Error code:', error.message);
+      console.error('   - Bucket:', bucket);
+      console.error('   - Path:', pathToUse);
       console.error('   - Full error:', error);
       throw new Error(`Signed URL generation failed: ${error.message}`);
     }
@@ -140,13 +144,15 @@ export const getSignedUrl = async (
       throw new Error('No signed URL returned from Supabase');
     }
 
-    console.log('✅ Signed URL generated successfully');
+    console.log('✅ Signed URL generated successfully for', bucket);
     console.log('   - URL length:', data.signedUrl.length);
-    console.log('   - URL starts with:', data.signedUrl.substring(0, 60) + '...');
+    console.log('   - URL starts with:', data.signedUrl.substring(0, 100) + '...');
     
     return { data, error: null };
   } catch (error) {
-    console.error('❌ Exception in getSignedUrl:');
+    console.error('❌ Exception in getSignedUrl with SDXL support:');
+    console.error('   - Bucket:', bucket);
+    console.error('   - Path:', filePath);
     console.error('   - Error:', error);
     console.error('   - Stack:', error instanceof Error ? error.stack : 'No stack');
     

@@ -1,11 +1,10 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { GenerationRequest, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
 import { videoAPI, imageAPI, usageAPI } from '@/lib/database';
 
 export class GenerationService {
   static async queueGeneration(request: GenerationRequest): Promise<string> {
-    console.log('🎬 GenerationService.queueGeneration called with enhanced logging:', {
+    console.log('🎬 GenerationService.queueGeneration called with enhanced SDXL tracking:', {
       request,
       timestamp: new Date().toISOString()
     });
@@ -20,21 +19,22 @@ export class GenerationService {
       throw new Error(`Unknown generation format: ${request.format}`);
     }
 
-    console.log('🔧 Enhanced generation config:', {
+    console.log('🔧 Enhanced generation config with model tracking:', {
       format: request.format,
       isSDXL: config.isSDXL,
       isVideo: config.isVideo,
       queue: config.queue,
+      bucket: config.bucket,
       estimatedTime: config.estimatedTime
     });
 
     try {
-      // Create record in appropriate table
+      // Create record in appropriate table with enhanced model tracking
       let videoId: string | undefined;
       let imageId: string | undefined;
 
       if (config.isVideo) {
-        console.log('📹 Creating video record with enhanced logging...');
+        console.log('📹 Creating video record...');
         const video = await videoAPI.create({
           user_id: user.id,
           project_id: request.projectId,
@@ -43,12 +43,9 @@ export class GenerationService {
           resolution: config.format.includes('high') ? '1280x720' : '832x480'
         });
         videoId = video.id;
-        console.log('✅ Video record created with enhanced tracking:', {
-          videoId,
-          resolution: video.resolution
-        });
+        console.log('✅ Video record created:', { videoId, resolution: video.resolution });
       } else {
-        console.log('🖼️ Creating image record with enhanced logging...');
+        console.log('🖼️ Creating image record with SDXL model tracking...');
         const image = await imageAPI.create({
           user_id: user.id,
           project_id: request.projectId,
@@ -56,18 +53,27 @@ export class GenerationService {
           generation_mode: 'standalone',
           status: 'queued',
           format: 'png',
-          quality: config.format.includes('high') ? 'high' : 'fast'
+          quality: config.format.includes('high') ? 'high' : 'fast',
+          metadata: {
+            model_type: config.isSDXL ? 'sdxl' : 'wan',
+            is_sdxl: config.isSDXL,
+            bucket: config.bucket,
+            job_format: request.format,
+            generation_timestamp: new Date().toISOString()
+          }
         });
         imageId = image.id;
-        console.log('✅ Image record created with enhanced tracking:', {
+        console.log('✅ Image record created with enhanced SDXL tracking:', {
           imageId,
           quality: image.quality,
-          isSDXL: config.isSDXL
+          isSDXL: config.isSDXL,
+          modelType: config.isSDXL ? 'sdxl' : 'wan',
+          bucket: config.bucket
         });
       }
 
-      // Queue the job with enhanced routing and error handling
-      console.log('📤 Queueing job via edge function with enhanced payload...');
+      // Queue the job with enhanced metadata
+      console.log('📤 Queueing job with enhanced SDXL model tracking...');
       const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
           jobType: request.format,
@@ -75,10 +81,13 @@ export class GenerationService {
             ...request.metadata,
             credits: config.credits,
             model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
+            model_type: config.isSDXL ? 'sdxl' : 'wan',
+            is_sdxl: config.isSDXL,
             prompt: request.prompt,
             queue: config.queue,
             bucket: config.bucket,
-            enhanced_request_tracking: true,
+            enhanced_tracking: true,
+            generation_format: request.format,
             client_timestamp: new Date().toISOString()
           },
           projectId: request.projectId,
@@ -88,29 +97,22 @@ export class GenerationService {
       });
 
       if (error) {
-        console.error('❌ Edge function error with enhanced details:', {
-          error,
-          request,
-          timestamp: new Date().toISOString()
-        });
+        console.error('❌ Edge function error:', { error, request });
         throw new Error(`Failed to queue generation: ${error.message}`);
       }
 
       if (!data?.success) {
-        console.error('❌ Edge function returned failure with enhanced details:', {
-          data,
-          request,
-          timestamp: new Date().toISOString()
-        });
+        console.error('❌ Edge function returned failure:', { data, request });
         throw new Error(data?.error || 'Failed to queue generation');
       }
 
-      console.log('✅ Job queued successfully with enhanced response tracking:', {
+      console.log('✅ Job queued successfully with enhanced SDXL tracking:', {
         jobId: data.job?.id,
         queueLength: data.queueLength,
         modelVariant: data.modelVariant,
         isSDXL: data.isSDXL,
-        queue: data.queue
+        queue: data.queue,
+        bucket: config.bucket
       });
       
       // Log usage with enhanced metadata
@@ -118,6 +120,8 @@ export class GenerationService {
         format: config.isVideo ? 'video' : 'image',
         quality: config.format.includes('high') ? 'high' : 'fast',
         model_type: config.isSDXL ? 'sdxl' : 'wan',
+        is_sdxl: config.isSDXL,
+        bucket: config.bucket,
         job_id: data.job?.id,
         enhanced_tracking: true,
         generation_timestamp: new Date().toISOString()
@@ -125,7 +129,7 @@ export class GenerationService {
 
       return data.job?.id || 'unknown';
     } catch (error) {
-      console.error('❌ GenerationService.queueGeneration failed with enhanced error tracking:', {
+      console.error('❌ GenerationService.queueGeneration failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',
         request,
         timestamp: new Date().toISOString()
