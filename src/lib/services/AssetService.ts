@@ -47,7 +47,7 @@ export class AssetService {
     });
     
     if (isSDXL) {
-      return quality === 'high' ? 'sdxl_high' : 'sdxl_fast';
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
     } else {
       return quality === 'high' ? 'image_high' : 'image_fast';
     }
