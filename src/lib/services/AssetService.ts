@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
@@ -37,13 +36,14 @@ export class AssetService {
     
     const quality = imageData.quality || jobData?.quality || 'fast';
     
-    console.log('🔍 Determining image bucket:', {
+    console.log('🔍 Determining image bucket with enhanced debugging:', {
       imageId: imageData.id,
       quality,
       isSDXL,
       metadata: metadata,
       jobType: jobData?.job_type,
-      modelType: jobData?.model_type
+      modelType: jobData?.model_type,
+      expectedBucket: isSDXL ? (quality === 'high' ? 'sdxl_high' : 'sdxl_fast') : (quality === 'high' ? 'image_high' : 'image_fast')
     });
     
     if (isSDXL) {
@@ -59,12 +59,14 @@ export class AssetService {
   }
 
   static async getUserAssets(): Promise<UnifiedAsset[]> {
-    console.log('🔍 Fetching user assets with enhanced SDXL support...');
+    console.log('🔍 ENHANCED ASSET FETCHING with comprehensive debugging...');
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated');
     }
+
+    console.log('👤 Fetching assets for user:', user.id);
 
     // Fetch images and videos in parallel
     const [imagesResult, videosResult] = await Promise.all([
@@ -97,11 +99,35 @@ export class AssetService {
       throw videosResult.error;
     }
 
-    console.log('📊 Raw data - Images:', imagesResult.data?.length, 'Videos:', videosResult.data?.length);
+    console.log('📊 ENHANCED Raw data analysis:', {
+      totalImages: imagesResult.data?.length,
+      totalVideos: videosResult.data?.length,
+      imageStatuses: imagesResult.data?.reduce((acc, img) => {
+        acc[img.status] = (acc[img.status] || 0) + 1;
+        return acc;
+      }, {}),
+      completedImages: imagesResult.data?.filter(img => img.status === 'completed').length,
+      imagesWithUrls: imagesResult.data?.filter(img => img.image_url).length
+    });
+
+    // Enhanced debugging for each image
+    imagesResult.data?.forEach((image, index) => {
+      console.log(`🖼️ Image ${index + 1} analysis:`, {
+        id: image.id,
+        status: image.status,
+        quality: image.quality,
+        hasImageUrl: !!image.image_url,
+        imageUrl: image.image_url,
+        metadata: image.metadata,
+        createdAt: image.created_at
+      });
+    });
 
     // Transform and combine assets
     const imageAssets: UnifiedAsset[] = await Promise.all(
-      (imagesResult.data || []).map(async (image) => {
+      (imagesResult.data || []).map(async (image, index) => {
+        console.log(`🔄 Processing image asset ${index + 1}/${imagesResult.data?.length}:`, image.id);
+        
         let thumbnailUrl: string | undefined;
         let url: string | undefined;
         let error: string | undefined;
@@ -110,7 +136,8 @@ export class AssetService {
         let isSDXL = false;
 
         // Get job data to determine model type and bucket
-        const { data: jobResult } = await supabase
+        console.log('🔍 Fetching job data for image:', image.id);
+        const { data: jobResult, error: jobError } = await supabase
           .from('jobs')
           .select('quality, job_type, model_type, metadata')
           .eq('image_id', image.id)
@@ -118,7 +145,15 @@ export class AssetService {
           .limit(1)
           .maybeSingle();
 
-        jobData = jobResult;
+        if (jobError) {
+          console.warn('⚠️ Error fetching job data for image:', image.id, jobError);
+        } else {
+          jobData = jobResult;
+          console.log('✅ Job data fetched:', {
+            imageId: image.id,
+            jobData: jobResult
+          });
+        }
 
         // Determine model type and SDXL status
         const metadata = image.metadata as any;
@@ -127,21 +162,30 @@ export class AssetService {
                  jobData?.model_type?.includes('sdxl');
         modelType = isSDXL ? 'SDXL' : 'WAN';
 
-        console.log('🖼️ Processing image asset:', {
+        console.log('🔧 Enhanced image processing analysis:', {
           imageId: image.id,
           status: image.status,
           quality: image.quality,
           isSDXL,
           modelType,
           jobType: jobData?.job_type,
-          hasImageUrl: !!image.image_url
+          hasImageUrl: !!image.image_url,
+          imageUrl: image.image_url,
+          metadata: metadata,
+          jobMetadata: jobData?.metadata
         });
 
         // Generate signed URLs for completed images
         if (image.status === 'completed' && image.image_url) {
           try {
             const bucket = this.determineImageBucket(image, jobData);
-            console.log('📁 Using bucket for image:', bucket);
+            console.log('📁 ENHANCED URL generation for image:', {
+              imageId: image.id,
+              bucket,
+              imagePath: image.image_url,
+              isSDXL,
+              quality: image.quality
+            });
             
             const { data: signedUrlData, error: urlError } = await getSignedUrl(
               bucket as any,
@@ -152,18 +196,40 @@ export class AssetService {
             if (!urlError && signedUrlData?.signedUrl) {
               thumbnailUrl = signedUrlData.signedUrl;
               url = signedUrlData.signedUrl;
-              console.log('✅ Generated signed URL for image:', image.id);
+              console.log('✅ Successfully generated signed URL for image:', {
+                imageId: image.id,
+                bucket,
+                urlLength: signedUrlData.signedUrl.length,
+                urlStart: signedUrlData.signedUrl.substring(0, 100)
+              });
             } else {
               error = urlError?.message || 'Failed to generate image URL';
-              console.error('❌ Failed to generate URL for image:', image.id, error);
+              console.error('❌ CRITICAL: Failed to generate URL for image:', {
+                imageId: image.id,
+                bucket,
+                imagePath: image.image_url,
+                error: error,
+                urlError: urlError
+              });
             }
           } catch (urlError) {
-            console.error('❌ Exception generating image URL:', urlError);
+            console.error('❌ CRITICAL: Exception generating image URL:', {
+              imageId: image.id,
+              error: urlError,
+              stack: urlError instanceof Error ? urlError.stack : 'No stack'
+            });
             error = 'Failed to load image';
           }
+        } else {
+          console.log('⚠️ Skipping URL generation for image:', {
+            imageId: image.id,
+            status: image.status,
+            hasImageUrl: !!image.image_url,
+            reason: image.status !== 'completed' ? 'not completed' : 'no image_url'
+          });
         }
 
-        return {
+        const asset = {
           id: image.id,
           type: 'image' as const,
           title: image.title || undefined,
@@ -180,6 +246,16 @@ export class AssetService {
           isSDXL,
           error
         };
+
+        console.log('📦 Final asset created:', {
+          id: asset.id,
+          hasUrl: !!asset.url,
+          hasError: !!asset.error,
+          modelType: asset.modelType,
+          status: asset.status
+        });
+
+        return asset;
       })
     );
 
@@ -253,12 +329,23 @@ export class AssetService {
     const allAssets = [...imageAssets, ...videoAssets];
     allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    console.log('✅ Combined assets with SDXL support:', {
+    console.log('✅ ENHANCED Final asset summary:', {
       total: allAssets.length,
       images: imageAssets.length,
       videos: videoAssets.length,
       sdxlImages: imageAssets.filter(a => a.isSDXL).length,
-      wanImages: imageAssets.filter(a => !a.isSDXL).length
+      wanImages: imageAssets.filter(a => !a.isSDXL).length,
+      completedImages: imageAssets.filter(a => a.status === 'completed').length,
+      imagesWithUrls: imageAssets.filter(a => !!a.url).length,
+      imagesWithErrors: imageAssets.filter(a => !!a.error).length,
+      assetBreakdown: allAssets.map(a => ({
+        id: a.id,
+        type: a.type,
+        status: a.status,
+        hasUrl: !!a.url,
+        hasError: !!a.error,
+        modelType: a.modelType
+      }))
     });
     
     return allAssets;

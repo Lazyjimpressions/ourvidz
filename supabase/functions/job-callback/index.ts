@@ -21,26 +21,62 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { jobId, status, filePath, errorMessage, enhancedPrompt } = await req.json();
+    const requestBody = await req.json();
+    const { jobId, status, filePath, errorMessage, enhancedPrompt } = requestBody;
     
-    console.log('Processing job callback with enhanced SDXL support:', {
+    console.log('🔍 ENHANCED CALLBACK DEBUGGING - Received request:', {
       jobId,
       status,
       filePath,
-      enhancedPrompt
+      errorMessage,
+      enhancedPrompt,
+      fullRequestBody: requestBody,
+      timestamp: new Date().toISOString()
     });
 
+    // Validate critical parameters
+    if (!jobId) {
+      console.error('❌ CRITICAL: No jobId provided in callback');
+      throw new Error('jobId is required');
+    }
+
+    if (!filePath && status === 'completed') {
+      console.error('❌ CRITICAL: No filePath provided for completed job', {
+        jobId,
+        status,
+        hasFilePath: !!filePath,
+        filePathValue: filePath
+      });
+    }
+
     // Get current job to preserve existing metadata and check format
+    console.log('🔍 Fetching job details for:', jobId);
     const { data: currentJob, error: fetchError } = await supabase
       .from('jobs')
-      .select('metadata, job_type, image_id, video_id, format, quality, model_type')
+      .select('metadata, job_type, image_id, video_id, format, quality, model_type, user_id')
       .eq('id', jobId)
       .single();
 
     if (fetchError) {
-      console.error('Error fetching current job:', fetchError);
+      console.error('❌ CRITICAL: Error fetching current job:', {
+        jobId,
+        error: fetchError,
+        errorMessage: fetchError.message,
+        errorCode: fetchError.code
+      });
       throw fetchError;
     }
+
+    console.log('✅ Job details fetched successfully:', {
+      jobId: currentJob.id,
+      jobType: currentJob.job_type,
+      imageId: currentJob.image_id,
+      videoId: currentJob.video_id,
+      userId: currentJob.user_id,
+      quality: currentJob.quality,
+      modelType: currentJob.model_type,
+      existingMetadata: currentJob.metadata
+    });
 
     // Prepare update data
     const updateData = {
@@ -55,15 +91,50 @@ serve(async (req) => {
     // Handle enhanced prompt for image_high jobs (enhancement)
     if (currentJob.job_type === 'image_high' && enhancedPrompt) {
       updatedMetadata.enhanced_prompt = enhancedPrompt;
-      console.log('Storing enhanced prompt for image_high job:', enhancedPrompt);
+      console.log('📝 Storing enhanced prompt for image_high job:', enhancedPrompt);
     }
 
-    // Add file path for completed jobs
+    // Add file path for completed jobs with enhanced validation
     if (status === 'completed' && filePath) {
+      console.log('📁 Processing completed job with file path:', {
+        jobId,
+        originalFilePath: filePath,
+        filePathLength: filePath.length,
+        filePathPattern: filePath.includes('/') ? 'contains slash' : 'no slash',
+        filePathStartsWith: filePath.substring(0, 50),
+        filePathEndsWith: filePath.substring(filePath.length - 20)
+      });
+      
       updatedMetadata.file_path = filePath;
+      updatedMetadata.callback_processed_at = new Date().toISOString();
+      updatedMetadata.callback_debug = {
+        received_file_path: filePath,
+        job_type: currentJob.job_type,
+        processing_timestamp: new Date().toISOString()
+      };
+    } else if (status === 'completed' && !filePath) {
+      console.error('❌ CRITICAL: Completed job has no file path!', {
+        jobId,
+        status,
+        filePath,
+        jobType: currentJob.job_type
+      });
+      
+      updatedMetadata.callback_error = {
+        issue: 'completed_without_file_path',
+        timestamp: new Date().toISOString(),
+        received_status: status,
+        received_file_path: filePath
+      };
     }
 
     updateData.metadata = updatedMetadata;
+
+    console.log('🔄 Updating job with enhanced metadata:', {
+      jobId,
+      updateData,
+      metadataKeys: Object.keys(updatedMetadata)
+    });
 
     // Update job status
     const { data: job, error: updateError } = await supabase
@@ -74,11 +145,20 @@ serve(async (req) => {
       .single();
 
     if (updateError) {
-      console.error('Error updating job:', updateError);
+      console.error('❌ CRITICAL: Error updating job:', {
+        jobId,
+        error: updateError,
+        updateData
+      });
       throw updateError;
     }
 
-    console.log('Job updated with enhanced SDXL support:', job);
+    console.log('✅ Job updated successfully with enhanced debugging:', {
+      jobId: job.id,
+      status: job.status,
+      jobType: job.job_type,
+      metadata: job.metadata
+    });
 
     // Enhanced job type parsing to handle SDXL jobs
     let format, quality, isSDXL = false;
@@ -96,29 +176,53 @@ serve(async (req) => {
       quality = parts[1]; // 'fast' or 'high'
     }
 
-    console.log('Enhanced job type parsing:', {
+    console.log('🔧 Enhanced job type parsing with debugging:', {
       originalJobType: job.job_type,
-      format,
-      quality,
-      isSDXL
+      parsedFormat: format,
+      parsedQuality: quality,
+      isSDXL,
+      expectedBucket: isSDXL ? `sdxl_${quality}` : `${format}_${quality}`
     });
 
     // Handle different job types based on parsed format
     if (format === 'image' && job.image_id) {
+      console.log('🖼️ Processing image job callback...');
       await handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL);
     } else if (format === 'video' && job.video_id) {
+      console.log('📹 Processing video job callback...');
       await handleVideoJobCallback(supabase, job, status, filePath, errorMessage, quality);
+    } else {
+      console.error('❌ CRITICAL: Unknown job format or missing ID:', {
+        format,
+        imageId: job.image_id,
+        videoId: job.video_id,
+        jobType: job.job_type
+      });
     }
+
+    console.log('✅ CALLBACK PROCESSING COMPLETE:', {
+      jobId,
+      status,
+      format,
+      quality,
+      isSDXL,
+      filePath,
+      processingTimestamp: new Date().toISOString()
+    });
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Job callback processed successfully with SDXL support',
-      jobStatus: status,
-      jobType: job.job_type,
-      format: format,
-      quality: quality,
-      isSDXL: isSDXL,
-      filePath: filePath
+      message: 'Job callback processed successfully with enhanced debugging',
+      debug: {
+        jobId,
+        jobStatus: status,
+        jobType: job.job_type,
+        format: format,
+        quality: quality,
+        isSDXL: isSDXL,
+        filePath: filePath,
+        processingTimestamp: new Date().toISOString()
+      }
     }), {
       headers: {
         ...corsHeaders,
@@ -128,10 +232,18 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Error in job callback function:', error);
+    console.error('❌ CRITICAL: Error in job callback function:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
     return new Response(JSON.stringify({
       error: error.message,
-      success: false
+      success: false,
+      debug: {
+        timestamp: new Date().toISOString(),
+        errorType: error.constructor.name
+      }
     }), {
       headers: {
         ...corsHeaders,
@@ -143,18 +255,33 @@ serve(async (req) => {
 });
 
 async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL) {
-  console.log('Handling image job callback with SDXL support:', {
+  console.log('🖼️ ENHANCED IMAGE CALLBACK DEBUGGING:', {
     jobId: job.id,
     imageId: job.image_id,
     status,
     filePath,
     jobType: job.job_type,
     quality,
-    isSDXL
+    isSDXL,
+    expectedBucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`
   });
 
   if (status === 'completed' && filePath) {
-    // Update image record with model type information
+    console.log('✅ Processing completed image job with file path');
+    
+    // Validate file path format
+    const filePathValidation = {
+      hasSlash: filePath.includes('/'),
+      hasUnderscore: filePath.includes('_'),
+      hasPngExtension: filePath.endsWith('.png'),
+      length: filePath.length,
+      startsWithUserId: filePath.startsWith(job.user_id || 'unknown'),
+      expectedPattern: `${job.user_id}/${isSDXL ? 'sdxl_' : ''}${job.id}_*.png`
+    };
+    
+    console.log('🔍 File path validation:', filePathValidation);
+
+    // Update image record with model type information and enhanced debugging
     const updateData = {
       status: 'completed',
       image_url: filePath,
@@ -164,56 +291,98 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
         ...(job.metadata || {}),
         model_type: isSDXL ? 'sdxl' : 'wan',
         is_sdxl: isSDXL,
-        bucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`
+        bucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`,
+        callback_processed_at: new Date().toISOString(),
+        file_path_validation: filePathValidation,
+        debug_info: {
+          original_file_path: filePath,
+          job_type: job.job_type,
+          processed_at: new Date().toISOString()
+        }
       }
     };
 
-    const { error: imageError } = await supabase
+    console.log('🔄 Updating image record:', {
+      imageId: job.image_id,
+      updateData,
+      expectedBucket: updateData.metadata.bucket
+    });
+
+    const { data: updatedImage, error: imageError } = await supabase
       .from('images')
       .update(updateData)
-      .eq('id', job.image_id);
+      .eq('id', job.image_id)
+      .select()
+      .single();
 
     if (imageError) {
-      console.error('Error updating image:', imageError);
+      console.error('❌ CRITICAL: Error updating image record:', {
+        imageId: job.image_id,
+        error: imageError,
+        updateData
+      });
     } else {
-      console.log('Image job updated successfully with SDXL metadata:', {
-        filePath,
-        isSDXL,
-        quality,
-        bucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`
+      console.log('✅ Image record updated successfully:', {
+        imageId: updatedImage.id,
+        status: updatedImage.status,
+        imageUrl: updatedImage.image_url,
+        quality: updatedImage.quality,
+        bucket: updatedImage.metadata?.bucket,
+        isSDXL: updatedImage.metadata?.is_sdxl
+      });
+
+      // Verify the image can be found by AssetService logic
+      console.log('🔍 Verifying image accessibility for AssetService:', {
+        imageId: updatedImage.id,
+        userId: job.user_id,
+        imageUrl: updatedImage.image_url,
+        status: updatedImage.status,
+        quality: updatedImage.quality,
+        metadata: updatedImage.metadata
       });
     }
   } else if (status === 'failed') {
+    console.log('❌ Processing failed image job');
     const { error: imageError } = await supabase
       .from('images')
       .update({
-        status: 'failed'
+        status: 'failed',
+        metadata: {
+          ...(job.metadata || {}),
+          error_message: errorMessage,
+          failed_at: new Date().toISOString()
+        }
       })
       .eq('id', job.image_id);
 
     if (imageError) {
-      console.error('Error updating image status to failed:', imageError);
+      console.error('❌ Error updating image status to failed:', imageError);
     } else {
-      console.log('Image job marked as failed');
+      console.log('✅ Image job marked as failed');
     }
   } else if (status === 'processing') {
+    console.log('🔄 Processing image job in progress');
     const { error: imageError } = await supabase
       .from('images')
       .update({
-        status: 'generating'
+        status: 'generating',
+        metadata: {
+          ...(job.metadata || {}),
+          processing_started_at: new Date().toISOString()
+        }
       })
       .eq('id', job.image_id);
 
     if (imageError) {
-      console.error('Error updating image status to generating:', imageError);
+      console.error('❌ Error updating image status to generating:', imageError);
     } else {
-      console.log('Image job marked as generating');
+      console.log('✅ Image job marked as generating');
     }
   }
 }
 
 async function handleVideoJobCallback(supabase, job, status, filePath, errorMessage, quality) {
-  console.log('Handling video job callback:', {
+  console.log('📹 ENHANCED VIDEO CALLBACK DEBUGGING:', {
     jobId: job.id,
     videoId: job.video_id,
     status,
@@ -233,9 +402,9 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
       .eq('id', job.video_id);
 
     if (videoError) {
-      console.error('Error updating video:', videoError);
+      console.error('❌ Error updating video:', videoError);
     } else {
-      console.log('Video job updated successfully with filePath:', filePath);
+      console.log('✅ Video job updated successfully with filePath:', filePath);
     }
   }
 
@@ -249,9 +418,9 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
       .eq('id', job.video_id);
 
     if (videoError) {
-      console.error('Error updating video status to failed:', videoError);
+      console.error('❌ Error updating video status to failed:', videoError);
     } else {
-      console.log('Video job marked as failed');
+      console.log('✅ Video job marked as failed');
     }
   }
 
@@ -264,9 +433,9 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
       .eq('id', job.video_id);
 
     if (videoError) {
-      console.error('Error updating video status to processing:', videoError);
+      console.error('❌ Error updating video status to processing:', videoError);
     } else {
-      console.log('Video job marked as processing');
+      console.log('✅ Video job marked as processing');
     }
   }
 }
