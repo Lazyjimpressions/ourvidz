@@ -43,7 +43,7 @@ export const WorkspaceInputControls = ({
   const isMobile = useIsMobile();
 
   return (
-    <div className="bg-gray-800/95 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-gray-700/50 shadow-2xl">
+    <div className="bg-gray-800/80 backdrop-blur-sm rounded-2xl border border-gray-700/50 shadow-2xl overflow-hidden">
       {isMobile ? (
         <MobileLayoutContainer
           selectedMode={selectedMode}

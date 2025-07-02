@@ -42,13 +42,22 @@ export const MobileLayoutContainer = ({
   const isVideoMode = selectedMode.includes('video');
 
   const handleReferenceImageUpload = () => {
-    // Handle reference image upload logic
-    console.log('Reference image upload clicked');
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        setReferenceImage(file);
+        setReferenceImageUrl(URL.createObjectURL(file));
+      }
+    };
+    input.click();
   };
 
   return (
-    <div className="p-4 space-y-3">
-      {/* Primary Row: Mode Dropdown */}
+    <div className="p-6 space-y-6">
+      {/* Mode Selection */}
       <div className="w-full">
         <GenerationModeDropdown 
           value={selectedMode} 
@@ -57,15 +66,17 @@ export const MobileLayoutContainer = ({
         />
       </div>
 
-      {/* Reference Upload Row */}
-      <div className="flex items-center justify-center">
+      {/* Reference Upload */}
+      <div className="flex justify-center">
         <ReferenceUploadSection
           mode={isVideoMode ? 'video' : 'image'}
           onReferenceImageUpload={handleReferenceImageUpload}
+          referenceImage={referenceImage}
+          referenceImageUrl={referenceImageUrl}
         />
       </div>
 
-      {/* Text Input Row */}
+      {/* Text Input */}
       <div className="w-full">
         <TextInputSection
           prompt={prompt}
@@ -73,24 +84,25 @@ export const MobileLayoutContainer = ({
           onGenerate={onGenerate}
           isGenerating={isGenerating}
           layout="mobile"
+          selectedMode={selectedMode}
         />
       </div>
 
       {/* Advanced Controls Toggle */}
-      <div className="flex items-center justify-center">
+      <div className="flex justify-center">
         <Button
           variant="ghost"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm px-4 py-2 h-8"
+          className="flex items-center gap-2 text-gray-400 hover:text-white hover:bg-gray-700/50 px-6 py-3 rounded-xl transition-all duration-200"
         >
-          Advanced
+          <span className="font-medium">Advanced Options</span>
           {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </Button>
       </div>
 
       {/* Collapsible Advanced Controls */}
       {showAdvanced && (
-        <div className="pt-2 border-t border-gray-700">
+        <div className="pt-4 border-t border-gray-700/50 animate-fade-in">
           <AdvancedControlsSection
             mode={isVideoMode ? 'video' : 'image'}
             motionIntensity="medium"
