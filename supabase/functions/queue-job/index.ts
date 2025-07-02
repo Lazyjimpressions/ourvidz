@@ -16,7 +16,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🚀 Queue-job function called - SDXL dual worker version');
+    console.log('🚀 Queue-job function called - Enhanced SDXL dual worker version');
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -34,22 +34,33 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       console.error('❌ Authentication failed:', userError?.message);
-      throw new Error('Authentication required');
+      return new Response(JSON.stringify({
+        error: 'Authentication required',
+        success: false,
+        details: userError?.message
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 401
+      });
     }
     console.log('✅ User authenticated:', user.id);
 
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
     
-    console.log('📋 Creating job with dual worker routing:', {
+    console.log('📋 Creating job with enhanced dual worker routing:', {
       jobType,
       projectId,
       videoId,
       imageId,
       userId: user.id,
-      queue: metadata?.queue
+      queue: metadata?.queue,
+      timestamp: new Date().toISOString()
     });
 
-    // Validate job type
+    // Enhanced job type validation
     const validJobTypes = [
       'sdxl_image_fast', 'sdxl_image_high',
       'image_fast', 'image_high', 
@@ -57,7 +68,19 @@ serve(async (req) => {
     ];
     
     if (!validJobTypes.includes(jobType)) {
-      throw new Error(`Invalid job type: ${jobType}`);
+      console.error('❌ Invalid job type provided:', jobType);
+      console.log('✅ Valid job types:', validJobTypes);
+      return new Response(JSON.stringify({
+        error: `Invalid job type: ${jobType}`,
+        success: false,
+        validJobTypes: validJobTypes
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 400
+      });
     }
 
     // Extract format and quality from job type
@@ -68,15 +91,38 @@ serve(async (req) => {
     // Determine queue routing
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
     
-    console.log('🎯 Job routing determined:', {
+    console.log('🎯 Enhanced job routing determined:', {
       isSDXL,
       queueName,
       modelVariant,
       format,
-      quality
+      quality,
+      originalJobType: jobType
     });
 
-    // Create job record
+    // Validate Redis configuration
+    const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
+    const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
+    
+    if (!redisUrl || !redisToken) {
+      console.error('❌ Redis configuration missing:', {
+        hasUrl: !!redisUrl,
+        hasToken: !!redisToken
+      });
+      return new Response(JSON.stringify({
+        error: 'Redis configuration missing',
+        success: false,
+        details: 'UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not configured'
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 500
+      });
+    }
+
+    // Create job record with enhanced error handling
     const { data: job, error: jobError } = await supabase
       .from('jobs')
       .insert({
@@ -89,7 +135,8 @@ serve(async (req) => {
           ...metadata,
           model_variant: modelVariant,
           queue: queueName,
-          dual_worker_routing: true
+          dual_worker_routing: true,
+          created_timestamp: new Date().toISOString()
         },
         project_id: projectId,
         video_id: videoId,
@@ -100,10 +147,27 @@ serve(async (req) => {
       .single();
 
     if (jobError) {
-      console.error('❌ Error creating job:', jobError);
-      throw jobError;
+      console.error('❌ Error creating job in database:', {
+        error: jobError,
+        jobType,
+        userId: user.id,
+        format,
+        quality
+      });
+      return new Response(JSON.stringify({
+        error: 'Failed to create job record',
+        success: false,
+        details: jobError.message,
+        jobType: jobType
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 500
+      });
     }
-    console.log('✅ Job created successfully:', job.id);
+    console.log('✅ Job created successfully in database:', job.id);
 
     // Get project details for the prompt (if projectId provided)
     let prompt = '';
@@ -118,12 +182,16 @@ serve(async (req) => {
       if (!projectError && project) {
         prompt = project.enhanced_prompt || project.original_prompt || '';
         characterId = project.character_id;
+        console.log('📄 Project prompt retrieved:', { projectId, hasPrompt: !!prompt });
+      } else {
+        console.warn('⚠️ Could not retrieve project prompt:', projectError?.message);
       }
     }
 
     // Use prompt from metadata if no project prompt available
     if (!prompt && metadata?.prompt) {
       prompt = metadata.prompt;
+      console.log('📝 Using metadata prompt');
     }
 
     // Format job payload for appropriate worker
@@ -144,25 +212,20 @@ serve(async (req) => {
       metadata: {
         ...metadata,
         model_variant: modelVariant,
-        dual_worker_routing: true
+        dual_worker_routing: true,
+        queue_timestamp: new Date().toISOString()
       },
       timestamp: new Date().toISOString()
     };
 
-    console.log('📤 Pushing job to Redis queue:', {
+    console.log('📤 Pushing job to Redis queue with enhanced payload:', {
       jobId: job.id,
       jobType,
-      queueName
+      queueName,
+      isSDXL,
+      hasPrompt: !!prompt,
+      payloadSize: JSON.stringify(jobPayload).length
     });
-
-    // Push job to appropriate Upstash Redis queue
-    const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
-    const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
-    
-    if (!redisUrl || !redisToken) {
-      console.error('❌ Redis configuration missing');
-      throw new Error('Redis configuration missing');
-    }
 
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
     const redisResponse = await fetch(`${redisUrl}/lpush/${queueName}`, {
@@ -176,15 +239,49 @@ serve(async (req) => {
 
     if (!redisResponse.ok) {
       const redisError = await redisResponse.text();
-      console.error('❌ Redis push failed:', redisError);
-      throw new Error(`Failed to queue job in Redis: ${redisError}`);
+      console.error('❌ Redis push failed:', {
+        status: redisResponse.status,
+        statusText: redisResponse.statusText,
+        error: redisError,
+        queueName,
+        jobId: job.id
+      });
+      
+      // Update job status to failed
+      await supabase
+        .from('jobs')
+        .update({ 
+          status: 'failed', 
+          error_message: `Redis queue failed: ${redisError}` 
+        })
+        .eq('id', job.id);
+
+      return new Response(JSON.stringify({
+        error: `Failed to queue job in Redis: ${redisError}`,
+        success: false,
+        details: {
+          redisStatus: redisResponse.status,
+          queueName,
+          jobId: job.id
+        }
+      }), {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        },
+        status: 500
+      });
     }
 
     const redisResult = await redisResponse.json();
-    console.log('✅ Job queued in Redis successfully:', redisResult);
+    console.log('✅ Job queued in Redis successfully:', {
+      jobId: job.id,
+      queueLength: redisResult.result || 0,
+      queueName
+    });
 
-    // Log usage with dual worker tracking
-    await supabase.from('usage_logs').insert({
+    // Log usage with enhanced dual worker tracking
+    const usageLogResult = await supabase.from('usage_logs').insert({
       user_id: user.id,
       action: jobType,
       format: format,
@@ -198,21 +295,32 @@ serve(async (req) => {
         model_type: jobType,
         model_variant: modelVariant,
         queue: queueName,
-        dual_worker_routing: true
+        dual_worker_routing: true,
+        usage_timestamp: new Date().toISOString()
       }
     });
 
-    console.log('📈 Usage logged successfully');
+    if (usageLogResult.error) {
+      console.warn('⚠️ Usage logging failed:', usageLogResult.error);
+    } else {
+      console.log('📈 Usage logged successfully');
+    }
 
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - SDXL dual worker version',
+      message: 'Job queued successfully - Enhanced SDXL dual worker version',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
       queue: queueName,
-      isSDXL: isSDXL
+      isSDXL: isSDXL,
+      debug: {
+        userId: user.id,
+        hasPrompt: !!prompt,
+        redisConfigured: true,
+        timestamp: new Date().toISOString()
+      }
     }), {
       headers: {
         ...corsHeaders,
@@ -222,16 +330,22 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('❌ Error in queue-job function:', error);
+    console.error('❌ Unhandled error in queue-job function:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
     return new Response(JSON.stringify({
       error: error.message,
-      success: false
+      success: false,
+      details: 'Unhandled server error',
+      timestamp: new Date().toISOString()
     }), {
       headers: {
         ...corsHeaders,
         'Content-Type': 'application/json'
       },
-      status: 400
+      status: 500
     });
   }
 });

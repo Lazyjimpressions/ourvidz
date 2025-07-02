@@ -5,7 +5,10 @@ import { videoAPI, imageAPI, usageAPI } from '@/lib/database';
 
 export class GenerationService {
   static async queueGeneration(request: GenerationRequest): Promise<string> {
-    console.log('🎬 GenerationService.queueGeneration called with:', request);
+    console.log('🎬 GenerationService.queueGeneration called with enhanced logging:', {
+      request,
+      timestamp: new Date().toISOString()
+    });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -17,13 +20,21 @@ export class GenerationService {
       throw new Error(`Unknown generation format: ${request.format}`);
     }
 
+    console.log('🔧 Enhanced generation config:', {
+      format: request.format,
+      isSDXL: config.isSDXL,
+      isVideo: config.isVideo,
+      queue: config.queue,
+      estimatedTime: config.estimatedTime
+    });
+
     try {
       // Create record in appropriate table
       let videoId: string | undefined;
       let imageId: string | undefined;
 
       if (config.isVideo) {
-        console.log('📹 Creating video record...');
+        console.log('📹 Creating video record with enhanced logging...');
         const video = await videoAPI.create({
           user_id: user.id,
           project_id: request.projectId,
@@ -32,9 +43,12 @@ export class GenerationService {
           resolution: config.format.includes('high') ? '1280x720' : '832x480'
         });
         videoId = video.id;
-        console.log('✅ Video record created:', videoId);
+        console.log('✅ Video record created with enhanced tracking:', {
+          videoId,
+          resolution: video.resolution
+        });
       } else {
-        console.log('🖼️ Creating image record...');
+        console.log('🖼️ Creating image record with enhanced logging...');
         const image = await imageAPI.create({
           user_id: user.id,
           project_id: request.projectId,
@@ -45,11 +59,15 @@ export class GenerationService {
           quality: config.format.includes('high') ? 'high' : 'fast'
         });
         imageId = image.id;
-        console.log('✅ Image record created:', imageId);
+        console.log('✅ Image record created with enhanced tracking:', {
+          imageId,
+          quality: image.quality,
+          isSDXL: config.isSDXL
+        });
       }
 
-      // Queue the job with proper routing
-      console.log('📤 Queueing job via edge function...');
+      // Queue the job with enhanced routing and error handling
+      console.log('📤 Queueing job via edge function with enhanced payload...');
       const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
           jobType: request.format,
@@ -59,7 +77,9 @@ export class GenerationService {
             model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
             prompt: request.prompt,
             queue: config.queue,
-            bucket: config.bucket
+            bucket: config.bucket,
+            enhanced_request_tracking: true,
+            client_timestamp: new Date().toISOString()
           },
           projectId: request.projectId,
           videoId,
@@ -68,28 +88,48 @@ export class GenerationService {
       });
 
       if (error) {
-        console.error('❌ Edge function error:', error);
+        console.error('❌ Edge function error with enhanced details:', {
+          error,
+          request,
+          timestamp: new Date().toISOString()
+        });
         throw new Error(`Failed to queue generation: ${error.message}`);
       }
 
       if (!data?.success) {
-        console.error('❌ Edge function returned failure:', data);
+        console.error('❌ Edge function returned failure with enhanced details:', {
+          data,
+          request,
+          timestamp: new Date().toISOString()
+        });
         throw new Error(data?.error || 'Failed to queue generation');
       }
 
-      console.log('✅ Job queued successfully:', data);
+      console.log('✅ Job queued successfully with enhanced response tracking:', {
+        jobId: data.job?.id,
+        queueLength: data.queueLength,
+        modelVariant: data.modelVariant,
+        isSDXL: data.isSDXL,
+        queue: data.queue
+      });
       
-      // Log usage
+      // Log usage with enhanced metadata
       await usageAPI.logAction(request.format, config.credits, {
         format: config.isVideo ? 'video' : 'image',
         quality: config.format.includes('high') ? 'high' : 'fast',
         model_type: config.isSDXL ? 'sdxl' : 'wan',
-        job_id: data.job?.id
+        job_id: data.job?.id,
+        enhanced_tracking: true,
+        generation_timestamp: new Date().toISOString()
       });
 
       return data.job?.id || 'unknown';
     } catch (error) {
-      console.error('❌ GenerationService.queueGeneration failed:', error);
+      console.error('❌ GenerationService.queueGeneration failed with enhanced error tracking:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        request,
+        timestamp: new Date().toISOString()
+      });
       throw error;
     }
   }
