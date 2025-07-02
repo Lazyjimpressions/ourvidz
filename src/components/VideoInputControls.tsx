@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Upload, Sparkles, Play, Music, RotateCcw } from "lucide-react";
 import {
   Select,
@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
+
 
 interface VideoInputControlsProps {
   prompt: string;
@@ -66,11 +66,12 @@ export const VideoInputControls = ({
 
         {/* Main Text Input */}
         <div className="flex-1">
-          <Input
+          <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A close-up of a woman talking on the phone..."
-            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 h-12"
+            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 resize-none"
+            rows={3}
             disabled={isGenerating}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -132,17 +133,6 @@ export const VideoInputControls = ({
         >
           <Music className="w-4 h-4" />
         </Button>
-
-        {/* Motion Intensity */}
-        <div className="flex items-center gap-2 min-w-32">
-          <span className="text-sm text-gray-400">Motion</span>
-          <Slider
-            defaultValue={[50]}
-            max={100}
-            step={1}
-            className="flex-1"
-          />
-        </div>
       </div>
     </div>
   );

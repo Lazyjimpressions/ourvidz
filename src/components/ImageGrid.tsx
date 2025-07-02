@@ -26,32 +26,51 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
   const fetchLatestImages = async () => {
     try {
       setLoading(true);
-      console.log('🖼️ Fetching latest 6 images...');
+      console.log('🖼️ Fetching latest generation batch (6 images)...');
       
       const assets = await AssetService.getUserAssets();
       const latestImageAssets = assets
         .filter(asset => asset.type === 'image' && asset.status === 'completed')
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 6);
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-      // For now, just use the asset URLs directly
-      // TODO: In the future when we implement 6-image generation, 
-      // we'll need to handle the image_urls array from the database
-      const processedImages: GeneratedImage[] = latestImageAssets
-        .filter(asset => asset.url) // Only include assets with URLs
-        .map(asset => ({
-          id: asset.id,
-          url: asset.url!,
-          prompt: asset.prompt,
-          timestamp: asset.createdAt,
-          quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.modelType
+      if (latestImageAssets.length === 0) {
+        setImages([]);
+        return;
+      }
+
+      // Get the most recent asset to check for image_urls array
+      const latestAsset = latestImageAssets[0];
+      let processedImages: GeneratedImage[] = [];
+
+      // Check if the latest asset has image_urls array (6-image generation)
+      if (latestAsset.imageUrls && Array.isArray(latestAsset.imageUrls) && latestAsset.imageUrls.length > 0) {
+        console.log('✅ Found image_urls array with', latestAsset.imageUrls.length, 'images');
+        processedImages = latestAsset.imageUrls.map((url: string, index: number) => ({
+          id: `${latestAsset.id}-${index}`,
+          url: url,
+          prompt: latestAsset.prompt,
+          timestamp: latestAsset.createdAt,
+          quality: (latestAsset.quality as 'fast' | 'high') || 'fast',
+          modelType: latestAsset.modelType
         }));
+      } else {
+        // Fallback: use individual images (legacy behavior)
+        console.log('📦 Using individual image assets (legacy mode)');
+        processedImages = latestImageAssets
+          .filter(asset => asset.url) // Only include assets with URLs
+          .slice(0, 6) // Take first 6
+          .map(asset => ({
+            id: asset.id,
+            url: asset.url!,
+            prompt: asset.prompt,
+            timestamp: asset.createdAt,
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            modelType: asset.modelType
+          }));
+      }
 
-      // Take only the latest 6 images
-      const latestSixImages = processedImages.slice(0, 6);
-      console.log('✅ Latest 6 images loaded:', latestSixImages.length);
-      setImages(latestSixImages);
+      console.log('✅ Latest generation batch loaded:', processedImages.length, 'images');
+      setImages(processedImages);
     } catch (error) {
       console.error('❌ Failed to fetch images:', error);
       toast.error('Failed to load images');

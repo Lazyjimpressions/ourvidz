@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Camera, Upload, Sparkles, Brush } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Camera, Upload, Sparkles, Brush, Play } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -16,6 +16,7 @@ interface ImageInputControlsProps {
   onGenerate: () => void;
   isGenerating: boolean;
   onReferenceImageUpload: () => void;
+  onSwitchToVideo?: () => void;
 }
 
 export const ImageInputControls = ({
@@ -23,7 +24,8 @@ export const ImageInputControls = ({
   setPrompt,
   onGenerate,
   isGenerating,
-  onReferenceImageUpload
+  onReferenceImageUpload,
+  onSwitchToVideo
 }: ImageInputControlsProps) => {
   return (
     <div className="bg-gray-900/95 backdrop-blur-sm rounded-2xl p-6 border border-gray-800/50 shadow-2xl">
@@ -48,11 +50,12 @@ export const ImageInputControls = ({
 
         {/* Main Text Input */}
         <div className="flex-1">
-          <Input
+          <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="A close-up of a woman talking on the phone..."
-            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 h-12"
+            className="bg-transparent border-none text-white placeholder:text-gray-400 text-lg py-3 px-4 focus:outline-none focus:ring-0 resize-none"
+            rows={3}
             disabled={isGenerating}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -140,6 +143,16 @@ export const ImageInputControls = ({
             className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm h-10"
           >
             Style ref
+          </Button>
+
+          {/* Video Button */}
+          <Button
+            variant="ghost"
+            onClick={onSwitchToVideo}
+            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white text-sm h-10 flex items-center gap-2"
+          >
+            <Play className="w-4 h-4" />
+            VIDEO
           </Button>
         </div>
 

@@ -165,6 +165,7 @@ const Workspace = () => {
               };
               input.click();
             }}
+            onSwitchToVideo={() => navigate('/workspace?mode=video')}
           />
         )}
       </div>
