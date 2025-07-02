@@ -43,9 +43,9 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
       let processedImages: GeneratedImage[] = [];
 
       // Check if the latest asset has image_urls array (6-image generation)
-      if (latestAsset.imageUrls && Array.isArray(latestAsset.imageUrls) && latestAsset.imageUrls.length > 0) {
-        console.log('✅ Found image_urls array with', latestAsset.imageUrls.length, 'images');
-        processedImages = latestAsset.imageUrls.map((url: string, index: number) => ({
+      if ((latestAsset as any).image_urls && Array.isArray((latestAsset as any).image_urls) && (latestAsset as any).image_urls.length > 0) {
+        console.log('✅ Found image_urls array with', (latestAsset as any).image_urls.length, 'images');
+        processedImages = (latestAsset as any).image_urls.map((url: string, index: number) => ({
           id: `${latestAsset.id}-${index}`,
           url: url,
           prompt: latestAsset.prompt,
