@@ -22,7 +22,7 @@ serve(async (req) => {
     );
 
     const requestBody = await req.json();
-    const { jobId, status, filePath, outputUrl, errorMessage, enhancedPrompt } = requestBody;
+    const { jobId, status, filePath, outputUrl, errorMessage, enhancedPrompt, imageUrls } = requestBody;
     
     // Handle parameter compatibility: WAN workers send outputUrl, SDXL workers send filePath
     const resolvedFilePath = filePath || outputUrl;
@@ -33,6 +33,7 @@ serve(async (req) => {
       filePath,
       outputUrl,
       resolvedFilePath,
+      imageUrls,
       errorMessage,
       enhancedPrompt,
       fullRequestBody: requestBody,
@@ -203,7 +204,7 @@ serve(async (req) => {
     // Handle different job types based on parsed format
     if (format === 'image' && job.image_id) {
       console.log('🖼️ Processing image job callback...');
-      await handleImageJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isSDXL);
+      await handleImageJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isSDXL, imageUrls);
     } else if (format === 'video' && job.video_id) {
       console.log('📹 Processing video job callback...');
       await handleVideoJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality);
@@ -272,29 +273,45 @@ serve(async (req) => {
   }
 });
 
-async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL) {
+async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL, imageUrls) {
   console.log('🖼️ ENHANCED IMAGE CALLBACK DEBUGGING:', {
     jobId: job.id,
     imageId: job.image_id,
     status,
     filePath,
+    imageUrls,
+    imageUrlsCount: imageUrls ? imageUrls.length : 0,
     jobType: job.job_type,
     quality,
     isSDXL,
     expectedBucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`
   });
 
-  if (status === 'completed' && filePath) {
-    console.log('✅ Processing completed image job with file path');
+  if (status === 'completed' && (filePath || imageUrls)) {
+    console.log('✅ Processing completed image job with file path or image URLs');
+    
+    // Handle multiple image URLs or single image
+    let primaryImageUrl = filePath;
+    let imageUrlsArray = null;
+    
+    if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+      console.log('🖼️ Multiple images received:', imageUrls.length);
+      imageUrlsArray = imageUrls;
+      primaryImageUrl = imageUrls[0]; // Use first image as primary
+    } else if (filePath) {
+      console.log('🖼️ Single image received:', filePath);
+    }
     
     // Validate file path format
     const filePathValidation = {
-      hasSlash: filePath.includes('/'),
-      hasUnderscore: filePath.includes('_'),
-      hasPngExtension: filePath.endsWith('.png'),
-      length: filePath.length,
-      startsWithUserId: filePath.startsWith(job.user_id || 'unknown'),
-      expectedPattern: `${job.user_id}/${isSDXL ? 'sdxl_' : ''}${job.id}_*.png`
+      hasSlash: primaryImageUrl ? primaryImageUrl.includes('/') : false,
+      hasUnderscore: primaryImageUrl ? primaryImageUrl.includes('_') : false,
+      hasPngExtension: primaryImageUrl ? primaryImageUrl.endsWith('.png') : false,
+      length: primaryImageUrl ? primaryImageUrl.length : 0,
+      startsWithUserId: primaryImageUrl ? primaryImageUrl.startsWith(job.user_id || 'unknown') : false,
+      expectedPattern: `${job.user_id}/${isSDXL ? 'sdxl_' : ''}${job.id}_*.png`,
+      isMultipleImages: !!imageUrlsArray,
+      imageCount: imageUrlsArray ? imageUrlsArray.length : 1
     };
     
     console.log('🔍 File path validation:', filePathValidation);
@@ -302,8 +319,9 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
     // Update image record with model type information and enhanced debugging
     const updateData = {
       status: 'completed',
-      image_url: filePath,
-      thumbnail_url: filePath, // For now, use same path for thumbnail
+      image_url: primaryImageUrl,
+      image_urls: imageUrlsArray, // Store the array of image URLs
+      thumbnail_url: primaryImageUrl, // For now, use primary image as thumbnail
       quality: quality,
       metadata: {
         ...(job.metadata || {}),
@@ -314,6 +332,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
         file_path_validation: filePathValidation,
         debug_info: {
           original_file_path: filePath,
+          image_urls_received: imageUrlsArray,
           job_type: job.job_type,
           processed_at: new Date().toISOString()
         }
