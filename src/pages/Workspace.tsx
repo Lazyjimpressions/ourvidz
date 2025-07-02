@@ -21,6 +21,7 @@ const Workspace = () => {
   const isVideoMode = mode === 'video';
   
   // Generation state
+  const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   const [selectedMode, setSelectedMode] = useState<GenerationFormat>(
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
@@ -45,10 +46,14 @@ const Workspace = () => {
     }
   }, [user, navigate]);
 
-  // Update selected mode when URL mode changes
+  // Update selected mode when URL mode changes or quality changes
   useEffect(() => {
-    setSelectedMode(isVideoMode ? 'video_fast' : 'sdxl_image_fast');
-  }, [isVideoMode]);
+    if (isVideoMode) {
+      setSelectedMode(quality === 'high' ? 'video_high' : 'video_fast');
+    } else {
+      setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+    }
+  }, [isVideoMode, quality]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -166,6 +171,8 @@ const Workspace = () => {
               input.click();
             }}
             onSwitchToVideo={() => navigate('/workspace?mode=video')}
+            quality={quality}
+            setQuality={setQuality}
           />
         )}
       </div>

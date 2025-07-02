@@ -15,6 +15,8 @@ interface ImageInputControlsProps {
   isGenerating: boolean;
   onReferenceImageUpload: () => void;
   onSwitchToVideo?: () => void;
+  quality: 'fast' | 'high';
+  setQuality: (quality: 'fast' | 'high') => void;
 }
 
 export const ImageInputControls = ({
@@ -23,13 +25,14 @@ export const ImageInputControls = ({
   onGenerate,
   isGenerating,
   onReferenceImageUpload,
-  onSwitchToVideo
+  onSwitchToVideo,
+  quality,
+  setQuality
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
-  const [quality, setQuality] = useState<'fast' | 'high'>('fast');
 
   return (
     <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
