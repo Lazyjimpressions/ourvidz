@@ -32,9 +32,23 @@ export class AssetService {
     const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl' || 
                    jobData?.job_type?.startsWith('sdxl_') ||
                    jobData?.model_type === 'sdxl_image_fast' ||
-                   jobData?.model_type === 'sdxl_image_high';
+                   jobData?.model_type === 'sdxl_image_high' ||
+                   metadata?.bucket?.includes('sdxl');
     
     const quality = imageData.quality || jobData?.quality || 'fast';
+    
+    // Enhanced bucket determination with fallback logic
+    let bucket: string;
+    if (isSDXL) {
+      bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    } else {
+      bucket = quality === 'high' ? 'image_high' : 'image_fast';
+    }
+    
+    // If metadata has bucket info, prefer that for SDXL images
+    if (metadata?.bucket && metadata.bucket.includes('sdxl')) {
+      bucket = metadata.bucket;
+    }
     
     console.log('🔍 Determining image bucket with enhanced debugging:', {
       imageId: imageData.id,
@@ -43,14 +57,11 @@ export class AssetService {
       metadata: metadata,
       jobType: jobData?.job_type,
       modelType: jobData?.model_type,
-      expectedBucket: isSDXL ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast') : (quality === 'high' ? 'image_high' : 'image_fast')
+      determinedBucket: bucket,
+      metadataBucket: metadata?.bucket
     });
     
-    if (isSDXL) {
-      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-    } else {
-      return quality === 'high' ? 'image_high' : 'image_fast';
-    }
+    return bucket;
   }
 
   private static determineVideoBucket(jobData?: any): string {
