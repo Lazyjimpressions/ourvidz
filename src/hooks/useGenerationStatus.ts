@@ -88,6 +88,14 @@ export const useGenerationStatus = (
         // Reset retry counter on successful response
         maxRetriesRef.current = 0;
         
+        // Emit event when generation completes to trigger UI refresh
+        if (result.status === 'completed') {
+          console.log('🎉 Generation completed, triggering UI refresh');
+          window.dispatchEvent(new CustomEvent('generationCompleted', { 
+            detail: { id, format, result } 
+          }));
+        }
+        
         return result;
       } catch (error: any) {
         console.error('❌ Error fetching generation status:', error);

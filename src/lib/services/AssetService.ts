@@ -29,35 +29,37 @@ export class AssetService {
   private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: any): string {
     // Check if this is an SDXL image from metadata or job data
     const metadata = imageData.metadata as any;
-    const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl' || 
+    const isSDXL = metadata?.is_sdxl || 
+                   metadata?.model_type === 'sdxl' || 
                    jobData?.job_type?.startsWith('sdxl_') ||
-                   jobData?.model_type === 'sdxl_image_fast' ||
-                   jobData?.model_type === 'sdxl_image_high' ||
+                   jobData?.model_type?.includes('sdxl_image') ||
                    metadata?.bucket?.includes('sdxl');
     
     const quality = imageData.quality || jobData?.quality || 'fast';
     
-    // Enhanced bucket determination with fallback logic
+    // Enhanced bucket determination with more specific logic
     let bucket: string;
-    if (isSDXL) {
+    
+    // First try to use bucket from metadata if it exists
+    if (metadata?.bucket && typeof metadata.bucket === 'string') {
+      bucket = metadata.bucket;
+      console.log('🔍 Using bucket from metadata:', bucket);
+    } else if (isSDXL) {
       bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      console.log('🔍 Determined SDXL bucket:', bucket);
     } else {
       bucket = quality === 'high' ? 'image_high' : 'image_fast';
+      console.log('🔍 Determined WAN bucket:', bucket);
     }
     
-    // If metadata has bucket info, prefer that for SDXL images
-    if (metadata?.bucket && metadata.bucket.includes('sdxl')) {
-      bucket = metadata.bucket;
-    }
-    
-    console.log('🔍 Determining image bucket with enhanced debugging:', {
+    console.log('🔍 ENHANCED bucket determination:', {
       imageId: imageData.id,
       quality,
       isSDXL,
       metadata: metadata,
       jobType: jobData?.job_type,
       modelType: jobData?.model_type,
-      determinedBucket: bucket,
+      finalBucket: bucket,
       metadataBucket: metadata?.bucket
     });
     
@@ -222,6 +224,23 @@ export class AssetService {
                 error: error,
                 urlError: urlError
               });
+              
+              // Try fallback buckets if primary bucket fails
+              if (isSDXL) {
+                const fallbackBucket = bucket === 'sdxl_image_high' ? 'sdxl_image_fast' : 'sdxl_image_high';
+                console.log('🔄 Trying fallback bucket:', fallbackBucket);
+                const { data: fallbackData, error: fallbackError } = await getSignedUrl(
+                  fallbackBucket as any,
+                  image.image_url,
+                  3600
+                );
+                if (!fallbackError && fallbackData?.signedUrl) {
+                  thumbnailUrl = fallbackData.signedUrl;
+                  url = fallbackData.signedUrl;
+                  error = undefined;
+                  console.log('✅ Fallback bucket worked:', fallbackBucket);
+                }
+              }
             }
           } catch (urlError) {
             console.error('❌ CRITICAL: Exception generating image URL:', {

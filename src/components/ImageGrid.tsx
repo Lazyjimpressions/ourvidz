@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Download, RotateCcw, Play } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { AssetService } from '@/lib/services/AssetService';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 interface GeneratedImage {
@@ -22,6 +23,7 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const fetchLatestImages = async () => {
     try {
@@ -81,6 +83,28 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
 
   useEffect(() => {
     fetchLatestImages();
+    
+    // Set up interval to refresh images every 5 seconds when on workspace
+    const interval = setInterval(() => {
+      fetchLatestImages();
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  // Listen for generation status changes to refresh images
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      console.log('🔄 Storage updated, refreshing images...');
+      fetchLatestImages();
+    };
+
+    // Listen for custom events from generation completion
+    window.addEventListener('generationCompleted', handleStorageUpdate);
+    
+    return () => {
+      window.removeEventListener('generationCompleted', handleStorageUpdate);
+    };
   }, []);
 
   const handleDownload = async (image: GeneratedImage, e: React.MouseEvent) => {
