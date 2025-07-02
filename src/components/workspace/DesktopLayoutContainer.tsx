@@ -53,30 +53,23 @@ export const DesktopLayoutContainer = ({
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 space-y-4">
       {/* Main Generation Row */}
-      <div className="grid grid-cols-12 gap-6 items-start mb-6">
-        {/* Mode Selection - Takes up 3 columns */}
-        <div className="col-span-3">
-          <GenerationModeDropdown 
-            value={selectedMode} 
-            onChange={setSelectedMode}
-            disabled={isGenerating}
-          />
-        </div>
+      <div className="flex items-center gap-4">
+        <GenerationModeDropdown 
+          value={selectedMode} 
+          onChange={setSelectedMode}
+          disabled={isGenerating}
+        />
 
-        {/* Reference Upload - Takes up 1 column */}
-        <div className="col-span-1 flex justify-center">
-          <ReferenceUploadSection
-            mode={isVideoMode ? 'video' : 'image'}
-            onReferenceImageUpload={handleReferenceImageUpload}
-            referenceImage={referenceImage}
-            referenceImageUrl={referenceImageUrl}
-          />
-        </div>
+        <ReferenceUploadSection
+          mode={isVideoMode ? 'video' : 'image'}
+          onReferenceImageUpload={handleReferenceImageUpload}
+          referenceImage={referenceImage}
+          referenceImageUrl={referenceImageUrl}
+        />
 
-        {/* Text Input and Generate - Takes up 8 columns */}
-        <div className="col-span-8">
+        <div className="flex-1">
           <TextInputSection
             prompt={prompt}
             setPrompt={setPrompt}
@@ -89,15 +82,10 @@ export const DesktopLayoutContainer = ({
       </div>
 
       {/* Advanced Controls Row */}
-      <div className="grid grid-cols-12 gap-6 items-center">
-        {/* Align with mode dropdown */}
-        <div className="col-span-3"></div>
-        
-        {/* Align with reference upload */}
-        <div className="col-span-1"></div>
-
-        {/* Advanced Controls - Align with text input */}
-        <div className="col-span-8">
+      <div className="flex items-center gap-4">
+        <div className="w-48"></div> {/* Spacer to align with dropdown */}
+        <div className="w-10"></div> {/* Spacer to align with reference upload */}
+        <div className="flex-1">
           <AdvancedControlsSection
             mode={isVideoMode ? 'video' : 'image'}
             motionIntensity="medium"
