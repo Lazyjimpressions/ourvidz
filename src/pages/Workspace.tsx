@@ -7,17 +7,16 @@ import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { DesktopLayoutContainer } from '@/components/workspace/DesktopLayoutContainer';
 import { MobileLayoutContainer } from '@/components/workspace/MobileLayoutContainer';
 import { useGeneration } from '@/hooks/useGeneration';
-import { useMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { GenerationFormat } from '@/types/generation';
 
 const Workspace = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   
   // Generation state
   const [selectedMode, setSelectedMode] = useState<GenerationFormat>('sdxl_image_fast');
-  const [selectedQuality, setSelectedQuality] = useState<'fast' | 'high'>('fast');
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
@@ -38,15 +37,6 @@ const Workspace = () => {
       return;
     }
   }, [user, navigate]);
-
-  // Update quality when mode changes
-  useEffect(() => {
-    if (selectedMode.includes('fast')) {
-      setSelectedQuality('fast');
-    } else if (selectedMode.includes('high')) {
-      setSelectedQuality('high');
-    }
-  }, [selectedMode]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -88,11 +78,12 @@ const Workspace = () => {
     }
   };
 
+  // Helper function to determine if current mode is video
+  const isVideoMode = selectedMode.includes('video');
+
   const layoutProps = {
     selectedMode,
     setSelectedMode,
-    selectedQuality,
-    setSelectedQuality,
     prompt,
     setPrompt,
     referenceImage,

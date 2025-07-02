@@ -58,7 +58,7 @@ export const useGeneration = () => {
         
         setCurrentJob(prev => prev ? {
           ...prev,
-          status: jobStatus.status,
+          status: jobStatus.status as 'queued' | 'processing' | 'completed' | 'failed',
           progress: jobStatus.status === 'processing' ? 50 : prev.progress,
           error: jobStatus.error_message || undefined
         } : null);

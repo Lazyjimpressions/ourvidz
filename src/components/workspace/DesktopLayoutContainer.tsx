@@ -1,51 +1,61 @@
 
 import React from 'react';
-import { ModeToggleButtons } from './ModeToggleButtons';
+import { GenerationModeDropdown } from './GenerationModeDropdown';
 import { ReferenceUploadSection } from './ReferenceUploadSection';
 import { TextInputSection } from './TextInputSection';
-import { QualityToggleSection } from './QualityToggleSection';
 import { AdvancedControlsSection } from './AdvancedControlsSection';
+import { GenerationFormat, GenerationStatus } from '@/types/generation';
 
 interface DesktopLayoutContainerProps {
-  mode: 'image' | 'video';
-  onModeChange: (mode: 'image' | 'video') => void;
+  selectedMode: GenerationFormat;
+  setSelectedMode: (mode: GenerationFormat) => void;
   prompt: string;
   setPrompt: (prompt: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  onReferenceImageUpload: () => void;
-  quality: 'fast' | 'high';
-  onQualityChange: (quality: 'fast' | 'high') => void;
-  motionIntensity: 'low' | 'medium' | 'high';
-  onMotionClick: () => void;
+  referenceImage: File | null;
+  setReferenceImage: (file: File | null) => void;
+  referenceImageUrl: string;
+  setReferenceImageUrl: (url: string) => void;
+  generationProgress: number;
+  currentJob: GenerationStatus | null;
+  generationError: string | null;
+  onRegenerate: () => void;
+  onClearError: () => void;
 }
 
 export const DesktopLayoutContainer = ({
-  mode,
-  onModeChange,
+  selectedMode,
+  setSelectedMode,
   prompt,
   setPrompt,
   onGenerate,
   isGenerating,
-  onReferenceImageUpload,
-  quality,
-  onQualityChange,
-  motionIntensity,
-  onMotionClick
+  referenceImage,
+  setReferenceImage,
+  referenceImageUrl,
+  setReferenceImageUrl
 }: DesktopLayoutContainerProps) => {
+  const isVideoMode = selectedMode.includes('video');
+
+  const handleReferenceImageUpload = () => {
+    // Handle reference image upload logic
+    console.log('Reference image upload clicked');
+  };
+
   return (
-    <div>
-      {/* Row 1: Mode Toggle Buttons, Reference Uploads, Text Input, Generate Button */}
+    <div className="p-6">
+      {/* Row 1: Mode Dropdown, Reference Uploads, Text Input, Generate Button */}
       <div className="flex items-center gap-3 mb-4">
-        <ModeToggleButtons 
-          mode={mode} 
-          onModeChange={onModeChange} 
-          layout="desktop" 
+        <GenerationModeDropdown 
+          value={selectedMode} 
+          onChange={setSelectedMode}
+          disabled={isGenerating}
         />
 
         <ReferenceUploadSection
-          mode={mode}
-          onReferenceImageUpload={onReferenceImageUpload}
+          mode={isVideoMode ? 'video' : 'image'}
+          onReferenceImageUpload={handleReferenceImageUpload}
         />
 
         <TextInputSection
@@ -57,24 +67,19 @@ export const DesktopLayoutContainer = ({
         />
       </div>
 
-      {/* Row 2: Mode-Specific Controls + Quality Toggle */}
+      {/* Row 2: Advanced Controls */}
       <div className="flex items-center gap-3">
-        {/* Spacer to align with mode buttons */}
-        <div className="w-20"></div>
+        {/* Spacer to align with mode dropdown */}
+        <div className="w-64"></div>
         
         {/* Spacer to align with reference uploads */}
-        <div className={mode === 'image' ? 'w-10' : 'w-24'}></div>
+        <div className={isVideoMode ? 'w-24' : 'w-10'}></div>
 
         <AdvancedControlsSection
-          mode={mode}
-          motionIntensity={motionIntensity}
-          onMotionClick={onMotionClick}
+          mode={isVideoMode ? 'video' : 'image'}
+          motionIntensity="medium"
+          onMotionClick={() => console.log('Motion clicked')}
           layout="desktop"
-        />
-
-        <QualityToggleSection 
-          quality={quality} 
-          onQualityChange={onQualityChange} 
         />
 
         {/* Spacer to align with generate button */}

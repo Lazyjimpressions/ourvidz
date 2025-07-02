@@ -9,7 +9,7 @@ import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Library from "@/pages/Library";
-import { Workspace } from "@/pages/Workspace";
+import Workspace from "@/pages/Workspace";
 
 const queryClient = new QueryClient();
 

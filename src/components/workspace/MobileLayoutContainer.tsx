@@ -2,63 +2,67 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { ModeToggleButtons } from './ModeToggleButtons';
+import { GenerationModeDropdown } from './GenerationModeDropdown';
 import { ReferenceUploadSection } from './ReferenceUploadSection';
 import { TextInputSection } from './TextInputSection';
-import { QualityToggleSection } from './QualityToggleSection';
 import { AdvancedControlsSection } from './AdvancedControlsSection';
+import { GenerationFormat, GenerationStatus } from '@/types/generation';
 
 interface MobileLayoutContainerProps {
-  mode: 'image' | 'video';
-  onModeChange: (mode: 'image' | 'video') => void;
+  selectedMode: GenerationFormat;
+  setSelectedMode: (mode: GenerationFormat) => void;
   prompt: string;
   setPrompt: (prompt: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  onReferenceImageUpload: () => void;
-  quality: 'fast' | 'high';
-  onQualityChange: (quality: 'fast' | 'high') => void;
-  motionIntensity: 'low' | 'medium' | 'high';
-  onMotionClick: () => void;
+  referenceImage: File | null;
+  setReferenceImage: (file: File | null) => void;
+  referenceImageUrl: string;
+  setReferenceImageUrl: (url: string) => void;
+  generationProgress: number;
+  currentJob: GenerationStatus | null;
+  generationError: string | null;
+  onRegenerate: () => void;
+  onClearError: () => void;
 }
 
 export const MobileLayoutContainer = ({
-  mode,
-  onModeChange,
+  selectedMode,
+  setSelectedMode,
   prompt,
   setPrompt,
   onGenerate,
   isGenerating,
-  onReferenceImageUpload,
-  quality,
-  onQualityChange,
-  motionIntensity,
-  onMotionClick
+  referenceImage,
+  setReferenceImage,
+  referenceImageUrl,
+  setReferenceImageUrl
 }: MobileLayoutContainerProps) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const isVideoMode = selectedMode.includes('video');
+
+  const handleReferenceImageUpload = () => {
+    // Handle reference image upload logic
+    console.log('Reference image upload clicked');
+  };
 
   return (
-    <div className="space-y-3">
-      {/* Primary Row: Mode + Quality + Reference Upload */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex gap-1">
-          <ModeToggleButtons 
-            mode={mode} 
-            onModeChange={onModeChange} 
-            layout="mobile" 
-          />
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <ReferenceUploadSection
-            mode={mode}
-            onReferenceImageUpload={onReferenceImageUpload}
-          />
-          <QualityToggleSection 
-            quality={quality} 
-            onQualityChange={onQualityChange} 
-          />
-        </div>
+    <div className="p-4 space-y-3">
+      {/* Primary Row: Mode Dropdown */}
+      <div className="w-full">
+        <GenerationModeDropdown 
+          value={selectedMode} 
+          onChange={setSelectedMode}
+          disabled={isGenerating}
+        />
+      </div>
+
+      {/* Reference Upload Row */}
+      <div className="flex items-center justify-center">
+        <ReferenceUploadSection
+          mode={isVideoMode ? 'video' : 'image'}
+          onReferenceImageUpload={handleReferenceImageUpload}
+        />
       </div>
 
       {/* Text Input Row */}
@@ -88,9 +92,9 @@ export const MobileLayoutContainer = ({
       {showAdvanced && (
         <div className="pt-2 border-t border-gray-700">
           <AdvancedControlsSection
-            mode={mode}
-            motionIntensity={motionIntensity}
-            onMotionClick={onMotionClick}
+            mode={isVideoMode ? 'video' : 'image'}
+            motionIntensity="medium"
+            onMotionClick={() => console.log('Motion clicked')}
             layout="mobile"
           />
         </div>

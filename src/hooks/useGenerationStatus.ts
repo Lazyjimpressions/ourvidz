@@ -18,20 +18,19 @@ interface GenerationStatusData {
 
 // Phase 2 optimized timing estimates
 const getOptimizedEstimatedTime = (format: GenerationFormat, quality: string): number => {
-  const timingMap = {
-    'image_fast': 60,    // 37% faster with medium resolution
-    'image_high': 105,   // High resolution, high quality
-    'video_fast': 75,    // 38% faster with medium resolution
-    'video_high': 120    // High resolution, high quality
-  };
-  
-  const key = `${format}_${quality}` as keyof typeof timingMap;
-  return timingMap[key] || (format === 'image' ? 90 : 120);
+  if (format.startsWith('sdxl_image')) {
+    return format.includes('fast') ? 5 : 8; // SDXL ultra-fast times
+  } else if (format.startsWith('image')) {
+    return format.includes('fast') ? 60 : 105; // WAN image times
+  } else if (format.startsWith('video')) {
+    return format.includes('fast') ? 75 : 120; // Video times
+  }
+  return 90; // Default fallback
 };
 
 // Helper function to get timeout based on format
 const getTimeoutForFormat = (format: GenerationFormat): number => {
-  if (format === 'video') {
+  if (format.includes('video')) {
     return 8 * 60 * 1000; // 8 minutes for videos
   } else {
     return 5 * 60 * 1000; // 5 minutes for images
@@ -56,11 +55,11 @@ export const useGenerationStatus = (
       console.log('🔍 Fetching generation status for:', { id, format });
       
       try {
-        const result = await GenerationService.getGenerationStatus(id, format);
+        const result = await GenerationService.getGenerationStatus(id);
         console.log('📊 Generation status result:', result);
         
-        // Handle image URL format consistency - only for image format
-        if (format === 'image' && result.status === 'completed') {
+        // Handle image URL format consistency - only for image formats
+        if (format.includes('image') && result.status === 'completed') {
           // Type guard to ensure we're working with image data
           const imageResult = result as any;
           
@@ -132,7 +131,7 @@ export const useGenerationStatus = (
       const elapsed = Date.now() - startTimeRef.current;
       const timeout = getTimeoutForFormat(format);
       if (elapsed > timeout) {
-        console.log(`🛑 Stopping polling due to timeout (${format === 'video' ? '8 minutes' : '5 minutes'})`);
+        console.log(`🛑 Stopping polling due to timeout (${format.includes('video') ? '8 minutes' : '5 minutes'})`);
         return false;
       }
       
