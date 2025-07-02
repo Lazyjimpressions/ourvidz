@@ -41,7 +41,7 @@ class LustifySDXLWorker:
                 'width': 1024,
                 'num_inference_steps': 15,
                 'guidance_scale': 6.0,
-                'storage_bucket': 'sdxl_fast',
+                'storage_bucket': 'sdxl_image_fast',
                 'expected_time': 5,
                 'quality_tier': 'fast',
                 'phase': 1
@@ -53,7 +53,7 @@ class LustifySDXLWorker:
                 'width': 1024,
                 'num_inference_steps': 25,
                 'guidance_scale': 7.5,
-                'storage_bucket': 'sdxl_high',
+                'storage_bucket': 'sdxl_image_high',
                 'expected_time': 8,
                 'quality_tier': 'high',
                 'phase': 1
@@ -253,7 +253,7 @@ class LustifySDXLWorker:
             with open(file_path, 'rb') as file:
                 response = requests.post(
                     f"{self.supabase_url}/storage/v1/object/{storage_path}",
-                    files={'file': file},
+                    files={'file': (file_path.split('/')[-1], file, 'image/png')},
                     headers={
                         'Authorization': f"Bearer {self.supabase_service_key}",
                         'x-upsert': 'true'
