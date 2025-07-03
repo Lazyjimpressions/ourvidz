@@ -73,40 +73,35 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-5xl max-h-[95vh] bg-black border-gray-800 text-white p-0 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-800">
-          <div className="flex-1 min-w-0 pr-4">
-            <h2 className="text-xl font-semibold text-white leading-relaxed break-words">
-              {currentTile.prompt}
-            </h2>
-            <div className="text-sm text-gray-400 mt-1">
-              {currentIndex + 1} of {tiles.length}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+      <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full bg-black border-none text-white p-0 overflow-hidden group">
+        {/* Content Area - Full Screen */}
+        <div className="relative w-full h-[95vh] flex items-center justify-center">
+          {/* Overlay Controls */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity duration-200">
             <Button
               variant="ghost"
               size="sm"
               onClick={handleDownload}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
+              className="bg-black/50 hover:bg-black/70 text-white p-2 backdrop-blur-sm"
             >
-              <Download className="w-4 h-4 mr-2" />
-              Download
+              <Download className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="text-gray-400 hover:text-white hover:bg-gray-800 p-2"
+              className="bg-black/50 hover:bg-black/70 text-white p-2 backdrop-blur-sm"
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
-        </div>
-        
-        {/* Content Area */}
-        <div className="relative flex-1 flex items-center justify-center p-6 min-h-[60vh]">
+
+          {/* Position Indicator */}
+          {tiles.length > 1 && (
+            <div className="absolute top-4 left-4 z-20 bg-black/50 text-white text-sm px-3 py-1 rounded-full backdrop-blur-sm">
+              {currentIndex + 1} of {tiles.length}
+            </div>
+          )}
           {currentTile.type === 'image' ? (
             <img
               src={currentTile.url}
@@ -147,27 +142,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
           )}
         </div>
         
-        {/* Footer */}
-        <div className="p-6 border-t border-gray-800 bg-gray-900/50">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm text-gray-400">
-            <div className="flex items-center gap-4">
-              <span>
-                Quality: <span className="text-white">{currentTile.quality === 'fast' ? 'Fast' : 'High Quality'}</span>
-              </span>
-              <span>
-                Type: <span className="text-white capitalize">{currentTile.type}</span>
-              </span>
-              {currentTile.modelType && (
-                <span>
-                  Model: <span className="text-white">{currentTile.modelType}</span>
-                </span>
-              )}
-            </div>
-            <div>
-              Generated: <span className="text-white">{currentTile.timestamp.toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
