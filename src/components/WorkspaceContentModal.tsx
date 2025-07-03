@@ -1,8 +1,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, X, ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect } from "react";
+import { Download, X, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { PromptInfoModal } from "@/components/PromptInfoModal";
 
 interface MediaTile {
   id: string;
@@ -26,6 +27,7 @@ interface WorkspaceContentModalProps {
 
 export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange }: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
+  const [showPromptModal, setShowPromptModal] = useState(false);
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -89,6 +91,14 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setShowPromptModal(true)}
+              className="bg-black/50 hover:bg-black/70 text-white p-2 backdrop-blur-sm"
+            >
+              <Info className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onClose}
               className="bg-black/50 hover:bg-black/70 text-white p-2 backdrop-blur-sm"
             >
@@ -143,6 +153,21 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
         </div>
         
       </DialogContent>
+
+      {/* Prompt Info Modal */}
+      {showPromptModal && (
+        <PromptInfoModal
+          isOpen={showPromptModal}
+          onClose={() => setShowPromptModal(false)}
+          prompt={currentTile.prompt}
+          quality={currentTile.quality}
+          mode={currentTile.type}
+          timestamp={currentTile.timestamp}
+          contentCount={1}
+          itemId={currentTile.originalAssetId}
+          originalImageUrl={currentTile.type === 'image' ? currentTile.url : undefined}
+        />
+      )}
     </Dialog>
   );
 };
