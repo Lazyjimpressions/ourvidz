@@ -198,7 +198,7 @@ serve(async (req) => {
       parsedFormat: format,
       parsedQuality: quality,
       isSDXL,
-      expectedBucket: isSDXL ? `sdxl_${quality}` : `${format}_${quality}`
+      expectedBucket: isSDXL ? `sdxl_image_${quality}` : `${format}_${quality}`
     });
 
     // Handle different job types based on parsed format
@@ -284,7 +284,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
     jobType: job.job_type,
     quality,
     isSDXL,
-    expectedBucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`
+    expectedBucket: isSDXL ? `sdxl_image_${quality}` : `image_${quality}`
   });
 
   if (status === 'completed' && (filePath || imageUrls)) {
@@ -327,7 +327,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
         ...(job.metadata || {}),
         model_type: isSDXL ? 'sdxl' : 'wan',
         is_sdxl: isSDXL,
-        bucket: isSDXL ? `sdxl_${quality}` : `image_${quality}`,
+        bucket: isSDXL ? `sdxl_image_${quality}` : `image_${quality}`,
         callback_processed_at: new Date().toISOString(),
         file_path_validation: filePathValidation,
         debug_info: {

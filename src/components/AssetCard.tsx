@@ -124,8 +124,8 @@ export const AssetCard = ({
           </div>
         )}
 
-        {/* Type Indicator */}
-        <div className="absolute top-2 right-2">
+        {/* Type and Model Indicators */}
+        <div className="absolute top-2 right-2 flex flex-col gap-1">
           <Badge 
             variant="secondary" 
             className="bg-black/50 text-white border-gray-600 text-xs"
@@ -137,6 +137,21 @@ export const AssetCard = ({
             )}
             {asset.type}
           </Badge>
+          
+          {/* Model Type Badge for Images */}
+          {asset.type === 'image' && asset.modelType && (
+            <Badge 
+              variant="secondary" 
+              className={cn(
+                "text-xs border",
+                asset.isSDXL 
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
+                  : "bg-blue-500/20 text-blue-300 border-blue-500/40"
+              )}
+            >
+              {asset.modelType}
+            </Badge>
+          )}
         </div>
 
         {/* Duration for videos */}

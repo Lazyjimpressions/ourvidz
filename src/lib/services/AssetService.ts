@@ -39,36 +39,16 @@ export class AssetService {
     
     const quality = imageData.quality || jobData?.quality || 'fast';
     
-    // Enhanced bucket determination with legacy name mapping
-    let bucket: string;
+    // Determine correct bucket based on model type and quality
+    const bucket = isSDXL 
+      ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
+      : (quality === 'high' ? 'image_high' : 'image_fast');
     
-    // First try to use bucket from metadata if it exists
-    if (metadata?.bucket && typeof metadata.bucket === 'string') {
-      bucket = metadata.bucket;
-      
-      // Map legacy bucket names to correct ones
-      if (bucket === 'sdxl_fast') {
-        bucket = 'sdxl_image_fast';
-        console.log('🔄 Mapped legacy bucket: sdxl_fast → sdxl_image_fast');
-      } else if (bucket === 'sdxl_high') {
-        bucket = 'sdxl_image_high';
-        console.log('🔄 Mapped legacy bucket: sdxl_high → sdxl_image_high');
-      }
-      
-      console.log('🔍 Using bucket from metadata:', bucket);
-    } else if (isSDXL) {
-      bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-      console.log('🔍 Determined SDXL bucket:', bucket);
-    } else {
-      bucket = quality === 'high' ? 'image_high' : 'image_fast';
-      console.log('🔍 Determined WAN bucket:', bucket);
-    }
-    
-    console.log('🔍 Final bucket determination:', {
+    console.log('🔍 Bucket determination:', {
       imageId: imageData.id,
       quality,
       isSDXL,
-      finalBucket: bucket
+      bucket
     });
     
     return bucket;
@@ -272,22 +252,8 @@ export class AssetService {
                   error: error
                 });
                 
-                // Try fallback buckets if primary bucket fails
-                if (isSDXL) {
-                  const fallbackBucket = bucket === 'sdxl_image_high' ? 'sdxl_image_fast' : 'sdxl_image_high';
-                  console.log('🔄 Trying fallback bucket:', fallbackBucket);
-                  const { data: fallbackData, error: fallbackError } = await getSignedUrl(
-                    fallbackBucket as any,
-                    image.image_url,
-                    3600
-                  );
-                  if (!fallbackError && fallbackData?.signedUrl) {
-                    thumbnailUrl = fallbackData.signedUrl;
-                    url = fallbackData.signedUrl;
-                    error = undefined;
-                    console.log('✅ Fallback bucket worked:', fallbackBucket);
-                  }
-                }
+                console.log('❌ Failed to generate URL - check bucket and file path');
+                // Note: Removing fallback bucket logic - buckets should be consistent now
               }
             } else {
               console.log('⚠️ No image_url or image_urls found:', image.id);

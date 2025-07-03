@@ -209,7 +209,7 @@ serve(async (req) => {
       characterId: characterId,
       isSDXL: isSDXL,
       numImages: format === 'video' ? 1 : 6, // Generate 6 images for image generations, 1 for video
-      bucket: metadata?.bucket || (isSDXL ? `sdxl_${quality}` : `${format}_${quality}`),
+      bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : `${format}_${quality}`),
       metadata: {
         ...metadata,
         model_variant: modelVariant,
