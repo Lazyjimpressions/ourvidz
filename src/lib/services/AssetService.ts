@@ -37,12 +37,22 @@ export class AssetService {
     
     const quality = imageData.quality || jobData?.quality || 'fast';
     
-    // Enhanced bucket determination with more specific logic
+    // Enhanced bucket determination with legacy name mapping
     let bucket: string;
     
     // First try to use bucket from metadata if it exists
     if (metadata?.bucket && typeof metadata.bucket === 'string') {
       bucket = metadata.bucket;
+      
+      // Map legacy bucket names to correct ones
+      if (bucket === 'sdxl_fast') {
+        bucket = 'sdxl_image_fast';
+        console.log('🔄 Mapped legacy bucket: sdxl_fast → sdxl_image_fast');
+      } else if (bucket === 'sdxl_high') {
+        bucket = 'sdxl_image_high';
+        console.log('🔄 Mapped legacy bucket: sdxl_high → sdxl_image_high');
+      }
+      
       console.log('🔍 Using bucket from metadata:', bucket);
     } else if (isSDXL) {
       bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
@@ -52,15 +62,11 @@ export class AssetService {
       console.log('🔍 Determined WAN bucket:', bucket);
     }
     
-    console.log('🔍 ENHANCED bucket determination:', {
+    console.log('🔍 Final bucket determination:', {
       imageId: imageData.id,
       quality,
       isSDXL,
-      metadata: metadata,
-      jobType: jobData?.job_type,
-      modelType: jobData?.model_type,
-      finalBucket: bucket,
-      metadataBucket: metadata?.bucket
+      finalBucket: bucket
     });
     
     return bucket;

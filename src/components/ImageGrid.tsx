@@ -83,13 +83,6 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
 
   useEffect(() => {
     fetchLatestImages();
-    
-    // Set up interval to refresh images every 5 seconds when on workspace
-    const interval = setInterval(() => {
-      fetchLatestImages();
-    }, 5000);
-    
-    return () => clearInterval(interval);
   }, []);
 
   // Listen for generation status changes to refresh images
