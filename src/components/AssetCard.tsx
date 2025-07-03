@@ -105,6 +105,9 @@ export const AssetCard = ({
               <div className="text-center text-red-400 p-4">
                 <div className="text-2xl mb-2">⚠️</div>
                 <div className="text-xs">Failed to load</div>
+                {asset.error && (
+                  <div className="text-xs mt-1 opacity-75">{asset.error}</div>
+                )}
               </div>
             ) : asset.status === 'processing' || asset.status === 'queued' ? (
               <div className="text-center text-gray-400 p-4">
@@ -165,30 +168,34 @@ export const AssetCard = ({
         )}
 
         {/* Hover Actions */}
-        {(isHovered || selectionMode) && asset.status === 'completed' && !asset.error && (
+        {(isHovered || selectionMode) && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2 transition-opacity duration-200">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPreview();
-              }}
-              className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
-            >
-              <Eye className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDownload();
-              }}
-              className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
-            >
-              <Download className="h-3 w-3" />
-            </Button>
+            {asset.status === 'completed' && !asset.error && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPreview();
+                }}
+                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+              >
+                <Eye className="h-3 w-3" />
+              </Button>
+            )}
+            {asset.status === 'completed' && !asset.error && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDownload();
+                }}
+                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"

@@ -179,7 +179,7 @@ export class AssetService {
         // Generate signed URLs for completed images
         if (image.status === 'completed') {
           try {
-            const bucket = this.determineImageBucket(image, jobData);
+            const bucket = AssetService.determineImageBucket(image, jobData);
             
             // Check for image_urls array (6-image generation)
             const metadata = image.metadata as any;
@@ -324,7 +324,7 @@ export class AssetService {
               .limit(1)
               .maybeSingle();
 
-            const bucket = this.determineVideoBucket(jobData);
+            const bucket = AssetService.determineVideoBucket(jobData);
             const { data: signedUrlData, error: urlError } = await getSignedUrl(
               bucket as any,
               video.video_url,
@@ -462,12 +462,12 @@ export class AssetService {
     if (assetData) {
       try {
         if (assetType === 'image' && assetData.image_url) {
-          const bucket = this.determineImageBucket(assetData, jobData);
+          const bucket = AssetService.determineImageBucket(assetData, jobData);
           console.log('🗑️ Deleting from bucket:', bucket);
           await deleteFile(bucket as any, assetData.image_url);
         } else if (assetType === 'video') {
           if (assetData.video_url) {
-            const bucket = this.determineVideoBucket(jobData);
+            const bucket = AssetService.determineVideoBucket(jobData);
             await deleteFile(bucket as any, assetData.video_url);
           }
           
@@ -489,7 +489,7 @@ export class AssetService {
     
     // Delete each asset individually to ensure proper storage cleanup
     const deletePromises = assets.map(asset => 
-      this.deleteAsset(asset.id, asset.type)
+      AssetService.deleteAsset(asset.id, asset.type)
     );
 
     await Promise.all(deletePromises);
@@ -534,7 +534,7 @@ export class AssetService {
                 .limit(1)
                 .maybeSingle();
 
-              const bucket = this.determineImageBucket(image, jobData);
+              const bucket = AssetService.determineImageBucket(image, jobData);
               const { data } = await getSignedUrl(bucket as any, image.image_url, 60);
               
               if (!data?.signedUrl) {
@@ -564,7 +564,7 @@ export class AssetService {
                 .limit(1)
                 .maybeSingle();
 
-              const bucket = this.determineVideoBucket(jobData);
+              const bucket = AssetService.determineVideoBucket(jobData);
               const { data } = await getSignedUrl(bucket as any, video.video_url, 60);
               
               if (!data?.signedUrl) {
