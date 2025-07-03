@@ -181,18 +181,21 @@ export class AssetService {
           try {
             const bucket = AssetService.determineImageBucket(image, jobData);
             
-            // Check for image_urls array (6-image generation)
+            // Check for image_urls array (6-image generation) - check root field first
             const metadata = image.metadata as any;
-            if (metadata?.image_urls && Array.isArray(metadata.image_urls) && metadata.image_urls.length > 0) {
+            const imageUrlsArray = image.image_urls || metadata?.image_urls;
+            
+            if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
               console.log('✅ Processing image_urls array:', {
                 imageId: image.id,
                 bucket,
-                urlCount: metadata.image_urls.length
+                urlCount: imageUrlsArray.length,
+                source: image.image_urls ? 'root' : 'metadata'
               });
               
               // Generate signed URLs for each image in the array
               const signedUrls: string[] = [];
-              for (const imagePath of metadata.image_urls) {
+              for (const imagePath of imageUrlsArray) {
                 const { data: signedUrlData, error: urlError } = await getSignedUrl(
                   bucket as any,
                   imagePath,
