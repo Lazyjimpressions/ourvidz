@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
 import { GenerationFormat } from '@/types/generation';
-import { ImageGrid } from '@/components/ImageGrid';
+import { MediaGrid } from '@/components/MediaGrid';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { ImageInputControls } from '@/components/ImageInputControls';
@@ -115,20 +115,8 @@ const Workspace = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 pt-20">
-        {/* Image Grid - Only show for image mode */}
-        {!isVideoMode && (
-          <ImageGrid onRegenerateItem={handleRegenerate} />
-        )}
-        
-        {/* Video mode placeholder */}
-        {isVideoMode && (
-          <div className="flex items-center justify-center h-96">
-            <div className="text-center">
-              <h3 className="text-lg font-medium text-gray-400 mb-2">Video workspace</h3>
-              <p className="text-gray-600">Video generation coming soon</p>
-            </div>
-          </div>
-        )}
+        {/* Unified Media Grid for both images and videos */}
+        <MediaGrid onRegenerateItem={handleRegenerate} />
       </div>
 
       {/* Bottom Input Controls */}

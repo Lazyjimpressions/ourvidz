@@ -1,0 +1,374 @@
+import React, { useState, useEffect } from 'react';
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  Download, 
+  Trash2, 
+  Eye, 
+  Image, 
+  Video, 
+  Play,
+  Clock,
+  Calendar
+} from "lucide-react";
+import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
+import { AssetService } from '@/lib/services/AssetService';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+
+interface MediaTile {
+  id: string;
+  originalAssetId: string; // For deletion
+  type: 'image' | 'video';
+  url: string;
+  prompt: string;
+  timestamp: Date;
+  quality: 'fast' | 'high';
+  modelType?: string;
+  duration?: number;
+  thumbnailUrl?: string;
+}
+
+interface MediaGridProps {
+  onRegenerateItem?: (itemId: string) => void;
+}
+
+export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
+  const [tiles, setTiles] = useState<MediaTile[]>([]);
+  const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
+
+  const fetchLatestMedia = async () => {
+    try {
+      setLoading(true);
+      console.log('🎯 Fetching latest media for unified workspace...');
+      
+      const assets = await AssetService.getUserAssets();
+      const completedAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
+      
+      const processedTiles: MediaTile[] = [];
+
+      for (const asset of completedAssets) {
+        if (asset.type === 'image') {
+          // Handle 6-image generations - create individual tiles for each image
+          if (asset.signedUrls && asset.signedUrls.length > 0) {
+            console.log('✅ Processing 6-image generation:', asset.id, 'with', asset.signedUrls.length, 'images');
+            asset.signedUrls.forEach((url: string, index: number) => {
+              processedTiles.push({
+                id: `${asset.id}-${index}`,
+                originalAssetId: asset.id,
+                type: 'image',
+                url: url,
+                prompt: asset.prompt,
+                timestamp: asset.createdAt,
+                quality: (asset.quality as 'fast' | 'high') || 'fast',
+                modelType: asset.modelType
+              });
+            });
+          } 
+          // Handle single images (legacy)
+          else {
+            processedTiles.push({
+              id: asset.id,
+              originalAssetId: asset.id,
+              type: 'image',
+              url: asset.url,
+              prompt: asset.prompt,
+              timestamp: asset.createdAt,
+              quality: (asset.quality as 'fast' | 'high') || 'fast',
+              modelType: asset.modelType
+            });
+          }
+        } 
+        else if (asset.type === 'video') {
+          processedTiles.push({
+            id: asset.id,
+            originalAssetId: asset.id,
+            type: 'video',
+            url: asset.url,
+            prompt: asset.prompt,
+            timestamp: asset.createdAt,
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            duration: asset.duration,
+            thumbnailUrl: asset.thumbnailUrl
+          });
+        }
+      }
+
+      // Sort by timestamp (newest first)
+      processedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+      console.log('✅ Processed tiles:', {
+        total: processedTiles.length,
+        images: processedTiles.filter(t => t.type === 'image').length,
+        videos: processedTiles.filter(t => t.type === 'video').length
+      });
+      
+      setTiles(processedTiles);
+    } catch (error) {
+      console.error('❌ Failed to fetch media:', error);
+      toast.error('Failed to load media');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLatestMedia();
+  }, []);
+
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      console.log('🔄 Storage updated, refreshing media grid...');
+      fetchLatestMedia();
+    };
+
+    window.addEventListener('generationCompleted', handleStorageUpdate);
+    
+    return () => {
+      window.removeEventListener('generationCompleted', handleStorageUpdate);
+    };
+  }, []);
+
+  const handleDelete = async (tile: MediaTile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (deletingTiles.has(tile.id)) return;
+    
+    try {
+      setDeletingTiles(prev => new Set([...prev, tile.id]));
+      
+      await AssetService.deleteAsset(tile.originalAssetId, tile.type);
+      
+      // Remove all tiles that share the same originalAssetId (for 6-image generations)
+      setTiles(prevTiles => 
+        prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId)
+      );
+      
+      toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
+    } catch (error) {
+      console.error('❌ Delete failed:', error);
+      toast.error('Failed to delete item');
+    } finally {
+      setDeletingTiles(prev => {
+        const next = new Set(prev);
+        next.delete(tile.id);
+        return next;
+      });
+    }
+  };
+
+  const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const response = await fetch(tile.url);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `generated-${tile.type}-${tile.id}.${tile.type === 'image' ? 'png' : 'mp4'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Download started');
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error('Download failed');
+    }
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+    });
+  };
+
+  if (loading && tiles.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin text-2xl mb-2">⏳</div>
+          <p className="text-gray-400">Loading your media...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tiles.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-400 mb-2">No media yet</h3>
+          <p className="text-gray-600">Generate your first image or video to see it here</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Dynamic Media Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+        {tiles.map((tile) => (
+          <div
+            key={tile.id}
+            className={cn(
+              "group relative cursor-pointer bg-gray-900 rounded-lg overflow-hidden aspect-square transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
+              deletingTiles.has(tile.id) && "opacity-50 pointer-events-none"
+            )}
+            onClick={() => setSelectedTile(tile)}
+          >
+            {/* Media Content */}
+            {tile.type === 'image' ? (
+              <img
+                src={tile.url}
+                alt="Generated content"
+                className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+                onError={(e) => {
+                  console.error('❌ Image failed to load:', tile.url);
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="relative w-full h-full">
+                {tile.thumbnailUrl ? (
+                  <img
+                    src={tile.thumbnailUrl}
+                    alt="Video thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <video
+                    src={tile.url}
+                    className="w-full h-full object-cover"
+                    muted
+                    preload="metadata"
+                  />
+                )}
+                {/* Play button overlay for videos */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <div className="bg-black/70 rounded-full p-3">
+                    <Play className="w-6 h-6 text-white fill-white" />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Content Type Icon */}
+            <div className="absolute top-2 left-2">
+              <Badge variant="secondary" className="bg-black/70 text-white border-gray-600 text-xs">
+                {tile.type === 'image' ? (
+                  <Image className="h-3 w-3 mr-1" />
+                ) : (
+                  <Video className="h-3 w-3 mr-1" />
+                )}
+                {tile.type}
+              </Badge>
+            </div>
+
+            {/* Model Type Badge (for images) */}
+            {tile.type === 'image' && tile.modelType && (
+              <div className="absolute top-2 right-2">
+                <Badge 
+                  variant="secondary" 
+                  className={cn(
+                    "text-xs border",
+                    tile.modelType === 'SDXL'
+                      ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
+                      : "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                  )}
+                >
+                  {tile.modelType}
+                </Badge>
+              </div>
+            )}
+
+            {/* Duration for videos */}
+            {tile.type === 'video' && tile.duration && (
+              <div className="absolute bottom-2 right-2">
+                <Badge variant="secondary" className="bg-black/70 text-white text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {tile.duration}s
+                </Badge>
+              </div>
+            )}
+
+            {/* Hover Actions */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 flex items-center justify-center gap-2 transition-all duration-200 opacity-0 group-hover:opacity-100">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedTile(tile);
+                }}
+                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+              >
+                <Eye className="h-3 w-3" />
+              </Button>
+              
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => handleDownload(tile, e)}
+                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+              >
+                <Download className="h-3 w-3" />
+              </Button>
+              
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => handleDelete(tile, e)}
+                className="h-8 w-8 p-0 bg-red-600 hover:bg-red-700"
+                disabled={deletingTiles.has(tile.id)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+
+            {/* Tile Info Footer */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="flex items-center justify-between text-xs text-white">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs px-1 py-0.5 bg-black/50 border-white/20 text-white">
+                    {tile.quality === 'high' ? 'HD' : 'Fast'}
+                  </Badge>
+                </div>
+                <div className="flex items-center text-xs text-gray-300">
+                  <Calendar className="h-3 w-3 mr-1" />
+                  {formatDate(tile.timestamp)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modal for Full Resolution */}
+      {selectedTile && (
+        <WorkspaceContentModal
+          content={{
+            id: selectedTile.id,
+            url: selectedTile.url,
+            prompt: selectedTile.prompt,
+            timestamp: selectedTile.timestamp,
+            quality: selectedTile.quality
+          }}
+          type={selectedTile.type}
+          onClose={() => setSelectedTile(null)}
+        />
+      )}
+    </>
+  );
+};
