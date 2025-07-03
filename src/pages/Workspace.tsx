@@ -107,6 +107,45 @@ const Workspace = () => {
     }
   };
 
+  const handleGenerateMoreLike = async (tile: any) => {
+    if (!tile.url || tile.type !== 'image') {
+      toast.error('Reference image not available');
+      return;
+    }
+
+    try {
+      console.log('🔄 Generating 3 more images like:', {
+        tileId: tile.id,
+        prompt: tile.prompt,
+        quality: tile.quality,
+        modelType: tile.modelType
+      });
+
+      // Use the same format as the original image
+      const originalFormat = tile.modelType === 'SDXL' 
+        ? (tile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
+        : (tile.quality === 'high' ? 'image_high' : 'image_fast');
+
+      await generateContent({
+        format: originalFormat,
+        prompt: tile.prompt,
+        referenceImageUrl: tile.url,
+        batchCount: 3,
+        metadata: {
+          reference_image: true,
+          similarity_strength: 0.8,
+          model_variant: tile.modelType === 'SDXL' ? 'lustify_sdxl' : 'wan_2_1_1_3b'
+        }
+      });
+
+      toast.success('Generating 3 more images like this one!');
+    } catch (error) {
+      console.error('❌ More like this generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Generation failed';
+      toast.error(errorMessage);
+    }
+  };
+
   // Show loading state while auth is being determined
   if (loading) {
     return (
@@ -132,7 +171,10 @@ const Workspace = () => {
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
         {/* Unified Media Grid for both images and videos */}
-        <MediaGrid onRegenerateItem={handleRegenerate} />
+        <MediaGrid 
+          onRegenerateItem={handleRegenerate} 
+          onGenerateMoreLike={handleGenerateMoreLike}
+        />
       </div>
 
       {/* Scroll Navigation */}

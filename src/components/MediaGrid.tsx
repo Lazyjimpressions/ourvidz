@@ -9,7 +9,8 @@ import {
   Video, 
   Play,
   Clock,
-  Calendar
+  Calendar,
+  Copy
 } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { AssetService } from '@/lib/services/AssetService';
@@ -31,9 +32,10 @@ interface MediaTile {
 
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
+  onGenerateMoreLike?: (tile: MediaTile) => void;
 }
 
-export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
+export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridProps) => {
   const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
@@ -332,6 +334,22 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
               >
                 <Download className="h-3 w-3" />
               </Button>
+              
+              {/* More Like This Button - Only for images */}
+              {tile.type === 'image' && onGenerateMoreLike && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onGenerateMoreLike(tile);
+                  }}
+                  className="h-6 w-6 p-0 bg-blue-600/80 hover:bg-blue-700 backdrop-blur-sm"
+                  title="Generate 3 more like this"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              )}
               
               <Button
                 variant="secondary"

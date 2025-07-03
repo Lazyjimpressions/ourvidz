@@ -74,26 +74,30 @@ export class GenerationService {
 
       // Queue the job with enhanced metadata
       console.log('📤 Queueing job with enhanced SDXL model tracking...');
+      const jobBody = {
+        jobType: request.format,
+        metadata: {
+          ...request.metadata,
+          credits: config.credits * (request.batchCount || 1),
+          model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
+          model_type: config.isSDXL ? 'sdxl' : 'wan',
+          is_sdxl: config.isSDXL,
+          prompt: request.prompt,
+          queue: config.queue,
+          bucket: config.bucket,
+          enhanced_tracking: true,
+          generation_format: request.format,
+          client_timestamp: new Date().toISOString(),
+          batch_count: request.batchCount || 1,
+          reference_image_url: request.referenceImageUrl
+        },
+        projectId: request.projectId,
+        videoId,
+        imageId
+      };
+
       const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: {
-          jobType: request.format,
-          metadata: {
-            ...request.metadata,
-            credits: config.credits,
-            model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
-            model_type: config.isSDXL ? 'sdxl' : 'wan',
-            is_sdxl: config.isSDXL,
-            prompt: request.prompt,
-            queue: config.queue,
-            bucket: config.bucket,
-            enhanced_tracking: true,
-            generation_format: request.format,
-            client_timestamp: new Date().toISOString()
-          },
-          projectId: request.projectId,
-          videoId,
-          imageId
-        }
+        body: jobBody
       });
 
       if (error) {

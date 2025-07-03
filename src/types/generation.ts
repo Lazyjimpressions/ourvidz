@@ -96,9 +96,13 @@ export interface GenerationRequest {
   projectId?: string;
   videoId?: string;
   imageId?: string;
+  referenceImageUrl?: string;
+  batchCount?: number;
   metadata?: {
     model_variant?: string;
     credits?: number;
+    reference_image?: boolean;
+    similarity_strength?: number;
     [key: string]: any;
   };
 }
