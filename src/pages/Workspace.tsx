@@ -7,8 +7,8 @@ import { useGeneration } from '@/hooks/useGeneration';
 import { useGenerationStatus } from '@/hooks/useGenerationStatus';
 import { GenerationFormat } from '@/types/generation';
 import { MediaGrid } from '@/components/MediaGrid';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
+import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 
@@ -126,23 +126,17 @@ const Workspace = () => {
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
-      {/* Back Button */}
-      <div className="absolute top-6 left-6 z-50">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate('/dashboard')}
-          className="text-white hover:text-gray-300 p-2"
-        >
-          <ArrowLeft className="w-6 h-6" />
-        </Button>
-      </div>
+      {/* Fixed Header */}
+      <WorkspaceHeader />
 
       {/* Main Content Area */}
-      <div className="flex-1 pt-20">
+      <div className="flex-1 pt-12">
         {/* Unified Media Grid for both images and videos */}
         <MediaGrid onRegenerateItem={handleRegenerate} />
       </div>
+
+      {/* Scroll Navigation */}
+      <ScrollNavigation />
 
       {/* Bottom Input Controls */}
       <div className="p-6 bg-black">

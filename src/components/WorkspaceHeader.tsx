@@ -1,31 +1,58 @@
 
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, User, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const WorkspaceHeader = () => {
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-gray-800">
-      <div className="flex items-center gap-4">
+    <header className="fixed top-0 w-full bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
+      <div className="flex items-center justify-between h-12 px-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => navigate("/dashboard")}
-          className="text-gray-400 hover:text-white"
+          className="text-gray-400 hover:text-white h-8 w-8"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="w-4 h-4" />
         </Button>
-        <h1 className="text-xl font-medium text-white">Gen Space</h1>
+        
+        <div className="flex items-center gap-2">
+          {user && (
+            <>
+              <span className="text-xs text-gray-400 hidden sm:block">
+                {profile?.username || user.email}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/profile")}
+                className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
+              >
+                <User className="h-3 w-3" />
+                <span className="hidden sm:inline">Profile</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
+              >
+                <LogOut className="h-3 w-3" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
-      
-      <Button
-        variant="outline"
-        className="bg-transparent border-gray-600 text-white hover:bg-gray-800"
-      >
-        Upgrade
-      </Button>
-    </div>
+    </header>
   );
 };
