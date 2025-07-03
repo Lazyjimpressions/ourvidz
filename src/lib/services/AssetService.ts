@@ -23,6 +23,8 @@ export interface UnifiedAsset {
   error?: string;
   modelType?: string;
   isSDXL?: boolean;
+  // Array of signed URLs for 6-image generations
+  signedUrls?: string[];
 }
 
 export class AssetService {
@@ -195,61 +197,103 @@ export class AssetService {
         });
 
         // Generate signed URLs for completed images
-        if (image.status === 'completed' && image.image_url) {
+        if (image.status === 'completed') {
           try {
             const bucket = this.determineImageBucket(image, jobData);
-            console.log('📁 ENHANCED URL generation for image:', {
-              imageId: image.id,
-              bucket,
-              imagePath: image.image_url,
-              isSDXL,
-              quality: image.quality
-            });
             
-            const { data: signedUrlData, error: urlError } = await getSignedUrl(
-              bucket as any,
-              image.image_url,
-              3600
-            );
-
-            if (!urlError && signedUrlData?.signedUrl) {
-              thumbnailUrl = signedUrlData.signedUrl;
-              url = signedUrlData.signedUrl;
-              console.log('✅ Successfully generated signed URL for image:', {
+            // Check for image_urls array (6-image generation)
+            const metadata = image.metadata as any;
+            if (metadata?.image_urls && Array.isArray(metadata.image_urls) && metadata.image_urls.length > 0) {
+              console.log('✅ Processing image_urls array:', {
                 imageId: image.id,
                 bucket,
-                urlLength: signedUrlData.signedUrl.length,
-                urlStart: signedUrlData.signedUrl.substring(0, 100)
-              });
-            } else {
-              error = urlError?.message || 'Failed to generate image URL';
-              console.error('❌ CRITICAL: Failed to generate URL for image:', {
-                imageId: image.id,
-                bucket,
-                imagePath: image.image_url,
-                error: error,
-                urlError: urlError
+                urlCount: metadata.image_urls.length
               });
               
-              // Try fallback buckets if primary bucket fails
-              if (isSDXL) {
-                const fallbackBucket = bucket === 'sdxl_image_high' ? 'sdxl_image_fast' : 'sdxl_image_high';
-                console.log('🔄 Trying fallback bucket:', fallbackBucket);
-                const { data: fallbackData, error: fallbackError } = await getSignedUrl(
-                  fallbackBucket as any,
-                  image.image_url,
+              // Generate signed URLs for each image in the array
+              const signedUrls: string[] = [];
+              for (const imagePath of metadata.image_urls) {
+                const { data: signedUrlData, error: urlError } = await getSignedUrl(
+                  bucket as any,
+                  imagePath,
                   3600
                 );
-                if (!fallbackError && fallbackData?.signedUrl) {
-                  thumbnailUrl = fallbackData.signedUrl;
-                  url = fallbackData.signedUrl;
-                  error = undefined;
-                  console.log('✅ Fallback bucket worked:', fallbackBucket);
+                
+                if (!urlError && signedUrlData?.signedUrl) {
+                  signedUrls.push(signedUrlData.signedUrl);
+                } else {
+                  console.error('❌ Failed to generate URL for image in array:', {
+                    imageId: image.id,
+                    imagePath,
+                    error: urlError?.message
+                  });
                 }
               }
+              
+              if (signedUrls.length > 0) {
+                // Store signed URLs in metadata for ImageGrid to use
+                (metadata as any).signed_urls = signedUrls;
+                thumbnailUrl = signedUrls[0]; // Use first image as thumbnail
+                url = signedUrls[0]; // Use first image as main URL
+                console.log('✅ Generated signed URLs for image array:', {
+                  imageId: image.id,
+                  bucket,
+                  urlCount: signedUrls.length
+                });
+              } else {
+                error = 'Failed to generate URLs for image array';
+                console.error('❌ No signed URLs generated for image array:', image.id);
+              }
+            } 
+            // Fallback to single image_url (legacy)
+            else if (image.image_url) {
+              console.log('📁 Processing single image_url:', {
+                imageId: image.id,
+                bucket,
+                imagePath: image.image_url
+              });
+              
+              const { data: signedUrlData, error: urlError } = await getSignedUrl(
+                bucket as any,
+                image.image_url,
+                3600
+              );
+
+              if (!urlError && signedUrlData?.signedUrl) {
+                thumbnailUrl = signedUrlData.signedUrl;
+                url = signedUrlData.signedUrl;
+                console.log('✅ Generated signed URL for single image:', image.id);
+              } else {
+                error = urlError?.message || 'Failed to generate image URL';
+                console.error('❌ Failed to generate URL for single image:', {
+                  imageId: image.id,
+                  bucket,
+                  imagePath: image.image_url,
+                  error: error
+                });
+                
+                // Try fallback buckets if primary bucket fails
+                if (isSDXL) {
+                  const fallbackBucket = bucket === 'sdxl_image_high' ? 'sdxl_image_fast' : 'sdxl_image_high';
+                  console.log('🔄 Trying fallback bucket:', fallbackBucket);
+                  const { data: fallbackData, error: fallbackError } = await getSignedUrl(
+                    fallbackBucket as any,
+                    image.image_url,
+                    3600
+                  );
+                  if (!fallbackError && fallbackData?.signedUrl) {
+                    thumbnailUrl = fallbackData.signedUrl;
+                    url = fallbackData.signedUrl;
+                    error = undefined;
+                    console.log('✅ Fallback bucket worked:', fallbackBucket);
+                  }
+                }
+              }
+            } else {
+              console.log('⚠️ No image_url or image_urls found:', image.id);
             }
           } catch (urlError) {
-            console.error('❌ CRITICAL: Exception generating image URL:', {
+            console.error('❌ Exception generating image URL:', {
               imageId: image.id,
               error: urlError,
               stack: urlError instanceof Error ? urlError.stack : 'No stack'
@@ -260,12 +304,11 @@ export class AssetService {
           console.log('⚠️ Skipping URL generation for image:', {
             imageId: image.id,
             status: image.status,
-            hasImageUrl: !!image.image_url,
-            reason: image.status !== 'completed' ? 'not completed' : 'no image_url'
+            reason: 'not completed'
           });
         }
 
-        const asset = {
+        const asset: UnifiedAsset = {
           id: image.id,
           type: 'image' as const,
           title: image.title || undefined,
@@ -280,7 +323,9 @@ export class AssetService {
           projectTitle: (image.project as any)?.title,
           modelType,
           isSDXL,
-          error
+          error,
+          // Include signed URLs array if available
+          signedUrls: (metadata as any)?.signed_urls
         };
 
         console.log('📦 Final asset created:', {

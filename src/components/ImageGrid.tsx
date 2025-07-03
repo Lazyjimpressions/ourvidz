@@ -28,11 +28,11 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
   const fetchLatestImages = async () => {
     try {
       setLoading(true);
-      console.log('🖼️ Fetching latest generation batch (6 images)...');
+      console.log('🖼️ Fetching latest generation batch...');
       
       const assets = await AssetService.getUserAssets();
       const latestImageAssets = assets
-        .filter(asset => asset.type === 'image' && asset.status === 'completed')
+        .filter(asset => asset.type === 'image' && asset.status === 'completed' && asset.url)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
       if (latestImageAssets.length === 0) {
@@ -40,14 +40,14 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
         return;
       }
 
-      // Get the most recent asset to check for image_urls array
+      // Get the most recent asset
       const latestAsset = latestImageAssets[0];
       let processedImages: GeneratedImage[] = [];
 
-      // Check if the latest asset has image_urls array (6-image generation)
-      if ((latestAsset as any).image_urls && Array.isArray((latestAsset as any).image_urls) && (latestAsset as any).image_urls.length > 0) {
-        console.log('✅ Found image_urls array with', (latestAsset as any).image_urls.length, 'images');
-        processedImages = (latestAsset as any).image_urls.map((url: string, index: number) => ({
+      // Check if the latest asset has signedUrls array (6-image generation)
+      if (latestAsset.signedUrls && latestAsset.signedUrls.length > 0) {
+        console.log('✅ Found signedUrls array with', latestAsset.signedUrls.length, 'images');
+        processedImages = latestAsset.signedUrls.map((url: string, index: number) => ({
           id: `${latestAsset.id}-${index}`,
           url: url,
           prompt: latestAsset.prompt,
@@ -59,7 +59,6 @@ export const ImageGrid = ({ onRegenerateItem }: ImageGridProps) => {
         // Fallback: use individual images (legacy behavior)
         console.log('📦 Using individual image assets (legacy mode)');
         processedImages = latestImageAssets
-          .filter(asset => asset.url) // Only include assets with URLs
           .slice(0, 6) // Take first 6
           .map(asset => ({
             id: asset.id,
