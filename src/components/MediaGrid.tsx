@@ -303,8 +303,8 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
               </div>
             )}
 
-            {/* Hover Actions */}
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 flex items-center justify-center gap-2 transition-all duration-200 opacity-0 group-hover:opacity-100">
+            {/* Hover Actions - positioned in upper right corner */}
+            <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
               <Button
                 variant="secondary"
                 size="sm"
@@ -312,7 +312,7 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
                   e.stopPropagation();
                   setSelectedTile(tile);
                 }}
-                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+                className="h-6 w-6 p-0 bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm"
               >
                 <Eye className="h-3 w-3" />
               </Button>
@@ -321,7 +321,7 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
                 variant="secondary"
                 size="sm"
                 onClick={(e) => handleDownload(tile, e)}
-                className="h-8 w-8 p-0 bg-gray-700 hover:bg-gray-600"
+                className="h-6 w-6 p-0 bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm"
               >
                 <Download className="h-3 w-3" />
               </Button>
@@ -330,12 +330,17 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
                 variant="secondary"
                 size="sm"
                 onClick={(e) => handleDelete(tile, e)}
-                className="h-8 w-8 p-0 bg-red-600 hover:bg-red-700"
+                className="h-6 w-6 p-0 bg-red-600/80 hover:bg-red-700 backdrop-blur-sm"
                 disabled={deletingTiles.has(tile.id)}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
             </div>
+
+            {/* Hover overlay for videos only - excludes the action buttons area */}
+            {tile.type === 'video' && (
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 opacity-0 group-hover:opacity-100 pointer-events-none" />
+            )}
 
             {/* Tile Info Footer */}
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
