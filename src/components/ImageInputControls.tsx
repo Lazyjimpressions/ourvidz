@@ -38,8 +38,8 @@ export const ImageInputControls = ({
     <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
       {/* Main Row */}
       <div className="flex items-center gap-2">
-        {/* Side-by-side IMAGE/VIDEO Toggle Buttons */}
-        <div className="flex gap-1">
+        {/* Stacked IMAGE/VIDEO Toggle Buttons */}
+        <div className="flex flex-col gap-1">
           <Button
             variant="default"
             className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
