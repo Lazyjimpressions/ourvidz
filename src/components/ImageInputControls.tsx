@@ -35,11 +35,11 @@ export const ImageInputControls = ({
   const [style, setStyle] = useState("");
 
   return (
-    <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
+    <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
       {/* Main Row */}
-      <div className="flex items-center gap-3">
-        {/* Stacked IMAGE/VIDEO Buttons */}
-        <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {/* Side-by-side IMAGE/VIDEO Toggle Buttons */}
+        <div className="flex gap-1">
           <Button
             variant="default"
             className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
@@ -95,7 +95,7 @@ export const ImageInputControls = ({
       </div>
 
       {/* Controls Row */}
-      <div className="flex items-center gap-2 mt-3 ml-20">
+      <div className="flex items-center justify-end gap-2 mt-2">
         {/* Aspect Ratio */}
         <Popover>
           <PopoverTrigger asChild>

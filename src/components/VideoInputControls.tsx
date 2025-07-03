@@ -35,18 +35,11 @@ export const VideoInputControls = ({
   const [duration, setDuration] = useState("5s");
 
   return (
-    <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
+    <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
       {/* Main Row */}
-      <div className="flex items-center gap-3">
-        {/* Stacked VIDEO/IMAGE Buttons */}
-        <div className="flex flex-col gap-1">
-          <Button
-            variant="default"
-            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
-          >
-            <Play className="w-3.5 h-3.5" />
-            VIDEO
-          </Button>
+      <div className="flex items-center gap-2">
+        {/* Side-by-side IMAGE/VIDEO Toggle Buttons */}
+        <div className="flex gap-1">
           <Button
             variant="ghost"
             onClick={onSwitchToImage}
@@ -54,6 +47,13 @@ export const VideoInputControls = ({
           >
             <Image className="w-3.5 h-3.5" />
             IMAGE
+          </Button>
+          <Button
+            variant="default"
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+          >
+            <Play className="w-3.5 h-3.5" />
+            VIDEO
           </Button>
         </div>
 
@@ -106,7 +106,7 @@ export const VideoInputControls = ({
       </div>
 
       {/* Controls Row */}
-      <div className="flex items-center justify-end gap-2 mt-3 mr-14">
+      <div className="flex items-center justify-end gap-2 mt-2">
 
         {/* Aspect Ratio */}
         <Popover>
