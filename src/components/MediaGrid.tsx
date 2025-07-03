@@ -36,6 +36,7 @@ interface MediaGridProps {
 export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
   const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
 
@@ -226,7 +227,11 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
               "group relative cursor-pointer bg-gray-900 rounded-lg overflow-hidden aspect-square transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
               deletingTiles.has(tile.id) && "opacity-50 pointer-events-none"
             )}
-            onClick={() => setSelectedTile(tile)}
+            onClick={() => {
+              const index = tiles.findIndex(t => t.id === tile.id);
+              setSelectedIndex(index);
+              setSelectedTile(tile);
+            }}
           >
             {/* Media Content */}
             {tile.type === 'image' ? (
@@ -310,6 +315,8 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation();
+                  const index = tiles.findIndex(t => t.id === tile.id);
+                  setSelectedIndex(index);
                   setSelectedTile(tile);
                 }}
                 className="h-6 w-6 p-0 bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm"
@@ -363,15 +370,13 @@ export const MediaGrid = ({ onRegenerateItem }: MediaGridProps) => {
       {/* Modal for Full Resolution */}
       {selectedTile && (
         <WorkspaceContentModal
-          content={{
-            id: selectedTile.id,
-            url: selectedTile.url,
-            prompt: selectedTile.prompt,
-            timestamp: selectedTile.timestamp,
-            quality: selectedTile.quality
-          }}
-          type={selectedTile.type}
+          tiles={tiles}
+          currentIndex={selectedIndex}
           onClose={() => setSelectedTile(null)}
+          onIndexChange={(newIndex) => {
+            setSelectedIndex(newIndex);
+            setSelectedTile(tiles[newIndex]);
+          }}
         />
       )}
     </>

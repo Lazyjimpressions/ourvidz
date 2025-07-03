@@ -21,6 +21,7 @@ interface WorkspaceImageDisplayProps {
 export const WorkspaceImageDisplay = ({ onRegenerateItem }: WorkspaceImageDisplayProps) => {
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
   const fetchImages = async () => {
@@ -137,7 +138,11 @@ export const WorkspaceImageDisplay = ({ onRegenerateItem }: WorkspaceImageDispla
             <div
               key={image.id}
               className="relative group cursor-pointer bg-gray-900 rounded-lg overflow-hidden"
-              onClick={() => setSelectedImage(image)}
+            onClick={() => {
+              const index = images.findIndex(img => img.id === image.id);
+              setSelectedIndex(index);
+              setSelectedImage(image);
+            }}
             >
               <img
                 src={image.url}
@@ -184,9 +189,22 @@ export const WorkspaceImageDisplay = ({ onRegenerateItem }: WorkspaceImageDispla
       {/* Modal for Full Resolution */}
       {selectedImage && (
         <WorkspaceContentModal
-          content={selectedImage}
-          type="image"
+          tiles={images.map(image => ({
+            id: image.id,
+            originalAssetId: image.id,
+            type: 'image' as const,
+            url: image.url,
+            prompt: image.prompt,
+            timestamp: image.timestamp,
+            quality: image.quality,
+            modelType: image.modelType
+          }))}
+          currentIndex={selectedIndex}
           onClose={() => setSelectedImage(null)}
+          onIndexChange={(newIndex) => {
+            setSelectedIndex(newIndex);
+            setSelectedImage(images[newIndex]);
+          }}
         />
       )}
     </>
