@@ -211,7 +211,7 @@ export class AssetService {
               }
               
               if (signedUrls.length > 0) {
-                // Store signed URLs in metadata for ImageGrid to use
+                // Store signed URLs in metadata for MediaGrid to use
                 (metadata as any).signed_urls = signedUrls;
                 thumbnailUrl = signedUrls[0]; // Use first image as thumbnail
                 url = signedUrls[0]; // Use first image as main URL
