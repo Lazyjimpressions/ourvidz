@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, RotateCcw, Music } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -13,7 +13,11 @@ interface VideoInputControlsProps {
   setPrompt: (prompt: string) => void;
   onGenerate: () => void;
   isGenerating: boolean;
-  onReferenceImageUpload: () => void;
+  onBeginningFrameUpload: () => void;
+  onEndingFrameUpload: () => void;
+  onSwitchToImage?: () => void;
+  quality: 'fast' | 'high';
+  setQuality: (quality: 'fast' | 'high') => void;
 }
 
 export const VideoInputControls = ({
@@ -21,7 +25,11 @@ export const VideoInputControls = ({
   setPrompt,
   onGenerate,
   isGenerating,
-  onReferenceImageUpload
+  onBeginningFrameUpload,
+  onEndingFrameUpload,
+  onSwitchToImage,
+  quality,
+  setQuality
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [duration, setDuration] = useState("5s");
@@ -30,46 +38,31 @@ export const VideoInputControls = ({
     <div className="bg-gray-900/90 rounded-lg p-4 border border-gray-800/50">
       {/* Main Row */}
       <div className="flex items-center gap-3">
-        {/* Stacked IMAGE/VIDEO Buttons */}
-        <div className="flex flex-col gap-1">
-          <Button
-            variant="ghost"
-            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium"
-          >
-            <Image className="w-3.5 h-3.5" />
-            IMAGE
-          </Button>
-          <Button
-            variant="default"
-            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
-          >
-            <Play className="w-3.5 h-3.5" />
-            VIDEO
-          </Button>
-        </div>
+        {/* VIDEO Button (Active) */}
+        <Button
+          variant="default"
+          className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+        >
+          <Play className="w-3.5 h-3.5" />
+          VIDEO
+        </Button>
 
-        {/* Start Ref Upload - small square */}
+        {/* Beginning Frame Upload */}
         <Button
           variant="ghost"
-          onClick={onReferenceImageUpload}
+          onClick={onBeginningFrameUpload}
           className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
+          title="Beginning frame"
         >
           <Upload className="w-3.5 h-3.5 text-gray-400" />
         </Button>
 
-        {/* Refresh/Cycle icon */}
+        {/* Ending Frame Upload */}
         <Button
           variant="ghost"
-          className="w-6 h-6 p-0 text-gray-400 hover:text-white"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </Button>
-
-        {/* End Ref Upload - small square */}
-        <Button
-          variant="ghost"
-          onClick={onReferenceImageUpload}
+          onClick={onEndingFrameUpload}
           className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
+          title="Ending frame"
         >
           <Upload className="w-3.5 h-3.5 text-gray-400" />
         </Button>
@@ -104,6 +97,16 @@ export const VideoInputControls = ({
 
       {/* Controls Row */}
       <div className="flex items-center gap-2 mt-3 ml-20">
+        {/* VIDEO Button (for mode switching) */}
+        <Button
+          variant="ghost"
+          onClick={onSwitchToImage}
+          className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium"
+        >
+          <Image className="w-3.5 h-3.5" />
+          IMAGE
+        </Button>
+
         {/* Aspect Ratio */}
         <Popover>
           <PopoverTrigger asChild>
@@ -152,12 +155,27 @@ export const VideoInputControls = ({
           </PopoverContent>
         </Popover>
 
-        {/* Music Button */}
+        {/* Fast/High Quality Toggle */}
         <Button
           variant="ghost"
-          className="w-8 h-8 p-0 bg-gray-800 hover:bg-gray-700 text-white rounded"
+          onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
+          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+            quality === 'high' 
+              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+              : 'bg-gray-800 hover:bg-gray-700 text-white'
+          }`}
         >
-          <Music className="w-3.5 h-3.5" />
+          {quality === 'high' ? (
+            <>
+              <Crown className="w-3 h-3" />
+              High
+            </>
+          ) : (
+            <>
+              <Zap className="w-3 h-3" />
+              Fast
+            </>
+          )}
         </Button>
       </div>
     </div>
