@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
+import { useGenerationStatus } from '@/hooks/useGenerationStatus';
 import { GenerationFormat } from '@/types/generation';
 import { MediaGrid } from '@/components/MediaGrid';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { VideoInputControls } from '@/components/VideoInputControls';
 
 const Workspace = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   
   // Get mode from URL params, default to image
@@ -38,13 +39,24 @@ const Workspace = () => {
     clearError
   } = useGeneration();
 
-  // Redirect if not authenticated
+  // Use generation status hook to track job completion and emit events
+  useGenerationStatus(
+    currentJob?.id || null,
+    selectedMode,
+    !!currentJob && isGenerating
+  );
+
+  // Handle authentication state and navigation
   useEffect(() => {
+    // Don't redirect while auth is loading
+    if (loading) return;
+    
+    // Redirect to auth if user is not authenticated
     if (!user) {
       navigate('/auth');
       return;
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   // Update selected mode when URL mode changes or quality changes
   useEffect(() => {
@@ -95,6 +107,19 @@ const Workspace = () => {
     }
   };
 
+  // Show loading state while auth is being determined
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin text-2xl mb-2">⏳</div>
+          <p className="text-gray-400">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if user is not authenticated (redirect will happen in useEffect)
   if (!user) {
     return null;
   }
