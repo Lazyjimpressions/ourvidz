@@ -236,6 +236,12 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   };
 
   const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+    console.log('📥 MediaGrid received import request:', {
+      count: importedAssets?.length || 0,
+      assetIds: importedAssets?.map(a => a.id) || [],
+      assetTypes: importedAssets?.map(a => a.type) || []
+    });
+    
     if (!importedAssets || importedAssets.length === 0) {
       console.log('📥 No assets to import');
       return;

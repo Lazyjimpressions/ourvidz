@@ -21,19 +21,37 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   const { data: libraryAssets = [], isLoading } = useAssets(false);
 
   const handleAssetToggle = (assetId: string) => {
+    console.log('🎯 Asset toggle clicked:', assetId);
     setSelectedAssets(prev => {
       const next = new Set(prev);
-      if (next.has(assetId)) {
+      const wasSelected = next.has(assetId);
+      
+      if (wasSelected) {
         next.delete(assetId);
+        console.log('❌ Deselected asset:', assetId);
       } else {
         next.add(assetId);
+        console.log('✅ Selected asset:', assetId);
       }
+      
+      console.log('📊 Selected assets after toggle:', Array.from(next));
       return next;
     });
   };
 
   const handleImport = () => {
+    console.log('🚀 Import triggered with selection:', Array.from(selectedAssets));
+    console.log('📋 Available library assets:', libraryAssets.length);
+    
     const assetsToImport = libraryAssets.filter(asset => selectedAssets.has(asset.id));
+    console.log('📦 Assets to import:', assetsToImport.map(a => ({ id: a.id, type: a.type, prompt: a.prompt.slice(0, 50) })));
+    console.log('🎯 Import count - Expected:', selectedAssets.size, 'Actual:', assetsToImport.length);
+    
+    if (assetsToImport.length === 0) {
+      console.error('⚠️ No assets to import despite selection!');
+      return;
+    }
+    
     onImport(assetsToImport);
     setSelectedAssets(new Set());
     onClose();
@@ -75,8 +93,8 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                     className={cn(
                       "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
                       selectedAssets.has(asset.id) 
-                        ? "ring-2 ring-primary scale-95" 
-                        : "hover:scale-105"
+                        ? "ring-4 ring-primary scale-95 shadow-lg" 
+                        : "hover:scale-105 hover:shadow-md"
                     )}
                     onClick={() => handleAssetToggle(asset.id)}
                   >
