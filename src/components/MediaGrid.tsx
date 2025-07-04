@@ -72,9 +72,6 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     if (tiles.length > 0) {
       sessionStorage.setItem('workspaceTiles', JSON.stringify(tiles));
       console.log('💾 Saved workspace to sessionStorage:', tiles.length, 'tiles');
-    } else {
-      sessionStorage.removeItem('workspaceTiles');
-      console.log('🧹 Cleared workspace from sessionStorage');
     }
   }, [tiles]);
 
@@ -215,6 +212,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const handleClearWorkspace = () => {
     console.log('🧹 Clearing workspace');
     setTiles([]);
+    sessionStorage.removeItem('workspaceTiles');
     toast.success('Workspace cleared');
   };
 
