@@ -245,6 +245,39 @@ const formatDate = (date: Date) => {
         <div className="text-center">
           <div className="animate-spin text-2xl mb-2">⏳</div>
           <p className="text-gray-400">Loading your media...</p>
+          <p className="text-gray-500 text-sm mt-2">This should only take a few seconds</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading overlay for new content being processed
+  if (isLoading && tiles.length > 0) {
+    return (
+      <div className="relative">
+        {/* Existing content with loading overlay */}
+        <div className="opacity-70">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+            {tiles.map((tile) => (
+              <div key={tile.id} className="group relative cursor-pointer bg-gray-900 rounded-lg overflow-hidden aspect-square">
+                {tile.type === 'image' ? (
+                  <img src={tile.url} alt="Generated content" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="relative w-full h-full">
+                    <video src={tile.url} className="w-full h-full object-cover" muted preload="metadata" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Loading overlay */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
+          <div className="bg-gray-900/90 rounded-lg p-4 text-center">
+            <div className="animate-spin text-xl mb-2">⏳</div>
+            <p className="text-white text-sm">Processing new content...</p>
+          </div>
         </div>
       </div>
     );

@@ -73,6 +73,12 @@ export class AssetService {
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     
+    console.log('📅 Session filtering details:', {
+      sessionOnly,
+      startOfDay: startOfDay.toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    });
+    
     // Build query conditions
     let imageQuery = supabase
       .from('images')
@@ -121,7 +127,10 @@ export class AssetService {
         return acc;
       }, {}),
       completedImages: imagesResult.data?.filter(img => img.status === 'completed').length,
-      imagesWithUrls: imagesResult.data?.filter(img => img.image_url).length
+      imagesWithUrls: imagesResult.data?.filter(img => img.image_url).length,
+      sessionFiltered: sessionOnly ? 'YES' : 'NO',
+      oldestImage: imagesResult.data?.[imagesResult.data.length - 1]?.created_at,
+      newestImage: imagesResult.data?.[0]?.created_at
     });
 
     // Enhanced debugging for each image
@@ -131,9 +140,8 @@ export class AssetService {
         status: image.status,
         quality: image.quality,
         hasImageUrl: !!image.image_url,
-        imageUrl: image.image_url,
-        metadata: image.metadata,
-        createdAt: image.created_at
+        createdAt: image.created_at,
+        isInSession: sessionOnly ? new Date(image.created_at) >= startOfDay : 'N/A'
       });
     });
 
@@ -206,9 +214,8 @@ export class AssetService {
                 source: image.image_urls ? 'root' : 'metadata'
               });
               
-              // Generate signed URLs for each image in the array
-              const signedUrls: string[] = [];
-              for (const imagePath of imageUrlsArray) {
+              // Generate signed URLs for each image in the array in parallel for speed
+              const signedUrlPromises = imageUrlsArray.map(async (imagePath) => {
                 const { data: signedUrlData, error: urlError } = await getSignedUrl(
                   bucket as any,
                   imagePath,
@@ -216,15 +223,18 @@ export class AssetService {
                 );
                 
                 if (!urlError && signedUrlData?.signedUrl) {
-                  signedUrls.push(signedUrlData.signedUrl);
+                  return signedUrlData.signedUrl;
                 } else {
                   console.error('❌ Failed to generate URL for image in array:', {
                     imageId: image.id,
                     imagePath,
                     error: urlError?.message
                   });
+                  return null;
                 }
-              }
+              });
+              
+              const signedUrls = (await Promise.all(signedUrlPromises)).filter(url => url !== null);
               
               if (signedUrls.length > 0) {
                 // Store signed URLs in metadata for MediaGrid to use
@@ -234,13 +244,14 @@ export class AssetService {
                 console.log('✅ Generated signed URLs for image array:', {
                   imageId: image.id,
                   bucket,
-                  urlCount: signedUrls.length
+                  urlCount: signedUrls.length,
+                  processingTime: 'optimized-parallel'
                 });
               } else {
                 error = 'Failed to generate URLs for image array';
                 console.error('❌ No signed URLs generated for image array:', image.id);
               }
-            } 
+            }
             // Fallback to single image_url (legacy)
             else if (image.image_url) {
               console.log('📁 Processing single image_url:', {

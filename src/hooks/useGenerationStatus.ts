@@ -90,10 +90,11 @@ export const useGenerationStatus = (
         // Reset retry counter on successful response
         maxRetriesRef.current = 0;
         
-        // Invalidate assets query when generation completes for immediate UI refresh
+        // Invalidate and refetch assets query when generation completes for immediate UI refresh
         if (result.status === 'completed') {
-          console.log('🎉 Generation completed, invalidating assets cache for immediate refresh');
+          console.log('🎉 Generation completed, invalidating and refetching assets cache for immediate refresh');
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
+          queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
           
           // Also emit event for backward compatibility
           window.dispatchEvent(new CustomEvent('generationCompleted', { 

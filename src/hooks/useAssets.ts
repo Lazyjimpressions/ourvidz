@@ -25,7 +25,7 @@ export const useAssets = (sessionOnly: boolean = true) => {
         throw error;
       }
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes for session assets
+    staleTime: 30 * 1000, // 30 seconds for faster updates
     gcTime: 45 * 60 * 1000, // Keep in cache for 45 minutes 
     refetchOnWindowFocus: true,
     refetchOnMount: true,
@@ -36,8 +36,9 @@ export const useInvalidateAssets = () => {
   const queryClient = useQueryClient();
   
   return () => {
-    console.log('🔄 React Query: Invalidating assets cache');
+    console.log('🔄 React Query: Invalidating and refetching assets cache');
     queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
+    queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
   };
 };
 
