@@ -75,9 +75,13 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   // Process assets into tiles whenever assets change
   useEffect(() => {
     console.log('🎯 Processing assets into tiles for unified workspace...');
+    console.log('📊 Total assets received:', assets.length);
     
     // If workspace is cleared, only show assets newer than clear timestamp
-    let filteredAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
+    let filteredAssets = assets.filter(asset => 
+      asset.status === 'completed' && (asset.url || (asset.signedUrls && asset.signedUrls.length > 0))
+    );
+    console.log('✅ Assets after filtering:', filteredAssets.length);
     
     if (workspaceCleared && clearTimestamp) {
       console.log('🧹 Filtering assets by clear timestamp:', new Date(clearTimestamp));
@@ -226,6 +230,11 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   };
 
   const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+    if (!importedAssets || importedAssets.length === 0) {
+      console.log('📥 No assets to import');
+      return;
+    }
+    
     console.log('📥 Importing assets to workspace:', importedAssets.length);
     
     // Convert imported assets to tiles using shared transform function
