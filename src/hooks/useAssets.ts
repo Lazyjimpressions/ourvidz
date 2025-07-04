@@ -41,12 +41,3 @@ export const useInvalidateAssets = () => {
     queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
   };
 };
-
-export const useClearWorkspace = () => {
-  const queryClient = useQueryClient();
-  
-  return () => {
-    console.log('🧹 Clearing workspace cache');
-    queryClient.removeQueries({ queryKey: [...ASSETS_QUERY_KEY, true] });
-  };
-};

@@ -85,53 +85,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       );
     }
     
+    // Use shared transform function for consistency
     const processedTiles: MediaTile[] = [];
-
     for (const asset of filteredAssets) {
-      if (asset.type === 'image') {
-        // Handle 6-image generations - create individual tiles for each image
-        if (asset.signedUrls && asset.signedUrls.length > 0) {
-          console.log('✅ Processing 6-image generation:', asset.id, 'with', asset.signedUrls.length, 'images');
-          asset.signedUrls.forEach((url: string, index: number) => {
-            processedTiles.push({
-              id: `${asset.id}-${index}`,
-              originalAssetId: asset.id,
-              type: 'image',
-              url: url,
-              prompt: asset.prompt,
-              timestamp: asset.createdAt,
-              quality: (asset.quality as 'fast' | 'high') || 'fast',
-              modelType: asset.modelType
-            });
-          });
-        } 
-        // Handle single images (legacy)
-        else {
-          processedTiles.push({
-            id: asset.id,
-            originalAssetId: asset.id,
-            type: 'image',
-            url: asset.url,
-            prompt: asset.prompt,
-            timestamp: asset.createdAt,
-            quality: (asset.quality as 'fast' | 'high') || 'fast',
-            modelType: asset.modelType
-          });
-        }
-      } 
-      else if (asset.type === 'video') {
-        processedTiles.push({
-          id: asset.id,
-          originalAssetId: asset.id,
-          type: 'video',
-          url: asset.url,
-          prompt: asset.prompt,
-          timestamp: asset.createdAt,
-          quality: (asset.quality as 'fast' | 'high') || 'fast',
-          duration: asset.duration,
-          thumbnailUrl: asset.thumbnailUrl
-        });
-      }
+      processedTiles.push(...transformAssetToTile(asset));
     }
 
     // Sort by timestamp (newest first)
@@ -219,51 +176,61 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   }
 };
 
-const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
-  // Convert imported assets to tiles and add to current tiles
-  const importedTiles: MediaTile[] = [];
+// Helper function to transform assets to tiles
+const transformAssetToTile = (asset: UnifiedAsset): MediaTile[] => {
+  const tiles: MediaTile[] = [];
   
-  for (const asset of importedAssets) {
-    if (asset.type === 'image') {
-      // Handle 6-image generations
-      if (asset.signedUrls && asset.signedUrls.length > 0) {
-        asset.signedUrls.forEach((url: string, index: number) => {
-          importedTiles.push({
-            id: `${asset.id}-${index}`,
-            originalAssetId: asset.id,
-            type: 'image',
-            url: url,
-            prompt: asset.prompt,
-            timestamp: asset.createdAt,
-            quality: (asset.quality as 'fast' | 'high') || 'fast',
-            modelType: asset.modelType
-          });
-        });
-      } else {
-        importedTiles.push({
-          id: asset.id,
+  if (asset.type === 'image') {
+    // Handle 6-image generations
+    if (asset.signedUrls && asset.signedUrls.length > 0) {
+      asset.signedUrls.forEach((url: string, index: number) => {
+        tiles.push({
+          id: `${asset.id}-${index}`,
           originalAssetId: asset.id,
           type: 'image',
-          url: asset.url!,
+          url: url,
           prompt: asset.prompt,
           timestamp: asset.createdAt,
           quality: (asset.quality as 'fast' | 'high') || 'fast',
           modelType: asset.modelType
         });
-      }
-    } else if (asset.type === 'video') {
-      importedTiles.push({
+      });
+    } else {
+      tiles.push({
         id: asset.id,
         originalAssetId: asset.id,
-        type: 'video',
+        type: 'image',
         url: asset.url!,
         prompt: asset.prompt,
         timestamp: asset.createdAt,
         quality: (asset.quality as 'fast' | 'high') || 'fast',
-        duration: asset.duration,
-        thumbnailUrl: asset.thumbnailUrl
+        modelType: asset.modelType
       });
     }
+  } else if (asset.type === 'video') {
+    tiles.push({
+      id: asset.id,
+      originalAssetId: asset.id,
+      type: 'video',
+      url: asset.url!,
+      prompt: asset.prompt,
+      timestamp: asset.createdAt,
+      quality: (asset.quality as 'fast' | 'high') || 'fast',
+      duration: asset.duration,
+      thumbnailUrl: asset.thumbnailUrl
+    });
+  }
+  
+  return tiles;
+};
+
+const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+  console.log('📥 Importing assets to workspace:', importedAssets.length);
+  
+  // Convert imported assets to tiles using shared transform function
+  const importedTiles: MediaTile[] = [];
+  for (const asset of importedAssets) {
+    importedTiles.push(...transformAssetToTile(asset));
   }
   
   // Add imported tiles to current tiles (at the beginning to show as recent)
@@ -272,6 +239,15 @@ const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
     // Sort by timestamp to maintain order
     return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   });
+  
+  // CRITICAL FIX: Reset workspace cleared state when importing
+  if (workspaceCleared) {
+    console.log('🔄 Resetting workspace cleared state after import');
+    setWorkspaceCleared(false);
+    setClearTimestamp(null);
+    sessionStorage.removeItem('workspaceCleared');
+    sessionStorage.removeItem('workspaceClearTimestamp');
+  }
   
   toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
 };
