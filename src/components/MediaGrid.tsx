@@ -16,7 +16,7 @@ import {
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { LibraryImportModal } from "@/components/LibraryImportModal";
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
-import { useAssets, useInvalidateAssets } from '@/hooks/useAssets';
+// Removed useAssets import - workspace is now purely session-based
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -46,95 +46,37 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [workspaceCleared, setWorkspaceCleared] = useState(false);
-  const [clearTimestamp, setClearTimestamp] = useState<number | null>(null);
-  
-  // Use React Query for session-based asset fetching
-  const { data: assets = [], isLoading, error } = useAssets(true);
-  const invalidateAssets = useInvalidateAssets();
 
-  // Initialize workspace cleared state from sessionStorage
+  // Load workspace state from sessionStorage on mount
   useEffect(() => {
-    const cleared = sessionStorage.getItem('workspaceCleared') === 'true';
-    const timestamp = sessionStorage.getItem('workspaceClearTimestamp');
-    if (cleared && timestamp) {
-      const clearTime = parseInt(timestamp);
-      // Only maintain cleared state if assets are actually empty or all older than clear time
-      const hasNewerAssets = assets.some(asset => 
-        asset.status === 'completed' && 
-        (asset.url || (asset.signedUrls && asset.signedUrls.length > 0)) &&
-        asset.createdAt.getTime() > clearTime
-      );
-      
-      if (!hasNewerAssets) {
-        console.log('🧹 Workspace was previously cleared, maintaining empty state');
-        setWorkspaceCleared(true);
-        setClearTimestamp(clearTime);
-      } else {
-        console.log('🔄 Found newer assets, clearing workspace cleared state');
-        sessionStorage.removeItem('workspaceCleared');
-        sessionStorage.removeItem('workspaceClearTimestamp');
+    const savedTiles = sessionStorage.getItem('workspaceTiles');
+    if (savedTiles) {
+      try {
+        const parsedTiles = JSON.parse(savedTiles);
+        // Convert timestamp strings back to Date objects
+        const tilesWithDates = parsedTiles.map((tile: any) => ({
+          ...tile,
+          timestamp: new Date(tile.timestamp)
+        }));
+        setTiles(tilesWithDates);
+        console.log('✅ Loaded workspace from sessionStorage:', tilesWithDates.length, 'tiles');
+      } catch (error) {
+        console.error('❌ Failed to parse saved workspace tiles:', error);
+        sessionStorage.removeItem('workspaceTiles');
       }
     }
-  }, [assets]);
+  }, []);
 
-  // Process assets into tiles whenever assets change
+  // Save workspace state to sessionStorage whenever tiles change
   useEffect(() => {
-    console.log('🎯 Processing assets into tiles for unified workspace...');
-    console.log('📊 Total assets received:', assets.length);
-    
-    // If workspace is cleared, only show assets newer than clear timestamp
-    let filteredAssets = assets.filter(asset => 
-      asset.status === 'completed' && (asset.url || (asset.signedUrls && asset.signedUrls.length > 0))
-    );
-    console.log('✅ Assets after filtering:', filteredAssets.length);
-    
-    if (workspaceCleared && clearTimestamp) {
-      console.log('🧹 Filtering assets by clear timestamp:', new Date(clearTimestamp));
-      filteredAssets = filteredAssets.filter(asset => 
-        asset.createdAt.getTime() > clearTimestamp
-      );
+    if (tiles.length > 0) {
+      sessionStorage.setItem('workspaceTiles', JSON.stringify(tiles));
+      console.log('💾 Saved workspace to sessionStorage:', tiles.length, 'tiles');
+    } else {
+      sessionStorage.removeItem('workspaceTiles');
+      console.log('🧹 Cleared workspace from sessionStorage');
     }
-    
-    // Use shared transform function for consistency
-    const processedTiles: MediaTile[] = [];
-    for (const asset of filteredAssets) {
-      processedTiles.push(...transformAssetToTile(asset));
-    }
-
-    // Sort by timestamp (newest first)
-    processedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-    console.log('✅ Processed tiles:', {
-      total: processedTiles.length,
-      images: processedTiles.filter(t => t.type === 'image').length,
-      videos: processedTiles.filter(t => t.type === 'video').length
-    });
-    
-    setTiles(processedTiles);
-    
-    // Reset workspace cleared state when genuinely new content arrives
-    if (processedTiles.length > 0 && workspaceCleared && clearTimestamp) {
-      const hasNewContent = processedTiles.some(tile => 
-        tile.timestamp.getTime() > clearTimestamp
-      );
-      if (hasNewContent) {
-        console.log('🔄 New content detected, resetting workspace cleared state');
-        setWorkspaceCleared(false);
-        setClearTimestamp(null);
-        sessionStorage.removeItem('workspaceCleared');
-        sessionStorage.removeItem('workspaceClearTimestamp');
-      }
-    }
-  }, [assets, workspaceCleared, clearTimestamp]);
-
-  // Show error state if assets failed to load
-  useEffect(() => {
-    if (error) {
-      console.error('❌ Failed to load assets:', error);
-      toast.error('Failed to load media');
-    }
-  }, [error]);
+  }, [tiles]);
 
   const handleDelete = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -150,9 +92,6 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       setTiles(prevTiles => 
         prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId)
       );
-      
-      // Invalidate React Query cache to ensure fresh data
-      invalidateAssets();
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
     } catch (error) {
@@ -261,17 +200,8 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       return importedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     });
     
-    // CRITICAL FIX: Reset workspace cleared state when importing
-    if (workspaceCleared) {
-      console.log('🔄 Resetting workspace cleared state after import');
-      setWorkspaceCleared(false);
-      setClearTimestamp(null);
-      sessionStorage.removeItem('workspaceCleared');
-      sessionStorage.removeItem('workspaceClearTimestamp');
-    }
-    
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, [workspaceCleared]);
+  }, []);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { 
@@ -284,11 +214,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   // Handle workspace clearing
   const handleClearWorkspace = () => {
     console.log('🧹 Clearing workspace');
-    const timestamp = Date.now();
-    setWorkspaceCleared(true);
-    setClearTimestamp(timestamp);
-    sessionStorage.setItem('workspaceCleared', 'true');
-    sessionStorage.setItem('workspaceClearTimestamp', timestamp.toString());
+    setTiles([]);
     toast.success('Workspace cleared');
   };
 
@@ -307,52 +233,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     }
   }, [onImport, handleImportFromLibrary]);
 
-  if (isLoading && tiles.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin text-2xl mb-2">⏳</div>
-          <p className="text-gray-400">Loading your media...</p>
-          <p className="text-gray-500 text-sm mt-2">This should only take a few seconds</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show loading overlay for new content being processed
-  if (isLoading && tiles.length > 0) {
-    return (
-      <div className="relative">
-        {/* Existing content with loading overlay */}
-        <div className="opacity-70">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-            {tiles.map((tile) => (
-              <div key={tile.id} className="group relative cursor-pointer bg-gray-900 rounded-lg overflow-hidden aspect-square">
-                {tile.type === 'image' ? (
-                  <img src={tile.url} alt="Generated content" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="relative w-full h-full">
-                    <video src={tile.url} className="w-full h-full object-cover" muted preload="metadata" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        {/* Loading overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-          <div className="bg-gray-900/90 rounded-lg p-4 text-center">
-            <div className="animate-spin text-xl mb-2">⏳</div>
-            <p className="text-white text-sm">Processing new content...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (tiles.length === 0 || workspaceCleared) {
-    const isCleared = workspaceCleared;
+  if (tiles.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -362,10 +243,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
             </svg>
           </div>
           <h3 className="text-lg font-medium text-gray-400 mb-2">
-            {isCleared ? 'Workspace cleared' : 'Your workspace is empty'}
+            Your workspace is empty
           </h3>
           <p className="text-gray-600 mb-4">
-            {isCleared ? 'Generate new content to populate your workspace' : 'Generate new content or import from your library'}
+            Generate new content or import from your library
           </p>
           <Button
             variant="outline"
