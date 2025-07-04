@@ -12,11 +12,18 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
+import { useClearWorkspace } from '@/hooks/useAssets';
 
 const Workspace = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
+  const clearWorkspace = useClearWorkspace();
+  
+  const handleClearWorkspace = () => {
+    clearWorkspace();
+    toast.success("Workspace cleared");
+  };
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -173,10 +180,12 @@ const Workspace = () => {
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
         {/* Unified Media Grid for both images and videos */}
-        <MediaGrid 
-          onRegenerateItem={handleRegenerate} 
-          onGenerateMoreLike={handleGenerateMoreLike}
-        />
+  const clearWorkspace = useClearWorkspace();
+
+  const handleClearWorkspace = () => {
+    clearWorkspace();
+    toast.success("Workspace cleared");
+  };
       </div>
 
       {/* Scroll Navigation */}

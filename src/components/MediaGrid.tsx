@@ -36,18 +36,29 @@ interface MediaTile {
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
+  onClearWorkspace?: () => void;
 }
 
-export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridProps) => {
+export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspace }: MediaGridProps) => {
   const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [workspaceCleared, setWorkspaceCleared] = useState(false);
   
   // Use React Query for session-based asset fetching
   const { data: assets = [], isLoading, error } = useAssets(true);
   const invalidateAssets = useInvalidateAssets();
+
+  // Initialize workspace cleared state from sessionStorage
+  useEffect(() => {
+    const cleared = sessionStorage.getItem('workspaceCleared') === 'true';
+    if (cleared) {
+      console.log('🧹 Workspace was previously cleared, maintaining empty state');
+      setWorkspaceCleared(true);
+    }
+  }, []);
 
   // Process assets into tiles whenever assets change
   useEffect(() => {
@@ -113,7 +124,14 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
     });
     
     setTiles(processedTiles);
-  }, [assets]);
+    
+    // Reset workspace cleared state when new content arrives
+    if (processedTiles.length > 0 && workspaceCleared) {
+      console.log('🔄 New content detected, resetting workspace cleared state');
+      setWorkspaceCleared(false);
+      sessionStorage.removeItem('workspaceCleared');
+    }
+  }, [assets, workspaceCleared]);
 
   // Show error state if assets failed to load
   useEffect(() => {
@@ -239,6 +257,19 @@ const formatDate = (date: Date) => {
     });
   };
 
+  // Handle workspace clearing
+  const handleClearWorkspace = () => {
+    console.log('🧹 Clearing workspace');
+    setWorkspaceCleared(true);
+    sessionStorage.setItem('workspaceCleared', 'true');
+    toast.success('Workspace cleared');
+    
+    // Call external callback if provided
+    if (onClearWorkspace) {
+      onClearWorkspace();
+    }
+  };
+
   if (isLoading && tiles.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -283,7 +314,8 @@ const formatDate = (date: Date) => {
     );
   }
 
-  if (tiles.length === 0) {
+  if (tiles.length === 0 || workspaceCleared) {
+    const isCleared = workspaceCleared;
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -292,8 +324,12 @@ const formatDate = (date: Date) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-400 mb-2">Your workspace is empty</h3>
-          <p className="text-gray-600 mb-4">Generate new content or import from your library</p>
+          <h3 className="text-lg font-medium text-gray-400 mb-2">
+            {isCleared ? 'Workspace cleared' : 'Your workspace is empty'}
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {isCleared ? 'Generate new content to populate your workspace' : 'Generate new content or import from your library'}
+          </p>
           <Button
             variant="outline"
             onClick={() => setShowLibraryModal(true)}
