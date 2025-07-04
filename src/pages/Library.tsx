@@ -17,7 +17,7 @@ const Library = () => {
   // Data fetching
   const { data: assets = [], isLoading, refetch } = useQuery({
     queryKey: ['user-assets'],
-    queryFn: AssetService.getUserAssets,
+    queryFn: () => AssetService.getUserAssets(false), // Show all assets in library
   });
 
   // Filter states

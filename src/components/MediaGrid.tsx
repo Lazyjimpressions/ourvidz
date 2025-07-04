@@ -10,10 +10,12 @@ import {
   Play,
   Clock,
   Calendar,
-  Copy
+  Copy,
+  Plus
 } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
-import { AssetService } from '@/lib/services/AssetService';
+import { LibraryImportModal } from "@/components/LibraryImportModal";
+import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { useAssets, useInvalidateAssets } from '@/hooks/useAssets';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -41,9 +43,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
   
-  // Use React Query for asset fetching
-  const { data: assets = [], isLoading, error } = useAssets();
+  // Use React Query for session-based asset fetching
+  const { data: assets = [], isLoading, error } = useAssets(true);
   const invalidateAssets = useInvalidateAssets();
 
   // Process assets into tiles whenever assets change
@@ -167,11 +170,68 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
       toast.success('Download started');
     } catch (error) {
       console.error('Download failed:', error);
-      toast.error('Download failed');
-    }
-  };
+    toast.error('Download failed');
+  }
+};
 
-  const formatDate = (date: Date) => {
+const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+  // Convert imported assets to tiles and add to current tiles
+  const importedTiles: MediaTile[] = [];
+  
+  for (const asset of importedAssets) {
+    if (asset.type === 'image') {
+      // Handle 6-image generations
+      if (asset.signedUrls && asset.signedUrls.length > 0) {
+        asset.signedUrls.forEach((url: string, index: number) => {
+          importedTiles.push({
+            id: `${asset.id}-${index}`,
+            originalAssetId: asset.id,
+            type: 'image',
+            url: url,
+            prompt: asset.prompt,
+            timestamp: asset.createdAt,
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            modelType: asset.modelType
+          });
+        });
+      } else {
+        importedTiles.push({
+          id: asset.id,
+          originalAssetId: asset.id,
+          type: 'image',
+          url: asset.url!,
+          prompt: asset.prompt,
+          timestamp: asset.createdAt,
+          quality: (asset.quality as 'fast' | 'high') || 'fast',
+          modelType: asset.modelType
+        });
+      }
+    } else if (asset.type === 'video') {
+      importedTiles.push({
+        id: asset.id,
+        originalAssetId: asset.id,
+        type: 'video',
+        url: asset.url!,
+        prompt: asset.prompt,
+        timestamp: asset.createdAt,
+        quality: (asset.quality as 'fast' | 'high') || 'fast',
+        duration: asset.duration,
+        thumbnailUrl: asset.thumbnailUrl
+      });
+    }
+  }
+  
+  // Add imported tiles to current tiles (at the beginning to show as recent)
+  setTiles(prevTiles => {
+    const combined = [...importedTiles, ...prevTiles];
+    // Sort by timestamp to maintain order
+    return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  });
+  
+  toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
+};
+
+const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
@@ -199,8 +259,16 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-400 mb-2">No media yet</h3>
-          <p className="text-gray-600">Generate your first image or video to see it here</p>
+          <h3 className="text-lg font-medium text-gray-400 mb-2">Your workspace is empty</h3>
+          <p className="text-gray-600 mb-4">Generate new content or import from your library</p>
+          <Button
+            variant="outline"
+            onClick={() => setShowLibraryModal(true)}
+            className="gap-2 border-gray-700 hover:bg-gray-800"
+          >
+            <Plus className="w-4 h-4" />
+            Import from Library
+          </Button>
         </div>
       </div>
     );
@@ -385,6 +453,13 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
           }}
         />
       )}
+
+      {/* Library Import Modal */}
+      <LibraryImportModal
+        open={showLibraryModal}
+        onClose={() => setShowLibraryModal(false)}
+        onImport={handleImportFromLibrary}
+      />
     </>
   );
 };

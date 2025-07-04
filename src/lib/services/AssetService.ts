@@ -59,8 +59,8 @@ export class AssetService {
     return quality === 'high' ? 'video_high' : 'video_fast';
   }
 
-  static async getUserAssets(): Promise<UnifiedAsset[]> {
-    console.log('🔍 ENHANCED ASSET FETCHING with comprehensive debugging...');
+  static async getUserAssets(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
+    console.log('🔍 ENHANCED ASSET FETCHING with session filtering:', { sessionOnly });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -69,25 +69,38 @@ export class AssetService {
 
     console.log('👤 Fetching assets for user:', user.id);
 
+    // Get today's date for session filtering
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    // Build query conditions
+    let imageQuery = supabase
+      .from('images')
+      .select(`
+        *,
+        project:projects(title)
+      `)
+      .eq('user_id', user.id);
+      
+    let videoQuery = supabase
+      .from('videos')
+      .select(`
+        *,
+        project:projects(title)
+      `)
+      .eq('user_id', user.id);
+
+    // Add session filtering if requested
+    if (sessionOnly) {
+      imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
+      videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
+      console.log('📅 Session filtering enabled - showing assets from:', startOfDay.toISOString());
+    }
+
     // Fetch images and videos in parallel
     const [imagesResult, videosResult] = await Promise.all([
-      supabase
-        .from('images')
-        .select(`
-          *,
-          project:projects(title)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
-      
-      supabase
-        .from('videos')
-        .select(`
-          *,
-          project:projects(title)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      imageQuery.order('created_at', { ascending: false }),
+      videoQuery.order('created_at', { ascending: false })
     ]);
 
     if (imagesResult.error) {

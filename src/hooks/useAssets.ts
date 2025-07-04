@@ -4,15 +4,15 @@ import { useToast } from '@/hooks/use-toast';
 
 export const ASSETS_QUERY_KEY = ['assets'] as const;
 
-export const useAssets = () => {
+export const useAssets = (sessionOnly: boolean = true) => {
   const { toast } = useToast();
 
   return useQuery({
-    queryKey: ASSETS_QUERY_KEY,
+    queryKey: [...ASSETS_QUERY_KEY, sessionOnly],
     queryFn: async (): Promise<UnifiedAsset[]> => {
       try {
-        console.log('🔄 React Query: Fetching assets...');
-        const assets = await AssetService.getUserAssets();
+        console.log('🔄 React Query: Fetching assets...', { sessionOnly });
+        const assets = await AssetService.getUserAssets(sessionOnly);
         console.log('✅ React Query: Assets fetched:', assets.length);
         return assets;
       } catch (error) {
@@ -25,8 +25,8 @@ export const useAssets = () => {
         throw error;
       }
     },
-    staleTime: 1000, // Consider data stale after 1 second
-    gcTime: 30000, // Keep in cache for 30 seconds
+    staleTime: 5 * 60 * 1000, // 5 minutes for session assets
+    gcTime: 45 * 60 * 1000, // Keep in cache for 45 minutes 
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
@@ -38,5 +38,14 @@ export const useInvalidateAssets = () => {
   return () => {
     console.log('🔄 React Query: Invalidating assets cache');
     queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
+  };
+};
+
+export const useClearWorkspace = () => {
+  const queryClient = useQueryClient();
+  
+  return () => {
+    console.log('🧹 Clearing workspace cache');
+    queryClient.removeQueries({ queryKey: [...ASSETS_QUERY_KEY, true] });
   };
 };
