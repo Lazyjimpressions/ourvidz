@@ -11,6 +11,7 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
+import { LibraryImportModal } from '@/components/LibraryImportModal';
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ const Workspace = () => {
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
+  const [showLibraryModal, setShowLibraryModal] = useState(false);
   
   const {
     generateContent,
@@ -215,6 +217,7 @@ const Workspace = () => {
             onSwitchToImage={() => navigate('/workspace?mode=image')}
             quality={quality}
             setQuality={setQuality}
+            onLibraryClick={() => setShowLibraryModal(true)}
           />
         ) : (
           <ImageInputControls
@@ -237,9 +240,20 @@ const Workspace = () => {
             onSwitchToVideo={() => navigate('/workspace?mode=video')}
             quality={quality}
             setQuality={setQuality}
+            onLibraryClick={() => setShowLibraryModal(true)}
           />
         )}
       </div>
+
+      {/* Library Import Modal */}
+      <LibraryImportModal
+        open={showLibraryModal}
+        onClose={() => setShowLibraryModal(false)}
+        onImport={(assets) => {
+          // Assets are automatically added to the workspace through the import process
+          toast.success(`Imported ${assets.length} asset${assets.length !== 1 ? 's' : ''} to workspace`);
+        }}
+      />
     </div>
   );
 };

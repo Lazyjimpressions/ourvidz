@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -18,6 +18,7 @@ interface VideoInputControlsProps {
   onSwitchToImage?: () => void;
   quality: 'fast' | 'high';
   setQuality: (quality: 'fast' | 'high') => void;
+  onLibraryClick: () => void;
 }
 
 export const VideoInputControls = ({
@@ -29,7 +30,8 @@ export const VideoInputControls = ({
   onEndingFrameUpload,
   onSwitchToImage,
   quality,
-  setQuality
+  setQuality,
+  onLibraryClick
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [duration, setDuration] = useState("5s");
@@ -107,6 +109,15 @@ export const VideoInputControls = ({
 
       {/* Controls Row */}
       <div className="flex items-center justify-end gap-2 mt-2">
+        {/* Library Button */}
+        <Button
+          variant="ghost"
+          onClick={onLibraryClick}
+          className="flex items-center gap-1 px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded"
+        >
+          <Archive className="w-3 h-3" />
+          Library
+        </Button>
 
         {/* Aspect Ratio */}
         <Popover>
