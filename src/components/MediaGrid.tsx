@@ -46,9 +46,11 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Load workspace state from sessionStorage on mount
   useEffect(() => {
+    console.log('🔄 Starting workspace initialization...');
     const savedTiles = sessionStorage.getItem('workspaceTiles');
     if (savedTiles) {
       try {
@@ -65,15 +67,22 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
         sessionStorage.removeItem('workspaceTiles');
       }
     }
+    setIsLoaded(true);
+    console.log('✅ Workspace initialization complete');
   }, []);
 
-  // Save workspace state to sessionStorage whenever tiles change
+  // Save workspace state to sessionStorage whenever tiles change (only after initialization)
   useEffect(() => {
+    if (!isLoaded) {
+      console.log('⏳ Skipping save - still initializing...');
+      return;
+    }
+    
     if (tiles.length > 0) {
       sessionStorage.setItem('workspaceTiles', JSON.stringify(tiles));
       console.log('💾 Saved workspace to sessionStorage:', tiles.length, 'tiles');
     }
-  }, [tiles]);
+  }, [tiles, isLoaded]);
 
   const handleDelete = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
