@@ -255,11 +255,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       importedTiles.push(...transformAssetToTile(asset));
     }
     
-    // Add imported tiles to current tiles (at the beginning to show as recent)
-    setTiles(prevTiles => {
-      const combined = [...importedTiles, ...prevTiles];
+    // Replace workspace with imported tiles only
+    setTiles(() => {
       // Sort by timestamp to maintain order
-      return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      return importedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     });
     
     // CRITICAL FIX: Reset workspace cleared state when importing
