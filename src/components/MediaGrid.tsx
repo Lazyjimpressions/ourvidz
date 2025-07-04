@@ -37,9 +37,10 @@ interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
   onClearWorkspace?: (clearHandler: () => void) => void;
+  onImport?: (importHandler: (assets: UnifiedAsset[]) => void) => void;
 }
 
-export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspace }: MediaGridProps) => {
+export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspace, onImport }: MediaGridProps) => {
   const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
@@ -277,6 +278,13 @@ const formatDate = (date: Date) => {
       onClearWorkspace(handleClearWorkspace);
     }
   }, [onClearWorkspace]);
+
+  // Register import handler with parent component
+  useEffect(() => {
+    if (onImport) {
+      onImport(handleImportFromLibrary);
+    }
+  }, [onImport]);
 
   if (isLoading && tiles.length === 0) {
     return (

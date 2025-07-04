@@ -12,6 +12,7 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
+import { UnifiedAsset } from '@/lib/services/AssetService';
 
 
 const Workspace = () => {
@@ -19,8 +20,9 @@ const Workspace = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   
-  // Create a ref to access MediaGrid's clear function
+  // Create refs to access MediaGrid's functions
   const [clearWorkspaceHandler, setClearWorkspaceHandler] = useState<(() => void) | null>(null);
+  const [importHandler, setImportHandler] = useState<((assets: UnifiedAsset[]) => void) | null>(null);
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -181,6 +183,7 @@ const Workspace = () => {
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
           onClearWorkspace={setClearWorkspaceHandler}
+          onImport={setImportHandler}
         />
       </div>
 
@@ -255,8 +258,11 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(assets) => {
-          // Assets are automatically added to the workspace through the import process
-          toast.success(`Imported ${assets.length} asset${assets.length !== 1 ? 's' : ''} to workspace`);
+          if (importHandler) {
+            importHandler(assets);
+          } else {
+            toast.error('Import handler not ready, please try again');
+          }
         }}
       />
     </div>
