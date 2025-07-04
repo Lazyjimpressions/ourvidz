@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Calendar, Image, Video, Check } from 'lucide-react';
 import { useAssets } from '@/hooks/useAssets';
 import { UnifiedAsset } from '@/lib/services/AssetService';
@@ -48,12 +49,12 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[80vh] bg-gray-900 border-gray-800">
-        <DialogHeader>
+      <DialogContent className="max-w-4xl h-[80vh] bg-gray-900 border-gray-800 flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="text-white">Import from Library</DialogTitle>
         </DialogHeader>
         
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 min-h-0">
           {isLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin text-2xl">⏳</div>
@@ -66,80 +67,82 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
               <p className="text-gray-400">No assets in your library yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
-              {libraryAssets.map((asset) => (
-                <div
-                  key={asset.id}
-                  className={cn(
-                    "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
-                    selectedAssets.has(asset.id) 
-                      ? "ring-2 ring-primary scale-95" 
-                      : "hover:scale-105"
-                  )}
-                  onClick={() => handleAssetToggle(asset.id)}
-                >
-                  {/* Asset Content */}
-                  {asset.type === 'image' ? (
-                    <img
-                      src={asset.url || asset.thumbnailUrl}
-                      alt="Library asset"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="relative w-full h-full bg-gray-800">
-                      {asset.thumbnailUrl ? (
-                        <img
-                          src={asset.thumbnailUrl}
-                          alt="Video thumbnail"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Video className="w-8 h-8 text-gray-600" />
-                        </div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="bg-black/70 rounded-full p-2">
-                          <Video className="w-4 h-4 text-white" />
+            <ScrollArea className="h-full">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
+                {libraryAssets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className={cn(
+                      "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
+                      selectedAssets.has(asset.id) 
+                        ? "ring-2 ring-primary scale-95" 
+                        : "hover:scale-105"
+                    )}
+                    onClick={() => handleAssetToggle(asset.id)}
+                  >
+                    {/* Asset Content */}
+                    {asset.type === 'image' ? (
+                      <img
+                        src={asset.url || asset.thumbnailUrl}
+                        alt="Library asset"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="relative w-full h-full bg-gray-800">
+                        {asset.thumbnailUrl ? (
+                          <img
+                            src={asset.thumbnailUrl}
+                            alt="Video thumbnail"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Video className="w-8 h-8 text-gray-600" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="bg-black/70 rounded-full p-2">
+                            <Video className="w-4 h-4 text-white" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Selection Indicator */}
-                  {selectedAssets.has(asset.id) && (
-                    <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
-                      <Check className="w-3 h-3 text-primary-foreground" />
-                    </div>
-                  )}
+                    {/* Selection Indicator */}
+                    {selectedAssets.has(asset.id) && (
+                      <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
+                        <Check className="w-3 h-3 text-primary-foreground" />
+                      </div>
+                    )}
 
-                  {/* Asset Info */}
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <Badge variant="secondary" className="text-xs px-1 py-0.5">
-                        {asset.type === 'image' ? (
-                          <Image className="h-2 w-2 mr-1" />
-                        ) : (
-                          <Video className="h-2 w-2 mr-1" />
-                        )}
-                        {asset.type}
-                      </Badge>
-                      <div className="flex items-center text-gray-300">
-                        <Calendar className="h-2 w-2 mr-1" />
-                        {formatDate(asset.createdAt)}
+                    {/* Asset Info */}
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <Badge variant="secondary" className="text-xs px-1 py-0.5">
+                          {asset.type === 'image' ? (
+                            <Image className="h-2 w-2 mr-1" />
+                          ) : (
+                            <Video className="h-2 w-2 mr-1" />
+                          )}
+                          {asset.type}
+                        </Badge>
+                        <div className="flex items-center text-gray-300">
+                          <Calendar className="h-2 w-2 mr-1" />
+                          {formatDate(asset.createdAt)}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </ScrollArea>
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+        <div className="flex items-center justify-between border-t border-gray-800 pt-4 flex-shrink-0">
           <p className="text-sm text-gray-400">
             {selectedAssets.size} asset{selectedAssets.size !== 1 ? 's' : ''} selected
           </p>

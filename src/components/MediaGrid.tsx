@@ -57,11 +57,19 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     const cleared = sessionStorage.getItem('workspaceCleared') === 'true';
     const timestamp = sessionStorage.getItem('workspaceClearTimestamp');
     if (cleared && timestamp) {
-      console.log('🧹 Workspace was previously cleared, maintaining empty state');
-      setWorkspaceCleared(true);
-      setClearTimestamp(parseInt(timestamp));
+      const clearTime = parseInt(timestamp);
+      // Only maintain cleared state if we don't have assets newer than the clear timestamp
+      if (assets.length === 0 || !assets.some(asset => asset.createdAt.getTime() > clearTime)) {
+        console.log('🧹 Workspace was previously cleared, maintaining empty state');
+        setWorkspaceCleared(true);
+        setClearTimestamp(clearTime);
+      } else {
+        console.log('🔄 Found newer assets, clearing workspace cleared state');
+        sessionStorage.removeItem('workspaceCleared');
+        sessionStorage.removeItem('workspaceClearTimestamp');
+      }
     }
-  }, []);
+  }, [assets]);
 
   // Process assets into tiles whenever assets change
   useEffect(() => {
