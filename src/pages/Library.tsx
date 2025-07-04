@@ -14,10 +14,14 @@ import { toast } from "sonner";
 import { Download, Trash2, RotateCcw } from "lucide-react";
 
 const Library = () => {
-  // Data fetching
+  // Data fetching - use consistent query key with useAssets hook
   const { data: assets = [], isLoading, refetch } = useQuery({
-    queryKey: ['user-assets'],
+    queryKey: ['assets', false], // Match useAssets hook query key
     queryFn: () => AssetService.getUserAssets(false), // Show all assets in library
+    staleTime: 30 * 1000,
+    gcTime: 45 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
   // Filter states

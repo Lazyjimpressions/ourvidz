@@ -59,8 +59,14 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     const timestamp = sessionStorage.getItem('workspaceClearTimestamp');
     if (cleared && timestamp) {
       const clearTime = parseInt(timestamp);
-      // Only maintain cleared state if we don't have assets newer than the clear timestamp
-      if (assets.length === 0 || !assets.some(asset => asset.createdAt.getTime() > clearTime)) {
+      // Only maintain cleared state if assets are actually empty or all older than clear time
+      const hasNewerAssets = assets.some(asset => 
+        asset.status === 'completed' && 
+        (asset.url || (asset.signedUrls && asset.signedUrls.length > 0)) &&
+        asset.createdAt.getTime() > clearTime
+      );
+      
+      if (!hasNewerAssets) {
         console.log('🧹 Workspace was previously cleared, maintaining empty state');
         setWorkspaceCleared(true);
         setClearTimestamp(clearTime);
@@ -292,6 +298,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   useEffect(() => {
     if (onImport) {
       onImport(handleImportFromLibrary);
+      // Notify parent that handlers are ready
+      if (typeof onImport === 'function') {
+        console.log('✅ Import handler registered with parent');
+      }
     }
   }, [onImport]);
 

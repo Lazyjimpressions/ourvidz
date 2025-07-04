@@ -23,6 +23,7 @@ const Workspace = () => {
   // Create refs to access MediaGrid's functions
   const [clearWorkspaceHandler, setClearWorkspaceHandler] = useState<(() => void) | null>(null);
   const [importHandler, setImportHandler] = useState<((assets: UnifiedAsset[]) => void) | null>(null);
+  const [handlersReady, setHandlersReady] = useState(false);
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -183,7 +184,11 @@ const Workspace = () => {
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
           onClearWorkspace={setClearWorkspaceHandler}
-          onImport={setImportHandler}
+          onImport={(handler) => {
+            setImportHandler(() => handler);
+            setHandlersReady(true);
+            console.log('✅ Import handler received in Workspace');
+          }}
         />
       </div>
 
@@ -258,10 +263,11 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(assets) => {
-          if (importHandler) {
+          if (importHandler && handlersReady) {
             importHandler(assets);
           } else {
-            toast.error('Import handler not ready, please try again');
+            console.log('Import handler state:', { importHandler: !!importHandler, handlersReady });
+            toast.error('Import handler not ready, please try again in a moment');
           }
         }}
       />
