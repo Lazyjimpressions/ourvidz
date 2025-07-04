@@ -20,8 +20,8 @@ const Workspace = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   
-  // Create refs to access MediaGrid's functions
-  const [clearWorkspaceHandler, setClearWorkspaceHandler] = useState<(() => void) | null>(null);
+  // Simple state for triggering workspace clear
+  const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
   const [importHandler, setImportHandler] = useState<((assets: UnifiedAsset[]) => void) | null>(null);
   const [handlersReady, setHandlersReady] = useState(false);
   
@@ -192,7 +192,9 @@ const Workspace = () => {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Fixed Header */}
-      <WorkspaceHeader onClearWorkspace={clearWorkspaceHandler || undefined} />
+      <WorkspaceHeader onClearWorkspace={() => {
+        setShouldClearWorkspace(prev => !prev); // Toggle to trigger clear
+      }} />
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
@@ -200,7 +202,7 @@ const Workspace = () => {
         <MediaGrid 
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
-          onClearWorkspace={setClearWorkspaceHandler}
+          onClearWorkspace={shouldClearWorkspace}
           onImport={handleImportRegistration}
         />
       </div>

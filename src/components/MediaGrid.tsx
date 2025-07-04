@@ -36,7 +36,7 @@ interface MediaTile {
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
-  onClearWorkspace?: (clearHandler: () => void) => void;
+  onClearWorkspace?: boolean; // Changed to simple boolean trigger
   onImport?: (importHandler: (assets: UnifiedAsset[]) => void) => void;
 }
 
@@ -217,6 +217,41 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     });
   };
 
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationCompleted = (event: CustomEvent) => {
+      console.log('📦 Generation completed, adding to workspace:', event.detail);
+      const asset = event.detail;
+      
+      if (asset && isLoaded) {
+        const newTiles = transformAssetToTile(asset);
+        setTiles(prevTiles => {
+          const combined = [...newTiles, ...prevTiles];
+          return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        });
+        toast.success(`New ${asset.type} added to workspace!`);
+      }
+    };
+
+    window.addEventListener('generationCompleted', handleGenerationCompleted as EventListener);
+    console.log('✅ Generation completion listener registered');
+
+    return () => {
+      window.removeEventListener('generationCompleted', handleGenerationCompleted as EventListener);
+      console.log('🧹 Generation completion listener cleaned up');
+    };
+  }, [isLoaded]);
+
+  // Clear workspace when triggered by parent
+  useEffect(() => {
+    if (onClearWorkspace && isLoaded) {
+      console.log('🧹 Clearing workspace via parent trigger');
+      setTiles([]);
+      sessionStorage.removeItem('workspaceTiles');
+      toast.success('Workspace cleared');
+    }
+  }, [onClearWorkspace, isLoaded]);
+
   // Handle workspace clearing
   const handleClearWorkspace = () => {
     console.log('🧹 Clearing workspace');
@@ -225,13 +260,6 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     toast.success('Workspace cleared');
   };
 
-  // Register clear handler with parent component
-  useEffect(() => {
-    if (onClearWorkspace) {
-      onClearWorkspace(handleClearWorkspace);
-    }
-  }, [onClearWorkspace]);
-
   // Register import handler with parent component
   useEffect(() => {
     if (onImport) {
@@ -239,6 +267,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       console.log('✅ Import handler registered with parent');
     }
   }, [onImport, handleImportFromLibrary]);
+
 
   if (tiles.length === 0) {
     return (
