@@ -36,7 +36,7 @@ interface MediaTile {
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
-  onClearWorkspace?: () => void;
+  onClearWorkspace?: (clearHandler: () => void) => void;
 }
 
 export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspace }: MediaGridProps) => {
@@ -46,6 +46,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [workspaceCleared, setWorkspaceCleared] = useState(false);
+  const [clearTimestamp, setClearTimestamp] = useState<number | null>(null);
   
   // Use React Query for session-based asset fetching
   const { data: assets = [], isLoading, error } = useAssets(true);
@@ -54,9 +55,11 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   // Initialize workspace cleared state from sessionStorage
   useEffect(() => {
     const cleared = sessionStorage.getItem('workspaceCleared') === 'true';
-    if (cleared) {
+    const timestamp = sessionStorage.getItem('workspaceClearTimestamp');
+    if (cleared && timestamp) {
       console.log('🧹 Workspace was previously cleared, maintaining empty state');
       setWorkspaceCleared(true);
+      setClearTimestamp(parseInt(timestamp));
     }
   }, []);
 
@@ -64,10 +67,19 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   useEffect(() => {
     console.log('🎯 Processing assets into tiles for unified workspace...');
     
-    const completedAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
+    // If workspace is cleared, only show assets newer than clear timestamp
+    let filteredAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
+    
+    if (workspaceCleared && clearTimestamp) {
+      console.log('🧹 Filtering assets by clear timestamp:', new Date(clearTimestamp));
+      filteredAssets = filteredAssets.filter(asset => 
+        asset.createdAt.getTime() > clearTimestamp
+      );
+    }
+    
     const processedTiles: MediaTile[] = [];
 
-    for (const asset of completedAssets) {
+    for (const asset of filteredAssets) {
       if (asset.type === 'image') {
         // Handle 6-image generations - create individual tiles for each image
         if (asset.signedUrls && asset.signedUrls.length > 0) {
@@ -125,13 +137,20 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     
     setTiles(processedTiles);
     
-    // Reset workspace cleared state when new content arrives
-    if (processedTiles.length > 0 && workspaceCleared) {
-      console.log('🔄 New content detected, resetting workspace cleared state');
-      setWorkspaceCleared(false);
-      sessionStorage.removeItem('workspaceCleared');
+    // Reset workspace cleared state when genuinely new content arrives
+    if (processedTiles.length > 0 && workspaceCleared && clearTimestamp) {
+      const hasNewContent = processedTiles.some(tile => 
+        tile.timestamp.getTime() > clearTimestamp
+      );
+      if (hasNewContent) {
+        console.log('🔄 New content detected, resetting workspace cleared state');
+        setWorkspaceCleared(false);
+        setClearTimestamp(null);
+        sessionStorage.removeItem('workspaceCleared');
+        sessionStorage.removeItem('workspaceClearTimestamp');
+      }
     }
-  }, [assets, workspaceCleared]);
+  }, [assets, workspaceCleared, clearTimestamp]);
 
   // Show error state if assets failed to load
   useEffect(() => {
@@ -260,15 +279,20 @@ const formatDate = (date: Date) => {
   // Handle workspace clearing
   const handleClearWorkspace = () => {
     console.log('🧹 Clearing workspace');
+    const timestamp = Date.now();
     setWorkspaceCleared(true);
+    setClearTimestamp(timestamp);
     sessionStorage.setItem('workspaceCleared', 'true');
+    sessionStorage.setItem('workspaceClearTimestamp', timestamp.toString());
     toast.success('Workspace cleared');
-    
-    // Call external callback if provided
-    if (onClearWorkspace) {
-      onClearWorkspace();
-    }
   };
+
+  // Register clear handler with parent component
+  useEffect(() => {
+    if (onClearWorkspace) {
+      onClearWorkspace(handleClearWorkspace);
+    }
+  }, [onClearWorkspace]);
 
   if (isLoading && tiles.length === 0) {
     return (

@@ -12,18 +12,15 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
-import { useClearWorkspace } from '@/hooks/useAssets';
+
 
 const Workspace = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  const clearWorkspace = useClearWorkspace();
   
-  const handleClearWorkspace = () => {
-    clearWorkspace();
-    toast.success("Workspace cleared");
-  };
+  // Create a ref to access MediaGrid's clear function
+  const [clearWorkspaceHandler, setClearWorkspaceHandler] = useState<(() => void) | null>(null);
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -175,7 +172,7 @@ const Workspace = () => {
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Fixed Header */}
-      <WorkspaceHeader />
+      <WorkspaceHeader onClearWorkspace={clearWorkspaceHandler || undefined} />
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
@@ -183,7 +180,7 @@ const Workspace = () => {
         <MediaGrid 
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
-          onClearWorkspace={handleClearWorkspace}
+          onClearWorkspace={setClearWorkspaceHandler}
         />
       </div>
 

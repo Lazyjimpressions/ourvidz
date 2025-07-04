@@ -3,22 +3,18 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, User, LogOut, RotateCcw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClearWorkspace } from "@/hooks/useAssets";
-import { toast } from "sonner";
 
-export const WorkspaceHeader = () => {
+interface WorkspaceHeaderProps {
+  onClearWorkspace?: () => void;
+}
+
+export const WorkspaceHeader = ({ onClearWorkspace }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
-  const clearWorkspace = useClearWorkspace();
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
-  };
-
-  const handleClearWorkspace = () => {
-    clearWorkspace();
-    toast.success("Workspace cleared");
   };
 
   return (
@@ -42,7 +38,7 @@ export const WorkspaceHeader = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleClearWorkspace}
+                onClick={onClearWorkspace}
                 className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
                 title="Clear workspace"
               >
