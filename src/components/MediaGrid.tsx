@@ -173,87 +173,87 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       toast.success('Download started');
     } catch (error) {
       console.error('Download failed:', error);
-    toast.error('Download failed');
-  }
-};
+      toast.error('Download failed');
+    }
+  };
 
-// Helper function to transform assets to tiles
-const transformAssetToTile = (asset: UnifiedAsset): MediaTile[] => {
-  const tiles: MediaTile[] = [];
-  
-  if (asset.type === 'image') {
-    // Handle 6-image generations
-    if (asset.signedUrls && asset.signedUrls.length > 0) {
-      asset.signedUrls.forEach((url: string, index: number) => {
+  // Helper function to transform assets to tiles
+  const transformAssetToTile = (asset: UnifiedAsset): MediaTile[] => {
+    const tiles: MediaTile[] = [];
+    
+    if (asset.type === 'image') {
+      // Handle 6-image generations
+      if (asset.signedUrls && asset.signedUrls.length > 0) {
+        asset.signedUrls.forEach((url: string, index: number) => {
+          tiles.push({
+            id: `${asset.id}-${index}`,
+            originalAssetId: asset.id,
+            type: 'image',
+            url: url,
+            prompt: asset.prompt,
+            timestamp: asset.createdAt,
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            modelType: asset.modelType
+          });
+        });
+      } else {
         tiles.push({
-          id: `${asset.id}-${index}`,
+          id: asset.id,
           originalAssetId: asset.id,
           type: 'image',
-          url: url,
+          url: asset.url!,
           prompt: asset.prompt,
           timestamp: asset.createdAt,
           quality: (asset.quality as 'fast' | 'high') || 'fast',
           modelType: asset.modelType
         });
-      });
-    } else {
+      }
+    } else if (asset.type === 'video') {
       tiles.push({
         id: asset.id,
         originalAssetId: asset.id,
-        type: 'image',
+        type: 'video',
         url: asset.url!,
         prompt: asset.prompt,
         timestamp: asset.createdAt,
         quality: (asset.quality as 'fast' | 'high') || 'fast',
-        modelType: asset.modelType
+        duration: asset.duration,
+        thumbnailUrl: asset.thumbnailUrl
       });
     }
-  } else if (asset.type === 'video') {
-    tiles.push({
-      id: asset.id,
-      originalAssetId: asset.id,
-      type: 'video',
-      url: asset.url!,
-      prompt: asset.prompt,
-      timestamp: asset.createdAt,
-      quality: (asset.quality as 'fast' | 'high') || 'fast',
-      duration: asset.duration,
-      thumbnailUrl: asset.thumbnailUrl
+    
+    return tiles;
+  };
+
+  const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+    console.log('📥 Importing assets to workspace:', importedAssets.length);
+    
+    // Convert imported assets to tiles using shared transform function
+    const importedTiles: MediaTile[] = [];
+    for (const asset of importedAssets) {
+      importedTiles.push(...transformAssetToTile(asset));
+    }
+    
+    // Add imported tiles to current tiles (at the beginning to show as recent)
+    setTiles(prevTiles => {
+      const combined = [...importedTiles, ...prevTiles];
+      // Sort by timestamp to maintain order
+      return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     });
-  }
-  
-  return tiles;
-};
+    
+    // CRITICAL FIX: Reset workspace cleared state when importing
+    if (workspaceCleared) {
+      console.log('🔄 Resetting workspace cleared state after import');
+      setWorkspaceCleared(false);
+      setClearTimestamp(null);
+      sessionStorage.removeItem('workspaceCleared');
+      sessionStorage.removeItem('workspaceClearTimestamp');
+    }
+    
+    toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
+  };
 
-const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
-  console.log('📥 Importing assets to workspace:', importedAssets.length);
-  
-  // Convert imported assets to tiles using shared transform function
-  const importedTiles: MediaTile[] = [];
-  for (const asset of importedAssets) {
-    importedTiles.push(...transformAssetToTile(asset));
-  }
-  
-  // Add imported tiles to current tiles (at the beginning to show as recent)
-  setTiles(prevTiles => {
-    const combined = [...importedTiles, ...prevTiles];
-    // Sort by timestamp to maintain order
-    return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  });
-  
-  // CRITICAL FIX: Reset workspace cleared state when importing
-  if (workspaceCleared) {
-    console.log('🔄 Resetting workspace cleared state after import');
-    setWorkspaceCleared(false);
-    setClearTimestamp(null);
-    sessionStorage.removeItem('workspaceCleared');
-    sessionStorage.removeItem('workspaceClearTimestamp');
-  }
-  
-  toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-};
-
-const formatDate = (date: Date) => {
+  const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',
