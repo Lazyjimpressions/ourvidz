@@ -7,6 +7,7 @@ import { X, Calendar, Image, Video, Check } from 'lucide-react';
 import { useAssets } from '@/hooks/useAssets';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface LibraryImportModalProps {
   open: boolean;
@@ -43,13 +44,36 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     console.log('🚀 Import triggered with selection:', Array.from(selectedAssets));
     console.log('📋 Available library assets:', libraryAssets.length);
     
+    // Validate selection before proceeding
+    if (selectedAssets.size === 0) {
+      console.error('⚠️ No assets selected for import');
+      toast.error('Please select at least one asset to import');
+      return;
+    }
+    
     const assetsToImport = libraryAssets.filter(asset => selectedAssets.has(asset.id));
     console.log('📦 Assets to import:', assetsToImport.map(a => ({ id: a.id, type: a.type, prompt: a.prompt.slice(0, 50) })));
     console.log('🎯 Import count - Expected:', selectedAssets.size, 'Actual:', assetsToImport.length);
     
+    // Double-check that we have assets to import
     if (assetsToImport.length === 0) {
       console.error('⚠️ No assets to import despite selection!');
+      console.error('❌ Selection/filter mismatch:', {
+        selectedIds: Array.from(selectedAssets),
+        availableIds: libraryAssets.map(a => a.id)
+      });
+      toast.error('Selected assets not found. Please refresh and try again.');
       return;
+    }
+    
+    // Verify the count matches
+    if (assetsToImport.length !== selectedAssets.size) {
+      console.warn('⚠️ Import count mismatch:', {
+        expected: selectedAssets.size,
+        actual: assetsToImport.length,
+        selectedIds: Array.from(selectedAssets),
+        foundIds: assetsToImport.map(a => a.id)
+      });
     }
     
     onImport(assetsToImport);

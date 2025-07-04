@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,6 +24,23 @@ const Workspace = () => {
   const [clearWorkspaceHandler, setClearWorkspaceHandler] = useState<(() => void) | null>(null);
   const [importHandler, setImportHandler] = useState<((assets: UnifiedAsset[]) => void) | null>(null);
   const [handlersReady, setHandlersReady] = useState(false);
+  
+  // Stable import handler registration
+  const handleImportRegistration = useCallback((handler: (assets: UnifiedAsset[]) => void) => {
+    setImportHandler(() => handler);
+    setHandlersReady(true);
+    console.log('✅ Import handler received in Workspace');
+  }, []);
+
+  // Stable import execution handler
+  const handleLibraryImport = useCallback((assets: UnifiedAsset[]) => {
+    if (importHandler && handlersReady) {
+      importHandler(assets);
+    } else {
+      console.log('Import handler state:', { importHandler: !!importHandler, handlersReady });
+      toast.error('Import handler not ready, please try again in a moment');
+    }
+  }, [importHandler, handlersReady]);
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -184,11 +201,7 @@ const Workspace = () => {
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
           onClearWorkspace={setClearWorkspaceHandler}
-          onImport={(handler) => {
-            setImportHandler(() => handler);
-            setHandlersReady(true);
-            console.log('✅ Import handler received in Workspace');
-          }}
+          onImport={handleImportRegistration}
         />
       </div>
 
@@ -262,14 +275,7 @@ const Workspace = () => {
       <LibraryImportModal
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
-        onImport={(assets) => {
-          if (importHandler && handlersReady) {
-            importHandler(assets);
-          } else {
-            console.log('Import handler state:', { importHandler: !!importHandler, handlersReady });
-            toast.error('Import handler not ready, please try again in a moment');
-          }
-        }}
+        onImport={handleLibraryImport}
       />
     </div>
   );

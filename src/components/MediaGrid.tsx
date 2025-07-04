@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -235,7 +235,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     return tiles;
   };
 
-  const handleImportFromLibrary = (importedAssets: UnifiedAsset[]) => {
+  const handleImportFromLibrary = useCallback((importedAssets: UnifiedAsset[]) => {
     console.log('📥 MediaGrid received import request:', {
       count: importedAssets?.length || 0,
       assetIds: importedAssets?.map(a => a.id) || [],
@@ -272,7 +272,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     }
     
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  };
+  }, [workspaceCleared]);
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { 
@@ -304,12 +304,9 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   useEffect(() => {
     if (onImport) {
       onImport(handleImportFromLibrary);
-      // Notify parent that handlers are ready
-      if (typeof onImport === 'function') {
-        console.log('✅ Import handler registered with parent');
-      }
+      console.log('✅ Import handler registered with parent');
     }
-  }, [onImport]);
+  }, [onImport, handleImportFromLibrary]);
 
   if (isLoading && tiles.length === 0) {
     return (
