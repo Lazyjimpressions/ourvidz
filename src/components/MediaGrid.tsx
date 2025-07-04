@@ -219,17 +219,67 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
 
   // Listen for generation completion events
   useEffect(() => {
-    const handleGenerationCompleted = (event: CustomEvent) => {
-      console.log('📦 Generation completed, adding to workspace:', event.detail);
-      const asset = event.detail;
+    const handleGenerationCompleted = async (event: CustomEvent) => {
+      console.log('📦 Generation completed event received:', event.detail);
+      const jobData = event.detail;
       
-      if (asset && isLoaded) {
-        const newTiles = transformAssetToTile(asset);
+      if (!jobData?.id || !isLoaded) {
+        console.log('⚠️ Invalid job data or not loaded:', { jobData, isLoaded });
+        return;
+      }
+
+      try {
+        console.log('🔍 Fetching fresh asset data for completed job:', jobData.id);
+        
+        // Fetch fresh asset data to get the complete UnifiedAsset
+        const assets = await AssetService.getUserAssets();
+        
+        // Find the asset that just completed - look for assets created in the last few minutes
+        const recentCutoff = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+        const recentAssets = assets.filter(asset => 
+          asset.createdAt > recentCutoff && 
+          asset.status === 'completed' &&
+          asset.url // Has actual content URL
+        );
+        
+        console.log('🔍 Recent completed assets found:', {
+          total: recentAssets.length,
+          assets: recentAssets.map(a => ({ id: a.id, type: a.type, status: a.status }))
+        });
+        
+        if (recentAssets.length === 0) {
+          console.log('⚠️ No recent completed assets found');
+          return;
+        }
+        
+        // Get the most recent asset (likely the one that just completed)
+        const newestAsset = recentAssets[0];
+        
+        // Check if this asset is already in workspace to avoid duplicates
+        const existingTileIds = tiles.map(tile => tile.originalAssetId);
+        if (existingTileIds.includes(newestAsset.id)) {
+          console.log('🔄 Asset already in workspace:', newestAsset.id);
+          return;
+        }
+        
+        console.log('✅ Adding new asset to workspace:', {
+          id: newestAsset.id,
+          type: newestAsset.type,
+          hasUrl: !!newestAsset.url,
+          modelType: newestAsset.modelType
+        });
+        
+        const newTiles = transformAssetToTile(newestAsset);
         setTiles(prevTiles => {
           const combined = [...newTiles, ...prevTiles];
           return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         });
-        toast.success(`New ${asset.type} added to workspace!`);
+        
+        toast.success(`New ${newestAsset.type} added to workspace!`);
+        
+      } catch (error) {
+        console.error('❌ Failed to fetch and add completed asset:', error);
+        toast.error('Failed to add new generation to workspace');
       }
     };
 
@@ -240,7 +290,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       window.removeEventListener('generationCompleted', handleGenerationCompleted as EventListener);
       console.log('🧹 Generation completion listener cleaned up');
     };
-  }, [isLoaded]);
+  }, [isLoaded, tiles]);
 
   // Clear workspace when triggered by parent
   useEffect(() => {
