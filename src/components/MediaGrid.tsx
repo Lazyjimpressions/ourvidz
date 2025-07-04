@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { AssetService } from '@/lib/services/AssetService';
+import { useAssets, useInvalidateAssets } from '@/hooks/useAssets';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -39,101 +40,85 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
   const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
+  
+  // Use React Query for asset fetching
+  const { data: assets = [], isLoading, error } = useAssets();
+  const invalidateAssets = useInvalidateAssets();
 
-  const fetchLatestMedia = async () => {
-    try {
-      setLoading(true);
-      console.log('🎯 Fetching latest media for unified workspace...');
-      
-      const assets = await AssetService.getUserAssets();
-      const completedAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
-      
-      const processedTiles: MediaTile[] = [];
+  // Process assets into tiles whenever assets change
+  useEffect(() => {
+    console.log('🎯 Processing assets into tiles for unified workspace...');
+    
+    const completedAssets = assets.filter(asset => asset.status === 'completed' && asset.url);
+    const processedTiles: MediaTile[] = [];
 
-      for (const asset of completedAssets) {
-        if (asset.type === 'image') {
-          // Handle 6-image generations - create individual tiles for each image
-          if (asset.signedUrls && asset.signedUrls.length > 0) {
-            console.log('✅ Processing 6-image generation:', asset.id, 'with', asset.signedUrls.length, 'images');
-            asset.signedUrls.forEach((url: string, index: number) => {
-              processedTiles.push({
-                id: `${asset.id}-${index}`,
-                originalAssetId: asset.id,
-                type: 'image',
-                url: url,
-                prompt: asset.prompt,
-                timestamp: asset.createdAt,
-                quality: (asset.quality as 'fast' | 'high') || 'fast',
-                modelType: asset.modelType
-              });
-            });
-          } 
-          // Handle single images (legacy)
-          else {
+    for (const asset of completedAssets) {
+      if (asset.type === 'image') {
+        // Handle 6-image generations - create individual tiles for each image
+        if (asset.signedUrls && asset.signedUrls.length > 0) {
+          console.log('✅ Processing 6-image generation:', asset.id, 'with', asset.signedUrls.length, 'images');
+          asset.signedUrls.forEach((url: string, index: number) => {
             processedTiles.push({
-              id: asset.id,
+              id: `${asset.id}-${index}`,
               originalAssetId: asset.id,
               type: 'image',
-              url: asset.url,
+              url: url,
               prompt: asset.prompt,
               timestamp: asset.createdAt,
               quality: (asset.quality as 'fast' | 'high') || 'fast',
               modelType: asset.modelType
             });
-          }
+          });
         } 
-        else if (asset.type === 'video') {
+        // Handle single images (legacy)
+        else {
           processedTiles.push({
             id: asset.id,
             originalAssetId: asset.id,
-            type: 'video',
+            type: 'image',
             url: asset.url,
             prompt: asset.prompt,
             timestamp: asset.createdAt,
             quality: (asset.quality as 'fast' | 'high') || 'fast',
-            duration: asset.duration,
-            thumbnailUrl: asset.thumbnailUrl
+            modelType: asset.modelType
           });
         }
+      } 
+      else if (asset.type === 'video') {
+        processedTiles.push({
+          id: asset.id,
+          originalAssetId: asset.id,
+          type: 'video',
+          url: asset.url,
+          prompt: asset.prompt,
+          timestamp: asset.createdAt,
+          quality: (asset.quality as 'fast' | 'high') || 'fast',
+          duration: asset.duration,
+          thumbnailUrl: asset.thumbnailUrl
+        });
       }
-
-      // Sort by timestamp (newest first)
-      processedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-
-      console.log('✅ Processed tiles:', {
-        total: processedTiles.length,
-        images: processedTiles.filter(t => t.type === 'image').length,
-        videos: processedTiles.filter(t => t.type === 'video').length
-      });
-      
-      setTiles(processedTiles);
-    } catch (error) {
-      console.error('❌ Failed to fetch media:', error);
-      toast.error('Failed to load media');
-    } finally {
-      setLoading(false);
     }
-  };
 
-  useEffect(() => {
-    fetchLatestMedia();
-  }, []);
+    // Sort by timestamp (newest first)
+    processedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  // Listen for generation completion events
-  useEffect(() => {
-    const handleStorageUpdate = () => {
-      console.log('🔄 Storage updated, refreshing media grid...');
-      fetchLatestMedia();
-    };
-
-    window.addEventListener('generationCompleted', handleStorageUpdate);
+    console.log('✅ Processed tiles:', {
+      total: processedTiles.length,
+      images: processedTiles.filter(t => t.type === 'image').length,
+      videos: processedTiles.filter(t => t.type === 'video').length
+    });
     
-    return () => {
-      window.removeEventListener('generationCompleted', handleStorageUpdate);
-    };
-  }, []);
+    setTiles(processedTiles);
+  }, [assets]);
+
+  // Show error state if assets failed to load
+  useEffect(() => {
+    if (error) {
+      console.error('❌ Failed to load assets:', error);
+      toast.error('Failed to load media');
+    }
+  }, [error]);
 
   const handleDelete = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -149,6 +134,9 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
       setTiles(prevTiles => 
         prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId)
       );
+      
+      // Invalidate React Query cache to ensure fresh data
+      invalidateAssets();
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
     } catch (error) {
@@ -191,7 +179,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike }: MediaGridPro
     });
   };
 
-  if (loading && tiles.length === 0) {
+  if (isLoading && tiles.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">

@@ -1,9 +1,10 @@
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GenerationService } from '@/lib/services/GenerationService';
 import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 import { useRef } from 'react';
+import { ASSETS_QUERY_KEY } from '@/hooks/useAssets';
 
 interface GenerationStatusData {
   status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
@@ -43,6 +44,7 @@ export const useGenerationStatus = (
   enabled: boolean = true
 ) => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const shownErrorsRef = useRef<Set<string>>(new Set());
   const maxRetriesRef = useRef<number>(0);
   const startTimeRef = useRef<number>(Date.now());
@@ -88,9 +90,12 @@ export const useGenerationStatus = (
         // Reset retry counter on successful response
         maxRetriesRef.current = 0;
         
-        // Emit event when generation completes to trigger UI refresh
+        // Invalidate assets query when generation completes for immediate UI refresh
         if (result.status === 'completed') {
-          console.log('🎉 Generation completed, triggering UI refresh');
+          console.log('🎉 Generation completed, invalidating assets cache for immediate refresh');
+          queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
+          
+          // Also emit event for backward compatibility
           window.dispatchEvent(new CustomEvent('generationCompleted', { 
             detail: { id, format, result } 
           }));
