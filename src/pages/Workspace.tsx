@@ -180,12 +180,11 @@ const Workspace = () => {
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
         {/* Unified Media Grid for both images and videos */}
-  const clearWorkspace = useClearWorkspace();
-
-  const handleClearWorkspace = () => {
-    clearWorkspace();
-    toast.success("Workspace cleared");
-  };
+        <MediaGrid 
+          onRegenerateItem={handleRegenerate} 
+          onGenerateMoreLike={handleGenerateMoreLike}
+          onClearWorkspace={handleClearWorkspace}
+        />
       </div>
 
       {/* Scroll Navigation */}
