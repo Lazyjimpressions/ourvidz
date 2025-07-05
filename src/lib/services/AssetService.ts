@@ -69,11 +69,15 @@ export class AssetService {
 
   static async getAssetsByIds(assetIds: string[]): Promise<UnifiedAsset[]> {
     if (assetIds.length === 0) {
-      console.log('🔍 getAssetsByIds called with empty array, returning empty result');
+      console.log('🔍 Phase 3: getAssetsByIds called with empty array, returning empty result');
       return [];
     }
 
-    console.log('🔍 AssetService.getAssetsByIds - Fetching assets by IDs:', assetIds);
+    console.log('🔍 Phase 3: AssetService.getAssetsByIds - Starting comprehensive fetch:', {
+      requestedIds: assetIds,
+      idCount: assetIds.length,
+      timestamp: new Date().toISOString()
+    });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -277,12 +281,30 @@ export class AssetService {
     const allAssets = [...imageAssets, ...videoAssets];
     allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    console.log('✅ Fetched assets by IDs:', {
+    console.log('✅ Phase 3: Comprehensive getAssetsByIds results:', {
       requestedIds: assetIds,
       foundAssets: allAssets.length,
       imageAssets: imageAssets.length,
-      videoAssets: videoAssets.length
+      videoAssets: videoAssets.length,
+      assetDetails: allAssets.map(asset => ({
+        id: asset.id,
+        type: asset.type,
+        status: asset.status,
+        hasUrl: !!asset.url,
+        hasSignedUrls: !!asset.signedUrls,
+        signedUrlCount: asset.signedUrls?.length || 0
+      })),
+      missingIds: assetIds.filter(id => !allAssets.find(asset => asset.id === id))
     });
+    
+    // Phase 3: Additional validation logging
+    if (allAssets.length !== assetIds.length) {
+      console.warn('⚠️ Phase 3: Asset count mismatch detected:', {
+        requested: assetIds.length,
+        found: allAssets.length,
+        missing: assetIds.filter(id => !allAssets.find(asset => asset.id === id))
+      });
+    }
     
     return allAssets;
   }

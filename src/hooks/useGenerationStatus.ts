@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 import { useRef } from 'react';
 import { ASSETS_QUERY_KEY } from '@/hooks/useAssets';
+import { supabase } from '@/integrations/supabase/client';
 
 interface GenerationStatusData {
   status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
@@ -96,10 +97,43 @@ export const useGenerationStatus = (
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
           queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
           
-          // Emit custom event for workspace to listen to
-          window.dispatchEvent(new CustomEvent('generation-completed', {
-            detail: { jobId: id, format }
-          }));
+          // Phase 1: Resolve asset ID from job completion
+          try {
+            const { data: jobData, error: jobError } = await supabase
+              .from('jobs')
+              .select('image_id, video_id, job_type')
+              .eq('id', id)
+              .single();
+            
+            if (!jobError && jobData) {
+              const assetId = jobData.image_id || jobData.video_id;
+              const assetType = jobData.image_id ? 'image' : 'video';
+              
+              if (assetId) {
+                console.log('🎯 Phase 1: Resolved asset ID from completed job:', { 
+                  jobId: id, 
+                  assetId, 
+                  assetType,
+                  jobType: jobData.job_type 
+                });
+                
+                // Emit event with resolved asset ID
+                window.dispatchEvent(new CustomEvent('generation-completed', {
+                  detail: { assetId, type: assetType, jobId: id }
+                }));
+              } else {
+                console.warn('⚠️ No asset ID found for completed job:', id);
+              }
+            } else {
+              console.error('❌ Failed to resolve asset ID for job:', id, jobError);
+            }
+          } catch (error) {
+            console.error('❌ Error resolving asset ID from job:', error);
+            // Fallback to old format for compatibility
+            window.dispatchEvent(new CustomEvent('generation-completed', {
+              detail: { jobId: id, format }
+            }));
+          }
         }
         
         return result;

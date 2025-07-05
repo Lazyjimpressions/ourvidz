@@ -99,29 +99,55 @@ export const useWorkspace = () => {
     return tiles;
   }, []);
 
-  // Get workspace tiles (only show completed assets with URLs)
+  // Phase 4: Enhanced workspace tiles with comprehensive logging
   const workspaceTiles = useCallback(() => {
-    console.log('🎬 workspaceTiles - processing assets:', assets.length);
-    console.log('📊 Asset statuses:', assets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
+    console.log('🎬 Phase 4: workspaceTiles - processing workspace assets:', {
+      totalAssets: assets.length,
+      workspaceFilterSize: workspaceFilter.size,
+      timestamp: new Date().toISOString()
+    });
+    
+    console.log('📊 Phase 4: Asset statuses breakdown:', assets.map(a => ({ 
+      id: a.id, 
+      status: a.status, 
+      hasUrl: !!a.url, 
+      type: a.type,
+      signedUrlCount: a.signedUrls?.length || 0
+    })));
     
     const completedAssets = assets.filter(asset => 
       asset.status === 'completed' && 
       asset.url
     );
     
-    console.log('✅ Completed assets with URLs:', completedAssets.length);
-    console.log('📋 Completed assets details:', completedAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
+    console.log('✅ Phase 4: Completed assets with URLs:', {
+      count: completedAssets.length,
+      details: completedAssets.map(a => ({ 
+        id: a.id, 
+        status: a.status, 
+        hasUrl: !!a.url, 
+        type: a.type,
+        signedUrlCount: a.signedUrls?.length || 0
+      }))
+    });
     
     const allTiles: MediaTile[] = [];
     completedAssets.forEach(asset => {
       const tiles = transformAssetToTiles(asset);
       allTiles.push(...tiles);
+      console.log(`🔄 Phase 4: Generated ${tiles.length} tiles for asset ${asset.id}`);
     });
     
-    console.log('🎯 Final tiles generated:', allTiles.length);
+    console.log('🎯 Phase 4: Final workspace tiles generated:', {
+      tileCount: allTiles.length,
+      tileTypes: allTiles.reduce((acc, tile) => {
+        acc[tile.type] = (acc[tile.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    });
     
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }, [assets, transformAssetToTiles]);
+  }, [assets, transformAssetToTiles, workspaceFilter]);
 
   // Add asset to workspace filter
   const addToWorkspace = useCallback((assetIds: string[]) => {
@@ -132,17 +158,33 @@ export const useWorkspace = () => {
     });
   }, []);
 
-  // Import assets to workspace (replace current workspace)
+  // Phase 4: Enhanced import with comprehensive debugging
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('🔄 importToWorkspace called with:', importedAssets.length, 'assets');
-    console.log('📋 Assets being imported:', importedAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
+    console.log('🔄 Phase 4: importToWorkspace called with comprehensive logging:', {
+      assetCount: importedAssets.length,
+      timestamp: new Date().toISOString(),
+      currentWorkspaceSize: workspaceFilter.size
+    });
+    
+    console.log('📋 Phase 4: Assets being imported detailed analysis:', importedAssets.map(a => ({ 
+      id: a.id, 
+      status: a.status, 
+      hasUrl: !!a.url, 
+      type: a.type,
+      signedUrlCount: a.signedUrls?.length || 0,
+      createdAt: a.createdAt.toISOString()
+    })));
     
     const newFilterIds = importedAssets.map(asset => asset.id);
-    console.log('🎯 New filter IDs:', newFilterIds);
-    console.log('📊 Previous workspace filter:', Array.from(workspaceFilter));
+    console.log('🎯 Phase 4: Filter transition:', {
+      previousFilter: Array.from(workspaceFilter),
+      newFilter: newFilterIds,
+      added: newFilterIds.filter(id => !workspaceFilter.has(id)),
+      removed: Array.from(workspaceFilter).filter(id => !newFilterIds.includes(id))
+    });
     
     setWorkspaceFilter(new Set(newFilterIds));
-    console.log('✅ Workspace filter updated to:', newFilterIds);
+    console.log('✅ Phase 4: Workspace filter successfully updated');
     
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter]);
