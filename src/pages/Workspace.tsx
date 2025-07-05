@@ -48,6 +48,7 @@ const Workspace = () => {
   
   // Generation state
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
+  const [enhanced, setEnhanced] = useState<boolean>(false);
   const [selectedMode, setSelectedMode] = useState<GenerationFormat>(
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
@@ -84,14 +85,22 @@ const Workspace = () => {
     }
   }, [user, loading, navigate]);
 
-  // Update selected mode when URL mode changes or quality changes
+  // Update selected mode when URL mode changes, quality changes, or enhancement changes
   useEffect(() => {
     if (isVideoMode) {
-      setSelectedMode(quality === 'high' ? 'video_high' : 'video_fast');
+      if (enhanced) {
+        setSelectedMode(quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced');
+      } else {
+        setSelectedMode(quality === 'high' ? 'video_high' : 'video_fast');
+      }
     } else {
-      setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+      if (enhanced) {
+        setSelectedMode(quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced');
+      } else {
+        setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+      }
     }
-  }, [isVideoMode, quality]);
+  }, [isVideoMode, quality, enhanced]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -246,6 +255,8 @@ const Workspace = () => {
             quality={quality}
             setQuality={setQuality}
             onLibraryClick={() => setShowLibraryModal(true)}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
           />
         ) : (
           <ImageInputControls
@@ -269,6 +280,8 @@ const Workspace = () => {
             quality={quality}
             setQuality={setQuality}
             onLibraryClick={() => setShowLibraryModal(true)}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
           />
         )}
       </div>

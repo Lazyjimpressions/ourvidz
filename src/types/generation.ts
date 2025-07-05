@@ -5,7 +5,11 @@ export type GenerationFormat =
   | 'image_fast' 
   | 'image_high' 
   | 'video_fast' 
-  | 'video_high';
+  | 'video_high'
+  | 'image7b_fast_enhanced'
+  | 'image7b_high_enhanced'
+  | 'video7b_fast_enhanced'
+  | 'video7b_high_enhanced';
 
 export type GenerationQuality = 'fast' | 'high';
 
@@ -86,6 +90,50 @@ export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
     isVideo: true,
     isSDXL: false,
     bucket: 'video_high',
+    queue: 'wan_queue'
+  },
+  image7b_fast_enhanced: {
+    format: 'image7b_fast_enhanced',
+    displayName: 'Enhanced Fast',
+    description: 'AI-enhanced fast image generation with Qwen 7B',
+    estimatedTime: '87 seconds',
+    credits: 2,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'image7b_fast_enhanced',
+    queue: 'wan_queue'
+  },
+  image7b_high_enhanced: {
+    format: 'image7b_high_enhanced',
+    displayName: 'Enhanced High',
+    description: 'AI-enhanced high-quality image generation with Qwen 7B',
+    estimatedTime: '104 seconds',
+    credits: 3,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'image7b_high_enhanced',
+    queue: 'wan_queue'
+  },
+  video7b_fast_enhanced: {
+    format: 'video7b_fast_enhanced',
+    displayName: 'Enhanced Video Fast',
+    description: 'AI-enhanced fast video generation with Qwen 7B',
+    estimatedTime: '194 seconds',
+    credits: 4,
+    isVideo: true,
+    isSDXL: false,
+    bucket: 'video7b_fast_enhanced',
+    queue: 'wan_queue'
+  },
+  video7b_high_enhanced: {
+    format: 'video7b_high_enhanced',
+    displayName: 'Enhanced Video High',
+    description: 'AI-enhanced high-quality video generation with Qwen 7B',
+    estimatedTime: '294 seconds',
+    credits: 6,
+    isVideo: true,
+    isSDXL: false,
+    bucket: 'video7b_high_enhanced',
     queue: 'wan_queue'
   }
 };

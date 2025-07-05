@@ -19,6 +19,8 @@ interface VideoInputControlsProps {
   quality: 'fast' | 'high';
   setQuality: (quality: 'fast' | 'high') => void;
   onLibraryClick: () => void;
+  enhanced: boolean;
+  setEnhanced: (enhanced: boolean) => void;
 }
 
 export const VideoInputControls = ({
@@ -31,7 +33,9 @@ export const VideoInputControls = ({
   onSwitchToImage,
   quality,
   setQuality,
-  onLibraryClick
+  onLibraryClick,
+  enhanced,
+  setEnhanced
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [duration, setDuration] = useState("5s");
@@ -188,6 +192,20 @@ export const VideoInputControls = ({
               Fast
             </>
           )}
+        </Button>
+
+        {/* Enhanced Toggle */}
+        <Button
+          variant="ghost"
+          onClick={() => setEnhanced(!enhanced)}
+          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+            enhanced 
+              ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+              : 'bg-gray-800 hover:bg-gray-700 text-white'
+          }`}
+        >
+          <Sparkles className="w-3 h-3" />
+          {enhanced ? 'Enhanced' : 'Enhance'}
         </Button>
       </div>
     </div>

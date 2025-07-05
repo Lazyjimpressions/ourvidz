@@ -54,7 +54,11 @@ serve(async (req)=>{
       'image_fast',
       'image_high',
       'video_fast',
-      'video_high'
+      'video_high',
+      'image7b_fast_enhanced',
+      'image7b_high_enhanced',
+      'video7b_fast_enhanced',
+      'video7b_high_enhanced'
     ];
     if (!validJobTypes.includes(jobType)) {
       console.error('❌ Invalid job type provided:', jobType);
@@ -75,7 +79,7 @@ serve(async (req)=>{
     const [format, quality] = jobType.split('_').slice(-2); // Get last 2 parts
     const isSDXL = jobType.startsWith('sdxl_');
     const modelVariant = isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b';
-    // Determine queue routing
+    // Determine queue routing - all enhanced jobs use wan_queue
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
     console.log('🎯 Enhanced job routing determined:', {
       isSDXL,
