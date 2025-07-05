@@ -141,25 +141,43 @@ serve(async (req)=>{
       jobType: job.job_type,
       metadata: job.metadata
     });
-    // Enhanced job type parsing to handle SDXL jobs
-    let format, quality, isSDXL = false;
+    // Enhanced job type parsing to handle SDXL jobs AND enhanced WAN jobs
+    let format, quality, isSDXL = false, isEnhanced = false;
+
     if (job.job_type.startsWith('sdxl_')) {
       // Handle SDXL jobs: sdxl_image_fast -> image, fast, true
       isSDXL = true;
       const parts = job.job_type.replace('sdxl_', '').split('_');
       format = parts[0]; // 'image'
       quality = parts[1]; // 'fast' or 'high'
+    } else if (job.job_type.includes('enhanced')) {
+      // Handle enhanced WAN jobs: video7b_fast_enhanced, image7b_high_enhanced
+      isEnhanced = true;
+      
+      if (job.job_type.startsWith('video7b_')) {
+        format = 'video';
+        quality = job.job_type.includes('_fast_') ? 'fast' : 'high';
+      } else if (job.job_type.startsWith('image7b_')) {
+        format = 'image'; 
+        quality = job.job_type.includes('_fast_') ? 'fast' : 'high';
+      } else {
+        // Fallback for unknown enhanced patterns
+        const parts = job.job_type.split('_');
+        format = parts[0].replace('7b', ''); // Remove '7b' suffix
+        quality = parts[1]; // 'fast' or 'high'
+      }
     } else {
-      // Handle WAN jobs: image_fast -> image, fast, false
+      // Handle standard WAN jobs: image_fast, video_high -> image/video, fast/high, false
       const parts = job.job_type.split('_');
       format = parts[0]; // 'image' or 'video'
       quality = parts[1]; // 'fast' or 'high'
     }
-    console.log('🔧 Enhanced job type parsing with debugging:', {
+    console.log('🔧 Enhanced job type parsing with enhanced job support:', {
       originalJobType: job.job_type,
       parsedFormat: format,
       parsedQuality: quality,
       isSDXL,
+      isEnhanced,
       expectedBucket: isSDXL ? `sdxl_image_${quality}` : `${format}_${quality}`
     });
     // Handle different job types based on parsed format
@@ -183,6 +201,7 @@ serve(async (req)=>{
       format,
       quality,
       isSDXL,
+      isEnhanced,
       filePath,
       outputUrl,
       resolvedFilePath,
@@ -198,6 +217,7 @@ serve(async (req)=>{
         format: format,
         quality: quality,
         isSDXL: isSDXL,
+        isEnhanced: isEnhanced,
         filePath: resolvedFilePath,
         processingTimestamp: new Date().toISOString()
       }
