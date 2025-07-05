@@ -221,15 +221,15 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   useEffect(() => {
     const handleGenerationCompleted = async (event: CustomEvent) => {
       console.log('📦 Generation completed event received:', event.detail);
-      const jobData = event.detail;
+      const jobId = event.detail.id; // Direct access to job ID
       
-      if (!jobData?.id || !isLoaded) {
-        console.log('⚠️ Invalid job data or not loaded:', { jobData, isLoaded });
+      if (!jobId || !isLoaded) {
+        console.log('⚠️ Invalid job ID or not loaded:', { jobId, isLoaded });
         return;
       }
 
       try {
-        console.log('🔍 Fetching fresh asset data for completed job:', jobData.id);
+        console.log('🔍 Fetching fresh asset data for completed job:', jobId);
         
         // Fetch fresh asset data to get the complete UnifiedAsset
         const assets = await AssetService.getUserAssets();
