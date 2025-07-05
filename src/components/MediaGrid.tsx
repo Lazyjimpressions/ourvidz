@@ -48,8 +48,8 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Subscribe to React Query assets cache
-  const { data: assets = [], isLoading } = useAssets(false); // Get all assets, not session-only
+  // Subscribe to React Query assets cache - using session-only to match workspace intent
+  const { data: assets = [], isLoading } = useAssets(true); // Get session-only assets
 
   // Load workspace state from sessionStorage on mount
   useEffect(() => {
@@ -228,17 +228,17 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     }
 
     if (!assets || assets.length === 0) {
-      console.log('⏳ No assets available in cache yet');
+      console.log('⏳ No session assets available in cache yet');
       return;
     }
 
-    console.log('🔍 Checking for new assets in cache:', {
-      cacheAssets: assets.length,
+    console.log('🔍 Checking for new session assets in cache:', {
+      sessionAssets: assets.length,
       workspaceTiles: tiles.length,
-      currentTileIds: tiles.map(t => t.originalAssetId)
+      currentTileIds: tiles.map(t => t.originalAssetId).slice(0, 10) // Show first 10 for debugging
     });
 
-    // Find completed assets that aren't already in workspace
+    // Find completed session assets that aren't already in workspace
     const existingTileIds = new Set(tiles.map(tile => tile.originalAssetId));
     const newAssets = assets.filter(asset => 
       asset.status === 'completed' &&
@@ -247,25 +247,35 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     );
 
     if (newAssets.length > 0) {
-      console.log('✅ Found new assets to add to workspace:', {
+      console.log('✅ Found new session assets to add to workspace:', {
         count: newAssets.length,
-        assets: newAssets.map(a => ({ id: a.id, type: a.type, createdAt: a.createdAt }))
+        assets: newAssets.map(a => ({ id: a.id, type: a.type, status: a.status, hasUrl: !!a.url }))
       });
 
       // Transform new assets to tiles
       const newTiles: MediaTile[] = [];
       for (const asset of newAssets) {
-        newTiles.push(...transformAssetToTile(asset));
+        const assetTiles = transformAssetToTile(asset);
+        if (assetTiles.length > 0) {
+          newTiles.push(...assetTiles);
+        }
       }
 
       if (newTiles.length > 0) {
         setTiles(prevTiles => {
+          console.log('📦 Adding tiles to workspace:', {
+            newTiles: newTiles.length,
+            existingTiles: prevTiles.length
+          });
+          
           const combined = [...newTiles, ...prevTiles];
           return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         });
 
-        toast.success(`${newAssets.length} new ${newAssets.length === 1 ? 'item' : 'items'} added to workspace!`);
+        toast.success(`${newTiles.length} new ${newTiles.length === 1 ? 'item' : 'items'} added to workspace!`);
       }
+    } else {
+      console.log('🔍 No new session assets found for workspace');
     }
   }, [assets, tiles, isLoaded, isLoading]);
 

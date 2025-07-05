@@ -95,6 +95,11 @@ export const useGenerationStatus = (
           console.log('🎉 Generation completed, invalidating and refetching assets cache for immediate refresh');
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
           queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
+          
+          // Emit custom event for workspace to listen to
+          window.dispatchEvent(new CustomEvent('generation-completed', {
+            detail: { jobId: id, format }
+          }));
         }
         
         return result;

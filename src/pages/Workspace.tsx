@@ -73,6 +73,25 @@ const Workspace = () => {
     !!currentJob && isGenerating
   );
 
+  // Listen for generation completion events and trigger workspace refresh
+  useEffect(() => {
+    const handleGenerationComplete = () => {
+      console.log('🎉 Generation completed - triggering workspace refresh');
+      // Force a small delay to ensure the asset cache is updated
+      setTimeout(() => {
+        // The MediaGrid will automatically pick up new session assets via useAssets(true)
+        console.log('📱 Workspace should auto-update with new content');
+      }, 1000);
+    };
+
+    // Listen for custom generation completion events
+    window.addEventListener('generation-completed', handleGenerationComplete);
+    
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete);
+    };
+  }, []);
+
   // Handle authentication state and navigation
   useEffect(() => {
     // Don't redirect while auth is loading
