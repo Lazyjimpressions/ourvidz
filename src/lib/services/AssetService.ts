@@ -463,13 +463,13 @@ export class AssetService {
         assetData = data;
         jobData = data?.jobs?.[0] || null;
       } else {
-        // Single query with JOIN for videos
+        // Single query with JOIN for videos - corrected foreign key reference
         const { data, error } = await supabase
           .from('videos')
           .select(`
             video_url, 
             thumbnail_url,
-            jobs!videos_video_id_fkey(quality, job_type)
+            jobs!jobs_video_id_fkey(quality, job_type)
           `)
           .eq('id', assetId)
           .maybeSingle();
@@ -481,6 +481,20 @@ export class AssetService {
         
         assetData = data;
         jobData = data?.jobs?.[0] || null;
+        
+        // Handle orphaned videos (no associated job data)
+        if (!jobData && assetData?.video_url) {
+          console.log('⚠️ Video has no job data - attempting fallback bucket detection');
+          // Fallback bucket detection based on URL patterns
+          if (assetData.video_url.includes('7b_') || assetData.video_url.includes('enhanced')) {
+            jobData = { quality: 'fast', job_type: 'video7b_fast_enhanced' };
+          } else if (assetData.video_url.includes('high')) {
+            jobData = { quality: 'high', job_type: 'video_high' };
+          } else {
+            jobData = { quality: 'fast', job_type: 'video_fast' };
+          }
+          console.log('🔧 Using fallback job data:', jobData);
+        }
       }
 
       // Step 2: Delete from database (jobs will be cleaned up by CASCADE)
