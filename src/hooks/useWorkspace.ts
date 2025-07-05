@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { toast } from 'sonner';
 
@@ -17,47 +17,57 @@ interface MediaTile {
 }
 
 export const useWorkspace = () => {
+  const queryClient = useQueryClient();
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   
-  // Fetch only assets that are in the workspace filter
+  // Fetch only assets that are in the workspace filter with real-time updates
   const { data: assets = [], isLoading, refetch } = useQuery({
     queryKey: ['workspace-assets', Array.from(workspaceFilter).sort()],
     queryFn: () => AssetService.getAssetsByIds(Array.from(workspaceFilter)),
     enabled: workspaceFilter.size > 0,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 30, // 30 seconds for faster updates
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 
-  // Load workspace filter from sessionStorage on mount
+  // Load workspace filter from localStorage on mount (persistent across refreshes)
   useEffect(() => {
-    const savedFilter = sessionStorage.getItem('workspaceFilter');
+    const savedFilter = localStorage.getItem('workspaceFilter');
     if (savedFilter) {
       try {
         const filterIds = JSON.parse(savedFilter);
         setWorkspaceFilter(new Set(filterIds));
+        console.log('🔄 Loaded workspace filter from localStorage:', filterIds);
       } catch (error) {
         console.error('Failed to parse workspace filter:', error);
-        sessionStorage.removeItem('workspaceFilter');
+        localStorage.removeItem('workspaceFilter');
       }
+    } else {
+      console.log('🆕 No saved workspace filter found, starting with empty workspace');
     }
   }, []);
 
-  // Save workspace filter to sessionStorage
+  // Save workspace filter to localStorage (persistent across refreshes)
   useEffect(() => {
     const filterArray = Array.from(workspaceFilter);
     if (filterArray.length > 0) {
-      sessionStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
+      localStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
+      console.log('💾 Saved workspace filter to localStorage:', filterArray);
     } else {
-      sessionStorage.removeItem('workspaceFilter');
+      localStorage.removeItem('workspaceFilter');
+      console.log('🗑️ Cleared workspace filter from localStorage');
     }
   }, [workspaceFilter]);
 
-  // Transform assets to tiles (single source of truth from React Query)
+  // Transform assets to tiles with enhanced SDXL array handling
   const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {
     const tiles: MediaTile[] = [];
     
     if (asset.type === 'image') {
+      // Handle SDXL 6-image arrays
       if (asset.signedUrls && asset.signedUrls.length > 0) {
+        console.log(`🖼️ Processing SDXL image array with ${asset.signedUrls.length} images for asset ${asset.id}`);
         asset.signedUrls.forEach((url: string, index: number) => {
           tiles.push({
             id: `${asset.id}-${index}`,
@@ -71,6 +81,7 @@ export const useWorkspace = () => {
           });
         });
       } else if (asset.url) {
+        // Handle single image
         tiles.push({
           id: asset.id,
           originalAssetId: asset.id,
@@ -99,33 +110,26 @@ export const useWorkspace = () => {
     return tiles;
   }, []);
 
-  // Phase 4: Enhanced workspace tiles with comprehensive logging
+  // Enhanced workspace tiles with real-time processing
   const workspaceTiles = useCallback(() => {
-    console.log('🎬 Phase 4: workspaceTiles - processing workspace assets:', {
+    console.log('🎬 Workspace tiles processing:', {
       totalAssets: assets.length,
       workspaceFilterSize: workspaceFilter.size,
       timestamp: new Date().toISOString()
     });
     
-    console.log('📊 Phase 4: Asset statuses breakdown:', assets.map(a => ({ 
-      id: a.id, 
-      status: a.status, 
-      hasUrl: !!a.url, 
-      type: a.type,
-      signedUrlCount: a.signedUrls?.length || 0
-    })));
-    
     const completedAssets = assets.filter(asset => 
       asset.status === 'completed' && 
-      asset.url
+      (asset.url || (asset.signedUrls && asset.signedUrls.length > 0))
     );
     
-    console.log('✅ Phase 4: Completed assets with URLs:', {
+    console.log('✅ Completed assets ready for display:', {
       count: completedAssets.length,
       details: completedAssets.map(a => ({ 
         id: a.id, 
         status: a.status, 
         hasUrl: !!a.url, 
+        hasSignedUrls: !!(a.signedUrls && a.signedUrls.length > 0),
         type: a.type,
         signedUrlCount: a.signedUrls?.length || 0
       }))
@@ -135,10 +139,10 @@ export const useWorkspace = () => {
     completedAssets.forEach(asset => {
       const tiles = transformAssetToTiles(asset);
       allTiles.push(...tiles);
-      console.log(`🔄 Phase 4: Generated ${tiles.length} tiles for asset ${asset.id}`);
+      console.log(`🔄 Generated ${tiles.length} tiles for asset ${asset.id}`);
     });
     
-    console.log('🎯 Phase 4: Final workspace tiles generated:', {
+    console.log('🎯 Final workspace tiles:', {
       tileCount: allTiles.length,
       tileTypes: allTiles.reduce((acc, tile) => {
         acc[tile.type] = (acc[tile.type] || 0) + 1;
@@ -149,52 +153,51 @@ export const useWorkspace = () => {
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [assets, transformAssetToTiles, workspaceFilter]);
 
-  // Add asset to workspace filter
+  // Add asset to workspace with immediate refetch
   const addToWorkspace = useCallback((assetIds: string[]) => {
+    console.log('➕ Adding assets to workspace:', assetIds);
+    
     setWorkspaceFilter(prev => {
       const newFilter = new Set(prev);
       assetIds.forEach(id => newFilter.add(id));
       return newFilter;
     });
-  }, []);
+    
+    // Immediately refetch the workspace assets query
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      refetch();
+    }, 100);
+  }, [queryClient, refetch]);
 
-  // Phase 4: Enhanced import with comprehensive debugging
+  // Enhanced import with immediate refetch
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('🔄 Phase 4: importToWorkspace called with comprehensive logging:', {
+    console.log('🔄 Importing assets to workspace:', {
       assetCount: importedAssets.length,
-      timestamp: new Date().toISOString(),
       currentWorkspaceSize: workspaceFilter.size
     });
     
-    console.log('📋 Phase 4: Assets being imported detailed analysis:', importedAssets.map(a => ({ 
-      id: a.id, 
-      status: a.status, 
-      hasUrl: !!a.url, 
-      type: a.type,
-      signedUrlCount: a.signedUrls?.length || 0,
-      createdAt: a.createdAt.toISOString()
-    })));
-    
     const newFilterIds = importedAssets.map(asset => asset.id);
-    console.log('🎯 Phase 4: Filter transition:', {
-      previousFilter: Array.from(workspaceFilter),
-      newFilter: newFilterIds,
-      added: newFilterIds.filter(id => !workspaceFilter.has(id)),
-      removed: Array.from(workspaceFilter).filter(id => !newFilterIds.includes(id))
-    });
+    console.log('🎯 Setting new workspace filter:', newFilterIds);
     
     setWorkspaceFilter(new Set(newFilterIds));
-    console.log('✅ Phase 4: Workspace filter successfully updated');
+    
+    // Immediately refetch the workspace assets query
+    setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      refetch();
+    }, 100);
     
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, [workspaceFilter]);
+  }, [workspaceFilter, queryClient, refetch]);
 
   // Clear workspace
   const clearWorkspace = useCallback(() => {
     setWorkspaceFilter(new Set());
-    sessionStorage.removeItem('workspaceFilter');
+    localStorage.removeItem('workspaceFilter');
+    queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
     toast.success('Workspace cleared');
-  }, []);
+  }, [queryClient]);
 
   // Delete tile
   const deleteTile = useCallback(async (tile: MediaTile) => {
