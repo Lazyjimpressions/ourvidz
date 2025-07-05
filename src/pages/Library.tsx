@@ -10,6 +10,7 @@ import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { AssetService, UnifiedAsset } from "@/lib/services/AssetService";
+import { useOptimisticAssetDeletion } from "@/hooks/useAssets";
 import { toast } from "sonner";
 import { Download, Trash2, RotateCcw } from "lucide-react";
 
@@ -43,6 +44,12 @@ const Library = () => {
 
   // Cleanup states
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  
+  // Optimistic deletion hook
+  const { removeAssetOptimistically, restoreAssetOnError } = useOptimisticAssetDeletion();
+  
+  // Track individual asset deletion states
+  const [deletingAssets, setDeletingAssets] = useState<Set<string>>(new Set());
 
   // Clear selection when exiting selection mode
   useEffect(() => {
@@ -145,29 +152,83 @@ const Library = () => {
   };
 
   const handleDelete = async (asset: UnifiedAsset) => {
+    // Prevent multiple concurrent deletes of same asset
+    if (deletingAssets.has(asset.id)) {
+      console.log('🚫 Delete already in progress for asset:', asset.id);
+      return;
+    }
+
+    console.log('🗑️ OPTIMIZED: Starting delete with optimistic update for:', asset.id);
+    
+    // Step 1: Add to deleting set and show optimistic update
+    setDeletingAssets(prev => new Set(prev).add(asset.id));
+    removeAssetOptimistically(asset.id, false); // Library shows all assets
+    
+    // Step 2: Show immediate user feedback
+    toast.loading(`Deleting ${asset.type}...`, { id: asset.id });
+    
     try {
+      // Step 3: Perform actual deletion (optimized backend call)
       await AssetService.deleteAsset(asset.id, asset.type);
-      toast.success(`${asset.type} deleted successfully`);
-      refetch();
+      
+      // Step 4: Success feedback
+      toast.success(`${asset.type} deleted successfully`, { id: asset.id });
+      console.log('✅ OPTIMIZED: Delete completed successfully for:', asset.id);
+      
     } catch (error) {
-      console.error('Delete error:', error);
-      toast.error(`Failed to delete ${asset.type}`);
+      console.error('❌ OPTIMIZED: Delete failed for:', asset.id, error);
+      
+      // Step 5: Restore asset on error and show error message
+      restoreAssetOnError(asset, false);
+      toast.error(`Failed to delete ${asset.type}`, { id: asset.id });
+      
+    } finally {
+      // Step 6: Clean up deleting state
+      setDeletingAssets(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(asset.id);
+        return newSet;
+      });
     }
   };
 
   const handleBulkDelete = async () => {
+    const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
+    console.log('🗑️ OPTIMIZED: Starting bulk delete for:', selectedAssetList.length, 'assets');
+    
+    // Optimistic updates for all selected assets
+    selectedAssetList.forEach(asset => {
+      removeAssetOptimistically(asset.id, false);
+      setDeletingAssets(prev => new Set(prev).add(asset.id));
+    });
+    
+    toast.loading(`Deleting ${selectedAssetList.length} assets...`, { id: 'bulk-delete' });
+    
     try {
-      const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
       const assetsToDelete = selectedAssetList.map(asset => ({ id: asset.id, type: asset.type }));
-      
       await AssetService.bulkDeleteAssets(assetsToDelete);
-      toast.success(`${selectedAssetList.length} assets deleted successfully`);
+      
+      toast.success(`${selectedAssetList.length} assets deleted successfully`, { id: 'bulk-delete' });
       setSelectedAssets(new Set());
       setShowBulkDelete(false);
-      refetch();
+      console.log('✅ OPTIMIZED: Bulk delete completed successfully');
+      
     } catch (error) {
-      console.error('Bulk delete error:', error);
-      toast.error("Failed to delete selected assets");
+      console.error('❌ OPTIMIZED: Bulk delete failed:', error);
+      
+      // Restore all assets on error
+      selectedAssetList.forEach(asset => {
+        restoreAssetOnError(asset, false);
+      });
+      
+      toast.error("Failed to delete selected assets", { id: 'bulk-delete' });
+    } finally {
+      // Clean up deleting states
+      setDeletingAssets(prev => {
+        const newSet = new Set(prev);
+        selectedAssetList.forEach(asset => newSet.delete(asset.id));
+        return newSet;
+      });
     }
   };
 
@@ -318,6 +379,7 @@ const Library = () => {
                   onDelete={() => setAssetToDelete(asset)}
                   onDownload={() => handleDownload(asset)}
                   selectionMode={selectionMode}
+                  isDeleting={deletingAssets.has(asset.id)}
                 />
               ))}
             </div>

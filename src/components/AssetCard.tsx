@@ -23,16 +23,18 @@ interface AssetCardProps {
   onDelete: () => void;
   onDownload: () => void;
   selectionMode: boolean;
+  isDeleting?: boolean;
 }
 
-export const AssetCard = ({
-  asset,
-  isSelected,
-  onSelect,
-  onPreview,
-  onDelete,
-  onDownload,
-  selectionMode
+export const AssetCard = ({ 
+  asset, 
+  isSelected, 
+  onSelect, 
+  onPreview, 
+  onDelete, 
+  onDownload, 
+  selectionMode,
+  isDeleting = false
 }: AssetCardProps) => {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -65,12 +67,13 @@ export const AssetCard = ({
   };
 
   return (
-    <div
+    <div 
       className={cn(
         "group relative bg-gray-900 rounded-lg overflow-hidden border transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
         isSelected 
           ? "border-blue-500 ring-2 ring-blue-500/50 shadow-lg" 
-          : "border-gray-700 hover:border-gray-600"
+          : "border-gray-700 hover:border-gray-600",
+        isDeleting && "opacity-50 pointer-events-none"
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}

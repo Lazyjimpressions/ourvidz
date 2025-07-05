@@ -426,89 +426,132 @@ export class AssetService {
   }
 
   static async deleteAsset(assetId: string, assetType: 'image' | 'video'): Promise<void> {
-    console.log('🗑️ Deleting asset with enhanced bucket detection:', assetId, assetType);
+    console.log('🗑️ OPTIMIZED: Deleting asset with enhanced performance:', assetId, assetType);
     
-    // Get asset details before deletion to clean up storage
-    let assetData: any = null;
-    let jobData: any = null;
-    
-    if (assetType === 'image') {
-      const { data } = await supabase
-        .from('images')
-        .select('image_url, quality, metadata')
-        .eq('id', assetId)
-        .single();
-      assetData = data;
-
-      // Get job data for bucket determination
-      const { data: job } = await supabase
-        .from('jobs')
-        .select('quality, job_type, model_type')
-        .eq('image_id', assetId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      jobData = job;
-    } else {
-      const { data } = await supabase
-        .from('videos')
-        .select('video_url, thumbnail_url')
-        .eq('id', assetId)
-        .single();
-      assetData = data;
-
-      // Get job data for video bucket determination
-      const { data: job } = await supabase
-        .from('jobs')
-        .select('quality, job_type')
-        .eq('video_id', assetId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      jobData = job;
-    }
-
-    // Delete from database first
-    if (assetType === 'image') {
-      const { error } = await supabase
-        .from('images')
-        .delete()
-        .eq('id', assetId);
+    try {
+      // Step 1: Get asset and job data in single optimized query
+      let assetData: any = null;
+      let jobData: any = null;
       
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from('videos')
-        .delete()
-        .eq('id', assetId);
-      
-      if (error) throw error;
-    }
+      if (assetType === 'image') {
+        // Single query with JOIN to get both asset and job data
+        const { data, error } = await supabase
+          .from('images')
+          .select(`
+            image_url, 
+            image_urls,
+            quality, 
+            metadata,
+            jobs!images_image_id_fkey(quality, job_type, model_type)
+          `)
+          .eq('id', assetId)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('❌ Failed to fetch image data:', error);
+          throw error;
+        }
+        
+        assetData = data;
+        jobData = data?.jobs?.[0] || null;
+      } else {
+        // Single query with JOIN for videos
+        const { data, error } = await supabase
+          .from('videos')
+          .select(`
+            video_url, 
+            thumbnail_url,
+            jobs!videos_video_id_fkey(quality, job_type)
+          `)
+          .eq('id', assetId)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('❌ Failed to fetch video data:', error);
+          throw error;
+        }
+        
+        assetData = data;
+        jobData = data?.jobs?.[0] || null;
+      }
 
-    // Clean up storage files with proper bucket detection
-    if (assetData) {
-      try {
-        if (assetType === 'image' && assetData.image_url) {
+      // Step 2: Delete from database (jobs will be cleaned up by CASCADE)
+      const deletePromise = assetType === 'image' 
+        ? supabase.from('images').delete().eq('id', assetId)
+        : supabase.from('videos').delete().eq('id', assetId);
+      
+      const { error: deleteError } = await deletePromise;
+      if (deleteError) {
+        console.error('❌ Database deletion failed:', deleteError);
+        throw deleteError;
+      }
+
+      // Step 3: Clean up storage files in parallel (non-blocking)
+      if (assetData) {
+        const storageCleanupPromises: Promise<any>[] = [];
+        
+        if (assetType === 'image') {
           const bucket = AssetService.determineImageBucket(assetData, jobData);
-          console.log('🗑️ Deleting from bucket:', bucket);
-          await deleteFile(bucket as any, assetData.image_url);
+          console.log('🗑️ Cleaning up from bucket:', bucket);
+          
+          // Handle multi-image generations (image_urls array)
+          const imageUrlsArray = assetData.image_urls || (assetData.metadata as any)?.image_urls;
+          
+          if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
+            console.log('🗑️ Deleting multiple images:', imageUrlsArray.length);
+            imageUrlsArray.forEach(imagePath => {
+              storageCleanupPromises.push(
+                deleteFile(bucket as any, imagePath).catch(err => 
+                  console.warn('⚠️ Failed to delete image:', imagePath, err)
+                )
+              );
+            });
+          } else if (assetData.image_url) {
+            console.log('🗑️ Deleting single image:', assetData.image_url);
+            storageCleanupPromises.push(
+              deleteFile(bucket as any, assetData.image_url).catch(err => 
+                console.warn('⚠️ Failed to delete image:', assetData.image_url, err)
+              )
+            );
+          }
         } else if (assetType === 'video') {
           if (assetData.video_url) {
             const bucket = AssetService.determineVideoBucket(jobData);
-            await deleteFile(bucket as any, assetData.video_url);
+            console.log('🗑️ Deleting video from bucket:', bucket);
+            storageCleanupPromises.push(
+              deleteFile(bucket as any, assetData.video_url).catch(err => 
+                console.warn('⚠️ Failed to delete video:', assetData.video_url, err)
+              )
+            );
           }
-          
           if (assetData.thumbnail_url) {
-            await deleteFile('image_fast' as any, assetData.thumbnail_url);
+            console.log('🗑️ Deleting thumbnail');
+            storageCleanupPromises.push(
+              deleteFile('image_fast' as any, assetData.thumbnail_url).catch(err => 
+                console.warn('⚠️ Failed to delete thumbnail:', assetData.thumbnail_url, err)
+              )
+            );
           }
         }
-      } catch (storageError) {
-        console.warn('⚠️ Storage cleanup failed (file may not exist):', storageError);
-        // Don't throw error - database deletion succeeded
+        
+        // Execute storage cleanup in parallel (don't await - fire and forget)
+        if (storageCleanupPromises.length > 0) {
+          Promise.allSettled(storageCleanupPromises).then(results => {
+            const failed = results.filter(r => r.status === 'rejected').length;
+            if (failed > 0) {
+              console.warn(`⚠️ ${failed}/${results.length} storage cleanup operations failed`);
+            } else {
+              console.log('✅ All storage cleanup completed successfully');
+            }
+          });
+        }
       }
+      
+      console.log('✅ OPTIMIZED: Asset deletion completed:', assetId);
+    } catch (error) {
+      console.error('❌ OPTIMIZED: Asset deletion failed:', error);
+      throw error;
     }
-    
-    console.log('✅ Asset and storage files deleted successfully');
   }
 
   static async bulkDeleteAssets(assets: { id: string; type: 'image' | 'video' }[]): Promise<void> {

@@ -41,3 +41,36 @@ export const useInvalidateAssets = () => {
     queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
   };
 };
+
+// Optimized hook for deleting assets with optimistic updates
+export const useOptimisticAssetDeletion = () => {
+  const queryClient = useQueryClient();
+  
+  return {
+    // Remove asset from cache immediately (optimistic update)
+    removeAssetOptimistically: (assetId: string, sessionOnly: boolean = true) => {
+      console.log('🚀 Optimistic deletion: Removing asset from cache', assetId);
+      
+      const queryKey = [...ASSETS_QUERY_KEY, sessionOnly];
+      queryClient.setQueryData(queryKey, (oldData: UnifiedAsset[] | undefined) => {
+        if (!oldData) return oldData;
+        return oldData.filter(asset => asset.id !== assetId);
+      });
+    },
+    
+    // Restore asset to cache if deletion fails
+    restoreAssetOnError: (asset: UnifiedAsset, sessionOnly: boolean = true) => {
+      console.log('↩️ Restoring asset after failed deletion', asset.id);
+      
+      const queryKey = [...ASSETS_QUERY_KEY, sessionOnly];
+      queryClient.setQueryData(queryKey, (oldData: UnifiedAsset[] | undefined) => {
+        if (!oldData) return [asset];
+        
+        // Insert back in correct chronological position
+        const updatedData = [...oldData, asset];
+        updatedData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return updatedData;
+      });
+    }
+  };
+};
