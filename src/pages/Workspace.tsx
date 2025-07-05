@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useGenerationStatus } from '@/hooks/useGenerationStatus';
+import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { MediaGrid } from '@/components/MediaGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
@@ -19,28 +21,6 @@ const Workspace = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  
-  // Simple state for triggering workspace clear
-  const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
-  const [importHandler, setImportHandler] = useState<((assets: UnifiedAsset[]) => void) | null>(null);
-  const [handlersReady, setHandlersReady] = useState(false);
-  
-  // Stable import handler registration
-  const handleImportRegistration = useCallback((handler: (assets: UnifiedAsset[]) => void) => {
-    setImportHandler(() => handler);
-    setHandlersReady(true);
-    console.log('✅ Import handler received in Workspace');
-  }, []);
-
-  // Stable import execution handler
-  const handleLibraryImport = useCallback((assets: UnifiedAsset[]) => {
-    if (importHandler && handlersReady) {
-      importHandler(assets);
-    } else {
-      console.log('Import handler state:', { importHandler: !!importHandler, handlersReady });
-      toast.error('Import handler not ready, please try again in a moment');
-    }
-  }, [importHandler, handlersReady]);
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -57,6 +37,11 @@ const Workspace = () => {
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   
+  // Workspace management
+  const { addToWorkspace, clearWorkspace, importToWorkspace } = useWorkspace();
+  const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
+  
+  // Generation hooks
   const {
     generateContent,
     isGenerating,
@@ -73,24 +58,11 @@ const Workspace = () => {
     !!currentJob && isGenerating
   );
 
-  // Listen for generation completion events and trigger workspace refresh
-  useEffect(() => {
-    const handleGenerationComplete = () => {
-      console.log('🎉 Generation completed - triggering workspace refresh');
-      // Force a small delay to ensure the asset cache is updated
-      setTimeout(() => {
-        // The MediaGrid will automatically pick up new session assets via useAssets(true)
-        console.log('📱 Workspace should auto-update with new content');
-      }, 1000);
-    };
-
-    // Listen for custom generation completion events
-    window.addEventListener('generation-completed', handleGenerationComplete);
-    
-    return () => {
-      window.removeEventListener('generation-completed', handleGenerationComplete);
-    };
-  }, []);
+  // Hook to automatically add new generations to workspace
+  useGenerationWorkspace({ 
+    addToWorkspace, 
+    isEnabled: true 
+  });
 
   // Handle authentication state and navigation
   useEffect(() => {
@@ -231,7 +203,6 @@ const Workspace = () => {
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
           onClearWorkspace={shouldClearWorkspace}
-          onImport={handleImportRegistration}
         />
       </div>
 
@@ -309,7 +280,7 @@ const Workspace = () => {
       <LibraryImportModal
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
-        onImport={handleLibraryImport}
+        onImport={importToWorkspace}
       />
     </div>
   );

@@ -15,14 +15,14 @@ import {
 } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { LibraryImportModal } from "@/components/LibraryImportModal";
-import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
-import { useAssets } from '@/hooks/useAssets';
+import { UnifiedAsset } from '@/lib/services/AssetService';
+import { useWorkspace } from '@/hooks/useWorkspace';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 interface MediaTile {
   id: string;
-  originalAssetId: string; // For deletion
+  originalAssetId: string;
   type: 'image' | 'video';
   url: string;
   prompt: string;
@@ -36,116 +36,17 @@ interface MediaTile {
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
-  onClearWorkspace?: boolean; // Changed to simple boolean trigger
+  onClearWorkspace?: boolean;
   onImport?: (importHandler: (assets: UnifiedAsset[]) => void) => void;
 }
 
 export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspace, onImport }: MediaGridProps) => {
-  const [tiles, setTiles] = useState<MediaTile[]>([]);
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Subscribe to React Query assets cache - using session-only to match workspace intent
-  const { data: assets = [], isLoading } = useAssets(true); // Get session-only assets
-
-  // Load workspace state from sessionStorage on mount
-  useEffect(() => {
-    console.log('🔄 Starting workspace initialization...');
-    const savedTiles = sessionStorage.getItem('workspaceTiles');
-    if (savedTiles) {
-      try {
-        const parsedTiles = JSON.parse(savedTiles);
-        // Convert timestamp strings back to Date objects
-        const tilesWithDates = parsedTiles.map((tile: any) => ({
-          ...tile,
-          timestamp: new Date(tile.timestamp)
-        }));
-        setTiles(tilesWithDates);
-        console.log('✅ Loaded workspace from sessionStorage:', tilesWithDates.length, 'tiles');
-      } catch (error) {
-        console.error('❌ Failed to parse saved workspace tiles:', error);
-        sessionStorage.removeItem('workspaceTiles');
-      }
-    }
-    setIsLoaded(true);
-    console.log('✅ Workspace initialization complete');
-  }, []);
-
-  // Save workspace state to sessionStorage whenever tiles change (only after initialization)
-  useEffect(() => {
-    if (!isLoaded) {
-      console.log('⏳ Skipping save - still initializing...');
-      return;
-    }
-    
-    if (tiles.length > 0) {
-      sessionStorage.setItem('workspaceTiles', JSON.stringify(tiles));
-      console.log('💾 Saved workspace to sessionStorage:', tiles.length, 'tiles');
-    }
-  }, [tiles, isLoaded]);
-
-  const handleDelete = async (tile: MediaTile, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (deletingTiles.has(tile.id)) return;
-    
-    console.log('🗑️ Starting workspace tile deletion:', {
-      tileId: tile.id,
-      originalAssetId: tile.originalAssetId,
-      type: tile.type
-    });
-    
-    try {
-      setDeletingTiles(prev => new Set([...prev, tile.id]));
-      
-      // Call the fixed AssetService.deleteAsset with proper error handling
-      await AssetService.deleteAsset(tile.originalAssetId, tile.type);
-      
-      console.log('✅ Asset deletion successful, removing tiles from workspace');
-      
-      // Remove all tiles that share the same originalAssetId (for 6-image generations)
-      setTiles(prevTiles => {
-        const filteredTiles = prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId);
-        console.log('🔄 Tiles removed from workspace:', {
-          before: prevTiles.length,
-          after: filteredTiles.length,
-          removedAssetId: tile.originalAssetId
-        });
-        return filteredTiles;
-      });
-      
-      toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
-    } catch (error) {
-      console.error('❌ Workspace deletion failed:', {
-        tileId: tile.id,
-        originalAssetId: tile.originalAssetId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        errorStack: error instanceof Error ? error.stack : undefined
-      });
-      
-      // More specific error message based on error type
-      const errorMessage = error instanceof Error 
-        ? error.message.includes('Failed to fetch') 
-          ? 'Network error - please check your connection'
-          : error.message.includes('permission')
-          ? 'Permission denied - please try again'
-          : `Deletion failed: ${error.message}`
-        : 'Failed to delete item - unknown error';
-        
-      toast.error(errorMessage);
-    } finally {
-      // Always clear the deleting state so user can retry
-      setDeletingTiles(prev => {
-        const next = new Set(prev);
-        next.delete(tile.id);
-        console.log('🔄 Cleared deleting state for tile:', tile.id);
-        return next;
-      });
-    }
-  };
+  // Use the new workspace hook
+  const { tiles, isLoading, deletingTiles, importToWorkspace, clearWorkspace, deleteTile } = useWorkspace();
 
   const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -167,83 +68,6 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     }
   };
 
-  // Helper function to transform assets to tiles
-  const transformAssetToTile = (asset: UnifiedAsset): MediaTile[] => {
-    const tiles: MediaTile[] = [];
-    
-    if (asset.type === 'image') {
-      // Handle 6-image generations
-      if (asset.signedUrls && asset.signedUrls.length > 0) {
-        asset.signedUrls.forEach((url: string, index: number) => {
-          tiles.push({
-            id: `${asset.id}-${index}`,
-            originalAssetId: asset.id,
-            type: 'image',
-            url: url,
-            prompt: asset.prompt,
-            timestamp: asset.createdAt,
-            quality: (asset.quality as 'fast' | 'high') || 'fast',
-            modelType: asset.modelType
-          });
-        });
-      } else {
-        tiles.push({
-          id: asset.id,
-          originalAssetId: asset.id,
-          type: 'image',
-          url: asset.url!,
-          prompt: asset.prompt,
-          timestamp: asset.createdAt,
-          quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.modelType
-        });
-      }
-    } else if (asset.type === 'video') {
-      tiles.push({
-        id: asset.id,
-        originalAssetId: asset.id,
-        type: 'video',
-        url: asset.url!,
-        prompt: asset.prompt,
-        timestamp: asset.createdAt,
-        quality: (asset.quality as 'fast' | 'high') || 'fast',
-        duration: asset.duration,
-        thumbnailUrl: asset.thumbnailUrl
-      });
-    }
-    
-    return tiles;
-  };
-
-  const handleImportFromLibrary = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('📥 MediaGrid received import request:', {
-      count: importedAssets?.length || 0,
-      assetIds: importedAssets?.map(a => a.id) || [],
-      assetTypes: importedAssets?.map(a => a.type) || []
-    });
-    
-    if (!importedAssets || importedAssets.length === 0) {
-      console.log('📥 No assets to import');
-      return;
-    }
-    
-    console.log('📥 Importing assets to workspace:', importedAssets.length);
-    
-    // Convert imported assets to tiles using shared transform function
-    const importedTiles: MediaTile[] = [];
-    for (const asset of importedAssets) {
-      importedTiles.push(...transformAssetToTile(asset));
-    }
-    
-    // Replace workspace with imported tiles only
-    setTiles(() => {
-      // Sort by timestamp to maintain order
-      return importedTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    });
-    
-    toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, []);
-
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
@@ -252,91 +76,30 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     });
   };
 
-  // Watch for new assets in the React Query cache and add them to workspace
+  // Handle workspace clearing from parent
   useEffect(() => {
-    if (!isLoaded || isLoading) {
-      console.log('⏳ Skipping asset detection - not loaded or still loading...');
-      return;
+    if (onClearWorkspace) {
+      clearWorkspace();
     }
-
-    if (!assets || assets.length === 0) {
-      console.log('⏳ No session assets available in cache yet');
-      return;
-    }
-
-    console.log('🔍 Checking for new session assets in cache:', {
-      sessionAssets: assets.length,
-      workspaceTiles: tiles.length,
-      currentTileIds: tiles.map(t => t.originalAssetId).slice(0, 10) // Show first 10 for debugging
-    });
-
-    // Find completed session assets that aren't already in workspace
-    const existingTileIds = new Set(tiles.map(tile => tile.originalAssetId));
-    const newAssets = assets.filter(asset => 
-      asset.status === 'completed' &&
-      asset.url && // Has actual content URL
-      !existingTileIds.has(asset.id) // Not already in workspace
-    );
-
-    if (newAssets.length > 0) {
-      console.log('✅ Found new session assets to add to workspace:', {
-        count: newAssets.length,
-        assets: newAssets.map(a => ({ id: a.id, type: a.type, status: a.status, hasUrl: !!a.url }))
-      });
-
-      // Transform new assets to tiles
-      const newTiles: MediaTile[] = [];
-      for (const asset of newAssets) {
-        const assetTiles = transformAssetToTile(asset);
-        if (assetTiles.length > 0) {
-          newTiles.push(...assetTiles);
-        }
-      }
-
-      if (newTiles.length > 0) {
-        setTiles(prevTiles => {
-          console.log('📦 Adding tiles to workspace:', {
-            newTiles: newTiles.length,
-            existingTiles: prevTiles.length
-          });
-          
-          const combined = [...newTiles, ...prevTiles];
-          return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        });
-
-        toast.success(`${newTiles.length} new ${newTiles.length === 1 ? 'item' : 'items'} added to workspace!`);
-      }
-    } else {
-      console.log('🔍 No new session assets found for workspace');
-    }
-  }, [assets, tiles, isLoaded, isLoading]);
-
-  // Clear workspace when triggered by parent
-  useEffect(() => {
-    if (onClearWorkspace && isLoaded) {
-      console.log('🧹 Clearing workspace via parent trigger');
-      setTiles([]);
-      sessionStorage.removeItem('workspaceTiles');
-      toast.success('Workspace cleared');
-    }
-  }, [onClearWorkspace, isLoaded]);
-
-  // Handle workspace clearing
-  const handleClearWorkspace = () => {
-    console.log('🧹 Clearing workspace');
-    setTiles([]);
-    sessionStorage.removeItem('workspaceTiles');
-    toast.success('Workspace cleared');
-  };
+  }, [onClearWorkspace, clearWorkspace]);
 
   // Register import handler with parent component
   useEffect(() => {
     if (onImport) {
-      onImport(handleImportFromLibrary);
-      console.log('✅ Import handler registered with parent');
+      onImport(importToWorkspace);
     }
-  }, [onImport, handleImportFromLibrary]);
+  }, [onImport, importToWorkspace]);
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin text-2xl mb-2">⏳</div>
+          <p className="text-gray-400">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (tiles.length === 0) {
     return (
@@ -458,7 +221,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
               </div>
             )}
 
-            {/* Hover Actions - positioned in upper right corner */}
+            {/* Hover Actions */}
             <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
               <Button
                 variant="secondary"
@@ -502,7 +265,10 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={(e) => handleDelete(tile, e)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteTile(tile);
+                }}
                 className="h-6 w-6 p-0 bg-red-600/80 hover:bg-red-700 backdrop-blur-sm"
                 disabled={deletingTiles.has(tile.id)}
               >
@@ -510,7 +276,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
               </Button>
             </div>
 
-            {/* Hover overlay for videos only - excludes the action buttons area */}
+            {/* Hover overlay for videos only */}
             {tile.type === 'video' && (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 opacity-0 group-hover:opacity-100 pointer-events-none" />
             )}
@@ -550,7 +316,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
       <LibraryImportModal
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
-        onImport={handleImportFromLibrary}
+        onImport={importToWorkspace}
       />
     </>
   );
