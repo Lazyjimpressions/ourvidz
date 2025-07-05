@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useEffect } from 'react';
 import { GenerationService } from '@/lib/services/GenerationService';
 import { GenerationRequest, GenerationStatus, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
@@ -76,7 +75,7 @@ export const useGeneration = () => {
     setError(null);
   }, []);
 
-  // Enhanced polling for job status updates
+  // Enhanced polling for job status updates with completion event emission
   useEffect(() => {
     if (!currentJob || currentJob.status === 'completed' || currentJob.status === 'failed') {
       return;
@@ -109,6 +108,42 @@ export const useGeneration = () => {
             format: currentJob.format,
             completedAt: new Date().toISOString()
           });
+          
+          // Emit completion event with asset ID resolution
+          try {
+            console.log('🎉 Generation completed, resolving asset ID and emitting event');
+            
+            const { data: jobData, error: jobError } = await supabase
+              .from('jobs')
+              .select('image_id, video_id, job_type')
+              .eq('id', currentJob.id)
+              .single();
+            
+            if (!jobError && jobData) {
+              const assetId = jobData.image_id || jobData.video_id;
+              const assetType = jobData.image_id ? 'image' : 'video';
+              
+              if (assetId) {
+                console.log('🎯 Resolved asset ID from completed job:', { 
+                  jobId: currentJob.id, 
+                  assetId, 
+                  assetType,
+                  jobType: jobData.job_type 
+                });
+                
+                // Emit event with resolved asset ID
+                window.dispatchEvent(new CustomEvent('generation-completed', {
+                  detail: { assetId, type: assetType, jobId: currentJob.id }
+                }));
+              } else {
+                console.warn('⚠️ No asset ID found for completed job:', currentJob.id);
+              }
+            } else {
+              console.error('❌ Failed to resolve asset ID for job:', currentJob.id, jobError);
+            }
+          } catch (error) {
+            console.error('❌ Error resolving asset ID from job:', error);
+          }
           
           toast({
             title: "Generation Complete",

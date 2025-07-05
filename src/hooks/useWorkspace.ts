@@ -163,11 +163,12 @@ export const useWorkspace = () => {
       return newFilter;
     });
     
-    // Immediately refetch the workspace assets query
-    setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
-      refetch();
-    }, 100);
+    // Immediately refetch the workspace assets query with exact key matching
+    queryClient.invalidateQueries({ 
+      queryKey: ['workspace-assets'],
+      exact: false 
+    });
+    refetch();
   }, [queryClient, refetch]);
 
   // Enhanced import with immediate refetch
@@ -182,11 +183,12 @@ export const useWorkspace = () => {
     
     setWorkspaceFilter(new Set(newFilterIds));
     
-    // Immediately refetch the workspace assets query
-    setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
-      refetch();
-    }, 100);
+    // Immediately refetch the workspace assets query with exact key matching
+    queryClient.invalidateQueries({ 
+      queryKey: ['workspace-assets'],
+      exact: false 
+    });
+    refetch();
     
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter, queryClient, refetch]);
