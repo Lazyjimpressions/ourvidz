@@ -442,7 +442,7 @@ export class AssetService {
       let jobData: any = null;
       
       if (assetType === 'image') {
-        // Single query with JOIN to get both asset and job data
+        // Single query with JOIN to get both asset and job data - corrected foreign key reference
         const { data, error } = await supabase
           .from('images')
           .select(`
@@ -450,7 +450,7 @@ export class AssetService {
             image_urls,
             quality, 
             metadata,
-            jobs!images_image_id_fkey(quality, job_type, model_type)
+            jobs!jobs_image_id_fkey(quality, job_type, model_type)
           `)
           .eq('id', assetId)
           .maybeSingle();
@@ -462,6 +462,23 @@ export class AssetService {
         
         assetData = data;
         jobData = data?.jobs?.[0] || null;
+        
+        // Handle orphaned images (no associated job data)
+        if (!jobData && assetData?.image_url) {
+          console.log('⚠️ Image has no job data - attempting fallback bucket detection');
+          // Fallback bucket detection based on URL patterns or metadata
+          const metadata = assetData.metadata as any;
+          if (metadata?.bucket?.includes('sdxl') || assetData.image_url.includes('sdxl')) {
+            jobData = { quality: assetData.quality || 'fast', job_type: 'sdxl_image_fast', model_type: 'sdxl_image' };
+          } else if (assetData.image_url.includes('7b_') || assetData.image_url.includes('enhanced')) {
+            jobData = { quality: assetData.quality || 'fast', job_type: 'image7b_fast_enhanced' };
+          } else if (assetData.quality === 'high') {
+            jobData = { quality: 'high', job_type: 'image_high' };
+          } else {
+            jobData = { quality: 'fast', job_type: 'image_fast' };
+          }
+          console.log('🔧 Using fallback job data for image:', jobData);
+        }
       } else {
         // Single query with JOIN for videos - corrected foreign key reference
         const { data, error } = await supabase

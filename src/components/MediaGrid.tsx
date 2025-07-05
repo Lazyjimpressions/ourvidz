@@ -92,24 +92,56 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     
     if (deletingTiles.has(tile.id)) return;
     
+    console.log('🗑️ Starting workspace tile deletion:', {
+      tileId: tile.id,
+      originalAssetId: tile.originalAssetId,
+      type: tile.type
+    });
+    
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
+      // Call the fixed AssetService.deleteAsset with proper error handling
       await AssetService.deleteAsset(tile.originalAssetId, tile.type);
       
+      console.log('✅ Asset deletion successful, removing tiles from workspace');
+      
       // Remove all tiles that share the same originalAssetId (for 6-image generations)
-      setTiles(prevTiles => 
-        prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId)
-      );
+      setTiles(prevTiles => {
+        const filteredTiles = prevTiles.filter(t => t.originalAssetId !== tile.originalAssetId);
+        console.log('🔄 Tiles removed from workspace:', {
+          before: prevTiles.length,
+          after: filteredTiles.length,
+          removedAssetId: tile.originalAssetId
+        });
+        return filteredTiles;
+      });
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
     } catch (error) {
-      console.error('❌ Delete failed:', error);
-      toast.error('Failed to delete item');
+      console.error('❌ Workspace deletion failed:', {
+        tileId: tile.id,
+        originalAssetId: tile.originalAssetId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        errorStack: error instanceof Error ? error.stack : undefined
+      });
+      
+      // More specific error message based on error type
+      const errorMessage = error instanceof Error 
+        ? error.message.includes('Failed to fetch') 
+          ? 'Network error - please check your connection'
+          : error.message.includes('permission')
+          ? 'Permission denied - please try again'
+          : `Deletion failed: ${error.message}`
+        : 'Failed to delete item - unknown error';
+        
+      toast.error(errorMessage);
     } finally {
+      // Always clear the deleting state so user can retry
       setDeletingTiles(prev => {
         const next = new Set(prev);
         next.delete(tile.id);
+        console.log('🔄 Cleared deleting state for tile:', tile.id);
         return next;
       });
     }
