@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { GenerationFormat } from '@/types/generation';
 import { useRef } from 'react';
 import { ASSETS_QUERY_KEY } from '@/hooks/useAssets';
+import { supabase } from '@/integrations/supabase/client';
 
 interface GenerationStatusData {
   status: 'queued' | 'processing' | 'uploading' | 'completed' | 'failed';
@@ -94,6 +95,42 @@ export const useGenerationStatus = (
           console.log('🎉 Generation completed, invalidating assets cache for immediate refresh');
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
           queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
+          
+          // Emit completion event with asset ID resolution for workspace auto-population
+          try {
+            console.log('🎯 Resolving asset ID from completed job for workspace auto-population');
+            
+            const { data: jobData, error: jobError } = await supabase
+              .from('jobs')
+              .select('image_id, video_id, job_type')
+              .eq('id', id)
+              .single();
+            
+            if (!jobError && jobData) {
+              const assetId = jobData.image_id || jobData.video_id;
+              const assetType = jobData.image_id ? 'image' : 'video';
+              
+              if (assetId) {
+                console.log('🚀 Emitting generation-completed event from useGenerationStatus:', { 
+                  jobId: id, 
+                  assetId, 
+                  assetType,
+                  jobType: jobData.job_type 
+                });
+                
+                // Emit event for workspace auto-population
+                window.dispatchEvent(new CustomEvent('generation-completed', {
+                  detail: { assetId, type: assetType, jobId: id }
+                }));
+              } else {
+                console.warn('⚠️ No asset ID found for completed job in useGenerationStatus:', id);
+              }
+            } else {
+              console.error('❌ Failed to resolve asset ID for job in useGenerationStatus:', id, jobError);
+            }
+          } catch (error) {
+            console.error('❌ Error resolving asset ID from job in useGenerationStatus:', error);
+          }
         }
         
         return result;

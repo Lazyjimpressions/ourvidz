@@ -171,17 +171,17 @@ export const useWorkspace = () => {
     refetch();
   }, [queryClient, refetch]);
 
-  // Enhanced import with immediate refetch
+  // Enhanced import with additive behavior (adds to existing workspace)
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('🔄 Importing assets to workspace:', {
+    console.log('🔄 Adding imported assets to workspace:', {
       assetCount: importedAssets.length,
       currentWorkspaceSize: workspaceFilter.size
     });
     
     const newFilterIds = importedAssets.map(asset => asset.id);
-    console.log('🎯 Setting new workspace filter:', newFilterIds);
+    console.log('➕ Adding assets to existing workspace filter:', newFilterIds);
     
-    setWorkspaceFilter(new Set(newFilterIds));
+    setWorkspaceFilter(prev => new Set([...prev, ...newFilterIds]));
     
     // Immediately refetch the workspace assets query with exact key matching
     queryClient.invalidateQueries({ 
@@ -190,7 +190,7 @@ export const useWorkspace = () => {
     });
     refetch();
     
-    toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
+    toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter, queryClient, refetch]);
 
   // Clear workspace
