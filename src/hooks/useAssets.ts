@@ -11,9 +11,7 @@ export const useAssets = (sessionOnly: boolean = true) => {
     queryKey: [...ASSETS_QUERY_KEY, sessionOnly],
     queryFn: async (): Promise<UnifiedAsset[]> => {
       try {
-        console.log('🔄 React Query: Fetching assets...', { sessionOnly });
         const assets = await AssetService.getUserAssets(sessionOnly);
-        console.log('✅ React Query: Assets fetched:', assets.length);
         return assets;
       } catch (error) {
         console.error('❌ React Query: Failed to fetch assets:', error);
@@ -25,10 +23,13 @@ export const useAssets = (sessionOnly: boolean = true) => {
         throw error;
       }
     },
-    staleTime: 30 * 1000, // 30 seconds for faster updates
+    // OPTIMIZATION: Increase stale time for better caching
+    staleTime: 5 * 60 * 1000, // 5 minutes - assets don't change that frequently
     gcTime: 45 * 60 * 1000, // Keep in cache for 45 minutes 
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false, // OPTIMIZATION: Reduce unnecessary refetches
     refetchOnMount: true,
+    // OPTIMIZATION: Add background refetch for real-time feel without aggressive polling
+    refetchInterval: 30 * 1000, // Background refresh every 30 seconds
   });
 };
 

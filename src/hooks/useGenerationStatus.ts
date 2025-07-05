@@ -48,6 +48,7 @@ export const useGenerationStatus = (
   const shownErrorsRef = useRef<Set<string>>(new Set());
   const maxRetriesRef = useRef<number>(0);
   const startTimeRef = useRef<number>(Date.now());
+  const processedEventsRef = useRef<Set<string>>(new Set()); // OPTIMIZATION: Local event deduplication
 
   return useQuery({
     queryKey: ['generation-status', id, format],
@@ -90,16 +91,16 @@ export const useGenerationStatus = (
         // Reset retry counter on successful response
         maxRetriesRef.current = 0;
         
-        // Invalidate and refetch assets query when generation completes for immediate UI refresh
+        // OPTIMIZATION: Smart cache invalidation and completion handling
         if (result.status === 'completed') {
-          console.log('🎉 Generation completed, invalidating assets cache for immediate refresh');
+          console.log('🎉 Generation completed');
+          
+          // OPTIMIZATION: Only invalidate assets cache, not refetch immediately
+          // Background refresh will handle the update
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
-          queryClient.refetchQueries({ queryKey: ASSETS_QUERY_KEY });
           
           // Emit completion event with asset ID resolution for workspace auto-population
           try {
-            console.log('🎯 Resolving asset ID from completed job for workspace auto-population');
-            
             const { data: jobData, error: jobError } = await supabase
               .from('jobs')
               .select('image_id, video_id, job_type')
@@ -111,25 +112,23 @@ export const useGenerationStatus = (
               const assetType = jobData.image_id ? 'image' : 'video';
               
               if (assetId) {
-                console.log('🚀 Emitting generation-completed event from useGenerationStatus:', { 
-                  jobId: id, 
-                  assetId, 
-                  assetType,
-                  jobType: jobData.job_type 
-                });
+                // OPTIMIZATION: Debounced event emission to prevent duplicates
+                const eventKey = `generation-completed-${id}`;
                 
-                // Emit event for workspace auto-population
-                window.dispatchEvent(new CustomEvent('generation-completed', {
-                  detail: { assetId, type: assetType, jobId: id }
-                }));
-              } else {
-                console.warn('⚠️ No asset ID found for completed job in useGenerationStatus:', id);
+                if (!processedEventsRef.current.has(eventKey)) {
+                  processedEventsRef.current.add(eventKey);
+                  
+                  // Clean up old events (prevent memory leaks)
+                  setTimeout(() => processedEventsRef.current.delete(eventKey), 30000);
+                  
+                  window.dispatchEvent(new CustomEvent('generation-completed', {
+                    detail: { assetId, type: assetType, jobId: id }
+                  }));
+                }
               }
-            } else {
-              console.error('❌ Failed to resolve asset ID for job in useGenerationStatus:', id, jobError);
             }
           } catch (error) {
-            console.error('❌ Error resolving asset ID from job in useGenerationStatus:', error);
+            console.error('❌ Error resolving asset ID:', error);
           }
         }
         
@@ -162,13 +161,11 @@ export const useGenerationStatus = (
       
       // Stop polling when generation is complete or failed
       if (data?.status === 'completed' || data?.status === 'failed') {
-        console.log('🛑 Stopping polling for completed/failed generation');
         return false;
       }
       
       // Stop polling if we have persistent URL errors (after a few attempts)
       if (data && 'url_error' in data && data.url_error && maxRetriesRef.current > 3) {
-        console.log('🛑 Stopping polling due to persistent URL errors');
         return false;
       }
       
@@ -176,20 +173,18 @@ export const useGenerationStatus = (
       const elapsed = Date.now() - startTimeRef.current;
       const timeout = getTimeoutForFormat(format);
       if (elapsed > timeout) {
-        console.log(`🛑 Stopping polling due to timeout (${format.includes('video') ? '8 minutes' : '5 minutes'})`);
         return false;
       }
       
-      // Adaptive polling based on job status - optimized for faster generation
+      // OPTIMIZATION: More efficient polling intervals with exponential backoff
       if (data?.status === 'uploading') {
-        console.log('📤 Uploading phase - polling every 500ms');
-        return 500; // Very frequent during upload
+        return 1000; // 1 second during upload
       } else if (data?.status === 'processing') {
-        console.log('⚡ Processing phase - polling every 1 second (optimized)');
-        return 1000; // Frequent during generation
+        return 2000; // 2 seconds during processing  
       } else {
-        console.log('⏳ Queued phase - polling every 2 seconds (faster)');
-        return 2000; // More frequent for faster jobs
+        // OPTIMIZATION: Exponential backoff for queued jobs
+        const queueTime = Math.min(elapsed / 1000, 60); // Max 60 seconds
+        return Math.min(2000 + (queueTime * 100), 10000); // 2s to 10s
       }
     },
     retry: (failureCount, error: any) => {
