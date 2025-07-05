@@ -75,20 +75,58 @@ serve(async (req)=>{
         status: 400
       });
     }
+    // Robust parsing function for all job type patterns
+    function parseJobType(jobType: string) {
+      const isSDXL = jobType.startsWith('sdxl_');
+      const isEnhanced = jobType.includes('enhanced');
+      
+      let format: string;
+      let quality: string;
+      
+      if (isSDXL) {
+        // SDXL patterns: sdxl_image_fast, sdxl_image_high
+        const parts = jobType.split('_');
+        format = parts[1]; // 'image'
+        quality = parts[2]; // 'fast' or 'high'
+      } else if (isEnhanced) {
+        // Enhanced patterns: image7b_fast_enhanced, video7b_high_enhanced
+        if (jobType.startsWith('image7b_')) {
+          format = 'image';
+          quality = jobType.includes('_fast_') ? 'fast' : 'high';
+        } else if (jobType.startsWith('video7b_')) {
+          format = 'video';
+          quality = jobType.includes('_fast_') ? 'fast' : 'high';
+        } else {
+          // Fallback for unknown enhanced patterns
+          format = jobType.includes('video') ? 'video' : 'image';
+          quality = jobType.includes('fast') ? 'fast' : 'high';
+        }
+      } else {
+        // Standard patterns: image_fast, image_high, video_fast, video_high
+        const parts = jobType.split('_');
+        format = parts[0]; // 'image' or 'video'
+        quality = parts[1]; // 'fast' or 'high'
+      }
+      
+      return { format, quality, isSDXL, isEnhanced };
+    }
+
     // Extract format and quality from job type
-    const [format, quality] = jobType.split('_').slice(-2); // Get last 2 parts
-    const isSDXL = jobType.startsWith('sdxl_');
+    const { format, quality, isSDXL, isEnhanced } = parseJobType(jobType);
     const modelVariant = isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b';
     // Determine queue routing - all enhanced jobs use wan_queue
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
-    console.log('🎯 Enhanced job routing determined:', {
-      isSDXL,
-      queueName,
-      modelVariant,
-      format,
-      quality,
-      originalJobType: jobType
-    });
+     // Enhanced logging with format and quality detection
+     console.log('🎯 Enhanced job routing determined:', {
+       isSDXL,
+       isEnhanced,
+       queueName,
+       modelVariant,
+       format,
+       quality,
+       originalJobType: jobType,
+       parsedCorrectly: true
+     });
     // Validate Redis configuration
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
     const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
