@@ -16,7 +16,7 @@ import {
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { LibraryImportModal } from "@/components/LibraryImportModal";
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
-// Removed useAssets import - workspace is now purely session-based
+import { useAssets } from '@/hooks/useAssets';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +47,9 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Subscribe to React Query assets cache
+  const { data: assets = [], isLoading } = useAssets(false); // Get all assets, not session-only
 
   // Load workspace state from sessionStorage on mount
   useEffect(() => {
@@ -217,80 +220,54 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
     });
   };
 
-  // Listen for generation completion events
+  // Watch for new assets in the React Query cache and add them to workspace
   useEffect(() => {
-    const handleGenerationCompleted = async (event: CustomEvent) => {
-      console.log('📦 Generation completed event received:', event.detail);
-      const jobId = event.detail.id; // Direct access to job ID
-      
-      if (!jobId || !isLoaded) {
-        console.log('⚠️ Invalid job ID or not loaded:', { jobId, isLoaded });
-        return;
+    if (!isLoaded || isLoading) {
+      console.log('⏳ Skipping asset detection - not loaded or still loading...');
+      return;
+    }
+
+    if (!assets || assets.length === 0) {
+      console.log('⏳ No assets available in cache yet');
+      return;
+    }
+
+    console.log('🔍 Checking for new assets in cache:', {
+      cacheAssets: assets.length,
+      workspaceTiles: tiles.length,
+      currentTileIds: tiles.map(t => t.originalAssetId)
+    });
+
+    // Find completed assets that aren't already in workspace
+    const existingTileIds = new Set(tiles.map(tile => tile.originalAssetId));
+    const newAssets = assets.filter(asset => 
+      asset.status === 'completed' &&
+      asset.url && // Has actual content URL
+      !existingTileIds.has(asset.id) // Not already in workspace
+    );
+
+    if (newAssets.length > 0) {
+      console.log('✅ Found new assets to add to workspace:', {
+        count: newAssets.length,
+        assets: newAssets.map(a => ({ id: a.id, type: a.type, createdAt: a.createdAt }))
+      });
+
+      // Transform new assets to tiles
+      const newTiles: MediaTile[] = [];
+      for (const asset of newAssets) {
+        newTiles.push(...transformAssetToTile(asset));
       }
 
-      try {
-        console.log('🔍 Fetching fresh asset data for completed job:', jobId);
-        
-        // Fetch fresh asset data to get the complete UnifiedAsset
-        const assets = await AssetService.getUserAssets();
-        
-        // Find the asset that just completed - look for assets created in the last few minutes
-        const recentCutoff = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
-        const recentAssets = assets.filter(asset => 
-          asset.createdAt > recentCutoff && 
-          asset.status === 'completed' &&
-          asset.url // Has actual content URL
-        );
-        
-        console.log('🔍 Recent completed assets found:', {
-          total: recentAssets.length,
-          assets: recentAssets.map(a => ({ id: a.id, type: a.type, status: a.status }))
-        });
-        
-        if (recentAssets.length === 0) {
-          console.log('⚠️ No recent completed assets found');
-          return;
-        }
-        
-        // Get the most recent asset (likely the one that just completed)
-        const newestAsset = recentAssets[0];
-        
-        // Check if this asset is already in workspace to avoid duplicates
-        const existingTileIds = tiles.map(tile => tile.originalAssetId);
-        if (existingTileIds.includes(newestAsset.id)) {
-          console.log('🔄 Asset already in workspace:', newestAsset.id);
-          return;
-        }
-        
-        console.log('✅ Adding new asset to workspace:', {
-          id: newestAsset.id,
-          type: newestAsset.type,
-          hasUrl: !!newestAsset.url,
-          modelType: newestAsset.modelType
-        });
-        
-        const newTiles = transformAssetToTile(newestAsset);
+      if (newTiles.length > 0) {
         setTiles(prevTiles => {
           const combined = [...newTiles, ...prevTiles];
           return combined.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         });
-        
-        toast.success(`New ${newestAsset.type} added to workspace!`);
-        
-      } catch (error) {
-        console.error('❌ Failed to fetch and add completed asset:', error);
-        toast.error('Failed to add new generation to workspace');
+
+        toast.success(`${newAssets.length} new ${newAssets.length === 1 ? 'item' : 'items'} added to workspace!`);
       }
-    };
-
-    window.addEventListener('generationCompleted', handleGenerationCompleted as EventListener);
-    console.log('✅ Generation completion listener registered');
-
-    return () => {
-      window.removeEventListener('generationCompleted', handleGenerationCompleted as EventListener);
-      console.log('🧹 Generation completion listener cleaned up');
-    };
-  }, [isLoaded, tiles]);
+    }
+  }, [assets, tiles, isLoaded, isLoading]);
 
   // Clear workspace when triggered by parent
   useEffect(() => {
