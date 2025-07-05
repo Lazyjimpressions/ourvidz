@@ -21,19 +21,24 @@ export const useWorkspace = () => {
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   
-  // Fetch only assets that are in the workspace filter with optimized caching
-  const { data: assets = [], isLoading, refetch } = useQuery({
-    queryKey: ['workspace-assets', Array.from(workspaceFilter).sort()],
-    queryFn: () => AssetService.getAssetsByIds(Array.from(workspaceFilter)),
-    enabled: workspaceFilter.size > 0,
-    // OPTIMIZATION: Better caching for workspace
-    staleTime: 2 * 60 * 1000, // 2 minutes - workspace doesn't change that frequently
-    gcTime: 10 * 60 * 1000, // 10 minutes cache
-    refetchOnWindowFocus: false, // OPTIMIZATION: Reduce unnecessary refetches
+  // Simple workspace query with static key - refetches when workspaceFilter changes
+  const { data: assets = [], isLoading } = useQuery({
+    queryKey: ['workspace-assets'],
+    queryFn: async () => {
+      if (workspaceFilter.size === 0) {
+        return [];
+      }
+      return AssetService.getAssetsByIds(Array.from(workspaceFilter));
+    },
+    enabled: true,
+    refetchOnWindowFocus: false,
     refetchOnMount: true,
-    // OPTIMIZATION: Background refresh for real-time updates without aggressive polling
-    refetchInterval: 15 * 1000, // Every 15 seconds for workspace responsiveness
   });
+
+  // Trigger refetch when workspaceFilter changes
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+  }, [workspaceFilter, queryClient]);
 
   // Load workspace filter from localStorage on mount (persistent across refreshes)
   useEffect(() => {
@@ -157,7 +162,7 @@ export const useWorkspace = () => {
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [assets, transformAssetToTiles, workspaceFilter]);
 
-  // Add asset to workspace with optimistic updates
+  // Simple add to workspace - let React Query handle refetching
   const addToWorkspace = useCallback((assetIds: string[]) => {
     console.log('➕ Adding assets to workspace:', assetIds);
     
@@ -166,16 +171,9 @@ export const useWorkspace = () => {
       assetIds.forEach(id => newFilter.add(id));
       return newFilter;
     });
-    
-    // OPTIMIZATION: Smart invalidation - only invalidate workspace queries
-    queryClient.invalidateQueries({ 
-      queryKey: ['workspace-assets'],
-      exact: false 
-    });
-    // Remove refetch() - let React Query handle it with background refresh
-  }, [queryClient]);
+  }, []);
 
-  // Enhanced import with optimistic updates
+  // Simple import to workspace - let React Query handle refetching
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
     console.log('🔄 Adding imported assets to workspace:', {
       assetCount: importedAssets.length,
@@ -183,39 +181,18 @@ export const useWorkspace = () => {
     });
     
     const newFilterIds = importedAssets.map(asset => asset.id);
-    
-    // OPTIMIZATION: Optimistic update - add assets to cache immediately
     const newFilter = new Set([...workspaceFilter, ...newFilterIds]);
-    const currentQueryKey = ['workspace-assets', Array.from(newFilter).sort()];
-    
-    queryClient.setQueryData(currentQueryKey, (oldData: UnifiedAsset[] | undefined) => {
-      const existingAssets = oldData || [];
-      const newAssets = importedAssets.filter(asset => 
-        !existingAssets.some(existing => existing.id === asset.id)
-      );
-      return [...existingAssets, ...newAssets].sort((a, b) => 
-        b.createdAt.getTime() - a.createdAt.getTime()
-      );
-    });
-    
     setWorkspaceFilter(newFilter);
     
-    // OPTIMIZATION: Smart invalidation - only workspace queries
-    queryClient.invalidateQueries({ 
-      queryKey: ['workspace-assets'],
-      exact: false 
-    });
-    
     toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, [workspaceFilter, queryClient]);
+  }, [workspaceFilter]);
 
-  // Clear workspace
+  // Simple clear workspace
   const clearWorkspace = useCallback(() => {
     setWorkspaceFilter(new Set());
     localStorage.removeItem('workspaceFilter');
-    queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
     toast.success('Workspace cleared');
-  }, [queryClient]);
+  }, []);
 
   // Delete tile
   const deleteTile = useCallback(async (tile: MediaTile) => {
