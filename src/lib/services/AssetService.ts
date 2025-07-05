@@ -56,6 +56,14 @@ export class AssetService {
 
   private static determineVideoBucket(jobData?: any): string {
     const quality = jobData?.quality || 'fast';
+    const jobType = jobData?.job_type || '';
+    
+    // Check if this is an enhanced video model
+    if (jobType.includes('enhanced') || jobType.includes('7b')) {
+      return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+    }
+    
+    // Default video buckets
     return quality === 'high' ? 'video_high' : 'video_fast';
   }
 
