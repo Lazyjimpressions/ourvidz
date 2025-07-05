@@ -69,10 +69,11 @@ export class AssetService {
 
   static async getAssetsByIds(assetIds: string[]): Promise<UnifiedAsset[]> {
     if (assetIds.length === 0) {
+      console.log('🔍 getAssetsByIds called with empty array, returning empty result');
       return [];
     }
 
-    console.log('🔍 Fetching assets by IDs:', assetIds);
+    console.log('🔍 AssetService.getAssetsByIds - Fetching assets by IDs:', assetIds);
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {

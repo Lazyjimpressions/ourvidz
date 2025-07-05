@@ -101,16 +101,24 @@ export const useWorkspace = () => {
 
   // Get workspace tiles (only show completed assets with URLs)
   const workspaceTiles = useCallback(() => {
+    console.log('🎬 workspaceTiles - processing assets:', assets.length);
+    console.log('📊 Asset statuses:', assets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
+    
     const completedAssets = assets.filter(asset => 
       asset.status === 'completed' && 
       asset.url
     );
+    
+    console.log('✅ Completed assets with URLs:', completedAssets.length);
+    console.log('📋 Completed assets details:', completedAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
     
     const allTiles: MediaTile[] = [];
     completedAssets.forEach(asset => {
       const tiles = transformAssetToTiles(asset);
       allTiles.push(...tiles);
     });
+    
+    console.log('🎯 Final tiles generated:', allTiles.length);
     
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [assets, transformAssetToTiles]);
@@ -126,10 +134,18 @@ export const useWorkspace = () => {
 
   // Import assets to workspace (replace current workspace)
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
+    console.log('🔄 importToWorkspace called with:', importedAssets.length, 'assets');
+    console.log('📋 Assets being imported:', importedAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
+    
     const newFilterIds = importedAssets.map(asset => asset.id);
+    console.log('🎯 New filter IDs:', newFilterIds);
+    console.log('📊 Previous workspace filter:', Array.from(workspaceFilter));
+    
     setWorkspaceFilter(new Set(newFilterIds));
+    console.log('✅ Workspace filter updated to:', newFilterIds);
+    
     toast.success(`Imported ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, []);
+  }, [workspaceFilter]);
 
   // Clear workspace
   const clearWorkspace = useCallback(() => {

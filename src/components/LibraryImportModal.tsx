@@ -41,8 +41,9 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   };
 
   const handleImport = () => {
-    console.log('🚀 Import triggered with selection:', Array.from(selectedAssets));
+    console.log('🚀 LibraryImportModal - Import triggered with selection:', Array.from(selectedAssets));
     console.log('📋 Available library assets:', libraryAssets.length);
+    console.log('🔍 Library assets details:', libraryAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
     
     // Validate selection before proceeding
     if (selectedAssets.size === 0) {
@@ -52,7 +53,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     }
     
     const assetsToImport = libraryAssets.filter(asset => selectedAssets.has(asset.id));
-    console.log('📦 Assets to import:', assetsToImport.map(a => ({ id: a.id, type: a.type, prompt: a.prompt.slice(0, 50) })));
+    console.log('📦 Assets to import:', assetsToImport.map(a => ({ id: a.id, type: a.type, status: a.status, hasUrl: !!a.url, prompt: a.prompt.slice(0, 50) })));
     console.log('🎯 Import count - Expected:', selectedAssets.size, 'Actual:', assetsToImport.length);
     
     // Double-check that we have assets to import
@@ -76,6 +77,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       });
     }
     
+    console.log('🔄 Calling onImport with assets:', assetsToImport.length);
     onImport(assetsToImport);
     setSelectedAssets(new Set());
     onClose();
