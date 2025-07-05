@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAssets, useOptimisticAssetDeletion } from '@/hooks/useAssets';
+import { useQuery } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { toast } from 'sonner';
 
@@ -20,9 +20,13 @@ export const useWorkspace = () => {
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   
-  // Get session-only assets from React Query (single source of truth)
-  const { data: assets = [], isLoading, refetch } = useAssets(true);
-  const { removeAssetOptimistically, restoreAssetOnError } = useOptimisticAssetDeletion();
+  // Fetch only assets that are in the workspace filter
+  const { data: assets = [], isLoading, refetch } = useQuery({
+    queryKey: ['workspace-assets', Array.from(workspaceFilter).sort()],
+    queryFn: () => AssetService.getAssetsByIds(Array.from(workspaceFilter)),
+    enabled: workspaceFilter.size > 0,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
 
   // Load workspace filter from sessionStorage on mount
   useEffect(() => {
@@ -95,12 +99,11 @@ export const useWorkspace = () => {
     return tiles;
   }, []);
 
-  // Get workspace tiles (filtered completed assets, transformed to tiles)
+  // Get workspace tiles (only show completed assets with URLs)
   const workspaceTiles = useCallback(() => {
     const completedAssets = assets.filter(asset => 
       asset.status === 'completed' && 
-      asset.url &&
-      (workspaceFilter.size === 0 || workspaceFilter.has(asset.id))
+      asset.url
     );
     
     const allTiles: MediaTile[] = [];
@@ -110,7 +113,7 @@ export const useWorkspace = () => {
     });
     
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }, [assets, workspaceFilter, transformAssetToTiles]);
+  }, [assets, transformAssetToTiles]);
 
   // Add asset to workspace filter
   const addToWorkspace = useCallback((assetIds: string[]) => {
@@ -135,7 +138,7 @@ export const useWorkspace = () => {
     toast.success('Workspace cleared');
   }, []);
 
-  // Delete tile with optimistic updates
+  // Delete tile
   const deleteTile = useCallback(async (tile: MediaTile) => {
     if (deletingTiles.has(tile.id)) return;
     
@@ -145,19 +148,10 @@ export const useWorkspace = () => {
       type: tile.type
     });
     
-    const assetToRestore = assets.find(a => a.id === tile.originalAssetId);
-    if (!assetToRestore) {
-      toast.error('Asset not found');
-      return;
-    }
-    
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
-      // Optimistic update: remove from cache immediately
-      removeAssetOptimistically(tile.originalAssetId, true);
-      
-      // Remove from workspace filter
+      // Remove from workspace filter first (optimistic update)
       setWorkspaceFilter(prev => {
         const newFilter = new Set(prev);
         newFilter.delete(tile.originalAssetId);
@@ -170,16 +164,10 @@ export const useWorkspace = () => {
       console.log('✅ Asset deletion successful');
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
       
-      // Force refetch to ensure cache is updated
-      refetch();
-      
     } catch (error) {
       console.error('❌ Workspace deletion failed:', error);
       
-      // Rollback optimistic update
-      restoreAssetOnError(assetToRestore, true);
-      
-      // Restore to workspace filter
+      // Restore to workspace filter on error
       setWorkspaceFilter(prev => new Set([...prev, tile.originalAssetId]));
       
       const errorMessage = error instanceof Error 
@@ -198,7 +186,7 @@ export const useWorkspace = () => {
         return next;
       });
     }
-  }, [deletingTiles, assets, removeAssetOptimistically, restoreAssetOnError, refetch]);
+  }, [deletingTiles]);
 
   return {
     tiles: workspaceTiles(),
