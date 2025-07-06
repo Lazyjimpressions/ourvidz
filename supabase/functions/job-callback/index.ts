@@ -405,25 +405,31 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
   });
   
   if (status === 'completed' && job.video_id && filePath) {
-    // Normalize video path to ensure user-scoped consistency
-    const normalizedVideoPath = normalizeAssetPath(filePath, job.user_id);
+    // Only normalize SDXL video paths, WAN workers upload to bucket root with just filename
+    const isSDXLVideo = job.job_type.startsWith('sdxl_');
+    const finalVideoPath = isSDXLVideo ? normalizeAssetPath(filePath, job.user_id) : filePath;
     
-    console.log('📹 Video path normalization:', {
+    console.log('📹 Video path handling:', {
       originalPath: filePath,
-      normalizedPath: normalizedVideoPath,
-      userId: job.user_id
+      finalPath: finalVideoPath,
+      userId: job.user_id,
+      isSDXL: isSDXLVideo,
+      jobType: job.job_type
     });
     
     const { error: videoError } = await supabase.from('videos').update({
       status: 'completed',
-      video_url: normalizedVideoPath,
+      video_url: finalVideoPath,
       completed_at: new Date().toISOString()
     }).eq('id', job.video_id);
     
     if (videoError) {
       console.error('❌ Error updating video:', videoError);
     } else {
-      console.log('✅ Video job updated successfully with normalized path:', normalizedVideoPath);
+      console.log('✅ Video job updated successfully:', {
+        path: finalVideoPath,
+        isSDXL: isSDXLVideo
+      });
     }
   }
   if (status === 'failed' && job.video_id) {
