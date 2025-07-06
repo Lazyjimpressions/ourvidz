@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
-import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
+import { useVirtualizedWorkspace } from '@/hooks/useVirtualizedWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { VirtualizedMediaGrid } from '@/components/VirtualizedMediaGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
@@ -37,8 +37,12 @@ const Workspace = () => {
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   
-  // Workspace management
-  const { addToWorkspace, clearWorkspace, importToWorkspace } = useRealtimeWorkspace();
+  // Workspace management - Use VirtualizedWorkspace to match VirtualizedMediaGrid
+  const { addToWorkspace, clearWorkspace, importToWorkspace } = useVirtualizedWorkspace({
+    itemHeight: 300,
+    overscan: 3,
+    visibleCount: 12
+  });
   const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
   
   // Generation hooks

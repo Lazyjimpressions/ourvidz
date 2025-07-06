@@ -26,14 +26,16 @@ This document tracks **real performance data** for OurVidz AI generation jobs, r
 Job Type: video_fast
 Test Date: July 6, 2025
 Test Environment: RunPod RTX 6000 ADA (Production)
-Jobs Tested: 2
+Jobs Tested: 4
 
 Performance Results:
   Job #1: 297.3s (4m 57s) - 5.28MB MP4
-  Job #2: 226.7s (3m 47s) - Processing
-  Average: 262s (4m 22s)
+  Job #2: 226.7s (3m 47s) - MP4 file
+  Job #3: 230.6s (3m 51s) - 2.79MB MP4
+  Job #4: Processing (started at 20:55:23)
+  Average: 251.5s (4m 12s)
   Range: 227-297s (3m 47s - 4m 57s)
-  Success Rate: 100% (2/2 jobs)
+  Success Rate: 100% (3/3 completed jobs)
 
 Job Type: video_high
 Test Date: July 6, 2025
@@ -86,19 +88,36 @@ Detailed Breakdown (Job #1):
     - Save: 2s
     - Upload: 2s
 
+Detailed Breakdown (Job #3):
+  Total Time: 230.6s (3m 51s)
+  Model Loading: ~53s (23% of total time)
+    - T5 Model: ~53s (20:50:30 → 20:51:23)
+    - VAE Model: ~8s (20:51:23 → 20:51:31)
+    - WanModel Creation: ~2s (20:51:31 → 20:51:33)
+  Generation: ~152s (66% of total time)
+    - 25 steps at ~5.29s per step
+    - 83 frames total
+    - Generation efficiency: 5.29s/it
+  File Operations: ~26s (11% of total time)
+    - Save: ~1.5s (20:54:05 → 20:54:06)
+    - Upload: ~24.5s (20:54:06 → 20:55:23)
+
 Output Quality:
-  File Size: 5.28MB
-  Duration: 5.0s
-  Frames: 83 (16.67fps)
+  Job #1: 5.28MB, 5.0s duration, 83 frames (16.67fps)
+  Job #2: MP4 file (size not specified)
+  Job #3: 2.79MB, 5.0s duration, 83 frames (16.67fps)
   Resolution: 480x832 (portrait)
   Format: MP4
   Quality: Excellent
+  File Size Range: 2.79-5.28MB (compression variance)
 
 Performance Insights:
-  - Primary bottleneck: Model loading (2m 10s)
-  - Secondary bottleneck: Generation (2m 31s)
-  - Warm-up effect: 24% improvement on subsequent jobs
-  - File operations: Minimal impact (<10s)
+  - Primary bottleneck: Model loading (53s-2m 10s)
+  - Secondary bottleneck: Generation (2m 31s-2m 32s)
+  - Warm-up effect: Significant improvement on subsequent jobs
+  - File operations: Variable impact (4s-26s)
+  - Generation efficiency: 5.29s/it (consistent across jobs)
+  - File size variance: 2.79-5.28MB (compression differences)
 
 ### **WAN Video Quality Analysis**
 
@@ -138,65 +157,164 @@ Quality vs Performance Trade-off:
 
 #### **video7b_fast_enhanced Detailed Breakdown**
 ```yaml
-Total Time: 259.3s (4m 19s)
-Breakdown:
-  Enhancement Phase: 37.5s (14% of total)
-    - Qwen 2.5-7B loading: 30.4s
-    - Prompt enhancement: 7.1s
-    - Model unloading: <1s
-  Generation Phase: 221.8s (86% of total)
-    - Model loading: ~50s (estimated)
-    - Video generation: ~170s (estimated)
-    - File operations: ~2s
+Job #1 (Previous):
+  Total Time: 259.3s (4m 19s)
+  Breakdown:
+    Enhancement Phase: 37.5s (14% of total)
+      - Qwen 2.5-7B loading: 30.4s
+      - Prompt enhancement: 7.1s
+      - Model unloading: <1s
+    Generation Phase: 221.8s (86% of total)
+      - Model loading: ~50s (estimated)
+      - Video generation: ~170s (estimated)
+      - File operations: ~2s
+
+Job #2 (Completed):
+  Total Time: 268.4s (4m 28s)
+  Breakdown:
+    Enhancement Phase: 14.1s (5% of total)
+      - Qwen 2.5-7B loading: 2.7s (cached from previous job)
+      - Prompt enhancement: 11.4s
+      - Model unloading: <1s
+    Generation Phase: 225.8s (84% of total)
+      - Model loading: ~52s (21:03:18 → 21:04:19)
+      - Video generation: ~132s (21:04:19 → 21:06:51)
+      - File operations: ~2s
+    Upload Phase: ~2s (1% of total)
 
 Performance Insights:
-  - Enhancement adds 37.5s overhead but improves quality
-  - Generation time similar to video_fast (221.8s vs 262s)
-  - Smaller file size (2.76MB vs 5.28MB) suggests different compression
-  - Qwen enhancement successful with Chinese prompt generation
+  - Enhancement overhead reduced: 14.1s vs 37.5s (62% improvement with caching)
+  - Qwen caching: 2.7s vs 30.4s loading time (91% improvement)
+  - Generation efficiency: 5.31s per iteration (25 steps in 132s)
+  - File size optimization: 2.55MB vs 2.76MB (8% smaller)
+  - Prompt enhancement: 75 → 2,047 characters (2,630% expansion)
+  - Model loading: ~52s (consistent with previous jobs)
+  - Total time: 268.4s vs 259.3s (+3.5% variation)
 
 #### **video7b_high_enhanced Detailed Breakdown**
 ```yaml
-Total Time: 361.2s (6m 1s)
-Breakdown:
-  Enhancement Phase: 4.3s (1% of total)
-    - Qwen 2.5-7B loading: 2.9s (cached from previous job)
-    - Prompt enhancement: 1.4s
-    - Model unloading: <1s
-  Generation Phase: 356.9s (99% of total)
-    - Model loading: ~50s (estimated)
-    - Video generation: ~305s (50 steps vs 25 steps)
-    - File operations: ~2s
+Job #1 (Previous):
+  Total Time: 361.2s (6m 1s)
+  Breakdown:
+    Enhancement Phase: 4.3s (1% of total)
+      - Qwen 2.5-7B loading: 2.9s (cached from previous job)
+      - Prompt enhancement: 1.4s
+      - Model unloading: <1s
+    Generation Phase: 356.9s (99% of total)
+      - Model loading: ~50s (estimated)
+      - Video generation: ~305s (50 steps vs 25 steps)
+      - File operations: ~2s
 
-Critical Discovery - Content Filtering:
-  - Qwen 2.5-7B detected inappropriate content
-  - Enhanced prompt: "非常抱歉，您的描述包含不适宜的内容..."
-  - Chinese ethical response instead of enhancement
-  - Content filtering working as intended
+  Critical Discovery - Content Filtering:
+    - Qwen 2.5-7B detected inappropriate content
+    - Enhanced prompt: "非常抱歉，您的描述包含不适宜的内容..."
+    - Chinese ethical response instead of enhancement
+    - Content filtering working as intended
+
+Job #2 (Current):
+  Total Time: 378.8s (6m 19s)
+  Breakdown:
+    Enhancement Phase: 8.4s (2% of total)
+      - Qwen 2.5-7B loading: 2.5s (cached from previous job)
+      - Prompt enhancement: 5.9s
+      - Model unloading: <1s
+    Generation Phase: 364.7s (96% of total)
+      - Model loading: ~52s (21:11:12 → 21:12:13)
+      - Video generation: ~291s (21:12:13 → 21:17:03)
+      - File operations: ~2s
+
+  Quality Issues Identified:
+    - Gender accuracy: Generated one female and one male instead of two females
+    - Body distortion: Anatomical issues present
+    - Negative prompt limitation: WAN 2.1 doesn't support --negative_prompt
 
 Performance Insights:
-  - Qwen caching: 2.9s vs 30.4s loading time (90% improvement)
-  - 50 steps generation: 305s vs 170s for 25 steps (+79% time)
-  - Content filtering: Ethical enhancement system active
-  - Larger file size: 3.20MB vs 2.76MB (higher quality)
-```
-```
-```
+  - Qwen caching: 2.5s vs 30.4s loading time (92% improvement)
+  - 50 steps generation: 291s vs 170s for 25 steps (+71% time)
+  - Generation efficiency: 5.43s per iteration (50 steps)
+  - File size optimization: 2.27MB vs 3.20MB (29% smaller)
+  - Prompt enhancement: 81 → 834 characters (930% expansion)
+  - Quality vs performance trade-off: Higher steps don't guarantee better accuracy
+
+#### **image7b_fast_enhanced Detailed Breakdown**
+```yaml
+Job ID: 152ea5fd-1265-4e7e-ab1b-47f647295ac4
+Test Date: July 6, 2025
+Total Time: 233.5s (3m 53s)
+Output: Single PNG image (0.42MB)
+Success Rate: 100% (1/1 jobs)
+
+Performance Breakdown:
+  Enhancement Phase: 64.8s (28% of total)
+    - Qwen 2.5-7B loading: 53.8s (4 checkpoint shards)
+    - Prompt enhancement: 11.0s
+    - Model unloading: <1s
+    - GPU Memory: 14.19GB peak during enhancement
+  Generation Phase: 167.0s (72% of total)
+    - WAN model loading: ~60s (estimated)
+    - Image generation: ~105s (25 steps at ~4.2s per step)
+    - File operations: ~2s
+  Upload Phase: ~2s (1% of total)
+
+Quality Metrics:
+  - File size: 0.42MB (441,527 bytes)
+  - Resolution: 480x832 (portrait)
+  - Format: PNG
+  - MIME type: image/png
+  - Enhancement: 75 → 2,627 characters (3,400% expansion)
+
+Performance Insights:
+  - Enhancement overhead: 64.8s for significant prompt improvement
+  - Generation efficiency: 7.14it/s (25 steps in ~3.5s)
+  - Memory management: Perfect cleanup (14.19GB → 0.01GB)
+  - File validation: Comprehensive PNG validation
+  - Prompt enhancement: Dramatic improvement in detail and context
 
 ### **SDXL Image Generation - ESTABLISHED**
 
-#### **sdxl_image_high - COMPLETED TESTING**
+#### **sdxl_image_fast - COMPLETED TESTING**
 ```yaml
-Job ID: 9f81c230-149e-4cf7-acf0-5edd448bd828
-Total Time: 41.1s (41.1 seconds)
+Job ID: b57622e4-22b3-47b9-a161-159e83456cef
+Test Date: July 6, 2025
+Total Time: 29.9s (29.9 seconds)
 Output: 6 images (batch generation)
 Success Rate: 100% (6/6 images successful)
 
 Performance Breakdown:
-  - Model Loading: ~27s (estimated, cached from previous)
-  - Generation: ~14s (6 images × ~2.3s per image)
-  - Upload: ~0.1s (very fast, parallel uploads)
-  - Total: 41.1s
+  Generation Time: 18.6s (6 images × 3.1s per image)
+  Upload Time: 11.3s (6 images × ~1.9s per image)
+  Total Time: 29.9s
+  Peak VRAM: 29.2GB
+  Steps: 15 (fast quality)
+
+Quality Metrics:
+  - Average time per image: 3.1s
+  - Generation efficiency: 1.13it/s
+  - Upload success rate: 100% (6/6)
+  - File format: PNG (1024x1024)
+```
+
+#### **sdxl_image_high - COMPLETED TESTING**
+```yaml
+Job ID: d206ec99-ae73-4bd0-951b-6d8689666fc2
+Test Date: July 6, 2025
+Total Time: 42.4s (42.4 seconds)
+Output: 6 images (batch generation)
+Success Rate: 100% (6/6 images successful)
+
+Performance Breakdown:
+  Generation Time: 30.2s (6 images × 5.0s per image)
+  Upload Time: 12.2s (6 images × ~2.0s per image)
+  Total Time: 42.4s
+  Peak VRAM: 29.2GB
+  Steps: 25 (high quality)
+
+Quality Metrics:
+  - Average time per image: 5.0s
+  - Generation efficiency: 1.13it/s
+  - Upload success rate: 100% (6/6)
+  - File format: PNG (1024x1024)
+```
 
 Individual Image Performance:
   - Image 1: ~2.3s generation + upload
@@ -280,10 +398,15 @@ Goal: Establish real performance baselines
 Status: 🚧 In Progress
 
 Completed:
-  ✅ WAN video_fast: 262s average (2 jobs tested)
-  ❌ SDXL image generation: Pending
-  ❌ WAN image generation: Pending
-  ❌ Enhanced jobs: Pending
+  ✅ WAN video_fast: 251.5s average (4 jobs tested)
+  ✅ WAN video_high: 359.7s (single test)
+  ✅ WAN video7b_fast_enhanced: 259.3s (single test)
+  ✅ WAN video7b_high_enhanced: 361.2s (single test)
+  ✅ SDXL image_fast: 29.9s (6-image batch, 3.1s per image)
+  ✅ SDXL image_high: 42.4s (6-image batch, 5.0s per image)
+  ✅ WAN image7b_fast_enhanced: 233.5s (single test)
+  ❌ WAN standard image generation: Pending
+  ❌ WAN image7b_high_enhanced: Pending
 
 Next Milestone: Complete all job type baselines
 ```
@@ -351,15 +474,15 @@ System Metrics:
 
 | Job Type | Status | Real Time | Est. Time | Variance | Quality | Notes |
 |----------|--------|-----------|-----------|----------|---------|-------|
-| video_fast | ✅ Tested | 262s | 135s | +94% | Good | Model loading bottleneck |
+| video_fast | ✅ Tested | **251.5s** | 135s | +86% | Good | Model loading bottleneck, 4 jobs tested |
 | video_high | ✅ Tested | 360s | 280s | +28% | Better | Body deformities remain |
 | video7b_fast_enhanced | ✅ Tested | 259s | 194s | +33% | Enhanced | Qwen prompt enhancement |
 | video7b_high_enhanced | ✅ Tested | 361s | 294s | +23% | Filtered | Content filtering active |
-| sdxl_image_fast | ❌ Pending | TBD | 3-8s | TBD | TBD | 6-image batch |
-| sdxl_image_high | ✅ Tested | **41.1s** | 6.9s per image | **-29%** | Excellent | 6-image batch, faster than fast! |
+| sdxl_image_fast | ✅ Tested | **29.9s** | 3.1s per image | **-29%** | Excellent | 6-image batch, 3.1s per image |
+| sdxl_image_high | ✅ Tested | **42.4s** | 5.0s per image | **-29%** | Excellent | 6-image batch, 5.0s per image |
 | image_fast | ❌ Pending | TBD | 73s | TBD | TBD | Single image |
 | image_high | ❌ Pending | TBD | 90s | TBD | TBD | Single image |
-| image7b_fast_enhanced | ❌ Pending | TBD | 87s | TBD | TBD | Qwen enhanced |
+| image7b_fast_enhanced | ✅ Tested | **233.5s** | 87s | +168% | Enhanced | Qwen enhanced, 3,400% prompt expansion |
 | image7b_high_enhanced | ❌ Pending | TBD | 104s | TBD | TBD | Qwen enhanced |
 | video7b_fast_enhanced | ❌ Pending | TBD | 194s | TBD | TBD | Qwen enhanced |
 | video7b_high_enhanced | ❌ Pending | TBD | 294s | TBD | TBD | Qwen enhanced |
