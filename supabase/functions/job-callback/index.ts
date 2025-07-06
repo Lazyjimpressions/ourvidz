@@ -178,15 +178,15 @@ serve(async (req)=>{
       parsedQuality: quality,
       isSDXL,
       isEnhanced,
-      expectedBucket: isSDXL ? `sdxl_image_${quality}` : `${format}_${quality}`
+      expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`
     });
     // Handle different job types based on parsed format
     if (format === 'image' && job.image_id) {
       console.log('🖼️ Processing image job callback...');
-      await handleImageJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isSDXL, imageUrls);
+      await handleImageJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isSDXL, imageUrls, isEnhanced);
     } else if (format === 'video' && job.video_id) {
       console.log('📹 Processing video job callback...');
-      await handleVideoJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality);
+      await handleVideoJobCallback(supabase, job, status, resolvedFilePath, errorMessage, quality, isEnhanced);
     } else {
       console.error('❌ CRITICAL: Unknown job format or missing ID:', {
         format,
@@ -250,7 +250,7 @@ serve(async (req)=>{
     });
   }
 });
-async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL, imageUrls) {
+async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL, imageUrls, isEnhanced) {
   console.log('🖼️ ENHANCED IMAGE CALLBACK DEBUGGING:', {
     jobId: job.id,
     imageId: job.image_id,
@@ -261,7 +261,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
     jobType: job.job_type,
     quality,
     isSDXL,
-    expectedBucket: isSDXL ? `sdxl_image_${quality}` : `image_${quality}`
+    expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`
   });
   if (status === 'completed' && (filePath || imageUrls)) {
     console.log('✅ Processing completed image job with file path or image URLs');
@@ -298,7 +298,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
         ...job.metadata || {},
         model_type: isSDXL ? 'sdxl' : 'wan',
         is_sdxl: isSDXL,
-        bucket: isSDXL ? `sdxl_image_${quality}` : `image_${quality}`,
+        bucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`,
         callback_processed_at: new Date().toISOString(),
         file_path_validation: filePathValidation,
         debug_info: {
@@ -371,7 +371,7 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
     }
   }
 }
-async function handleVideoJobCallback(supabase, job, status, filePath, errorMessage, quality) {
+async function handleVideoJobCallback(supabase, job, status, filePath, errorMessage, quality, isEnhanced) {
   console.log('📹 ENHANCED VIDEO CALLBACK DEBUGGING:', {
     jobId: job.id,
     videoId: job.video_id,
