@@ -303,6 +303,27 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
             }
           }
         )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'videos',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            const newVideo = payload.new as any;
+            if (newVideo.status === 'completed' && !processedUpdatesRef.current.has(newVideo.id)) {
+              console.log('🎉 New video completed:', newVideo.id);
+              processedUpdatesRef.current.add(newVideo.id);
+              
+              setWorkspaceFilter(prev => new Set([...prev, newVideo.id]));
+              toast.success('New video ready!');
+              
+              setTimeout(() => processedUpdatesRef.current.delete(newVideo.id), 30000);
+            }
+          }
+        )
         .subscribe();
 
       return () => {
