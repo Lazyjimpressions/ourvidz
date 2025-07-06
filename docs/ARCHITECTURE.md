@@ -1,7 +1,9 @@
 # OurVidz.com - Technical Architecture
 
-**Last Updated:** July 5, 2025  
-**System:** Dual Worker Architecture on RTX 6000 ADA (48GB VRAM)
+**Last Updated:** July 6, 2025 at 10:11 AM CST  
+**System:** Dual Worker Architecture on RTX 6000 ADA (48GB VRAM)  
+**Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
+**Status:** ✅ All 10 Job Types Available - Testing Phase
 
 ---
 
@@ -12,6 +14,7 @@
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Frontend      │    │   Backend       │    │   Workers       │
 │   (React/TS)    │◄──►│   (Supabase)    │◄──►│   (RunPod)      │
+│   Lovable.app   │    │   Production    │    │   RTX 6000 ADA  │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          │                       │                       │
@@ -20,17 +23,18 @@
 │   UI Components │    │   Edge Functions│    │   Dual Workers  │
 │   - Job Selection│    │   - queue-job   │    │   - SDXL Worker │
 │   - Asset Display│    │   - job-callback│    │   - WAN Worker  │
-│   - Workspace   │    │   - Auth        │    │   - Orchestrator│
+│   - Workspace   │    │   - Auth        │    │   - Qwen Worker │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### **Dual Worker System**
+### **Dual Worker System (Current)**
 ```yaml
 Worker Architecture:
   SDXL Worker:
     Queue: sdxl_queue (2s polling)
     Job Types: sdxl_image_fast, sdxl_image_high
-    Performance: 3-8 seconds
+    Performance: 3-8 seconds per image
+    Output: 6-image batch (array of URLs)
     VRAM Usage: 6.6GB loaded, 10.5GB peak
     Status: ✅ Fully operational
 
@@ -38,15 +42,17 @@ Worker Architecture:
     Queue: wan_queue (5s polling)
     Job Types: 8 types (4 standard + 4 enhanced)
     Performance: 67-294 seconds
+    Output: Single file (image/video URL)
     VRAM Usage: 15-30GB peak
-    Enhancement: Qwen 7B (14.6s)
-    Status: ✅ Ready for deployment
+    Enhancement: Qwen 7B (14.6s) - Currently disabled
+    Status: ✅ Operational (enhanced jobs working but quality issues)
 
-  Orchestrator:
-    Type: dual_orchestrator.py
-    Purpose: Manage both workers concurrently
-    Features: Process monitoring, auto-restart, status reporting
-    Status: ✅ Production ready
+  Qwen Worker (Planned):
+    Purpose: Prompt enhancement and storytelling
+    Model: Qwen 7B (NSFW-capable)
+    Integration: Same server as WAN/SDXL
+    Storage: Temp storage for speed, persistence for stability
+    Status: 🚧 Planning phase
 ```
 
 ---
@@ -56,18 +62,24 @@ Worker Architecture:
 ### **Technology Stack**
 ```yaml
 Core Framework:
-  React: 18.x with TypeScript
-  Build Tool: Vite
-  Styling: Tailwind CSS + shadcn/ui components
-  State Management: React Context + React Query
-  Routing: React Router
+  React: 18.3.1 with TypeScript 5.5.3
+  Build Tool: Vite 5.4.1
+  Styling: Tailwind CSS 3.4.11 + shadcn/ui components
+  State Management: React Context + React Query 5.56.2
+  Routing: React Router 6.26.2
 
 Key Libraries:
   @tanstack/react-query: Server state management
-  @supabase/supabase-js: Backend integration
-  lucide-react: Icons
-  sonner: Toast notifications
-  react-hook-form: Form handling
+  @supabase/supabase-js: 2.50.0 Backend integration
+  lucide-react: 0.462.0 Icons
+  sonner: 1.5.0 Toast notifications
+  react-hook-form: 7.53.0 Form handling
+  zod: 3.23.8 Schema validation
+
+Deployment:
+  Platform: Lovable
+  URL: https://ourvidz.lovable.app/
+  Status: ✅ Production deployed
 ```
 
 ### **Component Architecture**
@@ -83,11 +95,11 @@ Core Features:
   Dashboard: User overview and navigation
 
 Generation Components:
-  FastImageGenerator: SDXL fast generation
-  HighImageGenerator: SDXL high-quality generation
-  FastVideoGenerator: WAN fast video generation
-  HighVideoGenerator: WAN high-quality video generation
-  Enhanced Generators: Qwen-enhanced versions (pending)
+  FastImageGenerator: SDXL fast generation (6-image batch)
+  HighImageGenerator: SDXL high-quality generation (6-image batch)
+  FastVideoGenerator: WAN fast video generation (single file)
+  HighVideoGenerator: WAN high-quality video generation (single file)
+  Enhanced Generators: Qwen-enhanced versions (currently disabled)
 
 Asset Management:
   MediaGrid: Asset display grid
@@ -119,41 +131,48 @@ Custom Hooks:
 
 ### **Supabase Services**
 ```yaml
-Database (PostgreSQL):
+Database (PostgreSQL 15.8):
   Tables:
     - jobs: Job tracking and status
-    - assets: Generated content metadata
-    - user_profiles: User information
-    - job_formats: Format configurations
-    - job_qualities: Quality configurations
+    - images: Generated image metadata
+    - videos: Generated video metadata
+    - profiles: User information
+    - projects: Project management
+    - scenes: Scene management
+    - characters: Character management
+    - user_roles: Role-based access control
+    - usage_logs: Usage tracking
 
   RLS Policies:
     - Users can only access their own data
+    - Admins have full access to all data
     - Job status updates restricted to workers
     - Asset access controlled by ownership
 
 Storage:
-  Buckets:
-    - sdxl_image_fast: SDXL fast images
-    - sdxl_image_high: SDXL high-quality images
-    - image_fast: WAN fast images
-    - image_high: WAN high-quality images
-    - video_fast: WAN fast videos
-    - video_high: WAN high-quality videos
-    - image7b_fast_enhanced: Enhanced fast images
-    - image7b_high_enhanced: Enhanced high-quality images
-    - video7b_fast_enhanced: Enhanced fast videos
-    - video7b_high_enhanced: Enhanced high-quality videos
+  Buckets (12 Total):
+    - sdxl_image_fast: SDXL fast images (5MB limit)
+    - sdxl_image_high: SDXL high-quality images (10MB limit)
+    - image_fast: WAN fast images (5MB limit)
+    - image_high: WAN high-quality images (10MB limit)
+    - video_fast: WAN fast videos (50MB limit)
+    - video_high: WAN high-quality videos (200MB limit)
+    - image7b_fast_enhanced: Enhanced fast images (20MB limit)
+    - image7b_high_enhanced: Enhanced high-quality images (20MB limit)
+    - video7b_fast_enhanced: Enhanced fast videos (100MB limit)
+    - video7b_high_enhanced: Enhanced high-quality videos (100MB limit)
+    - videos: Public video storage (no limit)
+    - system_assets: Public system assets (5MB limit)
 
   Policies:
     - Private access (authenticated users only)
-    - File size limits: 20MB images, 100MB videos
-    - Allowed types: PNG, MP4
+    - File size limits: 5MB-200MB depending on bucket
+    - Allowed types: PNG for images, MP4 for videos
 
 Edge Functions:
-  queue-job: Job creation and queue routing
-  job-callback: Job completion handling
-  generate-admin-image: Admin image generation
+  queue-job: Job creation and queue routing (JWT verification enabled)
+  job-callback: Job completion handling (JWT verification disabled)
+  generate-admin-image: Admin image generation (Admin bypass)
 ```
 
 ### **Redis Queue System**
@@ -191,49 +210,49 @@ class SDXLWorker:
         # 6.5GB model size, 6.6GB VRAM usage
         
     def generate(self, prompt, config):
-        # Generate 6 images per job
-        # Performance: 3-8 seconds
-        # Output: 1024x1024 PNG images
+        # Generate 6 images per job (BATCH GENERATION)
+        # Performance: 3-8 seconds per image
+        # Output: Array of 6 image URLs
+        # Storage: Multiple files in sdxl bucket
 ```
 
-### **Enhanced WAN Worker Implementation**
+### **WAN Worker Implementation**
 ```python
-# enhanced_wan_worker.py
-class EnhancedWANWorker:
+# wan_worker.py
+class WANWorker:
     def __init__(self):
         self.wan_path = "/workspace/models/wan2.1-t2v-1.3b"
-        self.qwen_model = "Qwen/Qwen2.5-7B-Instruct"
         self.device = "cuda"
         
-    def enhance_prompt(self, prompt):
-        # Qwen 7B prompt enhancement
-        # Performance: 14.6 seconds
-        # Output: Enhanced Chinese prompt
-        
-    def generate_video(self, enhanced_prompt, config):
+    def generate_video(self, prompt, config):
         # WAN 2.1 video generation
         # Performance: 67-280 seconds
-        # Output: MP4 video files
+        # Output: Single video file URL
+        # Storage: Single file in video bucket
+        
+    def generate_image(self, prompt, config):
+        # WAN 2.1 image generation
+        # Performance: 67-90 seconds
+        # Output: Single image file URL
+        # Storage: Single file in image bucket
 ```
 
-### **Dual Orchestrator**
+### **Qwen Worker (Planned)**
 ```python
-# dual_orchestrator.py
-class DualOrchestrator:
+# qwen_worker.py (Future Implementation)
+class QwenWorker:
     def __init__(self):
-        self.sdxl_worker = SDXLWorker()
-        self.wan_worker = EnhancedWANWorker()
-        self.redis_client = RedisClient()
+        self.model_path = "/workspace/models/qwen-7b"
+        self.device = "cuda"
         
-    def start_workers(self):
-        # Start both workers concurrently
-        # Monitor processes and restart if needed
-        # Report status to monitoring system
+    def enhance_prompt(self, prompt, model_type):
+        # Qwen 7B prompt enhancement
+        # Purpose: NSFW content enhancement
+        # Integration: Pre-processing for WAN/SDXL
         
-    def process_jobs(self):
-        # Poll sdxl_queue and wan_queue
-        # Route jobs to appropriate workers
-        # Handle job completion callbacks
+    def generate_storyboard(self, script):
+        # Storyboarding functionality
+        # Future feature for video production
 ```
 
 ---
@@ -253,27 +272,29 @@ class DualOrchestrator:
 
 3. Worker Processing:
    Worker: Polls queue for new jobs
-   Enhancement: Qwen 7B enhances prompt (if enhanced job)
-   Generation: Model generates content
+   SDXL Jobs: Generate 6 images, return array of URLs
+   WAN Jobs: Generate single file, return single URL
    Storage: Content uploaded to Supabase bucket
 
 4. Completion:
    Callback: job-callback.ts updates job status
-   Database: Asset metadata stored in assets table
+   Database: Asset metadata stored in images/videos table
    Frontend: Real-time status updates via polling
 ```
 
 ### **Asset Management Flow**
 ```yaml
 1. Generation Complete:
-   Worker: Uploads generated content to bucket
+   SDXL: Uploads 6 images to bucket, returns array of URLs
+   WAN: Uploads single file to bucket, returns single URL
    Metadata: Stores asset information in database
    Status: Updates job status to completed
 
 2. Frontend Display:
    React Query: Fetches assets from database
    Grid Display: MediaGrid shows assets
-   Filtering: AssetFilters allow sorting/filtering
+   SDXL Display: Shows 6 images with selection options
+   WAN Display: Shows single image/video
 
 3. User Interaction:
    Preview: AssetPreviewModal shows full-size content
@@ -296,7 +317,7 @@ RTX 6000 ADA (48GB VRAM):
   WAN Worker:
     Model Load: ~15GB
     Generation Peak: 15-30GB
-    Qwen Enhancement: 8-12GB
+    Qwen Enhancement: 8-12GB (currently disabled)
     
   Concurrent Operation:
     Total Peak: ~35GB
@@ -335,6 +356,7 @@ Supabase Auth:
   
 Access Control:
   User Isolation: Users can only access their own data
+  Admin Access: Full access to all data and functions
   Job Security: Jobs tied to authenticated users
   Asset Protection: Assets protected by user ownership
 ```
@@ -399,7 +421,7 @@ Development:
   Workers: Local testing environment
   
 Production:
-  Frontend: Vercel/Netlify deployment
+  Frontend: Lovable deployment (https://ourvidz.lovable.app/)
   Backend: Supabase production project
   Workers: RunPod production environment
   
@@ -445,6 +467,10 @@ RunPod:
   GPU Infrastructure: RTX 6000 ADA instances
   Network Storage: Persistent model storage
   Container Management: Worker deployment
+  
+Lovable:
+  Frontend Deployment: Production hosting
+  Domain: ourvidz.lovable.app
 ```
 
 ### **API Endpoints**
@@ -509,4 +535,42 @@ Worker Testing:
   Performance: Timing and resource usage testing
 ```
 
-**Status: 🏗️ ARCHITECTURE COMPLETE - READY FOR IMPLEMENTATION** 
+---
+
+## **Current Testing Status**
+
+### **✅ Successfully Tested Job Types**
+```yaml
+SDXL Jobs:
+  sdxl_image_fast: ✅ Working (6-image batch)
+  sdxl_image_high: ✅ Working (6-image batch)
+
+WAN Jobs:
+  image_fast: ✅ Working (single file)
+  video7b_fast_enhanced: ✅ Working (single file)
+  video7b_high_enhanced: ✅ Working (single file)
+
+Pending Testing:
+  image_high: ❌ Not tested
+  video_fast: ❌ Not tested
+  video_high: ❌ Not tested
+  image7b_fast_enhanced: ❌ Not tested
+  image7b_high_enhanced: ❌ Not tested
+```
+
+### **Known Issues**
+```yaml
+Enhanced Video Quality:
+  Issue: Enhanced video generation working but quality not great
+  Problem: Adult/NSFW enhancement doesn't work well out of the box
+  Impact: Adds 60 seconds to video generation
+  Solution: Planning to use Qwen for prompt enhancement instead
+
+File Storage Mapping:
+  Issue: Job types to storage bucket mapping complexity
+  Problem: URL generation and file presentation on frontend
+  Impact: SDXL returns 6 images vs WAN returns single file
+  Solution: Proper array handling for SDXL, single URL for WAN
+```
+
+**Status: 🚧 TESTING PHASE - 5/10 Job Types Verified** 
