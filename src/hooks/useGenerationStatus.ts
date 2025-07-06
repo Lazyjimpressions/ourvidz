@@ -156,37 +156,8 @@ export const useGenerationStatus = (
       }
     },
     enabled: !!id && enabled,
-    refetchInterval: (query) => {
-      const data = query.state.data as GenerationStatusData | null;
-      
-      // Stop polling when generation is complete or failed
-      if (data?.status === 'completed' || data?.status === 'failed') {
-        return false;
-      }
-      
-      // Stop polling if we have persistent URL errors (after a few attempts)
-      if (data && 'url_error' in data && data.url_error && maxRetriesRef.current > 3) {
-        return false;
-      }
-      
-      // Stop polling after format-specific timeout to prevent infinite loops
-      const elapsed = Date.now() - startTimeRef.current;
-      const timeout = getTimeoutForFormat(format);
-      if (elapsed > timeout) {
-        return false;
-      }
-      
-      // OPTIMIZATION: More efficient polling intervals with exponential backoff
-      if (data?.status === 'uploading') {
-        return 1000; // 1 second during upload
-      } else if (data?.status === 'processing') {
-        return 2000; // 2 seconds during processing  
-      } else {
-        // OPTIMIZATION: Exponential backoff for queued jobs
-        const queueTime = Math.min(elapsed / 1000, 60); // Max 60 seconds
-        return Math.min(2000 + (queueTime * 100), 10000); // 2s to 10s
-      }
-    },
+    // OPTIMIZATION: No more polling - rely on realtime subscriptions for updates
+    refetchInterval: false,
     retry: (failureCount, error: any) => {
       // Don't retry for expected "no rows" errors
       if (error.message?.includes('no rows returned')) {

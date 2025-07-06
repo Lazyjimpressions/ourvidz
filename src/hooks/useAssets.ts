@@ -23,13 +23,13 @@ export const useAssets = (sessionOnly: boolean = true) => {
         throw error;
       }
     },
-    // OPTIMIZATION: Increase stale time for better caching
-    staleTime: 5 * 60 * 1000, // 5 minutes - assets don't change that frequently
-    gcTime: 45 * 60 * 1000, // Keep in cache for 45 minutes 
-    refetchOnWindowFocus: false, // OPTIMIZATION: Reduce unnecessary refetches
-    refetchOnMount: true,
-    // OPTIMIZATION: Add background refetch for real-time feel without aggressive polling
-    refetchInterval: 30 * 1000, // Background refresh every 30 seconds
+    // OPTIMIZATION: Increase stale time since we now rely on realtime
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false, // No need to refetch on focus with realtime
+    refetchOnMount: false, // Don't refetch on mount, use cache
+    // OPTIMIZATION: Remove polling since realtime handles updates
+    refetchInterval: false,
   });
 };
 

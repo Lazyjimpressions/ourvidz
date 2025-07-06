@@ -4,9 +4,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
-import { useGenerationStatus } from '@/hooks/useGenerationStatus';
+import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
-import { useWorkspace } from '@/hooks/useWorkspace';
+import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { MediaGrid } from '@/components/MediaGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
@@ -38,7 +38,7 @@ const Workspace = () => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   
   // Workspace management
-  const { addToWorkspace, clearWorkspace, importToWorkspace } = useWorkspace();
+  const { addToWorkspace, clearWorkspace, importToWorkspace } = useRealtimeWorkspace();
   const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
   
   // Generation hooks
@@ -51,8 +51,8 @@ const Workspace = () => {
     clearError
   } = useGeneration();
 
-  // Use generation status hook to track job completion and emit events
-  useGenerationStatus(
+  // Use realtime generation status hook to track job completion
+  useRealtimeGenerationStatus(
     currentJob?.id || null,
     selectedMode,
     !!currentJob && isGenerating
