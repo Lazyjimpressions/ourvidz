@@ -12,7 +12,7 @@ serve(async (req)=>{
     });
   }
   try {
-    console.log('🚀 Queue-job function called - Enhanced SDXL dual worker version');
+    console.log('🚀 Queue-job function called - FIXED: WAN negative prompt removal');
     const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
       global: {
         headers: {
@@ -38,7 +38,7 @@ serve(async (req)=>{
     }
     console.log('✅ User authenticated:', user.id);
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
-    console.log('📋 Creating job with enhanced dual worker routing:', {
+    console.log('📋 Creating job with FIXED dual worker routing:', {
       jobType,
       projectId,
       videoId,
@@ -47,140 +47,61 @@ serve(async (req)=>{
       queue: metadata?.queue,
       timestamp: new Date().toISOString()
     });
-    // Enhanced negative prompt generation function with priority-based system
-    function generateNegativePrompt(jobType: string, userPrompt: string = ''): string {
-      console.log('🎨 Generating priority-based negative prompt for job type:', jobType);
-      
-      // Priority-based negative prompt system
+    // FIXED: Negative prompt generation - ONLY for SDXL jobs
+    function generateNegativePromptForSDXL(userPrompt = '') {
+      console.log('🎨 Generating negative prompt for SDXL job only');
+      // SDXL-optimized negative prompts (keep under 77 tokens)
       const criticalNegatives = [
-        "bad anatomy", "extra limbs", "deformed", "missing limbs"
+        "bad anatomy",
+        "extra limbs",
+        "deformed",
+        "missing limbs"
       ];
-      
       const qualityNegatives = [
-        "low quality", "bad quality", "worst quality", "jpeg artifacts", "compression artifacts",
-        "blurry", "pixelated", "grainy", "noisy"
+        "low quality",
+        "bad quality",
+        "worst quality",
+        "blurry",
+        "pixelated"
       ];
-      
       const anatomicalNegatives = [
-        "deformed hands", "deformed fingers", "extra fingers", "missing fingers",
-        "deformed feet", "deformed toes", "extra toes", "missing toes",
-        "deformed face", "deformed eyes", "deformed nose", "deformed mouth",
-        "deformed body", "deformed torso", "deformed arms", "deformed legs",
-        "malformed joints", "dislocated joints", "broken bones",
-        "asymmetrical features", "uneven proportions", "distorted anatomy"
+        "deformed hands",
+        "extra fingers",
+        "deformed face",
+        "malformed"
       ];
-      
       const artifactNegatives = [
-        "text", "watermark", "logo", "signature", "writing",
-        "glitch", "artifact", "corruption", "distortion",
-        "oversaturated", "undersaturated", "bad lighting"
+        "text",
+        "watermark",
+        "logo",
+        "signature"
       ];
-      
-      const styleNegatives = [
-        "cartoon", "illustration", "animation", "painting", "drawing"
-      ];
-      
-      // NSFW-specific anatomical improvements
+      // NSFW-specific anatomical improvements for SDXL
       const nsfwNegatives = [
-        "deformed breasts", "deformed nipples", "extra breasts", "missing breasts",
-        "deformed genitals", "extra genitals", "missing genitals",
-        "inappropriate anatomy", "wrong anatomy", "anatomical errors",
-        "body part deformities", "anatomical deformities",
-        "distorted bodies", "unnatural poses", "impossible anatomy",
-        "merged bodies", "conjoined", "fused limbs",
-        "wrong proportions", "size mismatch", "scale errors"
+        "deformed breasts",
+        "extra breasts",
+        "anatomical errors",
+        "wrong anatomy",
+        "distorted bodies",
+        "unnatural poses"
       ];
-      
-      // Video-specific quality improvements
-      const videoNegatives = [
-        "motion artifacts", "temporal inconsistency", "frame stuttering",
-        "object morphing", "identity changes", "face swapping",
-        "lighting jumps", "exposure changes", "color bleeding",
-        "static", "frozen", "glitchy", "artifacts", "frame drops",
-        "inconsistent lighting", "flickering", "color shifts"
+      // Build SDXL negative prompt (token-efficient)
+      const sdxlNegatives = [
+        ...criticalNegatives,
+        ...qualityNegatives.slice(0, 3),
+        ...anatomicalNegatives.slice(0, 4),
+        ...artifactNegatives.slice(0, 3),
+        "ugly",
+        "poorly drawn"
       ];
-      
-      if (jobType.startsWith('sdxl_')) {
-        // SDXL: Optimized for token efficiency (keep under 77 tokens)
-        const sdxlNegatives = [
-          ...criticalNegatives,
-          ...qualityNegatives.slice(0, 3), // Limit quality negatives
-          ...anatomicalNegatives.slice(0, 4), // Focus on most critical
-          "ugly", "poorly drawn", "sketch"
-        ];
-        
-        // Add style-specific negatives for SDXL
-        if (userPrompt.toLowerCase().includes('photo') || userPrompt.toLowerCase().includes('realistic')) {
-          sdxlNegatives.push(...styleNegatives.slice(0, 2)); // Limit style negatives
-        }
-        
-        // Enhanced NSFW-specific improvements for SDXL
-        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
-          sdxlNegatives.push(...nsfwNegatives.slice(0, 6)); // Prioritize most critical NSFW issues
-        }
-        
-        const result = sdxlNegatives.join(", ");
-        console.log('✅ Optimized SDXL negative prompt generated:', result);
-        return result;
-        
-      } else if (jobType.includes('video')) {
-        // WAN Video: Comprehensive protection with enhanced video quality
-        const wanVideoNegatives = [
-          ...criticalNegatives,
-          ...qualityNegatives,
-          ...anatomicalNegatives,
-          ...artifactNegatives,
-          ...videoNegatives, // Enhanced video-specific negatives
-          "poorly drawn", "malformed", "mutated", "distorted proportions"
-        ];
-        
-        // Enhanced for 7B models with additional quality controls
-        if (jobType.includes('7b_')) {
-          wanVideoNegatives.push("inconsistent", "incoherent", "artificial artifacts", "processing errors");
-          wanVideoNegatives.push("model artifacts", "AI artifacts", "generation artifacts");
-        }
-        
-        // Enhanced NSFW-specific video improvements
-        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
-          wanVideoNegatives.push(...nsfwNegatives); // Full NSFW protection for video
-        }
-        
-        const result = wanVideoNegatives.join(", ");
-        console.log('✅ Enhanced WAN Video negative prompt generated:', result);
-        return result;
-        
-      } else if (jobType.includes('image')) {
-        // WAN Image: Enhanced anatomical accuracy with balanced approach
-        const wanImageNegatives = [
-          ...criticalNegatives,
-          ...qualityNegatives.slice(0, 4), // Balanced quality protection
-          ...anatomicalNegatives.slice(0, 6), // Most critical anatomical issues
-          ...artifactNegatives.slice(0, 4), // Enhanced artifact prevention
-          "poorly drawn", "malformed", "mutated", "distorted proportions"
-        ];
-        
-        // Enhanced for 7B models
-        if (jobType.includes('7b_')) {
-          wanImageNegatives.push("artificial artifacts", "processing errors", "model artifacts");
-          wanImageNegatives.push("AI generation artifacts", "neural network artifacts");
-        }
-        
-        // Enhanced NSFW-specific image improvements
-        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
-          wanImageNegatives.push(...nsfwNegatives.slice(0, 8)); // Prioritized NSFW protection
-        }
-        
-        const result = wanImageNegatives.join(", ");
-        console.log('✅ Enhanced WAN Image negative prompt generated:', result);
-        return result;
+      // Add NSFW negatives if applicable
+      if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude') || userPrompt.toLowerCase().includes('sex')) {
+        sdxlNegatives.push(...nsfwNegatives.slice(0, 4)); // Limit for token efficiency
       }
-      
-      // Enhanced fallback with priority-based approach
-      const fallback = `${criticalNegatives.join(", ")}, ${qualityNegatives.slice(0, 2).join(", ")}, extra limbs`;
-      console.log('⚠️ Using priority-based fallback negative prompt:', fallback);
-      return fallback;
+      const result = sdxlNegatives.join(", ");
+      console.log('✅ SDXL negative prompt generated:', result);
+      return result;
     }
-
     // Enhanced job type validation
     const validJobTypes = [
       'sdxl_image_fast',
@@ -210,13 +131,11 @@ serve(async (req)=>{
       });
     }
     // Robust parsing function for all job type patterns
-    function parseJobType(jobType: string) {
+    function parseJobType(jobType) {
       const isSDXL = jobType.startsWith('sdxl_');
       const isEnhanced = jobType.includes('enhanced');
-      
-      let format: string;
-      let quality: string;
-      
+      let format;
+      let quality;
       if (isSDXL) {
         // SDXL patterns: sdxl_image_fast, sdxl_image_high
         const parts = jobType.split('_');
@@ -241,26 +160,30 @@ serve(async (req)=>{
         format = parts[0]; // 'image' or 'video'
         quality = parts[1]; // 'fast' or 'high'
       }
-      
-      return { format, quality, isSDXL, isEnhanced };
+      return {
+        format,
+        quality,
+        isSDXL,
+        isEnhanced
+      };
     }
-
     // Extract format and quality from job type
     const { format, quality, isSDXL, isEnhanced } = parseJobType(jobType);
     const modelVariant = isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b';
     // Determine queue routing - all enhanced jobs use wan_queue
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
-     // Enhanced logging with format and quality detection
-     console.log('🎯 Enhanced job routing determined:', {
-       isSDXL,
-       isEnhanced,
-       queueName,
-       modelVariant,
-       format,
-       quality,
-       originalJobType: jobType,
-       parsedCorrectly: true
-     });
+    // Enhanced logging with format and quality detection
+    console.log('🎯 FIXED job routing determined:', {
+      isSDXL,
+      isEnhanced,
+      queueName,
+      modelVariant,
+      format,
+      quality,
+      originalJobType: jobType,
+      negativePromptSupported: isSDXL,
+      parsedCorrectly: true
+    });
     // Validate Redis configuration
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
     const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
@@ -293,6 +216,7 @@ serve(async (req)=>{
         model_variant: modelVariant,
         queue: queueName,
         dual_worker_routing: true,
+        negative_prompt_supported: isSDXL,
         created_timestamp: new Date().toISOString()
       },
       project_id: projectId,
@@ -343,43 +267,62 @@ serve(async (req)=>{
       prompt = metadata.prompt;
       console.log('📝 Using metadata prompt');
     }
-    // Generate intelligent negative prompt based on job type and user prompt
-    const negativePrompt = generateNegativePrompt(jobType, prompt);
-    console.log('🚫 Generated negative prompt:', negativePrompt);
-
+    // CRITICAL FIX: Only generate negative prompt for SDXL jobs
+    let negativePrompt = '';
+    if (isSDXL) {
+      negativePrompt = generateNegativePromptForSDXL(prompt);
+      console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
+    } else {
+      console.log('🚫 WAN job detected - NO negative prompt (not supported by WAN 2.1)');
+    }
     // Format job payload for appropriate worker
     const jobPayload = {
-      jobId: job.id,
-      videoId: videoId,
-      imageId: imageId,
-      userId: user.id,
-      jobType: jobType,
-      format: format,
-      quality: quality,
-      modelType: jobType,
-      modelVariant: modelVariant,
+      id: job.id,
+      type: jobType,
       prompt: prompt,
-      negativePrompt: negativePrompt, // Add intelligent negative prompt
-      characterId: characterId,
-      isSDXL: isSDXL,
-      numImages: format === 'video' ? 1 : 6,
-      bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : `${format}_${quality}`),
+      config: {
+        size: '480*832',
+        sample_steps: quality === 'high' ? 50 : 25,
+        sample_guide_scale: 5.0,
+        frame_num: format === 'video' ? 83 : 1,
+        enhance_prompt: isEnhanced,
+        expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 294 : 194 : quality === 'high' ? 104 : 87 : format === 'video' ? quality === 'high' ? 280 : 180 : quality === 'high' ? 90 : 73,
+        content_type: format,
+        file_extension: format === 'video' ? 'mp4' : 'png'
+      },
+      user_id: user.id,
+      created_at: new Date().toISOString(),
+      // CRITICAL FIX: Only include negative_prompt for SDXL jobs
+      ...isSDXL && {
+        negative_prompt: negativePrompt
+      },
+      // Additional metadata
+      video_id: videoId,
+      image_id: imageId,
+      character_id: characterId,
+      model_variant: modelVariant,
+      bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`),
       metadata: {
         ...metadata,
         model_variant: modelVariant,
         dual_worker_routing: true,
-        negative_prompt: negativePrompt, // Also store in metadata for tracking
-        num_images: format === 'video' ? 1 : 6,
+        negative_prompt_supported: isSDXL,
+        // Only include negative_prompt in metadata for SDXL
+        ...isSDXL && {
+          negative_prompt: negativePrompt
+        },
+        num_images: isSDXL ? 6 : 1,
         queue_timestamp: new Date().toISOString()
-      },
-      timestamp: new Date().toISOString()
+      }
     };
-    console.log('📤 Pushing job to Redis queue with enhanced payload:', {
+    console.log('📤 Pushing FIXED job to Redis queue:', {
       jobId: job.id,
       jobType,
       queueName,
       isSDXL,
       hasPrompt: !!prompt,
+      hasNegativePrompt: isSDXL && !!negativePrompt,
+      negativePromptSupported: isSDXL,
       payloadSize: JSON.stringify(jobPayload).length
     });
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
@@ -425,7 +368,8 @@ serve(async (req)=>{
     console.log('✅ Job queued in Redis successfully:', {
       jobId: job.id,
       queueLength: redisResult.result || 0,
-      queueName
+      queueName,
+      negativePromptIncluded: isSDXL
     });
     // Log usage with enhanced dual worker tracking
     const usageLogResult = await supabase.from('usage_logs').insert({
@@ -443,6 +387,7 @@ serve(async (req)=>{
         model_variant: modelVariant,
         queue: queueName,
         dual_worker_routing: true,
+        negative_prompt_supported: isSDXL,
         usage_timestamp: new Date().toISOString()
       }
     });
@@ -454,15 +399,23 @@ serve(async (req)=>{
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - Enhanced SDXL dual worker version',
+      message: 'Job queued successfully - FIXED: WAN negative prompt removal',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
       queue: queueName,
       isSDXL: isSDXL,
+      negativePromptSupported: isSDXL,
+      fixes_applied: [
+        'Removed negative prompt generation for WAN jobs',
+        'Simplified job payload structure',
+        'Fixed parameter naming consistency',
+        'Added proper WAN 2.1 configuration'
+      ],
       debug: {
         userId: user.id,
         hasPrompt: !!prompt,
+        hasNegativePrompt: isSDXL && !!negativePrompt,
         redisConfigured: true,
         timestamp: new Date().toISOString()
       }
