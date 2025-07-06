@@ -47,6 +47,74 @@ serve(async (req)=>{
       queue: metadata?.queue,
       timestamp: new Date().toISOString()
     });
+    // Enhanced negative prompt generation function
+    function generateNegativePrompt(jobType: string, userPrompt: string = ''): string {
+      console.log('🎨 Generating negative prompt for job type:', jobType);
+      
+      const baseQuality = "low quality, bad quality, worst quality";
+      
+      if (jobType.startsWith('sdxl_')) {
+        // SDXL Best Practices 2024-2025: Minimal negative prompts
+        const sdxlNegatives = [
+          baseQuality,
+          "ugly, deformed",
+          "bad anatomy, extra hands, extra fingers, poorly drawn face, extra limbs"
+        ];
+        
+        // Add style-specific negatives for SDXL
+        if (userPrompt.toLowerCase().includes('photo') || userPrompt.toLowerCase().includes('realistic')) {
+          sdxlNegatives.push("cartoon, illustration, animation");
+        }
+        
+        const result = sdxlNegatives.join(", ");
+        console.log('✅ SDXL negative prompt generated:', result);
+        return result;
+        
+      } else if (jobType.includes('video')) {
+        // WAN 2.1 Video Best Practices: More comprehensive for video artifacts
+        const wanVideoNegatives = [
+          baseQuality,
+          "blurry, distorted",
+          "text, watermark, logo",  
+          "static, frozen, glitchy, artifacts",
+          "bad anatomy, extra limbs, distorted hands, deformed body",
+          "poorly drawn, malformed, mutated"
+        ];
+        
+        // Enhanced for 7B models
+        if (jobType.includes('7b_')) {
+          wanVideoNegatives.push("inconsistent, incoherent, artificial artifacts, processing errors");
+        }
+        
+        const result = wanVideoNegatives.join(", ");
+        console.log('✅ WAN Video negative prompt generated:', result);
+        return result;
+        
+      } else if (jobType.includes('image')) {
+        // WAN Image: Less aggressive than video but more than SDXL  
+        const wanImageNegatives = [
+          baseQuality,
+          "blurry, distorted",
+          "bad anatomy, extra hands, extra fingers, poorly drawn face, extra limbs",
+          "poorly drawn, malformed"
+        ];
+        
+        // Enhanced for 7B models
+        if (jobType.includes('7b_')) {
+          wanImageNegatives.push("artificial artifacts, processing errors");
+        }
+        
+        const result = wanImageNegatives.join(", ");
+        console.log('✅ WAN Image negative prompt generated:', result);
+        return result;
+      }
+      
+      // Fallback
+      const fallback = `${baseQuality}, bad anatomy, extra limbs`;
+      console.log('⚠️ Using fallback negative prompt:', fallback);
+      return fallback;
+    }
+
     // Enhanced job type validation
     const validJobTypes = [
       'sdxl_image_fast',
@@ -209,6 +277,10 @@ serve(async (req)=>{
       prompt = metadata.prompt;
       console.log('📝 Using metadata prompt');
     }
+    // Generate intelligent negative prompt based on job type and user prompt
+    const negativePrompt = generateNegativePrompt(jobType, prompt);
+    console.log('🚫 Generated negative prompt:', negativePrompt);
+
     // Format job payload for appropriate worker
     const jobPayload = {
       jobId: job.id,
@@ -221,6 +293,7 @@ serve(async (req)=>{
       modelType: jobType,
       modelVariant: modelVariant,
       prompt: prompt,
+      negativePrompt: negativePrompt, // Add intelligent negative prompt
       characterId: characterId,
       isSDXL: isSDXL,
       numImages: format === 'video' ? 1 : 6,
@@ -229,6 +302,7 @@ serve(async (req)=>{
         ...metadata,
         model_variant: modelVariant,
         dual_worker_routing: true,
+        negative_prompt: negativePrompt, // Also store in metadata for tracking
         num_images: format === 'video' ? 1 : 6,
         queue_timestamp: new Date().toISOString()
       },
