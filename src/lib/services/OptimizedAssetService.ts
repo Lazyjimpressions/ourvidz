@@ -177,7 +177,7 @@ export class OptimizedAssetService {
     const { data: combinedData, error, count } = await supabase
       .from('images')
       .select(`
-        id, type::'image'::text, title, prompt, status, quality, format, 
+        id, title, prompt, status, quality, format, 
         created_at, updated_at, project_id, metadata, image_url, image_urls, thumbnail_url,
         project:projects(title),
         job:jobs(id, quality, job_type, model_type, metadata)
@@ -186,13 +186,16 @@ export class OptimizedAssetService {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Images query error:', error);  
+      throw error;
+    }
 
     // Also get videos with same pattern
     const { data: videosData, error: videoError } = await supabase
       .from('videos')
       .select(`
-        id, type::'video'::text, status, format, created_at, updated_at, project_id,
+        id, status, format, created_at, updated_at, project_id,
         duration, resolution, video_url, thumbnail_url,
         project:projects(title),
         job:jobs(id, quality, job_type, model_type, metadata)
