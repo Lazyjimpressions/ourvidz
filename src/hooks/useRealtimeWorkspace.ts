@@ -99,11 +99,15 @@ export const useRealtimeWorkspace = () => {
             
             if (eventType === 'UPDATE' && image.status === 'completed' && 
                 !processedUpdatesRef.current.has(image.id)) {
-              console.log('🎉 Image completed:', image.id);
+              console.log('🎉 Image completed with enhanced tracking:', image.id);
               processedUpdatesRef.current.add(image.id);
               
               setWorkspaceFilter(prev => new Set([...prev, image.id]));
-              toast.success('New image completed!');
+              
+              // Dispatch enhanced completion event
+              window.dispatchEvent(new CustomEvent('generation-completed', {
+                detail: { assetId: image.id, type: 'image', status: 'completed' }
+              }));
               
               // Invalidate cache to force refresh
               queryClient.invalidateQueries({ 
@@ -129,11 +133,15 @@ export const useRealtimeWorkspace = () => {
             
             if (eventType === 'UPDATE' && video.status === 'completed' && 
                 !processedUpdatesRef.current.has(video.id)) {
-              console.log('🎉 Video completed:', video.id);
+              console.log('🎉 Video completed with enhanced tracking:', video.id);
               processedUpdatesRef.current.add(video.id);
               
               setWorkspaceFilter(prev => new Set([...prev, video.id]));
-              toast.success('New video completed!');
+              
+              // Dispatch enhanced completion event
+              window.dispatchEvent(new CustomEvent('generation-completed', {
+                detail: { assetId: video.id, type: 'video', status: 'completed' }
+              }));
               
               // Invalidate cache to force refresh
               queryClient.invalidateQueries({ 
@@ -157,11 +165,26 @@ export const useRealtimeWorkspace = () => {
             const job = payload.new as any;
             const eventType = payload.eventType;
             
-            // Handle job status updates to clear "queuing" state
+            // Enhanced job status updates with asset coordination
             if (eventType === 'UPDATE' && job.status !== 'queued') {
-              console.log('🔄 Job status updated:', job.id, job.status);
+              console.log('🔄 Enhanced job status updated:', {
+                jobId: job.id, 
+                status: job.status,
+                assetId: job.image_id || job.video_id,
+                assetType: job.image_id ? 'image' : 'video'
+              });
               
-              // For job completion, trigger asset refresh
+              // Dispatch job status event for coordination
+              window.dispatchEvent(new CustomEvent('job-status-update', {
+                detail: { 
+                  jobId: job.id, 
+                  status: job.status,
+                  assetId: job.image_id || job.video_id,
+                  assetType: job.image_id ? 'image' : 'video'
+                }
+              }));
+              
+              // For job completion, trigger asset refresh with delay
               if (job.status === 'completed') {
                 setTimeout(() => {
                   queryClient.invalidateQueries({ 
@@ -184,22 +207,55 @@ export const useRealtimeWorkspace = () => {
     setupRealtimeSubscriptions();
   }, [queryClient]);
 
-  // Listen for generation completion events
+  // Enhanced generation completion event system
   useEffect(() => {
     const handleGenerationComplete = (event: CustomEvent) => {
-      const { assetId, type } = event.detail;
-      console.log('🎉 Generation completion event received:', { assetId, type });
+      const { assetId, jobId, type } = event.detail;
+      console.log('🎉 Enhanced generation completion event:', { assetId, jobId, type });
       
-      // Add to workspace filter
-      setWorkspaceFilter(prev => new Set([...prev, assetId]));
+      // Add to workspace filter with proper asset ID
+      if (assetId) {
+        setWorkspaceFilter(prev => new Set([...prev, assetId]));
+        
+        // Trigger cache invalidation for the new asset
+        queryClient.invalidateQueries({ 
+          queryKey: ['realtime-workspace-assets'],
+          exact: false 
+        });
+        
+        toast.success(`New ${type} completed!`);
+      } else if (jobId) {
+        // If we only have job ID, try to find the asset ID
+        console.log('🔍 Looking up asset ID for job:', jobId);
+        queryClient.invalidateQueries({ 
+          queryKey: ['realtime-workspace-assets'],
+          exact: false 
+        });
+      }
+    };
+
+    const handleJobStatusUpdate = (event: CustomEvent) => {
+      const { jobId, status, assetId, assetType } = event.detail;
+      console.log('📊 Job status update event:', { jobId, status, assetId, assetType });
+      
+      if (status === 'completed' && assetId) {
+        // Direct asset completion - add to workspace
+        setWorkspaceFilter(prev => new Set([...prev, assetId]));
+        queryClient.invalidateQueries({ 
+          queryKey: ['realtime-workspace-assets'],
+          exact: false 
+        });
+      }
     };
 
     window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    window.addEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     
     return () => {
       window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+      window.removeEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     };
-  }, []);
+  }, [queryClient]);
 
   // Transform assets to tiles with enhanced SDXL array handling
   const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {

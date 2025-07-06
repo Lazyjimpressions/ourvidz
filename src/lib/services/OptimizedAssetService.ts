@@ -450,6 +450,21 @@ export class OptimizedAssetService {
       if (!error && data?.signedUrl) {
         this.cache.setCachedUrl(cacheKey, data.signedUrl);
         return data.signedUrl;
+      } else if (error) {
+        console.warn(`URL generation failed for ${bucket}/${path}:`, error.message);
+        // Try fallback bucket patterns for enhanced models
+        if (bucket.includes('7b_') || bucket.includes('enhanced')) {
+          const fallbackBucket = bucket.includes('video') 
+            ? (bucket.includes('high') ? 'video_high' : 'video_fast')
+            : (bucket.includes('high') ? 'image_high' : 'image_fast');
+          
+          console.log(`🔄 Trying fallback bucket: ${fallbackBucket}`);
+          const { data: fallbackData, error: fallbackError } = await getSignedUrl(fallbackBucket as any, path, 7200);
+          if (!fallbackError && fallbackData?.signedUrl) {
+            this.cache.setCachedUrl(cacheKey, fallbackData.signedUrl);
+            return fallbackData.signedUrl;
+          }
+        }
       }
     } catch (error) {
       console.error(`Failed to generate URL for ${bucket}/${path}:`, error);

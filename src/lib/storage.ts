@@ -151,7 +151,7 @@ export const uploadFile = async (
   }
 };
 
-// ENHANCED signed URL generation with caching and fallback buckets
+// ENHANCED signed URL generation with intelligent path resolution
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
@@ -165,7 +165,7 @@ export const getSignedUrl = async (
       return { data: { signedUrl: cachedUrl }, error: null };
     }
 
-    console.log('🔐 Generating new signed URL:', bucket, filePath.substring(0, 50) + '...');
+    console.log('🔐 Generating new signed URL with path resolution:', bucket, filePath.substring(0, 50) + '...');
     
     // Validate inputs
     if (!bucket || !filePath) {
@@ -174,13 +174,19 @@ export const getSignedUrl = async (
       throw new Error(errorMsg);
     }
 
-    // Check authentication for private buckets
+    // Get user for path resolution
+    let user = null;
     if (!['system_assets'].includes(bucket)) {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !authUser) {
         throw new Error('Authentication required');
       }
+      user = authUser;
     }
+
+    // ENHANCED PATH RESOLUTION: Try multiple path formats
+    const pathsToTry = generatePathVariants(filePath, user?.id);
+    console.log('🔍 Path variants to try:', pathsToTry.length);
 
     // Try primary bucket first, then fallbacks
     const fallbackBuckets = [
@@ -194,28 +200,34 @@ export const getSignedUrl = async (
     const bucketsToTry = [bucket, ...fallbackBuckets];
     
     for (const tryBucket of bucketsToTry) {
-      try {
-        const { data, error } = await supabase.storage
-          .from(tryBucket)
-          .createSignedUrl(filePath, expiresIn);
+      for (const pathVariant of pathsToTry) {
+        try {
+          const { data, error } = await supabase.storage
+            .from(tryBucket)
+            .createSignedUrl(pathVariant, expiresIn);
 
-        if (!error && data?.signedUrl) {
-          // Cache the successful URL
-          urlCache.set(tryBucket, filePath, data.signedUrl, expiresIn);
-          
-          if (tryBucket !== bucket) {
-            console.log(`✅ Fallback success: ${tryBucket} (primary: ${bucket})`);
+          if (!error && data?.signedUrl) {
+            // Cache the successful URL using original path as key
+            urlCache.set(tryBucket, filePath, data.signedUrl, expiresIn);
+            
+            console.log(`✅ Path resolution success: ${tryBucket}/${pathVariant}`);
+            if (tryBucket !== bucket) {
+              console.log(`✅ Fallback bucket used: ${tryBucket} (primary: ${bucket})`);
+            }
+            
+            return { data, error: null };
           }
-          
-          return { data, error: null };
+        } catch (err) {
+          // Silent failure for path attempts
+          continue;
         }
-      } catch (err) {
-        console.warn(`⚠️ Bucket ${tryBucket} failed:`, err instanceof Error ? err.message : err);
-        continue;
       }
     }
 
-    throw new Error(`File not found in any bucket: ${filePath}`);
+    // Enhanced error with path resolution details
+    const errorMsg = `File not found with any path variant in any bucket. Original: ${filePath}, Tried paths: ${pathsToTry.length}, Tried buckets: ${bucketsToTry.length}`;
+    console.error('❌ Path resolution failed completely:', errorMsg);
+    throw new Error(errorMsg);
     
   } catch (error) {
     console.error('❌ getSignedUrl failed:', bucket, filePath.substring(0, 50) + '...', error);
@@ -225,6 +237,55 @@ export const getSignedUrl = async (
     };
   }
 };
+
+// ENHANCED PATH RESOLUTION: Generate multiple path variants to try
+function generatePathVariants(originalPath: string, userId?: string): string[] {
+  const variants: string[] = [];
+  
+  // 1. Original path as-is
+  variants.push(originalPath);
+  
+  // 2. User-prefixed path (most common for private buckets)
+  if (userId) {
+    if (!originalPath.startsWith(`${userId}/`)) {
+      variants.push(`${userId}/${originalPath}`);
+    }
+  }
+  
+  // 3. Strip user prefix if it exists
+  if (originalPath.includes('/')) {
+    const pathParts = originalPath.split('/');
+    if (pathParts.length > 1) {
+      const withoutPrefix = pathParts.slice(1).join('/');
+      variants.push(withoutPrefix);
+    }
+  }
+  
+  // 4. For videos, try common video path patterns
+  if (originalPath.includes('.mp4') || originalPath.includes('.webm')) {
+    const fileName = originalPath.split('/').pop() || originalPath;
+    if (userId) {
+      variants.push(`${userId}/videos/${fileName}`);
+      variants.push(`${userId}/video/${fileName}`);
+    }
+    variants.push(`videos/${fileName}`);
+    variants.push(`video/${fileName}`); 
+  }
+  
+  // 5. For images, try common image path patterns
+  if (originalPath.includes('.png') || originalPath.includes('.jpg') || originalPath.includes('.jpeg')) {
+    const fileName = originalPath.split('/').pop() || originalPath;
+    if (userId) {
+      variants.push(`${userId}/images/${fileName}`);
+      variants.push(`${userId}/image/${fileName}`);
+    }
+    variants.push(`images/${fileName}`);
+    variants.push(`image/${fileName}`);
+  }
+  
+  // Remove duplicates while preserving order
+  return [...new Set(variants)];
+}
 
 // Batch URL generation with caching
 export const getBatchSignedUrls = async (
