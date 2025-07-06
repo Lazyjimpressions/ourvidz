@@ -9,6 +9,7 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
+import { useLazyAssets } from "@/hooks/useLazyAssets";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
@@ -91,6 +92,18 @@ const OptimizedLibrary = () => {
     }
   }, [typeFilter, statusFilter, qualityFilter, debouncedSearchTerm, assets.length]);
 
+  // Auto-cleanup stuck jobs on initial load
+  useEffect(() => {
+    const cleanup = async () => {
+      try {
+        await OptimizedAssetService.cleanupStuckJobs();
+      } catch (error) {
+        console.error('Initial cleanup failed:', error);
+      }
+    };
+    cleanup();
+  }, []);
+
   // Initial load and filter changes
   useEffect(() => {
     loadAssets(true);
@@ -110,6 +123,17 @@ const OptimizedLibrary = () => {
       return true;
     });
   }, [assets, searchTerm, debouncedSearchTerm]);
+
+  // Initialize lazy loading for assets
+  const { 
+    lazyAssets, 
+    loadingUrls, 
+    registerAssetRef, 
+    forceLoadAssetUrls 
+  } = useLazyAssets({ 
+    assets: filteredAssets, 
+    enabled: viewMode === 'grid' 
+  });
 
   // Calculate counts for filter UI
   const counts = useMemo(() => {
@@ -150,9 +174,21 @@ const OptimizedLibrary = () => {
 
   // Download handler
   const handleDownload = async (asset: UnifiedAsset) => {
+    // Force load URLs if not already loaded
     if (!asset.url) {
-      toast.error("Asset URL not available");
-      return;
+      toast.loading("Preparing download...", { id: asset.id });
+      try {
+        const updatedAsset = await OptimizedAssetService.generateAssetUrls(asset);
+        if (!updatedAsset.url) {
+          toast.error("Asset URL not available", { id: asset.id });
+          return;
+        }
+        asset = updatedAsset;
+      } catch (error) {
+        toast.error("Failed to prepare download", { id: asset.id });
+        return;
+      }
+      toast.dismiss(asset.id);
     }
 
     try {
@@ -276,22 +312,23 @@ const OptimizedLibrary = () => {
 
   const handleCleanup = async () => {
     setIsCleaningUp(true);
+    toast.loading("Cleaning up stuck jobs...", { id: 'cleanup' });
     try {
       const result = await OptimizedAssetService.cleanupStuckJobs();
       if (result.cleaned > 0) {
-        toast.success(`Cleaned up ${result.cleaned} stuck jobs`);
+        toast.success(`Cleaned up ${result.cleaned} stuck jobs`, { id: 'cleanup' });
         loadAssets(true); // Refresh the list
       } else {
-        toast.info("No stuck jobs found");
+        toast.info("No stuck jobs found", { id: 'cleanup' });
       }
       
       if (result.errors.length > 0) {
         console.warn('Cleanup errors:', result.errors);
-        toast.warning(`Cleanup completed with ${result.errors.length} warnings`);
+        toast.warning(`Cleanup completed with ${result.errors.length} warnings`, { id: 'cleanup' });
       }
     } catch (error) {
       console.error('Cleanup error:', error);
-      toast.error("Failed to cleanup stuck jobs");
+      toast.error("Failed to cleanup stuck jobs", { id: 'cleanup' });
     } finally {
       setIsCleaningUp(false);
     }
@@ -384,18 +421,26 @@ const OptimizedLibrary = () => {
           ) : (
             <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                {filteredAssets.map((asset) => (
-                  <AssetCard
+                {lazyAssets.map((asset) => (
+                  <div
                     key={asset.id}
-                    asset={asset}
-                    isSelected={selectedAssets.has(asset.id)}
-                    onSelect={(selected) => handleAssetSelection(asset.id, selected)}
-                    onPreview={() => setPreviewAsset(asset)}
-                    onDelete={() => setAssetToDelete(asset)}
-                    onDownload={() => handleDownload(asset)}
-                    selectionMode={true}
-                    isDeleting={deletingAssets.has(asset.id)}
-                  />
+                    ref={(el) => registerAssetRef(asset.id, el)}
+                  >
+                    <AssetCard
+                      asset={asset}
+                      isSelected={selectedAssets.has(asset.id)}
+                      onSelect={(selected) => handleAssetSelection(asset.id, selected)}
+                      onPreview={async () => {
+                        await forceLoadAssetUrls(asset.id);
+                        setPreviewAsset(asset);
+                      }}
+                      onDelete={() => setAssetToDelete(asset)}
+                      onDownload={() => handleDownload(asset)}
+                      selectionMode={true}
+                      isDeleting={deletingAssets.has(asset.id)}
+                      isLoadingUrl={loadingUrls.has(asset.id)}
+                    />
+                  </div>
                 ))}
               </div>
 

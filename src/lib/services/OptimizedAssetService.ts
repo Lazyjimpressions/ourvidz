@@ -40,9 +40,10 @@ interface PaginationOptions {
   offset?: number;
 }
 
-// Smart caching with 2-hour URL cache and 5-minute metadata cache
-const URL_CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours
-const METADATA_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+// Smart caching with longer durations for better performance
+const URL_CACHE_DURATION = 4 * 60 * 60 * 1000; // 4 hours (longer for URLs)
+const METADATA_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes (longer for metadata)
+const VIEWPORT_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes for viewport assets
 
 interface CachedUrl {
   url: string;
@@ -54,9 +55,16 @@ interface CachedMetadata {
   timestamp: number;
 }
 
+interface ViewportAsset {
+  asset: UnifiedAsset;
+  urlsGenerated: boolean;
+  timestamp: number;
+}
+
 class SmartCache {
   private urlCache = new Map<string, CachedUrl>();
   private metadataCache = new Map<string, CachedMetadata>();
+  private viewportCache = new Map<string, ViewportAsset>();
 
   getCachedUrl(key: string): string | null {
     const cached = this.urlCache.get(key);
@@ -88,9 +96,25 @@ class SmartCache {
     this.metadataCache.set(key, { assets, timestamp: Date.now() });
   }
 
+  getViewportAsset(key: string): ViewportAsset | null {
+    const cached = this.viewportCache.get(key);
+    if (cached && Date.now() - cached.timestamp < VIEWPORT_CACHE_DURATION) {
+      return cached;
+    }
+    if (cached) {
+      this.viewportCache.delete(key);
+    }
+    return null;
+  }
+
+  setViewportAsset(key: string, asset: ViewportAsset): void {
+    this.viewportCache.set(key, { ...asset, timestamp: Date.now() });
+  }
+
   clear(): void {
     this.urlCache.clear();
     this.metadataCache.clear();
+    this.viewportCache.clear();
   }
 }
 
@@ -171,10 +195,24 @@ export class OptimizedAssetService {
   ): Promise<{ assets: UnifiedAsset[]; hasMore: boolean; total: number }> {
     const { limit = 50, offset = 0 } = pagination;
 
-    console.log('📊 Database fetch with optimized single query strategy');
+    console.log('📊 Database fetch with unified query strategy');
 
-    // OPTIMIZATION: Single batched query with joins - much faster than separate queries
-    const { data: combinedData, error, count } = await supabase
+    // Use optimized separate queries with lazy loading
+    return this.fallbackFetchMethod(userId, filters, pagination);
+  }
+
+  // Fallback to original method if unified query fails
+  private static async fallbackFetchMethod(
+    userId: string, 
+    filters: AssetFilters, 
+    pagination: PaginationOptions
+  ): Promise<{ assets: UnifiedAsset[]; hasMore: boolean; total: number }> {
+    const { limit = 50, offset = 0 } = pagination;
+
+    console.log('🔄 Using fallback separate queries method');
+
+    // Get images
+    let imageQuery = supabase
       .from('images')
       .select(`
         id, title, prompt, status, quality, format, 
@@ -182,17 +220,10 @@ export class OptimizedAssetService {
         project:projects(title),
         job:jobs(id, quality, job_type, model_type, metadata)
       `, { count: 'exact' })
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .eq('user_id', userId);
 
-    if (error) {
-      console.error('Images query error:', error);  
-      throw error;
-    }
-
-    // Also get videos with same pattern
-    const { data: videosData, error: videoError } = await supabase
+    // Get videos  
+    let videoQuery = supabase
       .from('videos')
       .select(`
         id, status, format, created_at, updated_at, project_id,
@@ -200,34 +231,79 @@ export class OptimizedAssetService {
         project:projects(title),
         job:jobs(id, quality, job_type, model_type, metadata)
       `)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .eq('user_id', userId);
 
-    if (videoError) throw videoError;
+    // Apply filters
+    if (filters.status) {
+      imageQuery = imageQuery.eq('status', filters.status);
+      videoQuery = videoQuery.eq('status', filters.status);
+    }
+    if (filters.quality && filters.type !== 'video') {
+      imageQuery = imageQuery.eq('quality', filters.quality);
+    }
 
-    // Transform and process assets
-    const imageAssets = await this.processImageAssets(combinedData || []);
-    const videoAssets = await this.processVideoAssets(videosData || []);
+    // Execute queries
+    const [imageResult, videoResult] = await Promise.all([
+      filters.type === 'video' ? { data: [], error: null, count: 0 } : 
+        imageQuery.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
+      filters.type === 'image' ? { data: [], error: null } :
+        videoQuery.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
+    ]);
+
+    if (imageResult.error) throw imageResult.error;
+    if (videoResult.error) throw videoResult.error;
+
+    // Process assets without URL generation (lazy loading)
+    const imageAssets = this.processImageAssetsLazy(imageResult.data || []);
+    const videoAssets = this.processVideoAssetsLazy(videoResult.data || []);
     
     const allAssets = [...imageAssets, ...videoAssets]
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, limit);
 
-    // Apply filters
+    // Apply client-side filters if needed
     const filteredAssets = this.applyFilters(allAssets, filters);
-
-    console.log('✅ Optimized fetch complete:', {
-      total: count || 0,
-      returned: filteredAssets.length,
-      hasMore: filteredAssets.length === limit
-    });
 
     return {
       assets: filteredAssets,
       hasMore: filteredAssets.length === limit,
-      total: count || 0
+      total: imageResult.count || 0
     };
+  }
+
+  // NEW: Process unified data from single query
+  private static processUnifiedData(data: any[]): UnifiedAsset[] {
+    return data.map(item => ({
+      id: item.id,
+      type: item.type as 'image' | 'video',
+      title: item.title,
+      prompt: item.prompt || 'Untitled',
+      status: item.status || 'draft',
+      quality: item.quality,
+      format: item.format,
+      createdAt: new Date(item.created_at),
+      projectId: item.project_id,
+      projectTitle: item.project_title,
+      duration: item.duration,
+      resolution: item.resolution,
+      // URLs are NOT generated here - lazy loading
+      thumbnailUrl: undefined,
+      url: undefined,
+      signedUrls: undefined,
+      modelType: item.type === 'image' ? (item.metadata?.is_sdxl ? 'SDXL' : 'WAN') : undefined,
+      isSDXL: item.metadata?.is_sdxl || false,
+      jobId: item.job_id
+    }));
+  }
+
+  // LAZY: Process images without URL generation
+  private static processImageAssetsLazy(images: any[]): UnifiedAsset[] {
+    return images.map(image => this.processImageMetadataOnly(image));
+  }
+
+  // LAZY: Process videos without URL generation  
+  private static processVideoAssetsLazy(videos: any[]): UnifiedAsset[] {
+    return videos.map(video => this.processVideoMetadataOnly(video));
   }
 
   private static async processImageAssets(images: any[]): Promise<UnifiedAsset[]> {
@@ -244,6 +320,192 @@ export class OptimizedAssetService {
     );
 
     return processedBatches.flat();
+  }
+
+  // NEW: Generate URLs on-demand for visible assets
+  static async generateAssetUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
+    if (asset.type === 'image') {
+      return this.generateImageUrls(asset);
+    } else {
+      return this.generateVideoUrls(asset);
+    }
+  }
+
+  private static async generateImageUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
+    const cacheKey = `${asset.id}-urls`;
+    const cachedAsset = this.cache.getViewportAsset(cacheKey);
+    
+    if (cachedAsset && cachedAsset.urlsGenerated) {
+      return cachedAsset.asset;
+    }
+
+    try {
+      // Get image metadata from database
+      const { data: imageData } = await supabase
+        .from('images')
+        .select('image_url, image_urls, thumbnail_url, metadata, job:jobs(job_type, model_type)')
+        .eq('id', asset.id)
+        .single();
+
+      if (!imageData) return asset;
+
+      const jobData = Array.isArray(imageData.job) ? imageData.job[0] : imageData.job;
+      const bucket = this.determineImageBucket(imageData, jobData);
+      
+      let urls: string[] = [];
+      if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
+        urls = await this.batchGenerateUrls(bucket, imageData.image_urls);
+      } else if (imageData.image_url) {
+        const url = await this.generateSingleUrl(bucket, imageData.image_url);
+        if (url) urls = [url];
+      }
+
+      const updatedAsset = {
+        ...asset,
+        url: urls[0],
+        signedUrls: urls.length > 1 ? urls : undefined,
+        thumbnailUrl: urls[0]
+      };
+
+      // Cache the result
+      this.cache.setViewportAsset(cacheKey, {
+        asset: updatedAsset,
+        urlsGenerated: true,
+        timestamp: Date.now()
+      });
+
+      return updatedAsset;
+    } catch (error) {
+      console.error('Failed to generate image URLs:', error);
+      return { ...asset, error: 'Failed to load image' };
+    }
+  }
+
+  private static async generateVideoUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
+    const cacheKey = `${asset.id}-urls`;
+    const cachedAsset = this.cache.getViewportAsset(cacheKey);
+    
+    if (cachedAsset && cachedAsset.urlsGenerated) {
+      return cachedAsset.asset;
+    }
+
+    try {
+      // Get video metadata from database
+      const { data: videoData } = await supabase
+        .from('videos')
+        .select('video_url, thumbnail_url, job:jobs(job_type, quality)')
+        .eq('id', asset.id)
+        .single();
+
+      if (!videoData) return asset;
+
+      const jobData = Array.isArray(videoData.job) ? videoData.job[0] : videoData.job;
+      const bucket = this.determineVideoBucket(jobData);
+      
+      let videoUrl: string | undefined;
+      let thumbnailUrl: string | undefined;
+
+      if (videoData.video_url) {
+        videoUrl = await this.generateSingleUrl(bucket, videoData.video_url);
+      }
+      
+      if (videoData.thumbnail_url) {
+        thumbnailUrl = await this.generateSingleUrl('image_fast', videoData.thumbnail_url);
+      }
+
+      const updatedAsset = {
+        ...asset,
+        url: videoUrl,
+        thumbnailUrl
+      };
+
+      // Cache the result
+      this.cache.setViewportAsset(cacheKey, {
+        asset: updatedAsset,
+        urlsGenerated: true,
+        timestamp: Date.now()
+      });
+
+      return updatedAsset;
+    } catch (error) {
+      console.error('Failed to generate video URLs:', error);
+      return { ...asset, error: 'Failed to load video' };
+    }
+  }
+
+  private static async batchGenerateUrls(bucket: string, paths: string[]): Promise<string[]> {
+    const urlPromises = paths.map(path => this.generateSingleUrl(bucket, path));
+    const urls = await Promise.all(urlPromises);
+    return urls.filter(Boolean) as string[];
+  }
+
+  private static async generateSingleUrl(bucket: string, path: string): Promise<string | null> {
+    const cacheKey = `${bucket}-${path}`;
+    const cachedUrl = this.cache.getCachedUrl(cacheKey);
+    
+    if (cachedUrl) return cachedUrl;
+
+    try {
+      const { data, error } = await getSignedUrl(bucket as any, path, 7200);
+      if (!error && data?.signedUrl) {
+        this.cache.setCachedUrl(cacheKey, data.signedUrl);
+        return data.signedUrl;
+      }
+    } catch (error) {
+      console.error(`Failed to generate URL for ${bucket}/${path}:`, error);
+    }
+    return null;
+  }
+
+  // Metadata-only processing (no URL generation)
+  private static processImageMetadataOnly(image: any): UnifiedAsset {
+    const jobData = Array.isArray(image.job) ? image.job[0] : image.job;
+    const metadata = image.metadata as any;
+    const isSDXL = metadata?.is_sdxl || 
+                   metadata?.model_type === 'sdxl' || 
+                   jobData?.job_type?.startsWith('sdxl_') ||
+                   jobData?.model_type?.includes('sdxl');
+
+    return {
+      id: image.id,
+      type: 'image',
+      title: image.title,
+      prompt: image.prompt,
+      status: image.status,
+      quality: image.quality,
+      format: image.format,
+      createdAt: new Date(image.created_at),
+      projectId: image.project_id,
+      projectTitle: image.project?.title,
+      modelType: isSDXL ? 'SDXL' : 'WAN',
+      isSDXL,
+      jobId: jobData?.id,
+      // URLs will be generated on-demand
+      thumbnailUrl: undefined,
+      url: undefined,
+      signedUrls: undefined
+    };
+  }
+
+  private static processVideoMetadataOnly(video: any): UnifiedAsset {
+    const jobData = Array.isArray(video.job) ? video.job[0] : video.job;
+
+    return {
+      id: video.id,
+      type: 'video' as const,
+      prompt: video.project?.title || 'Untitled Video',
+      status: video.status || 'draft',
+      format: video.format,
+      createdAt: new Date(video.created_at),
+      projectId: video.project_id,
+      projectTitle: video.project?.title,
+      duration: video.duration,
+      resolution: video.resolution,
+      jobId: jobData?.id,
+      // URLs will be generated on-demand
+      thumbnailUrl: undefined,
+      url: undefined
+    };
   }
 
   private static async processSingleImage(image: any): Promise<UnifiedAsset> {
@@ -557,22 +819,22 @@ export class OptimizedAssetService {
     return { success: completed, failed };
   }
 
-  // AUTO-CLEANUP: Remove stuck and failed jobs
+  // ENHANCED AUTO-CLEANUP: Remove stuck and failed jobs more aggressively
   static async cleanupStuckJobs(): Promise<{ cleaned: number; errors: string[] }> {
-    console.log('🧹 Starting automatic cleanup of stuck jobs');
+    console.log('🧹 Starting aggressive cleanup of stuck jobs');
     
     const errors: string[] = [];
     let cleaned = 0;
 
     try {
-      // Find jobs stuck in processing for more than 1 hour
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      // Find jobs stuck in processing for more than 30 minutes (more aggressive)
+      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
       
       const { data: stuckJobs, error } = await supabase
         .from('jobs')
-        .select('id, image_id, video_id, job_type')
+        .select('id, image_id, video_id, job_type, created_at')
         .in('status', ['processing', 'queued'])
-        .lt('created_at', oneHourAgo);
+        .lt('created_at', thirtyMinutesAgo);
 
       if (error) throw error;
 
