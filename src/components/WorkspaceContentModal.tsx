@@ -4,19 +4,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Download, X, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PromptInfoModal } from "@/components/PromptInfoModal";
-
-interface MediaTile {
-  id: string;
-  originalAssetId: string;
-  type: 'image' | 'video';
-  url: string;
-  prompt: string;
-  timestamp: Date;
-  quality: 'fast' | 'high';
-  modelType?: string;
-  duration?: number;
-  thumbnailUrl?: string;
-}
+import { MediaTile } from "@/types/workspace";
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -28,6 +16,11 @@ interface WorkspaceContentModalProps {
 export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange }: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
   const [showPromptModal, setShowPromptModal] = useState(false);
+  
+  // Skip if current tile doesn't have URL
+  if (!currentTile?.url) {
+    return null;
+  }
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -8,7 +8,7 @@ import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
 import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { GenerationFormat } from '@/types/generation';
-import { MediaGrid } from '@/components/MediaGrid';
+import { VirtualizedMediaGrid } from '@/components/VirtualizedMediaGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
@@ -198,8 +198,8 @@ const Workspace = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
-        {/* Unified Media Grid for both images and videos */}
-        <MediaGrid 
+        {/* Optimized Virtualized Media Grid */}
+        <VirtualizedMediaGrid 
           onRegenerateItem={handleRegenerate} 
           onGenerateMoreLike={handleGenerateMoreLike}
           onClearWorkspace={shouldClearWorkspace}
