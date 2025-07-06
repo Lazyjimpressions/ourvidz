@@ -7,6 +7,10 @@ export type StorageBucket =
   | 'video_high' 
   | 'sdxl_image_fast'
   | 'sdxl_image_high'
+  | 'image7b_fast_enhanced'
+  | 'image7b_high_enhanced'
+  | 'video7b_fast_enhanced'
+  | 'video7b_high_enhanced'
   | 'system_assets';
 
 export interface UploadProgress {
@@ -104,23 +108,59 @@ export const getSignedUrl = async (
     const pathToUse = filePath;
     console.log('📁 Using path for signed URL with SDXL support:', pathToUse);
 
-    // Test if the file exists first
-    console.log('📋 Checking if file exists...');
+    // Enhanced file existence verification
+    console.log('📋 Checking if file exists with detailed verification...');
+    const pathParts = pathToUse.split('/');
+    const fileName = pathParts.pop();
+    const folderPath = pathParts.join('/') || '';
+    
+    console.log('🔍 File search details:', {
+      fullPath: pathToUse,
+      folderPath: folderPath,
+      fileName: fileName,
+      bucket: bucket
+    });
+    
     const { data: fileList, error: listError } = await supabase.storage
       .from(bucket)
-      .list(pathToUse.split('/').slice(0, -1).join('/') || '', {
-        limit: 100,
-        search: pathToUse.split('/').pop()
+      .list(folderPath, {
+        limit: 1000, // Increased limit to ensure we find the file
+        search: fileName
       });
 
     if (listError) {
-      console.warn('⚠️ Could not list files (might be normal):', listError.message);
+      console.error('❌ File listing error:', {
+        error: listError,
+        bucket: bucket,
+        folderPath: folderPath,
+        fileName: fileName
+      });
     } else {
-      console.log('📁 File listing result:', fileList?.length, 'files found');
+      console.log('📁 File listing result:', {
+        filesFound: fileList?.length || 0,
+        searchedFolder: folderPath,
+        searchedFile: fileName,
+        allFiles: fileList?.map(f => f.name) || []
+      });
+      
       if (fileList) {
-        const fileName = pathToUse.split('/').pop();
         const fileExists = fileList.some(f => f.name === fileName);
-        console.log('🔍 File exists check:', fileExists, 'for file:', fileName, 'in bucket:', bucket);
+        console.log('🔍 File exists check:', {
+          exists: fileExists,
+          fileName: fileName,
+          bucket: bucket,
+          fullPath: pathToUse
+        });
+        
+        if (!fileExists) {
+          console.error('❌ File not found in storage!', {
+            searchedPath: pathToUse,
+            bucket: bucket,
+            availableFiles: fileList.map(f => f.name),
+            folderContents: fileList.length
+          });
+          throw new Error(`File not found in storage: ${pathToUse} in bucket ${bucket}`);
+        }
       }
     }
 
