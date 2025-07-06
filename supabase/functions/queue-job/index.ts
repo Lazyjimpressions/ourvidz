@@ -47,71 +47,137 @@ serve(async (req)=>{
       queue: metadata?.queue,
       timestamp: new Date().toISOString()
     });
-    // Enhanced negative prompt generation function
+    // Enhanced negative prompt generation function with priority-based system
     function generateNegativePrompt(jobType: string, userPrompt: string = ''): string {
-      console.log('🎨 Generating negative prompt for job type:', jobType);
+      console.log('🎨 Generating priority-based negative prompt for job type:', jobType);
       
-      const baseQuality = "low quality, bad quality, worst quality";
+      // Priority-based negative prompt system
+      const criticalNegatives = [
+        "bad anatomy", "extra limbs", "deformed", "missing limbs"
+      ];
+      
+      const qualityNegatives = [
+        "low quality", "bad quality", "worst quality", "jpeg artifacts", "compression artifacts",
+        "blurry", "pixelated", "grainy", "noisy"
+      ];
+      
+      const anatomicalNegatives = [
+        "deformed hands", "deformed fingers", "extra fingers", "missing fingers",
+        "deformed feet", "deformed toes", "extra toes", "missing toes",
+        "deformed face", "deformed eyes", "deformed nose", "deformed mouth",
+        "deformed body", "deformed torso", "deformed arms", "deformed legs",
+        "malformed joints", "dislocated joints", "broken bones",
+        "asymmetrical features", "uneven proportions", "distorted anatomy"
+      ];
+      
+      const artifactNegatives = [
+        "text", "watermark", "logo", "signature", "writing",
+        "glitch", "artifact", "corruption", "distortion",
+        "oversaturated", "undersaturated", "bad lighting"
+      ];
+      
+      const styleNegatives = [
+        "cartoon", "illustration", "animation", "painting", "drawing"
+      ];
+      
+      // NSFW-specific anatomical improvements
+      const nsfwNegatives = [
+        "deformed breasts", "deformed nipples", "extra breasts", "missing breasts",
+        "deformed genitals", "extra genitals", "missing genitals",
+        "inappropriate anatomy", "wrong anatomy", "anatomical errors",
+        "body part deformities", "anatomical deformities",
+        "distorted bodies", "unnatural poses", "impossible anatomy",
+        "merged bodies", "conjoined", "fused limbs",
+        "wrong proportions", "size mismatch", "scale errors"
+      ];
+      
+      // Video-specific quality improvements
+      const videoNegatives = [
+        "motion artifacts", "temporal inconsistency", "frame stuttering",
+        "object morphing", "identity changes", "face swapping",
+        "lighting jumps", "exposure changes", "color bleeding",
+        "static", "frozen", "glitchy", "artifacts", "frame drops",
+        "inconsistent lighting", "flickering", "color shifts"
+      ];
       
       if (jobType.startsWith('sdxl_')) {
-        // SDXL Best Practices 2024-2025: Minimal negative prompts
+        // SDXL: Optimized for token efficiency (keep under 77 tokens)
         const sdxlNegatives = [
-          baseQuality,
-          "ugly, deformed",
-          "bad anatomy, extra hands, extra fingers, poorly drawn face, extra limbs"
+          ...criticalNegatives,
+          ...qualityNegatives.slice(0, 3), // Limit quality negatives
+          ...anatomicalNegatives.slice(0, 4), // Focus on most critical
+          "ugly", "poorly drawn", "sketch"
         ];
         
         // Add style-specific negatives for SDXL
         if (userPrompt.toLowerCase().includes('photo') || userPrompt.toLowerCase().includes('realistic')) {
-          sdxlNegatives.push("cartoon, illustration, animation");
+          sdxlNegatives.push(...styleNegatives.slice(0, 2)); // Limit style negatives
+        }
+        
+        // Enhanced NSFW-specific improvements for SDXL
+        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
+          sdxlNegatives.push(...nsfwNegatives.slice(0, 6)); // Prioritize most critical NSFW issues
         }
         
         const result = sdxlNegatives.join(", ");
-        console.log('✅ SDXL negative prompt generated:', result);
+        console.log('✅ Optimized SDXL negative prompt generated:', result);
         return result;
         
       } else if (jobType.includes('video')) {
-        // WAN 2.1 Video Best Practices: More comprehensive for video artifacts
+        // WAN Video: Comprehensive protection with enhanced video quality
         const wanVideoNegatives = [
-          baseQuality,
-          "blurry, distorted",
-          "text, watermark, logo",  
-          "static, frozen, glitchy, artifacts",
-          "bad anatomy, extra limbs, distorted hands, deformed body",
-          "poorly drawn, malformed, mutated"
+          ...criticalNegatives,
+          ...qualityNegatives,
+          ...anatomicalNegatives,
+          ...artifactNegatives,
+          ...videoNegatives, // Enhanced video-specific negatives
+          "poorly drawn", "malformed", "mutated", "distorted proportions"
         ];
         
-        // Enhanced for 7B models
+        // Enhanced for 7B models with additional quality controls
         if (jobType.includes('7b_')) {
-          wanVideoNegatives.push("inconsistent, incoherent, artificial artifacts, processing errors");
+          wanVideoNegatives.push("inconsistent", "incoherent", "artificial artifacts", "processing errors");
+          wanVideoNegatives.push("model artifacts", "AI artifacts", "generation artifacts");
+        }
+        
+        // Enhanced NSFW-specific video improvements
+        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
+          wanVideoNegatives.push(...nsfwNegatives); // Full NSFW protection for video
         }
         
         const result = wanVideoNegatives.join(", ");
-        console.log('✅ WAN Video negative prompt generated:', result);
+        console.log('✅ Enhanced WAN Video negative prompt generated:', result);
         return result;
         
       } else if (jobType.includes('image')) {
-        // WAN Image: Less aggressive than video but more than SDXL  
+        // WAN Image: Enhanced anatomical accuracy with balanced approach
         const wanImageNegatives = [
-          baseQuality,
-          "blurry, distorted",
-          "bad anatomy, extra hands, extra fingers, poorly drawn face, extra limbs",
-          "poorly drawn, malformed"
+          ...criticalNegatives,
+          ...qualityNegatives.slice(0, 4), // Balanced quality protection
+          ...anatomicalNegatives.slice(0, 6), // Most critical anatomical issues
+          ...artifactNegatives.slice(0, 4), // Enhanced artifact prevention
+          "poorly drawn", "malformed", "mutated", "distorted proportions"
         ];
         
         // Enhanced for 7B models
         if (jobType.includes('7b_')) {
-          wanImageNegatives.push("artificial artifacts, processing errors");
+          wanImageNegatives.push("artificial artifacts", "processing errors", "model artifacts");
+          wanImageNegatives.push("AI generation artifacts", "neural network artifacts");
+        }
+        
+        // Enhanced NSFW-specific image improvements
+        if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude')) {
+          wanImageNegatives.push(...nsfwNegatives.slice(0, 8)); // Prioritized NSFW protection
         }
         
         const result = wanImageNegatives.join(", ");
-        console.log('✅ WAN Image negative prompt generated:', result);
+        console.log('✅ Enhanced WAN Image negative prompt generated:', result);
         return result;
       }
       
-      // Fallback
-      const fallback = `${baseQuality}, bad anatomy, extra limbs`;
-      console.log('⚠️ Using fallback negative prompt:', fallback);
+      // Enhanced fallback with priority-based approach
+      const fallback = `${criticalNegatives.join(", ")}, ${qualityNegatives.slice(0, 2).join(", ")}, extra limbs`;
+      console.log('⚠️ Using priority-based fallback negative prompt:', fallback);
       return fallback;
     }
 

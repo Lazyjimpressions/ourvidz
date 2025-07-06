@@ -18,21 +18,21 @@
 
 ### **✅ SUCCESSFULLY TESTED JOB TYPES**
 ```yaml
-SDXL Jobs (2/2):
-  sdxl_image_fast: ✅ Working (6-image batch generation)
-  sdxl_image_high: ✅ Working (6-image batch generation)
+SDXL Jobs (0/2):
+  sdxl_image_fast: ❌ Not tested (performance baseline pending)
+  sdxl_image_high: ❌ Not tested (performance baseline pending)
 
-WAN Jobs (3/8):
-  image_fast: ✅ Working (single file generation)
-  video7b_fast_enhanced: ✅ Working (single file generation)
-  video7b_high_enhanced: ✅ Working (single file generation)
-
-Pending Testing (5/10):
+WAN Jobs (1/8):
+  video_fast: ✅ Working (performance baseline: 262s average)
+  image_fast: ❌ Not tested
   image_high: ❌ Not tested
-  video_fast: ❌ Not tested
   video_high: ❌ Not tested
   image7b_fast_enhanced: ❌ Not tested
   image7b_high_enhanced: ❌ Not tested
+  video7b_fast_enhanced: ❌ Not tested
+  video7b_high_enhanced: ❌ Not tested
+
+Performance Documentation: See docs/PERFORMANCE_BENCHMARKS.md
 ```
 
 ### **🚧 CURRENT FOCUS**
@@ -133,26 +133,26 @@ Redis Queues: ✅ Upstash Redis with REST API compatibility
 
 ### **Supported Job Types (10 Total)**
 ```yaml
-SDXL Jobs (2) - VERIFIED: 6-IMAGE BATCH GENERATION:
-  sdxl_image_fast: 3.6s per image, ~22s for 6-image batch, excellent NSFW quality
-  sdxl_image_high: 8s per image, ~48s for 6-image batch, premium NSFW quality
-  ✨ VERIFIED: Batch processing returns array of 6 images per job
-  ✨ Better UX: Users get multiple options instead of single image
-  ✨ Efficient: Single VRAM allocation for multiple outputs
+SDXL Jobs (2) - PENDING PERFORMANCE BASELINE:
+  sdxl_image_fast: TBD (expected 3-8s per image, 6-image batch)
+  sdxl_image_high: TBD (expected 8-15s per image, 6-image batch)
+  ✨ Expected: Batch processing returns array of 6 images per job
+  ✨ Expected: Better UX with multiple options per job
+  ✨ Expected: Efficient VRAM allocation for batch generation
 
 WAN Standard Jobs (4) - PARTIALLY TESTED:
-  image_fast: 73s, no enhancement ✅ TESTED
-  image_high: 90s, no enhancement ❌ NOT TESTED
-  video_fast: 180s, no enhancement ❌ NOT TESTED
-  video_high: 280s, no enhancement ❌ NOT TESTED
+  video_fast: 262s average (real baseline established) ✅ TESTED
+  image_fast: TBD (expected 73s) ❌ NOT TESTED
+  image_high: TBD (expected 90s) ❌ NOT TESTED
+  video_high: TBD (expected 280s) ❌ NOT TESTED
 
-WAN Enhanced Jobs (4) - PARTIALLY TESTED:
-  image7b_fast_enhanced: 87s (73s + 14s AI enhancement) ❌ NOT TESTED
-  image7b_high_enhanced: 104s (90s + 14s AI enhancement) ❌ NOT TESTED
-  video7b_fast_enhanced: 194s (180s + 14s AI enhancement) ✅ TESTED
-  video7b_high_enhanced: 294s (280s + 14s AI enhancement) ✅ TESTED
-  ⚠️ Quality Issues: Enhanced jobs working but quality not great
-  ⚠️ NSFW Enhancement: Adult content enhancement doesn't work well out of the box
+WAN Enhanced Jobs (4) - NOT TESTED:
+  image7b_fast_enhanced: TBD (expected 87s) ❌ NOT TESTED
+  image7b_high_enhanced: TBD (expected 104s) ❌ NOT TESTED
+  video7b_fast_enhanced: TBD (expected 194s) ❌ NOT TESTED
+  video7b_high_enhanced: TBD (expected 294s) ❌ NOT TESTED
+
+Performance Documentation: See docs/PERFORMANCE_BENCHMARKS.md for detailed tracking
 ```
 
 ### **System Capacity (RTX 6000 ADA 48GB)**
