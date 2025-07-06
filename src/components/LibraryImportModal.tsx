@@ -21,8 +21,16 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   // Fetch all assets (not session-only)
   const { data: libraryAssets = [], isLoading } = useAssets(false);
 
-  const handleAssetToggle = (assetId: string) => {
-    console.log('🎯 Asset toggle clicked:', assetId);
+  const handleAssetToggle = (assetId: string, event?: React.MouseEvent) => {
+    console.log('🎯 Asset toggle clicked:', assetId, 'Event:', event?.type);
+    console.log('🔍 Event target:', event?.target, 'Current target:', event?.currentTarget);
+    
+    // Prevent event bubbling issues
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    
     setSelectedAssets(prev => {
       const next = new Set(prev);
       const wasSelected = next.has(assetId);
@@ -118,22 +126,38 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                     key={asset.id}
                     className={cn(
                       "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
+                      "hover:bg-primary/10", // Add hover feedback
                       selectedAssets.has(asset.id) 
-                        ? "ring-4 ring-primary scale-95 shadow-lg" 
+                        ? "ring-4 ring-primary scale-95 shadow-lg bg-primary/20" 
                         : "hover:scale-105 hover:shadow-md"
                     )}
-                    onClick={() => handleAssetToggle(asset.id)}
+                    onClick={(e) => handleAssetToggle(asset.id, e)}
+                    style={{ pointerEvents: 'auto' }} // Ensure clickable
                   >
                     {/* Asset Content */}
                     {asset.type === 'image' ? (
-                      <img
-                        src={asset.url || asset.thumbnailUrl}
-                        alt="Library asset"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
+                      asset.url || asset.thumbnailUrl ? (
+                        <img
+                          src={asset.url || asset.thumbnailUrl}
+                          alt="Library asset"
+                          className="w-full h-full object-cover"
+                          style={{ pointerEvents: 'none' }} // Prevent image from blocking clicks
+                          onError={(e) => {
+                            console.log('❌ Image failed to load:', asset.url || asset.thumbnailUrl, 'Asset ID:', asset.id);
+                            e.currentTarget.style.display = 'none';
+                          }}
+                          onLoad={() => {
+                            console.log('✅ Image loaded successfully:', asset.url || asset.thumbnailUrl, 'Asset ID:', asset.id);
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                          <div className="text-center text-gray-400">
+                            <Image className="w-8 h-8 mx-auto mb-2" />
+                            <p className="text-xs">Loading...</p>
+                          </div>
+                        </div>
+                      )
                     ) : (
                       <div className="relative w-full h-full bg-gray-800">
                         {asset.thumbnailUrl ? (
