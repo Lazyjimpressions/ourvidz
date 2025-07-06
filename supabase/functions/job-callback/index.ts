@@ -250,6 +250,26 @@ serve(async (req)=>{
     });
   }
 });
+// Helper function to normalize asset paths to be user-scoped
+function normalizeAssetPath(filePath, userId) {
+  if (!filePath || !userId) return filePath;
+  
+  // Check if path already contains user ID prefix
+  if (filePath.startsWith(`${userId}/`)) {
+    return filePath; // Already user-scoped
+  }
+  
+  // Add user ID prefix for consistency
+  const normalizedPath = `${userId}/${filePath}`;
+  console.log('🔧 Path normalization:', {
+    originalPath: filePath,
+    userId: userId,
+    normalizedPath: normalizedPath
+  });
+  
+  return normalizedPath;
+}
+
 async function handleImageJobCallback(supabase, job, status, filePath, errorMessage, quality, isSDXL, imageUrls, isEnhanced) {
   console.log('🖼️ ENHANCED IMAGE CALLBACK DEBUGGING:', {
     jobId: job.id,
@@ -265,13 +285,15 @@ async function handleImageJobCallback(supabase, job, status, filePath, errorMess
   });
   if (status === 'completed' && (filePath || imageUrls)) {
     console.log('✅ Processing completed image job with file path or image URLs');
-    // Handle multiple image URLs or single image
-    let primaryImageUrl = filePath;
+    
+    // Normalize paths to ensure user-scoped consistency
+    let primaryImageUrl = normalizeAssetPath(filePath, job.user_id);
     let imageUrlsArray = null;
     if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
       console.log('🖼️ Multiple images received:', imageUrls.length);
-      imageUrlsArray = imageUrls;
-      primaryImageUrl = imageUrls[0]; // Use first image as primary
+      // Normalize all image URLs in the array
+      imageUrlsArray = imageUrls.map(url => normalizeAssetPath(url, job.user_id));
+      primaryImageUrl = imageUrlsArray[0]; // Use first image as primary
     } else if (filePath) {
       console.log('🖼️ Single image received:', filePath);
     }
@@ -378,18 +400,30 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
     status,
     filePath,
     jobType: job.job_type,
-    quality
+    quality,
+    isEnhanced
   });
+  
   if (status === 'completed' && job.video_id && filePath) {
+    // Normalize video path to ensure user-scoped consistency
+    const normalizedVideoPath = normalizeAssetPath(filePath, job.user_id);
+    
+    console.log('📹 Video path normalization:', {
+      originalPath: filePath,
+      normalizedPath: normalizedVideoPath,
+      userId: job.user_id
+    });
+    
     const { error: videoError } = await supabase.from('videos').update({
       status: 'completed',
-      video_url: filePath,
+      video_url: normalizedVideoPath,
       completed_at: new Date().toISOString()
     }).eq('id', job.video_id);
+    
     if (videoError) {
       console.error('❌ Error updating video:', videoError);
     } else {
-      console.log('✅ Video job updated successfully with filePath:', filePath);
+      console.log('✅ Video job updated successfully with normalized path:', normalizedVideoPath);
     }
   }
   if (status === 'failed' && job.video_id) {
