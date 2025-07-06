@@ -1,5 +1,87 @@
 import { supabase } from '@/integrations/supabase/client';
 
+// URL Cache with TTL and smart invalidation
+interface CachedUrl {
+  url: string;
+  expiresAt: number;
+  generatedAt: number;
+}
+
+class UrlCache {
+  private cache = new Map<string, CachedUrl>();
+  private readonly DEFAULT_TTL = 3600 * 1000; // 1 hour
+  private readonly VIDEO_TTL = 7200 * 1000; // 2 hours
+
+  private getCacheKey(bucket: string, path: string): string {
+    return `${bucket}:${path}`;
+  }
+
+  get(bucket: string, path: string): string | null {
+    const key = this.getCacheKey(bucket, path);
+    const cached = this.cache.get(key);
+    
+    if (!cached) return null;
+    
+    // Check if expired
+    if (Date.now() > cached.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    
+    return cached.url;
+  }
+
+  set(bucket: string, path: string, url: string, ttlSeconds: number = 3600): void {
+    const key = this.getCacheKey(bucket, path);
+    const now = Date.now();
+    
+    this.cache.set(key, {
+      url,
+      expiresAt: now + (ttlSeconds * 1000),
+      generatedAt: now
+    });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  // Cleanup expired entries
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, cached] of this.cache.entries()) {
+      if (now > cached.expiresAt) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  // Get cache stats
+  getStats(): { size: number; expired: number; valid: number } {
+    const now = Date.now();
+    let expired = 0;
+    let valid = 0;
+    
+    for (const cached of this.cache.values()) {
+      if (now > cached.expiresAt) {
+        expired++;
+      } else {
+        valid++;
+      }
+    }
+    
+    return { size: this.cache.size, expired, valid };
+  }
+}
+
+const urlCache = new UrlCache();
+
+// Cleanup cache every 10 minutes
+setInterval(() => {
+  urlCache.cleanup();
+  console.log('🧹 URL cache cleanup completed:', urlCache.getStats());
+}, 10 * 60 * 1000);
+
 export type StorageBucket = 
   | 'image_fast' 
   | 'image_high' 
@@ -69,17 +151,21 @@ export const uploadFile = async (
   }
 };
 
-// ENHANCED signed URL generation with comprehensive debugging
+// ENHANCED signed URL generation with caching and fallback buckets
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
   expiresIn: number = 3600
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    console.log('🔐 getSignedUrl called with enhanced SDXL support:');
-    console.log('   - Bucket:', bucket);
-    console.log('   - File path:', filePath);
-    console.log('   - Expires in:', expiresIn, 'seconds');
+    // Check cache first
+    const cachedUrl = urlCache.get(bucket, filePath);
+    if (cachedUrl) {
+      console.log('✅ Cache hit for URL:', bucket, filePath.substring(0, 50) + '...');
+      return { data: { signedUrl: cachedUrl }, error: null };
+    }
+
+    console.log('🔐 Generating new signed URL:', bucket, filePath.substring(0, 50) + '...');
     
     // Validate inputs
     if (!bucket || !filePath) {
@@ -88,119 +174,74 @@ export const getSignedUrl = async (
       throw new Error(errorMsg);
     }
 
-    // Check if user is authenticated for private buckets
+    // Check authentication for private buckets
     if (!['system_assets'].includes(bucket)) {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.error('❌ Auth error in getSignedUrl:', authError);
-        throw new Error('Authentication error: ' + authError.message);
+      if (authError || !user) {
+        throw new Error('Authentication required');
       }
-
-      if (!user) {
-        console.error('❌ No authenticated user found');
-        throw new Error('User must be authenticated to access files');
-      }
-
-      console.log('✅ User authenticated:', user.id);
     }
 
-    // Use the filePath as-is (it should already be user-scoped from the database)
-    const pathToUse = filePath;
-    console.log('📁 Using path for signed URL with SDXL support:', pathToUse);
-
-    // Enhanced file existence verification
-    console.log('📋 Checking if file exists with detailed verification...');
-    const pathParts = pathToUse.split('/');
-    const fileName = pathParts.pop();
-    const folderPath = pathParts.join('/') || '';
+    // Try primary bucket first, then fallbacks
+    const fallbackBuckets = [
+      'sdxl_image_fast', 'sdxl_image_high', 
+      'image_fast', 'image_high', 
+      'image7b_fast_enhanced', 'image7b_high_enhanced',
+      'video_fast', 'video_high',
+      'video7b_fast_enhanced', 'video7b_high_enhanced'
+    ].filter(b => b !== bucket);
     
-    console.log('🔍 File search details:', {
-      fullPath: pathToUse,
-      folderPath: folderPath,
-      fileName: fileName,
-      bucket: bucket
-    });
+    const bucketsToTry = [bucket, ...fallbackBuckets];
     
-    const { data: fileList, error: listError } = await supabase.storage
-      .from(bucket)
-      .list(folderPath, {
-        limit: 1000, // Increased limit to ensure we find the file
-        search: fileName
-      });
+    for (const tryBucket of bucketsToTry) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(tryBucket)
+          .createSignedUrl(filePath, expiresIn);
 
-    if (listError) {
-      console.error('❌ File listing error:', {
-        error: listError,
-        bucket: bucket,
-        folderPath: folderPath,
-        fileName: fileName
-      });
-    } else {
-      console.log('📁 File listing result:', {
-        filesFound: fileList?.length || 0,
-        searchedFolder: folderPath,
-        searchedFile: fileName,
-        allFiles: fileList?.map(f => f.name) || []
-      });
-      
-      if (fileList) {
-        const fileExists = fileList.some(f => f.name === fileName);
-        console.log('🔍 File exists check:', {
-          exists: fileExists,
-          fileName: fileName,
-          bucket: bucket,
-          fullPath: pathToUse
-        });
-        
-        if (!fileExists) {
-          console.error('❌ File not found in storage!', {
-            searchedPath: pathToUse,
-            bucket: bucket,
-            availableFiles: fileList.map(f => f.name),
-            folderContents: fileList.length
-          });
-          throw new Error(`File not found in storage: ${pathToUse} in bucket ${bucket}`);
+        if (!error && data?.signedUrl) {
+          // Cache the successful URL
+          urlCache.set(tryBucket, filePath, data.signedUrl, expiresIn);
+          
+          if (tryBucket !== bucket) {
+            console.log(`✅ Fallback success: ${tryBucket} (primary: ${bucket})`);
+          }
+          
+          return { data, error: null };
         }
+      } catch (err) {
+        console.warn(`⚠️ Bucket ${tryBucket} failed:`, err instanceof Error ? err.message : err);
+        continue;
       }
     }
 
-    // Generate signed URL
-    console.log('🔗 Generating signed URL for SDXL/WAN content...');
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(pathToUse, expiresIn);
-
-    if (error) {
-      console.error('❌ Signed URL generation failed:');
-      console.error('   - Error code:', error.message);
-      console.error('   - Bucket:', bucket);
-      console.error('   - Path:', pathToUse);
-      console.error('   - Full error:', error);
-      throw new Error(`Signed URL generation failed: ${error.message}`);
-    }
-
-    if (!data?.signedUrl) {
-      console.error('❌ No signed URL returned from Supabase');
-      throw new Error('No signed URL returned from Supabase');
-    }
-
-    console.log('✅ Signed URL generated successfully for', bucket);
-    console.log('   - URL length:', data.signedUrl.length);
-    console.log('   - URL starts with:', data.signedUrl.substring(0, 100) + '...');
+    throw new Error(`File not found in any bucket: ${filePath}`);
     
-    return { data, error: null };
   } catch (error) {
-    console.error('❌ Exception in getSignedUrl with SDXL support:');
-    console.error('   - Bucket:', bucket);
-    console.error('   - Path:', filePath);
-    console.error('   - Error:', error);
-    console.error('   - Stack:', error instanceof Error ? error.stack : 'No stack');
-    
+    console.error('❌ getSignedUrl failed:', bucket, filePath.substring(0, 50) + '...', error);
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')
     };
   }
+};
+
+// Batch URL generation with caching
+export const getBatchSignedUrls = async (
+  requests: Array<{ bucket: StorageBucket; filePath: string; expiresIn?: number }>
+): Promise<Array<{ data: { signedUrl: string } | null; error: Error | null }>> => {
+  console.log('📦 Batch generating URLs:', requests.length);
+  
+  const results = await Promise.all(
+    requests.map(req => 
+      getSignedUrl(req.bucket, req.filePath, req.expiresIn || 3600)
+    )
+  );
+  
+  const successCount = results.filter(r => r.data?.signedUrl).length;
+  console.log(`✅ Batch URL generation: ${successCount}/${requests.length} successful`);
+  
+  return results;
 };
 
 // Get public URL for public files
@@ -360,6 +401,16 @@ export const uploadVideoThumbnail = uploadFastVideo;
 export const getVideoThumbnailUrl = getFastVideoUrl;
 export const uploadFinalVideo = uploadHighQualityVideo;
 export const getFinalVideoUrl = getHighQualityVideoUrl;
+
+// Cache management utilities
+export const clearUrlCache = (): void => {
+  urlCache.clear();
+  console.log('🧹 URL cache cleared');
+};
+
+export const getCacheStats = () => {
+  return urlCache.getStats();
+};
 
 // Cleanup expired files (utility function)
 export const cleanupExpiredFiles = async (bucket: StorageBucket, olderThanDays: number = 30) => {

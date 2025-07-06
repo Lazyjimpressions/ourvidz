@@ -23,22 +23,30 @@ export const useRealtimeWorkspace = () => {
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   const processedUpdatesRef = useRef<Set<string>>(new Set());
   
-  // Efficient workspace query - only fetches when filter changes
+  // Efficient workspace query with aggressive caching
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['realtime-workspace-assets', Array.from(workspaceFilter).sort()],
     queryFn: async () => {
       if (workspaceFilter.size === 0) {
         return [];
       }
-      console.log('🚀 Fetching workspace assets:', Array.from(workspaceFilter));
+      console.log('🚀 Fetching workspace assets with optimization:', Array.from(workspaceFilter));
       return AssetService.getAssetsByIds(Array.from(workspaceFilter));
     },
-    enabled: true,
-    // OPTIMIZATION: Cache workspace assets for 10 minutes - they're immutable once completed
-    staleTime: 10 * 60 * 1000,
-    gcTime: 30 * 60 * 1000,
+    enabled: workspaceFilter.size > 0,
+    // AGGRESSIVE OPTIMIZATION: Cache for 4 hours - assets don't change once completed
+    staleTime: 4 * 60 * 60 * 1000, // 4 hours
+    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
     refetchOnWindowFocus: false,
     refetchOnMount: false, // Don't refetch on mount, rely on cache
+    refetchInterval: false, // No polling - use realtime instead
+    // Retry strategy for failed requests
+    retry: (failureCount, error) => {
+      if (failureCount < 2) return true;
+      console.error('❌ Asset fetch failed after retries:', error);
+      return false;
+    },
+    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
   // Load workspace filter from localStorage on mount
@@ -66,81 +74,115 @@ export const useRealtimeWorkspace = () => {
     }
   }, [workspaceFilter]);
 
-  // Realtime subscription for completed assets
+  // Enhanced realtime subscription with job status tracking
   useEffect(() => {
     const setupRealtimeSubscriptions = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔔 Setting up realtime subscriptions for workspace');
+      console.log('🔔 Setting up enhanced realtime subscriptions');
       
-      const imageChannel = supabase
-        .channel('workspace-images')
+      // Combined channel for all asset updates
+      const combinedChannel = supabase
+        .channel('workspace-combined')
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
             table: 'images',
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-            const newImage = payload.new as any;
-            if (newImage.status === 'completed' && !processedUpdatesRef.current.has(newImage.id)) {
-              console.log('🎉 New completed image detected:', newImage.id);
-              processedUpdatesRef.current.add(newImage.id);
+            const image = payload.new as any;
+            const eventType = payload.eventType;
+            
+            if (eventType === 'UPDATE' && image.status === 'completed' && 
+                !processedUpdatesRef.current.has(image.id)) {
+              console.log('🎉 Image completed:', image.id);
+              processedUpdatesRef.current.add(image.id);
               
-              // Add to workspace filter
-              setWorkspaceFilter(prev => new Set([...prev, newImage.id]));
+              setWorkspaceFilter(prev => new Set([...prev, image.id]));
+              toast.success('New image completed!');
               
-              // Show notification
-              toast.success('New image completed and added to workspace!');
+              // Invalidate cache to force refresh
+              queryClient.invalidateQueries({ 
+                queryKey: ['realtime-workspace-assets'],
+                exact: false 
+              });
               
-              // Cleanup
-              setTimeout(() => processedUpdatesRef.current.delete(newImage.id), 30000);
+              setTimeout(() => processedUpdatesRef.current.delete(image.id), 60000);
             }
           }
         )
-        .subscribe();
-
-      const videoChannel = supabase
-        .channel('workspace-videos')
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
             table: 'videos',
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-            const newVideo = payload.new as any;
-            if (newVideo.status === 'completed' && !processedUpdatesRef.current.has(newVideo.id)) {
-              console.log('🎉 New completed video detected:', newVideo.id);
-              processedUpdatesRef.current.add(newVideo.id);
+            const video = payload.new as any;
+            const eventType = payload.eventType;
+            
+            if (eventType === 'UPDATE' && video.status === 'completed' && 
+                !processedUpdatesRef.current.has(video.id)) {
+              console.log('🎉 Video completed:', video.id);
+              processedUpdatesRef.current.add(video.id);
               
-              // Add to workspace filter
-              setWorkspaceFilter(prev => new Set([...prev, newVideo.id]));
+              setWorkspaceFilter(prev => new Set([...prev, video.id]));
+              toast.success('New video completed!');
               
-              // Show notification
-              toast.success('New video completed and added to workspace!');
+              // Invalidate cache to force refresh
+              queryClient.invalidateQueries({ 
+                queryKey: ['realtime-workspace-assets'],
+                exact: false 
+              });
               
-              // Cleanup
-              setTimeout(() => processedUpdatesRef.current.delete(newVideo.id), 30000);
+              setTimeout(() => processedUpdatesRef.current.delete(video.id), 60000);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'jobs',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            const job = payload.new as any;
+            const eventType = payload.eventType;
+            
+            // Handle job status updates to clear "queuing" state
+            if (eventType === 'UPDATE' && job.status !== 'queued') {
+              console.log('🔄 Job status updated:', job.id, job.status);
+              
+              // For job completion, trigger asset refresh
+              if (job.status === 'completed') {
+                setTimeout(() => {
+                  queryClient.invalidateQueries({ 
+                    queryKey: ['realtime-workspace-assets'],
+                    exact: false 
+                  });
+                }, 2000); // Small delay to allow asset creation
+              }
             }
           }
         )
         .subscribe();
 
       return () => {
-        console.log('🔕 Cleaning up workspace realtime subscriptions');
-        supabase.removeChannel(imageChannel);
-        supabase.removeChannel(videoChannel);
+        console.log('🔕 Cleaning up enhanced realtime subscriptions');
+        supabase.removeChannel(combinedChannel);
       };
     };
 
     setupRealtimeSubscriptions();
-  }, []);
+  }, [queryClient]);
 
   // Listen for generation completion events
   useEffect(() => {
@@ -208,7 +250,7 @@ export const useRealtimeWorkspace = () => {
     return tiles;
   }, []);
 
-  // Enhanced workspace tiles
+  // Optimized workspace tiles with enhanced caching
   const workspaceTiles = useCallback(() => {
     const completedAssets = assets.filter(asset => 
       asset.status === 'completed' && 
@@ -221,6 +263,7 @@ export const useRealtimeWorkspace = () => {
       allTiles.push(...tiles);
     });
     
+    // Sort by timestamp descending (newest first)
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [assets, transformAssetToTiles]);
 

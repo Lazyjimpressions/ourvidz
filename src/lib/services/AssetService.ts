@@ -29,25 +29,35 @@ export interface UnifiedAsset {
 
 export class AssetService {
   private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: any): string {
-    // Check if this is an SDXL image from metadata or job data
     const metadata = imageData.metadata as any;
+    const jobType = jobData?.job_type || '';
+    const quality = imageData.quality || jobData?.quality || 'fast';
+    
+    // Enhanced model detection with all 7B variants
     const isSDXL = metadata?.is_sdxl || 
                    metadata?.model_type === 'sdxl' || 
-                   jobData?.job_type?.startsWith('sdxl_') ||
+                   jobType.startsWith('sdxl_') ||
                    jobData?.model_type?.includes('sdxl_image') ||
                    metadata?.bucket?.includes('sdxl');
     
-    const quality = imageData.quality || jobData?.quality || 'fast';
+    const isEnhanced = jobType.includes('enhanced') || jobType.includes('7b');
     
-    // Determine correct bucket based on model type and quality
-    const bucket = isSDXL 
-      ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
-      : (quality === 'high' ? 'image_high' : 'image_fast');
+    // Determine bucket with enhanced 7B model support
+    let bucket: string;
+    if (isSDXL) {
+      bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    } else if (isEnhanced) {
+      bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+    } else {
+      bucket = quality === 'high' ? 'image_high' : 'image_fast';
+    }
     
-    console.log('🔍 Bucket determination:', {
+    console.log('🔍 Enhanced bucket determination:', {
       imageId: imageData.id,
+      jobType,
       quality,
       isSDXL,
+      isEnhanced,
       bucket
     });
     
@@ -58,13 +68,143 @@ export class AssetService {
     const quality = jobData?.quality || 'fast';
     const jobType = jobData?.job_type || '';
     
-    // Check if this is an enhanced video model
-    if (jobType.includes('enhanced') || jobType.includes('7b')) {
-      return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+    // Enhanced video model detection with all 7B variants
+    const isEnhanced = jobType.includes('enhanced') || 
+                       jobType.includes('7b') ||
+                       jobType.startsWith('video7b_');
+    
+    let bucket: string;
+    if (isEnhanced) {
+      bucket = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+    } else {
+      bucket = quality === 'high' ? 'video_high' : 'video_fast';
     }
     
-    // Default video buckets
-    return quality === 'high' ? 'video_high' : 'video_fast';
+    console.log('🎬 Enhanced video bucket determination:', {
+      jobType,
+      quality,
+      isEnhanced,
+      bucket
+    });
+    
+    return bucket;
+  }
+
+  // URL generation methods with fallback bucket support
+  private static async generateImageUrlsWithFallback(imageUrlsArray: string[], primaryBucket: any, imageId: string): Promise<any> {
+    const fallbackBuckets = ['sdxl_image_fast', 'sdxl_image_high', 'image_fast', 'image_high', 'image7b_fast_enhanced', 'image7b_high_enhanced'];
+    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
+    
+    for (const bucket of bucketsToTry) {
+      try {
+        const urlPromises = imageUrlsArray.map(path => 
+          getSignedUrl(bucket as any, path, 3600)
+            .then(({ data, error }) => error ? null : data?.signedUrl)
+            .catch(() => null)
+        );
+        
+        const urls = await Promise.all(urlPromises);
+        const validUrls = urls.filter(Boolean) as string[];
+        
+        if (validUrls.length > 0) {
+          console.log(`✅ Generated URLs with bucket ${bucket}:`, validUrls.length);
+          return {
+            id: imageId,
+            thumbnailUrl: validUrls[0],
+            url: validUrls[0],
+            signedUrls: validUrls,
+            error: undefined
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️ Bucket ${bucket} failed for image ${imageId}:`, error);
+        continue;
+      }
+    }
+    
+    return {
+      id: imageId,
+      thumbnailUrl: undefined,
+      url: undefined,
+      signedUrls: undefined,
+      error: 'Failed to generate URLs from any bucket'
+    };
+  }
+
+  private static async generateSingleImageUrlWithFallback(imagePath: string, primaryBucket: any, imageId: string): Promise<any> {
+    const fallbackBuckets = ['sdxl_image_fast', 'sdxl_image_high', 'image_fast', 'image_high', 'image7b_fast_enhanced', 'image7b_high_enhanced'];
+    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
+    
+    for (const bucket of bucketsToTry) {
+      try {
+        const { data, error } = await getSignedUrl(bucket as any, imagePath, 3600);
+        
+        if (!error && data?.signedUrl) {
+          console.log(`✅ Generated single image URL with bucket ${bucket}`);
+          return {
+            id: imageId,
+            thumbnailUrl: data.signedUrl,
+            url: data.signedUrl,
+            error: undefined,
+            signedUrls: undefined
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️ Bucket ${bucket} failed for image ${imageId}:`, error);
+        continue;
+      }
+    }
+    
+    return {
+      id: imageId,
+      thumbnailUrl: undefined,
+      url: undefined,
+      error: 'Failed to generate URL from any bucket',
+      signedUrls: undefined
+    };
+  }
+
+  private static async generateVideoUrlWithFallback(videoPath: string, primaryBucket: any, videoId: string, thumbnailPath?: string): Promise<any> {
+    const fallbackBuckets = ['video_fast', 'video_high', 'video7b_fast_enhanced', 'video7b_high_enhanced'];
+    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
+    
+    let videoUrl: string | undefined;
+    let thumbnailUrl: string | undefined;
+    
+    // Try to get video URL with fallback buckets
+    for (const bucket of bucketsToTry) {
+      try {
+        const { data, error } = await getSignedUrl(bucket as any, videoPath, 7200);
+        
+        if (!error && data?.signedUrl) {
+          videoUrl = data.signedUrl;
+          console.log(`✅ Generated video URL with bucket ${bucket}`);
+          break;
+        }
+      } catch (error) {
+        console.warn(`⚠️ Video bucket ${bucket} failed for video ${videoId}:`, error);
+        continue;
+      }
+    }
+    
+    // Try to get thumbnail URL if provided
+    if (thumbnailPath) {
+      try {
+        const { data } = await getSignedUrl('image_fast' as any, thumbnailPath, 3600);
+        if (data?.signedUrl) {
+          thumbnailUrl = data.signedUrl;
+        }
+      } catch (error) {
+        console.warn(`⚠️ Thumbnail generation failed for video ${videoId}:`, error);
+      }
+    }
+    
+    return {
+      id: videoId,
+      url: videoUrl,
+      thumbnailUrl: thumbnailUrl,
+      error: videoUrl ? undefined : 'Failed to generate video URL from any bucket'
+    };
   }
 
   static async getAssetsByIds(assetIds: string[]): Promise<UnifiedAsset[]> {
@@ -138,39 +278,10 @@ export class AssetService {
         const imageUrlsArray = image.image_urls || metadata?.image_urls;
         
         if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
-          // OPTIMIZATION: Generate all URLs in parallel
-          urlPromise = Promise.all(
-            imageUrlsArray.map(path => 
-              getSignedUrl(bucket as any, path, 3600)
-                .then(({ data, error }) => error ? null : data?.signedUrl)
-                .catch(() => null)
-            )
-          ).then(urls => {
-            const validUrls = urls.filter(Boolean) as string[];
-            return {
-              id: image.id,
-              thumbnailUrl: validUrls[0],
-              url: validUrls[0],
-              signedUrls: validUrls,
-              error: validUrls.length === 0 ? 'Failed to generate URLs' : undefined
-            };
-          });
+          // OPTIMIZATION: Generate all URLs in parallel with fallback buckets
+          urlPromise = AssetService.generateImageUrlsWithFallback(imageUrlsArray, bucket as any, image.id);
         } else if (image.image_url) {
-          urlPromise = getSignedUrl(bucket as any, image.image_url, 3600)
-            .then(({ data, error }) => ({
-              id: image.id,
-              thumbnailUrl: error ? undefined : data?.signedUrl,
-              url: error ? undefined : data?.signedUrl,
-              error: error?.message,
-              signedUrls: undefined
-            }))
-            .catch(() => ({
-              id: image.id,
-              thumbnailUrl: undefined,
-              url: undefined,
-              error: 'Failed to generate URL',
-              signedUrls: undefined
-            }));
+          urlPromise = AssetService.generateSingleImageUrlWithFallback(image.image_url, bucket as any, image.id);
         }
       }
 
@@ -211,20 +322,7 @@ export class AssetService {
       if (video.status === 'completed' && video.video_url) {
         const bucket = AssetService.determineVideoBucket(jobData);
         
-        urlPromise = Promise.all([
-          getSignedUrl(bucket as any, video.video_url, 7200),
-          video.thumbnail_url ? getSignedUrl('image_fast' as any, video.thumbnail_url, 3600) : Promise.resolve({ data: null, error: null })
-        ]).then(([videoResult, thumbResult]) => ({
-          id: video.id,
-          url: videoResult.error ? undefined : videoResult.data?.signedUrl,
-          thumbnailUrl: thumbResult.error ? undefined : thumbResult.data?.signedUrl,
-          error: videoResult.error?.message
-        })).catch(() => ({
-          id: video.id,
-          url: undefined,
-          thumbnailUrl: undefined,
-          error: 'Failed to generate URLs'
-        }));
+        urlPromise = AssetService.generateVideoUrlWithFallback(video.video_url, bucket as any, video.id, video.thumbnail_url);
       }
 
       urlGenerationTasks.push(urlPromise);
