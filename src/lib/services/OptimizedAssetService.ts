@@ -350,11 +350,11 @@ export class OptimizedAssetService {
       if (!imageData) return asset;
 
       const jobData = Array.isArray(imageData.job) ? imageData.job[0] : imageData.job;
-      const bucket = this.determineImageBucket(imageData, jobData);
+      const bucket = this.determineImageBucket(imageData, jobData as any);
       
       let urls: string[] = [];
       if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
-        urls = await this.batchGenerateUrls(bucket, imageData.image_urls);
+        urls = await this.batchGenerateUrls(bucket, imageData.image_urls as string[]);
       } else if (imageData.image_url) {
         const url = await this.generateSingleUrl(bucket, imageData.image_url);
         if (url) urls = [url];
@@ -400,7 +400,7 @@ export class OptimizedAssetService {
       if (!videoData) return asset;
 
       const jobData = Array.isArray(videoData.job) ? videoData.job[0] : videoData.job;
-      const bucket = this.determineVideoBucket(jobData);
+      const bucket = this.determineVideoBucket(jobData as any);
       
       let videoUrl: string | undefined;
       let thumbnailUrl: string | undefined;

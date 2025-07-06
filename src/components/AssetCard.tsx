@@ -24,6 +24,7 @@ interface AssetCardProps {
   onDownload: () => void;
   selectionMode: boolean;
   isDeleting?: boolean;
+  isLoadingUrl?: boolean;
 }
 
 export const AssetCard = ({ 
@@ -34,7 +35,8 @@ export const AssetCard = ({
   onDelete, 
   onDownload, 
   selectionMode,
-  isDeleting = false
+  isDeleting = false,
+  isLoadingUrl = false
 }: AssetCardProps) => {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
