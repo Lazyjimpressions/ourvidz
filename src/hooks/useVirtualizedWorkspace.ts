@@ -86,26 +86,29 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     }
   }, [workspaceFilter]);
 
-  // Transform assets to tiles with lazy URL loading
+  // Transform assets to tiles with enhanced SDXL support
   const allTiles = useCallback((): MediaTile[] => {
     const tiles: MediaTile[] = [];
     
     metadataAssets.forEach(asset => {
       if (asset.type === 'image') {
-        // Handle SDXL 6-image arrays
+        // Handle SDXL 6-image arrays with individual selection
         if (asset.signedUrls && asset.signedUrls.length > 0) {
-          asset.signedUrls.forEach((url: string, index: number) => {
-            tiles.push({
-              id: `${asset.id}-${index}`,
-              originalAssetId: asset.id,
-              type: 'image',
-              url: url,
-              prompt: asset.prompt,
-              timestamp: asset.createdAt,
-              quality: (asset.quality as 'fast' | 'high') || 'fast',
-              modelType: asset.modelType,
-              isUrlLoaded: true
-            });
+          // Create a single tile representing the SDXL set
+          tiles.push({
+            id: asset.id,
+            originalAssetId: asset.id,
+            type: 'image',
+            url: asset.signedUrls[0], // Show first image as preview
+            prompt: asset.prompt,
+            timestamp: asset.createdAt,
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            modelType: asset.modelType,
+            isUrlLoaded: true,
+            isPartOfSet: true,
+            setSize: asset.signedUrls.length,
+            setImageUrls: asset.signedUrls,
+            selectedImageIndices: Array.from({ length: asset.signedUrls.length }, (_, i) => i) // Default: all selected
           });
         } else {
           // Single image or no URL yet
@@ -118,7 +121,8 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
             timestamp: asset.createdAt,
             quality: (asset.quality as 'fast' | 'high') || 'fast',
             modelType: asset.modelType,
-            isUrlLoaded: !!asset.url
+            isUrlLoaded: !!asset.url,
+            isPartOfSet: false
           });
         }
       } else if (asset.type === 'video') {
@@ -132,7 +136,8 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
           quality: (asset.quality as 'fast' | 'high') || 'fast',
           duration: asset.duration,
           thumbnailUrl: asset.thumbnailUrl,
-          isUrlLoaded: !!asset.url
+          isUrlLoaded: !!asset.url,
+          isPartOfSet: false
         });
       }
     });
@@ -375,7 +380,7 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
       });
       
       await OptimizedAssetService.deleteAssetCompletely(tile.originalAssetId, tile.type);
-      toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted`);
+      toast.success(`${tile.type === 'image' ? 'Image set' : 'Video'} deleted`);
       
     } catch (error) {
       console.error('❌ Deletion failed:', error);
@@ -390,6 +395,89 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
       });
     }
   }, [deletingTiles]);
+
+  // Enhanced individual image deletion for SDXL sets
+  const deleteIndividualImages = useCallback(async (tile: MediaTile, imageIndices: number[]) => {
+    if (!tile.isPartOfSet || !tile.setImageUrls) return;
+    
+    console.log('🗑️ Deleting individual images:', imageIndices, 'from tile:', tile.id);
+    
+    try {
+      // Update the tile's selected images
+      const updatedSelectedIndices = tile.selectedImageIndices?.filter(index => 
+        !imageIndices.includes(index)
+      ) || [];
+      
+      // If no images left, delete the entire asset
+      if (updatedSelectedIndices.length === 0) {
+        await deleteTile(tile);
+        return;
+      }
+      
+      // Update query cache with new selection
+      queryClient.setQueryData(
+        ['workspace-metadata', Array.from(workspaceFilter).sort()],
+        (oldData: UnifiedAsset[]) => {
+          if (!oldData) return oldData;
+          
+          return oldData.map(asset => {
+            if (asset.id === tile.originalAssetId) {
+              // Remove URLs for deleted images and update selected indices
+              const remainingUrls = tile.setImageUrls?.filter((_, index) => 
+                !imageIndices.includes(index)
+              ) || [];
+              
+              return {
+                ...asset,
+                signedUrls: remainingUrls,
+                selectedImageIndices: updatedSelectedIndices
+              };
+            }
+            return asset;
+          });
+        }
+      );
+      
+      toast.success(`Deleted ${imageIndices.length} image${imageIndices.length > 1 ? 's' : ''} from set`);
+      
+    } catch (error) {
+      console.error('❌ Individual image deletion failed:', error);
+      toast.error('Failed to delete individual images');
+    }
+  }, [deleteTile, queryClient, workspaceFilter]);
+
+  // Update image selection for SDXL sets
+  const updateImageSelection = useCallback(async (tile: MediaTile, selectedIndices: number[]) => {
+    if (!tile.isPartOfSet) return;
+    
+    console.log('🔄 Updating image selection for tile:', tile.id, 'Selected:', selectedIndices);
+    
+    try {
+      // Update query cache with new selection
+      queryClient.setQueryData(
+        ['workspace-metadata', Array.from(workspaceFilter).sort()],
+        (oldData: UnifiedAsset[]) => {
+          if (!oldData) return oldData;
+          
+          return oldData.map(asset => {
+            if (asset.id === tile.originalAssetId) {
+              return {
+                ...asset,
+                selectedImageIndices: selectedIndices
+              };
+            }
+            return asset;
+          });
+        }
+      );
+      
+      toast.success(`Updated selection: ${selectedIndices.length} image${selectedIndices.length > 1 ? 's' : ''} selected`);
+      
+    } catch (error) {
+      console.error('❌ Image selection update failed:', error);
+      toast.error('Failed to update image selection');
+    }
+  }, [queryClient, workspaceFilter]);
 
   return {
     // Core data
@@ -407,6 +495,10 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     importToWorkspace,
     clearWorkspace,
     deleteTile,
+    
+    // Enhanced SDXL management
+    deleteIndividualImages,
+    updateImageSelection,
     
     // Virtualization
     registerTileElement,

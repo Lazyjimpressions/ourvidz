@@ -12,4 +12,10 @@ export interface MediaTile {
   isUrlLoaded?: boolean;
   isVisible?: boolean;
   virtualIndex?: number;
+  // Enhanced SDXL support
+  isPartOfSet?: boolean;
+  setIndex?: number;
+  setSize?: number;
+  setImageUrls?: string[];
+  selectedImageIndices?: number[];
 }

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { LibraryImportModal } from "@/components/LibraryImportModal";
+import { SDXLImageSelector } from "@/components/workspace/SDXLImageSelector";
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 import { useVirtualizedWorkspace } from '@/hooks/useVirtualizedWorkspace';
 import { MediaTile } from '@/types/workspace';
@@ -41,6 +42,7 @@ const MediaTileComponent = React.memo(({
   onDownload, 
   onGenerateMoreLike, 
   onDelete, 
+  onSDXLManage,
   isDeleting,
   isLoadingUrl,
   registerElement 
@@ -50,6 +52,7 @@ const MediaTileComponent = React.memo(({
   onDownload: (e: React.MouseEvent) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
   onDelete: () => void;
+  onSDXLManage?: () => void;
   isDeleting: boolean;
   isLoadingUrl: boolean;
   registerElement: (element: HTMLElement | null) => void;
@@ -138,6 +141,7 @@ const MediaTileComponent = React.memo(({
             )}
           >
             {tile.modelType}
+            {tile.isPartOfSet && ` (${tile.selectedImageIndices?.length || tile.setSize}/${tile.setSize})`}
           </Badge>
         </div>
       )}
@@ -191,6 +195,22 @@ const MediaTileComponent = React.memo(({
             </Button>
           )}
           
+          {/* SDXL Image Management Button */}
+          {tile.isPartOfSet && onSDXLManage && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSDXLManage();
+              }}
+              className="h-6 w-6 p-0 bg-purple-600/80 hover:bg-purple-700 backdrop-blur-sm"
+              title="Manage SDXL images"
+            >
+              <Image className="h-3 w-3" />
+            </Button>
+          )}
+          
           <Button
             variant="secondary"
             size="sm"
@@ -235,6 +255,8 @@ export const VirtualizedMediaGrid = ({
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [showSDXLSelector, setShowSDXLSelector] = useState(false);
+  const [currentSDXLTile, setCurrentSDXLTile] = useState<MediaTile | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Use optimized virtualized workspace hook
@@ -248,6 +270,8 @@ export const VirtualizedMediaGrid = ({
     importToWorkspace, 
     clearWorkspace, 
     deleteTile,
+    deleteIndividualImages,
+    updateImageSelection,
     registerTileElement
   } = useVirtualizedWorkspace({
     itemHeight: 300,
@@ -293,6 +317,24 @@ export const VirtualizedMediaGrid = ({
       onImport(importToWorkspace);
     }
   }, [onImport, importToWorkspace]);
+
+  // Handle SDXL image management
+  const handleSDXLManage = (tile: MediaTile) => {
+    setCurrentSDXLTile(tile);
+    setShowSDXLSelector(true);
+  };
+
+  const handleSDXLSelectionUpdate = (selectedIndices: number[]) => {
+    if (currentSDXLTile) {
+      updateImageSelection(currentSDXLTile, selectedIndices);
+    }
+  };
+
+  const handleSDXLIndividualDelete = (imageIndices: number[]) => {
+    if (currentSDXLTile) {
+      deleteIndividualImages(currentSDXLTile, imageIndices);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -362,6 +404,7 @@ export const VirtualizedMediaGrid = ({
             onDownload={(e) => handleDownload(tile, e)}
             onGenerateMoreLike={onGenerateMoreLike}
             onDelete={() => deleteTile(tile)}
+            onSDXLManage={tile.isPartOfSet ? () => handleSDXLManage(tile) : undefined}
             isDeleting={deletingTiles.has(tile.id)}
             isLoadingUrl={loadingUrls.has(tile.originalAssetId)}
             registerElement={(element) => registerTileElement(tile.id, element)}
@@ -392,6 +435,20 @@ export const VirtualizedMediaGrid = ({
         onClose={() => setShowLibraryModal(false)}
         onImport={importToWorkspace}
       />
+
+      {/* SDXL Image Selector Modal */}
+      {currentSDXLTile && (
+        <SDXLImageSelector
+          open={showSDXLSelector}
+          onClose={() => {
+            setShowSDXLSelector(false);
+            setCurrentSDXLTile(null);
+          }}
+          tile={currentSDXLTile}
+          onSelectionUpdate={handleSDXLSelectionUpdate}
+          onIndividualDelete={handleSDXLIndividualDelete}
+        />
+      )}
     </>
   );
 };
