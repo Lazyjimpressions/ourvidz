@@ -12,7 +12,7 @@ serve(async (req)=>{
     });
   }
   try {
-    console.log('🚀 Queue-job function called - FIXED: WAN negative prompt removal');
+    console.log('🚀 Queue-job function called - STANDARDIZED: Worker callback parameter consistency');
     const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
       global: {
         headers: {
@@ -38,7 +38,7 @@ serve(async (req)=>{
     }
     console.log('✅ User authenticated:', user.id);
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
-    console.log('📋 Creating job with FIXED dual worker routing:', {
+    console.log('📋 Creating job with STANDARDIZED worker parameters:', {
       jobType,
       projectId,
       videoId,
