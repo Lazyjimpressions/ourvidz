@@ -336,67 +336,26 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     }
   }, []);
 
-  // Realtime subscriptions for new assets
+  // Listen for global completion events from AuthContext
   useEffect(() => {
-    const setupRealtimeSubscriptions = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      console.log('🔔 Setting up optimized realtime subscriptions');
+    const handleGenerationCompleted = (event: CustomEvent) => {
+      const { assetId, type } = event.detail;
+      console.log('🎉 Workspace received completion event:', assetId, type);
       
-      const imageChannel = supabase
-        .channel('workspace-images-optimized')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'images',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const newImage = payload.new as any;
-            if (newImage.status === 'completed' && !processedUpdatesRef.current.has(newImage.id)) {
-              console.log('🎉 New image completed:', newImage.id);
-              processedUpdatesRef.current.add(newImage.id);
-              
-              setWorkspaceFilter(prev => new Set([...prev, newImage.id]));
-              toast.success('New image ready!');
-              
-              setTimeout(() => processedUpdatesRef.current.delete(newImage.id), 30000);
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'videos',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const newVideo = payload.new as any;
-            if (newVideo.status === 'completed' && !processedUpdatesRef.current.has(newVideo.id)) {
-              console.log('🎉 New video completed:', newVideo.id);
-              processedUpdatesRef.current.add(newVideo.id);
-              
-              setWorkspaceFilter(prev => new Set([...prev, newVideo.id]));
-              toast.success('New video ready!');
-              
-              setTimeout(() => processedUpdatesRef.current.delete(newVideo.id), 30000);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        console.log('🔕 Cleaning up optimized realtime subscriptions');
-        supabase.removeChannel(imageChannel);
-      };
+      if (!processedUpdatesRef.current.has(assetId)) {
+        processedUpdatesRef.current.add(assetId);
+        setWorkspaceFilter(prev => new Set([...prev, assetId]));
+        toast.success(`New ${type} ready!`);
+        
+        setTimeout(() => processedUpdatesRef.current.delete(assetId), 30000);
+      }
     };
 
-    setupRealtimeSubscriptions();
+    window.addEventListener('generation-completed', handleGenerationCompleted as EventListener);
+    
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationCompleted as EventListener);
+    };
   }, []);
 
   // Workspace management functions
