@@ -240,22 +240,8 @@ serve(async (req)=>{
     });
   }
 });
-// Helper function to normalize asset paths to be user-scoped
-function normalizeAssetPath(filePath, userId) {
-  if (!filePath || !userId) return filePath;
-  // Check if path already contains user ID prefix
-  if (filePath.startsWith(`${userId}/`)) {
-    return filePath; // Already user-scoped
-  }
-  // Add user ID prefix for consistency
-  const normalizedPath = `${userId}/${filePath}`;
-  console.log('🔧 Path normalization:', {
-    originalPath: filePath,
-    userId: userId,
-    normalizedPath: normalizedPath
-  });
-  return normalizedPath;
-}
+// REMOVED: Path normalization - workers now upload with correct paths
+// No longer needed as all workers upload to standardized paths
 async function handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced) {
   console.log('🖼️ STANDARDIZED IMAGE CALLBACK PROCESSING:', {
     job_id: job.id,
@@ -270,13 +256,12 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
   });
   if (status === 'completed' && assets && assets.length > 0) {
     console.log('✅ Processing completed image job with standardized assets');
-    // Normalize paths to ensure user-scoped consistency
-    let primaryImageUrl = normalizeAssetPath(assets[0], job.user_id);
+    // Store paths exactly as returned by workers - no normalization needed
+    let primaryImageUrl = assets[0];
     let imageUrlsArray = null;
     if (assets.length > 1) {
       console.log('🖼️ Multiple images received:', assets.length);
-      // Normalize all image URLs in the array
-      imageUrlsArray = assets.map((url) => normalizeAssetPath(url, job.user_id));
+      imageUrlsArray = assets; // Store as-is from worker
       primaryImageUrl = imageUrlsArray[0]; // Use first image as primary
     } else {
       console.log('🖼️ Single image received:', assets[0]);
@@ -396,14 +381,15 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
     isEnhanced
   });
   if (status === 'completed' && job.video_id && assets && assets.length > 0) {
-    // Normalize ALL video paths to be user-scoped for consistency
-    const normalizedVideoPath = normalizeAssetPath(assets[0], job.user_id);
+    // Store video path exactly as returned by WAN worker - no normalization
+    const videoPath = assets[0];
     
-    console.log('📹 Video path handling:', {
-      originalPath: assets[0],
-      normalizedPath: normalizedVideoPath,
+    console.log('📹 Video path handling (FIXED):', {
+      receivedPath: assets[0],
+      storedPath: videoPath,
       userId: job.user_id,
-      jobType: job.job_type
+      jobType: job.job_type,
+      pathConsistencyFixed: true
     });
 
     // Extract title from job metadata or prompt
@@ -417,25 +403,26 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
     console.log('📹 Setting video thumbnail:', {
       videoId: job.video_id,
       placeholderThumbnailUrl,
-      hasVideoUrl: !!normalizedVideoPath
+      hasVideoUrl: !!videoPath
     });
 
-    // Store in both video_url and signed_url fields for consistency
+    // Store exact path from worker - this matches actual storage structure  
     const updateData = {
       status: 'completed',
       title: title,
-      video_url: normalizedVideoPath,
+      video_url: videoPath,
       thumbnail_url: placeholderThumbnailUrl,
-      signed_url: normalizedVideoPath,
+      signed_url: videoPath,
       signed_url_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
       completed_at: new Date().toISOString(),
       metadata: {
         ...jobMetadata,
         prompt: prompt,
         callback_processed_at: new Date().toISOString(),
-        normalized_path: normalizedVideoPath,
+        stored_path: videoPath,
         thumbnail_placeholder: true,
-        bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`
+        bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`,
+        path_consistency_fixed: true
       }
     };
 
@@ -448,10 +435,11 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
         updateData
       });
     } else {
-      console.log('✅ Video job updated successfully:', {
+      console.log('✅ Video job updated successfully with path consistency fix:', {
         videoId: job.video_id,
-        path: normalizedVideoPath,
-        bucket: updateData.metadata.bucket
+        storedPath: videoPath,
+        bucket: updateData.metadata.bucket,
+        pathConsistencyFixed: true
       });
     }
   }

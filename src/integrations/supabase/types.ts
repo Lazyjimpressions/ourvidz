@@ -516,6 +516,15 @@ export type Database = {
         Args: { _user_id: string }
         Returns: number
       }
+      get_video_path_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          total_videos: number
+          videos_with_user_prefix: number
+          videos_without_prefix: number
+          system_asset_thumbnails: number
+        }[]
+      }
       has_role: {
         Args: {
           _user_id: string
@@ -526,6 +535,16 @@ export type Database = {
       is_url_expired: {
         Args: { expires_at: string }
         Returns: boolean
+      }
+      validate_video_path_consistency: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          video_id: string
+          current_path: string
+          expected_path: string
+          path_matches: boolean
+          requires_fix: boolean
+        }[]
       }
     }
     Enums: {

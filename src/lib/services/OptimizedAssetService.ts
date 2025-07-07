@@ -159,7 +159,7 @@ export class OptimizedAssetService {
     const modelType = jobData?.model_type || '';
     const jobMetadata = jobData?.metadata as any;
     
-    // Enhanced 7B models detection (improved)
+    // Enhanced 7B models detection
     if (jobType.includes('enhanced') || 
         jobType.includes('7b') || 
         modelType.includes('7b') ||
@@ -168,7 +168,7 @@ export class OptimizedAssetService {
       return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
     }
     
-    // Default video buckets
+    // Default video buckets - always use video_fast/video_high for WAN
     return quality === 'high' ? 'video_high' : 'video_fast';
   }
 
@@ -486,13 +486,14 @@ export class OptimizedAssetService {
 
       // Generate new signed URL if needed
       if (!videoUrl && videoData.video_url) {
-        const bucket = this.determineVideoBucket(null); // We'll determine bucket from metadata if needed
+        // Determine bucket from metadata or default to video_fast
+        const bucket = (videoData.metadata as any)?.bucket || 'video_fast';
         
         try {
           const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
           if (!error && data?.signedUrl) {
             videoUrl = data.signedUrl;
-            console.log(`✅ Generated new video URL for:`, asset.id);
+            console.log(`✅ Generated new video URL for ${asset.id} using bucket: ${bucket}`);
             
             // Update database with new signed URL
             await supabase
@@ -502,6 +503,15 @@ export class OptimizedAssetService {
                 signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
               })
               .eq('id', asset.id);
+          } else {
+            console.warn(`⚠️ Failed to generate URL with bucket ${bucket}, trying fallback`);
+            // Try alternate bucket
+            const fallbackBucket = bucket === 'video_fast' ? 'video_high' : 'video_fast';
+            const { data: fallbackData, error: fallbackError } = await getSignedUrl(fallbackBucket as any, videoData.video_url, 7200);
+            if (!fallbackError && fallbackData?.signedUrl) {
+              videoUrl = fallbackData.signedUrl;
+              console.log(`✅ Generated video URL with fallback bucket: ${fallbackBucket}`);
+            }
           }
         } catch (error) {
           console.error(`❌ Failed to generate video URL for ${asset.id}:`, error);
@@ -1167,5 +1177,11 @@ export class OptimizedAssetService {
   static clearCache(): void {
     this.cache.clear();
     console.log('🧹 Asset cache cleared');
+  }
+
+  // Clear cache for path consistency fixes
+  static clearCacheAfterPathFix(): void {
+    this.cache.clear();
+    console.log('🔧 Asset cache cleared after path consistency fix');
   }
 }
