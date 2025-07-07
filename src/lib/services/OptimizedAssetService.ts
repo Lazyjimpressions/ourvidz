@@ -510,10 +510,16 @@ export class OptimizedAssetService {
       if (!thumbnailUrl || thumbnailUrl === 'null') {
         thumbnailUrl = '/video-placeholder.svg'; // Use a built-in placeholder
         console.log(`📹 Using placeholder thumbnail for video:`, asset.id);
-      } else if (thumbnailUrl.startsWith('system_assets/')) {
+      } else if (thumbnailUrl && thumbnailUrl.startsWith('system_assets/')) {
         // Convert system asset path to full URL
         try {
-          thumbnailUrl = await getSignedUrl('system_assets', thumbnailUrl.replace('system_assets/', ''));
+          const { data, error } = await getSignedUrl('system_assets' as any, thumbnailUrl.replace('system_assets/', ''), 7200);
+          if (!error && data?.signedUrl) {
+            thumbnailUrl = data.signedUrl;
+          } else {
+            console.warn(`⚠️ Failed to load system thumbnail, using placeholder:`, error);
+            thumbnailUrl = '/video-placeholder.svg';
+          }
         } catch (error) {
           console.warn(`⚠️ Failed to load system thumbnail, using placeholder:`, error);
           thumbnailUrl = '/video-placeholder.svg';
@@ -630,91 +636,85 @@ export class OptimizedAssetService {
     }
   }
 
-  private static async generateVideoUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
-    const cacheKey = `${asset.id}-urls`;
-    const cachedAsset = this.cache.getViewportAsset(cacheKey);
-    
-    if (cachedAsset && cachedAsset.urlsGenerated) {
-      return cachedAsset.asset;
-    }
+  private static async processVideoAssets(videos: any[]): Promise<UnifiedAsset[]> {
+    return Promise.all(videos.map(async (video) => {
+      const jobData = Array.isArray(video.job) ? video.job[0] : video.job;
+      
+      let thumbnailUrl: string | undefined;
+      let url: string | undefined;
+      let error: string | undefined;
 
-    try {
-      // Check if we have valid cached URLs in database first
-      const { data: videoData } = await supabase
-        .from('videos')
-        .select('video_url, thumbnail_url, signed_url, signed_url_expires_at, job:jobs(job_type, quality)')
-        .eq('id', asset.id)
-        .single();
-
-      if (!videoData) return asset;
-
-      // Return cached URL if valid
-      if (videoData.signed_url && videoData.signed_url_expires_at) {
-        const expiresAt = new Date(videoData.signed_url_expires_at);
-        if (expiresAt > new Date()) {
-          console.log(`✅ Using cached database URL for video:`, asset.id);
-          const updatedAsset = {
-            ...asset,
-            url: videoData.signed_url
-          };
+      if (video.status === 'completed' && video.video_url) {
+        try {
+          const bucket = this.determineVideoBucket(jobData);
+          const cacheKey = `${bucket}-${video.video_url}`;
+          const cachedUrl = this.cache.getCachedUrl(cacheKey);
           
-          // Cache the result in memory too
-          this.cache.setViewportAsset(cacheKey, {
-            asset: updatedAsset,
-            urlsGenerated: true,
-            timestamp: Date.now()
-          });
-          
-          return updatedAsset;
+          if (cachedUrl) {
+            url = cachedUrl;
+          } else {
+            const { data, error: urlError } = await getSignedUrl(bucket as any, video.video_url, 7200);
+            if (!urlError && data?.signedUrl) {
+              this.cache.setCachedUrl(cacheKey, data.signedUrl);
+              url = data.signedUrl;
+            } else {
+              error = urlError?.message;
+            }
+          }
+
+          // Thumbnail - use placeholder if none exists
+          if (video.thumbnail_url && video.thumbnail_url !== 'null') {
+            if (video.thumbnail_url.startsWith('system_assets/')) {
+              // Handle system asset thumbnails
+              try {
+                const { data: thumbData } = await getSignedUrl('system_assets' as any, video.thumbnail_url.replace('system_assets/', ''), 7200);
+                if (thumbData?.signedUrl) {
+                  thumbnailUrl = thumbData.signedUrl;
+                }
+              } catch {
+                thumbnailUrl = '/video-placeholder.svg';
+              }
+            } else {
+              const thumbCacheKey = `image_fast-${video.thumbnail_url}`;
+              const cachedThumb = this.cache.getCachedUrl(thumbCacheKey);
+              
+              if (cachedThumb) {
+                thumbnailUrl = cachedThumb;
+              } else {
+                const { data: thumbData } = await getSignedUrl('image_fast' as any, video.thumbnail_url, 3600);
+                if (thumbData?.signedUrl) {
+                  this.cache.setCachedUrl(thumbCacheKey, thumbData.signedUrl);
+                  thumbnailUrl = thumbData.signedUrl;
+                }
+              }
+            }
+          } else {
+            // Use fallback placeholder
+            thumbnailUrl = '/video-placeholder.svg';
+          }
+        } catch (err) {
+          error = 'URL generation failed';
+          console.error('Video URL generation error:', err);
         }
       }
 
-      const jobData = Array.isArray(videoData.job) ? videoData.job[0] : videoData.job;
-      const bucket = this.determineVideoBucket(jobData as any);
-      
-      let videoUrl: string | undefined;
-      let thumbnailUrl: string | undefined;
-
-      if (videoData.video_url) {
-        videoUrl = await this.generateSingleUrl(bucket, videoData.video_url);
-      }
-      
-      if (videoData.thumbnail_url) {
-        thumbnailUrl = await this.generateSingleUrl('image_fast', videoData.thumbnail_url);
-      }
-
-      const updatedAsset = {
-        ...asset,
-        url: videoUrl,
-        thumbnailUrl
+      return {
+        id: video.id,
+        type: 'video' as const,
+        prompt: video.project?.title || 'Untitled Video',
+        status: video.status || 'draft',
+        format: video.format,
+        createdAt: new Date(video.created_at),
+        projectId: video.project_id,
+        projectTitle: video.project?.title,
+        duration: video.duration,
+        resolution: video.resolution,
+        thumbnailUrl,
+        url,
+        error,
+        jobId: jobData?.id
       };
-
-      // Store URLs in database with 24-hour expiry
-      if (videoUrl) {
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 24);
-        
-        await supabase
-          .from('videos')
-          .update({
-            signed_url: videoUrl,
-            signed_url_expires_at: expiresAt.toISOString()
-          })
-          .eq('id', asset.id);
-      }
-
-      // Cache the result
-      this.cache.setViewportAsset(cacheKey, {
-        asset: updatedAsset,
-        urlsGenerated: true,
-        timestamp: Date.now()
-      });
-
-      return updatedAsset;
-    } catch (error) {
-      console.error('Failed to generate video URLs:', error);
-      return { ...asset, error: 'Failed to load video' };
-    }
+    }));
   }
 
   private static async batchGenerateUrls(bucket: string, paths: string[]): Promise<string[]> {
@@ -849,72 +849,6 @@ export class OptimizedAssetService {
       error,
       jobId: jobData?.id
     };
-  }
-
-  private static async processVideoAssets(videos: any[]): Promise<UnifiedAsset[]> {
-    return Promise.all(videos.map(async (video) => {
-      const jobData = Array.isArray(video.job) ? video.job[0] : video.job;
-      
-      let thumbnailUrl: string | undefined;
-      let url: string | undefined;
-      let error: string | undefined;
-
-      if (video.status === 'completed' && video.video_url) {
-        try {
-          const bucket = this.determineVideoBucket(jobData);
-          const cacheKey = `${bucket}-${video.video_url}`;
-          const cachedUrl = this.cache.getCachedUrl(cacheKey);
-          
-          if (cachedUrl) {
-            url = cachedUrl;
-          } else {
-            const { data, error: urlError } = await getSignedUrl(bucket as any, video.video_url, 7200);
-            if (!urlError && data?.signedUrl) {
-              this.cache.setCachedUrl(cacheKey, data.signedUrl);
-              url = data.signedUrl;
-            } else {
-              error = urlError?.message;
-            }
-          }
-
-          // Thumbnail
-          if (video.thumbnail_url) {
-            const thumbCacheKey = `image_fast-${video.thumbnail_url}`;
-            const cachedThumb = this.cache.getCachedUrl(thumbCacheKey);
-            
-            if (cachedThumb) {
-              thumbnailUrl = cachedThumb;
-            } else {
-              const { data: thumbData } = await getSignedUrl('image_fast' as any, video.thumbnail_url, 3600);
-              if (thumbData?.signedUrl) {
-                this.cache.setCachedUrl(thumbCacheKey, thumbData.signedUrl);
-                thumbnailUrl = thumbData.signedUrl;
-              }
-            }
-          }
-        } catch (err) {
-          error = 'URL generation failed';
-          console.error('Video URL generation error:', err);
-        }
-      }
-
-      return {
-        id: video.id,
-        type: 'video' as const,
-        prompt: video.project?.title || 'Untitled Video',
-        status: video.status || 'draft',
-        format: video.format,
-        createdAt: new Date(video.created_at),
-        projectId: video.project_id,
-        projectTitle: video.project?.title,
-        duration: video.duration,
-        resolution: video.resolution,
-        thumbnailUrl,
-        url,
-        error,
-        jobId: jobData?.id
-      };
-    }));
   }
 
   private static applyFilters(assets: UnifiedAsset[], filters: AssetFilters): UnifiedAsset[] {

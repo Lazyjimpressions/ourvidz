@@ -282,3 +282,6 @@ export const AssetCard = ({
     </div>
   );
 };
+
+// Enhanced video card display with proper thumbnails
+export default AssetCard;
