@@ -432,6 +432,7 @@ export type Database = {
           expires_at: string | null
           format: string | null
           id: string
+          metadata: Json | null
           preview_url: string | null
           project_id: string | null
           reference_image_url: string | null
@@ -452,6 +453,7 @@ export type Database = {
           expires_at?: string | null
           format?: string | null
           id?: string
+          metadata?: Json | null
           preview_url?: string | null
           project_id?: string | null
           reference_image_url?: string | null
@@ -472,6 +474,7 @@ export type Database = {
           expires_at?: string | null
           format?: string | null
           id?: string
+          metadata?: Json | null
           preview_url?: string | null
           project_id?: string | null
           reference_image_url?: string | null
