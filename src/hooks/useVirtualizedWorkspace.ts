@@ -26,6 +26,8 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
   const processedUpdatesRef = useRef<Set<string>>(new Set());
   const intersectionObserverRef = useRef<IntersectionObserver | null>(null);
   const tileElementsRef = useRef<Map<string, HTMLElement>>(new Map());
+  const loadingUrlsRef = useRef<Set<string>>(new Set());
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fast metadata-only query for workspace items
   const { data: metadataAssets = [], isLoading: isLoadingMetadata } = useQuery({
@@ -162,7 +164,7 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
   const loadUrlsForTiles = useCallback(async (tiles: MediaTile[]) => {
     const tilesToLoad = tiles.filter(tile => 
       !tile.isUrlLoaded && 
-      !loadingUrls.has(tile.originalAssetId) &&
+      !loadingUrlsRef.current.has(tile.originalAssetId) &&
       tile.isVisible
     );
 
@@ -172,12 +174,9 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     
     console.log('🔄 Lazy loading URLs for', assetIds.length, 'assets');
     
-    // Mark as loading
-    setLoadingUrls(prev => {
-      const next = new Set(prev);
-      assetIds.forEach(id => next.add(id));
-      return next;
-    });
+    // Mark as loading using ref to avoid circular dependency
+    assetIds.forEach(id => loadingUrlsRef.current.add(id));
+    setLoadingUrls(new Set(loadingUrlsRef.current));
 
     try {
       // Load URLs for these specific assets
@@ -210,21 +209,30 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     } catch (error) {
       console.error('❌ Failed to load URLs:', error);
     } finally {
-      // Clear loading state
-      setLoadingUrls(prev => {
-        const next = new Set(prev);
-        assetIds.forEach(id => next.delete(id));
-        return next;
-      });
+      // Clear loading state using ref
+      assetIds.forEach(id => loadingUrlsRef.current.delete(id));
+      setLoadingUrls(new Set(loadingUrlsRef.current));
     }
-  }, [metadataAssets, workspaceFilter, queryClient, loadingUrls]);
+  }, [metadataAssets, workspaceFilter, queryClient]);
 
-  // Load URLs when visible tiles change
+  // Load URLs when visible tiles change with debouncing
   useEffect(() => {
-    const tiles = visibleTiles();
-    if (tiles.length > 0) {
-      loadUrlsForTiles(tiles);
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
     }
+    
+    debounceTimeoutRef.current = setTimeout(() => {
+      const tiles = visibleTiles();
+      if (tiles.length > 0) {
+        loadUrlsForTiles(tiles);
+      }
+    }, 300);
+    
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
   }, [visibleTiles, loadUrlsForTiles]);
 
   // Intersection Observer for virtualization
