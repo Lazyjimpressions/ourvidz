@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { X, Calendar, Image, Video, Check } from 'lucide-react';
-import { useAssets } from '@/hooks/useAssets';
-import { UnifiedAsset } from '@/lib/services/AssetService';
+import { OptimizedAssetService, UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -17,9 +16,45 @@ interface LibraryImportModalProps {
 
 export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportModalProps) => {
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
-  
-  // Fetch all assets (not session-only)
-  const { data: libraryAssets = [], isLoading } = useAssets(false);
+  const [libraryAssets, setLibraryAssets] = useState<UnifiedAsset[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
+
+  // Fetch all library assets using OptimizedAssetService
+  useEffect(() => {
+    if (!open) return;
+
+    const fetchLibraryAssets = async () => {
+      setIsLoading(true);
+      try {
+        console.log('🔍 LibraryImportModal: Fetching library assets');
+        
+        // Get all user assets (no session filtering for library)
+        const result = await OptimizedAssetService.getUserAssets(
+          { status: 'completed' }, // Only show completed assets
+          { limit: 200, offset: 0 } // Get more assets for library view
+        );
+        
+        console.log('📚 Library assets fetched:', {
+          count: result.assets.length,
+          hasUrls: result.assets.filter(a => a.url).length,
+          types: result.assets.reduce((acc, a) => { 
+            acc[a.type] = (acc[a.type] || 0) + 1; 
+            return acc; 
+          }, {} as Record<string, number>)
+        });
+        
+        setLibraryAssets(result.assets);
+      } catch (error) {
+        console.error('❌ Failed to fetch library assets:', error);
+        toast.error('Failed to load library assets');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLibraryAssets();
+  }, [open]);
 
   const handleAssetToggle = (assetId: string, event?: React.MouseEvent) => {
     console.log('🎯 Asset toggle clicked:', assetId, 'Event:', event?.type);
@@ -48,10 +83,35 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     });
   };
 
-  const handleImport = () => {
+  // Generate URLs for visible assets on demand
+  const generateAssetUrls = async (asset: UnifiedAsset) => {
+    if (asset.url || loadingUrls.has(asset.id)) return;
+    
+    setLoadingUrls(prev => new Set([...prev, asset.id]));
+    
+    try {
+      const assetWithUrls = await OptimizedAssetService.generateAssetUrls(asset);
+      
+      // Update the asset in the library list
+      setLibraryAssets(prev => prev.map(a => 
+        a.id === asset.id ? assetWithUrls : a
+      ));
+      
+      console.log('✅ Generated URLs for library asset:', asset.id);
+    } catch (error) {
+      console.error('❌ Failed to generate URLs for asset:', asset.id, error);
+    } finally {
+      setLoadingUrls(prev => {
+        const next = new Set(prev);
+        next.delete(asset.id);
+        return next;
+      });
+    }
+  };
+
+  const handleImport = async () => {
     console.log('🚀 LibraryImportModal - Import triggered with selection:', Array.from(selectedAssets));
     console.log('📋 Available library assets:', libraryAssets.length);
-    console.log('🔍 Library assets details:', libraryAssets.map(a => ({ id: a.id, status: a.status, hasUrl: !!a.url, type: a.type })));
     
     // Validate selection before proceeding
     if (selectedAssets.size === 0) {
@@ -61,32 +121,53 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     }
     
     const assetsToImport = libraryAssets.filter(asset => selectedAssets.has(asset.id));
-    console.log('📦 Assets to import:', assetsToImport.map(a => ({ id: a.id, type: a.type, status: a.status, hasUrl: !!a.url, prompt: a.prompt.slice(0, 50) })));
-    console.log('🎯 Import count - Expected:', selectedAssets.size, 'Actual:', assetsToImport.length);
+    console.log('📦 Assets to import:', assetsToImport.map(a => ({ 
+      id: a.id, 
+      type: a.type, 
+      status: a.status, 
+      hasUrl: !!a.url, 
+      hasSignedUrls: !!(a.signedUrls && a.signedUrls.length > 0),
+      prompt: a.prompt.slice(0, 50),
+      modelType: a.modelType
+    })));
     
     // Double-check that we have assets to import
     if (assetsToImport.length === 0) {
       console.error('⚠️ No assets to import despite selection!');
-      console.error('❌ Selection/filter mismatch:', {
-        selectedIds: Array.from(selectedAssets),
-        availableIds: libraryAssets.map(a => a.id)
-      });
       toast.error('Selected assets not found. Please refresh and try again.');
       return;
     }
     
-    // Verify the count matches
-    if (assetsToImport.length !== selectedAssets.size) {
-      console.warn('⚠️ Import count mismatch:', {
-        expected: selectedAssets.size,
-        actual: assetsToImport.length,
-        selectedIds: Array.from(selectedAssets),
-        foundIds: assetsToImport.map(a => a.id)
-      });
-    }
+    // Generate URLs for assets that don't have them yet
+    const assetsWithUrls = await Promise.all(
+      assetsToImport.map(async (asset) => {
+        if (!asset.url && !asset.signedUrls) {
+          try {
+            const assetWithUrls = await OptimizedAssetService.generateAssetUrls(asset);
+            console.log('🔗 Generated URLs for import:', asset.id, { 
+              hasUrl: !!assetWithUrls.url, 
+              hasSignedUrls: !!(assetWithUrls.signedUrls && assetWithUrls.signedUrls.length > 0)
+            });
+            return assetWithUrls;
+          } catch (error) {
+            console.error('❌ Failed to generate URLs for import asset:', asset.id, error);
+            return asset; // Return original asset even if URL generation fails
+          }
+        }
+        return asset;
+      })
+    );
     
-    console.log('🔄 Calling onImport with assets:', assetsToImport.length);
-    onImport(assetsToImport);
+    console.log('🔄 Calling onImport with', assetsWithUrls.length, 'assets');
+    console.log('📊 Import summary:', {
+      totalAssets: assetsWithUrls.length,
+      withUrls: assetsWithUrls.filter(a => a.url || (a.signedUrls && a.signedUrls.length > 0)).length,
+      images: assetsWithUrls.filter(a => a.type === 'image').length,
+      videos: assetsWithUrls.filter(a => a.type === 'video').length,
+      sdxlAssets: assetsWithUrls.filter(a => a.isSDXL || (a.signedUrls && a.signedUrls.length > 0)).length
+    });
+    
+    onImport(assetsWithUrls);
     setSelectedAssets(new Set());
     onClose();
   };
@@ -132,43 +213,80 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                         : "hover:scale-105 hover:shadow-md"
                     )}
                     onClick={(e) => handleAssetToggle(asset.id, e)}
+                    onMouseEnter={() => {
+                      // Generate URLs on hover for better UX
+                      if (!asset.url && !asset.signedUrls) {
+                        generateAssetUrls(asset);
+                      }
+                    }}
                     style={{ pointerEvents: 'auto' }} // Ensure clickable
                   >
                     {/* Asset Content */}
                     {asset.type === 'image' ? (
-                      asset.url || asset.thumbnailUrl ? (
+                      // Handle both single images and SDXL arrays
+                      asset.signedUrls && asset.signedUrls.length > 0 ? (
+                        // SDXL image set - show first image with count indicator
+                        <div className="relative w-full h-full">
+                          <img
+                            src={asset.signedUrls[0]}
+                            alt="SDXL image set"
+                            className="w-full h-full object-cover"
+                            style={{ pointerEvents: 'none' }}
+                            onError={(e) => {
+                              console.log('❌ SDXL image failed to load:', asset.signedUrls?.[0], 'Asset ID:', asset.id);
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                          {/* SDXL set indicator */}
+                          <div className="absolute top-2 left-2">
+                            <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/40 text-xs">
+                              {asset.signedUrls.length} images
+                            </Badge>
+                          </div>
+                        </div>
+                      ) : asset.url || asset.thumbnailUrl ? (
+                        // Single image
                         <img
                           src={asset.url || asset.thumbnailUrl}
                           alt="Library asset"
                           className="w-full h-full object-cover"
-                          style={{ pointerEvents: 'none' }} // Prevent image from blocking clicks
+                          style={{ pointerEvents: 'none' }}
                           onError={(e) => {
                             console.log('❌ Image failed to load:', asset.url || asset.thumbnailUrl, 'Asset ID:', asset.id);
                             e.currentTarget.style.display = 'none';
                           }}
-                          onLoad={() => {
-                            console.log('✅ Image loaded successfully:', asset.url || asset.thumbnailUrl, 'Asset ID:', asset.id);
-                          }}
                         />
                       ) : (
+                        // Loading state for images without URLs
                         <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                           <div className="text-center text-gray-400">
-                            <Image className="w-8 h-8 mx-auto mb-2" />
-                            <p className="text-xs">Loading...</p>
+                            {loadingUrls.has(asset.id) ? (
+                              <div className="animate-spin text-lg mb-2">⏳</div>
+                            ) : (
+                              <Image className="w-8 h-8 mx-auto mb-2" />
+                            )}
+                            <p className="text-xs">
+                              {loadingUrls.has(asset.id) ? 'Loading...' : 'Click to load'}
+                            </p>
                           </div>
                         </div>
                       )
                     ) : (
+                      // Video content
                       <div className="relative w-full h-full bg-gray-800">
-                        {asset.thumbnailUrl ? (
+                        {asset.thumbnailUrl || asset.url ? (
                           <img
-                            src={asset.thumbnailUrl}
+                            src={asset.thumbnailUrl || asset.url}
                             alt="Video thumbnail"
                             className="w-full h-full object-cover"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <Video className="w-8 h-8 text-gray-600" />
+                            {loadingUrls.has(asset.id) ? (
+                              <div className="animate-spin text-lg">⏳</div>
+                            ) : (
+                              <Video className="w-8 h-8 text-gray-600" />
+                            )}
                           </div>
                         )}
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -183,6 +301,25 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                     {selectedAssets.has(asset.id) && (
                       <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
                         <Check className="w-3 h-3 text-primary-foreground" />
+                      </div>
+                    )}
+
+                    {/* Model Type Badge for Images */}
+                    {asset.type === 'image' && asset.modelType && (
+                      <div className="absolute top-2 right-2 mr-8">
+                        <Badge 
+                          variant="secondary" 
+                          className={cn(
+                            "text-xs border",
+                            asset.modelType === 'SDXL' 
+                              ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
+                              : asset.modelType === 'Enhanced-7B'
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                          )}
+                        >
+                          {asset.modelType}
+                        </Badge>
                       </div>
                     )}
 
