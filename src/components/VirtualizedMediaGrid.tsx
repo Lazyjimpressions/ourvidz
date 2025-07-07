@@ -272,7 +272,8 @@ export const VirtualizedMediaGrid = ({
     deleteTile,
     deleteIndividualImages,
     updateImageSelection,
-    registerTileElement
+    registerTileElement,
+    getSessionInfo
   } = useVirtualizedWorkspace({
     itemHeight: 300,
     overscan: 3,
@@ -377,10 +378,21 @@ export const VirtualizedMediaGrid = ({
 
   return (
     <>
-      {/* Performance Stats */}
+      {/* Performance Stats and Session Info */}
       <div className="px-6 py-2 text-xs text-gray-500 border-b border-gray-800">
         <div className="flex items-center justify-between">
-          <span>⚡ Optimized: {totalCount} total, {visibleTiles.length} visible</span>
+          <div className="flex items-center gap-4">
+            <span>⚡ Optimized: {totalCount} total, {visibleTiles.length} visible</span>
+            {(() => {
+              const sessionInfo = getSessionInfo();
+              return sessionInfo && (
+                <span className="text-blue-400">
+                  Session: {sessionInfo.duration}
+                  {sessionInfo.isNewSession && " (new)"}
+                </span>
+              );
+            })()}
+          </div>
           {loadingUrls.size > 0 && (
             <span className="animate-pulse">Loading {loadingUrls.size} images...</span>
           )}

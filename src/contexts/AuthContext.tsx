@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
 
-  // Cleanup function to prevent auth limbo states
+  // Cleanup function to prevent auth limbo states and clear workspace
   const cleanupAuthState = useCallback(() => {
     console.log('Cleaning up auth state...');
     
@@ -64,6 +64,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           sessionStorage.removeItem(key);
         }
       });
+      
+      // Clear workspace for new session
+      sessionStorage.removeItem('workspaceFilter');
+      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+      console.log('🔄 Cleared workspace for new authentication session');
     }
     
     // Reset local state

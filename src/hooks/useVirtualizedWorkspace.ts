@@ -63,28 +63,48 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     refetchOnWindowFocus: false,
   });
 
-  // Load workspace filter from localStorage
+  // Load workspace filter from sessionStorage (session-based workspace)
   useEffect(() => {
-    const savedFilter = localStorage.getItem('workspaceFilter');
-    if (savedFilter) {
+    const savedFilter = sessionStorage.getItem('workspaceFilter');
+    const sessionStart = sessionStorage.getItem('workspaceSessionStart');
+    
+    if (savedFilter && sessionStart) {
       try {
         const filterIds = JSON.parse(savedFilter);
-        setWorkspaceFilter(new Set(filterIds));
-        console.log('🔄 Loaded workspace filter:', filterIds.length, 'items');
+        const sessionStartTime = parseInt(sessionStart);
+        
+        // Only restore workspace if it's from the current session
+        const sessionAge = Date.now() - sessionStartTime;
+        if (sessionAge < 24 * 60 * 60 * 1000) { // 24 hours max
+          setWorkspaceFilter(new Set(filterIds));
+          console.log('🔄 Loaded workspace filter from session:', filterIds.length, 'items');
+        } else {
+          // Clear old session data
+          sessionStorage.removeItem('workspaceFilter');
+          sessionStorage.removeItem('workspaceSessionStart');
+          console.log('🗑️ Cleared old session workspace data');
+        }
       } catch (error) {
         console.error('Failed to parse workspace filter:', error);
-        localStorage.removeItem('workspaceFilter');
+        sessionStorage.removeItem('workspaceFilter');
+        sessionStorage.removeItem('workspaceSessionStart');
       }
+    }
+    
+    // Initialize session start time if not present
+    if (!sessionStart) {
+      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+      console.log('🆕 Started new workspace session');
     }
   }, []);
 
-  // Save workspace filter to localStorage
+  // Save workspace filter to sessionStorage (session-based workspace)
   useEffect(() => {
     const filterArray = Array.from(workspaceFilter);
     if (filterArray.length > 0) {
-      localStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
+      sessionStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
     } else {
-      localStorage.removeItem('workspaceFilter');
+      sessionStorage.removeItem('workspaceFilter');
     }
   }, [workspaceFilter]);
 
@@ -367,9 +387,19 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
 
   const clearWorkspace = useCallback(() => {
     setWorkspaceFilter(new Set());
-    localStorage.removeItem('workspaceFilter');
+    sessionStorage.removeItem('workspaceFilter');
+    sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
     setVisibleRange({ start: 0, end: visibleCount });
-    toast.success('Workspace cleared');
+    toast.success('Workspace cleared - fresh session started');
+  }, [visibleCount]);
+
+  // Clear workspace on authentication changes (new session)
+  const clearWorkspaceOnAuthChange = useCallback(() => {
+    console.log('🔄 Clearing workspace for new authentication session');
+    setWorkspaceFilter(new Set());
+    sessionStorage.removeItem('workspaceFilter');
+    sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+    setVisibleRange({ start: 0, end: visibleCount });
   }, [visibleCount]);
 
   const deleteTile = useCallback(async (tile: MediaTile) => {
@@ -487,6 +517,23 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     }
   }, [queryClient, workspaceFilter]);
 
+  // Get session info for display
+  const getSessionInfo = useCallback(() => {
+    const sessionStart = sessionStorage.getItem('workspaceSessionStart');
+    if (!sessionStart) return null;
+    
+    const startTime = parseInt(sessionStart);
+    const duration = Date.now() - startTime;
+    const hours = Math.floor(duration / (1000 * 60 * 60));
+    const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60));
+    
+    return {
+      startTime: new Date(startTime),
+      duration: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+      isNewSession: duration < 5 * 60 * 1000 // Less than 5 minutes
+    };
+  }, []);
+
   return {
     // Core data
     tiles: allTiles(),
@@ -507,6 +554,10 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     // Enhanced SDXL management
     deleteIndividualImages,
     updateImageSelection,
+    
+    // Session management
+    clearWorkspaceOnAuthChange,
+    getSessionInfo,
     
     // Virtualization
     registerTileElement,
