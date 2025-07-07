@@ -489,7 +489,9 @@ export class OptimizedAssetService {
         const bucket = this.determineVideoBucket(null); // We'll determine bucket from metadata if needed
         
         try {
-          videoUrl = await getSignedUrl(bucket, videoData.video_url);
+          const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
+          if (!error && data?.signedUrl) {
+            videoUrl = data.signedUrl;
           console.log(`✅ Generated new video URL for:`, asset.id);
           
           // Update database with new signed URL
