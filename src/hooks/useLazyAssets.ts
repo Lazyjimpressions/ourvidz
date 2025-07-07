@@ -72,8 +72,8 @@ export const useLazyAssets = ({ assets, enabled = true }: UseLazyAssetsProps) =>
               )
             );
             
-            // Load URLs with a small delay to avoid overwhelming the system
-            setTimeout(() => loadAssetUrls(assetId), 100);
+            // Load URLs with debouncing to reduce API calls
+            setTimeout(() => loadAssetUrls(assetId), 300);
           } else {
             // Mark as not visible
             setLazyAssets(prev => 
@@ -87,7 +87,7 @@ export const useLazyAssets = ({ assets, enabled = true }: UseLazyAssetsProps) =>
         });
       },
       {
-        rootMargin: '200px', // Start loading 200px before entering viewport
+        rootMargin: '50px', // Reduced from 200px to minimize over-fetching
         threshold: 0.1
       }
     );

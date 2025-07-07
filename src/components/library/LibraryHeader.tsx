@@ -1,7 +1,7 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Grid2X2, List, RotateCcw } from "lucide-react";
+import { Search, Grid2X2, List, RotateCcw, RefreshCw } from "lucide-react";
 
 interface LibraryHeaderProps {
   searchTerm: string;
@@ -12,6 +12,8 @@ interface LibraryHeaderProps {
   filteredCount: number;
   isLoading?: boolean;
   onCleanup: () => void;
+  onRefreshUrls: () => void;
+  isRefreshingUrls?: boolean;
 }
 
 export const LibraryHeader = ({
@@ -22,7 +24,9 @@ export const LibraryHeader = ({
   totalAssets,
   filteredCount,
   isLoading,
-  onCleanup
+  onCleanup,
+  onRefreshUrls,
+  isRefreshingUrls
 }: LibraryHeaderProps) => {
   return (
     <div className="space-y-4">
@@ -43,6 +47,18 @@ export const LibraryHeader = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Manual URL Refresh Button */}
+          <Button
+            onClick={onRefreshUrls}
+            variant="outline"
+            size="sm"
+            disabled={isRefreshingUrls}
+            className="border-gray-600 text-gray-300 hover:bg-gray-700"
+          >
+            <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshingUrls ? 'animate-spin' : ''}`} />
+            Refresh URLs
+          </Button>
+
           {/* Cleanup Button */}
           <Button
             onClick={onCleanup}

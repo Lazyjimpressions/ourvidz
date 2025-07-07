@@ -38,6 +38,7 @@ const OptimizedLibrary = () => {
   // Deletion states
   const [deletingAssets, setDeletingAssets] = useState<Set<string>>(new Set());
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [isRefreshingUrls, setIsRefreshingUrls] = useState(false);
 
   // OPTIMIZATION: Debounced search
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -334,6 +335,30 @@ const OptimizedLibrary = () => {
     }
   };
 
+  const handleRefreshUrls = async () => {
+    setIsRefreshingUrls(true);
+    toast.loading("Refreshing asset URLs...", { id: 'refresh-urls' });
+    try {
+      const result = await OptimizedAssetService.refreshAllAssetUrls();
+      if (result.success > 0) {
+        toast.success(`Refreshed ${result.success} asset URLs`, { id: 'refresh-urls' });
+        loadAssets(true); // Refresh the list to show updated URLs
+      } else {
+        toast.info("All URLs are up to date", { id: 'refresh-urls' });
+      }
+      
+      if (result.failed > 0) {
+        console.warn('URL refresh errors:', result.errors);
+        toast.warning(`${result.success} refreshed, ${result.failed} failed`, { id: 'refresh-urls' });
+      }
+    } catch (error) {
+      console.error('URL refresh error:', error);
+      toast.error("Failed to refresh URLs", { id: 'refresh-urls' });
+    } finally {
+      setIsRefreshingUrls(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
@@ -381,6 +406,8 @@ const OptimizedLibrary = () => {
             filteredCount={filteredAssets.length}
             isLoading={isLoadingMore}
             onCleanup={handleCleanup}
+            onRefreshUrls={handleRefreshUrls}
+            isRefreshingUrls={isRefreshingUrls}
           />
 
           {/* Filters */}

@@ -9,8 +9,8 @@ interface CachedUrl {
 
 class UrlCache {
   private cache = new Map<string, CachedUrl>();
-  private readonly DEFAULT_TTL = 3600 * 1000; // 1 hour
-  private readonly VIDEO_TTL = 7200 * 1000; // 2 hours
+  private readonly DEFAULT_TTL = 24 * 3600 * 1000; // 24 hours (optimized)
+  private readonly VIDEO_TTL = 24 * 3600 * 1000; // 24 hours (optimized)
 
   private getCacheKey(bucket: string, path: string): string {
     return `${bucket}:${path}`;
@@ -31,7 +31,7 @@ class UrlCache {
     return cached.url;
   }
 
-  set(bucket: string, path: string, url: string, ttlSeconds: number = 3600): void {
+  set(bucket: string, path: string, url: string, ttlSeconds: number = 86400): void { // 24 hours default
     const key = this.getCacheKey(bucket, path);
     const now = Date.now();
     
@@ -151,11 +151,11 @@ export const uploadFile = async (
   }
 };
 
-// ENHANCED signed URL generation with intelligent path resolution
+// ENHANCED signed URL generation with intelligent path resolution and validation
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
-  expiresIn: number = 3600
+  expiresIn: number = 86400 // 24 hours default
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
     // Check cache first
@@ -414,7 +414,7 @@ export const uploadFastVideo = async (
 };
 
 export const getFastVideoUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('video_fast', filePath, 7200); // 2 hours for videos
+  const { data, error } = await getSignedUrl('video_fast', filePath, 86400); // 24 hours for videos
   return error ? null : data?.signedUrl || null;
 };
 
@@ -436,7 +436,7 @@ export const uploadHighQualityVideo = async (
 };
 
 export const getHighQualityVideoUrl = async (filePath: string): Promise<string | null> => {
-  const { data, error } = await getSignedUrl('video_high', filePath, 7200); // 2 hours for videos
+  const { data, error } = await getSignedUrl('video_high', filePath, 86400); // 24 hours for videos
   return error ? null : data?.signedUrl || null;
 };
 

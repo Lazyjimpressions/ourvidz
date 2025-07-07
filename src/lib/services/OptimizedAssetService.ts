@@ -340,14 +340,36 @@ export class OptimizedAssetService {
     }
 
     try {
-      // Get image metadata from database
+      // Check if we have valid cached URLs in database first
       const { data: imageData } = await supabase
         .from('images')
-        .select('image_url, image_urls, thumbnail_url, metadata, job:jobs(job_type, model_type)')
+        .select('image_url, image_urls, thumbnail_url, metadata, signed_url, signed_url_expires_at, job:jobs(job_type, model_type)')
         .eq('id', asset.id)
         .single();
 
       if (!imageData) return asset;
+
+      // Return cached URL if valid
+      if (imageData.signed_url && imageData.signed_url_expires_at) {
+        const expiresAt = new Date(imageData.signed_url_expires_at);
+        if (expiresAt > new Date()) {
+          console.log(`✅ Using cached database URL for image:`, asset.id);
+          const updatedAsset = {
+            ...asset,
+            url: imageData.signed_url,
+            thumbnailUrl: imageData.signed_url
+          };
+          
+          // Cache the result in memory too
+          this.cache.setViewportAsset(cacheKey, {
+            asset: updatedAsset,
+            urlsGenerated: true,
+            timestamp: Date.now()
+          });
+          
+          return updatedAsset;
+        }
+      }
 
       const jobData = Array.isArray(imageData.job) ? imageData.job[0] : imageData.job;
       const bucket = this.determineImageBucket(imageData, jobData as any);
@@ -366,6 +388,20 @@ export class OptimizedAssetService {
         signedUrls: urls.length > 1 ? urls : undefined,
         thumbnailUrl: urls[0]
       };
+
+      // Store URLs in database with 24-hour expiry
+      if (urls[0]) {
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+        
+        await supabase
+          .from('images')
+          .update({
+            signed_url: urls[0],
+            signed_url_expires_at: expiresAt.toISOString()
+          })
+          .eq('id', asset.id);
+      }
 
       // Cache the result
       this.cache.setViewportAsset(cacheKey, {
@@ -390,14 +426,35 @@ export class OptimizedAssetService {
     }
 
     try {
-      // Get video metadata from database
+      // Check if we have valid cached URLs in database first
       const { data: videoData } = await supabase
         .from('videos')
-        .select('video_url, thumbnail_url, job:jobs(job_type, quality)')
+        .select('video_url, thumbnail_url, signed_url, signed_url_expires_at, job:jobs(job_type, quality)')
         .eq('id', asset.id)
         .single();
 
       if (!videoData) return asset;
+
+      // Return cached URL if valid
+      if (videoData.signed_url && videoData.signed_url_expires_at) {
+        const expiresAt = new Date(videoData.signed_url_expires_at);
+        if (expiresAt > new Date()) {
+          console.log(`✅ Using cached database URL for video:`, asset.id);
+          const updatedAsset = {
+            ...asset,
+            url: videoData.signed_url
+          };
+          
+          // Cache the result in memory too
+          this.cache.setViewportAsset(cacheKey, {
+            asset: updatedAsset,
+            urlsGenerated: true,
+            timestamp: Date.now()
+          });
+          
+          return updatedAsset;
+        }
+      }
 
       const jobData = Array.isArray(videoData.job) ? videoData.job[0] : videoData.job;
       const bucket = this.determineVideoBucket(jobData as any);
@@ -418,6 +475,20 @@ export class OptimizedAssetService {
         url: videoUrl,
         thumbnailUrl
       };
+
+      // Store URLs in database with 24-hour expiry
+      if (videoUrl) {
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+        
+        await supabase
+          .from('videos')
+          .update({
+            signed_url: videoUrl,
+            signed_url_expires_at: expiresAt.toISOString()
+          })
+          .eq('id', asset.id);
+      }
 
       // Cache the result
       this.cache.setViewportAsset(cacheKey, {
@@ -884,6 +955,113 @@ export class OptimizedAssetService {
     }
 
     return { cleaned, errors };
+  }
+
+  // Add manual URL refresh for all assets
+  static async refreshAllAssetUrls(): Promise<{ success: number; failed: number; errors: string[] }> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('🔄 Starting manual URL refresh for all assets');
+      
+      // Get all assets without valid URLs
+      const [imagesResult, videosResult] = await Promise.all([
+        supabase
+          .from('images')
+          .select('id, image_url, image_urls, metadata, title, prompt, status, quality, format, created_at, project_id')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .or('signed_url.is.null,signed_url_expires_at.lt.now()'),
+        supabase
+          .from('videos')
+          .select('id, video_url, status, format, created_at, project_id, duration, resolution')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .or('signed_url.is.null,signed_url_expires_at.lt.now()')
+      ]);
+
+      const imageAssets = (imagesResult.data || []).map(img => ({ 
+        id: img.id,
+        image_url: img.image_url,
+        image_urls: img.image_urls,
+        metadata: img.metadata,
+        title: img.title,
+        prompt: img.prompt,
+        status: img.status,
+        quality: img.quality,
+        format: img.format,
+        created_at: img.created_at,
+        project_id: img.project_id,
+        type: 'image' as const 
+      }));
+      
+      const videoAssets = (videosResult.data || []).map(vid => ({ 
+        id: vid.id,
+        video_url: vid.video_url,
+        status: vid.status,
+        format: vid.format,
+        created_at: vid.created_at,
+        project_id: vid.project_id,
+        duration: vid.duration,
+        resolution: vid.resolution,
+        prompt: 'Video',
+        type: 'video' as const 
+      }));
+
+      const assets = [...imageAssets, ...videoAssets];
+
+      console.log(`🔄 Refreshing URLs for ${assets.length} assets`);
+
+      let success = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      // Process in batches to avoid overwhelming the system
+      const batchSize = 10;
+      for (let i = 0; i < assets.length; i += batchSize) {
+        const batch = assets.slice(i, i + batchSize);
+        
+        await Promise.all(
+          batch.map(async (asset) => {
+            try {
+              const unifiedAsset = this.convertToUnifiedAsset(asset);
+              await this.generateAssetUrls(unifiedAsset);
+              success++;
+            } catch (error) {
+              failed++;
+              errors.push(`${asset.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
+          })
+        );
+      }
+
+      console.log(`✅ URL refresh completed: ${success} success, ${failed} failed`);
+      return { success, failed, errors };
+      
+    } catch (error) {
+      console.error('❌ Manual URL refresh failed:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to convert raw data to UnifiedAsset
+  private static convertToUnifiedAsset(asset: any): UnifiedAsset {
+    return {
+      id: asset.id,
+      type: asset.type,
+      title: asset.title,
+      prompt: asset.prompt || 'Untitled',
+      status: asset.status,
+      quality: asset.quality,
+      format: asset.format,
+      createdAt: new Date(asset.created_at),
+      projectId: asset.project_id,
+      duration: asset.duration,
+      resolution: asset.resolution,
+      modelType: asset.type === 'image' && asset.metadata?.is_sdxl ? 'SDXL' : 'WAN',
+      isSDXL: asset.type === 'image' && asset.metadata?.is_sdxl || false
+    };
   }
 
   // Clear all caches
