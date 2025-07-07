@@ -397,27 +397,44 @@ async function handleVideoJobCallback(supabase, job, status, filePath, errorMess
     isEnhanced
   });
   if (status === 'completed' && job.video_id && filePath) {
-    // Only normalize SDXL video paths, WAN workers upload to bucket root with just filename
-    const isSDXLVideo = job.job_type.startsWith('sdxl_');
-    const finalVideoPath = isSDXLVideo ? normalizeAssetPath(filePath, job.user_id) : filePath;
+    // Normalize ALL video paths to be user-scoped for consistency
+    const normalizedVideoPath = normalizeAssetPath(filePath, job.user_id);
+    
     console.log('📹 Video path handling:', {
       originalPath: filePath,
-      finalPath: finalVideoPath,
+      normalizedPath: normalizedVideoPath,
       userId: job.user_id,
-      isSDXL: isSDXLVideo,
       jobType: job.job_type
     });
-    const { error: videoError } = await supabase.from('videos').update({
+
+    // Store in both video_url and signed_url fields for consistency
+    const updateData = {
       status: 'completed',
-      video_url: finalVideoPath,
-      completed_at: new Date().toISOString()
-    }).eq('id', job.video_id);
+      video_url: normalizedVideoPath,
+      signed_url: normalizedVideoPath,
+      signed_url_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+      completed_at: new Date().toISOString(),
+      metadata: {
+        ...job.metadata || {},
+        callback_processed_at: new Date().toISOString(),
+        normalized_path: normalizedVideoPath,
+        bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`
+      }
+    };
+
+    const { error: videoError } = await supabase.from('videos').update(updateData).eq('id', job.video_id);
+    
     if (videoError) {
-      console.error('❌ Error updating video:', videoError);
+      console.error('❌ Error updating video:', {
+        videoId: job.video_id,
+        error: videoError,
+        updateData
+      });
     } else {
       console.log('✅ Video job updated successfully:', {
-        path: finalVideoPath,
-        isSDXL: isSDXLVideo
+        videoId: job.video_id,
+        path: normalizedVideoPath,
+        bucket: updateData.metadata.bucket
       });
     }
   }
