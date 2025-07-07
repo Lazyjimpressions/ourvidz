@@ -492,17 +492,17 @@ export class OptimizedAssetService {
           const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
           if (!error && data?.signedUrl) {
             videoUrl = data.signedUrl;
-          console.log(`✅ Generated new video URL for:`, asset.id);
-          
-          // Update database with new signed URL
-          await supabase
-            .from('videos')
-            .update({
-              signed_url: videoUrl,
-              signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
-            })
-            .eq('id', asset.id);
+            console.log(`✅ Generated new video URL for:`, asset.id);
             
+            // Update database with new signed URL
+            await supabase
+              .from('videos')
+              .update({
+                signed_url: videoUrl,
+                signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
+              })
+              .eq('id', asset.id);
+          }
         } catch (error) {
           console.error(`❌ Failed to generate video URL for ${asset.id}:`, error);
         }
