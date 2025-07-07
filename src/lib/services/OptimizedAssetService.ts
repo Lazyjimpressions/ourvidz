@@ -453,6 +453,97 @@ export class OptimizedAssetService {
     }
   }
 
+  // Enhanced video URL generation with thumbnail fallback
+  private static async generateVideoUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
+    const cacheKey = `${asset.id}-video-urls`;
+    const cachedAsset = this.cache.getViewportAsset(cacheKey);
+    
+    if (cachedAsset && cachedAsset.urlsGenerated) {
+      return cachedAsset.asset;
+    }
+
+    try {
+      // Get video data from database
+      const { data: videoData } = await supabase
+        .from('videos')
+        .select('video_url, thumbnail_url, signed_url, signed_url_expires_at, metadata')
+        .eq('id', asset.id)
+        .single();
+
+      if (!videoData) return asset;
+
+      let videoUrl = null;
+      let thumbnailUrl = videoData.thumbnail_url;
+
+      // Check for valid signed URL first
+      if (videoData.signed_url && videoData.signed_url_expires_at) {
+        const expiresAt = new Date(videoData.signed_url_expires_at);
+        if (expiresAt > new Date()) {
+          console.log(`✅ Using cached video URL for:`, asset.id);
+          videoUrl = videoData.signed_url;
+        }
+      }
+
+      // Generate new signed URL if needed
+      if (!videoUrl && videoData.video_url) {
+        const bucket = this.determineVideoBucket(null); // We'll determine bucket from metadata if needed
+        
+        try {
+          videoUrl = await getSignedUrl(bucket, videoData.video_url);
+          console.log(`✅ Generated new video URL for:`, asset.id);
+          
+          // Update database with new signed URL
+          await supabase
+            .from('videos')
+            .update({
+              signed_url: videoUrl,
+              signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
+            })
+            .eq('id', asset.id);
+            
+        } catch (error) {
+          console.error(`❌ Failed to generate video URL for ${asset.id}:`, error);
+        }
+      }
+
+      // Handle thumbnail URL - use placeholder if none exists
+      if (!thumbnailUrl || thumbnailUrl === 'null') {
+        thumbnailUrl = '/video-placeholder.svg'; // Use a built-in placeholder
+        console.log(`📹 Using placeholder thumbnail for video:`, asset.id);
+      } else if (thumbnailUrl.startsWith('system_assets/')) {
+        // Convert system asset path to full URL
+        try {
+          thumbnailUrl = await getSignedUrl('system_assets', thumbnailUrl.replace('system_assets/', ''));
+        } catch (error) {
+          console.warn(`⚠️ Failed to load system thumbnail, using placeholder:`, error);
+          thumbnailUrl = '/video-placeholder.svg';
+        }
+      }
+
+      const updatedAsset = {
+        ...asset,
+        url: videoUrl,
+        thumbnailUrl: thumbnailUrl
+      };
+      
+      // Cache the result
+      this.cache.setViewportAsset(cacheKey, {
+        asset: updatedAsset,
+        urlsGenerated: true,
+        timestamp: Date.now()
+      });
+      
+      return updatedAsset;
+
+    } catch (error) {
+      console.error(`❌ Error generating video URLs for ${asset.id}:`, error);
+      return {
+        ...asset,
+        thumbnailUrl: '/video-placeholder.svg' // Always provide a fallback
+      };
+    }
+  }
+
   private static async generateImageUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
     const cacheKey = `${asset.id}-urls`;
     const cachedAsset = this.cache.getViewportAsset(cacheKey);

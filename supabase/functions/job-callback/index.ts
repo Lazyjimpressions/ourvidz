@@ -411,11 +411,21 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
     const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Video';
     const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
 
+    // Generate placeholder thumbnail URL for videos
+    const placeholderThumbnailUrl = `system_assets/video-placeholder-thumbnail.png`;
+    
+    console.log('📹 Setting video thumbnail:', {
+      videoId: job.video_id,
+      placeholderThumbnailUrl,
+      hasVideoUrl: !!normalizedVideoPath
+    });
+
     // Store in both video_url and signed_url fields for consistency
     const updateData = {
       status: 'completed',
       title: title,
       video_url: normalizedVideoPath,
+      thumbnail_url: placeholderThumbnailUrl,
       signed_url: normalizedVideoPath,
       signed_url_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
       completed_at: new Date().toISOString(),
@@ -424,6 +434,7 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
         prompt: prompt,
         callback_processed_at: new Date().toISOString(),
         normalized_path: normalizedVideoPath,
+        thumbnail_placeholder: true,
         bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`
       }
     };
