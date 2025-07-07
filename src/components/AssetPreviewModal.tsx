@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, Calendar, Clock, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
-import { UnifiedAsset } from "@/lib/services/AssetService";
+import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 
 interface AssetPreviewModalProps {
   asset: UnifiedAsset | null;
@@ -32,7 +32,7 @@ export const AssetPreviewModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] bg-gray-900 border-gray-700 text-white">
+      <DialogContent className="max-w-6xl max-h-[95vh] bg-gray-900 border-gray-700 text-white overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-left">
             {asset.type === 'image' ? (
@@ -88,77 +88,118 @@ export const AssetPreviewModal = ({
           </div>
 
           {/* Asset Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              {/* Full Prompt Display */}
               <div>
-                <h3 className="font-semibold text-gray-300 mb-1">Prompt</h3>
-                <div className="text-sm text-gray-400 bg-gray-800 p-3 rounded-md max-h-32 overflow-y-auto">
-                  <p className="break-words">{asset.prompt}</p>
+                <h3 className="font-semibold text-gray-300 mb-2">Prompt</h3>
+                <div className="text-sm text-gray-300 bg-gray-800 p-4 rounded-lg border border-gray-700 max-h-48 overflow-y-auto">
+                  <p className="break-words leading-relaxed whitespace-pre-wrap">{asset.prompt}</p>
                 </div>
               </div>
 
               {asset.projectTitle && (
                 <div>
-                  <h3 className="font-semibold text-gray-300 mb-1">Project</h3>
-                  <p className="text-sm text-gray-400 break-words">{asset.projectTitle}</p>
+                  <h3 className="font-semibold text-gray-300 mb-2">Project</h3>
+                  <p className="text-sm text-gray-400 bg-gray-800 p-3 rounded-lg border border-gray-700 break-words">{asset.projectTitle}</p>
+                </div>
+              )}
+
+              {/* Model and Technical Info */}
+              {asset.modelType && (
+                <div>
+                  <h3 className="font-semibold text-gray-300 mb-2">Technical Details</h3>
+                  <div className="space-y-2 text-sm text-gray-400">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Model:</span>
+                      <Badge 
+                        variant="outline" 
+                        className={
+                          asset.modelType === 'SDXL' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                          asset.modelType === 'Enhanced-7B' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                          'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                        }
+                      >
+                        {asset.modelType}
+                      </Badge>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <Badge 
-                  variant="outline" 
-                  className={`${
-                    asset.status === 'completed' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                    asset.status === 'processing' || asset.status === 'queued' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                    'bg-red-500/10 text-red-400 border-red-500/20'
-                  }`}
-                >
-                  {asset.status}
-                </Badge>
-
-                {asset.quality && (
+            <div className="space-y-4">
+              {/* Status and Quality Badges */}
+              <div>
+                <h3 className="font-semibold text-gray-300 mb-2">Status</h3>
+                <div className="flex flex-wrap gap-2">
                   <Badge 
-                    variant="outline"
-                    className={asset.quality === 'high' 
-                      ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                      : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                    }
+                    variant="outline" 
+                    className={`${
+                      asset.status === 'completed' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                      asset.status === 'processing' || asset.status === 'queued' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
+                      'bg-red-500/10 text-red-400 border-red-500/20'
+                    }`}
                   >
-                    {asset.quality === 'high' ? 'High Quality' : 'Fast'}
+                    {asset.status.charAt(0).toUpperCase() + asset.status.slice(1)}
                   </Badge>
-                )}
 
-                <Badge variant="outline" className="bg-gray-500/10 text-gray-400 border-gray-500/20">
-                  {asset.type}
-                </Badge>
+                  {asset.quality && (
+                    <Badge 
+                      variant="outline"
+                      className={asset.quality === 'high' 
+                        ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                        : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                      }
+                    >
+                      {asset.quality === 'high' ? 'High Quality' : 'Fast'}
+                    </Badge>
+                  )}
+
+                  <Badge variant="outline" className="bg-gray-500/10 text-gray-400 border-gray-500/20">
+                    {asset.type.charAt(0).toUpperCase() + asset.type.slice(1)}
+                  </Badge>
+                </div>
               </div>
 
-              <div className="space-y-2 text-sm text-gray-400">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 flex-shrink-0" />
-                  <span className="break-words">Created: {formatDate(asset.createdAt)}</span>
+              {/* Metadata */}
+              <div>
+                <h3 className="font-semibold text-gray-300 mb-2">Details</h3>
+                <div className="space-y-3 text-sm text-gray-400">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                    <span>Created: {formatDate(asset.createdAt)}</span>
+                  </div>
+
+                  {asset.format && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Format:</span>
+                      <code className="text-xs bg-gray-800 px-2 py-1 rounded">{asset.format.toUpperCase()}</code>
+                    </div>
+                  )}
+
+                  {asset.type === 'video' && asset.duration && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 flex-shrink-0 text-gray-500" />
+                      <span>Duration: {asset.duration}s</span>
+                    </div>
+                  )}
+
+                  {asset.resolution && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Resolution:</span>
+                      <span>{asset.resolution}</span>
+                    </div>
+                  )}
+
+                  {/* Multi-image info for SDXL */}
+                  {asset.signedUrls && asset.signedUrls.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Images:</span>
+                      <span>{asset.signedUrls.length} variations</span>
+                    </div>
+                  )}
                 </div>
-
-                {asset.format && (
-                  <div className="flex items-center gap-2">
-                    <span className="break-words">Format: {asset.format.toUpperCase()}</span>
-                  </div>
-                )}
-
-                {asset.type === 'video' && asset.duration && (
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 flex-shrink-0" />
-                    <span>Duration: {asset.duration}s</span>
-                  </div>
-                )}
-
-                {asset.resolution && (
-                  <div className="flex items-center gap-2">
-                    <span>Resolution: {asset.resolution}</span>
-                  </div>
-                )}
               </div>
             </div>
           </div>

@@ -123,27 +123,52 @@ export class OptimizedAssetService {
 
   private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: JobRecord): string {
     const metadata = imageData.metadata as any;
+    const jobMetadata = jobData?.metadata as any;
+    
+    // Check for enhanced/7b models first (new bucket types)
+    const jobType = jobData?.job_type || '';
+    const modelType = jobData?.model_type || metadata?.model_type || '';
+    
+    // Enhanced 7B models detection
+    if (jobType.includes('enhanced') || jobType.includes('7b') || modelType.includes('7b')) {
+      const quality = imageData.quality || jobData?.quality || 'fast';
+      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+    }
+    
+    // SDXL detection (improved logic)
     const isSDXL = metadata?.is_sdxl || 
                    metadata?.model_type === 'sdxl' || 
-                   jobData?.job_type?.startsWith('sdxl_') ||
-                   jobData?.model_type?.includes('sdxl_image') ||
+                   jobType.startsWith('sdxl_') ||
+                   modelType.includes('sdxl') ||
+                   jobMetadata?.bucket?.includes('sdxl') ||
                    metadata?.bucket?.includes('sdxl');
     
     const quality = imageData.quality || jobData?.quality || 'fast';
     
-    return isSDXL 
-      ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
-      : (quality === 'high' ? 'image_high' : 'image_fast');
+    if (isSDXL) {
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    }
+    
+    // Default image buckets
+    return quality === 'high' ? 'image_high' : 'image_fast';
   }
 
   private static determineVideoBucket(jobData?: JobRecord): string {
     const quality = jobData?.quality || 'fast';
     const jobType = jobData?.job_type || '';
+    const modelType = jobData?.model_type || '';
+    const jobMetadata = jobData?.metadata as any;
     
-    if (jobType.includes('enhanced') || jobType.includes('7b')) {
+    // Enhanced 7B models detection (improved)
+    if (jobType.includes('enhanced') || 
+        jobType.includes('7b') || 
+        modelType.includes('7b') ||
+        jobMetadata?.bucket?.includes('7b') ||
+        jobMetadata?.bucket?.includes('enhanced')) {
       return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
     }
     
+    // Default video buckets
     return quality === 'high' ? 'video_high' : 'video_fast';
   }
 
@@ -226,8 +251,8 @@ export class OptimizedAssetService {
     let videoQuery = supabase
       .from('videos')
       .select(`
-        id, status, format, created_at, updated_at, project_id,
-        duration, resolution, video_url, thumbnail_url,
+        id, title, status, format, created_at, updated_at, project_id,
+        duration, resolution, video_url, thumbnail_url, metadata,
         project:projects(title),
         job:jobs(id, quality, job_type, model_type, metadata)
       `)
@@ -304,6 +329,103 @@ export class OptimizedAssetService {
   // LAZY: Process videos without URL generation  
   private static processVideoAssetsLazy(videos: any[]): UnifiedAsset[] {
     return videos.map(video => this.processVideoMetadataOnly(video));
+  }
+
+  // Process video metadata only (lazy loading approach)
+  private static processVideoMetadataOnly(video: any): UnifiedAsset {
+    const jobData = Array.isArray(video.job) ? video.job[0] : video.job;
+    const videoMetadata = video.metadata as any;
+    const jobMetadata = jobData?.metadata as any;
+    
+    // Extract title and prompt with proper fallbacks
+    let title = video.title;
+    let prompt = 'Untitled Video';
+    
+    // Try to get prompt from various sources
+    if (videoMetadata?.prompt) {
+      prompt = videoMetadata.prompt;
+    } else if (jobMetadata?.prompt) {
+      prompt = jobMetadata.prompt;
+    } else if (jobMetadata?.original_prompt) {
+      prompt = jobMetadata.original_prompt;
+    }
+    
+    // Use prompt as title if no title
+    if (!title && prompt && prompt !== 'Untitled Video') {
+      title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+    }
+    
+    return {
+      id: video.id,
+      type: 'video',
+      title: title || prompt,
+      prompt: prompt,
+      status: video.status || 'draft',
+      quality: jobData?.quality || 'fast',
+      format: video.format || 'mp4',
+      createdAt: new Date(video.created_at),
+      projectId: video.project_id,
+      projectTitle: video.project?.title,
+      duration: video.duration,
+      resolution: video.resolution,
+      // URLs are NOT generated here - lazy loading
+      thumbnailUrl: undefined,
+      url: undefined,
+      jobId: jobData?.id,
+      modelType: jobData?.model_type || videoMetadata?.model_type
+    };
+  }
+
+  // Process image metadata only (lazy loading approach)  
+  private static processImageMetadataOnly(image: any): UnifiedAsset {
+    const jobData = Array.isArray(image.job) ? image.job[0] : image.job;
+    const imageMetadata = image.metadata as any;
+    const jobMetadata = jobData?.metadata as any;
+    
+    // Extract title and prompt with proper fallbacks
+    let title = image.title;
+    let prompt = image.prompt || 'Untitled Image';
+    
+    // Use prompt as title if no title
+    if (!title && prompt && prompt !== 'Untitled Image') {
+      title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+    }
+    
+    const isSDXL = imageMetadata?.is_sdxl || 
+                   jobData?.job_type?.startsWith('sdxl_') ||
+                   jobData?.model_type?.includes('sdxl') ||
+                   jobMetadata?.bucket?.includes('sdxl');
+    
+    const isEnhanced = jobData?.job_type?.includes('enhanced') || 
+                       jobData?.job_type?.includes('7b') ||
+                       jobData?.model_type?.includes('7b');
+    
+    let modelType = 'WAN'; // Default
+    if (isEnhanced) {
+      modelType = 'Enhanced-7B';
+    } else if (isSDXL) {
+      modelType = 'SDXL';
+    }
+    
+    return {
+      id: image.id,
+      type: 'image',
+      title: title || prompt,
+      prompt: prompt,
+      status: image.status || 'pending',
+      quality: image.quality || jobData?.quality || 'fast',
+      format: image.format || 'png',
+      createdAt: new Date(image.created_at),
+      projectId: image.project_id,
+      projectTitle: image.project?.title,
+      // URLs are NOT generated here - lazy loading
+      thumbnailUrl: undefined,
+      url: undefined,
+      signedUrls: undefined,
+      modelType: modelType,
+      isSDXL: isSDXL,
+      jobId: jobData?.id
+    };
   }
 
   private static async processImageAssets(images: any[]): Promise<UnifiedAsset[]> {
@@ -543,56 +665,6 @@ export class OptimizedAssetService {
     return null;
   }
 
-  // Metadata-only processing (no URL generation)
-  private static processImageMetadataOnly(image: any): UnifiedAsset {
-    const jobData = Array.isArray(image.job) ? image.job[0] : image.job;
-    const metadata = image.metadata as any;
-    const isSDXL = metadata?.is_sdxl || 
-                   metadata?.model_type === 'sdxl' || 
-                   jobData?.job_type?.startsWith('sdxl_') ||
-                   jobData?.model_type?.includes('sdxl');
-
-    return {
-      id: image.id,
-      type: 'image',
-      title: image.title,
-      prompt: image.prompt,
-      status: image.status,
-      quality: image.quality,
-      format: image.format,
-      createdAt: new Date(image.created_at),
-      projectId: image.project_id,
-      projectTitle: image.project?.title,
-      modelType: isSDXL ? 'SDXL' : 'WAN',
-      isSDXL,
-      jobId: jobData?.id,
-      // URLs will be generated on-demand
-      thumbnailUrl: undefined,
-      url: undefined,
-      signedUrls: undefined
-    };
-  }
-
-  private static processVideoMetadataOnly(video: any): UnifiedAsset {
-    const jobData = Array.isArray(video.job) ? video.job[0] : video.job;
-
-    return {
-      id: video.id,
-      type: 'video' as const,
-      prompt: video.project?.title || 'Untitled Video',
-      status: video.status || 'draft',
-      format: video.format,
-      createdAt: new Date(video.created_at),
-      projectId: video.project_id,
-      projectTitle: video.project?.title,
-      duration: video.duration,
-      resolution: video.resolution,
-      jobId: jobData?.id,
-      // URLs will be generated on-demand
-      thumbnailUrl: undefined,
-      url: undefined
-    };
-  }
 
   private static async processSingleImage(image: any): Promise<UnifiedAsset> {
     const jobData = Array.isArray(image.job) ? image.job[0] : image.job;

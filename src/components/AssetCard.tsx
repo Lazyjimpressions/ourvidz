@@ -12,7 +12,7 @@ import {
   Clock,
   Calendar
 } from "lucide-react";
-import { UnifiedAsset } from "@/lib/services/AssetService";
+import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { cn } from "@/lib/utils";
 
 interface AssetCardProps {
@@ -96,7 +96,15 @@ export const AssetCard = ({
         className="aspect-square cursor-pointer relative overflow-hidden bg-gray-800"
         onClick={onPreview}
       >
-        {asset.status === 'completed' && (asset.thumbnailUrl || asset.url) && !imageError ? (
+        {/* Loading State */}
+        {isLoadingUrl ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-800">
+            <div className="text-center text-gray-400 p-4">
+              <div className="animate-pulse text-2xl mb-2">⚡</div>
+              <div className="text-xs">Loading preview...</div>
+            </div>
+          </div>
+        ) : asset.status === 'completed' && (asset.thumbnailUrl || asset.url) && !imageError ? (
           <img
             src={asset.thumbnailUrl || asset.url}
             alt={asset.prompt}
@@ -105,13 +113,13 @@ export const AssetCard = ({
             onError={() => setImageError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
+          <div className="w-full h-full flex items-center justify-center bg-gray-800">
             {asset.error ? (
               <div className="text-center text-red-400 p-4">
                 <div className="text-2xl mb-2">⚠️</div>
                 <div className="text-xs">Failed to load</div>
                 {asset.error && (
-                  <div className="text-xs mt-1 opacity-75">{asset.error}</div>
+                  <div className="text-xs mt-1 opacity-75 max-w-[120px] break-words">{truncateText(asset.error, 50)}</div>
                 )}
               </div>
             ) : asset.status === 'processing' || asset.status === 'queued' ? (
@@ -126,7 +134,9 @@ export const AssetCard = ({
                 ) : (
                   <Video className="h-8 w-8 mx-auto mb-2" />
                 )}
-                <div className="text-xs">No preview</div>
+                <div className="text-xs">
+                  {asset.status === 'completed' ? 'No preview available' : 'Preview not ready'}
+                </div>
               </div>
             )}
           </div>
@@ -152,8 +162,10 @@ export const AssetCard = ({
               variant="secondary" 
               className={cn(
                 "text-xs border",
-                asset.isSDXL 
+                asset.modelType === 'SDXL' 
                   ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
+                  : asset.modelType === 'Enhanced-7B'
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                   : "bg-blue-500/20 text-blue-300 border-blue-500/40"
               )}
             >

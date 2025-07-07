@@ -293,17 +293,24 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
       imageCount: imageUrlsArray ? imageUrlsArray.length : 1
     };
     console.log('🔍 File path validation:', filePathValidation);
+    // Extract title from job metadata or prompt
+    const jobMetadata = job.metadata || {};
+    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image';
+    const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+
     // Update image record with model type information and enhanced debugging
     const updateData = {
       status: 'completed',
+      title: title,
       image_url: primaryImageUrl,
       image_urls: imageUrlsArray,
       thumbnail_url: primaryImageUrl,
       quality: quality,
       metadata: {
-        ...job.metadata || {},
-        model_type: isSDXL ? 'sdxl' : 'wan',
+        ...jobMetadata,
+        model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
         is_sdxl: isSDXL,
+        is_enhanced: isEnhanced,
         bucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`,
         callback_processed_at: new Date().toISOString(),
         file_path_validation: filePathValidation,
@@ -399,15 +406,22 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
       jobType: job.job_type
     });
 
+    // Extract title from job metadata or prompt
+    const jobMetadata = job.metadata || {};
+    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Video';
+    const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+
     // Store in both video_url and signed_url fields for consistency
     const updateData = {
       status: 'completed',
+      title: title,
       video_url: normalizedVideoPath,
       signed_url: normalizedVideoPath,
       signed_url_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
       completed_at: new Date().toISOString(),
       metadata: {
-        ...job.metadata || {},
+        ...jobMetadata,
+        prompt: prompt,
         callback_processed_at: new Date().toISOString(),
         normalized_path: normalizedVideoPath,
         bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`

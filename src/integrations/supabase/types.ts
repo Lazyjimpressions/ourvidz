@@ -441,6 +441,7 @@ export type Database = {
           signed_url_expires_at: string | null
           status: string | null
           thumbnail_url: string | null
+          title: string | null
           updated_at: string | null
           user_id: string
           video_url: string | null
@@ -462,6 +463,7 @@ export type Database = {
           signed_url_expires_at?: string | null
           status?: string | null
           thumbnail_url?: string | null
+          title?: string | null
           updated_at?: string | null
           user_id: string
           video_url?: string | null
@@ -483,6 +485,7 @@ export type Database = {
           signed_url_expires_at?: string | null
           status?: string | null
           thumbnail_url?: string | null
+          title?: string | null
           updated_at?: string | null
           user_id?: string
           video_url?: string | null
