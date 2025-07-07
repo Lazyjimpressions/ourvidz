@@ -46,7 +46,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
 
-  // Cleanup function to prevent auth limbo states and clear workspace
+  // Cleanup function to prevent auth limbo states (for logout only)
   const cleanupAuthState = useCallback(() => {
     console.log('Cleaning up auth state...');
     
@@ -64,11 +64,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           sessionStorage.removeItem(key);
         }
       });
-      
-      // Clear workspace for new session
-      sessionStorage.removeItem('workspaceFilter');
-      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
-      console.log('🔄 Cleared workspace for new authentication session');
     }
     
     // Reset local state
@@ -76,6 +71,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setSession(null);
     setProfile(null);
     setProfileFetchAttempts(0);
+  }, []);
+
+  // Separate function for clearing workspace (only on logout)
+  const clearWorkspaceOnLogout = useCallback(() => {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('workspaceFilter');
+      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+      console.log('🔄 Cleared workspace for logout');
+    }
   }, []);
 
   const fetchProfile = useCallback(async (userId: string, retryCount = 0) => {
@@ -229,9 +233,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signUp = async (email: string, password: string) => {
     try {
-      // Clean up any existing auth state before signup
-      cleanupAuthState();
-      
       // Attempt global sign out to ensure clean state
       try {
         await supabase.auth.signOut({ scope: 'global' });
@@ -259,9 +260,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      // Clean up any existing auth state before signin
-      cleanupAuthState();
-      
       // Attempt global sign out to ensure clean state
       try {
         await supabase.auth.signOut({ scope: 'global' });
@@ -284,9 +282,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signInWithGoogle = async () => {
     try {
-      // Clean up any existing auth state before Google signin
-      cleanupAuthState();
-      
       // Attempt global sign out to ensure clean state
       try {
         await supabase.auth.signOut({ scope: 'global' });
@@ -313,7 +308,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       console.log('Signing out...');
       
-      // Clean up auth state first
+      // Clear workspace on logout
+      clearWorkspaceOnLogout();
+      
+      // Clean up auth state
       cleanupAuthState();
       
       // Attempt global sign out

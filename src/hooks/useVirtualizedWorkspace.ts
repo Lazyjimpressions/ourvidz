@@ -65,47 +65,78 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
 
   // Load workspace filter from sessionStorage (session-based workspace)
   useEffect(() => {
-    const savedFilter = sessionStorage.getItem('workspaceFilter');
-    const sessionStart = sessionStorage.getItem('workspaceSessionStart');
-    
-    if (savedFilter && sessionStart) {
-      try {
-        const filterIds = JSON.parse(savedFilter);
-        const sessionStartTime = parseInt(sessionStart);
-        
-        // Only restore workspace if it's from the current session
-        const sessionAge = Date.now() - sessionStartTime;
-        if (sessionAge < 24 * 60 * 60 * 1000) { // 24 hours max
-          setWorkspaceFilter(new Set(filterIds));
-          console.log('🔄 Loaded workspace filter from session:', filterIds.length, 'items');
-        } else {
-          // Clear old session data
-          sessionStorage.removeItem('workspaceFilter');
-          sessionStorage.removeItem('workspaceSessionStart');
-          console.log('🗑️ Cleared old session workspace data');
-        }
-      } catch (error) {
-        console.error('Failed to parse workspace filter:', error);
+    const initializeWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const savedFilter = sessionStorage.getItem('workspaceFilter');
+      const sessionStart = sessionStorage.getItem('workspaceSessionStart');
+      const sessionUserId = sessionStorage.getItem('workspaceUserId');
+      
+      // Check if workspace belongs to current user
+      if (sessionUserId && sessionUserId !== user.id) {
+        console.log('🔄 Different user detected, clearing workspace');
         sessionStorage.removeItem('workspaceFilter');
         sessionStorage.removeItem('workspaceSessionStart');
+        sessionStorage.removeItem('workspaceUserId');
+        sessionStorage.setItem('workspaceUserId', user.id);
+        sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+        return;
       }
-    }
+      
+      if (savedFilter && sessionStart) {
+        try {
+          const filterIds = JSON.parse(savedFilter);
+          const sessionStartTime = parseInt(sessionStart);
+          
+          // Only restore workspace if it's from the current session
+          const sessionAge = Date.now() - sessionStartTime;
+          if (sessionAge < 24 * 60 * 60 * 1000) { // 24 hours max
+            setWorkspaceFilter(new Set(filterIds));
+            console.log('🔄 Loaded workspace filter from session:', filterIds.length, 'items');
+          } else {
+            // Clear old session data
+            sessionStorage.removeItem('workspaceFilter');
+            sessionStorage.removeItem('workspaceSessionStart');
+            console.log('🗑️ Cleared old session workspace data');
+          }
+        } catch (error) {
+          console.error('Failed to parse workspace filter:', error);
+          sessionStorage.removeItem('workspaceFilter');
+          sessionStorage.removeItem('workspaceSessionStart');
+        }
+      }
+      
+      // Initialize session data if not present
+      if (!sessionStart) {
+        sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+        console.log('🆕 Started new workspace session');
+      }
+      if (!sessionUserId) {
+        sessionStorage.setItem('workspaceUserId', user.id);
+        console.log('🆕 Set workspace user ID:', user.id);
+      }
+    };
     
-    // Initialize session start time if not present
-    if (!sessionStart) {
-      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
-      console.log('🆕 Started new workspace session');
-    }
+    initializeWorkspace();
   }, []);
 
   // Save workspace filter to sessionStorage (session-based workspace)
   useEffect(() => {
-    const filterArray = Array.from(workspaceFilter);
-    if (filterArray.length > 0) {
-      sessionStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
-    } else {
-      sessionStorage.removeItem('workspaceFilter');
-    }
+    const saveWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const filterArray = Array.from(workspaceFilter);
+      if (filterArray.length > 0) {
+        sessionStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
+        sessionStorage.setItem('workspaceUserId', user.id); // Ensure user ID is always set
+      } else {
+        sessionStorage.removeItem('workspaceFilter');
+      }
+    };
+    
+    saveWorkspace();
   }, [workspaceFilter]);
 
   // Transform assets to tiles with enhanced SDXL support
@@ -385,19 +416,27 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, []);
 
-  const clearWorkspace = useCallback(() => {
+  const clearWorkspace = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
     setWorkspaceFilter(new Set());
     sessionStorage.removeItem('workspaceFilter');
     sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+    
+    if (user) {
+      sessionStorage.setItem('workspaceUserId', user.id);
+    }
+    
     setVisibleRange({ start: 0, end: visibleCount });
     toast.success('Workspace cleared - fresh session started');
   }, [visibleCount]);
 
-  // Clear workspace on authentication changes (new session)
-  const clearWorkspaceOnAuthChange = useCallback(() => {
-    console.log('🔄 Clearing workspace for new authentication session');
+  // Clear workspace on authentication changes (new session) - only for logout
+  const clearWorkspaceOnAuthChange = useCallback(async () => {
+    console.log('🔄 Clearing workspace for logout');
     setWorkspaceFilter(new Set());
     sessionStorage.removeItem('workspaceFilter');
+    sessionStorage.removeItem('workspaceUserId');
     sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
     setVisibleRange({ start: 0, end: visibleCount });
   }, [visibleCount]);
