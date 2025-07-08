@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import TestMediaGrid from '@/components/TestMediaGrid';
+import TestVideoGrid from '@/components/TestVideoGrid';
 import { Button } from '@/components/ui/button';
 
 interface WorkspaceAsset {
@@ -10,6 +11,7 @@ interface WorkspaceAsset {
   url: string;
   jobId: string;
   prompt: string;
+  type?: 'image' | 'video';
 }
 
 const WorkspaceTest = () => {
@@ -59,7 +61,7 @@ const WorkspaceTest = () => {
         } else {
           const { data, error } = await supabase
             .from('videos')
-            .select('id, video_url, signed_url, prompt, metadata, created_at, quality')
+            .select('id, video_url, signed_url, prompt, metadata, created_at, quality, resolution, thumbnail_url')
             .eq('user_id', user.id)
             .eq('status', 'completed')
             .order('created_at', { ascending: false })
@@ -85,7 +87,8 @@ const WorkspaceTest = () => {
       id: assetId,
       url: signedUrl,
       jobId,
-      prompt
+      prompt,
+      type: mode as 'image' | 'video'
     };
     
     // Check if this exact URL is already in workspace
@@ -154,11 +157,22 @@ const WorkspaceTest = () => {
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {workspace.map((asset) => (
               <div key={asset.id} className="relative group">
-                <img
-                  src={asset.url}
-                  alt={`Workspace ${asset.id}`}
-                  className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
-                />
+                {asset.type === 'video' ? (
+                  <video
+                    src={asset.url}
+                    className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
+                    muted
+                    loop
+                    onMouseEnter={(e) => e.currentTarget.play()}
+                    onMouseLeave={(e) => e.currentTarget.pause()}
+                  />
+                ) : (
+                  <img
+                    src={asset.url}
+                    alt={`Workspace ${asset.id}`}
+                    className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
+                  />
+                )}
                 <button
                   onClick={() => handleRemoveFromWorkspace(asset.id)}
                   className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
@@ -183,8 +197,14 @@ const WorkspaceTest = () => {
           <div className="text-center py-8">
             <p className="text-muted-foreground">Loading...</p>
           </div>
-        ) : (
+        ) : mode === 'image' ? (
           <TestMediaGrid 
+            jobs={jobs} 
+            onImport={handleImport}
+            mode={mode as 'image' | 'video'}
+          />
+        ) : (
+          <TestVideoGrid 
             jobs={jobs} 
             onImport={handleImport}
             mode={mode as 'image' | 'video'}
