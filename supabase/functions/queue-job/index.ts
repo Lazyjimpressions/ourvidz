@@ -47,59 +47,93 @@ serve(async (req)=>{
       queue: metadata?.queue,
       timestamp: new Date().toISOString()
     });
-    // FIXED: Negative prompt generation - ONLY for SDXL jobs
+    // ENHANCED: Negative prompt generation - ONLY for SDXL jobs with multi-party and anatomical accuracy
     function generateNegativePromptForSDXL(userPrompt = '') {
-      console.log('🎨 Generating negative prompt for SDXL job only');
-      // SDXL-optimized negative prompts (keep under 77 tokens)
+      console.log('🎨 Generating enhanced negative prompt for SDXL job only');
+      
+      // Priority 1: Critical Quality (Always Included)
       const criticalNegatives = [
-        "bad anatomy",
-        "extra limbs",
-        "deformed",
-        "missing limbs"
+        "bad anatomy", "extra limbs", "deformed", "missing limbs",
+        "worst quality", "low quality", "normal quality", "lowres"
       ];
-      const qualityNegatives = [
-        "low quality",
-        "bad quality",
-        "worst quality",
-        "blurry",
-        "pixelated"
-      ];
+      
+      // Priority 2: Anatomical Accuracy (Always Included)
       const anatomicalNegatives = [
-        "deformed hands",
-        "extra fingers",
-        "deformed face",
-        "malformed"
+        "deformed hands", "extra fingers", "deformed face", "malformed",
+        "bad hands", "bad fingers", "missing fingers", "distorted features"
       ];
+      
+      // Priority 3: Technical Artifacts (High Priority)
       const artifactNegatives = [
-        "text",
-        "watermark",
-        "logo",
-        "signature"
+        "text", "watermark", "logo", "signature", "contact info",
+        "username", "artist name", "title", "caption"
       ];
-      // NSFW-specific anatomical improvements for SDXL
+      
+      // Priority 4: Style Prevention (Medium Priority)
+      const styleNegatives = [
+        "anime", "cartoon", "graphic", "render", "cgi", "3d",
+        "painting", "drawing", "illustration", "sketch"
+      ];
+      
+      // Priority 5: NSFW-Specific (Conditional)
       const nsfwNegatives = [
-        "deformed breasts",
-        "extra breasts",
-        "anatomical errors",
-        "wrong anatomy",
-        "distorted bodies",
-        "unnatural poses"
+        "child", "minor"
       ];
-      // Build SDXL negative prompt (token-efficient)
-      const sdxlNegatives = [
+      
+      // Priority 6: Multi-Party Scene Prevention (NEW - Critical for group scenes)
+      const multiPartyNegatives = [
+        "three girls", "all girls", "only girls", "no male", "missing male",
+        "disembodied penis", "floating penis", "detached penis", "penis not attached",
+        "wrong gender ratio", "incorrect participants", "wrong number of people"
+      ];
+      
+      // Priority 7: Position and Action Accuracy (NEW - Critical for explicit scenes)
+      const positionNegatives = [
+        "wrong position", "incorrect pose", "impossible position", "unnatural pose",
+        "penis in wrong place", "anatomical mismatch", "position confusion",
+        "wrong body parts", "misplaced anatomy", "anatomical errors"
+      ];
+      
+      // Priority 8: NSFW Anatomical Improvements (Conditional)
+      const nsfwAnatomicalNegatives = [
+        "deformed breasts", "extra breasts", "anatomical errors",
+        "wrong anatomy", "distorted bodies", "unnatural poses"
+      ];
+      
+      // Build SDXL negative prompt with priority system
+      let sdxlNegatives = [
         ...criticalNegatives,
-        ...qualityNegatives.slice(0, 3),
-        ...anatomicalNegatives.slice(0, 4),
-        ...artifactNegatives.slice(0, 3),
-        "ugly",
-        "poorly drawn"
+        ...anatomicalNegatives,
+        ...artifactNegatives.slice(0, 4), // Limit for token efficiency
+        ...styleNegatives.slice(0, 3),    // Limit for token efficiency
+        ...nsfwNegatives
       ];
-      // Add NSFW negatives if applicable
-      if (userPrompt.toLowerCase().includes('naked') || userPrompt.toLowerCase().includes('nude') || userPrompt.toLowerCase().includes('sex')) {
-        sdxlNegatives.push(...nsfwNegatives.slice(0, 4)); // Limit for token efficiency
+      
+      // Add multi-party prevention for group scenes (NEW)
+      if (userPrompt.toLowerCase().includes('two') && 
+          (userPrompt.toLowerCase().includes('girl') || userPrompt.toLowerCase().includes('woman')) &&
+          (userPrompt.toLowerCase().includes('guy') || userPrompt.toLowerCase().includes('man'))) {
+        sdxlNegatives.push(...multiPartyNegatives.slice(0, 6)); // Limit for token efficiency
+        console.log('🎯 Adding multi-party prevention for group scene');
       }
+      
+      // Add position accuracy for explicit scenes (NEW)
+      if (userPrompt.toLowerCase().includes('sex') || 
+          userPrompt.toLowerCase().includes('oral') || 
+          userPrompt.toLowerCase().includes('doggy')) {
+        sdxlNegatives.push(...positionNegatives.slice(0, 5)); // Limit for token efficiency
+        console.log('🎯 Adding position accuracy prevention for explicit scene');
+      }
+      
+      // Add NSFW anatomical improvements if applicable
+      if (userPrompt.toLowerCase().includes('naked') || 
+          userPrompt.toLowerCase().includes('nude') || 
+          userPrompt.toLowerCase().includes('sex')) {
+        sdxlNegatives.push(...nsfwAnatomicalNegatives.slice(0, 4)); // Limit for token efficiency
+      }
+      
       const result = sdxlNegatives.join(", ");
-      console.log('✅ SDXL negative prompt generated:', result);
+      console.log('✅ Enhanced SDXL negative prompt generated:', result);
       return result;
     }
     // Enhanced job type validation
