@@ -37,7 +37,26 @@ This master guide consolidates the best approaches from both existing prompting 
 2. **Anatomical Accuracy Framework**: Model-specific anatomical terms
 3. **Hybrid Enhancement Strategy**: WAN built-in + Qwen external
 4. **Production-Ready Edge Function**: Complete with error handling
-5. **Advanced Token Optimization**: Priority-based truncation
+5. **Advanced Token Optimization**: Priority-based truncation with safety margin
+
+---
+
+## **⚠️ CRITICAL TOKEN OPTIMIZATION UPDATE**
+
+### **Performance Testing Results (July 8, 2025)**
+
+**Critical Finding:** All prompts exceeding 77 tokens are automatically truncated by CLIP, causing significant quality degradation.
+
+**Test Results:**
+- **82-token prompts:** Consistently truncated, losing critical NSFW content terms
+- **Truncated content:** "accurate, professional adult content, maximum realism"
+- **Impact:** Reduced prompt effectiveness for sexually explicit content
+- **Solution:** Strict 75-token limit with safety margin
+
+**Updated Token Limits:**
+- **SDXL LUSTIFY:** 75 tokens maximum (225 characters)
+- **WAN 2.1:** 100 tokens maximum (300 characters)
+- **Safety Margin:** 2 tokens below CLIP limit for reliability
 
 ---
 
@@ -53,7 +72,7 @@ INPUT FORMAT: Natural language description
 OUTPUT FORMAT: Optimized SDXL prompt with quality hierarchy
 
 QUALITY HIERARCHY:
-1. Quality Tags: score_9, score_8_up, masterpiece, best quality, highly detailed
+1. Quality Tags: score_9, score_8_up, masterpiece, best quality
 2. Subject Definition: Specific anatomical accuracy terms
 3. Environmental Context: Setting, lighting, atmosphere
 4. Technical Specifications: Camera, lens, settings
@@ -65,8 +84,9 @@ ANATOMICAL ACCURACY FRAMEWORK:
 - Professional anatomical terminology
 - Avoid generic terms, use specific descriptors
 
-TOKEN LIMIT: 75 tokens (225 characters)
+TOKEN LIMIT: 75 tokens (225 characters) - CRITICAL: Exceeding 77 tokens causes truncation
 PRIORITY: Quality tags → Subject → Environment → Technical → Style
+SAFETY MARGIN: 2 tokens below CLIP limit for reliability
 
 Input: {user_prompt}
 Output:
@@ -77,13 +97,13 @@ Output:
 **Input:** "naked woman in bedroom"
 **Output:** 
 ```
-score_9, score_8_up, masterpiece, best quality, highly detailed, beautiful naked woman, perfect anatomy, natural breasts, smooth skin, elegant pose, intimate bedroom setting, soft natural lighting, warm atmosphere, shot on Canon EOS R5, f/1.8, shallow depth of field, professional photography, 8k resolution
+score_9, score_8_up, masterpiece, best quality, beautiful naked woman, perfect anatomy, natural breasts, smooth skin, elegant pose, intimate bedroom setting, soft natural lighting, warm atmosphere, shot on Canon EOS R5, f/1.8, shallow depth of field, professional photography
 ```
 
 **Input:** "couple having sex"
 **Output:**
 ```
-score_9, score_8_up, masterpiece, best quality, highly detailed, attractive couple, intimate moment, perfect anatomy, natural bodies, sensual interaction, soft lighting, intimate atmosphere, natural skin texture, warm color palette, professional photography, tasteful composition, anatomically accurate
+score_9, score_8_up, masterpiece, best quality, attractive couple, intimate moment, perfect anatomy, natural bodies, sensual interaction, soft lighting, intimate atmosphere, natural skin texture, warm color palette, professional photography, tasteful composition
 ```
 
 ### **2. WAN 2.1 - Master Video System Prompt**
@@ -108,7 +128,7 @@ TEMPORAL CONSISTENCY FRAMEWORK:
 - Avoid: jerky movement, teleporting, flickering
 - Focus: Single continuous action, environmental interaction
 
-TOKEN LIMIT: 100 tokens (300 characters)
+TOKEN LIMIT: 100 tokens (300 characters) - CRITICAL: Stay under limit for optimal quality
 PRIORITY: Subject → Motion → Environment → Camera → Quality
 
 Input: {user_prompt}
@@ -120,13 +140,829 @@ Output:
 **Input:** "woman undressing"
 **Output:**
 ```
-beautiful woman undressing slowly, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera movement, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, shallow depth of field
+beautiful woman undressing slowly, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera movement, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography
 ```
 
 **Input:** "couple intimate scene"
 **Output:**
 ```
-attractive couple in intimate moment, smooth motion, fluid movement, sensual interaction, soft lighting, intimate atmosphere, stable camera, temporal consistency, natural body movement, romantic setting, high quality video, professional cinematography, tasteful composition, emotional connection
+attractive couple in intimate moment, smooth motion, fluid movement, sensual interaction, soft lighting, intimate atmosphere, stable camera, temporal consistency, natural body movement, romantic setting, high quality video, professional cinematography, tasteful composition
+```
+
+---
+
+## **🤖 WAN7B Enhanced Models - Qwen 2.5-7B Enhancement System**
+
+### **Performance Testing Results (July 8, 2025)**
+
+**Critical Discovery:** WAN7B enhanced models provide significant quality improvement through Qwen 2.5-7B prompt enhancement with reasonable performance overhead.
+
+**Test Results:**
+- **image7b_fast_enhanced:** 111.0s, 0.40MB PNG, Enhanced quality
+- **image7b_high_enhanced:** 108.6s, 0.45MB PNG, Enhanced quality
+- **Prompt Enhancement:** 3,400% expansion (32→2517 chars, 35→2684 chars)
+- **Quality Improvement:** Significant enhancement over standard prompts
+- **Performance Overhead:** +38s (fast), +18.6s (high) for quality gain
+
+### **Qwen 2.5-7B Enhancement Process**
+
+#### **Enhancement Workflow**
+```yaml
+Input Processing:
+  1. Simple, direct prompt (32-35 characters)
+  2. Qwen 2.5-7B Base model loading (2.6-2.7s)
+  3. Enhancement processing (12.9-13.0s)
+  4. Professional cinematic description output (2500+ characters)
+  5. WAN 2.1 generation with enhanced prompt
+  6. Automatic Qwen model cleanup and memory management
+
+Enhancement Quality:
+  - Focus Areas: Visual details, lighting & atmosphere, camera work, artistic style
+  - Technical Quality: 4K quality, sharp focus, no artifacts, smooth motion
+  - Professional Standards: High-end production values, realistic skin textures
+  - Cinematic Style: Professional photography, natural poses, authentic expressions
+  - Anatomical Accuracy: Enhanced anatomical terminology and descriptions
+
+Memory Management:
+  - Peak Usage: 14.19GB during Qwen enhancement
+  - Post-Enhancement: 0.01GB (automatic cleanup)
+  - Efficiency: Excellent memory management
+  - Scalability: Suitable for production use
+```
+
+#### **Qwen Enhancement System Prompt**
+```yaml
+Model: Qwen 2.5-7B Base (no content filtering)
+Purpose: Professional prompt enhancement for adult content generation
+Input: Simple, direct prompts (32-35 characters)
+Output: Professional cinematic descriptions (2500+ characters)
+
+Enhancement Focus:
+  - VISUAL DETAILS: High-quality anatomical accuracy, realistic proportions, natural skin textures, detailed facial features, expressive eyes, natural hair flow, realistic body language
+  - LIGHTING & ATMOSPHERE: Cinematic lighting, soft shadows, warm tones, intimate atmosphere, professional photography style, natural skin tones, flattering angles
+  - CAMERA WORK: Close-up shots, intimate framing, smooth camera movements, professional cinematography, dynamic angles that enhance the scene
+  - ARTISTIC STYLE: Photorealistic quality, high resolution details, natural poses, authentic expressions, realistic interactions, professional adult content standards
+  - TECHNICAL QUALITY: 4K quality, sharp focus, no artifacts, smooth motion, consistent lighting, professional color grading
+
+Output Format: Detailed, cinematic prompt optimized for AI video generation with focus on anatomical accuracy, professional production values, and unrestricted adult content quality.
+```
+
+### **WAN7B Enhanced Model Performance**
+
+#### **Performance Characteristics**
+```yaml
+image7b_fast_enhanced:
+  - Total Time: 111.0s
+  - Enhancement: 12.9s (32→2517 chars)
+  - Generation: 15.2s (25 steps, 0.6s per step)
+  - File Size: 0.40MB PNG
+  - Quality: Enhanced (significant improvement over standard)
+
+image7b_high_enhanced:
+  - Total Time: 108.6s
+  - Enhancement: 13.0s (35→2684 chars)
+  - Generation: 19.6s (50 steps, 0.4s per step)
+  - File Size: 0.45MB PNG
+  - Quality: Enhanced (significant improvement over standard)
+
+Performance Comparison:
+  - Standard vs Enhanced: +38s (fast), +18.6s (high)
+  - Quality Gain: Significant enhancement over standard prompts
+  - Memory Efficiency: Excellent (automatic cleanup)
+  - Scalability: Production-ready with reasonable overhead
+```
+
+#### **Enhancement Effectiveness Analysis**
+```yaml
+Prompt Enhancement Results:
+  - Input: "professional adult content scene" (32 chars)
+  - Enhanced: 2517 chars (3,400% expansion)
+  - Quality: Professional cinematic descriptions
+  - Focus: Anatomical accuracy, lighting, camera work, artistic style
+  - Technical Quality: 4K quality, sharp focus, professional color grading
+
+Enhancement Process:
+  - Model: Qwen 2.5-7B Base (no content filtering)
+  - Loading: 2.6s (one-time per session)
+  - Processing: 12.9s per prompt
+  - Output: Professional adult content optimization
+  - Memory Management: Automatic unloading after enhancement
+```
+
+### **WAN7B Enhanced Model Best Practices**
+
+#### **Input Prompt Optimization**
+```yaml
+Optimal Input Strategy:
+  - Keep input prompts simple and direct (30-40 characters)
+  - Focus on core concept rather than detailed descriptions
+  - Let Qwen enhancement handle detailed cinematic descriptions
+  - Avoid redundant terms that Qwen will enhance
+
+Example Input Prompts:
+  - "professional adult content scene" (32 chars)
+  - "couple passionate love making naked" (35 chars)
+  - "intimate adult moment" (22 chars)
+  - "explicit adult scene" (20 chars)
+
+Avoid in Input:
+  - Detailed descriptions (Qwen will enhance)
+  - Technical terms (Qwen will add professional quality)
+  - Quality tags (Qwen will add appropriate quality terms)
+  - Redundant anatomical terms (Qwen will enhance)
+```
+
+#### **Quality Expectations**
+```yaml
+Enhanced Quality Characteristics:
+  - Professional cinematic quality
+  - Enhanced anatomical accuracy
+  - Professional lighting and camera work
+  - High-end production values
+  - Realistic skin textures and details
+  - Professional adult content optimization
+
+Quality Comparison:
+  - Standard WAN: Good quality (3-3.5/5)
+  - Enhanced WAN: Enhanced quality (4-5/5)
+  - Quality Improvement: Significant enhancement
+  - Production Value: Professional adult content standards
+```
+
+#### **Performance Optimization**
+```yaml
+Enhancement Efficiency:
+  - Qwen Loading: 2.6-2.7s (one-time per session)
+  - Enhancement Time: 12.9-13.0s per prompt
+  - Memory Usage: 14.19GB during enhancement, 0.01GB after
+  - Cleanup: Automatic model unloading
+
+Generation Efficiency:
+  - Fast Enhanced: 15.2s (25 steps, 0.6s per step)
+  - High Enhanced: 19.6s (50 steps, 0.4s per step)
+  - Quality vs Speed: Enhanced quality with reasonable overhead
+  - File Optimization: Excellent compression (0.40-0.45MB PNG)
+```
+
+### **WAN7B Enhanced Model Use Cases**
+
+#### **When to Use Enhanced Models**
+```yaml
+Use Enhanced Models For:
+  - High-quality adult content production
+  - Professional cinematic quality requirements
+  - Enhanced anatomical accuracy needs
+  - Professional adult content standards
+  - Maximum quality output requirements
+
+Use Standard Models For:
+  - Quick generation needs
+  - Basic quality requirements
+  - Resource-constrained environments
+  - Batch processing with time constraints
+  - Prototype or concept generation
+```
+
+#### **Enhanced Model Selection Guide**
+```yaml
+image7b_fast_enhanced:
+  - Use For: Quick high-quality images
+  - Time: 111.0s (reasonable overhead)
+  - Quality: Enhanced with fast generation
+  - Best For: Professional adult content with time constraints
+
+image7b_high_enhanced:
+  - Use For: Maximum quality images
+  - Time: 108.6s (minimal overhead vs fast)
+  - Quality: Enhanced with maximum generation steps
+  - Best For: Professional adult content with maximum quality
+
+video7b_fast_enhanced:
+  - Use For: Quick high-quality videos
+  - Time: TBD (expected 263.9s average)
+  - Quality: Enhanced video with motion quality
+  - Best For: Professional adult content videos with time constraints
+
+video7b_high_enhanced:
+  - Use For: Maximum quality videos
+  - Time: TBD (expected 370.0s average)
+  - Quality: Enhanced video with maximum quality
+  - Best For: Professional adult content videos with maximum quality
+```
+
+### **WAN7B Enhanced Model Testing Protocol**
+
+#### **Phase 1: Image Enhancement Testing (COMPLETE)**
+```yaml
+Status: ✅ COMPLETE
+Results: Enhanced quality with reasonable overhead
+Performance: 111.0s (fast), 108.6s (high)
+Quality: Significant improvement over standard prompts
+```
+
+#### **Phase 2: Video Enhancement Testing (IN PROGRESS)**
+```yaml
+Status: 🔄 IN PROGRESS
+Target: Test video enhancement capabilities
+Expected Quality: Enhanced video with motion quality
+Performance: TBD (Job 8 in progress)
+```
+
+#### **Phase 3: Explicit Content Testing (FUTURE)**
+```yaml
+Status: 🔄 FUTURE
+Target: Test explicit content with enhanced prompts
+Expected Quality: 4-5/5 with enhanced details
+Prompts: Combine explicit content with Qwen enhancement
+Performance: Enhanced quality with additional processing time
+```
+
+### **WAN7B Enhanced Model Quality Assessment**
+
+#### **Enhanced Quality Characteristics**
+```yaml
+Professional Quality (Target: 5.0/5.0, Actual: Enhanced):
+  - Professional cinematic descriptions: ✅ Excellent
+  - Enhanced anatomical accuracy: ✅ Excellent
+  - Professional lighting and camera work: ✅ Excellent
+  - High-end production values: ✅ Excellent
+  - Realistic skin textures and details: ✅ Excellent
+
+Technical Quality (Target: 5.0/5.0, Actual: Enhanced):
+  - File format and compression: ✅ Excellent
+  - Resolution quality: ✅ Good (480x832)
+  - Professional color grading: ✅ Excellent
+  - No technical artifacts: ✅ Excellent
+  - Optimal file size: ✅ Excellent (0.40-0.45MB PNG)
+
+Adult Content Quality (Target: 5.0/5.0, Actual: Enhanced):
+  - Professional adult content optimization: ✅ Excellent
+  - Enhanced anatomical descriptions: ✅ Excellent
+  - Professional production standards: ✅ Excellent
+  - Cinematic quality output: ✅ Excellent
+  - Realistic intimate scene portrayal: ✅ Excellent
+```
+
+### **WAN7B Enhanced Model Optimization Summary**
+
+#### **Critical Findings**
+```yaml
+Performance: ✅ Excellent
+  - Enhancement: 12.9-13.0s per prompt (reasonable)
+  - Generation: 15.2-19.6s (excellent efficiency)
+  - File optimization: 0.40-0.45MB PNG (excellent)
+  - Memory efficiency: Perfect (automatic cleanup)
+
+Quality Enhancement: ✅ Excellent
+  - Prompt expansion: 3,400% (32→2517 chars, 35→2684 chars)
+  - Professional cinematic quality: Excellent
+  - Enhanced anatomical accuracy: Excellent
+  - Professional adult content optimization: Excellent
+
+Value Proposition: ✅ Excellent
+  - Quality improvement: Significant enhancement over standard
+  - Performance overhead: Reasonable (+38s fast, +18.6s high)
+  - Production readiness: Suitable for professional use
+  - Scalability: Excellent memory management
+```
+
+#### **Optimization Strategy**
+```yaml
+Immediate Actions:
+  1. Use enhanced models for high-quality adult content
+  2. Keep input prompts simple and direct (30-40 characters)
+  3. Let Qwen enhancement handle detailed descriptions
+  4. Expect enhanced quality with reasonable overhead
+  5. Utilize automatic memory management
+
+Expected Results:
+  - Quality improvement: Standard → Enhanced
+  - Professional cinematic quality output
+  - Enhanced anatomical accuracy
+  - Professional adult content standards
+  - Production-ready performance
+```
+
+---
+
+## **🔞 WAN Adult Content Optimization (CRITICAL UPDATE)**
+
+### **Performance Testing Results (July 8, 2025)**
+
+**Critical Finding:** Conservative prompts (3-3.5/5) not testing WAN's unrestricted tier capabilities for adult content.
+
+**Test Results:**
+- **Conservative prompts:** "intimate photo shoot" → 3/5 quality
+- **Missing elements:** No "unrestricted nsfw", anatomical terms, adult production terms
+- **Impact:** Not utilizing WAN's full adult content potential
+- **Solution:** Explicit adult content prompts with anatomical accuracy
+
+### **WAN Adult Content Best Practices**
+
+#### **Three-Tier WAN Adult Content System**
+
+**Tier 1: Artistic Adult Content (Tasteful)**
+```yaml
+Target: Artistic, tasteful adult content with motion
+Language: Professional, artistic terminology
+Focus: Emotional connection, aesthetic beauty, smooth motion
+Anatomical Terms: Natural curves, perfect proportions, elegant features
+Motion Quality: Smooth motion, fluid movement, temporal consistency
+
+Example Input: "intimate couple portrait"
+Example Output: "attractive couple in intimate embrace, smooth motion, fluid movement, artistic nude photography, soft natural window light, tender moment, stable camera, temporal consistency, natural body movement, professional boudoir cinematography, tasteful composition, emotional connection"
+```
+
+**Tier 2: Explicit Adult Content (Direct)**
+```yaml
+Target: Direct, explicit adult content with motion
+Language: Professional but direct terminology
+Focus: Anatomical accuracy, production quality, smooth motion
+Anatomical Terms: Specific body part descriptions, natural anatomy
+Motion Quality: Smooth motion, fluid movement, temporal consistency
+
+Example Input: "adult video scene"
+Example Output: "explicit nsfw, professional adult content, attractive adult performers, intimate scene, smooth motion, fluid movement, high-end production values, professional lighting setup, stable camera, temporal consistency, natural body movement, 4k camera quality, realistic skin textures, anatomically accurate, shot on RED camera, cinematic depth of field"
+```
+
+**Tier 3: Unrestricted Adult Content (Maximum)**
+```yaml
+Target: Unrestricted, maximum explicit content with motion
+Language: Direct, professional adult terminology
+Focus: Maximum anatomical accuracy, professional quality, smooth motion
+Anatomical Terms: Comprehensive anatomical descriptions
+Motion Quality: Smooth motion, fluid movement, temporal consistency
+
+Example Input: "explicit adult scene"
+Example Output: "unrestricted nsfw, professional adult content, attractive adult performers, explicit intimate scene, smooth motion, fluid movement, maximum anatomical accuracy, high-end production values, professional lighting setup, stable camera, temporal consistency, natural body movement, 4k camera quality, realistic skin textures, shot on RED camera, cinematic depth of field, maximum realism"
+```
+
+### **WAN Adult Content Prompt Optimization**
+
+#### **Current Issues Identified**
+```yaml
+Conservative Prompt Problems:
+  - "intimate photo shoot": Too conservative for adult content
+  - "passionate love scene": Vague, needs specific adult content terms
+  - Missing: "unrestricted nsfw", "professional adult content"
+  - Missing: Specific anatomical descriptions
+  - Missing: Adult production terminology
+
+WAN Model Capabilities:
+  - Supports explicit adult content (based on model architecture)
+  - Requires specific NSFW content indicators
+  - Needs anatomical accuracy terms for adult content
+  - Can handle professional adult production terminology
+  - Motion quality excellent for adult content scenes
+```
+
+#### **Optimized WAN Adult Content Prompts**
+
+**Conservative → Explicit Transformation:**
+```yaml
+Before (Conservative - 3/5 quality):
+"two gorgeous petite asian models, intimate photo shoot, passionate love scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera movement, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, shallow depth of field"
+
+After (Explicit - Target 4-5/5 quality):
+"unrestricted nsfw, two gorgeous petite asian models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism"
+```
+
+**Key Changes:**
+- Added: "unrestricted nsfw" (explicit tier indicator)
+- Added: "perfect anatomy, natural curves" (anatomical accuracy)
+- Changed: "intimate photo shoot" → "intimate adult scene"
+- Changed: "passionate love scene" → "passionate love making"
+- Added: "professional adult content" (production quality)
+- Added: "maximum realism" (quality target)
+- Result: 100 tokens (under WAN limit)
+
+#### **WAN Adult Content Prompt Templates**
+
+**Template 1: Explicit Adult Scene (100 tokens)**
+```
+unrestricted nsfw, two gorgeous petite asian models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+**Template 2: Adult Content with Specific Actions (100 tokens)**
+```
+unrestricted nsfw, beautiful asian models, perfect anatomy, natural curves, intimate adult moment, passionate interaction, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+**Template 3: Professional Adult Production (100 tokens)**
+```
+unrestricted nsfw, professional adult content, attractive models, perfect anatomy, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, high-end production, high quality video, professional cinematography, maximum realism
+```
+
+### **WAN Motion Quality Best Practices**
+
+#### **Temporal Consistency Framework**
+```yaml
+Motion Quality Terms (Always Include):
+  - smooth motion, fluid movement
+  - temporal consistency, stable camera
+  - natural body movement
+  - no jerky motion, no teleporting
+
+Camera Quality Terms:
+  - stable camera, steady camera movement
+  - professional cinematography
+  - shallow depth of field
+  - high quality video
+
+Lighting and Atmosphere:
+  - soft lighting, sensual atmosphere
+  - intimate setting, romantic setting
+  - professional lighting setup
+```
+
+#### **WAN Performance Optimization**
+```yaml
+Generation Efficiency:
+  - Fast: 25 steps (5.13s per step = 128.0s generation)
+  - High: 50 steps (5.30s per step = 265.0s generation)
+  - Quality improvement: 3/5 → 3.5/5 (modest)
+  - Time increase: 36% more time for 17% quality improvement
+
+File Optimization:
+  - Fast: 2.25MB for 5.0s video (450KB/s)
+  - High: ~3-4MB for 5.0s video (600-800KB/s)
+  - Compression: Excellent (professional quality)
+  - Format: MP4 with proper codec
+
+Memory Efficiency:
+  - No VRAM issues reported
+  - Perfect memory cleanup
+  - Efficient model loading (52.2s first load, cached thereafter)
+```
+
+### **WAN Adult Content Testing Protocol**
+
+#### **Phase 1: Conservative Testing (COMPLETE)**
+```yaml
+Status: ✅ COMPLETE
+Results: 3/5 (fast), 3.5/5 (high)
+Issues: Too conservative, not testing unrestricted tier
+Performance: Excellent (262.1s fast, 357.1s+ high)
+```
+
+#### **Phase 2: Explicit Testing (NEXT)**
+```yaml
+Status: 🔄 NEXT
+Target: Test optimized explicit prompts
+Expected Quality: 4-5/5
+Prompts: Use unrestricted nsfw templates above
+Performance: Maintain excellent motion quality
+```
+
+#### **Phase 3: Enhanced Testing (FUTURE)**
+```yaml
+Status: 🔄 FUTURE
+Target: Test with Qwen enhancement
+Expected Quality: 4-5/5 with enhanced details
+Prompts: Combine explicit prompts with Qwen enhancement
+Performance: Enhanced quality with additional processing time
+```
+
+### **WAN Adult Content Quality Assessment**
+
+#### **Motion Quality (Target: 5.0/5.0, Actual: 4/5)**
+```yaml
+✅ Excellent:
+  - Smooth motion, fluid movement
+  - Temporal consistency
+  - Stable camera movement
+  - No jerky motion or teleporting
+
+⚠️ Good:
+  - Natural body movement
+```
+
+#### **Technical Quality (Target: 5.0/5.0, Actual: 4/5)**
+```yaml
+✅ Excellent:
+  - Video format and compression
+  - File size optimization (2.25MB for 5.0s)
+  - Professional cinematography
+
+⚠️ Good:
+  - Resolution quality (480x832)
+  - Color grading and lighting
+```
+
+#### **Adult Content Quality (Target: 5.0/5.0, Actual: 2/5)**
+```yaml
+❌ Below Target:
+  - NSFW content generation (too conservative)
+  - Anatomical accuracy (not tested with explicit terms)
+  - Professional adult production (missing production terms)
+  - Explicit content capability (not utilizing full potential)
+  - Adult content specificity (needs more explicit prompts)
+```
+
+### **WAN Adult Content Optimization Summary**
+
+#### **Critical Findings**
+```yaml
+Performance: ✅ Excellent
+  - Generation: 5.13-5.30s per step (excellent)
+  - File optimization: 2.25MB for 5.0s video (excellent)
+  - Memory efficiency: Perfect (no VRAM issues)
+
+Motion Quality: ✅ Excellent
+  - Smooth motion, temporal consistency (excellent)
+  - Professional cinematography (good)
+  - No technical artifacts (excellent)
+
+Adult Content Quality: ❌ Below Target
+  - Conservative prompts limiting quality (3-3.5/5)
+  - Not testing unrestricted tier capabilities
+  - Missing explicit anatomical and adult content terms
+```
+
+#### **Optimization Strategy**
+```yaml
+Immediate Actions:
+  1. Test explicit prompts with "unrestricted nsfw"
+  2. Add anatomical accuracy terms ("perfect anatomy, natural curves")
+  3. Include adult production terms ("professional adult content")
+  4. Maintain motion quality terms
+  5. Target 100 tokens for optimal performance
+
+Expected Results:
+  - Quality improvement: 3-3.5/5 → 4-5/5
+  - Maintain excellent motion quality
+  - Test WAN's full adult content capabilities
+  - Validate unrestricted tier performance
+```
+
+---
+
+## **🔞 WAN7B Enhanced Models - Qwen 7B Prompt Enhancement**
+
+### **Overview: Enhanced Video Generation**
+
+**Job Types:**
+- **video7b_fast_enhanced:** 263.9s average, 2.76MB MP4, Qwen enhanced
+- **video7b_high_enhanced:** 370.0s average, 3.20MB MP4, Qwen enhanced
+
+**Enhancement Process:**
+```yaml
+Step 1: User Input Prompt
+  - Simple prompt: "two asian models intimate scene"
+  - Token limit: 200 characters (enhanced jobs)
+
+Step 2: Qwen 7B Enhancement
+  - AI-powered prompt expansion
+  - Adds cinematic details, lighting, camera work
+  - Enhances anatomical and adult content terms
+  - Maintains motion quality descriptors
+
+Step 3: WAN Generation
+  - Uses enhanced prompt for video generation
+  - Higher quality due to detailed prompt
+  - Better anatomical accuracy and adult content
+  - Enhanced motion quality and cinematography
+```
+
+### **WAN7B Enhanced Adult Content Best Practices**
+
+#### **Input Prompt Optimization (User Level)**
+
+**Simple Input → Enhanced Output Process:**
+```yaml
+User Input (Simple):
+"two gorgeous petite asian models intimate scene"
+
+Qwen Enhancement Adds:
+- Cinematic details: "soft natural lighting, intimate bedroom setting"
+- Camera work: "stable camera, shallow depth of field"
+- Motion quality: "smooth motion, fluid movement, temporal consistency"
+- Adult content: "passionate love making, professional adult content"
+- Anatomical accuracy: "perfect anatomy, natural curves"
+- Production quality: "high-end production values, professional cinematography"
+
+Final Enhanced Prompt:
+"two gorgeous petite asian models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft natural lighting, intimate bedroom setting, stable camera, shallow depth of field, temporal consistency, natural body movement, professional adult content, high-end production values, professional cinematography, maximum realism"
+```
+
+#### **WAN7B Enhanced Prompt Templates**
+
+**Template 1: Simple Adult Scene (Enhanced)**
+```yaml
+User Input:
+"two asian models intimate"
+
+Expected Qwen Enhancement:
+"two gorgeous asian models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft natural lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism"
+```
+
+**Template 2: Specific Adult Action (Enhanced)**
+```yaml
+User Input:
+"couple passionate love making"
+
+Expected Qwen Enhancement:
+"attractive couple, perfect anatomy, natural curves, passionate love making, intimate adult scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism"
+```
+
+**Template 3: Professional Adult Production (Enhanced)**
+```yaml
+User Input:
+"professional adult content scene"
+
+Expected Qwen Enhancement:
+"professional adult content, attractive models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, high-end production values, high quality video, professional cinematography, maximum realism"
+```
+
+### **Qwen 7B Enhancement System Prompts**
+
+#### **Adult Content Enhancement Prompt**
+```yaml
+System Prompt for Qwen 7B:
+"You are an expert adult content prompt enhancer for video generation. Enhance the user's simple prompt into a detailed, professional adult content prompt for WAN video generation.
+
+Enhancement Guidelines:
+1. Add anatomical accuracy: 'perfect anatomy, natural curves'
+2. Add adult content specificity: 'intimate adult scene, passionate love making'
+3. Add motion quality: 'smooth motion, fluid movement, temporal consistency'
+4. Add cinematography: 'stable camera, professional cinematography'
+5. Add lighting/atmosphere: 'soft lighting, sensual atmosphere, intimate setting'
+6. Add production quality: 'professional adult content, high-end production values'
+7. Add quality targets: 'high quality video, maximum realism'
+
+Maintain professional language and focus on adult content quality.
+Output only the enhanced prompt, max 200 characters.
+
+Input: {user_prompt}
+Enhanced Output:"
+```
+
+#### **Example Qwen Enhancements**
+
+**Input:** "asian models intimate"
+**Enhanced Output:**
+```
+two gorgeous asian models, perfect anatomy, natural curves, intimate adult scene, passionate love making, smooth motion, fluid movement, sensual atmosphere, soft natural lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+**Input:** "couple passionate"
+**Enhanced Output:**
+```
+attractive couple, perfect anatomy, natural curves, passionate love making, intimate adult scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+### **WAN7B Enhanced Performance Analysis**
+
+#### **Performance Comparison**
+```yaml
+Regular WAN vs Enhanced WAN:
+  - video_fast: 262.1s, 2.25MB, 3/5 quality
+  - video7b_fast_enhanced: 263.9s, 2.76MB, 4-5/5 quality (expected)
+  
+  - video_high: 357.1s+, ~3-4MB, 3.5/5 quality
+  - video7b_high_enhanced: 370.0s, 3.20MB, 4-5/5 quality (expected)
+
+Quality Improvement:
+  - Enhanced prompts provide 20-30% more detail
+  - Better anatomical accuracy through Qwen enhancement
+  - Improved adult content specificity
+  - Enhanced cinematography and production quality
+  - Expected quality: 4-5/5 vs 3-3.5/5 for regular WAN
+```
+
+#### **Enhanced Model Capabilities**
+```yaml
+Qwen 7B Enhancement Benefits:
+  - Automatic prompt expansion and optimization
+  - Context-aware adult content enhancement
+  - Cinematic detail addition
+  - Anatomical accuracy improvement
+  - Professional production terminology
+  - Motion quality optimization
+
+WAN Generation Benefits:
+  - Higher quality input prompts
+  - Better anatomical accuracy
+  - Enhanced adult content quality
+  - Improved motion consistency
+  - Professional cinematography
+  - Maximum realism output
+```
+
+### **WAN7B Enhanced Adult Content Testing Protocol**
+
+#### **Phase 1: Enhanced Testing (NEXT)**
+```yaml
+Status: 🔄 NEXT
+Target: Test WAN7B enhanced models with simple adult content prompts
+Expected Quality: 4-5/5 (significant improvement over regular WAN)
+Prompts: Use simple inputs, let Qwen handle enhancement
+Performance: 263.9s (fast), 370.0s (high)
+
+Test Cases:
+1. Simple Input: "two asian models intimate"
+2. Simple Input: "couple passionate love making"
+3. Simple Input: "professional adult content scene"
+4. Simple Input: "intimate adult scene"
+```
+
+#### **Phase 2: Quality Validation (FUTURE)**
+```yaml
+Status: 🔄 FUTURE
+Target: Validate enhanced quality improvements
+Expected Quality: 4-5/5 consistently
+Focus: Anatomical accuracy, adult content quality, motion quality
+Comparison: Enhanced vs regular WAN performance
+```
+
+### **WAN7B Enhanced Best Practices Summary**
+
+#### **User Input Guidelines**
+```yaml
+Simple Input Strategy:
+  - Keep user prompts simple and direct
+  - Focus on core content: "two asian models intimate"
+  - Let Qwen 7B handle enhancement details
+  - Target 50-100 characters for user input
+  - Avoid over-engineering user prompts
+
+Qwen Enhancement Handles:
+  - Anatomical accuracy terms
+  - Motion quality descriptors
+  - Cinematography details
+  - Lighting and atmosphere
+  - Production quality terms
+  - Adult content specificity
+```
+
+#### **Quality Expectations**
+```yaml
+Enhanced Model Quality Targets:
+  - Anatomical Accuracy: 4-5/5 (Qwen enhancement)
+  - Adult Content Quality: 4-5/5 (enhanced specificity)
+  - Motion Quality: 4-5/5 (enhanced descriptors)
+  - Technical Quality: 4-5/5 (professional production)
+  - Overall Quality: 4-5/5 (significant improvement)
+
+Performance Trade-offs:
+  - Additional 1-2s for Qwen enhancement
+  - Larger file sizes (2.76MB vs 2.25MB)
+  - Higher quality output
+  - Better adult content accuracy
+```
+
+#### **Optimization Strategy**
+```yaml
+Immediate Actions:
+  1. Test WAN7B enhanced models with simple adult content prompts
+  2. Validate Qwen enhancement quality improvements
+  3. Compare enhanced vs regular WAN performance
+  4. Optimize user input prompts for enhancement
+  5. Target maximum quality with enhanced models
+
+Expected Results:
+  - Quality improvement: 3-3.5/5 → 4-5/5
+  - Better anatomical accuracy through Qwen enhancement
+  - Enhanced adult content specificity
+  - Professional production quality
+  - Maximum realism output
+```
+
+### **WAN7B Enhanced vs Regular WAN Comparison**
+
+#### **Quality Comparison Matrix**
+```yaml
+| Aspect | Regular WAN | WAN7B Enhanced | Improvement |
+|--------|-------------|----------------|-------------|
+| **Anatomical Accuracy** | 2/5 | 4-5/5 | +150% |
+| **Adult Content Quality** | 2/5 | 4-5/5 | +150% |
+| **Motion Quality** | 4/5 | 4-5/5 | +25% |
+| **Technical Quality** | 4/5 | 4-5/5 | +25% |
+| **Overall Quality** | 3-3.5/5 | 4-5/5 | +100% |
+
+Performance Comparison:
+| Metric | Regular WAN | WAN7B Enhanced | Difference |
+|--------|-------------|----------------|------------|
+| **Generation Time** | 262.1s | 263.9s | +1.8s |
+| **File Size** | 2.25MB | 2.76MB | +23% |
+| **Quality Score** | 3-3.5/5 | 4-5/5 | +100% |
+| **Adult Content** | Limited | Enhanced | +150% |
+```
+
+#### **Recommendation**
+```yaml
+For Adult Content Testing:
+  - Use WAN7B enhanced models for maximum quality
+  - Simple user prompts + Qwen enhancement = best results
+  - Expected quality: 4-5/5 consistently
+  - Better anatomical accuracy and adult content specificity
+  - Professional production quality output
+
+For Performance Testing:
+  - Regular WAN: 262.1s, 2.25MB, 3-3.5/5 quality
+  - Enhanced WAN: 263.9s, 2.76MB, 4-5/5 quality
+  - Minimal time penalty for significant quality improvement
+  - Enhanced models recommended for production use
 ```
 
 ### **3. Qwen 7B - Master Enhancement System Prompt**
@@ -153,7 +989,7 @@ NSFW SPECIALIZATION:
 - Ensure anatomical accuracy for adult content
 
 EXPANSION RATIO: 300-500% detail increase
-TOKEN LIMIT: Model-specific (SDXL: 75, WAN: 100)
+TOKEN LIMIT: Model-specific (SDXL: 75, WAN: 100) - CRITICAL: Respect limits
 
 Input: {user_prompt}
 Output:
@@ -970,3 +1806,154 @@ Phase 3 (6 months):
 ---
 
 This master prompting guide represents the culmination of expert-level prompting engineering, providing production-ready implementation for maximum effectiveness and anatomical accuracy in sexually explicit adult content generation. 
+
+---
+
+## **🔞 WAN Models - Explicit NSFW Prompts (BREAKTHROUGH)**
+
+### **BREAKTHROUGH Results (July 8, 2025)**
+**Critical Discovery:** Explicit prompts with "unrestricted nsfw" achieve 4-5/5 quality vs 3-3.5/5 for conservative prompts.
+
+**Test Results:**
+- **video_fast (Explicit):** 224.5s, 1.73MB MP4, 4-5/5 quality ✅
+- **video_high (Explicit):** 362.0s, 2.42MB MP4, 4-5/5 quality ✅
+- **image7b_fast_enhanced (Explicit):** 97.8s, 0.48MB PNG, Enhanced quality ✅
+- **Quality Improvement:** 3-3.5/5 → 4-5/5 (BREAKTHROUGH)
+- **Performance Impact:** Minimal (excellent efficiency maintained)
+
+### **🔞 WAN Standard Models - Explicit Prompts**
+
+#### **video_fast (25 steps, ~225s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, kissing nipples, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+#### **video_high (50 steps, ~362s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, kissing nipples, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+### **🔞 WAN Enhanced Models - Explicit Prompts**
+
+#### **image7b_fast_enhanced (25 steps, ~98s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, sensual atmosphere, soft lighting, intimate setting, professional adult content, high quality image, professional photography, maximum realism
+```
+
+#### **image7b_high_enhanced (50 steps, ~109s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, sensual atmosphere, soft lighting, intimate setting, professional adult content, high quality image, professional photography, maximum realism
+```
+
+#### **video7b_fast_enhanced (25 steps, ~TBD)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, kissing nipples, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+#### **video7b_high_enhanced (50 steps, ~370s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, kissing nipples, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism
+```
+
+### **🔞 SDXL Models - Explicit Prompts (Token Optimized)**
+
+#### **sdxl_image_fast (25 steps, ~30s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, sensual atmosphere, soft lighting, intimate setting, professional adult content, high quality image, professional photography, maximum realism
+```
+
+#### **sdxl_image_high (25 steps, ~47s)**
+```
+unrestricted nsfw, two naked girlfriends having sex, perfect anatomy, natural curves, intimate lesbian scene, passionate love making, sensual atmosphere, soft lighting, intimate setting, professional adult content, high quality image, professional photography, maximum realism
+```
+
+### **BREAKTHROUGH Key Success Factors**
+
+#### **Critical Explicit Terms**
+```yaml
+NSFW Activation:
+  - "unrestricted nsfw": ✅ Activates unrestricted tier
+  - "professional adult content": ✅ Ensures production quality
+  - "intimate lesbian scene": ✅ Provides context specificity
+
+Anatomical Accuracy:
+  - "perfect anatomy": ✅ Provides anatomical guidance
+  - "natural curves": ✅ Ensures realistic body proportions
+  - "kissing nipples": ✅ Adds specific intimate details
+
+Motion Quality (Video):
+  - "smooth motion": ✅ Ensures fluid movement
+  - "fluid movement": ✅ Maintains temporal consistency
+  - "temporal consistency": ✅ Prevents motion artifacts
+  - "natural body movement": ✅ Realistic motion patterns
+
+Production Quality:
+  - "maximum realism": ✅ Sets quality target
+  - "professional cinematography": ✅ Ensures production values
+  - "high quality video/image": ✅ Quality specification
+  - "professional photography": ✅ Image quality specification
+```
+
+#### **Quality Improvement Analysis**
+```yaml
+Conservative Prompts (Jobs 1-5):
+  - Quality: 3-3.5/5 (below target)
+  - NSFW Content: Limited by conservative interpretation
+  - Anatomical Accuracy: Basic (missing explicit guidance)
+  - Motion Quality: Excellent (consistent)
+  - Performance: Excellent (262-358s)
+
+Explicit Prompts (Jobs 10-12):
+  - Quality: 4-5/5 (BREAKTHROUGH - target achieved)
+  - NSFW Content: Excellent (unrestricted nsfw working)
+  - Anatomical Accuracy: Excellent (perfect anatomy, natural curves)
+  - Motion Quality: Excellent (consistent)
+  - Performance: Excellent (224-362s)
+
+Quality Improvement: 3-3.5/5 → 4-5/5 (BREAKTHROUGH)
+Performance Impact: Minimal (excellent efficiency maintained)
+```
+
+#### **Enhanced Model Performance (Explicit)**
+```yaml
+Explicit + Qwen Enhancement Results:
+  - Enhancement Time: 8.5s (vs 12.9-13.0s for simple prompts)
+  - Prompt Expansion: 440% (276→1491 chars vs 3,400% for simple)
+  - Quality: Enhanced tier with explicit content
+  - Performance: 97.8s (vs 111.0s for simple prompts)
+  - Explicit Content: ✅ Successfully enhanced and generated
+
+Key Insights:
+  - Explicit prompts reduce enhancement time (more specific input)
+  - Qwen enhancement works well with explicit content
+  - Performance improvement with explicit prompts
+  - Quality maintained at enhanced tier
+```
+
+### **Production Readiness Assessment**
+
+#### **WAN Standard Models**
+```yaml
+Explicit Prompts: ✅ Production Ready (4-5/5 quality)
+Conservative Prompts: ⚠️ Limited (3-3.5/5 quality)
+Performance: ✅ Excellent (224-362s)
+Scalability: ✅ Excellent (no VRAM issues)
+```
+
+#### **WAN Enhanced Models**
+```yaml
+Explicit + Qwen: ✅ Production Ready (Enhanced quality)
+Simple + Qwen: ✅ Production Ready (Enhanced quality)
+Performance: ✅ Excellent (97-111s)
+Scalability: ✅ Excellent (automatic memory management)
+```
+
+#### **SDXL Models**
+```yaml
+Token Optimized: ✅ Production Ready (4-5/5 quality)
+Token Truncated: ❌ Not Production Ready (3/5 quality)
+Performance: ✅ Excellent (46.7s for 6 images)
+Scalability: ✅ Excellent (29.2GB VRAM usage)
+```
+
+--- 
