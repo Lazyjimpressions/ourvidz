@@ -1,0 +1,192 @@
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import TestMediaGrid from '@/components/TestMediaGrid';
+import { Button } from '@/components/ui/button';
+
+interface WorkspaceAsset {
+  id: string;
+  url: string;
+  jobId: string;
+  prompt: string;
+}
+
+const WorkspaceTest = () => {
+  const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode = searchParams.get('mode') || 'image';
+  const [workspace, setWorkspace] = useState<WorkspaceAsset[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load workspace from sessionStorage
+  useEffect(() => {
+    const stored = sessionStorage.getItem('workspace-test');
+    if (stored) {
+      try {
+        setWorkspace(JSON.parse(stored));
+      } catch (error) {
+        console.error('Error parsing workspace data:', error);
+      }
+    }
+  }, []);
+
+  // Save workspace to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem('workspace-test', JSON.stringify(workspace));
+  }, [workspace]);
+
+  // Fetch jobs based on mode
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchJobs = async () => {
+      setLoading(true);
+      try {
+        if (mode === 'image') {
+          const { data, error } = await supabase
+            .from('images')
+            .select('id, image_urls, prompt, metadata, created_at, generation_mode, quality')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(20);
+            
+          if (!error && data) {
+            setJobs(data);
+          }
+        } else {
+          const { data, error } = await supabase
+            .from('videos')
+            .select('id, video_url, signed_url, prompt, metadata, created_at, quality')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .order('created_at', { ascending: false })
+            .limit(20);
+            
+          if (!error && data) {
+            setJobs(data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching jobs:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchJobs();
+  }, [user, mode]);
+
+  const handleImport = (assets: WorkspaceAsset[]) => {
+    const newAssets = assets.filter(asset => 
+      !workspace.find(existing => existing.id === asset.id)
+    );
+    
+    if (newAssets.length > 0) {
+      setWorkspace(prev => [...newAssets, ...prev]);
+      console.log(`Imported ${newAssets.length} assets to workspace`);
+    }
+  };
+
+  const handleRemoveFromWorkspace = (assetId: string) => {
+    setWorkspace(prev => prev.filter(asset => asset.id !== assetId));
+  };
+
+  const clearWorkspace = () => {
+    setWorkspace([]);
+  };
+
+  const switchMode = (newMode: 'image' | 'video') => {
+    const params = new URLSearchParams(searchParams);
+    params.set('mode', newMode);
+    setSearchParams(params);
+  };
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <p className="text-muted-foreground">Please sign in to use the workspace test.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background text-foreground p-6 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Workspace Test</h1>
+        <div className="flex gap-2">
+          <Button 
+            variant={mode === 'image' ? 'default' : 'outline'}
+            onClick={() => switchMode('image')}
+          >
+            Images
+          </Button>
+          <Button 
+            variant={mode === 'video' ? 'default' : 'outline'}
+            onClick={() => switchMode('video')}
+          >
+            Videos
+          </Button>
+        </div>
+      </div>
+
+      {/* Current Workspace */}
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Current Workspace ({workspace.length} assets)</h2>
+          {workspace.length > 0 && (
+            <Button variant="destructive" onClick={clearWorkspace}>
+              Clear Workspace
+            </Button>
+          )}
+        </div>
+        
+        {workspace.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {workspace.map((asset) => (
+              <div key={asset.id} className="relative group">
+                <img
+                  src={asset.url}
+                  alt={`Workspace ${asset.id}`}
+                  className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
+                />
+                <button
+                  onClick={() => handleRemoveFromWorkspace(asset.id)}
+                  className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+            <p className="text-muted-foreground">Workspace is empty. Import some assets from your recent jobs below.</p>
+          </div>
+        )}
+      </section>
+
+      {/* Job Results */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Your Recent {mode === 'image' ? 'Images' : 'Videos'}</h2>
+        
+        {loading ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        ) : (
+          <TestMediaGrid 
+            jobs={jobs} 
+            onImport={handleImport}
+            mode={mode as 'image' | 'video'}
+          />
+        )}
+      </section>
+    </div>
+  );
+};
+
+export default WorkspaceTest;

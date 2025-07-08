@@ -10,6 +10,7 @@ import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Library from "@/pages/Library";
 import Workspace from "@/pages/Workspace";
+import WorkspaceTest from "@/pages/WorkspaceTest";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/workspace" element={<Workspace />} />
+              <Route path="/workspace-test" element={<WorkspaceTest />} />
               <Route path="/library" element={<Library />} />
               <Route path="/auth" element={<Auth />} />
             </Routes>
