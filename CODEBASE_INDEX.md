@@ -1,8 +1,9 @@
 # OurVidz.com - Codebase Index
 
-**Last Updated:** July 5, 2025  
-**Status:** Production Ready - Frontend Integration Pending  
-**System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)
+**Last Updated:** July 7, 2025  
+**Status:** Production Ready - 9/10 Job Types Verified  
+**System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)  
+**Deployment:** Production on Lovable (https://ourvidz.lovable.app/)
 
 ---
 
@@ -10,7 +11,7 @@
 
 OurVidz.com is an AI-powered platform for generating adult content videos and images. The system features:
 
-- **Ultra-Fast Images**: SDXL generation in 3-8 seconds
+- **Ultra-Fast Images**: SDXL generation in 3-8 seconds (6-image batches)
 - **AI Video Generation**: WAN 2.1 with Qwen 7B enhancement
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
@@ -28,11 +29,12 @@ Frontend:
   Styling: Tailwind CSS + shadcn/ui components
   State Management: React Context + React Query
   Routing: React Router DOM
+  Deployment: Lovable (https://ourvidz.lovable.app/)
 
 Backend:
   Database: Supabase (PostgreSQL)
   Authentication: Supabase Auth
-  Storage: Supabase Storage (8 buckets)
+  Storage: Supabase Storage (12 buckets)
   Edge Functions: Deno runtime
   Queue: Upstash Redis (REST API)
 
@@ -47,18 +49,40 @@ AI Workers:
 SDXL Worker:
   Queue: sdxl_queue (2s polling)
   Job Types: sdxl_image_fast, sdxl_image_high
-  Performance: 3-8 seconds
+  Performance: 29.9s-42.4s (6-image batches)
   VRAM Usage: 6.6GB loaded, 10.5GB peak
   Status: ✅ Fully operational
 
 WAN Worker:
   Queue: wan_queue (5s polling)
   Job Types: 8 types (4 standard + 4 enhanced)
-  Performance: 67-294 seconds
+  Performance: 233s-370s (single files)
   VRAM Usage: 15-30GB peak
-  Enhancement: Qwen 7B (14.6s)
-  Status: ✅ Ready for deployment
+  Enhancement: Qwen 7B (14.6s) - Currently disabled
+  Status: ✅ Operational (9/10 job types tested)
 ```
+
+---
+
+## 📊 Current Performance Status
+
+### **✅ Tested Job Types (9/10)**
+| Job Type | Status | Performance | Output | Quality |
+|----------|--------|-------------|--------|---------|
+| **sdxl_image_fast** | ✅ Tested | 29.9s (3.1s per image) | 6 images | Excellent |
+| **sdxl_image_high** | ✅ Tested | 42.4s (5.0s per image) | 6 images | Premium |
+| **video_fast** | ✅ Tested | 251.5s average | 1 video | Good |
+| **video_high** | ✅ Tested | 359.7s | 1 video | Better |
+| **video7b_fast_enhanced** | ✅ Tested | 263.9s average | 1 video | Enhanced |
+| **video7b_high_enhanced** | ✅ Tested | 370.0s average | 1 video | Enhanced |
+| **image7b_fast_enhanced** | ✅ Tested | 233.5s | 1 image | Enhanced |
+
+### **❌ Pending Testing (3/10)**
+| Job Type | Expected Time | Priority |
+|----------|---------------|----------|
+| **image_fast** | 73s | Medium |
+| **image_high** | 90s | Medium |
+| **image7b_high_enhanced** | 104s | Low |
 
 ---
 
@@ -67,7 +91,7 @@ WAN Worker:
 ### **Root Directory**
 ```
 ourvidz-1/
-├── docs/                    # Project documentation
+├── docs/                    # Project documentation (consolidated structure)
 ├── src/                     # Frontend source code
 ├── supabase/               # Backend configuration
 ├── public/                 # Static assets
@@ -108,6 +132,32 @@ supabase/
 
 ---
 
+## 📚 Documentation Status
+
+### **Final Documentation Structure (Consolidated & Cleaned)**
+```yaml
+docs/
+├── README.md               # Main project overview and entry point
+├── ARCHITECTURE.md         # Technical architecture and system design
+├── API.md                  # API reference (edge functions + worker API)
+├── PERFORMANCE.md          # Performance data, benchmarks, and quality improvements
+├── SERVICES.md             # Service configurations and setup
+├── CHANGELOG.md            # Version history, milestones, and dependency resolution
+├── DEPLOYMENT.md           # Deployment and operational guides
+├── WORKER_API.md           # Worker API reference (separate from API.md)
+├── EDGE_FUNCTIONS.md       # Supabase edge functions (separate from API.md)
+├── PROJECT.md              # Complete project context
+└── PROJECT_STATUS.md       # Current development status
+```
+
+### **Documentation Consolidation Status**
+- ✅ **Core Documentation**: README.md, ARCHITECTURE.md, API.md, PERFORMANCE.md, SERVICES.md, CHANGELOG.md, DEPLOYMENT.md
+- ✅ **Specialized Docs**: EDGE_FUNCTIONS.md (current Supabase functions), WORKER_API.md (worker API reference)
+- ✅ **Project Context**: PROJECT.md, PROJECT_STATUS.md (kept for reference)
+- ✅ **Consolidation Complete**: All duplicative files removed
+
+---
+
 ## 🔧 Key Components
 
 ### **Core Pages**
@@ -127,8 +177,8 @@ supabase/
 ### **Generation Components**
 ```typescript
 // Image and video generation
-- FastImageGenerator.tsx     # SDXL fast generation
-- HighImageGenerator.tsx     # SDXL high-quality generation
+- FastImageGenerator.tsx     # SDXL fast generation (6-image batch)
+- HighImageGenerator.tsx     # SDXL high-quality generation (6-image batch)
 - FastVideoGenerator.tsx     # WAN fast video generation
 - HighVideoGenerator.tsx     # WAN high-quality video generation
 - GeneratedImageGallery.tsx  # Generated content display
@@ -267,37 +317,39 @@ projects (1) → (1) characters
 
 ## 🎯 Job Types (10 Total)
 
-### **SDXL Jobs (2) - Ultra-Fast Images**
+### **SDXL Jobs (2) - Ultra-Fast Images (6-Image Batches)**
 ```yaml
 sdxl_image_fast:
-  performance: 3-8 seconds
+  performance: 29.9s total (3.1s per image)
   resolution: 1024x1024
   quality: excellent NSFW
-  storage: sdxl_fast bucket
+  storage: sdxl_image_fast bucket (5MB limit)
   credits: 1
+  status: ✅ Tested
 
 sdxl_image_high:
-  performance: 8-15 seconds
+  performance: 42.4s total (5.0s per image)
   resolution: 1024x1024
   quality: premium NSFW
-  storage: sdxl_high bucket
+  storage: sdxl_image_high bucket (10MB limit)
   credits: 2
+  status: ✅ Tested
 ```
 
-### **WAN Standard Jobs (4) - Videos + Backup Images**
+### **WAN Standard Jobs (4) - Videos + Backup Images (Single Files)**
 ```yaml
-image_fast: 73s, backup images, 1 credit
-image_high: 90s, backup images, 2 credits
-video_fast: 180s, 5s videos, 3 credits
-video_high: 280s, 6s videos, 5 credits
+image_fast: 73s, backup images, 1 credit, ❌ Not tested
+image_high: 90s, backup images, 2 credits, ❌ Not tested
+video_fast: 251.5s average, 5s videos, 3 credits, ✅ Tested
+video_high: 359.7s, 6s videos, 5 credits, ✅ Tested
 ```
 
 ### **WAN Enhanced Jobs (4) - AI-Enhanced with Qwen 7B**
 ```yaml
-image7b_fast_enhanced: 87s (73s + 14s), 2 credits
-image7b_high_enhanced: 104s (90s + 14s), 3 credits
-video7b_fast_enhanced: 194s (180s + 14s), 4 credits
-video7b_high_enhanced: 294s (280s + 14s), 6 credits
+image7b_fast_enhanced: 233.5s, 2 credits, ✅ Tested
+image7b_high_enhanced: 104s, 3 credits, ❌ Not tested
+video7b_fast_enhanced: 263.9s average, 4 credits, ✅ Tested
+video7b_high_enhanced: 370.0s average, 6 credits, ✅ Tested
 ```
 
 ---
@@ -509,7 +561,8 @@ Queue System:
 
 ### **Frontend Deployment**
 ```yaml
-Platform: Vercel/Netlify
+Platform: Lovable
+URL: https://ourvidz.lovable.app/
 Build: npm run build
 Output: dist/ directory
 Environment: Production Supabase credentials
@@ -519,7 +572,7 @@ Environment: Production Supabase credentials
 ```yaml
 Platform: Supabase
 Database: PostgreSQL with RLS
-Storage: 8 buckets with policies
+Storage: 12 buckets with policies
 Functions: Deno runtime edge functions
 ```
 
@@ -554,9 +607,9 @@ console.log('📋 Creating job:', { jobType, userId });
 ### **Performance Monitoring**
 ```yaml
 Generation Times:
-  - SDXL: 3-8 seconds (measured)
-  - WAN Standard: 67-280 seconds (measured)
-  - WAN Enhanced: +14 seconds (Qwen 7B)
+  - SDXL: 29.9-42.4 seconds (measured)
+  - WAN Standard: 251-360 seconds (measured)
+  - WAN Enhanced: 233-370 seconds (measured)
 
 VRAM Usage:
   - SDXL: 6.6GB loaded, 10.5GB peak
@@ -591,14 +644,32 @@ Testing: Component testing (to be implemented)
 
 ## 📚 Documentation
 
-### **Project Documentation**
+### **Current Documentation Structure**
 ```markdown
 docs/
 ├── PROJECT.md              # Complete project context
 ├── ARCHITECTURE.md         # Technical architecture
 ├── SERVICES.md             # Service configurations
 ├── PROJECT_STATUS.md       # Current development status
-└── SERVERCODEBASE_OVERVIEW.md # Server-side overview
+├── SERVERCODEBASE_OVERVIEW.md # Server-side overview
+├── EDGE_FUNCTIONS.md       # Supabase edge functions
+├── WORKER_API.md           # Worker API reference
+├── PERFORMANCE_BENCHMARKS.md # Detailed performance data
+├── PERFORMANCE_SUMMARY.md  # Quick performance reference
+├── NEGATIVE_PROMPT_IMPROVEMENTS.md # Prompt optimization
+└── ourvidz_status_update.md # Status updates
+```
+
+### **Planned Documentation Consolidation**
+```markdown
+docs/
+├── README.md               # Main project overview (consolidated)
+├── ARCHITECTURE.md         # Technical architecture (keep)
+├── API.md                  # API reference (consolidated)
+├── PERFORMANCE.md          # Performance data (consolidated)
+├── SERVICES.md             # Service configurations (keep)
+├── CHANGELOG.md            # Version history (new)
+└── DEPLOYMENT.md           # Deployment guides (new)
 ```
 
 ### **Code Documentation**
@@ -624,11 +695,12 @@ async function generateContent(request: GenerationRequest): Promise<void>
 - Asset management system
 - Real-time status updates
 - Mobile-responsive design
+- Production deployment on Lovable
 
 ### **🚧 In Progress**
-- Enhanced job type UI integration
-- End-to-end testing
+- Complete testing of remaining job types (1/10 pending)
 - Performance optimization
+- Documentation consolidation
 - User experience improvements
 
 ### **📋 Planned Features**

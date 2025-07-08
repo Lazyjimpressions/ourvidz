@@ -196,6 +196,68 @@ Job Structure:
 
 ## **Worker System Architecture**
 
+### **Active Production Components**
+```yaml
+Main Components:
+  🎭 Dual Worker Orchestrator: dual_orchestrator.py (✅ ACTIVE)
+    - Main controller managing both SDXL and WAN workers
+    - Auto-restart on failures (max 5 attempts)
+    - GPU memory monitoring and status reporting
+    - Environment variable validation
+    - Graceful SDXL import handling (no startup failures)
+    
+  🎨 SDXL Worker: sdxl_worker.py (✅ ACTIVE)
+    - Fast image generation using LUSTIFY SDXL model
+    - 6-image batch generation per job (VERIFIED WORKING)
+    - Proper PNG Content-Type headers (upload fix)
+    - Memory optimization with attention slicing
+    - xformers support for efficiency
+    - Returns imageUrls array instead of single URL
+    
+  🎬 Enhanced WAN Worker: wan_worker.py (✅ ACTIVE)
+    - Video/image generation with AI prompt enhancement
+    - 8 job types: 4 standard + 4 enhanced
+    - Qwen 2.5-7B prompt enhancement (currently disabled)
+    - Fixed Redis integration: RPOP instead of BRPOP for Upstash REST API
+    - Proper environment configuration (HF_HOME, PYTHONPATH)
+    - Fixed polling: 5-second intervals without log spam
+    - Model loading/unloading for memory efficiency
+```
+
+### **Performance Characteristics**
+
+#### **SDXL Jobs (6-Image Batches)**
+| Job Type | Quality | Steps | Time | Resolution | Output | Status |
+|----------|---------|-------|------|------------|--------|--------|
+| `sdxl_image_fast` | Fast | 15 | 3-8s per image | 1024x1024 | Array of 6 URLs | ✅ Working |
+| `sdxl_image_high` | High | 25 | 8-15s per image | 1024x1024 | Array of 6 URLs | ✅ Working |
+
+#### **WAN Jobs (Single Files)**
+| Job Type | Quality | Steps | Frames | Time | Resolution | Enhancement | Output | Status |
+|----------|---------|-------|--------|------|------------|-------------|--------|--------|
+| `image_fast` | Fast | 4 | 1 | 73s | 480x832 | No | Single URL | ❌ Not tested |
+| `image_high` | High | 6 | 1 | 90s | 480x832 | No | Single URL | ❌ Not tested |
+| `video_fast` | Fast | 4 | 17 | 180s | 480x832 | No | Single URL | ✅ Tested |
+| `video_high` | High | 6 | 17 | 280s | 480x832 | No | Single URL | ✅ Tested |
+| `image7b_fast_enhanced` | Fast | 4 | 1 | 87s | 480x832 | Yes | Single URL | ✅ Tested |
+| `image7b_high_enhanced` | High | 6 | 1 | 104s | 480x832 | Yes | Single URL | ❌ Not tested |
+| `video7b_fast_enhanced` | Fast | 4 | 17 | 194s | 480x832 | Yes | Single URL | ✅ Tested |
+| `video7b_high_enhanced` | High | 6 | 17 | 294s | 480x832 | Yes | Single URL | ✅ Tested |
+
+### **Legacy Components (Not Used)**
+```yaml
+Legacy/Backup Files:
+  - worker.py: Previous optimized worker (replaced by enhanced WAN worker)
+  - ourvidz_enhanced_worker.py: Previous multi-model worker (replaced by dual orchestrator)
+  - worker-14b.py: Previous 14B worker (functionality integrated)
+  - worker_Old_Wan_only.py: Original WAN-only implementation
+  - sdxl_worker_old.py: Previous SDXL implementation
+  - dual_orchestrator_old.py: Previous orchestrator version
+  - wan_worker_7.15.py: Backup version (identical to current)
+
+Note: All functionality has been consolidated into the active trio of files
+```
+
 ### **SDXL Worker Implementation**
 ```python
 # sdxl_worker.py
