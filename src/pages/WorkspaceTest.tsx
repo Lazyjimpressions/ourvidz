@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import TestMediaGrid from '@/components/TestMediaGrid';
 import TestVideoGrid from '@/components/TestVideoGrid';
 import { Button } from '@/components/ui/button';
+import Lightbox from '@/components/ui/Lightbox';
 
 interface WorkspaceAsset {
   id: string;
@@ -21,6 +22,7 @@ const WorkspaceTest = () => {
   const [workspace, setWorkspace] = useState<WorkspaceAsset[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   // Load workspace from sessionStorage
   useEffect(() => {
@@ -34,9 +36,12 @@ const WorkspaceTest = () => {
     }
   }, []);
 
-  // Save workspace to sessionStorage
+  // Save workspace to sessionStorage with debouncing
   useEffect(() => {
-    sessionStorage.setItem('workspace-test', JSON.stringify(workspace));
+    const timeout = setTimeout(() => {
+      sessionStorage.setItem('workspace-test', JSON.stringify(workspace));
+    }, 300);
+    return () => clearTimeout(timeout);
   }, [workspace]);
 
   // Fetch jobs based on mode
@@ -160,7 +165,7 @@ const WorkspaceTest = () => {
                 {asset.type === 'video' ? (
                   <video
                     src={asset.url}
-                    className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
+                    className="w-full aspect-square object-cover rounded-lg border border-border"
                     muted
                     loop
                     onMouseEnter={(e) => e.currentTarget.play()}
@@ -170,7 +175,8 @@ const WorkspaceTest = () => {
                   <img
                     src={asset.url}
                     alt={`Workspace ${asset.id}`}
-                    className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition"
+                    onClick={() => setLightboxIndex(workspace.findIndex(a => a.id === asset.id))}
+                    className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
                   />
                 )}
                 <button
@@ -188,6 +194,15 @@ const WorkspaceTest = () => {
           </div>
         )}
       </section>
+
+      {/* Lightbox Viewer */}
+      {lightboxIndex !== null && (
+        <Lightbox
+          items={workspace.filter(asset => asset.type !== 'video').map(asset => asset.url)}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
 
       {/* Job Results */}
       <section className="space-y-4">
