@@ -20,19 +20,25 @@ const TestVideoGrid = ({ jobs, onImport, mode }: TestVideoGridProps) => {
     }
 
     // Fallback logic for video buckets
-    const quality = job.quality || 'fast';
+    const generationFormat = job.metadata?.generation_format || '';
     const modelVariant = job.metadata?.model_variant || '';
 
     // Enhanced model variants
     if (modelVariant.includes('video7b')) {
-      const bucket = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+      const bucket = generationFormat.includes('high') ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
       console.log(`Using enhanced video bucket for ${modelVariant}: ${bucket}`);
       return bucket;
     }
 
-    // Default video buckets
-    const bucket = quality === 'high' ? 'video_high' : 'video_fast';
-    console.log(`Using default video bucket: ${bucket}`);
+    // Default video buckets based on generation_format
+    if (generationFormat.includes('high')) {
+      const bucket = 'video_high';
+      console.log(`Using default high video bucket: ${bucket}`);
+      return bucket;
+    }
+    
+    const bucket = 'video_fast';
+    console.log(`Using default fast video bucket: ${bucket}`);
     return bucket;
   };
 
@@ -117,12 +123,12 @@ const TestVideoGrid = ({ jobs, onImport, mode }: TestVideoGridProps) => {
                 Job {index + 1} – Video – Bucket: {bucket}
               </h3>
               <div className="text-sm text-muted-foreground">
-                {job.quality || 'fast'} • {job.resolution || '720p'} • {new Date(job.created_at).toLocaleDateString()}
+                {job.metadata?.generation_format || 'fast'} • {job.resolution || '720p'} • {new Date(job.created_at).toLocaleDateString()}
               </div>
             </div>
             
             <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-              {job.prompt}
+              {job.metadata?.prompt || 'No prompt available'}
             </p>
 
             <div className="flex gap-4 items-center">
@@ -137,7 +143,7 @@ const TestVideoGrid = ({ jobs, onImport, mode }: TestVideoGridProps) => {
                     poster={job.thumbnail_url}
                   />
                   <button
-                    onClick={() => handleImport(signedUrl, job.id, job.prompt)}
+                    onClick={() => handleImport(signedUrl, job.id, job.metadata?.prompt || 'No prompt available')}
                     className="absolute bottom-1 left-1 right-1 bg-primary text-primary-foreground text-xs py-1 rounded opacity-0 group-hover:opacity-100 transition"
                   >
                     Import

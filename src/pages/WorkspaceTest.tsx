@@ -61,7 +61,7 @@ const WorkspaceTest = () => {
         } else {
           const { data, error } = await supabase
             .from('videos')
-            .select('id, video_url, signed_url, prompt, metadata, created_at, quality, resolution, thumbnail_url')
+            .select('id, video_url, signed_url, metadata, created_at, resolution, thumbnail_url')
             .eq('user_id', user.id)
             .eq('status', 'completed')
             .order('created_at', { ascending: false })
