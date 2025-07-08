@@ -79,14 +79,20 @@ const WorkspaceTest = () => {
     fetchJobs();
   }, [user, mode]);
 
-  const handleImport = (assets: WorkspaceAsset[]) => {
-    const newAssets = assets.filter(asset => 
-      !workspace.find(existing => existing.id === asset.id)
-    );
+  const handleImport = (signedUrl: string, jobId: string, prompt: string) => {
+    const assetId = `${jobId}_${Date.now()}`;
+    const newAsset: WorkspaceAsset = {
+      id: assetId,
+      url: signedUrl,
+      jobId,
+      prompt
+    };
     
-    if (newAssets.length > 0) {
-      setWorkspace(prev => [...newAssets, ...prev]);
-      console.log(`Imported ${newAssets.length} assets to workspace`);
+    // Check if this exact URL is already in workspace
+    const existingAsset = workspace.find(asset => asset.url === signedUrl);
+    if (!existingAsset) {
+      setWorkspace(prev => [newAsset, ...prev]);
+      console.log(`Imported asset ${assetId} to workspace`);
     }
   };
 

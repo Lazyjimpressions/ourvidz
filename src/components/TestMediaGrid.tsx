@@ -1,126 +1,90 @@
-import React from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import useSignedImageUrls from '@/hooks/useSignedImageUrls';
-
-interface WorkspaceAsset {
-  id: string;
-  url: string;
-  jobId: string;
-  prompt: string;
-}
+import React, { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface TestMediaGridProps {
   jobs: any[];
-  onImport: (assets: WorkspaceAsset[]) => void;
+  onImport: (signedUrl: string, jobId: string, prompt: string) => void;
   mode: 'image' | 'video';
 }
 
 const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
-  const { getSignedUrl } = useSignedImageUrls();
+  const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
+  const [loadingPaths, setLoadingPaths] = useState<string[]>([]);
+  const [batchLoading, setBatchLoading] = useState<string | null>(null);
 
-  const handleImportJob = async (job: any) => {
-    try {
-      if (mode === 'image') {
-        // Handle SDXL jobs (6 images) and WAN jobs (1 image)
-        const imageUrls = job.image_urls as string[] | null;
-        
-        if (imageUrls && Array.isArray(imageUrls)) {
-          // SDXL job with multiple images
-          const assets: WorkspaceAsset[] = [];
+  useEffect(() => {
+    const fetchSignedUrls = async () => {
+      const urls: { [key: string]: string } = {};
+      for (const job of jobs) {
+        if (mode === 'image') {
+          const imageUrls = job.image_urls || [];
+          const bucket = job.generation_mode?.includes('sdxl') ? 'sdxl_image_fast' : 'image_fast';
           
-          for (let i = 0; i < imageUrls.length; i++) {
-            const imageUrl = imageUrls[i];
-            if (imageUrl) {
-              const signedUrl = await getSignedUrl(imageUrl, job.generation_mode || 'sdxl_image_fast');
-              if (signedUrl) {
-                assets.push({
-                  id: `${job.id}_${i}`,
-                  url: signedUrl,
-                  jobId: job.id,
-                  prompt: job.prompt
+          for (const path of imageUrls) {
+            try {
+              setLoadingPaths((prev) => [...prev, path]);
+              const { data, error } = await supabase
+                .storage
+                .from(bucket)
+                .createSignedUrl(path, 3600);
+              if (!error && data?.signedUrl) {
+                urls[path] = data.signedUrl;
+              } else {
+                console.warn('Failed to generate signed URL', error);
+                toast({ 
+                  title: 'URL Error', 
+                  description: `Failed to sign ${path}`, 
+                  variant: 'destructive' 
                 });
               }
+            } finally {
+              setLoadingPaths((prev) => prev.filter((p) => p !== path));
             }
           }
-          
-          if (assets.length > 0) {
-            onImport(assets);
-            console.log(`Imported ${assets.length} images from SDXL job ${job.id}`);
-          }
-        } else if (job.image_url) {
-          // WAN job with single image
-          const signedUrl = await getSignedUrl(job.image_url, job.generation_mode || 'image_fast');
-          if (signedUrl) {
-            onImport([{
-              id: job.id,
-              url: signedUrl,
-              jobId: job.id,
-              prompt: job.prompt
-            }]);
-            console.log(`Imported 1 image from WAN job ${job.id}`);
-          }
-        }
-      } else {
-        // Handle video jobs
-        const videoUrl = job.signed_url || job.video_url;
-        if (videoUrl) {
-          onImport([{
-            id: job.id,
-            url: videoUrl,
-            jobId: job.id,
-            prompt: job.prompt
-          }]);
-          console.log(`Imported 1 video from job ${job.id}`);
         }
       }
-    } catch (error) {
-      console.error('Error importing job:', error);
+      setSignedUrls(urls);
+    };
+    
+    if (jobs.length > 0) {
+      fetchSignedUrls();
     }
+  }, [jobs, mode]);
+
+  const handleImport = (url: string, jobId: string, prompt: string) => {
+    if (!url) {
+      toast({ 
+        title: 'Import Failed', 
+        description: 'Missing URL', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+    onImport(url, jobId, prompt);
+    toast({ 
+      title: 'Imported to Workspace', 
+      description: 'Item added successfully!' 
+    });
   };
 
-  const renderJobPreview = (job: any) => {
-    if (mode === 'image') {
-      const imageUrls = job.image_urls as string[] | null;
-      
-      if (imageUrls && Array.isArray(imageUrls)) {
-        // SDXL job - show first image with count badge
-        return (
-          <div className="relative">
-            <img
-              src={imageUrls[0]}
-              alt="Job preview"
-              className="w-full aspect-square object-cover rounded-lg"
-            />
-            <div className="absolute top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
-              {imageUrls.length} images
-            </div>
-          </div>
-        );
-      } else if (job.image_url) {
-        // WAN job - show single image
-        return (
-          <img
-            src={job.image_url}
-            alt="Job preview"
-            className="w-full aspect-square object-cover rounded-lg"
-          />
-        );
+  const handleImportAll = (imageUrls: string[], jobId: string, prompt: string) => {
+    setBatchLoading(jobId);
+    let imported = 0;
+    imageUrls.forEach((path: string) => {
+      if (signedUrls[path]) {
+        handleImport(signedUrls[path], jobId, prompt);
+        imported++;
       }
-    } else {
-      // Video preview (placeholder for now)
-      return (
-        <div className="w-full aspect-square bg-muted rounded-lg flex items-center justify-center">
-          <p className="text-muted-foreground text-sm">Video</p>
-        </div>
-      );
+    });
+    if (imported === 0) {
+      toast({ 
+        title: 'Import Failed', 
+        description: 'No images were imported.', 
+        variant: 'destructive' 
+      });
     }
-    
-    return (
-      <div className="w-full aspect-square bg-muted rounded-lg flex items-center justify-center">
-        <p className="text-muted-foreground text-sm">No preview</p>
-      </div>
-    );
+    setBatchLoading(null);
   };
 
   if (jobs.length === 0) {
@@ -132,32 +96,79 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {jobs.map((job) => (
-        <Card key={job.id} className="overflow-hidden">
-          <CardContent className="p-4">
-            {renderJobPreview(job)}
-            <div className="mt-3 space-y-1">
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {job.prompt}
-              </p>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{job.quality || 'fast'}</span>
-                <span>{new Date(job.created_at).toLocaleDateString()}</span>
+    <div className="space-y-6">
+      {jobs.map((job, index) => {
+        const isSDXL = job.generation_mode?.includes('sdxl') || job.image_urls?.length === 6;
+        const isWAN = job.generation_mode?.includes('wan') || job.image_urls?.length === 1;
+
+        return (
+          <div key={job.id} className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">
+                Job {index + 1} – {isSDXL ? 'SDXL' : isWAN ? 'WAN' : 'Unknown'}
+              </h3>
+              <div className="text-sm text-muted-foreground">
+                {job.quality || 'fast'} • {new Date(job.created_at).toLocaleDateString()}
               </div>
             </div>
-          </CardContent>
-          <CardFooter className="p-4 pt-0">
-            <Button 
-              onClick={() => handleImportJob(job)}
-              className="w-full"
-              size="sm"
-            >
-              Import to Workspace
-            </Button>
-          </CardFooter>
-        </Card>
-      ))}
+            
+            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+              {job.prompt}
+            </p>
+
+            {mode === 'image' && job.image_urls && (
+              <>
+                <div className="flex gap-4 overflow-x-auto pb-2">
+                  {job.image_urls.map((path: string, idx: number) => (
+                    <div key={idx} className="relative group flex-shrink-0">
+                      <img
+                        src={signedUrls[path] || ''}
+                        alt={`Image ${idx + 1}`}
+                        className={`w-40 h-28 object-cover rounded border border-border transition ${
+                          loadingPaths.includes(path) ? 'opacity-50' : ''
+                        }`}
+                      />
+                      {loadingPaths.includes(path) && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => handleImport(signedUrls[path], job.id, job.prompt)}
+                        disabled={!signedUrls[path]}
+                        className="absolute bottom-1 left-1 right-1 bg-primary text-primary-foreground text-xs py-1 rounded opacity-0 group-hover:opacity-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Import
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {isSDXL && job.image_urls.length === 6 && (
+                  <div>
+                    <button
+                      onClick={() => handleImportAll(job.image_urls, job.id, job.prompt)}
+                      disabled={batchLoading === job.id}
+                      className="text-sm text-primary hover:underline flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {batchLoading === job.id ? 'Importing...' : 'Import All 6 Images'}
+                      {batchLoading === job.id && (
+                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full"></div>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {mode === 'video' && (
+              <div className="w-40 h-28 bg-muted rounded flex items-center justify-center">
+                <p className="text-muted-foreground text-sm">Video Preview</p>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
