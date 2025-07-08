@@ -13,28 +13,66 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
   const [loadingPaths, setLoadingPaths] = useState<string[]>([]);
   const [batchLoading, setBatchLoading] = useState<string | null>(null);
 
+  const inferBucketFromJob = (job: any): string => {
+    // Primary: Use bucket from metadata if available
+    if (job.metadata?.bucket) {
+      console.log(`Using bucket from metadata: ${job.metadata.bucket}`);
+      return job.metadata.bucket;
+    }
+
+    // Fallback logic based on job properties
+    const mode = job.generation_mode || '';
+    const quality = job.quality || 'fast';
+    const modelVariant = job.metadata?.model_variant || '';
+
+    // Enhanced model variants
+    if (modelVariant.includes('image7b')) {
+      const bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+      console.log(`Using enhanced bucket for ${modelVariant}: ${bucket}`);
+      return bucket;
+    }
+
+    // SDXL models
+    if (mode.includes('sdxl')) {
+      const bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      console.log(`Using SDXL bucket: ${bucket}`);
+      return bucket;
+    }
+
+    // Default buckets
+    const bucket = quality === 'high' ? 'image_high' : 'image_fast';
+    console.log(`Using default bucket: ${bucket}`);
+    return bucket;
+  };
+
   useEffect(() => {
     const fetchSignedUrls = async () => {
       const urls: { [key: string]: string } = {};
       for (const job of jobs) {
         if (mode === 'image') {
           const imageUrls = job.image_urls || [];
-          const bucket = job.generation_mode?.includes('sdxl') ? 'sdxl_image_fast' : 'image_fast';
+          const bucket = inferBucketFromJob(job);
+          
+          console.log(`Processing job ${job.id} with bucket: ${bucket}, paths:`, imageUrls);
           
           for (const path of imageUrls) {
             try {
               setLoadingPaths((prev) => [...prev, path]);
+              console.log(`Attempting to sign URL: bucket=${bucket}, path=${path}`);
+              
               const { data, error } = await supabase
                 .storage
                 .from(bucket)
                 .createSignedUrl(path, 3600);
+                
               if (!error && data?.signedUrl) {
                 urls[path] = data.signedUrl;
+                console.log(`Successfully signed URL for ${path}`);
               } else {
-                console.warn('Failed to generate signed URL', error);
+                console.warn(`Signed URL failed for bucket=${bucket}, path=${path}:`, error);
                 toast({ 
                   title: 'URL Error', 
-                  description: `Failed to sign ${path}`, 
+                  description: `Failed to sign ${path} in ${bucket}`, 
                   variant: 'destructive' 
                 });
               }
@@ -105,7 +143,7 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
           <div key={job.id} className="space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">
-                Job {index + 1} – {isSDXL ? 'SDXL' : isWAN ? 'WAN' : 'Unknown'}
+                Job {index + 1} – {isSDXL ? 'SDXL' : isWAN ? 'WAN' : 'Unknown'} – Bucket: {inferBucketFromJob(job)}
               </h3>
               <div className="text-sm text-muted-foreground">
                 {job.quality || 'fast'} • {new Date(job.created_at).toLocaleDateString()}
