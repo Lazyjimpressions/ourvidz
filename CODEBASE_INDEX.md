@@ -147,7 +147,9 @@ docs/
 ├── WORKER_API.md           # Worker API reference (separate from API.md)
 ├── EDGE_FUNCTIONS.md       # Supabase edge functions (separate from API.md)
 ├── PROJECT.md              # Complete project context
-└── PROJECT_STATUS.md       # Current development status
+├── PROJECT_STATUS.md       # Current development status
+├── PROMPTING_REFERENCE_GUIDE.md # Comprehensive prompting best practices
+└── MASTER_PROMPTING_GUIDE.md # Expert-level master prompting system
 ```
 
 ### **Documentation Consolidation Status**
