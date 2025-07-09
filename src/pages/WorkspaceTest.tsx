@@ -6,6 +6,7 @@ import TestMediaGrid from '@/components/TestMediaGrid';
 import TestVideoGrid from '@/components/TestVideoGrid';
 import { Button } from '@/components/ui/button';
 import Lightbox from '@/components/ui/Lightbox';
+import { clearWorkspaceSessionData, clearSignedUrlCache, getSessionStorageStats } from '@/lib/utils';
 
 interface WorkspaceAsset {
   id: string;
@@ -26,15 +27,41 @@ const WorkspaceTest = () => {
 
   // Load workspace from sessionStorage
   useEffect(() => {
+    const sessionStart = sessionStorage.getItem('workspace-test-session');
+    const sessionUserId = sessionStorage.getItem('workspace-test-user');
+    const currentUserId = user?.id;
+    
+    // Check if this is a new session or different user
+    if (!sessionStart || sessionUserId !== currentUserId) {
+      // Clear old workspace data and start fresh
+      sessionStorage.removeItem('workspace-test');
+      sessionStorage.removeItem('workspace-test-session');
+      sessionStorage.removeItem('workspace-test-user');
+      
+      // Set new session data
+      if (currentUserId) {
+        sessionStorage.setItem('workspace-test-session', Date.now().toString());
+        sessionStorage.setItem('workspace-test-user', currentUserId);
+        console.log('🆕 Started new workspace test session for user:', currentUserId);
+      }
+      
+      setWorkspace([]);
+      return;
+    }
+    
+    // Load existing workspace from current session
     const stored = sessionStorage.getItem('workspace-test');
     if (stored) {
       try {
         setWorkspace(JSON.parse(stored));
+        console.log('🔄 Loaded workspace from current session');
       } catch (error) {
         console.error('Error parsing workspace data:', error);
+        sessionStorage.removeItem('workspace-test');
+        setWorkspace([]);
       }
     }
-  }, []);
+  }, [user]);
 
   // Save workspace to sessionStorage with debouncing
   useEffect(() => {
@@ -117,6 +144,24 @@ const WorkspaceTest = () => {
     params.set('mode', newMode);
     setSearchParams(params);
   };
+
+  const handleClearSessionData = () => {
+    clearWorkspaceSessionData();
+    setWorkspace([]);
+    window.location.reload(); // Reload to test fresh session
+  };
+
+  const handleClearUrlCache = () => {
+    clearSignedUrlCache();
+    window.location.reload(); // Reload to test fresh URL requests
+  };
+
+  const [storageStats, setStorageStats] = useState(getSessionStorageStats());
+
+  // Update stats when workspace changes
+  useEffect(() => {
+    setStorageStats(getSessionStorageStats());
+  }, [workspace]);
 
   if (!user) {
     return (
@@ -225,6 +270,29 @@ const WorkspaceTest = () => {
             mode={mode as 'image' | 'video'}
           />
         )}
+      </section>
+
+      {/* Debug Section */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Debug Storage</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <h3 className="text-lg font-bold">Session Storage</h3>
+            <p>Session Start: {new Date(parseInt(sessionStorage.getItem('workspace-test-session') || '0', 10)).toLocaleDateString()}</p>
+            <p>Current User ID: {sessionStorage.getItem('workspace-test-user')}</p>
+            <p>Workspace Count: {workspace.length}</p>
+            <Button variant="outline" onClick={handleClearSessionData}>
+              Clear Session Data
+            </Button>
+          </div>
+          <div>
+            <h3 className="text-lg font-bold">Signed URL Cache</h3>
+            <p>Cache Size: {storageStats.signedUrlCacheSize} bytes</p>
+            <Button variant="outline" onClick={handleClearUrlCache}>
+              Clear Signed URL Cache
+            </Button>
+          </div>
+        </div>
       </section>
     </div>
   );

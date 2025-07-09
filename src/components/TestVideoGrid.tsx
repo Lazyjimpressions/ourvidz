@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
+import { createClient } from '@supabase/supabase-js';
+import { toast } from '@/components/ui/use-toast';
+
+const supabase = createClient(
+  'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 interface TestVideoGridProps {
   jobs: any[];
@@ -10,95 +15,48 @@ interface TestVideoGridProps {
 
 const TestVideoGrid = ({ jobs, onImport, mode }: TestVideoGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
-  const [loading, setLoading] = useState<string[]>([]);
-
-  const inferBucketFromJob = (job: any): string => {
-    // Primary: Use bucket from metadata if available
-    if (job.metadata?.bucket) {
-      console.log(`Using bucket from metadata: ${job.metadata.bucket}`);
-      return job.metadata.bucket;
-    }
-
-    // Fallback logic for video buckets
-    const generationFormat = job.metadata?.generation_format || '';
-    const modelVariant = job.metadata?.model_variant || '';
-
-    // Enhanced model variants
-    if (modelVariant.includes('video7b')) {
-      const bucket = generationFormat.includes('high') ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
-      console.log(`Using enhanced video bucket for ${modelVariant}: ${bucket}`);
-      return bucket;
-    }
-
-    // Default video buckets based on generation_format
-    if (generationFormat.includes('high')) {
-      const bucket = 'video_high';
-      console.log(`Using default high video bucket: ${bucket}`);
-      return bucket;
-    }
-    
-    const bucket = 'video_fast';
-    console.log(`Using default fast video bucket: ${bucket}`);
-    return bucket;
-  };
 
   useEffect(() => {
     const fetchSignedUrls = async () => {
-      const urls: { [key: string]: string } = {};
-      for (const job of jobs) {
+      const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
+      const updatedCache = { ...sessionCache };
+      const result: { [key: string]: string } = {};
+
+      await Promise.all(jobs.map(async (job) => {
         if (mode === 'video' && job.video_url) {
-          const bucket = inferBucketFromJob(job);
+          const bucket = job.metadata?.bucket || 'video_fast';
           const path = job.video_url;
-          
-          console.log(`Processing video job ${job.id} with bucket: ${bucket}, path: ${path}`);
-          
-          try {
-            setLoading(prev => [...prev, job.id]);
-            console.log(`Attempting to sign video URL: bucket=${bucket}, path=${path}`);
-            
+          const key = `${bucket}|${path}`;
+
+          if (sessionCache[key]) {
+            result[job.id] = sessionCache[key];
+          } else {
             const { data, error } = await supabase
               .storage
               .from(bucket)
               .createSignedUrl(path, 3600);
-              
-            if (!error && data?.signedUrl) {
-              urls[job.id] = data.signedUrl;
-              console.log(`Successfully signed video URL for ${job.id}`);
+
+            if (data?.signedUrl) {
+              result[job.id] = data.signedUrl;
+              updatedCache[key] = data.signedUrl;
             } else {
-              console.warn(`Signed video URL failed for bucket=${bucket}, path=${path}:`, error);
-              toast({ 
-                title: 'Video URL Error', 
-                description: `Failed to sign ${path} in ${bucket}`, 
-                variant: 'destructive' 
-              });
+              console.warn('Failed to sign video:', key, error);
+              toast({ title: 'Video Signing Failed', description: path, variant: 'destructive' });
             }
-          } finally {
-            setLoading(prev => prev.filter(id => id !== job.id));
           }
         }
-      }
-      setSignedUrls(urls);
+      }));
+
+      sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
+      setSignedUrls(result);
     };
-    
-    if (jobs.length > 0) {
-      fetchSignedUrls();
-    }
+    fetchSignedUrls();
   }, [jobs, mode]);
 
   const handleImport = (url: string, jobId: string, prompt: string) => {
-    if (!url) {
-      toast({ 
-        title: 'Import Failed', 
-        description: 'Missing video URL', 
-        variant: 'destructive' 
-      });
-      return;
-    }
+    if (!url) return toast({ title: 'Import Failed', description: 'Missing video URL', variant: 'destructive' });
     onImport(url, jobId, prompt);
-    toast({ 
-      title: 'Imported to Workspace', 
-      description: 'Video added successfully!' 
-    });
+    toast({ title: 'Imported to Workspace', description: 'Video added successfully!' });
   };
 
   if (jobs.length === 0) {
@@ -113,46 +71,32 @@ const TestVideoGrid = ({ jobs, onImport, mode }: TestVideoGridProps) => {
     <div className="space-y-6">
       {jobs.map((job, index) => {
         const signedUrl = signedUrls[job.id];
-        const isLoading = loading.includes(job.id);
-        const bucket = inferBucketFromJob(job);
+        const bucket = job.metadata?.bucket || 'video_fast';
 
         return (
-          <div key={job.id} className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">
-                Job {index + 1} – Video – Bucket: {bucket}
-              </h3>
-              <div className="text-sm text-muted-foreground">
-                {job.metadata?.generation_format || 'fast'} • {job.resolution || '720p'} • {new Date(job.created_at).toLocaleDateString()}
-              </div>
-            </div>
-            
-            <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-              {job.metadata?.prompt || 'No prompt available'}
-            </p>
+          <div key={job.id} className="border border-gray-700 rounded p-4">
+            <h3 className="text-md font-semibold mb-2">
+              Job {index + 1} – Video – {job.metadata?.generation_format || 'fast'}
+            </h3>
 
             <div className="flex gap-4 items-center">
-              {isLoading ? (
-                <div className="w-64 h-36 bg-muted animate-pulse rounded border border-border" />
-              ) : signedUrl ? (
+              {signedUrl ? (
                 <div className="relative group">
                   <video
                     src={signedUrl}
                     controls
-                    className="w-64 h-36 object-cover rounded border border-border"
+                    className="w-64 h-36 object-cover rounded border border-gray-600"
                     poster={job.thumbnail_url}
                   />
                   <button
                     onClick={() => handleImport(signedUrl, job.id, job.metadata?.prompt || 'No prompt available')}
-                    className="absolute bottom-1 left-1 right-1 bg-primary text-primary-foreground text-xs py-1 rounded opacity-0 group-hover:opacity-100 transition"
+                    className="absolute bottom-2 right-2 px-2 py-1 text-xs rounded bg-white text-black opacity-0 group-hover:opacity-100 transition"
                   >
                     Import
                   </button>
                 </div>
               ) : (
-                <div className="w-64 h-36 bg-muted rounded border border-border flex items-center justify-center">
-                  <p className="text-muted-foreground text-sm">Failed to load video</p>
-                </div>
+                <div className="w-64 h-36 bg-gray-800 animate-pulse rounded border border-gray-600" />
               )}
             </div>
           </div>
