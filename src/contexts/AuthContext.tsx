@@ -18,6 +18,7 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   isSubscribed: boolean;
+  isAdmin: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -43,8 +44,28 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileFetchAttempts, setProfileFetchAttempts] = useState(0);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
+
+  // Check if user has admin role
+  const checkAdminRole = useCallback(async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .eq('role', 'admin')
+        .single();
+      
+      const hasAdminRole = !error && !!data;
+      setIsAdmin(hasAdminRole);
+      console.log('Admin role check:', hasAdminRole);
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+      setIsAdmin(false);
+    }
+  }, []);
 
   // Cleanup function to prevent auth limbo states (for logout only)
   const cleanupAuthState = useCallback(() => {
@@ -71,6 +92,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setSession(null);
     setProfile(null);
     setProfileFetchAttempts(0);
+    setIsAdmin(false);
   }, []);
 
   // Separate function for clearing workspace (only on logout)
@@ -119,6 +141,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(typedProfile);
         setProfileFetchAttempts(0); // Reset attempts on success
         console.log('Profile fetched successfully:', typedProfile);
+        
+        // Check admin role after profile is fetched
+        await checkAdminRole(userId);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -429,6 +454,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profile,
     loading,
     isSubscribed,
+    isAdmin,
     signUp,
     signIn,
     signInWithGoogle,

@@ -11,6 +11,7 @@ import Dashboard from "@/pages/Dashboard";
 import Library from "@/pages/Library";
 import Workspace from "@/pages/Workspace";
 import WorkspaceTest from "@/pages/WorkspaceTest";
+import Admin from "@/pages/Admin";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ function App() {
               <Route path="/workspace-test" element={<WorkspaceTest />} />
               <Route path="/library" element={<Library />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </BrowserRouter>
         </AuthProvider>
