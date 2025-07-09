@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -11,20 +11,39 @@ interface TestVideoGridProps {
 const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedJobs, setProcessedJobs] = useState<Set<string>>(new Set());
+  
+  // Use useRef to maintain stable reference to onAutoAdd callback
+  const onAutoAddRef = useRef(onAutoAdd);
+  onAutoAddRef.current = onAutoAdd;
 
   useEffect(() => {
     const fetchSignedUrls = async () => {
-      if (jobs.length === 0) return;
-      
+      // Guard against concurrent processing
+      if (isProcessing || jobs.length === 0) {
+        console.log('🛑 Skipping video processing - already processing or no jobs');
+        return;
+      }
+
+      // Check if all jobs have already been processed
+      const unprocessedJobs = jobs.filter(job => !processedJobs.has(job.id));
+      if (unprocessedJobs.length === 0) {
+        console.log('✅ All video jobs already processed, skipping');
+        return;
+      }
+
+      setIsProcessing(true);
       setLoading(true);
-      console.log('🔄 Starting signed video URL generation for', jobs.length, 'jobs');
+      console.log('🔄 Starting signed video URL generation for', unprocessedJobs.length, 'unprocessed jobs');
       
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
       const result: { [key: string]: string } = {};
+      const newProcessedJobs = new Set(processedJobs);
 
       try {
-        await Promise.all(jobs.map(async (job) => {
+        await Promise.all(unprocessedJobs.map(async (job) => {
           const path = job.video_url || job.metadata?.primary_asset;
           const bucket = job.metadata?.bucket || 'video_fast';
           const key = `${bucket}|${path}`;
@@ -32,6 +51,7 @@ const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
 
           if (!path) {
             console.warn('Job has no video path:', job.id);
+            newProcessedJobs.add(job.id);
             return;
           }
 
@@ -39,8 +59,8 @@ const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
             result[path] = sessionCache[key];
             console.log(`Using cached video URL for ${job.id}`);
             // Auto-add cached URLs to workspace
-            if (onAutoAdd) {
-              onAutoAdd(sessionCache[key], job.id, jobPrompt);
+            if (onAutoAddRef.current) {
+              onAutoAddRef.current(sessionCache[key], job.id, jobPrompt);
             }
           } else {
             try {
@@ -56,8 +76,8 @@ const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
                 console.log(`Successfully signed video URL for ${job.id}`);
                 
                 // Auto-add new URLs to workspace
-                if (onAutoAdd) {
-                  onAutoAdd(data.signedUrl, job.id, jobPrompt);
+                if (onAutoAddRef.current) {
+                  onAutoAddRef.current(data.signedUrl, job.id, jobPrompt);
                 }
               } else {
                 console.error(`Failed to sign video URL for ${job.id}:`, error);
@@ -76,10 +96,14 @@ const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
               });
             }
           }
+          
+          // Mark job as processed
+          newProcessedJobs.add(job.id);
         }));
 
         sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
-        setSignedUrls(result);
+        setSignedUrls(prev => ({ ...prev, ...result }));
+        setProcessedJobs(newProcessedJobs);
         console.log('✅ Signed video URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchSignedUrls:', error);
@@ -90,11 +114,12 @@ const TestVideoGrid = ({ jobs, onAutoAdd, mode }: TestVideoGridProps) => {
         });
       } finally {
         setLoading(false);
+        setIsProcessing(false);
       }
     };
 
     fetchSignedUrls();
-  }, [jobs, onAutoAdd]);
+  }, [jobs]); // Removed onAutoAdd from dependencies
 
   if (jobs.length === 0) {
     return (

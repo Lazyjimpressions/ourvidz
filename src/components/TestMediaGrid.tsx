@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
@@ -11,6 +11,12 @@ interface TestMediaGridProps {
 const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedJobs, setProcessedJobs] = useState<Set<string>>(new Set());
+  
+  // Use useRef to maintain stable reference to onAutoAdd callback
+  const onAutoAddRef = useRef(onAutoAdd);
+  onAutoAddRef.current = onAutoAdd;
 
   // Enhanced bucket detection logic
   const inferBucketFromJob = (job: any): string => {
@@ -47,19 +53,33 @@ const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
 
   useEffect(() => {
     const fetchSignedUrls = async () => {
-      if (jobs.length === 0) return;
-      
+      // Guard against concurrent processing
+      if (isProcessing || jobs.length === 0) {
+        console.log('🛑 Skipping processing - already processing or no jobs');
+        return;
+      }
+
+      // Check if all jobs have already been processed
+      const unprocessedJobs = jobs.filter(job => !processedJobs.has(job.id));
+      if (unprocessedJobs.length === 0) {
+        console.log('✅ All jobs already processed, skipping');
+        return;
+      }
+
+      setIsProcessing(true);
       setLoading(true);
-      console.log('🔄 Starting signed URL generation for', jobs.length, 'jobs');
+      console.log('🔄 Starting signed URL generation for', unprocessedJobs.length, 'unprocessed jobs');
       
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
       const result: { [key: string]: string } = {};
+      const newProcessedJobs = new Set(processedJobs);
 
       try {
-        await Promise.all(jobs.map(async (job) => {
+        await Promise.all(unprocessedJobs.map(async (job) => {
           if (!Array.isArray(job.image_urls)) {
             console.warn('Job has no image_urls array:', job.id);
+            newProcessedJobs.add(job.id);
             return;
           }
 
@@ -74,8 +94,8 @@ const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
               result[path] = sessionCache[key];
               console.log(`Using cached URL for ${path}`);
               // Auto-add cached URLs to workspace
-              if (onAutoAdd) {
-                onAutoAdd(sessionCache[key], job.id, jobPrompt);
+              if (onAutoAddRef.current) {
+                onAutoAddRef.current(sessionCache[key], job.id, jobPrompt);
               }
             } else {
               try {
@@ -95,8 +115,8 @@ const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
                   preload.src = data.signedUrl;
                   
                   // Auto-add new URLs to workspace
-                  if (onAutoAdd) {
-                    onAutoAdd(data.signedUrl, job.id, jobPrompt);
+                  if (onAutoAddRef.current) {
+                    onAutoAddRef.current(data.signedUrl, job.id, jobPrompt);
                   }
                 } else {
                   console.error(`Failed to sign URL for ${path}:`, error);
@@ -116,10 +136,14 @@ const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
               }
             }
           }
+          
+          // Mark job as processed
+          newProcessedJobs.add(job.id);
         }));
 
         sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
-        setSignedUrls(result);
+        setSignedUrls(prev => ({ ...prev, ...result }));
+        setProcessedJobs(newProcessedJobs);
         console.log('✅ Signed URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchSignedUrls:', error);
@@ -130,11 +154,12 @@ const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
         });
       } finally {
         setLoading(false);
+        setIsProcessing(false);
       }
     };
 
     fetchSignedUrls();
-  }, [jobs, onAutoAdd]);
+  }, [jobs]); // Removed onAutoAdd from dependencies
 
   if (jobs.length === 0) {
     return (
