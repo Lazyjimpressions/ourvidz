@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { toast } from '@/components/ui/use-toast';
-
-const supabase = createClient(
-  'https://ulmdmzhcdwfadbvfpckt.supabase.co',
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface TestMediaGridProps {
   jobs: any[];
@@ -15,88 +10,207 @@ interface TestMediaGridProps {
 
 const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
+  const [loading, setLoading] = useState(false);
+
+  // Enhanced bucket detection logic
+  const inferBucketFromJob = (job: any): string => {
+    // Primary: Use bucket from metadata if available
+    if (job.metadata?.bucket) {
+      console.log(`Using bucket from metadata: ${job.metadata.bucket}`);
+      return job.metadata.bucket;
+    }
+
+    // Fallback logic based on job properties
+    const mode = job.generation_mode || '';
+    const quality = job.quality || 'fast';
+    const modelVariant = job.metadata?.model_variant || '';
+
+    // Enhanced model variants
+    if (modelVariant.includes('image7b')) {
+      const bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+      console.log(`Using enhanced bucket for ${modelVariant}: ${bucket}`);
+      return bucket;
+    }
+
+    // SDXL models
+    if (mode.includes('sdxl')) {
+      const bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      console.log(`Using SDXL bucket: ${bucket}`);
+      return bucket;
+    }
+
+    // Default buckets
+    const bucket = quality === 'high' ? 'image_high' : 'image_fast';
+    console.log(`Using default bucket: ${bucket}`);
+    return bucket;
+  };
 
   useEffect(() => {
     const fetchSignedUrls = async () => {
+      if (jobs.length === 0) return;
+      
+      setLoading(true);
+      console.log('🔄 Starting signed URL generation for', jobs.length, 'jobs');
+      
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
       const result: { [key: string]: string } = {};
 
-      await Promise.all(jobs.map(async (job) => {
-        if (!Array.isArray(job.image_urls)) return;
+      try {
+        await Promise.all(jobs.map(async (job) => {
+          if (!Array.isArray(job.image_urls)) {
+            console.warn('Job has no image_urls array:', job.id);
+            return;
+          }
 
-        for (const path of job.image_urls) {
-          const key = `${job.metadata?.bucket || 'sdxl_image_fast'}|${path}`;
+          const bucket = inferBucketFromJob(job);
+          console.log(`Processing job ${job.id} with bucket: ${bucket}, paths:`, job.image_urls);
 
-          if (sessionCache[key]) {
-            result[path] = sessionCache[key];
-          } else {
-            const { data, error } = await supabase
-              .storage
-              .from(job.metadata?.bucket || 'sdxl_image_fast')
-              .createSignedUrl(path, 3600);
+          for (const path of job.image_urls) {
+            const key = `${bucket}|${path}`;
 
-            if (data?.signedUrl) {
-              result[path] = data.signedUrl;
-              updatedCache[key] = data.signedUrl;
-              const preload = new Image();
-              preload.src = data.signedUrl;
+            if (sessionCache[key]) {
+              result[path] = sessionCache[key];
+              console.log(`Using cached URL for ${path}`);
             } else {
-              console.warn('Failed to sign:', key, error);
-              toast({ title: 'Signing Failed', description: path, variant: 'destructive' });
+              try {
+                console.log(`Requesting signed URL for bucket=${bucket}, path=${path}`);
+                const { data, error } = await supabase
+                  .storage
+                  .from(bucket)
+                  .createSignedUrl(path, 3600);
+
+                if (data?.signedUrl) {
+                  result[path] = data.signedUrl;
+                  updatedCache[key] = data.signedUrl;
+                  console.log(`Successfully signed URL for ${path}`);
+                  
+                  // Preload image for better UX
+                  const preload = new Image();
+                  preload.src = data.signedUrl;
+                } else {
+                  console.error(`Failed to sign URL for ${path}:`, error);
+                  toast({ 
+                    title: 'Signing Failed', 
+                    description: `Failed to sign ${path} in ${bucket}`, 
+                    variant: 'destructive' 
+                  });
+                }
+              } catch (error) {
+                console.error(`Error signing URL for ${path}:`, error);
+                toast({ 
+                  title: 'Signing Error', 
+                  description: `Error signing ${path}`, 
+                  variant: 'destructive' 
+                });
+              }
             }
           }
-        }
-      }));
+        }));
 
-      sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
-      setSignedUrls(result);
+        sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
+        setSignedUrls(result);
+        console.log('✅ Signed URL generation completed. Total URLs:', Object.keys(result).length);
+      } catch (error) {
+        console.error('Error in fetchSignedUrls:', error);
+        toast({ 
+          title: 'URL Generation Error', 
+          description: 'Failed to generate signed URLs', 
+          variant: 'destructive' 
+        });
+      } finally {
+        setLoading(false);
+      }
     };
+
     fetchSignedUrls();
   }, [jobs]);
 
   const handleImport = (url: string, jobId: string, prompt: string) => {
-    if (!url) return toast({ title: 'Import Failed', description: 'Missing URL', variant: 'destructive' });
-    onImport(url, jobId, prompt);
+    if (!url) {
+      toast({ title: 'Import Failed', description: 'Missing URL', variant: 'destructive' });
+      return;
+    }
+    
+    // Use the correct prompt from metadata
+    const correctPrompt = prompt || 'No prompt available';
+    onImport(url, jobId, correctPrompt);
     toast({ title: 'Imported to Workspace', description: 'Image added successfully!' });
   };
 
+  if (jobs.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">No images found. Generate some content first!</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {jobs.map((job, index) => (
-        <div key={job.id} className="border border-gray-700 rounded p-4">
-          <h3 className="text-md font-semibold mb-2">
-            Job {index + 1} – {job.generation_mode || 'unknown'} – {job.quality || 'fast'}
-          </h3>
-
-          <div className="grid grid-cols-3 gap-4">
-            {Array.isArray(job.image_urls) && job.image_urls.map((path: string) => {
-              const signed = signedUrls[path];
-              return (
-                <div key={path} className="relative group">
-                  {signed ? (
-                    <img
-                      src={signed}
-                      alt="Generated asset"
-                      className="rounded border border-gray-600 object-cover h-36 w-full"
-                    />
-                  ) : (
-                    <div className="w-full h-36 bg-gray-800 animate-pulse rounded" />
-                  )}
-
-                  <button
-                    onClick={() => handleImport(signed, job.id, job.prompt)}
-                    disabled={!signed}
-                    className="absolute bottom-2 right-2 px-2 py-1 text-xs rounded bg-white text-black opacity-0 group-hover:opacity-100 transition"
-                  >
-                    Import
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+      {loading && (
+        <div className="text-center py-4">
+          <p className="text-muted-foreground">Loading signed URLs...</p>
         </div>
-      ))}
+      )}
+      
+      {jobs.map((job, index) => {
+        const bucket = inferBucketFromJob(job);
+        const jobPrompt = job.metadata?.prompt || job.prompt || 'No prompt available';
+        const jobQuality = job.quality || job.metadata?.quality || 'fast';
+        const jobMode = job.generation_mode || job.metadata?.generation_format || 'unknown';
+
+        return (
+          <div key={job.id} className="border border-gray-700 rounded p-4">
+            <h3 className="text-md font-semibold mb-2">
+              Job {index + 1} – {jobMode} – {jobQuality} – Bucket: {bucket}
+            </h3>
+            
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+              {jobPrompt}
+            </p>
+
+            <div className="grid grid-cols-3 gap-4">
+              {Array.isArray(job.image_urls) && job.image_urls.length > 0 ? (
+                job.image_urls.map((path: string) => {
+                  const signed = signedUrls[path];
+                  return (
+                    <div key={path} className="relative group">
+                      {signed ? (
+                        <img
+                          src={signed}
+                          alt="Generated asset"
+                          className="rounded border border-gray-600 object-cover h-36 w-full"
+                          onError={(e) => {
+                            console.error('Image failed to load:', path);
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-36 bg-gray-800 animate-pulse rounded flex items-center justify-center">
+                          <span className="text-xs text-gray-500">Loading...</span>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => handleImport(signed, job.id, jobPrompt)}
+                        disabled={!signed}
+                        className="absolute bottom-2 right-2 px-2 py-1 text-xs rounded bg-white text-black opacity-0 group-hover:opacity-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Import
+                      </button>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="col-span-3 text-center py-8">
+                  <p className="text-muted-foreground">No images available for this job</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };

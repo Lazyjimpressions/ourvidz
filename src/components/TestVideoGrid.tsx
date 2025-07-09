@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { toast } from '@/components/ui/use-toast';
-
-const supabase = createClient(
-  'https://ulmdmzhcdwfadbvfpckt.supabase.co',
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 interface TestVideoGridProps {
   jobs: any[];
