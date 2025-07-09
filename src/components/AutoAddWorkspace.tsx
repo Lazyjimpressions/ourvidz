@@ -6,9 +6,10 @@ interface AutoAddWorkspaceProps {
   onAutoAdd: (url: string, jobId: string, prompt: string, type: 'image' | 'video', quality?: string, modelType?: string) => void;
   imageJobs: any[];
   videoJobs: any[];
+  isClearing?: boolean;
 }
 
-const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceProps) => {
+const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false }: AutoAddWorkspaceProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -54,9 +55,9 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
   // Process image jobs
   useEffect(() => {
     const fetchSignedUrls = async () => {
-      // Guard against concurrent processing
-      if (isProcessing || imageJobs.length === 0) {
-        console.log('🛑 Skipping image processing - already processing or no jobs');
+      // Guard against concurrent processing or clearing
+      if (isProcessing || imageJobs.length === 0 || isClearing) {
+        console.log('🛑 Skipping image processing - already processing, no jobs, or clearing');
         return;
       }
 
@@ -123,19 +124,11 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
                   }
                 } else {
                   console.error(`Failed to sign URL for ${path}:`, error);
-                  toast({ 
-                    title: 'Signing Failed', 
-                    description: `Failed to sign ${path} in ${bucket}`, 
-                    variant: 'destructive' 
-                  });
+                  toast.error(`Failed to sign ${path} in ${bucket}`);
                 }
               } catch (error) {
                 console.error(`Error signing URL for ${path}:`, error);
-                toast({ 
-                  title: 'Signing Error', 
-                  description: `Error signing ${path}`, 
-                  variant: 'destructive' 
-                });
+                toast.error(`Error signing ${path}`);
               }
             }
           }
@@ -150,11 +143,7 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
         console.log('✅ Image signed URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchSignedUrls:', error);
-        toast({ 
-          title: 'URL Generation Error', 
-          description: 'Failed to generate signed URLs', 
-          variant: 'destructive' 
-        });
+        toast.error('Failed to generate signed URLs');
       } finally {
         setLoading(false);
         setIsProcessing(false);
@@ -167,9 +156,9 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
   // Process video jobs
   useEffect(() => {
     const fetchVideoSignedUrls = async () => {
-      // Guard against concurrent processing
-      if (isProcessing || videoJobs.length === 0) {
-        console.log('🛑 Skipping video processing - already processing or no jobs');
+      // Guard against concurrent processing or clearing
+      if (isProcessing || videoJobs.length === 0 || isClearing) {
+        console.log('🛑 Skipping video processing - already processing, no jobs, or clearing');
         return;
       }
 
@@ -238,7 +227,7 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
           // If no result, trigger toast for failure
           const validPath = attempts.find(p => !!p);
           if (validPath && !result[validPath]) {
-            toast({ title: 'Video Signing Failed', description: validPath, variant: 'destructive' });
+            toast.error(`Video signing failed: ${validPath}`);
           }
           
           // Mark job as processed
@@ -251,11 +240,7 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs }: AutoAddWorkspaceP
         console.log('✅ Video signed URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchVideoSignedUrls:', error);
-        toast({ 
-          title: 'Video URL Generation Error', 
-          description: 'Failed to generate signed video URLs', 
-          variant: 'destructive' 
-        });
+        toast.error('Failed to generate signed video URLs');
       } finally {
         setIsProcessing(false);
       }

@@ -57,6 +57,7 @@ const Workspace = () => {
   const [workspaceLoading, setWorkspaceLoading] = useState(false);
   const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
   const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   
   // Modal states
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -330,8 +331,17 @@ const Workspace = () => {
   };
 
   const clearWorkspace = () => {
+    setIsClearing(true);
     setWorkspace([]);
     setAutoAddedUrls(new Set());
+    // Clear session storage to prevent auto-add from restoring items
+    sessionStorage.removeItem('workspace');
+    console.log('🧹 Workspace cleared completely');
+    
+    // Reset clearing flag after a short delay to allow auto-add to resume
+    setTimeout(() => {
+      setIsClearing(false);
+    }, 1000);
   };
 
   const handleImageClick = (asset: WorkspaceAsset) => {
@@ -611,6 +621,7 @@ const Workspace = () => {
         onAutoAdd={handleAutoAdd}
         imageJobs={imageJobs}
         videoJobs={videoJobs}
+        isClearing={isClearing}
       />
 
       {/* Library Import Modal */}
