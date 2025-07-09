@@ -246,6 +246,10 @@ const Workspace = () => {
       clearError();
     }
 
+    // Clear workspaceCleared flag so auto-add resumes
+    sessionStorage.removeItem('workspaceCleared');
+    localStorage.removeItem('workspaceCleared');
+
     try {
       console.log('🚀 Starting generation with:', {
         format: selectedMode,
@@ -334,10 +338,18 @@ const Workspace = () => {
     setIsClearing(true);
     setWorkspace([]);
     setAutoAddedUrls(new Set());
-    // Clear session storage to prevent auto-add from restoring items
+    // Fully clear all workspace-related storage
     sessionStorage.removeItem('workspace');
-    console.log('🧹 Workspace cleared completely');
-    
+    sessionStorage.removeItem('workspace-session');
+    sessionStorage.removeItem('workspace-user');
+    sessionStorage.removeItem('signed_urls');
+    sessionStorage.setItem('workspaceCleared', 'true');
+    localStorage.removeItem('workspace');
+    localStorage.removeItem('workspace-session');
+    localStorage.removeItem('workspace-user');
+    localStorage.removeItem('signed_urls');
+    localStorage.setItem('workspaceCleared', 'true');
+    console.log('🧹 Workspace and all related storage cleared completely');
     // Reset clearing flag after a short delay to allow auto-add to resume
     setTimeout(() => {
       setIsClearing(false);
@@ -410,11 +422,6 @@ const Workspace = () => {
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Current Workspace ({workspace.length} assets)</h2>
-            {workspace.length > 0 && (
-              <Button variant="destructive" onClick={clearWorkspace}>
-                Clear Workspace
-              </Button>
-            )}
           </div>
           
           {workspace.length > 0 ? (
@@ -629,6 +636,9 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
+          // Clear workspaceCleared flag so auto-add resumes
+          sessionStorage.removeItem('workspaceCleared');
+          localStorage.removeItem('workspaceCleared');
           // Convert imported assets to workspace format
           const workspaceAssets: WorkspaceAsset[] = importedAssets.map(asset => ({
             id: `${asset.id}_${Date.now()}`,

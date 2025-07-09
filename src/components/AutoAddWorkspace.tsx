@@ -15,6 +15,14 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedJobs, setProcessedJobs] = useState<Set<string>>(new Set());
   
+  // Helper to check if workspace is cleared
+  const isWorkspaceCleared = () => {
+    return (
+      sessionStorage.getItem('workspaceCleared') === 'true' ||
+      localStorage.getItem('workspaceCleared') === 'true'
+    );
+  };
+
   // Use useRef to maintain stable reference to onAutoAdd callback
   const onAutoAddRef = useRef(onAutoAdd);
   onAutoAddRef.current = onAutoAdd;
@@ -54,6 +62,11 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
 
   // Process image jobs
   useEffect(() => {
+    if (isWorkspaceCleared() || isClearing) {
+      console.log('🛑 Auto-add is disabled due to workspaceCleared flag or clearing');
+      return;
+    }
+
     const fetchSignedUrls = async () => {
       // Guard against concurrent processing or clearing
       if (isProcessing || imageJobs.length === 0 || isClearing) {
@@ -151,10 +164,15 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
     };
 
     fetchSignedUrls();
-  }, [imageJobs]); // Removed onAutoAdd from dependencies
+  }, [imageJobs, isClearing]); // Removed onAutoAdd from dependencies
 
   // Process video jobs
   useEffect(() => {
+    if (isWorkspaceCleared() || isClearing) {
+      console.log('🛑 Auto-add is disabled due to workspaceCleared flag or clearing');
+      return;
+    }
+
     const fetchVideoSignedUrls = async () => {
       // Guard against concurrent processing or clearing
       if (isProcessing || videoJobs.length === 0 || isClearing) {
@@ -247,7 +265,7 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
     };
 
     fetchVideoSignedUrls();
-  }, [videoJobs]); // Removed onAutoAdd from dependencies
+  }, [videoJobs, isClearing]); // Removed onAutoAdd from dependencies
 
   // This component doesn't render anything visible
   return null;
