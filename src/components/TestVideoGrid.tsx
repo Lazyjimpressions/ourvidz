@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,53 +21,109 @@ interface VideoModalData {
 const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [selectedVideo, setSelectedVideo] = useState<VideoModalData | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedJobs, setProcessedJobs] = useState<Set<string>>(new Set());
+  
+  // Use useRef to maintain stable reference to onAutoAdd callback
+  const onAutoAddRef = useRef(onAutoAdd);
+  onAutoAddRef.current = onAutoAdd;
 
   useEffect(() => {
     const fetchSignedUrls = async () => {
+      // Guard against concurrent processing
+      if (isProcessing || jobs.length === 0) {
+        console.log('🛑 Skipping video processing - already processing or no jobs');
+        return;
+      }
+
+      // Check if all jobs have already been processed
+      const unprocessedJobs = jobs.filter(job => !processedJobs.has(job.id));
+      if (unprocessedJobs.length === 0) {
+        console.log('✅ All video jobs already processed, skipping');
+        return;
+      }
+
+      setIsProcessing(true);
+      console.log('🔄 Starting video signed URL generation for', unprocessedJobs.length, 'unprocessed jobs');
+      
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
       const result: { [key: string]: string } = {};
+      const newProcessedJobs = new Set(processedJobs);
 
-      await Promise.all(jobs.map(async (job) => {
-        const bucket = job.metadata?.bucket || 'video_fast';
-        const attempts = [job.video_url, job.metadata?.primary_asset];
+      try {
+        await Promise.all(unprocessedJobs.map(async (job) => {
+          const bucket = job.metadata?.bucket || 'video_fast';
+          const attempts = [job.video_url, job.metadata?.primary_asset];
+          const jobPrompt = job.metadata?.prompt || 'No prompt available';
 
-        for (const path of attempts) {
-          if (!path) continue;
-          const key = `${bucket}|${path}`;
+          for (const path of attempts) {
+            if (!path) continue;
+            const key = `${bucket}|${path}`;
 
-          if (sessionCache[key]) {
-            result[path] = sessionCache[key];
-            if (onAutoAdd) onAutoAdd(sessionCache[key], job.id, job.metadata?.prompt || '');
-            break;
-          } else {
-            const { data, error } = await supabase
-              .storage
-              .from(bucket)
-              .createSignedUrl(path, 3600);
-
-            if (data?.signedUrl) {
-              result[path] = data.signedUrl;
-              updatedCache[key] = data.signedUrl;
-              if (onAutoAdd) onAutoAdd(data.signedUrl, job.id, job.metadata?.prompt || '');
+            if (sessionCache[key]) {
+              result[path] = sessionCache[key];
+              console.log(`Using cached video URL for ${path}`);
+              // Auto-add cached URLs to workspace
+              if (onAutoAddRef.current) {
+                onAutoAddRef.current(sessionCache[key], job.id, jobPrompt);
+              }
               break;
+            } else {
+              try {
+                console.log(`Requesting signed video URL for bucket=${bucket}, path=${path}`);
+                const { data, error } = await supabase
+                  .storage
+                  .from(bucket)
+                  .createSignedUrl(path, 3600);
+
+                if (data?.signedUrl) {
+                  result[path] = data.signedUrl;
+                  updatedCache[key] = data.signedUrl;
+                  console.log(`Successfully signed video URL for ${path}`);
+                  
+                  // Auto-add new URLs to workspace
+                  if (onAutoAddRef.current) {
+                    onAutoAddRef.current(data.signedUrl, job.id, jobPrompt);
+                  }
+                  break;
+                } else {
+                  console.error(`Failed to sign video URL for ${path}:`, error);
+                }
+              } catch (error) {
+                console.error(`Error signing video URL for ${path}:`, error);
+              }
             }
           }
-        }
 
-        // If no result, trigger toast for failure
-        const validPath = attempts.find(p => !!p);
-        if (validPath && !result[validPath]) {
-          toast({ title: 'Video Signing Failed', description: validPath, variant: 'destructive' });
-        }
-      }));
+          // If no result, trigger toast for failure
+          const validPath = attempts.find(p => !!p);
+          if (validPath && !result[validPath]) {
+            toast({ title: 'Video Signing Failed', description: validPath, variant: 'destructive' });
+          }
+          
+          // Mark job as processed
+          newProcessedJobs.add(job.id);
+        }));
 
-      sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
-      setSignedUrls(result);
+        sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
+        setSignedUrls(prev => ({ ...prev, ...result }));
+        setProcessedJobs(newProcessedJobs);
+        console.log('✅ Video signed URL generation completed. Total URLs:', Object.keys(result).length);
+      } catch (error) {
+        console.error('Error in fetchSignedUrls:', error);
+        toast({ 
+          title: 'Video URL Generation Error', 
+          description: 'Failed to generate signed video URLs', 
+          variant: 'destructive' 
+        });
+      } finally {
+        setIsProcessing(false);
+      }
     };
 
     fetchSignedUrls();
-  }, [jobs, onAutoAdd]);
+  }, [jobs]); // Removed onAutoAdd from dependencies
 
   const handleVideoClick = (job: any, signedUrl: string) => {
     const path = job.video_url || job.metadata?.primary_asset;
