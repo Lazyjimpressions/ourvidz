@@ -5,6 +5,8 @@ import TestMediaGrid from '@/components/TestMediaGrid';
 import TestVideoGrid from '@/components/TestVideoGrid';
 import { Button } from '@/components/ui/button';
 import Lightbox from '@/components/ui/Lightbox';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { X } from 'lucide-react';
 import { clearWorkspaceSessionData, clearSignedUrlCache, getSessionStorageStats } from '@/lib/utils';
 
 interface WorkspaceAsset {
@@ -22,6 +24,7 @@ const WorkspaceTest = () => {
   const [videoJobs, setVideoJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<WorkspaceAsset | null>(null);
   const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
 
   // Load workspace from sessionStorage
@@ -177,6 +180,19 @@ const WorkspaceTest = () => {
     window.location.reload(); // Reload to test fresh URL requests
   };
 
+  const handleImageClick = (asset: WorkspaceAsset) => {
+    if (asset.type === 'video') {
+      setSelectedVideo(asset);
+    } else {
+      const imageIndex = workspace.findIndex(a => a.id === asset.id);
+      setLightboxIndex(imageIndex);
+    }
+  };
+
+  const handleCloseVideoModal = () => {
+    setSelectedVideo(null);
+  };
+
   const [storageStats, setStorageStats] = useState(getSessionStorageStats());
 
   // Update stats when workspace changes
@@ -191,6 +207,9 @@ const WorkspaceTest = () => {
       </div>
     );
   }
+
+  // Filter workspace assets for lightbox (images only)
+  const imageAssets = workspace.filter(asset => asset.type !== 'video');
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 space-y-8">
@@ -220,17 +239,18 @@ const WorkspaceTest = () => {
                 {asset.type === 'video' ? (
                   <video
                     src={asset.url}
-                    className="w-full aspect-square object-cover rounded-lg border border-border"
+                    className="w-full aspect-square object-cover rounded-lg border border-border cursor-pointer hover:scale-105 transition"
                     muted
                     loop
                     onMouseEnter={(e) => e.currentTarget.play()}
                     onMouseLeave={(e) => e.currentTarget.pause()}
+                    onClick={() => handleImageClick(asset)}
                   />
                 ) : (
                   <img
                     src={asset.url}
                     alt={`Workspace ${asset.id}`}
-                    onClick={() => setLightboxIndex(workspace.findIndex(a => a.id === asset.id))}
+                    onClick={() => handleImageClick(asset)}
                     className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
                   />
                 )}
@@ -250,14 +270,44 @@ const WorkspaceTest = () => {
         )}
       </section>
 
-      {/* Lightbox Viewer */}
+      {/* Lightbox Viewer for Images */}
       {lightboxIndex !== null && (
         <Lightbox
-          items={workspace.filter(asset => asset.type !== 'video').map(asset => asset.url)}
+          items={imageAssets.map(asset => asset.url)}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
         />
       )}
+
+      {/* Video Modal */}
+      <Dialog open={!!selectedVideo} onOpenChange={handleCloseVideoModal}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
+          <DialogHeader className="flex flex-row items-center justify-between">
+            <DialogTitle className="text-lg pr-8">
+              {selectedVideo?.prompt}
+            </DialogTitle>
+            <button
+              onClick={handleCloseVideoModal}
+              className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogHeader>
+          
+          {selectedVideo && (
+            <div className="flex justify-center">
+              <video
+                controls
+                className="max-w-full max-h-[70vh] rounded"
+                autoPlay
+              >
+                <source src={selectedVideo.url} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Job Results - Images */}
       <section className="space-y-4">

@@ -201,15 +201,15 @@ const TestMediaGrid = ({ jobs, onAutoAdd }: TestMediaGridProps) => {
                       {signed ? (
                         <img
                           src={signed}
-                          alt="Generated asset"
-                          className="rounded border border-gray-600 object-cover h-36 w-full"
+                          alt={`Generated image ${path}`}
+                          className="w-full aspect-square object-cover rounded border border-gray-600"
                           onError={(e) => {
                             console.error('Image failed to load:', path);
                             e.currentTarget.style.display = 'none';
                           }}
                         />
                       ) : (
-                        <div className="w-full h-36 bg-gray-800 animate-pulse rounded flex items-center justify-center">
+                        <div className="w-full aspect-square bg-gray-800 animate-pulse rounded flex items-center justify-center">
                           <span className="text-xs text-gray-500">Loading...</span>
                         </div>
                       )}
