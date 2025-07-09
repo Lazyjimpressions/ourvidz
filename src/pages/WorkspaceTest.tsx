@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +24,7 @@ const WorkspaceTest = () => {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
 
   // Load workspace from sessionStorage
   useEffect(() => {
@@ -46,6 +47,7 @@ const WorkspaceTest = () => {
       }
       
       setWorkspace([]);
+      setAutoAddedUrls(new Set()); // Reset auto-added tracking
       return;
     }
     
@@ -53,12 +55,19 @@ const WorkspaceTest = () => {
     const stored = sessionStorage.getItem('workspace-test');
     if (stored) {
       try {
-        setWorkspace(JSON.parse(stored));
+        const loadedWorkspace = JSON.parse(stored);
+        setWorkspace(loadedWorkspace);
+        
+        // Populate auto-added tracking with existing workspace URLs
+        const existingUrls = new Set<string>(Array.from(loadedWorkspace, (asset: WorkspaceAsset) => asset.url));
+        setAutoAddedUrls(existingUrls);
+        
         console.log('🔄 Loaded workspace from current session');
       } catch (error) {
         console.error('Error parsing workspace data:', error);
         sessionStorage.removeItem('workspace-test');
         setWorkspace([]);
+        setAutoAddedUrls(new Set());
       }
     }
   }, [user]);
@@ -113,7 +122,13 @@ const WorkspaceTest = () => {
     fetchJobs();
   }, [user, mode]);
 
-  const handleAutoAdd = (signedUrl: string, jobId: string, prompt: string) => {
+  const handleAutoAdd = useCallback((signedUrl: string, jobId: string, prompt: string) => {
+    // Check if this URL has already been auto-added to prevent duplicates
+    if (autoAddedUrls.has(signedUrl)) {
+      console.log(`Skipping auto-add for ${signedUrl} - already in workspace`);
+      return;
+    }
+
     const assetId = `${jobId}_${Date.now()}`;
     const newAsset: WorkspaceAsset = {
       id: assetId,
@@ -123,20 +138,33 @@ const WorkspaceTest = () => {
       type: mode as 'image' | 'video'
     };
     
-    // Check if this exact URL is already in workspace
+    // Check if this exact URL is already in workspace (double-check)
     const existingAsset = workspace.find(asset => asset.url === signedUrl);
     if (!existingAsset) {
       setWorkspace(prev => [newAsset, ...prev]);
+      setAutoAddedUrls(prev => new Set([...prev, signedUrl]));
       console.log(`Auto-added asset ${assetId} to workspace`);
     }
-  };
+  }, [workspace, mode, autoAddedUrls]);
 
   const handleRemoveFromWorkspace = (assetId: string) => {
-    setWorkspace(prev => prev.filter(asset => asset.id !== assetId));
+    setWorkspace(prev => {
+      const assetToRemove = prev.find(asset => asset.id === assetId);
+      if (assetToRemove) {
+        // Remove the URL from tracking when asset is removed
+        setAutoAddedUrls(prevUrls => {
+          const newUrls = new Set(prevUrls);
+          newUrls.delete(assetToRemove.url);
+          return newUrls;
+        });
+      }
+      return prev.filter(asset => asset.id !== assetId);
+    });
   };
 
   const clearWorkspace = () => {
     setWorkspace([]);
+    setAutoAddedUrls(new Set());
   };
 
   const switchMode = (newMode: 'image' | 'video') => {
@@ -148,6 +176,7 @@ const WorkspaceTest = () => {
   const handleClearSessionData = () => {
     clearWorkspaceSessionData();
     setWorkspace([]);
+    setAutoAddedUrls(new Set());
     window.location.reload(); // Reload to test fresh session
   };
 
@@ -281,6 +310,7 @@ const WorkspaceTest = () => {
             <p>Session Start: {new Date(parseInt(sessionStorage.getItem('workspace-test-session') || '0', 10)).toLocaleDateString()}</p>
             <p>Current User ID: {sessionStorage.getItem('workspace-test-user')}</p>
             <p>Workspace Count: {workspace.length}</p>
+            <p>Auto-Added URLs: {autoAddedUrls.size}</p>
             <Button variant="outline" onClick={handleClearSessionData}>
               Clear Session Data
             </Button>
