@@ -80,7 +80,7 @@ serve(async (req)=>{
         "child", "minor"
       ];
       
-      // Priority 6: Multi-Party Scene Prevention (NEW - Critical for group scenes)
+      // Priority 6: Multi-Party Scene Prevention (FIXED - Critical for group scenes)
       const multiPartyNegatives = [
         "three girls", "all girls", "only girls", "no male", "missing male",
         "disembodied penis", "floating penis", "detached penis", "penis not attached",
@@ -109,27 +109,31 @@ serve(async (req)=>{
         ...nsfwNegatives
       ];
       
-      // Add multi-party prevention for group scenes (NEW)
-      if (userPrompt.toLowerCase().includes('two') && 
-          (userPrompt.toLowerCase().includes('girl') || userPrompt.toLowerCase().includes('woman')) &&
-          (userPrompt.toLowerCase().includes('guy') || userPrompt.toLowerCase().includes('man'))) {
+      // FIXED: Enhanced multi-party prevention for group scenes
+      const promptLower = userPrompt.toLowerCase();
+      const hasMultiplePeople = promptLower.includes('two') || promptLower.includes('both') || promptLower.includes('sisters') || promptLower.includes('girls');
+      const hasFemales = promptLower.includes('girl') || promptLower.includes('woman') || promptLower.includes('sister') || promptLower.includes('female');
+      const hasMales = promptLower.includes('guy') || promptLower.includes('man') || promptLower.includes('male') || promptLower.includes('boy');
+      
+      if (hasMultiplePeople && hasFemales && hasMales) {
         sdxlNegatives.push(...multiPartyNegatives.slice(0, 6)); // Limit for token efficiency
-        console.log('🎯 Adding multi-party prevention for group scene');
+        console.log('🎯 Adding multi-party prevention for mixed gender group scene');
+      } else if (hasMultiplePeople && hasFemales && !hasMales) {
+        // For all-female scenes, still add some prevention terms
+        sdxlNegatives.push("three girls", "all girls", "only girls", "wrong number of people");
+        console.log('🎯 Adding multi-party prevention for all-female group scene');
       }
       
       // Add position accuracy for explicit scenes (NEW)
-      if (userPrompt.toLowerCase().includes('sex') || 
-          userPrompt.toLowerCase().includes('oral') || 
-          userPrompt.toLowerCase().includes('doggy')) {
+      if (promptLower.includes('sex') || promptLower.includes('oral') || promptLower.includes('doggy') || promptLower.includes('sucking')) {
         sdxlNegatives.push(...positionNegatives.slice(0, 5)); // Limit for token efficiency
         console.log('🎯 Adding position accuracy prevention for explicit scene');
       }
       
       // Add NSFW anatomical improvements if applicable
-      if (userPrompt.toLowerCase().includes('naked') || 
-          userPrompt.toLowerCase().includes('nude') || 
-          userPrompt.toLowerCase().includes('sex')) {
+      if (promptLower.includes('naked') || promptLower.includes('nude') || promptLower.includes('sex') || promptLower.includes('topless')) {
         sdxlNegatives.push(...nsfwAnatomicalNegatives.slice(0, 4)); // Limit for token efficiency
+        console.log('🎯 Adding NSFW anatomical improvements');
       }
       
       const result = sdxlNegatives.join(", ");
@@ -238,21 +242,96 @@ serve(async (req)=>{
         status: 500
       });
     }
-    // Create job record with enhanced error handling
+    
+    // Get project details for the prompt (if projectId provided)
+    let prompt = '';
+    let characterId = null;
+    if (projectId) {
+      const { data: project, error: projectError } = await supabase.from('projects').select('enhanced_prompt, original_prompt, character_id').eq('id', projectId).single();
+      if (!projectError && project) {
+        prompt = project.enhanced_prompt || project.original_prompt || '';
+        characterId = project.character_id;
+        console.log('📄 Project prompt retrieved:', {
+          projectId,
+          hasPrompt: !!prompt
+        });
+      } else {
+        console.warn('⚠️ Could not retrieve project prompt:', projectError?.message);
+      }
+    }
+    
+    // Use prompt from metadata if no project prompt available
+    if (!prompt && metadata?.prompt) {
+      prompt = metadata.prompt;
+      console.log('📝 Using metadata prompt');
+    }
+    
+    // CRITICAL FIX: Generate negative prompt BEFORE creating job record
+    let negativePrompt = '';
+    let negativePromptError = null;
+    
+    if (isSDXL) {
+      try {
+        negativePrompt = generateNegativePromptForSDXL(prompt);
+        console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
+      } catch (error) {
+        negativePromptError = error.message;
+        console.error('❌ Error generating negative prompt:', error);
+        // Fallback to basic negative prompt
+        negativePrompt = "bad anatomy, extra limbs, deformed, missing limbs, worst quality, low quality, normal quality, lowres, text, watermark, logo, signature";
+      }
+    } else {
+      console.log('🚫 WAN job detected - NO negative prompt (not supported by WAN 2.1)');
+    }
+    
+    // Create comprehensive metadata structure
+    const jobMetadata = {
+      ...metadata,
+      model_variant: modelVariant,
+      queue: queueName,
+      dual_worker_routing: true,
+      negative_prompt_supported: isSDXL,
+      // CRITICAL FIX: Include negative_prompt in database metadata
+      ...isSDXL && {
+        negative_prompt: negativePrompt,
+        negative_prompt_generation_error: negativePromptError
+      },
+      // Enhanced tracking fields
+      prompt_length: prompt.length,
+      prompt_word_count: prompt.split(' ').length,
+      generation_timestamp: new Date().toISOString(),
+      edge_function_version: '2.1.0',
+      // Performance tracking
+      expected_generation_time: isEnhanced ? 
+        (format === 'video' ? (quality === 'high' ? 240 : 195) : (quality === 'high' ? 100 : 85)) :
+        (format === 'video' ? (quality === 'high' ? 180 : 135) : (quality === 'high' ? 40 : 25)),
+      // Quality settings
+      sample_steps: quality === 'high' ? 50 : 25,
+      sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
+      sample_solver: 'unipc',
+      sample_shift: 5.0,
+      // Batch settings
+      num_images: isSDXL ? 6 : 1,
+      batch_count: metadata?.batch_count || 1,
+      // Content type tracking
+      content_type: format,
+      file_extension: format === 'video' ? 'mp4' : 'png',
+      // User context
+      user_id: user.id,
+      project_id: projectId,
+      video_id: videoId,
+      image_id: imageId,
+      character_id: characterId
+    };
+    
+    // Create job record with enhanced error handling - INCLUDING negative prompt in metadata
     const { data: job, error: jobError } = await supabase.from('jobs').insert({
       user_id: user.id,
       job_type: jobType,
       format: format,
       quality: quality,
       model_type: jobType,
-      metadata: {
-        ...metadata,
-        model_variant: modelVariant,
-        queue: queueName,
-        dual_worker_routing: true,
-        negative_prompt_supported: isSDXL,
-        created_timestamp: new Date().toISOString()
-      },
+      metadata: jobMetadata,
       project_id: projectId,
       video_id: videoId,
       image_id: imageId,
@@ -280,35 +359,6 @@ serve(async (req)=>{
       });
     }
     console.log('✅ Job created successfully in database:', job.id);
-    // Get project details for the prompt (if projectId provided)
-    let prompt = '';
-    let characterId = null;
-    if (projectId) {
-      const { data: project, error: projectError } = await supabase.from('projects').select('enhanced_prompt, original_prompt, character_id').eq('id', projectId).single();
-      if (!projectError && project) {
-        prompt = project.enhanced_prompt || project.original_prompt || '';
-        characterId = project.character_id;
-        console.log('📄 Project prompt retrieved:', {
-          projectId,
-          hasPrompt: !!prompt
-        });
-      } else {
-        console.warn('⚠️ Could not retrieve project prompt:', projectError?.message);
-      }
-    }
-    // Use prompt from metadata if no project prompt available
-    if (!prompt && metadata?.prompt) {
-      prompt = metadata.prompt;
-      console.log('📝 Using metadata prompt');
-    }
-    // CRITICAL FIX: Only generate negative prompt for SDXL jobs
-    let negativePrompt = '';
-    if (isSDXL) {
-      negativePrompt = generateNegativePromptForSDXL(prompt);
-      console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
-    } else {
-      console.log('🚫 WAN job detected - NO negative prompt (not supported by WAN 2.1)');
-    }
     // Format job payload for appropriate worker
     const jobPayload = {
       id: job.id,
@@ -332,24 +382,13 @@ serve(async (req)=>{
       ...isSDXL && {
         negative_prompt: negativePrompt
       },
-      // Additional metadata
+      // Additional metadata - use same structure as database
       video_id: videoId,
       image_id: imageId,
       character_id: characterId,
       model_variant: modelVariant,
       bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`),
-      metadata: {
-        ...metadata,
-        model_variant: modelVariant,
-        dual_worker_routing: true,
-        negative_prompt_supported: isSDXL,
-        // Only include negative_prompt in metadata for SDXL
-        ...isSDXL && {
-          negative_prompt: negativePrompt
-        },
-        num_images: isSDXL ? 6 : 1,
-        queue_timestamp: new Date().toISOString()
-      }
+      metadata: jobMetadata // Use the same comprehensive metadata structure
     };
     console.log('📤 Pushing FIXED job to Redis queue:', {
       jobId: job.id,
@@ -359,6 +398,9 @@ serve(async (req)=>{
       hasPrompt: !!prompt,
       hasNegativePrompt: isSDXL && !!negativePrompt,
       negativePromptSupported: isSDXL,
+      negativePromptLength: isSDXL ? negativePrompt.length : 0,
+      negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
+      negativePromptError: negativePromptError,
       payloadSize: JSON.stringify(jobPayload).length
     });
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
@@ -435,7 +477,7 @@ serve(async (req)=>{
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - FIXED: WAN negative prompt removal',
+      message: 'Job queued successfully - ENHANCED: Comprehensive negative prompt system',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
@@ -443,16 +485,24 @@ serve(async (req)=>{
       isSDXL: isSDXL,
       negativePromptSupported: isSDXL,
       fixes_applied: [
-        'Removed negative prompt generation for WAN jobs',
-        'Simplified job payload structure',
-        'Fixed parameter naming consistency',
-        'Added proper WAN 2.1 configuration'
+        'Fixed negative prompt generation timing',
+        'Enhanced multi-party scene detection',
+        'Added comprehensive error handling',
+        'Improved metadata consistency',
+        'Added performance tracking fields',
+        'Enhanced logging and debugging'
       ],
       debug: {
         userId: user.id,
         hasPrompt: !!prompt,
+        promptLength: prompt.length,
+        promptWordCount: prompt.split(' ').length,
         hasNegativePrompt: isSDXL && !!negativePrompt,
+        negativePromptLength: isSDXL ? negativePrompt.length : 0,
+        negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
+        negativePromptError: negativePromptError,
         redisConfigured: true,
+        metadataFields: Object.keys(jobMetadata).length,
         timestamp: new Date().toISOString()
       }
     }), {
