@@ -6,8 +6,9 @@ import TestVideoGrid from '@/components/TestVideoGrid';
 import { Button } from '@/components/ui/button';
 import Lightbox from '@/components/ui/Lightbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
+import { X, Info } from 'lucide-react';
 import { clearWorkspaceSessionData, clearSignedUrlCache, getSessionStorageStats } from '@/lib/utils';
+import { PromptInfoModal } from '@/components/PromptInfoModal';
 
 interface WorkspaceAsset {
   id: string;
@@ -26,6 +27,8 @@ const WorkspaceTest = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<WorkspaceAsset | null>(null);
   const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
+  const [showPromptModal, setShowPromptModal] = useState(false);
+  const [currentPromptAsset, setCurrentPromptAsset] = useState<WorkspaceAsset | null>(null);
 
   // Load workspace from sessionStorage
   useEffect(() => {
@@ -184,13 +187,25 @@ const WorkspaceTest = () => {
     if (asset.type === 'video') {
       setSelectedVideo(asset);
     } else {
-      const imageIndex = workspace.findIndex(a => a.id === asset.id);
+      // Find the index in the filtered image assets array for lightbox
+      const imageAssets = workspace.filter(a => a.type !== 'video');
+      const imageIndex = imageAssets.findIndex(a => a.id === asset.id);
       setLightboxIndex(imageIndex);
     }
   };
 
   const handleCloseVideoModal = () => {
     setSelectedVideo(null);
+  };
+
+  const handleShowPromptInfo = (asset: WorkspaceAsset) => {
+    setCurrentPromptAsset(asset);
+    setShowPromptModal(true);
+  };
+
+  const handleClosePromptModal = () => {
+    setShowPromptModal(false);
+    setCurrentPromptAsset(null);
   };
 
   const [storageStats, setStorageStats] = useState(getSessionStorageStats());
@@ -276,6 +291,12 @@ const WorkspaceTest = () => {
           items={imageAssets.map(asset => asset.url)}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
+          onShowPromptInfo={() => {
+            const currentAsset = imageAssets[lightboxIndex];
+            if (currentAsset) {
+              handleShowPromptInfo(currentAsset);
+            }
+          }}
         />
       )}
 
@@ -286,12 +307,24 @@ const WorkspaceTest = () => {
             <DialogTitle className="text-lg pr-8">
               {selectedVideo?.prompt}
             </DialogTitle>
-            <button
-              onClick={handleCloseVideoModal}
-              className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedVideo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleShowPromptInfo(selectedVideo)}
+                  className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+              )}
+              <button
+                onClick={handleCloseVideoModal}
+                className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </DialogHeader>
           
           {selectedVideo && (
@@ -308,6 +341,21 @@ const WorkspaceTest = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Prompt Info Modal */}
+      {currentPromptAsset && (
+        <PromptInfoModal
+          isOpen={showPromptModal}
+          onClose={handleClosePromptModal}
+          prompt={currentPromptAsset.prompt}
+          quality="fast"
+          mode={currentPromptAsset.type || 'image'}
+          timestamp={new Date()}
+          contentCount={1}
+          itemId={currentPromptAsset.jobId}
+          originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
+        />
+      )}
 
       {/* Job Results - Images */}
       <section className="space-y-4">

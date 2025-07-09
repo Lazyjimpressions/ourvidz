@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface LightboxProps {
   items: string[];
   startIndex: number;
   onClose: () => void;
+  onShowPromptInfo?: () => void;
 }
 
-const Lightbox: React.FC<LightboxProps> = ({ items, startIndex, onClose }) => {
+const Lightbox: React.FC<LightboxProps> = ({ items, startIndex, onClose, onShowPromptInfo }) => {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [isLoading, setIsLoading] = useState(true);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -101,6 +103,19 @@ const Lightbox: React.FC<LightboxProps> = ({ items, startIndex, onClose }) => {
           >
             <X className="h-6 w-6" />
           </button>
+
+          {/* Info Button */}
+          {onShowPromptInfo && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onShowPromptInfo}
+              className="absolute top-4 right-16 z-20 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+              aria-label="Show prompt info"
+            >
+              <Info className="h-6 w-6" />
+            </Button>
+          )}
 
           {/* Navigation Arrows */}
           {currentIndex > 0 && (

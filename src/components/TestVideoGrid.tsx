@@ -2,7 +2,9 @@ import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X } from 'lucide-react';
+import { X, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { PromptInfoModal } from '@/components/PromptInfoModal';
 
 interface TestVideoGridProps {
   jobs: any[];
@@ -23,6 +25,7 @@ const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
   const [selectedVideo, setSelectedVideo] = useState<VideoModalData | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedJobs, setProcessedJobs] = useState<Set<string>>(new Set());
+  const [showPromptModal, setShowPromptModal] = useState(false);
   
   // Use useRef to maintain stable reference to onAutoAdd callback
   const onAutoAddRef = useRef(onAutoAdd);
@@ -143,6 +146,14 @@ const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
     setSelectedVideo(null);
   };
 
+  const handleShowPromptInfo = () => {
+    setShowPromptModal(true);
+  };
+
+  const handleClosePromptModal = () => {
+    setShowPromptModal(false);
+  };
+
   return (
     <>
       <div className="space-y-6">
@@ -189,12 +200,24 @@ const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
             <DialogTitle className="text-lg pr-8">
               {selectedVideo?.prompt}
             </DialogTitle>
-            <button
-              onClick={handleCloseModal}
-              className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              {selectedVideo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShowPromptInfo}
+                  className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+              )}
+              <button
+                onClick={handleCloseModal}
+                className="rounded-full p-1 hover:bg-gray-100 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </DialogHeader>
           
           {selectedVideo && (
@@ -218,6 +241,20 @@ const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Prompt Info Modal */}
+      {selectedVideo && (
+        <PromptInfoModal
+          isOpen={showPromptModal}
+          onClose={handleClosePromptModal}
+          prompt={selectedVideo.prompt}
+          quality={selectedVideo.quality as any}
+          mode="video"
+          timestamp={new Date()}
+          contentCount={1}
+          itemId={selectedVideo.jobId}
+        />
+      )}
     </>
   );
 };
