@@ -113,7 +113,7 @@ const WorkspaceTest = () => {
     fetchJobs();
   }, [user, mode]);
 
-  const handleImport = (signedUrl: string, jobId: string, prompt: string) => {
+  const handleAutoAdd = (signedUrl: string, jobId: string, prompt: string) => {
     const assetId = `${jobId}_${Date.now()}`;
     const newAsset: WorkspaceAsset = {
       id: assetId,
@@ -127,7 +127,7 @@ const WorkspaceTest = () => {
     const existingAsset = workspace.find(asset => asset.url === signedUrl);
     if (!existingAsset) {
       setWorkspace(prev => [newAsset, ...prev]);
-      console.log(`Imported asset ${assetId} to workspace`);
+      console.log(`Auto-added asset ${assetId} to workspace`);
     }
   };
 
@@ -235,7 +235,7 @@ const WorkspaceTest = () => {
           </div>
         ) : (
           <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-            <p className="text-muted-foreground">Workspace is empty. Import some assets from your recent jobs below.</p>
+            <p className="text-muted-foreground">Workspace is empty. Generated images and videos will automatically appear here.</p>
           </div>
         )}
       </section>
@@ -251,7 +251,7 @@ const WorkspaceTest = () => {
 
       {/* Job Results */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Your Recent {mode === 'image' ? 'Images' : 'Videos'}</h2>
+        <h2 className="text-xl font-semibold">Your Recent {mode === 'image' ? 'Images' : 'Videos'} (Auto-Added to Workspace)</h2>
         
         {loading ? (
           <div className="text-center py-8">
@@ -260,13 +260,13 @@ const WorkspaceTest = () => {
         ) : mode === 'image' ? (
           <TestMediaGrid 
             jobs={jobs} 
-            onImport={handleImport}
+            onAutoAdd={handleAutoAdd}
             mode={mode as 'image' | 'video'}
           />
         ) : (
           <TestVideoGrid 
             jobs={jobs} 
-            onImport={handleImport}
+            onAutoAdd={handleAutoAdd}
             mode={mode as 'image' | 'video'}
           />
         )}

@@ -4,11 +4,11 @@ import { toast } from '@/hooks/use-toast';
 
 interface TestMediaGridProps {
   jobs: any[];
-  onImport: (signedUrl: string, jobId: string, prompt: string) => void;
+  onAutoAdd?: (url: string, jobId: string, prompt: string) => void;
   mode: 'image' | 'video';
 }
 
-const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
+const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +64,7 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
           }
 
           const bucket = inferBucketFromJob(job);
+          const jobPrompt = job.metadata?.prompt || job.prompt || 'No prompt available';
           console.log(`Processing job ${job.id} with bucket: ${bucket}, paths:`, job.image_urls);
 
           for (const path of job.image_urls) {
@@ -72,6 +73,10 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
             if (sessionCache[key]) {
               result[path] = sessionCache[key];
               console.log(`Using cached URL for ${path}`);
+              // Auto-add cached URLs to workspace
+              if (onAutoAdd) {
+                onAutoAdd(sessionCache[key], job.id, jobPrompt);
+              }
             } else {
               try {
                 console.log(`Requesting signed URL for bucket=${bucket}, path=${path}`);
@@ -88,6 +93,11 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
                   // Preload image for better UX
                   const preload = new Image();
                   preload.src = data.signedUrl;
+                  
+                  // Auto-add new URLs to workspace
+                  if (onAutoAdd) {
+                    onAutoAdd(data.signedUrl, job.id, jobPrompt);
+                  }
                 } else {
                   console.error(`Failed to sign URL for ${path}:`, error);
                   toast({ 
@@ -124,19 +134,7 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
     };
 
     fetchSignedUrls();
-  }, [jobs]);
-
-  const handleImport = (url: string, jobId: string, prompt: string) => {
-    if (!url) {
-      toast({ title: 'Import Failed', description: 'Missing URL', variant: 'destructive' });
-      return;
-    }
-    
-    // Use the correct prompt from metadata
-    const correctPrompt = prompt || 'No prompt available';
-    onImport(url, jobId, correctPrompt);
-    toast({ title: 'Imported to Workspace', description: 'Image added successfully!' });
-  };
+  }, [jobs, onAutoAdd]);
 
   if (jobs.length === 0) {
     return (
@@ -150,7 +148,7 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
     <div className="space-y-6">
       {loading && (
         <div className="text-center py-4">
-          <p className="text-muted-foreground">Loading signed URLs...</p>
+          <p className="text-muted-foreground">Loading and auto-adding images to workspace...</p>
         </div>
       )}
       
@@ -175,7 +173,7 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
                 job.image_urls.map((path: string) => {
                   const signed = signedUrls[path];
                   return (
-                    <div key={path} className="relative group">
+                    <div key={path} className="relative">
                       {signed ? (
                         <img
                           src={signed}
@@ -191,14 +189,6 @@ const TestMediaGrid = ({ jobs, onImport, mode }: TestMediaGridProps) => {
                           <span className="text-xs text-gray-500">Loading...</span>
                         </div>
                       )}
-
-                      <button
-                        onClick={() => handleImport(signed, job.id, jobPrompt)}
-                        disabled={!signed}
-                        className="absolute bottom-2 right-2 px-2 py-1 text-xs rounded bg-white text-black opacity-0 group-hover:opacity-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Import
-                      </button>
                     </div>
                   );
                 })
