@@ -5,10 +5,9 @@ import { toast } from '@/hooks/use-toast';
 interface TestMediaGridProps {
   jobs: any[];
   onAutoAdd?: (url: string, jobId: string, prompt: string) => void;
-  mode: 'image' | 'video';
 }
 
-const TestMediaGrid = ({ jobs, onAutoAdd, mode }: TestMediaGridProps) => {
+const TestMediaGrid = ({ jobs, onAutoAdd }: TestMediaGridProps) => {
   const [signedUrls, setSignedUrls] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);

@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import TestMediaGrid from '@/components/TestMediaGrid';
@@ -18,10 +17,9 @@ interface WorkspaceAsset {
 
 const WorkspaceTest = () => {
   const { user } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const mode = searchParams.get('mode') || 'image';
   const [workspace, setWorkspace] = useState<WorkspaceAsset[]>([]);
-  const [jobs, setJobs] = useState<any[]>([]);
+  const [imageJobs, setImageJobs] = useState<any[]>([]);
+  const [videoJobs, setVideoJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
@@ -80,37 +78,37 @@ const WorkspaceTest = () => {
     return () => clearTimeout(timeout);
   }, [workspace]);
 
-  // Fetch jobs based on mode
+  // Fetch both image and video jobs
   useEffect(() => {
     if (!user) return;
     
     const fetchJobs = async () => {
       setLoading(true);
       try {
-        if (mode === 'image') {
-          const { data, error } = await supabase
-            .from('images')
-            .select('id, image_urls, prompt, metadata, created_at, generation_mode, quality')
-            .eq('user_id', user.id)
-            .eq('status', 'completed')
-            .order('created_at', { ascending: false })
-            .limit(20);
-            
-          if (!error && data) {
-            setJobs(data);
-          }
-        } else {
-          const { data, error } = await supabase
-            .from('videos')
-            .select('id, video_url, signed_url, metadata, created_at, resolution, thumbnail_url')
-            .eq('user_id', user.id)
-            .eq('status', 'completed')
-            .order('created_at', { ascending: false })
-            .limit(20);
-            
-          if (!error && data) {
-            setJobs(data);
-          }
+        // Fetch images
+        const { data: imageData, error: imageError } = await supabase
+          .from('images')
+          .select('id, image_urls, prompt, metadata, created_at, generation_mode, quality')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(20);
+          
+        if (!imageError && imageData) {
+          setImageJobs(imageData);
+        }
+
+        // Fetch videos
+        const { data: videoData, error: videoError } = await supabase
+          .from('videos')
+          .select('id, video_url, signed_url, metadata, created_at, resolution, thumbnail_url')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false })
+          .limit(20);
+          
+        if (!videoError && videoData) {
+          setVideoJobs(videoData);
         }
       } catch (error) {
         console.error('Error fetching jobs:', error);
@@ -120,9 +118,9 @@ const WorkspaceTest = () => {
     };
 
     fetchJobs();
-  }, [user, mode]);
+  }, [user]);
 
-  const handleAutoAdd = useCallback((signedUrl: string, jobId: string, prompt: string) => {
+  const handleAutoAdd = useCallback((signedUrl: string, jobId: string, prompt: string, type: 'image' | 'video' = 'image') => {
     // Check if this URL has already been auto-added to prevent duplicates
     if (autoAddedUrls.has(signedUrl)) {
       console.log(`Skipping auto-add for ${signedUrl} - already in workspace`);
@@ -135,7 +133,7 @@ const WorkspaceTest = () => {
       url: signedUrl,
       jobId,
       prompt,
-      type: mode as 'image' | 'video'
+      type
     };
     
     // Check if this exact URL is already in workspace (double-check)
@@ -143,9 +141,9 @@ const WorkspaceTest = () => {
     if (!existingAsset) {
       setWorkspace(prev => [newAsset, ...prev]);
       setAutoAddedUrls(prev => new Set([...prev, signedUrl]));
-      console.log(`Auto-added asset ${assetId} to workspace`);
+      console.log(`Auto-added ${type} asset ${assetId} to workspace`);
     }
-  }, [workspace, mode, autoAddedUrls]);
+  }, [workspace, autoAddedUrls]);
 
   const handleRemoveFromWorkspace = (assetId: string) => {
     setWorkspace(prev => {
@@ -165,12 +163,6 @@ const WorkspaceTest = () => {
   const clearWorkspace = () => {
     setWorkspace([]);
     setAutoAddedUrls(new Set());
-  };
-
-  const switchMode = (newMode: 'image' | 'video') => {
-    const params = new URLSearchParams(searchParams);
-    params.set('mode', newMode);
-    setSearchParams(params);
   };
 
   const handleClearSessionData = () => {
@@ -204,20 +196,9 @@ const WorkspaceTest = () => {
     <div className="min-h-screen bg-background text-foreground p-6 space-y-8">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Workspace Test</h1>
-        <div className="flex gap-2">
-          <Button 
-            variant={mode === 'image' ? 'default' : 'outline'}
-            onClick={() => switchMode('image')}
-          >
-            Images
-          </Button>
-          <Button 
-            variant={mode === 'video' ? 'default' : 'outline'}
-            onClick={() => switchMode('video')}
-          >
-            Videos
-          </Button>
+        <h1 className="text-3xl font-bold">Unified Workspace Test</h1>
+        <div className="text-sm text-muted-foreground">
+          Images and videos automatically added to workspace
         </div>
       </div>
 
@@ -278,25 +259,34 @@ const WorkspaceTest = () => {
         />
       )}
 
-      {/* Job Results */}
+      {/* Job Results - Images */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">Your Recent {mode === 'image' ? 'Images' : 'Videos'} (Auto-Added to Workspace)</h2>
+        <h2 className="text-xl font-semibold">Your Recent Images (Auto-Added to Workspace)</h2>
         
         {loading ? (
           <div className="text-center py-8">
-            <p className="text-muted-foreground">Loading...</p>
+            <p className="text-muted-foreground">Loading images...</p>
           </div>
-        ) : mode === 'image' ? (
+        ) : (
           <TestMediaGrid 
-            jobs={jobs} 
-            onAutoAdd={handleAutoAdd}
-            mode={mode as 'image' | 'video'}
+            jobs={imageJobs} 
+            onAutoAdd={(url, jobId, prompt) => handleAutoAdd(url, jobId, prompt, 'image')}
           />
+        )}
+      </section>
+
+      {/* Job Results - Videos */}
+      <section className="space-y-4">
+        <h2 className="text-xl font-semibold">Your Recent Videos (Auto-Added to Workspace)</h2>
+        
+        {loading ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Loading videos...</p>
+          </div>
         ) : (
           <TestVideoGrid 
-            jobs={jobs} 
-            onAutoAdd={handleAutoAdd}
-            mode={mode as 'image' | 'video'}
+            jobs={videoJobs} 
+            onAutoAdd={(url, jobId, prompt) => handleAutoAdd(url, jobId, prompt, 'video')}
           />
         )}
       </section>
