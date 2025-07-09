@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Trash2, X, CheckSquare } from "lucide-react";
+import { Download, Trash2, X, CheckSquare, Plus } from "lucide-react";
 
 interface BulkActionBarProps {
   selectedCount: number;
@@ -8,6 +8,7 @@ interface BulkActionBarProps {
   onClearSelection: () => void;
   onBulkDownload: () => void;
   onBulkDelete: () => void;
+  onAddToWorkspace: () => void;
   totalFilteredCount: number;
 }
 
@@ -17,6 +18,7 @@ export const BulkActionBar = ({
   onClearSelection,
   onBulkDownload,
   onBulkDelete,
+  onAddToWorkspace,
   totalFilteredCount
 }: BulkActionBarProps) => {
   if (selectedCount === 0) return null;
@@ -45,6 +47,15 @@ export const BulkActionBar = ({
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            <Button
+              onClick={onAddToWorkspace}
+              variant="outline"
+              size="sm"
+              className="border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add to Workspace
+            </Button>
             <Button
               onClick={onBulkDownload}
               variant="outline"

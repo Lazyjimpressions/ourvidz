@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
 import { AssetPreviewModal } from "@/components/AssetPreviewModal";
@@ -13,18 +14,12 @@ import { useLazyAssets } from "@/hooks/useLazyAssets";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
-  // Data state
-  const [assets, setAssets] = useState<UnifiedAsset[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Filter states
+  const queryClient = useQueryClient();
+  
+  // Simplified filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>("all");
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'processing' | 'failed'>("all");
-  const [qualityFilter, setQualityFilter] = useState<'all' | 'fast' | 'high'>("all");
   
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -37,8 +32,6 @@ const OptimizedLibrary = () => {
 
   // Deletion states
   const [deletingAssets, setDeletingAssets] = useState<Set<string>>(new Set());
-  const [isCleaningUp, setIsCleaningUp] = useState(false);
-  const [isRefreshingUrls, setIsRefreshingUrls] = useState(false);
 
   // OPTIMIZATION: Debounced search
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
@@ -50,80 +43,55 @@ const OptimizedLibrary = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Load assets with optimized service
-  const loadAssets = useCallback(async (reset = false) => {
-    try {
-      if (reset) {
-        setIsLoading(true);
-        setAssets([]);
-        setSelectedAssets(new Set());
-      } else {
-        setIsLoadingMore(true);
-      }
-      
-      setError(null);
-
+  // React Query for intelligent caching
+  const { data: assets = [], isLoading, error } = useQuery({
+    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm],
+    queryFn: async () => {
       const filters = {
         type: typeFilter !== 'all' ? typeFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
-        quality: qualityFilter !== 'all' ? qualityFilter : undefined,
         search: debouncedSearchTerm || undefined,
       };
 
       const result = await OptimizedAssetService.getUserAssets(filters, {
-        limit: 50,
-        offset: reset ? 0 : assets.length
+        limit: 1000, // Support up to 1000 assets as requested
+        offset: 0
       });
 
-      if (reset) {
-        setAssets(result.assets);
+      return result.assets;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 15 * 60 * 1000,   // 15 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  // Transform assets to handle SDXL images like workspace (individual images)
+  const transformedAssets = useMemo(() => {
+    const transformed: UnifiedAsset[] = [];
+    
+    assets.forEach(asset => {
+      if (asset.type === 'image' && asset.signedUrls && asset.signedUrls.length > 1) {
+        // SDXL job with multiple images - create individual assets
+        asset.signedUrls.forEach((url, index) => {
+          transformed.push({
+            ...asset,
+            id: `${asset.id}_${index}`, // Unique ID for each image
+            url: url,
+            thumbnailUrl: url,
+            prompt: `${asset.prompt} (Image ${index + 1})`,
+            isSDXLImage: true,
+            sdxlIndex: index,
+            originalAssetId: asset.id,
+          });
+        });
       } else {
-        setAssets(prev => [...prev, ...result.assets]);
+        // Single image or video
+        transformed.push(asset);
       }
-      
-      setHasMore(result.hasMore);
-      
-    } catch (err) {
-      console.error('Failed to load assets:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load assets');
-      toast.error('Failed to load assets');
-    } finally {
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
-  }, [typeFilter, statusFilter, qualityFilter, debouncedSearchTerm, assets.length]);
-
-  // Auto-cleanup stuck jobs on initial load
-  useEffect(() => {
-    const cleanup = async () => {
-      try {
-        await OptimizedAssetService.cleanupStuckJobs();
-      } catch (error) {
-        console.error('Initial cleanup failed:', error);
-      }
-    };
-    cleanup();
-  }, []);
-
-  // Initial load and filter changes
-  useEffect(() => {
-    loadAssets(true);
-  }, [typeFilter, statusFilter, qualityFilter, debouncedSearchTerm]);
-
-  // Filtered assets for display (client-side filtering for responsive UI)
-  const filteredAssets = useMemo(() => {
-    return assets.filter(asset => {
-      // The server already filtered these, but we apply additional client-side search
-      if (searchTerm && searchTerm !== debouncedSearchTerm) {
-        const searchLower = searchTerm.toLowerCase();
-        const matchesPrompt = asset.prompt.toLowerCase().includes(searchLower);
-        const matchesTitle = asset.title?.toLowerCase().includes(searchLower);
-        const matchesProject = asset.projectTitle?.toLowerCase().includes(searchLower);
-        return matchesPrompt || matchesTitle || matchesProject;
-      }
-      return true;
     });
-  }, [assets, searchTerm, debouncedSearchTerm]);
+    
+    return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  }, [assets]);
 
   // Initialize lazy loading for assets
   const { 
@@ -132,27 +100,25 @@ const OptimizedLibrary = () => {
     registerAssetRef, 
     forceLoadAssetUrls 
   } = useLazyAssets({ 
-    assets: filteredAssets, 
+    assets: transformedAssets, 
     enabled: viewMode === 'grid' 
   });
 
-  // Calculate counts for filter UI
+  // Calculate simplified counts for filter UI
   const counts = useMemo(() => {
-    const completed = assets.filter(a => a.status === 'completed').length;
-    const processing = assets.filter(a => a.status === 'processing' || a.status === 'queued').length;
-    const failed = assets.filter(a => a.status === 'failed' || a.status === 'error').length;
+    const completed = transformedAssets.filter(a => a.status === 'completed').length;
+    const processing = transformedAssets.filter(a => a.status === 'processing' || a.status === 'queued').length;
+    const failed = transformedAssets.filter(a => a.status === 'failed' || a.status === 'error').length;
     
     return {
-      total: filteredAssets.length,
-      images: filteredAssets.filter(a => a.type === 'image').length,
-      videos: filteredAssets.filter(a => a.type === 'video').length,
+      total: transformedAssets.length,
+      images: transformedAssets.filter(a => a.type === 'image').length,
+      videos: transformedAssets.filter(a => a.type === 'video').length,
       completed: completed,
       processing: processing,
       failed: failed,
-      fast: filteredAssets.filter(a => a.quality === 'fast').length,
-      high: filteredAssets.filter(a => a.quality === 'high').length,
     };
-  }, [assets, filteredAssets]);
+  }, [transformedAssets]);
 
   // Selection handlers
   const handleAssetSelection = (assetId: string, selected: boolean) => {
@@ -166,17 +132,20 @@ const OptimizedLibrary = () => {
   };
 
   const handleSelectAll = () => {
-    setSelectedAssets(new Set(filteredAssets.map(asset => asset.id)));
+    setSelectedAssets(new Set(transformedAssets.map(asset => asset.id)));
   };
 
   const handleClearSelection = () => {
     setSelectedAssets(new Set());
   };
 
-  // Download handler
+  // Download handler with session caching
   const handleDownload = async (asset: UnifiedAsset) => {
-    // Force load URLs if not already loaded
-    if (!asset.url) {
+    // Check session cache first
+    const cachedUrl = sessionStorage.getItem(`download_${asset.id}`);
+    let downloadUrl = cachedUrl || asset.url;
+    
+    if (!downloadUrl) {
       toast.loading("Preparing download...", { id: asset.id });
       try {
         const updatedAsset = await OptimizedAssetService.generateAssetUrls(asset);
@@ -184,7 +153,9 @@ const OptimizedLibrary = () => {
           toast.error("Asset URL not available", { id: asset.id });
           return;
         }
-        asset = updatedAsset;
+        downloadUrl = updatedAsset.url;
+        // Cache the URL for this session
+        sessionStorage.setItem(`download_${asset.id}`, downloadUrl);
       } catch (error) {
         toast.error("Failed to prepare download", { id: asset.id });
         return;
@@ -193,7 +164,7 @@ const OptimizedLibrary = () => {
     }
 
     try {
-      const response = await fetch(asset.url);
+      const response = await fetch(downloadUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -212,24 +183,35 @@ const OptimizedLibrary = () => {
   };
 
   const handleBulkDownload = () => {
-    const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
+    const selectedAssetList = transformedAssets.filter(asset => selectedAssets.has(asset.id));
     selectedAssetList.forEach(asset => handleDownload(asset));
     toast.success(`Downloading ${selectedAssetList.length} assets...`);
+  };
+
+  // Add to workspace functionality
+  const handleAddToWorkspace = () => {
+    const selectedAssetList = transformedAssets.filter(asset => selectedAssets.has(asset.id));
+    // Dispatch custom event for workspace to pick up
+    window.dispatchEvent(new CustomEvent('add-to-workspace', {
+      detail: { assetIds: selectedAssetList.map(a => a.originalAssetId || a.id) }
+    }));
+    toast.success(`Added ${selectedAssetList.length} assets to workspace`);
+    setSelectedAssets(new Set());
   };
 
   // Optimized deletion with complete cleanup
   const handleDelete = async (asset: UnifiedAsset) => {
     if (deletingAssets.has(asset.id)) {
-      console.log('🚫 Delete already in progress for asset:', asset.id);
       return;
     }
 
-    console.log('🗑️ Starting optimized complete deletion for:', asset.id);
-    
     setDeletingAssets(prev => new Set(prev).add(asset.id));
     
     // Optimistic update - remove from UI immediately
-    setAssets(prev => prev.filter(a => a.id !== asset.id));
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
+      (oldData: UnifiedAsset[]) => oldData?.filter(a => a.id !== asset.id) || []
+    );
+    
     if (selectedAssets.has(asset.id)) {
       setSelectedAssets(prev => {
         const newSet = new Set(prev);
@@ -241,18 +223,22 @@ const OptimizedLibrary = () => {
     toast.loading(`Deleting ${asset.type}...`, { id: asset.id });
     
     try {
-      await OptimizedAssetService.deleteAssetCompletely(asset.id, asset.type);
+      // Delete the original asset (not the individual SDXL image)
+      const assetIdToDelete = asset.originalAssetId || asset.id;
+      await OptimizedAssetService.deleteAssetCompletely(assetIdToDelete, asset.type);
       toast.success(`${asset.type} deleted completely`, { id: asset.id });
-      console.log('✅ Complete deletion finished for:', asset.id);
       
     } catch (error) {
-      console.error('❌ Complete deletion failed for:', asset.id, error);
+      console.error('❌ Deletion failed for:', asset.id, error);
       
       // Restore asset on error
-      setAssets(prev => {
-        const restored = [...prev, asset];
-        return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      });
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
+        (oldData: UnifiedAsset[]) => {
+          if (!oldData) return oldData;
+          const restored = [...oldData, asset];
+          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+      );
       
       toast.error(`Failed to delete ${asset.type}`, { id: asset.id });
       
@@ -266,96 +252,47 @@ const OptimizedLibrary = () => {
   };
 
   const handleBulkDelete = async () => {
-    const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
-    console.log('🗑️ Starting bulk complete deletion for:', selectedAssetList.length, 'assets');
+    const selectedAssetList = transformedAssets.filter(asset => selectedAssets.has(asset.id));
     
     // Optimistic updates
     const selectedIds = new Set(selectedAssetList.map(a => a.id));
-    setAssets(prev => prev.filter(a => !selectedIds.has(a.id)));
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
+      (oldData: UnifiedAsset[]) => oldData?.filter(a => !selectedIds.has(a.id)) || []
+    );
     setSelectedAssets(new Set());
     setShowBulkDelete(false);
     
     toast.loading(`Deleting ${selectedAssetList.length} assets...`, { id: 'bulk-delete' });
     
     try {
-      const assetsToDelete = selectedAssetList.map(asset => ({ id: asset.id, type: asset.type }));
+      // Group by original asset IDs to avoid duplicate deletions
+      const uniqueAssetIds = new Set(selectedAssetList.map(asset => asset.originalAssetId || asset.id));
+      const assetsToDelete = Array.from(uniqueAssetIds).map(id => {
+        const asset = selectedAssetList.find(a => (a.originalAssetId || a.id) === id);
+        return { id, type: asset?.type || 'image' };
+      });
+      
       const result = await OptimizedAssetService.bulkDeleteAssets(assetsToDelete);
       
       if (result.failed.length > 0) {
-        console.warn('❌ Some deletions failed:', result.failed);
         toast.warning(`${result.success} deleted, ${result.failed.length} failed`, { id: 'bulk-delete' });
-        
-        // Restore failed assets
-        const failedIds = new Set(result.failed.map(f => f.id));
-        const failedAssets = selectedAssetList.filter(a => failedIds.has(a.id));
-        setAssets(prev => {
-          const restored = [...prev, ...failedAssets];
-          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-        });
       } else {
         toast.success(`${result.success} assets deleted successfully`, { id: 'bulk-delete' });
       }
       
-      console.log('✅ Bulk complete deletion finished');
-      
     } catch (error) {
-      console.error('❌ Bulk complete deletion failed:', error);
+      console.error('❌ Bulk deletion failed:', error);
       
       // Restore all assets on error
-      setAssets(prev => {
-        const restored = [...prev, ...selectedAssetList];
-        return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      });
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
+        (oldData: UnifiedAsset[]) => {
+          if (!oldData) return oldData;
+          const restored = [...oldData, ...selectedAssetList];
+          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+      );
       
       toast.error("Failed to delete selected assets", { id: 'bulk-delete' });
-    }
-  };
-
-  const handleCleanup = async () => {
-    setIsCleaningUp(true);
-    toast.loading("Cleaning up stuck jobs...", { id: 'cleanup' });
-    try {
-      const result = await OptimizedAssetService.cleanupStuckJobs();
-      if (result.cleaned > 0) {
-        toast.success(`Cleaned up ${result.cleaned} stuck jobs`, { id: 'cleanup' });
-        loadAssets(true); // Refresh the list
-      } else {
-        toast.info("No stuck jobs found", { id: 'cleanup' });
-      }
-      
-      if (result.errors.length > 0) {
-        console.warn('Cleanup errors:', result.errors);
-        toast.warning(`Cleanup completed with ${result.errors.length} warnings`, { id: 'cleanup' });
-      }
-    } catch (error) {
-      console.error('Cleanup error:', error);
-      toast.error("Failed to cleanup stuck jobs", { id: 'cleanup' });
-    } finally {
-      setIsCleaningUp(false);
-    }
-  };
-
-  const handleRefreshUrls = async () => {
-    setIsRefreshingUrls(true);
-    toast.loading("Refreshing asset URLs...", { id: 'refresh-urls' });
-    try {
-      const result = await OptimizedAssetService.refreshAllAssetUrls();
-      if (result.success > 0) {
-        toast.success(`Refreshed ${result.success} asset URLs`, { id: 'refresh-urls' });
-        loadAssets(true); // Refresh the list to show updated URLs
-      } else {
-        toast.info("All URLs are up to date", { id: 'refresh-urls' });
-      }
-      
-      if (result.failed > 0) {
-        console.warn('URL refresh errors:', result.errors);
-        toast.warning(`${result.success} refreshed, ${result.failed} failed`, { id: 'refresh-urls' });
-      }
-    } catch (error) {
-      console.error('URL refresh error:', error);
-      toast.error("Failed to refresh URLs", { id: 'refresh-urls' });
-    } finally {
-      setIsRefreshingUrls(false);
     }
   };
 
@@ -379,9 +316,9 @@ const OptimizedLibrary = () => {
           <div className="text-center">
             <div className="text-red-400 text-xl mb-4">⚠️</div>
             <h2 className="text-xl font-semibold text-white mb-2">Failed to Load Library</h2>
-            <p className="text-gray-400 mb-4">{error}</p>
+            <p className="text-gray-400 mb-4">{error instanceof Error ? error.message : 'Unknown error'}</p>
             <button
-              onClick={() => loadAssets(true)}
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['library-assets'] })}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
             >
               Try Again
@@ -402,27 +339,21 @@ const OptimizedLibrary = () => {
             onSearchChange={setSearchTerm}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
-            totalAssets={assets.length}
-            filteredCount={filteredAssets.length}
-            isLoading={isLoadingMore}
-            onCleanup={handleCleanup}
-            onRefreshUrls={handleRefreshUrls}
-            isRefreshingUrls={isRefreshingUrls}
+            totalAssets={transformedAssets.length}
+            isLoading={isLoading}
           />
 
-          {/* Filters */}
+          {/* Simplified Filters */}
           <LibraryFilters
             typeFilter={typeFilter}
             onTypeFilterChange={setTypeFilter}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
-            qualityFilter={qualityFilter}
-            onQualityFilterChange={setQualityFilter}
             counts={counts}
           />
 
           {/* Assets Display */}
-          {filteredAssets.length === 0 ? (
+          {transformedAssets.length === 0 ? (
             <div className="text-center py-16">
               <div className="text-6xl mb-4">📁</div>
               <h2 className="text-xl font-semibold text-white mb-2">
@@ -437,7 +368,7 @@ const OptimizedLibrary = () => {
             </div>
           ) : viewMode === "list" ? (
             <AssetTableView
-              assets={filteredAssets}
+              assets={transformedAssets}
               selectedAssets={selectedAssets}
               onAssetSelection={handleAssetSelection}
               onPreview={setPreviewAsset}
@@ -470,19 +401,6 @@ const OptimizedLibrary = () => {
                   </div>
                 ))}
               </div>
-
-              {/* Load More */}
-              {hasMore && (
-                <div className="text-center py-8">
-                  <button
-                    onClick={() => loadAssets(false)}
-                    disabled={isLoadingMore}
-                    className="px-6 py-3 bg-gray-800 border border-gray-700 text-white rounded-md hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    {isLoadingMore ? 'Loading...' : 'Load More'}
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -494,7 +412,8 @@ const OptimizedLibrary = () => {
           onClearSelection={handleClearSelection}
           onBulkDownload={handleBulkDownload}
           onBulkDelete={() => setShowBulkDelete(true)}
-          totalFilteredCount={filteredAssets.length}
+          onAddToWorkspace={handleAddToWorkspace}
+          totalFilteredCount={transformedAssets.length}
         />
 
         {/* Modals */}

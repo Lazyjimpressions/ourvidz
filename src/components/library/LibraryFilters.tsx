@@ -15,8 +15,6 @@ interface LibraryFiltersProps {
   onTypeFilterChange: (type: 'all' | 'image' | 'video') => void;
   statusFilter: 'all' | 'completed' | 'processing' | 'failed';
   onStatusFilterChange: (status: 'all' | 'completed' | 'processing' | 'failed') => void;
-  qualityFilter: 'all' | 'fast' | 'high';
-  onQualityFilterChange: (quality: 'all' | 'fast' | 'high') => void;
   counts: {
     total: number;
     images: number;
@@ -24,8 +22,6 @@ interface LibraryFiltersProps {
     completed: number;
     processing: number;
     failed: number;
-    fast: number;
-    high: number;
   };
 }
 
@@ -34,8 +30,6 @@ export const LibraryFilters = ({
   onTypeFilterChange,
   statusFilter,
   onStatusFilterChange,
-  qualityFilter,
-  onQualityFilterChange,
   counts
 }: LibraryFiltersProps) => {
   return (
@@ -70,80 +64,47 @@ export const LibraryFilters = ({
         </Button>
       </div>
 
-      {/* Status and Quality Filters */}
+      {/* Status Filters */}
       <div className="flex flex-wrap gap-2">
-        {/* Status */}
-        <div className="flex gap-1">
+        <Button
+          variant={statusFilter === 'all' ? "default" : "outline"}
+          size="sm"
+          onClick={() => onStatusFilterChange('all')}
+          className="border-gray-600 text-xs"
+        >
+          All Status
+        </Button>
+        <Button
+          variant={statusFilter === 'completed' ? "default" : "outline"}
+          size="sm"
+          onClick={() => onStatusFilterChange('completed')}
+          className="border-gray-600 text-xs"
+        >
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Done ({counts.completed})
+        </Button>
+        {counts.processing > 0 && (
           <Button
-            variant={statusFilter === 'all' ? "default" : "outline"}
+            variant={statusFilter === 'processing' ? "default" : "outline"}
             size="sm"
-            onClick={() => onStatusFilterChange('all')}
+            onClick={() => onStatusFilterChange('processing')}
             className="border-gray-600 text-xs"
           >
-            All Status
+            <Clock className="h-3 w-3 mr-1" />
+            Working ({counts.processing})
           </Button>
+        )}
+        {counts.failed > 0 && (
           <Button
-            variant={statusFilter === 'completed' ? "default" : "outline"}
+            variant={statusFilter === 'failed' ? "default" : "outline"}
             size="sm"
-            onClick={() => onStatusFilterChange('completed')}
-            className="border-gray-600 text-xs"
+            onClick={() => onStatusFilterChange('failed')}
+            className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs"
           >
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Done ({counts.completed})
+            <XCircle className="h-3 w-3 mr-1" />
+            Failed ({counts.failed})
           </Button>
-          {counts.processing > 0 && (
-            <Button
-              variant={statusFilter === 'processing' ? "default" : "outline"}
-              size="sm"
-              onClick={() => onStatusFilterChange('processing')}
-              className="border-gray-600 text-xs"
-            >
-              <Clock className="h-3 w-3 mr-1" />
-              Working ({counts.processing})
-            </Button>
-          )}
-          {counts.failed > 0 && (
-            <Button
-              variant={statusFilter === 'failed' ? "default" : "outline"}
-              size="sm"
-              onClick={() => onStatusFilterChange('failed')}
-              className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white text-xs"
-            >
-              <XCircle className="h-3 w-3 mr-1" />
-              Failed ({counts.failed})
-            </Button>
-          )}
-        </div>
-
-        {/* Quality */}
-        <div className="flex gap-1">
-          <Button
-            variant={qualityFilter === 'all' ? "default" : "outline"}
-            size="sm"
-            onClick={() => onQualityFilterChange('all')}
-            className="border-gray-600 text-xs"
-          >
-            All Quality
-          </Button>
-          <Button
-            variant={qualityFilter === 'fast' ? "default" : "outline"}
-            size="sm"
-            onClick={() => onQualityFilterChange('fast')}
-            className="border-gray-600 text-xs"
-          >
-            <Zap className="h-3 w-3 mr-1" />
-            Fast ({counts.fast})
-          </Button>
-          <Button
-            variant={qualityFilter === 'high' ? "default" : "outline"}
-            size="sm"
-            onClick={() => onQualityFilterChange('high')}
-            className="border-gray-600 text-xs"
-          >
-            <Sparkles className="h-3 w-3 mr-1" />
-            HD ({counts.high})
-          </Button>
-        </div>
+        )}
       </div>
     </div>
   );

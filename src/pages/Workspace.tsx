@@ -18,6 +18,7 @@ import { X, Info } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
 import { clearWorkspaceSessionData, clearSignedUrlCache, getSessionStorageStats } from '@/lib/utils';
 import AutoAddWorkspace from '@/components/AutoAddWorkspace';
+import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
 
 interface WorkspaceAsset {
   id: string;
@@ -81,6 +82,9 @@ const Workspace = () => {
     selectedMode,
     !!currentJob && isGenerating
   );
+
+  // Use workspace integration hook
+  useWorkspaceIntegration();
 
   // Load workspace from sessionStorage (from test workspace)
   useEffect(() => {
@@ -177,6 +181,106 @@ const Workspace = () => {
 
     fetchJobs();
   }, [user]);
+
+  // Listen for library assets being added to workspace
+  useEffect(() => {
+    const handleLibraryAddToWorkspace = async (event: CustomEvent) => {
+      const { assetIds } = event.detail;
+      
+      try {
+        // Fetch the assets from the database
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const [imagesResult, videosResult] = await Promise.all([
+          supabase
+            .from('images')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('id', assetIds.filter(id => !id.includes('_'))) // Filter out SDXL individual image IDs
+            .eq('status', 'completed'),
+          supabase
+            .from('videos')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('id', assetIds.filter(id => !id.includes('_')))
+            .eq('status', 'completed')
+        ]);
+
+        const newAssets: WorkspaceAsset[] = [];
+
+        // Process images
+        if (imagesResult.data) {
+          imagesResult.data.forEach(image => {
+            const imageUrls = image.image_urls as string[] | null;
+            if (imageUrls && imageUrls.length > 0) {
+              // SDXL job with multiple images
+              imageUrls.forEach((url: string, index: number) => {
+                const assetId = `${image.id}_${index}`;
+                newAssets.push({
+                  id: assetId,
+                  url,
+                  jobId: image.id,
+                  prompt: `${image.prompt} (Image ${index + 1})`,
+                  type: 'image',
+                  quality: image.quality,
+                  modelType: image.generation_mode,
+                  timestamp: new Date(image.created_at)
+                });
+              });
+            } else if (image.image_url) {
+              // Single image
+              newAssets.push({
+                id: image.id,
+                url: image.image_url,
+                jobId: image.id,
+                prompt: image.prompt,
+                type: 'image',
+                quality: image.quality,
+                modelType: image.generation_mode,
+                timestamp: new Date(image.created_at)
+              });
+            }
+          });
+        }
+
+        // Process videos
+        if (videosResult.data) {
+          videosResult.data.forEach(video => {
+            if (video.signed_url) {
+              newAssets.push({
+                id: video.id,
+                url: video.signed_url,
+                jobId: video.id,
+                prompt: 'Generated video', // Videos don't have prompt field
+                type: 'video',
+                quality: 'fast', // Default quality for videos
+                timestamp: new Date(video.created_at)
+              });
+            }
+          });
+        }
+
+        // Add to workspace
+        setWorkspace(prev => [...newAssets, ...prev]);
+        
+        // Update auto-added tracking
+        const newUrls = new Set(newAssets.map(asset => asset.url));
+        setAutoAddedUrls(prev => new Set([...prev, ...newUrls]));
+
+        toast.success(`Added ${newAssets.length} assets to workspace`);
+      } catch (error) {
+        console.error('Failed to add assets to workspace:', error);
+        toast.error('Failed to add assets to workspace');
+      }
+    };
+
+    window.addEventListener('library-add-to-workspace', handleLibraryAddToWorkspace as EventListener);
+    
+    return () => {
+      window.removeEventListener('library-add-to-workspace', handleLibraryAddToWorkspace as EventListener);
+    };
+  }, []);
 
   // Auto-add callback (from test workspace)
   const handleAutoAdd = useCallback((signedUrl: string, jobId: string, prompt: string, type: 'image' | 'video' = 'image', quality?: string, modelType?: string) => {

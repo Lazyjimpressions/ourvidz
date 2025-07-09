@@ -26,6 +26,10 @@ export interface UnifiedAsset {
   isSDXL?: boolean;
   signedUrls?: string[];
   jobId?: string;
+  // SDXL image handling properties
+  isSDXLImage?: boolean;
+  sdxlIndex?: number;
+  originalAssetId?: string;
 }
 
 interface AssetFilters {

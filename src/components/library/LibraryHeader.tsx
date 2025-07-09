@@ -1,7 +1,8 @@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Grid2X2, List, RotateCcw, RefreshCw } from "lucide-react";
+import { Search, Grid2X2, List } from "lucide-react";
+import { StorageUsageIndicator } from "./StorageUsageIndicator";
 
 interface LibraryHeaderProps {
   searchTerm: string;
@@ -9,11 +10,7 @@ interface LibraryHeaderProps {
   viewMode: 'grid' | 'list';
   onViewModeChange: (mode: 'grid' | 'list') => void;
   totalAssets: number;
-  filteredCount: number;
   isLoading?: boolean;
-  onCleanup: () => void;
-  onRefreshUrls: () => void;
-  isRefreshingUrls?: boolean;
 }
 
 export const LibraryHeader = ({
@@ -22,11 +19,7 @@ export const LibraryHeader = ({
   viewMode,
   onViewModeChange,
   totalAssets,
-  filteredCount,
-  isLoading,
-  onCleanup,
-  onRefreshUrls,
-  isRefreshingUrls
+  isLoading
 }: LibraryHeaderProps) => {
   return (
     <div className="space-y-4">
@@ -36,7 +29,7 @@ export const LibraryHeader = ({
           <h1 className="text-3xl font-bold text-white">My Library</h1>
           <div className="flex items-center gap-2 mt-1">
             <Badge variant="secondary" className="bg-gray-800 text-gray-300">
-              {filteredCount} of {totalAssets} assets
+              {totalAssets} assets
             </Badge>
             {isLoading && (
               <Badge variant="outline" className="border-yellow-500/20 text-yellow-400">
@@ -46,30 +39,10 @@ export const LibraryHeader = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Manual URL Refresh Button */}
-          <Button
-            onClick={onRefreshUrls}
-            variant="outline"
-            size="sm"
-            disabled={isRefreshingUrls}
-            className="border-gray-600 text-gray-300 hover:bg-gray-700"
-          >
-            <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshingUrls ? 'animate-spin' : ''}`} />
-            Refresh URLs
-          </Button>
-
-          {/* Cleanup Button */}
-          <Button
-            onClick={onCleanup}
-            variant="outline"
-            size="sm"
-            className="border-gray-600 text-gray-300 hover:bg-gray-700"
-          >
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Cleanup
-          </Button>
-
+        <div className="flex items-center gap-4">
+          {/* Storage Usage Indicator */}
+          <StorageUsageIndicator />
+          
           {/* View Mode Toggle */}
           <div className="flex gap-1 border border-gray-600 rounded-md p-1">
             <Button
