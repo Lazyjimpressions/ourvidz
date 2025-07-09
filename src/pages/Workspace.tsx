@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
@@ -16,9 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { X, Info } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
-import { clearWorkspaceSessionData, clearSignedUrlCache, getSessionStorageStats } from '@/lib/utils';
-import AutoAddWorkspace from '@/components/AutoAddWorkspace';
 import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
+import { OptimizedAssetService, UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 
 interface WorkspaceAsset {
   id: string;
@@ -35,6 +35,7 @@ const Workspace = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -51,13 +52,8 @@ const Workspace = () => {
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   
-  // Workspace state - Simplified from test workspace
-  const [workspace, setWorkspace] = useState<WorkspaceAsset[]>([]);
-  const [imageJobs, setImageJobs] = useState<any[]>([]);
-  const [videoJobs, setVideoJobs] = useState<any[]>([]);
-  const [workspaceLoading, setWorkspaceLoading] = useState(false);
-  const [autoAddedUrls, setAutoAddedUrls] = useState<Set<string>>(new Set());
-  const [shouldClearWorkspace, setShouldClearWorkspace] = useState(false);
+  // Workspace state - Simplified and optimized
+  const [workspaceAssets, setWorkspaceAssets] = useState<WorkspaceAsset[]>([]);
   const [isClearing, setIsClearing] = useState(false);
   
   // Modal states
@@ -86,7 +82,7 @@ const Workspace = () => {
   // Use workspace integration hook
   useWorkspaceIntegration();
 
-  // Load workspace from sessionStorage (from test workspace)
+  // Load workspace from sessionStorage with proper session management
   useEffect(() => {
     const sessionStart = sessionStorage.getItem('workspace-session');
     const sessionUserId = sessionStorage.getItem('workspace-user');
@@ -106,8 +102,7 @@ const Workspace = () => {
         console.log('🆕 Started new workspace session for user:', currentUserId);
       }
       
-      setWorkspace([]);
-      setAutoAddedUrls(new Set());
+      setWorkspaceAssets([]);
       return;
     }
     
@@ -116,18 +111,12 @@ const Workspace = () => {
     if (stored) {
       try {
         const loadedWorkspace = JSON.parse(stored);
-        setWorkspace(loadedWorkspace);
-        
-        // Populate auto-added tracking with existing workspace URLs
-        const existingUrls = new Set<string>(Array.from(loadedWorkspace, (asset: WorkspaceAsset) => asset.url));
-        setAutoAddedUrls(existingUrls);
-        
-        console.log('🔄 Loaded workspace from current session');
+        setWorkspaceAssets(loadedWorkspace);
+        console.log('🔄 Loaded workspace from current session:', loadedWorkspace.length, 'assets');
       } catch (error) {
         console.error('Error parsing workspace data:', error);
         sessionStorage.removeItem('workspace');
-        setWorkspace([]);
-        setAutoAddedUrls(new Set());
+        setWorkspaceAssets([]);
       }
     }
   }, [user]);
@@ -135,52 +124,81 @@ const Workspace = () => {
   // Save workspace to sessionStorage with debouncing
   useEffect(() => {
     const timeout = setTimeout(() => {
-      sessionStorage.setItem('workspace', JSON.stringify(workspace));
+      sessionStorage.setItem('workspace', JSON.stringify(workspaceAssets));
     }, 300);
     return () => clearTimeout(timeout);
-  }, [workspace]);
+  }, [workspaceAssets]);
 
-  // Fetch both image and video jobs (from test workspace)
+  // React Query for recent completed assets (for auto-add functionality)
+  const { data: recentAssets = [] } = useQuery({
+    queryKey: ['recent-assets', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      
+      // Get recent completed assets from the last 24 hours
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      
+      const result = await OptimizedAssetService.getUserAssets(
+        { status: 'completed' },
+        { limit: 50, offset: 0 }
+      );
+      
+      // Filter to only assets created in the last 24 hours
+      return result.assets.filter(asset => 
+        asset.createdAt > oneDayAgo
+      );
+    },
+    enabled: !!user,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    gcTime: 10 * 60 * 1000,   // 10 minutes
+    refetchOnWindowFocus: false,
+  });
+
+  // Auto-add new assets to workspace (only recent ones not already in workspace)
   useEffect(() => {
-    if (!user) return;
-    
-    const fetchJobs = async () => {
-      setWorkspaceLoading(true);
-      try {
-        // Fetch images
-        const { data: imageData, error: imageError } = await supabase
-          .from('images')
-          .select('id, image_urls, prompt, metadata, created_at, generation_mode, quality')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(20);
-          
-        if (!imageError && imageData) {
-          setImageJobs(imageData);
-        }
+    if (!recentAssets.length || !user) return;
 
-        // Fetch videos
-        const { data: videoData, error: videoError } = await supabase
-          .from('videos')
-          .select('id, video_url, signed_url, metadata, created_at, resolution, thumbnail_url')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false })
-          .limit(20);
-          
-        if (!videoError && videoData) {
-          setVideoJobs(videoData);
-        }
-      } catch (error) {
-        console.error('Error fetching jobs:', error);
-      } finally {
-        setWorkspaceLoading(false);
+    const workspaceJobIds = new Set(workspaceAssets.map(asset => asset.jobId));
+    const newAssets: WorkspaceAsset[] = [];
+
+    recentAssets.forEach(asset => {
+      // Skip if this job is already in workspace
+      if (workspaceJobIds.has(asset.id)) return;
+
+      if (asset.type === 'image' && asset.signedUrls && asset.signedUrls.length > 0) {
+        // SDXL job with multiple images - add each individually
+        asset.signedUrls.forEach((url, index) => {
+          newAssets.push({
+            id: `${asset.id}_${index}`,
+            url,
+            jobId: asset.id,
+            prompt: `${asset.prompt} (Image ${index + 1})`,
+            type: 'image',
+            quality: asset.quality,
+            modelType: asset.modelType,
+            timestamp: asset.createdAt
+          });
+        });
+      } else if (asset.url) {
+        // Single image or video
+        newAssets.push({
+          id: asset.id,
+          url: asset.url,
+          jobId: asset.id,
+          prompt: asset.prompt,
+          type: asset.type,
+          quality: asset.quality,
+          modelType: asset.modelType,
+          timestamp: asset.createdAt
+        });
       }
-    };
+    });
 
-    fetchJobs();
-  }, [user]);
+    if (newAssets.length > 0) {
+      setWorkspaceAssets(prev => [...newAssets, ...prev]);
+      console.log('🔄 Auto-added', newAssets.length, 'new assets to workspace');
+    }
+  }, [recentAssets, workspaceAssets, user]);
 
   // Listen for library assets being added to workspace
   useEffect(() => {
@@ -262,12 +280,7 @@ const Workspace = () => {
         }
 
         // Add to workspace
-        setWorkspace(prev => [...newAssets, ...prev]);
-        
-        // Update auto-added tracking
-        const newUrls = new Set(newAssets.map(asset => asset.url));
-        setAutoAddedUrls(prev => new Set([...prev, ...newUrls]));
-
+        setWorkspaceAssets(prev => [...newAssets, ...prev]);
         toast.success(`Added ${newAssets.length} assets to workspace`);
       } catch (error) {
         console.error('Failed to add assets to workspace:', error);
@@ -281,35 +294,6 @@ const Workspace = () => {
       window.removeEventListener('library-add-to-workspace', handleLibraryAddToWorkspace as EventListener);
     };
   }, []);
-
-  // Auto-add callback (from test workspace)
-  const handleAutoAdd = useCallback((signedUrl: string, jobId: string, prompt: string, type: 'image' | 'video' = 'image', quality?: string, modelType?: string) => {
-    // Check if this URL has already been auto-added to prevent duplicates
-    if (autoAddedUrls.has(signedUrl)) {
-      console.log(`Skipping auto-add for ${signedUrl} - already in workspace`);
-      return;
-    }
-
-    const assetId = `${jobId}_${Date.now()}`;
-    const newAsset: WorkspaceAsset = {
-      id: assetId,
-      url: signedUrl,
-      jobId,
-      prompt,
-      type,
-      quality,
-      modelType,
-      timestamp: new Date()
-    };
-    
-    // Check if this exact URL is already in workspace (double-check)
-    const existingAsset = workspace.find(asset => asset.url === signedUrl);
-    if (!existingAsset) {
-      setWorkspace(prev => [newAsset, ...prev]);
-      setAutoAddedUrls(prev => new Set([...prev, signedUrl]));
-      console.log(`Auto-added ${type} asset ${assetId} to workspace`);
-    }
-  }, [workspace, autoAddedUrls]);
 
   // Handle authentication state and navigation
   useEffect(() => {
@@ -349,10 +333,6 @@ const Workspace = () => {
     if (generationError) {
       clearError();
     }
-
-    // Clear workspaceCleared flag so auto-add resumes
-    sessionStorage.removeItem('workspaceCleared');
-    localStorage.removeItem('workspaceCleared');
 
     try {
       console.log('🚀 Starting generation with:', {
@@ -398,65 +378,65 @@ const Workspace = () => {
         modelType: tile.modelType
       });
 
-      // Use the same format as the original image
-      const originalFormat = tile.modelType === 'SDXL' 
-        ? (tile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
-        : (tile.quality === 'high' ? 'image_high' : 'image_fast');
-
+      // Set the prompt from the selected tile
+      setPrompt(tile.prompt);
+      
+      // Determine the generation mode based on the tile's properties
+      let generationMode: GenerationFormat;
+      if (tile.modelType?.includes('7b')) {
+        generationMode = tile.quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+      } else if (tile.modelType?.includes('sdxl')) {
+        generationMode = tile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      } else {
+        generationMode = tile.quality === 'high' ? 'image_high' : 'image_fast';
+      }
+      
+      setSelectedMode(generationMode);
+      
+      // Start generation
       await generateContent({
-        format: originalFormat,
+        format: generationMode,
         prompt: tile.prompt,
-        referenceImageUrl: tile.url,
-        batchCount: 3,
         metadata: {
-          reference_image: true,
-          similarity_strength: 0.8,
-          model_variant: tile.modelType === 'SDXL' ? 'lustify_sdxl' : 'wan_2_1_1_3b'
+          model_variant: generationMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b'
         }
       });
 
-      toast.success('Generating 3 more images like this one!');
+      toast.success('Generating more images like this one!');
     } catch (error) {
-      console.error('❌ More like this generation failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Generation failed';
-      toast.error(errorMessage);
+      console.error('❌ Generate more like failed:', error);
+      toast.error('Failed to generate more images');
     }
   };
 
   const handleRemoveFromWorkspace = (assetId: string) => {
-    setWorkspace(prev => {
-      const assetToRemove = prev.find(asset => asset.id === assetId);
-      if (assetToRemove) {
-        // Remove the URL from tracking when asset is removed
-        setAutoAddedUrls(prevUrls => {
-          const newUrls = new Set(prevUrls);
-          newUrls.delete(assetToRemove.url);
-          return newUrls;
-        });
-      }
-      return prev.filter(asset => asset.id !== assetId);
-    });
+    setWorkspaceAssets(prev => prev.filter(asset => asset.id !== assetId));
+    toast.success('Removed from workspace');
   };
 
   const clearWorkspace = () => {
     setIsClearing(true);
-    setWorkspace([]);
-    setAutoAddedUrls(new Set());
-    // Fully clear all workspace-related storage
+    
+    // Clear workspace state
+    setWorkspaceAssets([]);
+    
+    // Clear session storage
     sessionStorage.removeItem('workspace');
-    sessionStorage.removeItem('workspace-session');
-    sessionStorage.removeItem('workspace-user');
-    sessionStorage.removeItem('signed_urls');
+    
+    // Set cleared flag
     sessionStorage.setItem('workspaceCleared', 'true');
-    localStorage.removeItem('workspace');
-    localStorage.removeItem('workspace-session');
-    localStorage.removeItem('workspace-user');
-    localStorage.removeItem('signed_urls');
     localStorage.setItem('workspaceCleared', 'true');
-    console.log('🧹 Workspace and all related storage cleared completely');
-    // Reset clearing flag after a short delay to allow auto-add to resume
+    
+    // Invalidate queries to refresh data
+    queryClient.invalidateQueries({ queryKey: ['recent-assets'] });
+    
+    toast.success('Workspace cleared');
+    
+    // Reset clearing state after a short delay
     setTimeout(() => {
       setIsClearing(false);
+      sessionStorage.removeItem('workspaceCleared');
+      localStorage.removeItem('workspaceCleared');
     }, 1000);
   };
 
@@ -464,10 +444,11 @@ const Workspace = () => {
     if (asset.type === 'video') {
       setSelectedVideo(asset);
     } else {
-      // Find the index in the filtered image assets array for lightbox
-      const imageAssets = workspace.filter(a => a.type !== 'video');
-      const imageIndex = imageAssets.findIndex(a => a.id === asset.id);
-      setLightboxIndex(imageIndex);
+      const imageAssets = workspaceAssets.filter(a => a.type !== 'video');
+      const index = imageAssets.findIndex(a => a.id === asset.id);
+      if (index !== -1) {
+        setLightboxIndex(index);
+      }
     }
   };
 
@@ -485,15 +466,6 @@ const Workspace = () => {
     setCurrentPromptAsset(null);
   };
 
-  // Handle workspace clearing from header
-  useEffect(() => {
-    if (shouldClearWorkspace) {
-      clearWorkspace();
-      setShouldClearWorkspace(false);
-    }
-  }, [shouldClearWorkspace]);
-
-  // Show loading state while auth is being determined
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -511,26 +483,24 @@ const Workspace = () => {
   }
 
   // Filter workspace assets for lightbox (images only)
-  const imageAssets = workspace.filter(asset => asset.type !== 'video');
+  const imageAssets = workspaceAssets.filter(asset => asset.type !== 'video');
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Fixed Header */}
-      <WorkspaceHeader onClearWorkspace={() => {
-        setShouldClearWorkspace(true);
-      }} />
+      <WorkspaceHeader onClearWorkspace={clearWorkspace} />
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
         {/* Current Workspace */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Current Workspace ({workspace.length} assets)</h2>
+            <h2 className="text-xl font-semibold">Current Workspace ({workspaceAssets.length} assets)</h2>
           </div>
           
-          {workspace.length > 0 ? (
+          {workspaceAssets.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {workspace.map((asset) => (
+              {workspaceAssets.map((asset) => (
                 <div key={asset.id} className="relative group">
                   {asset.type === 'video' ? (
                     <video
@@ -727,22 +697,11 @@ const Workspace = () => {
         />
       )}
 
-      {/* Auto-add component for background processing */}
-      <AutoAddWorkspace
-        onAutoAdd={handleAutoAdd}
-        imageJobs={imageJobs}
-        videoJobs={videoJobs}
-        isClearing={isClearing}
-      />
-
       {/* Library Import Modal */}
       <LibraryImportModal
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
-          // Clear workspaceCleared flag so auto-add resumes
-          sessionStorage.removeItem('workspaceCleared');
-          localStorage.removeItem('workspaceCleared');
           // Convert imported assets to workspace format
           const workspaceAssets: WorkspaceAsset[] = importedAssets.map(asset => ({
             id: `${asset.id}_${Date.now()}`,
@@ -755,8 +714,9 @@ const Workspace = () => {
             timestamp: asset.createdAt
           }));
           
-          setWorkspace(prev => [...workspaceAssets, ...prev]);
-          toast.success(`Added ${workspaceAssets.length} asset${workspaceAssets.length !== 1 ? 's' : ''} to workspace`);
+          setWorkspaceAssets(prev => [...workspaceAssets, ...prev]);
+          setShowLibraryModal(false);
+          toast.success(`Added ${workspaceAssets.length} assets to workspace`);
         }}
       />
     </div>
