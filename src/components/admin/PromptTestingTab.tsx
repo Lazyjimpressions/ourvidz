@@ -10,6 +10,8 @@ import { Star, Download, RefreshCw, Play, Image } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useGeneration } from "@/hooks/useGeneration";
+import { GenerationFormat } from "@/types/generation";
 
 interface PromptTest {
   id: string;
@@ -19,6 +21,7 @@ interface PromptTest {
   notes: string;
   status: 'pending' | 'testing' | 'completed' | 'failed';
   createdAt: Date;
+  jobId?: string;
 }
 
 export const PromptTestingTab = () => {
@@ -28,9 +31,73 @@ export const PromptTestingTab = () => {
   const [testResults, setTestResults] = useState<PromptTest[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTests, setActiveTests] = useState<Set<string>>(new Set());
+  
+  // Use the real generation system
+  const { generateContent, isGenerating, currentJob } = useGeneration();
 
   useEffect(() => {
     loadTestResults();
+  }, []);
+
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationComplete = async (event: CustomEvent) => {
+      const { assetId, type, jobId } = event.detail || {};
+      
+      console.log('🎯 Admin prompt testing - generation completed:', { 
+        assetId, 
+        type, 
+        jobId 
+      });
+      
+      if (jobId && assetId) {
+        try {
+          // Update the prompt test result with the generated asset ID
+          const { error: updateError } = await supabase
+            .from('prompt_test_results')
+            .update({ 
+              image_id: type === 'image' ? assetId : null,
+              success: true,
+              generation_time_ms: Date.now() // This should be calculated from start time
+            })
+            .eq('job_id', jobId);
+
+          if (updateError) {
+            console.error('❌ Failed to update test result with asset ID:', updateError);
+          } else {
+            console.log('✅ Test result updated with asset ID:', { jobId, assetId, type });
+          }
+        } catch (error) {
+          console.error('❌ Error updating test result:', error);
+        }
+      }
+      
+      // Find and update the corresponding test
+      setTestResults(prev => 
+        prev.map(test => 
+          test.jobId === jobId 
+            ? { ...test, status: 'completed' as const }
+            : test
+        )
+      );
+      
+      // Remove from active tests
+      setActiveTests(prev => {
+        const newSet = new Set(prev);
+        // Find the test with matching jobId and remove it
+        const testToRemove = testResults.find(t => t.jobId === jobId);
+        if (testToRemove) {
+          newSet.delete(testToRemove.id);
+        }
+        return newSet;
+      });
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
   }, []);
 
   const loadTestResults = async () => {
@@ -49,8 +116,9 @@ export const PromptTestingTab = () => {
         modelType: result.model_type as 'SDXL' | 'WAN',
         quality: result.quality_rating || 0,
         notes: result.notes || '',
-        status: result.success ? 'completed' : 'failed' as 'pending' | 'testing' | 'completed' | 'failed',
-        createdAt: new Date(result.created_at)
+        status: result.success ? 'completed' : 'failed',
+        createdAt: new Date(result.created_at),
+        jobId: (result as any).job_id || result.id // Use job_id if available, fallback to id
       })) || []);
     } catch (error) {
       console.error('Error loading test results:', error);
@@ -102,6 +170,25 @@ export const PromptTestingTab = () => {
     try {
       for (const prompt of validPrompts) {
         const testId = crypto.randomUUID();
+        
+        // Create test record in database first
+        const { data: testRecord, error: dbError } = await supabase
+          .from('prompt_test_results')
+          .insert({
+            id: testId,
+            prompt_text: prompt.trim(),
+            model_type: selectedModel,
+            success: false,
+            tested_by: user?.id
+          })
+          .select()
+          .single();
+
+        if (dbError) {
+          console.error('❌ Failed to create test record:', dbError);
+          throw new Error(`Database error: ${dbError.message}`);
+        }
+
         const test: PromptTest = {
           id: testId,
           prompt: prompt.trim(),
@@ -115,23 +202,73 @@ export const PromptTestingTab = () => {
         newTests.push(test);
         setActiveTests(prev => new Set([...prev, testId]));
 
-        // Simulate test processing
-        setTimeout(() => {
+        // Determine generation format based on model selection
+        const generationFormat: GenerationFormat = selectedModel === 'SDXL' 
+          ? 'sdxl_image_fast' 
+          : 'image_fast';
+
+        try {
+          console.log(`🎬 Submitting prompt for ${selectedModel} testing:`, prompt.trim());
+          
+          await generateContent({
+            format: generationFormat,
+            prompt: prompt.trim(),
+            metadata: {
+              source: 'admin_prompt_testing',
+              test_id: testId,
+              model_type: selectedModel.toLowerCase(),
+              admin_test: true
+            }
+          });
+
+          // Update test with job ID if available
+          if (currentJob?.id) {
+            // Update database record with job ID
+            await supabase
+              .from('prompt_test_results')
+              .update({ 
+                job_id: currentJob.id,
+                success: true 
+              })
+              .eq('id', testId);
+
+            setTestResults(prev => 
+              prev.map(t => 
+                t.id === testId 
+                  ? { ...t, jobId: currentJob.id, status: 'testing' as const }
+                  : t
+              )
+            );
+          }
+
+          console.log(`✅ Prompt submitted for ${selectedModel} testing`);
+        } catch (error) {
+          console.error(`❌ Failed to submit prompt for ${selectedModel} testing:`, error);
+          
+          // Update database record with error
+          await supabase
+            .from('prompt_test_results')
+            .update({ 
+              success: false,
+              error_message: error instanceof Error ? error.message : 'Unknown error'
+            })
+            .eq('id', testId);
+          
+          // Update test status to failed
+          setTestResults(prev => 
+            prev.map(t => 
+              t.id === testId 
+                ? { ...t, status: 'failed' as const }
+                : t
+            )
+          );
+          
           setActiveTests(prev => {
             const newSet = new Set(prev);
             newSet.delete(testId);
             return newSet;
           });
-          
-          // Update test status to completed
-          setTestResults(prev => 
-            prev.map(t => 
-              t.id === testId 
-                ? { ...t, status: 'completed' as const }
-                : t
-            )
-          );
-        }, Math.random() * 5000 + 2000); // 2-7 seconds
+        }
       }
 
       setTestResults(prev => [...newTests, ...prev]);
@@ -139,7 +276,7 @@ export const PromptTestingTab = () => {
 
       toast({
         title: "Batch Submitted",
-        description: `${validPrompts.length} prompts submitted for testing`,
+        description: `${validPrompts.length} prompts submitted for ${selectedModel} testing`,
       });
     } catch (error) {
       console.error('Error submitting batch:', error);
