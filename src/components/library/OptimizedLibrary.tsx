@@ -13,18 +13,39 @@ import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { useLazyAssetsV2 } from "@/hooks/useLazyAssetsV2";
 import { sessionCache } from "@/lib/cache/SessionCache";
+import { memoryManager } from "@/lib/cache/MemoryManager";
+import { progressiveEnhancement } from "@/lib/cache/ProgressiveEnhancement";
+import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
   const queryClient = useQueryClient();
   
-  // Initialize session cache on mount
+  // Phase 3: Initialize performance monitoring
+  useEffect(() => {
+    performanceMonitor.startLibrarySession();
+    performanceMonitor.markStart('library-load');
+    
+    return () => {
+      const metrics = performanceMonitor.endLibrarySession();
+      const summary = performanceMonitor.getPerformanceSummary();
+      
+      if (summary.suggestions.length > 0) {
+        console.log('💡 Performance suggestions:', summary.suggestions);
+      }
+    };
+  }, []);
+  
+  // Initialize session cache on mount with memory management
   useEffect(() => {
     const initializeCache = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         sessionCache.initializeSession(user.id);
         console.log('🚀 Library: Session cache initialized for user:', user.id);
+        
+        // Phase 3: Track library usage
+        progressiveEnhancement.trackLibraryTime(Date.now());
       }
     };
     initializeCache();
@@ -57,10 +78,12 @@ const OptimizedLibrary = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // React Query for intelligent caching
+  // React Query for intelligent caching with Phase 3 enhancements
   const { data: assets = [], isLoading, error } = useQuery({
     queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm],
     queryFn: async () => {
+      performanceMonitor.markStart('assets-fetch');
+      
       const filters = {
         type: typeFilter !== 'all' ? typeFilter : undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -72,6 +95,14 @@ const OptimizedLibrary = () => {
         offset: 0
       });
 
+      performanceMonitor.markEnd('assets-fetch');
+      
+      // Phase 3: Track search patterns and enable smart prefetching
+      if (debouncedSearchTerm) {
+        progressiveEnhancement.trackSearch(debouncedSearchTerm);
+      }
+      progressiveEnhancement.trackFilterChange(filters);
+      
       return result.assets;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -104,10 +135,20 @@ const OptimizedLibrary = () => {
       }
     });
     
+    // Phase 3: Register assets with memory manager and progressive enhancement
+    transformed.forEach(asset => {
+      memoryManager.registerAsset(asset.id, 1024, 'medium');
+    });
+    
+    // Phase 3: Smart prefetching analysis
+    if (transformed.length > 0) {
+      progressiveEnhancement.analyzeAndPrefetch(transformed, { typeFilter, statusFilter });
+    }
+    
     return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  }, [assets]);
+  }, [assets, typeFilter, statusFilter]);
 
-  // Initialize optimized lazy loading for assets
+  // Initialize optimized lazy loading for assets with Phase 3 enhancements
   const { 
     lazyAssets, 
     loadingUrls, 
@@ -119,6 +160,15 @@ const OptimizedLibrary = () => {
     enabled: viewMode === 'grid',
     prefetchThreshold: 100 // Start loading when 100px away from viewport
   });
+  
+  // Phase 3: Track asset visibility separately
+  useEffect(() => {
+    transformedAssets.forEach(asset => {
+      // Register with memory manager on asset change
+      memoryManager.updateAssetVisibility(asset.id, true);
+      progressiveEnhancement.trackAssetView(asset);
+    });
+  }, [transformedAssets]);
 
   // Calculate simplified counts for filter UI
   const counts = useMemo(() => {
