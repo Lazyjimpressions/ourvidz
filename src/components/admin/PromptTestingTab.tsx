@@ -44,7 +44,12 @@ export const PromptTestingTab = () => {
       if (error) throw error;
 
       setTestResults(data?.map(result => ({
-        ...result,
+        id: result.id,
+        prompt: result.prompt_text,
+        modelType: result.model_type as 'SDXL' | 'WAN',
+        quality: result.quality_rating || 0,
+        notes: result.notes || '',
+        status: result.success ? 'completed' : 'failed' as 'pending' | 'testing' | 'completed' | 'failed',
         createdAt: new Date(result.created_at)
       })) || []);
     } catch (error) {

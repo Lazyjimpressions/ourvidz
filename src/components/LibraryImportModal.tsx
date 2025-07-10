@@ -83,7 +83,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     });
   };
 
-  // Generate URLs for visible assets on demand
+  // Enhanced URL generation with session caching
   const generateAssetUrls = async (asset: UnifiedAsset) => {
     if (asset.url || loadingUrls.has(asset.id)) return;
     

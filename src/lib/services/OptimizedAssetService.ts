@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
+import { sessionCache } from '@/lib/cache/SessionCache';
 
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
@@ -448,8 +449,14 @@ export class OptimizedAssetService {
     return processedBatches.flat();
   }
 
-  // NEW: Generate URLs on-demand for visible assets
+  // ENHANCED: Generate URLs on-demand with session caching
   static async generateAssetUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
+    // Initialize session cache
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      sessionCache.initializeSession(user.id);
+    }
+
     if (asset.type === 'image') {
       return this.generateImageUrls(asset);
     } else {
@@ -457,13 +464,12 @@ export class OptimizedAssetService {
     }
   }
 
-  // Enhanced video URL generation with thumbnail fallback
+  // Enhanced video URL generation with session caching
   private static async generateVideoUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
-    const cacheKey = `${asset.id}-video-urls`;
-    const cachedAsset = this.cache.getViewportAsset(cacheKey);
-    
-    if (cachedAsset && cachedAsset.urlsGenerated) {
-      return cachedAsset.asset;
+    // Check session cache first
+    const cachedUrl = sessionCache.getCachedSignedUrl(asset.id);
+    if (cachedUrl) {
+      return { ...asset, url: cachedUrl };
     }
 
     try {
@@ -497,6 +503,8 @@ export class OptimizedAssetService {
           const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
           if (!error && data?.signedUrl) {
             videoUrl = data.signedUrl;
+            // Cache the generated URL
+            sessionCache.cacheSignedUrl(asset.id, videoUrl);
             console.log(`✅ Generated new video URL for ${asset.id} using bucket: ${bucket}`);
             
             // Update database with new signed URL
@@ -548,12 +556,10 @@ export class OptimizedAssetService {
         thumbnailUrl: thumbnailUrl
       };
       
-      // Cache the result
-      this.cache.setViewportAsset(cacheKey, {
-        asset: updatedAsset,
-        urlsGenerated: true,
-        timestamp: Date.now()
-      });
+      // Cache the result (note: session cache replaces viewport cache for videos)
+      if (videoUrl) {
+        sessionCache.cacheSignedUrl(asset.id, videoUrl);
+      }
       
       return updatedAsset;
 
@@ -595,12 +601,8 @@ export class OptimizedAssetService {
             thumbnailUrl: imageData.signed_url
           };
           
-          // Cache the result in memory too
-          this.cache.setViewportAsset(cacheKey, {
-            asset: updatedAsset,
-            urlsGenerated: true,
-            timestamp: Date.now()
-          });
+          // Cache the result in session cache too
+          sessionCache.cacheSignedUrl(asset.id, imageData.signed_url);
           
           return updatedAsset;
         }
@@ -638,12 +640,10 @@ export class OptimizedAssetService {
           .eq('id', asset.id);
       }
 
-      // Cache the result
-      this.cache.setViewportAsset(cacheKey, {
-        asset: updatedAsset,
-        urlsGenerated: true,
-        timestamp: Date.now()
-      });
+      // Cache the result using session cache
+      if (urls[0]) {
+        sessionCache.cacheSignedUrl(asset.id, urls[0]);
+      }
 
       return updatedAsset;
     } catch (error) {

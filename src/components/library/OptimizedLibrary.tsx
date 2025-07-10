@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
@@ -10,11 +11,24 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
-import { useLazyAssets } from "@/hooks/useLazyAssets";
+import { useLazyAssetsV2 } from "@/hooks/useLazyAssetsV2";
+import { sessionCache } from "@/lib/cache/SessionCache";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
   const queryClient = useQueryClient();
+  
+  // Initialize session cache on mount
+  useEffect(() => {
+    const initializeCache = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        sessionCache.initializeSession(user.id);
+        console.log('🚀 Library: Session cache initialized for user:', user.id);
+      }
+    };
+    initializeCache();
+  }, []);
   
   // Simplified filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -93,15 +107,17 @@ const OptimizedLibrary = () => {
     return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [assets]);
 
-  // Initialize lazy loading for assets
+  // Initialize optimized lazy loading for assets
   const { 
     lazyAssets, 
     loadingUrls, 
     registerAssetRef, 
-    forceLoadAssetUrls 
-  } = useLazyAssets({ 
+    forceLoadAssetUrls,
+    preloadNextAssets
+  } = useLazyAssetsV2({ 
     assets: transformedAssets, 
-    enabled: viewMode === 'grid' 
+    enabled: viewMode === 'grid',
+    prefetchThreshold: 100 // Start loading when 100px away from viewport
   });
 
   // Calculate simplified counts for filter UI
