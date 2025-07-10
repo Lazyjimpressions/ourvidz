@@ -2,6 +2,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
 import { sessionCache } from '@/lib/cache/SessionCache';
+import { assetMetadataCache, assetUrlCache } from '@/lib/cache/StaleWhileRevalidateCache';
+import { OptimizedDatabaseQuery } from './OptimizedDatabaseQuery';
+import { EnhancedErrorHandling } from './EnhancedErrorHandling';
 
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
@@ -181,41 +184,45 @@ export class OptimizedAssetService {
     filters: AssetFilters = {}, 
     pagination: PaginationOptions = { limit: 50, offset: 0 }
   ): Promise<{ assets: UnifiedAsset[]; hasMore: boolean; total: number }> {
-    console.log('🚀 OptimizedAssetService: Fetching assets with filters:', filters, pagination);
+    console.log('🚀 OptimizedAssetService: Fetching assets with enhanced caching');
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated');
     }
 
-    // Check cache first (stale-while-revalidate pattern)
-    const cacheKey = `${user.id}-${JSON.stringify(filters)}-${pagination.offset}`;
-    const cachedAssets = this.cache.getCachedMetadata(cacheKey);
+    // Enhanced caching with stale-while-revalidate pattern
+    const cacheKey = `assets-${user.id}-${JSON.stringify(filters)}-${pagination.offset || 0}`;
     
-    // Start fresh fetch in background if cache is stale
-    const fetchPromise = this.fetchAssetsFromDatabase(user.id, filters, pagination);
-    
-    if (cachedAssets) {
-      console.log('✅ Cache hit: Returning cached assets while refreshing in background');
-      
-      // Update cache in background
-      fetchPromise.then(result => {
-        this.cache.setCachedMetadata(cacheKey, result.assets);
-      }).catch(console.error);
-      
-      return { 
-        assets: cachedAssets, 
-        hasMore: cachedAssets.length === pagination.limit,
-        total: cachedAssets.length 
-      };
-    }
-
-    // No cache, wait for fresh data
-    console.log('🔄 Cache miss: Fetching fresh data');
-    const result = await fetchPromise;
-    this.cache.setCachedMetadata(cacheKey, result.assets);
-    
-    return result;
+    return assetMetadataCache.get(
+      cacheKey,
+      async () => {
+        console.log('🔄 Fetching fresh asset data from database');
+        
+        // Use enhanced error handling for the database query
+        const result = await EnhancedErrorHandling.enhancedRequest(
+          () => OptimizedDatabaseQuery.queryAssets(user.id, filters, {
+            limit: pagination.limit || 50,
+            metadataOnly: true // Load metadata first, URLs on-demand
+          }),
+          {
+            timeout: 15000,
+            deduplicationKey: cacheKey,
+            retries: {
+              maxRetries: 2,
+              baseDelay: 1000,
+              maxDelay: 3000
+            }
+          }
+        );
+        
+        return {
+          assets: result.assets,
+          hasMore: result.hasMore,
+          total: result.total || result.assets.length
+        };
+      }
+    );
   }
 
   private static async fetchAssetsFromDatabase(
@@ -449,7 +456,7 @@ export class OptimizedAssetService {
     return processedBatches.flat();
   }
 
-  // ENHANCED: Generate URLs on-demand with session caching
+  // ENHANCED: Generate URLs on-demand with advanced caching and error handling
   static async generateAssetUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
     // Initialize session cache
     const { data: { user } } = await supabase.auth.getUser();
@@ -457,11 +464,34 @@ export class OptimizedAssetService {
       sessionCache.initializeSession(user.id);
     }
 
-    if (asset.type === 'image') {
-      return this.generateImageUrls(asset);
-    } else {
-      return this.generateVideoUrls(asset);
-    }
+    const cacheKey = `url-${asset.id}-${asset.type}`;
+    
+    return assetUrlCache.get(
+      cacheKey,
+      async () => {
+        console.log(`🔗 Generating URLs for ${asset.type} asset:`, asset.id);
+        
+        const result = await EnhancedErrorHandling.enhancedRequest(
+          async () => {
+            if (asset.type === 'image') {
+              return this.generateImageUrls(asset);
+            } else {
+              return this.generateVideoUrls(asset);
+            }
+          },
+          {
+            timeout: 10000,
+            retries: {
+              maxRetries: 2,
+              baseDelay: 500,
+              maxDelay: 2000
+            }
+          }
+        );
+        
+        return result;
+      }
+    );
   }
 
   // Enhanced video URL generation with session caching
@@ -494,41 +524,43 @@ export class OptimizedAssetService {
         }
       }
 
-      // Generate new signed URL if needed
-      if (!videoUrl && videoData.video_url) {
-        // Determine bucket from metadata or default to video_fast
-        const bucket = (videoData.metadata as any)?.bucket || 'video_fast';
+        // Generate new signed URL with fallback buckets
+        if (!videoUrl && videoData.video_url) {
+          // Determine primary bucket and fallbacks
+          const primaryBucket = (videoData.metadata as any)?.bucket || 'video_fast';
+          const fallbackBuckets = ['video_fast', 'video_high', 'videos'];
         
-        try {
-          const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
-          if (!error && data?.signedUrl) {
-            videoUrl = data.signedUrl;
-            // Cache the generated URL
-            sessionCache.cacheSignedUrl(asset.id, videoUrl);
-            console.log(`✅ Generated new video URL for ${asset.id} using bucket: ${bucket}`);
+          // Use enhanced error handling with bucket fallbacks
+          try {
+            videoUrl = await EnhancedErrorHandling.withBucketFallback(
+              primaryBucket,
+              fallbackBuckets,
+              async (bucket) => {
+                const { data, error } = await getSignedUrl(bucket as any, videoData.video_url, 7200);
+                if (error) throw new Error(error.message);
+                if (!data?.signedUrl) throw new Error('No signed URL returned');
+                return data.signedUrl;
+              }
+            );
             
-            // Update database with new signed URL
-            await supabase
-              .from('videos')
-              .update({
-                signed_url: videoUrl,
-                signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
-              })
-              .eq('id', asset.id);
-          } else {
-            console.warn(`⚠️ Failed to generate URL with bucket ${bucket}, trying fallback`);
-            // Try alternate bucket
-            const fallbackBucket = bucket === 'video_fast' ? 'video_high' : 'video_fast';
-            const { data: fallbackData, error: fallbackError } = await getSignedUrl(fallbackBucket as any, videoData.video_url, 7200);
-            if (!fallbackError && fallbackData?.signedUrl) {
-              videoUrl = fallbackData.signedUrl;
-              console.log(`✅ Generated video URL with fallback bucket: ${fallbackBucket}`);
+            if (videoUrl) {
+              // Cache the generated URL
+              sessionCache.cacheSignedUrl(asset.id, videoUrl);
+              console.log(`✅ Generated new video URL for ${asset.id}`);
+              
+              // Update database with new signed URL
+              await supabase
+                .from('videos')
+                .update({
+                  signed_url: videoUrl,
+                  signed_url_expires_at: new Date(Date.now() + 23 * 60 * 60 * 1000).toISOString() // 23 hours
+                })
+                .eq('id', asset.id);
             }
+          } catch (error) {
+            console.error(`❌ Failed to generate video URL for ${asset.id}:`, error);
           }
-        } catch (error) {
-          console.error(`❌ Failed to generate video URL for ${asset.id}:`, error);
         }
-      }
 
       // Handle thumbnail URL - use placeholder if none exists
       if (!thumbnailUrl || thumbnailUrl === 'null') {
