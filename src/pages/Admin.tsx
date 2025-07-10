@@ -2,6 +2,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
 import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { HealthCheckJobCleaner } from "@/components/admin/HealthCheckJobCleaner";
+import { PromptTestingTab } from "@/components/admin/PromptTestingTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -21,8 +22,9 @@ const Admin = () => {
             </p>
           </div>
 
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4">
+          <Tabs defaultValue="prompt-testing" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="prompt-testing">Prompt Testing</TabsTrigger>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="health">System Health</TabsTrigger>
               <TabsTrigger value="database">Database</TabsTrigger>
@@ -81,6 +83,20 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               </div>
+            </TabsContent>
+
+            <TabsContent value="prompt-testing" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Prompt Testing & Validation</CardTitle>
+                  <CardDescription>
+                    Test and optimize prompts for SDXL and WAN models with quality rating system
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PromptTestingTab />
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="health" className="space-y-6">
