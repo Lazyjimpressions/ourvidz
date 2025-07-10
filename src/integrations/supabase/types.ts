@@ -121,10 +121,12 @@ export type Database = {
           metadata: Json | null
           project_id: string | null
           prompt: string
+          prompt_test_id: string | null
           quality: string | null
           signed_url: string | null
           signed_url_expires_at: string | null
           status: string
+          test_metadata: Json | null
           thumbnail_url: string | null
           title: string | null
           updated_at: string
@@ -141,10 +143,12 @@ export type Database = {
           metadata?: Json | null
           project_id?: string | null
           prompt: string
+          prompt_test_id?: string | null
           quality?: string | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
+          test_metadata?: Json | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
@@ -161,10 +165,12 @@ export type Database = {
           metadata?: Json | null
           project_id?: string | null
           prompt?: string
+          prompt_test_id?: string | null
           quality?: string | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
+          test_metadata?: Json | null
           thumbnail_url?: string | null
           title?: string | null
           updated_at?: string
@@ -176,6 +182,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "images_prompt_test_id_fkey"
+            columns: ["prompt_test_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_analytics"
+            referencedColumns: ["test_id"]
+          },
+          {
+            foreignKeyName: "images_prompt_test_id_fkey"
+            columns: ["prompt_test_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_results"
             referencedColumns: ["id"]
           },
         ]
@@ -194,9 +214,11 @@ export type Database = {
           metadata: Json | null
           model_type: string | null
           project_id: string | null
+          prompt_test_id: string | null
           quality: string | null
           started_at: string | null
           status: string | null
+          test_metadata: Json | null
           user_id: string
           video_id: string | null
         }
@@ -213,9 +235,11 @@ export type Database = {
           metadata?: Json | null
           model_type?: string | null
           project_id?: string | null
+          prompt_test_id?: string | null
           quality?: string | null
           started_at?: string | null
           status?: string | null
+          test_metadata?: Json | null
           user_id: string
           video_id?: string | null
         }
@@ -232,9 +256,11 @@ export type Database = {
           metadata?: Json | null
           model_type?: string | null
           project_id?: string | null
+          prompt_test_id?: string | null
           quality?: string | null
           started_at?: string | null
           status?: string | null
+          test_metadata?: Json | null
           user_id?: string
           video_id?: string | null
         }
@@ -247,10 +273,31 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "jobs_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_analytics"
+            referencedColumns: ["image_id"]
+          },
+          {
             foreignKeyName: "jobs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_prompt_test_id_fkey"
+            columns: ["prompt_test_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_analytics"
+            referencedColumns: ["test_id"]
+          },
+          {
+            foreignKeyName: "jobs_prompt_test_id_fkey"
+            columns: ["prompt_test_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_results"
             referencedColumns: ["id"]
           },
           {
@@ -452,43 +499,86 @@ export type Database = {
         Row: {
           created_at: string | null
           error_message: string | null
+          generation_parameters: Json | null
           generation_time_ms: number | null
           id: string
+          image_id: string | null
+          job_id: string | null
           model_type: string
+          model_version: string | null
           notes: string | null
           prompt_category: string | null
           prompt_text: string
           quality_rating: number | null
           success: boolean
+          success_rate: number | null
           tested_by: string | null
         }
         Insert: {
           created_at?: string | null
           error_message?: string | null
+          generation_parameters?: Json | null
           generation_time_ms?: number | null
           id?: string
+          image_id?: string | null
+          job_id?: string | null
           model_type: string
+          model_version?: string | null
           notes?: string | null
           prompt_category?: string | null
           prompt_text: string
           quality_rating?: number | null
           success: boolean
+          success_rate?: number | null
           tested_by?: string | null
         }
         Update: {
           created_at?: string | null
           error_message?: string | null
+          generation_parameters?: Json | null
           generation_time_ms?: number | null
           id?: string
+          image_id?: string | null
+          job_id?: string | null
           model_type?: string
+          model_version?: string | null
           notes?: string | null
           prompt_category?: string | null
           prompt_text?: string
           quality_rating?: number | null
           success?: boolean
+          success_rate?: number | null
           tested_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "prompt_test_results_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "images"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_test_results_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_analytics"
+            referencedColumns: ["image_id"]
+          },
+          {
+            foreignKeyName: "prompt_test_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prompt_test_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "prompt_test_analytics"
+            referencedColumns: ["job_id"]
+          },
           {
             foreignKeyName: "prompt_test_results_tested_by_fkey"
             columns: ["tested_by"]
@@ -693,7 +783,28 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      prompt_test_analytics: {
+        Row: {
+          generation_parameters: Json | null
+          generation_time_ms: number | null
+          image_id: string | null
+          image_metadata: Json | null
+          image_url: string | null
+          job_completed_at: string | null
+          job_created_at: string | null
+          job_id: string | null
+          job_status: string | null
+          model_type: string | null
+          model_version: string | null
+          notes: string | null
+          prompt_text: string | null
+          quality_rating: number | null
+          success_rate: number | null
+          test_created_at: string | null
+          test_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_user_role_priority: {

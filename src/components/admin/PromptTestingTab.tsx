@@ -53,13 +53,15 @@ export const PromptTestingTab = () => {
       if (jobId && assetId) {
         try {
           // Update the prompt test result with the generated asset ID
+          const updateData = {
+            image_id: type === 'image' ? assetId : null,
+            success: true,
+            generation_time_ms: Date.now()
+          };
+          
           const { error: updateError } = await supabase
             .from('prompt_test_results')
-            .update({ 
-              image_id: type === 'image' ? assetId : null,
-              success: true,
-              generation_time_ms: Date.now() // This should be calculated from start time
-            })
+            .update(updateData)
             .eq('job_id', jobId);
 
           if (updateError) {
