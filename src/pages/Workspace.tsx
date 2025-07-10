@@ -82,6 +82,127 @@ const Workspace = () => {
   // Use workspace integration hook
   useWorkspaceIntegration();
 
+  // Listen for generation completion events and add new assets to workspace immediately
+  useEffect(() => {
+    const handleGenerationComplete = async (event: CustomEvent) => {
+      const { assetId, type, jobId } = event.detail || {};
+      
+      console.log('🎯 Workspace received generation completion event:', { 
+        assetId, 
+        type, 
+        jobId 
+      });
+      
+      if (!assetId || !user) {
+        console.warn('⚠️ Generation complete event missing assetId or user');
+        return;
+      }
+
+      try {
+        // Fetch the completed asset data
+        let assetData: any = null;
+        
+        if (type === 'image') {
+          const { data, error } = await supabase
+            .from('images')
+            .select('*')
+            .eq('id', assetId)
+            .eq('user_id', user.id)
+            .single();
+          
+          if (error) throw error;
+          assetData = data;
+        } else if (type === 'video') {
+          const { data, error } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', assetId)
+            .eq('user_id', user.id)
+            .single();
+          
+          if (error) throw error;
+          assetData = data;
+        }
+
+        if (!assetData) {
+          console.warn('⚠️ No asset data found for completed generation:', assetId);
+          return;
+        }
+
+        console.log('✅ Fetched completed asset data:', assetData);
+
+        // Create workspace assets from the completed data
+        const newAssets: WorkspaceAsset[] = [];
+
+        if (type === 'image') {
+          const imageUrls = assetData.image_urls as string[] | null;
+          if (imageUrls && imageUrls.length > 0) {
+            // SDXL job with multiple images - add each individually
+            imageUrls.forEach((url: string, index: number) => {
+              const assetId = `${assetData.id}_${index}`;
+              newAssets.push({
+                id: assetId,
+                url,
+                jobId: assetData.id,
+                prompt: `${assetData.prompt} (Image ${index + 1})`,
+                type: 'image',
+                quality: assetData.quality,
+                modelType: assetData.generation_mode,
+                timestamp: new Date(assetData.created_at)
+              });
+            });
+          } else if (assetData.image_url) {
+            // Single image
+            newAssets.push({
+              id: assetData.id,
+              url: assetData.image_url,
+              jobId: assetData.id,
+              prompt: assetData.prompt,
+              type: 'image',
+              quality: assetData.quality,
+              modelType: assetData.generation_mode,
+              timestamp: new Date(assetData.created_at)
+            });
+          }
+        } else if (type === 'video' && assetData.signed_url) {
+          newAssets.push({
+            id: assetData.id,
+            url: assetData.signed_url,
+            jobId: assetData.id,
+            prompt: assetData.prompt || 'Generated video',
+            type: 'video',
+            quality: 'fast',
+            timestamp: new Date(assetData.created_at)
+          });
+        }
+
+        if (newAssets.length > 0) {
+          // Add to workspace state immediately
+          setWorkspaceAssets(prev => [...newAssets, ...prev]);
+          console.log('🚀 Added new assets to workspace:', newAssets.length);
+          
+          // Show success notification
+          if (type === 'image') {
+            toast.success(`New ${newAssets.length > 1 ? 'images' : 'image'} added to workspace!`);
+          } else {
+            toast.success('New video added to workspace!');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error adding completed asset to workspace:', error);
+        toast.error('Failed to add completed asset to workspace');
+      }
+    };
+
+    console.log('🔗 Setting up generation completion event listener in workspace');
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    
+    return () => {
+      console.log('🔌 Removing generation completion event listener from workspace');
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [user]);
+
   // Load workspace from sessionStorage with proper session management
   useEffect(() => {
     const sessionStart = sessionStorage.getItem('workspace-session');
