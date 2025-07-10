@@ -191,38 +191,18 @@ export class OptimizedAssetService {
       throw new Error('User must be authenticated');
     }
 
-    // Enhanced caching with stale-while-revalidate pattern
-    const cacheKey = `assets-${user.id}-${JSON.stringify(filters)}-${pagination.offset || 0}`;
-    
-    return assetMetadataCache.get(
-      cacheKey,
-      async () => {
-        console.log('🔄 Fetching fresh asset data from database');
-        
-        // Use enhanced error handling for the database query
-        const result = await EnhancedErrorHandling.enhancedRequest(
-          () => OptimizedDatabaseQuery.queryAssets(user.id, filters, {
-            limit: pagination.limit || 50,
-            metadataOnly: true // Load metadata first, URLs on-demand
-          }),
-          {
-            timeout: 15000,
-            deduplicationKey: cacheKey,
-            retries: {
-              maxRetries: 2,
-              baseDelay: 1000,
-              maxDelay: 3000
-            }
-          }
-        );
-        
-        return {
-          assets: result.assets,
-          hasMore: result.hasMore,
-          total: result.total || result.assets.length
-        };
-      }
-    );
+    // Use fallback approach instead of problematic advanced caching
+    try {
+      const result = await this.fallbackFetchMethod(user.id, filters, pagination);
+      return result;
+    } catch (error) {
+      console.error('❌ Asset fetch failed:', error);
+      return {
+        assets: [],
+        hasMore: false,
+        total: 0
+      };
+    }
   }
 
   private static async fetchAssetsFromDatabase(
@@ -464,34 +444,19 @@ export class OptimizedAssetService {
       sessionCache.initializeSession(user.id);
     }
 
-    const cacheKey = `url-${asset.id}-${asset.type}`;
+    // Use direct URL generation instead of problematic cache
+    console.log(`🔗 Generating URLs for ${asset.type} asset:`, asset.id);
     
-    return assetUrlCache.get(
-      cacheKey,
-      async () => {
-        console.log(`🔗 Generating URLs for ${asset.type} asset:`, asset.id);
-        
-        const result = await EnhancedErrorHandling.enhancedRequest(
-          async () => {
-            if (asset.type === 'image') {
-              return this.generateImageUrls(asset);
-            } else {
-              return this.generateVideoUrls(asset);
-            }
-          },
-          {
-            timeout: 10000,
-            retries: {
-              maxRetries: 2,
-              baseDelay: 500,
-              maxDelay: 2000
-            }
-          }
-        );
-        
-        return result;
+    try {
+      if (asset.type === 'image') {
+        return await this.generateImageUrls(asset);
+      } else {
+        return await this.generateVideoUrls(asset);
       }
-    );
+    } catch (error) {
+      console.error(`❌ URL generation failed for ${asset.type} asset:`, asset.id, error);
+      return asset; // Return original asset if URL generation fails
+    }
   }
 
   // Enhanced video URL generation with session caching

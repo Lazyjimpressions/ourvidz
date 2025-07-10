@@ -32,56 +32,61 @@ export class StaleWhileRevalidateCache<T> {
     fetchFn: () => Promise<T>,
     forceRefresh = false
   ): Promise<T> {
-    const now = Date.now();
-    const entry = this.cache.get(key);
+    try {
+      const now = Date.now();
+      const entry = this.cache.get(key);
 
-    // Force refresh bypasses all caching
-    if (forceRefresh) {
-      this.cache.delete(key);
-      const data = await fetchFn();
-      this.set(key, data);
-      return data;
+      // Force refresh bypasses all caching
+      if (forceRefresh) {
+        this.cache.delete(key);
+        const data = await fetchFn();
+        this.set(key, data);
+        return data;
+      }
+
+      // No cache entry - fetch fresh data
+      if (!entry) {
+        const data = await fetchFn();
+        this.set(key, data);
+        return data;
+      }
+
+      // Data is expired - fetch fresh data
+      if (now > entry.timestamp + this.options.maxAge) {
+        this.cache.delete(key);
+        const data = await fetchFn();
+        this.set(key, data);
+        return data;
+      }
+
+      // Data is fresh - return immediately
+      if (now < entry.staleAt) {
+        return entry.data;
+      }
+
+      // Data is stale - return cached data and refresh in background
+      if (!entry.refreshPromise) {
+        entry.refreshPromise = fetchFn()
+          .then(data => {
+            this.set(key, data);
+            return data;
+          })
+          .catch(error => {
+            console.warn('Background refresh failed for key:', key, error);
+            return entry.data; // Return stale data on error
+          })
+          .finally(() => {
+            if (this.cache.has(key)) {
+              delete this.cache.get(key)!.refreshPromise;
+            }
+          });
+      }
+
+      return entry.data; // Return stale data immediately
+    } catch (error) {
+      console.error('Cache error, falling back to direct fetch:', error);
+      return fetchFn(); // Fallback to direct fetch if cache fails
     }
-
-    // No cache entry - fetch fresh data
-    if (!entry) {
-      const data = await fetchFn();
-      this.set(key, data);
-      return data;
-    }
-
-    // Data is expired - fetch fresh data
-    if (now > entry.timestamp + this.options.maxAge) {
-      this.cache.delete(key);
-      const data = await fetchFn();
-      this.set(key, data);
-      return data;
-    }
-
-    // Data is fresh - return immediately
-    if (now < entry.staleAt) {
-      return entry.data;
-    }
-
-    // Data is stale - return cached data and refresh in background
-    if (!entry.refreshPromise) {
-      entry.refreshPromise = fetchFn()
-        .then(data => {
-          this.set(key, data);
-          return data;
-        })
-        .catch(error => {
-          console.warn('Background refresh failed for key:', key, error);
-          return entry.data; // Return stale data on error
-        })
-        .finally(() => {
-          if (this.cache.has(key)) {
-            delete this.cache.get(key)!.refreshPromise;
-          }
-        });
-    }
-
-    return entry.data; // Return stale data immediately
   }
 
   set(key: string, data: T): void {
