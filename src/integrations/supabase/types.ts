@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_development_progress: {
+        Row: {
+          actual_hours: number | null
+          assigned_to: string | null
+          blockers: string | null
+          completion_date: string | null
+          created_at: string | null
+          estimated_hours: number | null
+          feature_category: string
+          feature_name: string
+          id: string
+          notes: string | null
+          priority: string
+          start_date: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          actual_hours?: number | null
+          assigned_to?: string | null
+          blockers?: string | null
+          completion_date?: string | null
+          created_at?: string | null
+          estimated_hours?: number | null
+          feature_category: string
+          feature_name: string
+          id?: string
+          notes?: string | null
+          priority: string
+          start_date?: string | null
+          status: string
+          updated_at?: string | null
+        }
+        Update: {
+          actual_hours?: number | null
+          assigned_to?: string | null
+          blockers?: string | null
+          completion_date?: string | null
+          created_at?: string | null
+          estimated_hours?: number | null
+          feature_category?: string
+          feature_name?: string
+          id?: string
+          notes?: string | null
+          priority?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       characters: {
         Row: {
           appearance_tags: string[] | null
@@ -218,6 +269,89 @@ export type Database = {
           },
         ]
       }
+      model_config_history: {
+        Row: {
+          config_data: Json
+          config_name: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          model_type: string
+          notes: string | null
+        }
+        Insert: {
+          config_data: Json
+          config_name: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_type: string
+          notes?: string | null
+        }
+        Update: {
+          config_data?: Json
+          config_name?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_type?: string
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_config_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model_performance_logs: {
+        Row: {
+          avg_generation_time_ms: number | null
+          avg_quality_rating: number | null
+          created_at: string | null
+          date: string
+          failed_generations: number | null
+          id: string
+          model_type: string
+          successful_generations: number | null
+          total_generations: number | null
+          total_processing_time_ms: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_generation_time_ms?: number | null
+          avg_quality_rating?: number | null
+          created_at?: string | null
+          date: string
+          failed_generations?: number | null
+          id?: string
+          model_type: string
+          successful_generations?: number | null
+          total_generations?: number | null
+          total_processing_time_ms?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_generation_time_ms?: number | null
+          avg_quality_rating?: number | null
+          created_at?: string | null
+          date?: string
+          failed_generations?: number | null
+          id?: string
+          model_type?: string
+          successful_generations?: number | null
+          total_generations?: number | null
+          total_processing_time_ms?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           age_verified: boolean | null
@@ -308,6 +442,56 @@ export type Database = {
           {
             foreignKeyName: "projects_user_id_fkey"
             columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      prompt_test_results: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          generation_time_ms: number | null
+          id: string
+          model_type: string
+          notes: string | null
+          prompt_category: string | null
+          prompt_text: string
+          quality_rating: number | null
+          success: boolean
+          tested_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          generation_time_ms?: number | null
+          id?: string
+          model_type: string
+          notes?: string | null
+          prompt_category?: string | null
+          prompt_text: string
+          quality_rating?: number | null
+          success: boolean
+          tested_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          generation_time_ms?: number | null
+          id?: string
+          model_type?: string
+          notes?: string | null
+          prompt_category?: string | null
+          prompt_text?: string
+          quality_rating?: number | null
+          success?: boolean
+          tested_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prompt_test_results_tested_by_fkey"
+            columns: ["tested_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
