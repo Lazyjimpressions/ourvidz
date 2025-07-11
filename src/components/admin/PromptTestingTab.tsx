@@ -32,6 +32,7 @@ interface TestResult {
   generation_time_ms?: number;
   file_size_bytes?: number;
   success: boolean;
+  test_metadata?: any;
 }
 
 interface TestSeries {
@@ -150,10 +151,29 @@ interface BatchTestConfig {
   variations_per_prompt: number;
 }
 
+// Add job type configurations
+const JOB_TYPE_CONFIGS = {
+  SDXL: [
+    { id: 'sdxl_image_fast', name: 'SDXL Fast (25 steps)', description: 'Ultra-fast image generation' },
+    { id: 'sdxl_image_high', name: 'SDXL High (40 steps)', description: 'High-quality image generation' }
+  ],
+  WAN: [
+    { id: 'image_fast', name: 'WAN Image Fast', description: 'Fast single image generation' },
+    { id: 'image_high', name: 'WAN Image High', description: 'High-quality single image' },
+    { id: 'video_fast', name: 'WAN Video Fast', description: 'Fast video generation' },
+    { id: 'video_high', name: 'WAN Video High', description: 'High-quality video generation' },
+    { id: 'image7b_fast_enhanced', name: 'WAN Enhanced Image Fast', description: 'Fast enhanced with Qwen 7B' },
+    { id: 'image7b_high_enhanced', name: 'WAN Enhanced Image High', description: 'High-quality enhanced with Qwen 7B' },
+    { id: 'video7b_fast_enhanced', name: 'WAN Enhanced Video Fast', description: 'Fast enhanced video with Qwen 7B' },
+    { id: 'video7b_high_enhanced', name: 'WAN Enhanced Video High', description: 'High-quality enhanced video with Qwen 7B' }
+  ]
+};
+
 export function PromptTestingTab() {
   const [selectedModel, setSelectedModel] = useState<'SDXL' | 'WAN'>('SDXL');
   const [selectedSeries, setSelectedSeries] = useState<string>('couples-intimacy');
   const [selectedTier, setSelectedTier] = useState<'artistic' | 'explicit' | 'unrestricted'>('artistic');
+  const [selectedJobType, setSelectedJobType] = useState<string>('sdxl_image_fast');
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -349,20 +369,30 @@ export function PromptTestingTab() {
 
     setIsGenerating(true);
     try {
-      const jobType = selectedModel === 'SDXL' ? 'sdxl_image_fast' : 'video_fast';
+      // Use selected job type instead of hardcoded values
+      const jobType = selectedJobType;
+      const isEnhanced = jobType.includes('enhanced');
       
       // Generate a unique job ID for test tracking
       const testJobId = crypto.randomUUID();
       
-      const result = await generateContent(currentPrompt, jobType, {
-        prompt: currentPrompt,
+      // For enhanced models, use simple prompts (Qwen will enhance them)
+      const promptToUse = isEnhanced ? 
+        (currentPrompt.length > 50 ? currentPrompt.substring(0, 50) + '...' : currentPrompt) : 
+        currentPrompt;
+      
+      const result = await generateContent(promptToUse, jobType, {
+        prompt: promptToUse,
         test_series: selectedSeries,
         test_tier: selectedTier,
         created_from: 'admin_prompt_testing',
         prompt_test_metadata: {
           model_type: selectedModel,
+          job_type: jobType,
+          is_enhanced: isEnhanced,
           test_category: 'prompt_testing',
-          generation_source: 'admin_panel'
+          generation_source: 'admin_panel',
+          original_prompt: currentPrompt // Keep original for reference
         },
         prompt_test_id: testJobId,
         queue: selectedModel === 'SDXL' ? 'sdxl_queue' : 'wan_queue'
@@ -410,7 +440,8 @@ export function PromptTestingTab() {
     setBatchProgress(0);
 
     try {
-      const jobType = batchConfig.model_type === 'SDXL' ? 'sdxl_image_fast' : 'video_fast';
+      const jobType = batchConfig.job_type;
+      const isEnhanced = jobType.includes('enhanced');
       let completedTests = 0;
 
       for (const seriesId of batchConfig.series) {
@@ -418,22 +449,30 @@ export function PromptTestingTab() {
         if (!series) continue;
 
         for (const tier of batchConfig.tiers) {
-          const prompt = series.prompts[tier];
+          const originalPrompt = series.prompts[tier];
+          
+          // For enhanced models, use simple prompts (Qwen will enhance them)
+          const promptToUse = isEnhanced ? 
+            (originalPrompt.length > 50 ? originalPrompt.substring(0, 50) + '...' : originalPrompt) : 
+            originalPrompt;
           
           for (let i = 0; i < batchConfig.variations_per_prompt; i++) {
               try {
                 const testJobId = crypto.randomUUID();
                 
-                const result = await generateContent(prompt, jobType, {
-                  prompt: prompt,
+                const result = await generateContent(promptToUse, jobType, {
+                  prompt: promptToUse,
                   test_series: seriesId,
                   test_tier: tier,
                   created_from: 'admin_prompt_testing',
                   prompt_test_metadata: {
                     model_type: batchConfig.model_type,
+                    job_type: jobType,
+                    is_enhanced: isEnhanced,
                     test_category: 'batch_testing',
                     generation_source: 'admin_panel',
-                    batch_variation: i + 1
+                    batch_variation: i + 1,
+                    original_prompt: originalPrompt
                   },
                   prompt_test_id: testJobId,
                   queue: batchConfig.model_type === 'SDXL' ? 'sdxl_queue' : 'wan_queue',
@@ -442,7 +481,7 @@ export function PromptTestingTab() {
 
                 await saveTestResult(
                   result.job?.id || testJobId,
-                  prompt,
+                  promptToUse,
                   batchConfig.model_type,
                   seriesId,
                   tier
@@ -564,16 +603,34 @@ export function PromptTestingTab() {
               <CardTitle>Test Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="text-sm font-medium">Model Type</label>
-                  <Select value={selectedModel} onValueChange={(value: 'SDXL' | 'WAN') => setSelectedModel(value)}>
+                  <Select value={selectedModel} onValueChange={(value: 'SDXL' | 'WAN') => {
+                    setSelectedModel(value);
+                    setSelectedJobType(JOB_TYPE_CONFIGS[value][0].id);
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="SDXL">SDXL LUSTIFY (Images)</SelectItem>
                       <SelectItem value="WAN">WAN 2.1 (Videos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Job Type</label>
+                  <Select value={selectedJobType} onValueChange={setSelectedJobType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JOB_TYPE_CONFIGS[selectedModel].map(jobType => (
+                        <SelectItem key={jobType.id} value={jobType.id}>
+                          {jobType.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -666,16 +723,35 @@ export function PromptTestingTab() {
               <CardTitle>Batch Test Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="text-sm font-medium">Model Type</label>
-                  <Select value={batchConfig.model_type} onValueChange={(value: 'SDXL' | 'WAN') => setBatchConfig(prev => ({ ...prev, model_type: value, job_type: value === 'SDXL' ? 'sdxl_image_fast' : 'video_fast' }))}>
+                  <Select value={batchConfig.model_type} onValueChange={(value: 'SDXL' | 'WAN') => setBatchConfig(prev => ({ 
+                    ...prev, 
+                    model_type: value, 
+                    job_type: JOB_TYPE_CONFIGS[value][0].id 
+                  }))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="SDXL">SDXL LUSTIFY (Images)</SelectItem>
                       <SelectItem value="WAN">WAN 2.1 (Videos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Job Type</label>
+                  <Select value={batchConfig.job_type} onValueChange={(value) => setBatchConfig(prev => ({ ...prev, job_type: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {JOB_TYPE_CONFIGS[batchConfig.model_type].map(jobType => (
+                        <SelectItem key={jobType.id} value={jobType.id}>
+                          {jobType.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -789,6 +865,16 @@ export function PromptTestingTab() {
                           <Badge variant="outline">
                             {getCurrentTestSeries().find(s => s.id === result.test_series)?.name || result.test_series}
                           </Badge>
+                          {result.test_metadata?.job_type && (
+                            <Badge variant="secondary" className="text-xs">
+                              {result.test_metadata.job_type}
+                            </Badge>
+                          )}
+                          {result.test_metadata?.is_enhanced && (
+                            <Badge className="bg-purple-100 text-purple-800 text-xs">
+                              Enhanced
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm font-mono bg-gray-50 p-2 rounded">
                           {result.prompt_text}
