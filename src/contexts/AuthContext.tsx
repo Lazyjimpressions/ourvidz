@@ -95,13 +95,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsAdmin(false);
   }, []);
 
-  // Separate function for clearing workspace (only on logout)
+  // Enhanced workspace cleanup for logout - clears ALL workspace data
   const clearWorkspaceOnLogout = useCallback(() => {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.removeItem('workspaceFilter');
-      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
-      console.log('🔄 Cleared workspace for logout');
+    console.log('🔄 Clearing all workspace data for logout');
+    
+    // Clear both localStorage and sessionStorage workspace keys
+    if (typeof localStorage !== 'undefined') {
+      // Clear legacy localStorage workspace keys
+      localStorage.removeItem('workspaceFilter');
+      
+      // Clear all user-scoped workspace keys from localStorage
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('workspaceFilter_') || key.startsWith('workspaceSession')) {
+          localStorage.removeItem(key);
+        }
+      });
     }
+    
+    if (typeof sessionStorage !== 'undefined') {
+      // Clear all workspace-related session storage
+      Object.keys(sessionStorage).forEach((key) => {
+        if (key.startsWith('workspaceFilter') || 
+            key.startsWith('workspaceSession') || 
+            key.startsWith('workspace-') ||
+            key === 'signed_urls') {
+          sessionStorage.removeItem(key);
+        }
+      });
+      
+      // Set new session start timestamp
+      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
+    }
+    
+    console.log('✅ All workspace data cleared for logout');
   }, []);
 
   const fetchProfile = useCallback(async (userId: string, retryCount = 0) => {

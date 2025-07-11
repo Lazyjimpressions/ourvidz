@@ -10,18 +10,19 @@ export function cn(...inputs: ClassValue[]) {
  * Useful for starting fresh sessions or debugging
  */
 export function clearWorkspaceSessionData() {
-  // Clear main workspace data
-  sessionStorage.removeItem('workspaceFilter');
-  sessionStorage.removeItem('workspaceSessionStart');
-  sessionStorage.removeItem('workspaceUserId');
-  
-  // Clear test workspace data
-  sessionStorage.removeItem('workspace-test');
-  sessionStorage.removeItem('workspace-test-session');
-  sessionStorage.removeItem('workspace-test-user');
-  
-  // Clear signed URL cache
-  sessionStorage.removeItem('signed_urls');
+  // Clear all user-scoped workspace data
+  Object.keys(sessionStorage).forEach((key) => {
+    if (key.startsWith('workspaceFilter_') || 
+        key.startsWith('workspaceSessionStart_') ||
+        key.startsWith('workspaceUserId_') ||
+        key.startsWith('workspace-test') ||
+        key === 'workspaceFilter' ||
+        key === 'workspaceSessionStart' ||
+        key === 'workspaceUserId' ||
+        key === 'signed_urls') {
+      sessionStorage.removeItem(key);
+    }
+  });
   
   console.log('🗑️ Cleared all workspace session data');
 }

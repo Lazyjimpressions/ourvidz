@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface MediaTile {
@@ -40,33 +41,73 @@ export const useWorkspace = () => {
     queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
   }, [workspaceFilter, queryClient]);
 
-  // Load workspace filter from localStorage on mount (persistent across refreshes)
+  // Load workspace filter from sessionStorage with user validation
   useEffect(() => {
-    const savedFilter = localStorage.getItem('workspaceFilter');
-    if (savedFilter) {
-      try {
-        const filterIds = JSON.parse(savedFilter);
-        setWorkspaceFilter(new Set(filterIds));
-        console.log('🔄 Loaded workspace filter from localStorage:', filterIds);
-      } catch (error) {
-        console.error('Failed to parse workspace filter:', error);
-        localStorage.removeItem('workspaceFilter');
+    const initializeWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('🚫 No user found, skipping workspace initialization');
+        return;
       }
-    } else {
-      console.log('🆕 No saved workspace filter found, starting with empty workspace');
-    }
+
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const sessionStartKey = `workspaceSessionStart_${user.id}`;
+      
+      const savedFilter = sessionStorage.getItem(userScopedKey);
+      const sessionStart = sessionStorage.getItem(sessionStartKey);
+      
+      if (savedFilter && sessionStart) {
+        try {
+          const filterIds = JSON.parse(savedFilter);
+          const sessionStartTime = parseInt(sessionStart);
+          
+          // Only restore workspace if it's from current session (max 24 hours)
+          const sessionAge = Date.now() - sessionStartTime;
+          if (sessionAge < 24 * 60 * 60 * 1000) {
+            setWorkspaceFilter(new Set(filterIds));
+            console.log('🔄 Loaded workspace filter from session for user:', user.id, filterIds.length, 'items');
+          } else {
+            // Clear old session data
+            sessionStorage.removeItem(userScopedKey);
+            sessionStorage.removeItem(sessionStartKey);
+            console.log('🗑️ Cleared old session workspace data for user:', user.id);
+          }
+        } catch (error) {
+          console.error('Failed to parse workspace filter:', error);
+          sessionStorage.removeItem(userScopedKey);
+          sessionStorage.removeItem(sessionStartKey);
+        }
+      }
+      
+      // Initialize session start if not present
+      if (!sessionStart) {
+        sessionStorage.setItem(sessionStartKey, Date.now().toString());
+        console.log('🆕 Started new workspace session for user:', user.id);
+      }
+    };
+    
+    initializeWorkspace();
   }, []);
 
-  // Save workspace filter to localStorage (persistent across refreshes)
+  // Save workspace filter to sessionStorage with user scoping
   useEffect(() => {
-    const filterArray = Array.from(workspaceFilter);
-    if (filterArray.length > 0) {
-      localStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
-      console.log('💾 Saved workspace filter to localStorage:', filterArray);
-    } else {
-      localStorage.removeItem('workspaceFilter');
-      console.log('🗑️ Cleared workspace filter from localStorage');
-    }
+    const saveWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const filterArray = Array.from(workspaceFilter);
+      
+      if (filterArray.length > 0) {
+        sessionStorage.setItem(userScopedKey, JSON.stringify(filterArray));
+        console.log('💾 Saved workspace filter to session for user:', user.id, filterArray.length, 'items');
+      } else {
+        sessionStorage.removeItem(userScopedKey);
+        console.log('🗑️ Cleared workspace filter from session for user:', user.id);
+      }
+    };
+    
+    saveWorkspace();
   }, [workspaceFilter]);
 
   // Transform assets to tiles with enhanced SDXL array handling
@@ -187,10 +228,20 @@ export const useWorkspace = () => {
     toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter]);
 
-  // Simple clear workspace
-  const clearWorkspace = useCallback(() => {
+  // Clear workspace with user-scoped session management
+  const clearWorkspace = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
     setWorkspaceFilter(new Set());
-    localStorage.removeItem('workspaceFilter');
+    
+    if (user) {
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const sessionStartKey = `workspaceSessionStart_${user.id}`;
+      sessionStorage.removeItem(userScopedKey);
+      sessionStorage.setItem(sessionStartKey, Date.now().toString());
+      console.log('🔄 Cleared workspace and reset session for user:', user.id);
+    }
+    
     toast.success('Workspace cleared');
   }, []);
 

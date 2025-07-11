@@ -49,29 +49,66 @@ export const useRealtimeWorkspace = () => {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Load workspace filter from localStorage on mount
+  // Load workspace filter from sessionStorage with user validation
   useEffect(() => {
-    const savedFilter = localStorage.getItem('workspaceFilter');
-    if (savedFilter) {
-      try {
-        const filterIds = JSON.parse(savedFilter);
-        setWorkspaceFilter(new Set(filterIds));
-        console.log('🔄 Loaded workspace filter from localStorage:', filterIds);
-      } catch (error) {
-        console.error('Failed to parse workspace filter:', error);
-        localStorage.removeItem('workspaceFilter');
+    const initializeWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const sessionStartKey = `workspaceSessionStart_${user.id}`;
+      
+      const savedFilter = sessionStorage.getItem(userScopedKey);
+      const sessionStart = sessionStorage.getItem(sessionStartKey);
+      
+      if (savedFilter && sessionStart) {
+        try {
+          const filterIds = JSON.parse(savedFilter);
+          const sessionStartTime = parseInt(sessionStart);
+          
+          // Only restore if session is less than 24 hours old
+          const sessionAge = Date.now() - sessionStartTime;
+          if (sessionAge < 24 * 60 * 60 * 1000) {
+            setWorkspaceFilter(new Set(filterIds));
+            console.log('🔄 Loaded workspace filter from session for user:', user.id);
+          } else {
+            sessionStorage.removeItem(userScopedKey);
+            sessionStorage.removeItem(sessionStartKey);
+            console.log('🗑️ Cleared old session workspace data for user:', user.id);
+          }
+        } catch (error) {
+          console.error('Failed to parse workspace filter:', error);
+          sessionStorage.removeItem(userScopedKey);
+          sessionStorage.removeItem(sessionStartKey);
+        }
       }
-    }
+      
+      if (!sessionStart) {
+        sessionStorage.setItem(sessionStartKey, Date.now().toString());
+        console.log('🆕 Started new workspace session for user:', user.id);
+      }
+    };
+    
+    initializeWorkspace();
   }, []);
 
-  // Save workspace filter to localStorage
+  // Save workspace filter to sessionStorage with user scoping
   useEffect(() => {
-    const filterArray = Array.from(workspaceFilter);
-    if (filterArray.length > 0) {
-      localStorage.setItem('workspaceFilter', JSON.stringify(filterArray));
-    } else {
-      localStorage.removeItem('workspaceFilter');
-    }
+    const saveWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const filterArray = Array.from(workspaceFilter);
+      
+      if (filterArray.length > 0) {
+        sessionStorage.setItem(userScopedKey, JSON.stringify(filterArray));
+      } else {
+        sessionStorage.removeItem(userScopedKey);
+      }
+    };
+    
+    saveWorkspace();
   }, [workspaceFilter]);
 
   // Enhanced realtime subscription with job status tracking
@@ -344,10 +381,20 @@ export const useRealtimeWorkspace = () => {
     toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter]);
 
-  // Clear workspace
-  const clearWorkspace = useCallback(() => {
+  // Clear workspace with user-scoped session management
+  const clearWorkspace = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    
     setWorkspaceFilter(new Set());
-    localStorage.removeItem('workspaceFilter');
+    
+    if (user) {
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const sessionStartKey = `workspaceSessionStart_${user.id}`;
+      sessionStorage.removeItem(userScopedKey);
+      sessionStorage.setItem(sessionStartKey, Date.now().toString());
+      console.log('🔄 Cleared workspace and reset session for user:', user.id);
+    }
+    
     toast.success('Workspace cleared');
   }, []);
 
