@@ -107,22 +107,35 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "characters_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       images: {
         Row: {
           created_at: string
           enhanced_prompt: string | null
+          file_size: number | null
           format: string | null
           generation_mode: string
           id: string
           image_url: string | null
           image_urls: Json | null
           metadata: Json | null
+          moderation_status: string | null
+          nsfw_score: number | null
           project_id: string | null
           prompt: string
           prompt_test_id: string | null
           quality: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           signed_url: string | null
           signed_url_expires_at: string | null
           status: string
@@ -135,16 +148,22 @@ export type Database = {
         Insert: {
           created_at?: string
           enhanced_prompt?: string | null
+          file_size?: number | null
           format?: string | null
           generation_mode?: string
           id?: string
           image_url?: string | null
           image_urls?: Json | null
           metadata?: Json | null
+          moderation_status?: string | null
+          nsfw_score?: number | null
           project_id?: string | null
           prompt: string
           prompt_test_id?: string | null
           quality?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
@@ -157,16 +176,22 @@ export type Database = {
         Update: {
           created_at?: string
           enhanced_prompt?: string | null
+          file_size?: number | null
           format?: string | null
           generation_mode?: string
           id?: string
           image_url?: string | null
           image_urls?: Json | null
           metadata?: Json | null
+          moderation_status?: string | null
+          nsfw_score?: number | null
           project_id?: string | null
           prompt?: string
           prompt_test_id?: string | null
           quality?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
@@ -198,6 +223,20 @@ export type Database = {
             referencedRelation: "prompt_test_results"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "images_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "images_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       jobs: {
@@ -213,9 +252,13 @@ export type Database = {
           max_attempts: number | null
           metadata: Json | null
           model_type: string | null
+          moderation_status: string | null
           project_id: string | null
           prompt_test_id: string | null
           quality: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
           started_at: string | null
           status: string | null
           test_metadata: Json | null
@@ -234,9 +277,13 @@ export type Database = {
           max_attempts?: number | null
           metadata?: Json | null
           model_type?: string | null
+          moderation_status?: string | null
           project_id?: string | null
           prompt_test_id?: string | null
           quality?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           started_at?: string | null
           status?: string | null
           test_metadata?: Json | null
@@ -255,9 +302,13 @@ export type Database = {
           max_attempts?: number | null
           metadata?: Json | null
           model_type?: string | null
+          moderation_status?: string | null
           project_id?: string | null
           prompt_test_id?: string | null
           quality?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
           started_at?: string | null
           status?: string | null
           test_metadata?: Json | null
@@ -301,11 +352,32 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "jobs_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "jobs_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "jobs_video_id_fkey"
@@ -354,6 +426,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_config_history_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -493,6 +572,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "projects_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       prompt_test_results: {
@@ -586,6 +672,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "prompt_test_results_tested_by_fkey"
+            columns: ["tested_by"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       scenes: {
@@ -635,6 +728,27 @@ export type Database = {
           },
         ]
       }
+      system_config: {
+        Row: {
+          config: Json
+          created_at: string | null
+          id: number
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json
+          created_at?: string | null
+          id?: number
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          id?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       usage_logs: {
         Row: {
           action: string
@@ -673,6 +787,64 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      user_activity_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          resource_id: string | null
+          resource_type: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -779,10 +951,29 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
     }
     Views: {
+      content_moderation_analytics: {
+        Row: {
+          avg_nsfw_score: number | null
+          content_type: string | null
+          count: number | null
+          high_nsfw_count: number | null
+          low_nsfw_count: number | null
+          medium_nsfw_count: number | null
+          moderation_status: string | null
+        }
+        Relationships: []
+      }
       prompt_test_analytics: {
         Row: {
           generation_parameters: Json | null
@@ -805,8 +996,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_analytics: {
+        Row: {
+          avg_job_time_minutes: number | null
+          completed_jobs: number | null
+          failed_jobs: number | null
+          storage_used_bytes: number | null
+          total_images: number | null
+          total_jobs: number | null
+          total_videos: number | null
+          user_created_at: string | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      get_system_stats: {
+        Args: { p_days?: number }
+        Returns: Json
+      }
       get_user_role_priority: {
         Args: { _user_id: string }
         Returns: number
@@ -830,6 +1040,18 @@ export type Database = {
       is_url_expired: {
         Args: { expires_at: string }
         Returns: boolean
+      }
+      log_user_activity: {
+        Args: {
+          p_user_id: string
+          p_action: string
+          p_resource_type?: string
+          p_resource_id?: string
+          p_metadata?: Json
+          p_ip_address?: unknown
+          p_user_agent?: string
+        }
+        Returns: string
       }
       validate_video_path_consistency: {
         Args: Record<PropertyKey, never>
