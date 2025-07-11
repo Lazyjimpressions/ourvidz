@@ -70,7 +70,7 @@ export const AnalyticsTab = () => {
       // Get user statistics
       const { data: users, error: usersError } = await supabase
         .from('profiles')
-        .select('id, created_at, last_sign_in_at');
+        .select('id, created_at');
 
       if (usersError) throw usersError;
 
@@ -92,9 +92,10 @@ export const AnalyticsTab = () => {
 
       // Calculate analytics
       const totalUsers = users?.length || 0;
-      const activeUsers = users?.filter(u => 
-        u.last_sign_in_at && new Date(u.last_sign_in_at) > startDate
-      ).length || 0;
+      // For now, consider users active if they have jobs in the last 7 days
+      const activeUsers = jobs?.filter(j => 
+        j.created_at && new Date(j.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      ).map(j => j.user_id).filter((value, index, self) => self.indexOf(value) === index).length || 0;
 
       const totalJobs = jobs?.length || 0;
       const completedJobs = jobs?.filter(j => j.status === 'completed').length || 0;
@@ -102,14 +103,14 @@ export const AnalyticsTab = () => {
       const successRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
 
       const jobTypeBreakdown = {
-        image_fast: jobs?.filter(j => j.job_type === 'image_fast').length || 0,
+        image_fast: jobs?.filter(j => j.job_type === 'image_fast' || j.job_type === 'sdxl_image_fast').length || 0,
         image_high: jobs?.filter(j => j.job_type === 'image_high').length || 0,
         video_fast: jobs?.filter(j => j.job_type === 'video_fast').length || 0,
         video_high: jobs?.filter(j => j.job_type === 'video_high').length || 0
       };
 
       const totalImages = images?.length || 0;
-      const totalVideos = jobTypeBreakdown.video_fast + jobTypeBreakdown.video_high;
+      const totalVideos = jobs?.filter(j => j.job_type.includes('video')).length || 0;
       const storageUsed = images?.reduce((sum, img) => sum + (img.file_size || 0), 0) || 0;
 
       // Calculate average job time (simplified)
@@ -166,6 +167,32 @@ export const AnalyticsTab = () => {
 
     } catch (error) {
       console.error('Error loading analytics:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      // Set default analytics data to prevent infinite loading
+      setAnalytics({
+        timeRange,
+        totalUsers: 0,
+        activeUsers: 0,
+        totalJobs: 0,
+        completedJobs: 0,
+        failedJobs: 0,
+        totalImages: 0,
+        totalVideos: 0,
+        avgJobTime: 0,
+        successRate: 0,
+        storageUsed: 0,
+        revenue: 0,
+        jobTypeBreakdown: {
+          image_fast: 0,
+          image_high: 0,
+          video_fast: 0,
+          video_high: 0
+        },
+        dailyStats: []
+      });
     } finally {
       setIsLoading(false);
     }
@@ -187,12 +214,26 @@ export const AnalyticsTab = () => {
     return `${hours}h ${mins}m`;
   };
 
-  if (!analytics) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <Activity className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
           <p className="text-gray-500">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!analytics) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <Activity className="h-8 w-8 mx-auto mb-4 text-gray-400" />
+          <p className="text-gray-500">Failed to load analytics</p>
+          <Button onClick={loadAnalytics} className="mt-4">
+            Retry
+          </Button>
         </div>
       </div>
     );
