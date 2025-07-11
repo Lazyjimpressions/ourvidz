@@ -29,7 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Users, Search, Filter, RefreshCw, Eye, Shield, Ban, Activity } from "lucide-react";
+import { Users, Search, Filter, RefreshCw, Eye, Shield, Ban, Activity, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -60,6 +60,7 @@ export const UserManagementTab = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasAdminAccess, setHasAdminAccess] = useState(false);
   const [stats, setStats] = useState<UserStats>({
     total_users: 0,
     active_users: 0,
@@ -84,49 +85,114 @@ export const UserManagementTab = () => {
   const loadUsers = async () => {
     setIsLoading(true);
     try {
-      // Get users from auth.users
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) throw authError;
+      // First try to get users with admin functions
+      let authUsers: any[] = [];
+      let adminAccess = false;
+
+      try {
+        const { data, error } = await supabase.auth.admin.listUsers();
+        if (error) {
+          console.warn('Admin access not available, falling back to profiles table:', error.message);
+          throw error; // This will trigger the fallback
+        }
+        authUsers = (data.users || []).map(user => ({
+          ...user,
+          email: user.email || `user-${user.id.slice(0, 8)}@example.com`,
+          created_at: user.created_at || new Date().toISOString(),
+          last_sign_in_at: user.last_sign_in_at || null,
+          user_metadata: user.user_metadata || {},
+          app_metadata: user.app_metadata || {}
+        }));
+        adminAccess = true;
+        setHasAdminAccess(true);
+      } catch (adminError) {
+        console.log('Using fallback method: profiles table');
+        setHasAdminAccess(false);
+        
+        // Fallback: Get users from profiles table
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, created_at, updated_at');
+        
+        if (profilesError) throw profilesError;
+        
+        // Convert profiles to user-like objects
+        authUsers = profiles?.map(profile => ({
+          id: profile.id,
+          email: `user-${profile.id.slice(0, 8)}@example.com`, // Placeholder email
+          created_at: profile.created_at || new Date().toISOString(),
+          last_sign_in_at: profile.updated_at || null,
+          user_metadata: {},
+          app_metadata: {}
+        })) || [];
+      }
 
       // Get usage stats for each user
       const usersWithStats = await Promise.all(
-        (authUsers.users || []).map(async (user) => {
-          const { data: jobStats } = await supabase
-            .from('jobs')
-            .select('id, job_type')
-            .eq('user_id', user.id);
+        authUsers.map(async (user) => {
+          try {
+            const { data: jobStats } = await supabase
+              .from('jobs')
+              .select('id, job_type')
+              .eq('user_id', user.id);
 
-          const { data: imageStats } = await supabase
-            .from('images')
-            .select('id, file_size')
-            .eq('user_id', user.id);
+            const { data: imageStats } = await supabase
+              .from('images')
+              .select('id, file_size')
+              .eq('user_id', user.id);
 
-          const totalJobs = jobStats?.length || 0;
-          const totalImages = imageStats?.length || 0;
-          const totalVideos = jobStats?.filter(j => j.job_type.includes('video')).length || 0;
-          const storageUsed = imageStats?.reduce((sum, img) => sum + (img.file_size || 0), 0) || 0;
+            const totalJobs = jobStats?.length || 0;
+            const totalImages = imageStats?.length || 0;
+            const totalVideos = jobStats?.filter(j => j.job_type.includes('video')).length || 0;
+            const storageUsed = imageStats?.reduce((sum, img) => sum + (img.file_size || 0), 0) || 0;
 
-          return {
-            ...user,
-            usage_stats: {
-              total_jobs: totalJobs,
-              total_images: totalImages,
-              total_videos: totalVideos,
-              storage_used: storageUsed
-            }
-          };
+            return {
+              ...user,
+              usage_stats: {
+                total_jobs: totalJobs,
+                total_images: totalImages,
+                total_videos: totalVideos,
+                storage_used: storageUsed
+              }
+            };
+          } catch (error) {
+            console.warn(`Error loading stats for user ${user.id}:`, error);
+            return {
+              ...user,
+              usage_stats: {
+                total_jobs: 0,
+                total_images: 0,
+                total_videos: 0,
+                storage_used: 0
+              }
+            };
+          }
         })
       );
 
       setUsers(usersWithStats);
       calculateStats(usersWithStats);
+      
+      toast({
+        title: "Success",
+        description: `Loaded ${usersWithStats.length} users successfully`,
+      });
     } catch (error) {
       console.error('Error loading users:', error);
       toast({
-        title: "Error",
-        description: "Failed to load users",
+        title: "Error Loading Users",
+        description: error instanceof Error ? error.message : "Failed to load user information. Please check your permissions and try again.",
         variant: "destructive"
+      });
+      
+      // Set empty state to prevent infinite loading
+      setUsers([]);
+      setStats({
+        total_users: 0,
+        active_users: 0,
+        new_users_today: 0,
+        new_users_week: 0,
+        premium_users: 0
       });
     } finally {
       setIsLoading(false);
@@ -186,6 +252,15 @@ export const UserManagementTab = () => {
   };
 
   const handleUserAction = async (userId: string, action: 'suspend' | 'activate' | 'delete') => {
+    if (!hasAdminAccess) {
+      toast({
+        title: "Admin Access Required",
+        description: "Admin functions are not available. User management actions require service role permissions.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       switch (action) {
         case 'suspend':
@@ -213,7 +288,7 @@ export const UserManagementTab = () => {
       console.error(`Error ${action}ing user:`, error);
       toast({
         title: "Error",
-        description: `Failed to ${action} user`,
+        description: `Failed to ${action} user: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive"
       });
     }
@@ -239,6 +314,22 @@ export const UserManagementTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Admin Access Warning */}
+      {!hasAdminAccess && (
+        <Card className="border-orange-200 bg-orange-50">
+          <CardContent className="pt-4">
+            <div className="flex items-center gap-2 text-orange-700">
+              <AlertTriangle className="h-4 w-4" />
+              <span className="text-sm font-medium">Limited Admin Access</span>
+            </div>
+            <p className="text-sm text-orange-600 mt-1">
+              Admin functions are not available. User management actions require service role permissions. 
+              Only read-only user information is displayed.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
@@ -352,118 +443,142 @@ export const UserManagementTab = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{user.email}</p>
-                        <p className="text-sm text-gray-500">{user.id}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.user_metadata?.suspended ? 'destructive' : 'default'}>
-                        {user.user_metadata?.suspended ? 'Suspended' : 'Active'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <p>Jobs: {user.usage_stats?.total_jobs || 0}</p>
-                        <p>Images: {user.usage_stats?.total_images || 0}</p>
-                        <p>Storage: {formatBytes(user.usage_stats?.storage_used || 0)}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{formatDate(user.created_at)}</TableCell>
-                    <TableCell>
-                      {user.last_sign_in_at ? formatDate(user.last_sign_in_at) : 'Never'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {/* View user details */}}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        
-                        {user.user_metadata?.suspended ? (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="outline">
-                                <Shield className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Activate User</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to activate this user? They will be able to access the platform again.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleUserAction(user.id, 'activate')}
-                                >
-                                  Activate
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        ) : (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="outline">
-                                <Ban className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Suspend User</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to suspend this user? They will not be able to access the platform.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleUserAction(user.id, 'suspend')}
-                                >
-                                  Suspend
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="destructive">
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete User</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the user account and all associated data.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleUserAction(user.id, 'delete')}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="flex items-center justify-center">
+                        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading users...</span>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : filteredUsers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8">
+                      <div className="text-gray-500">
+                        {users.length === 0 ? 'No users found' : 'No users match your search criteria'}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{user.email}</p>
+                          <p className="text-sm text-gray-500">{user.id}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={user.user_metadata?.suspended ? 'destructive' : 'default'}>
+                          {user.user_metadata?.suspended ? 'Suspended' : 'Active'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <p>Jobs: {user.usage_stats?.total_jobs || 0}</p>
+                          <p>Images: {user.usage_stats?.total_images || 0}</p>
+                          <p>Storage: {formatBytes(user.usage_stats?.storage_used || 0)}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatDate(user.created_at)}</TableCell>
+                      <TableCell>
+                        {user.last_sign_in_at ? formatDate(user.last_sign_in_at) : 'Never'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {/* View user details */}}
+                            disabled={!hasAdminAccess}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          
+                          {hasAdminAccess && (
+                            <>
+                              {user.user_metadata?.suspended ? (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button size="sm" variant="outline">
+                                      <Shield className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Activate User</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to activate this user? They will be able to access the platform again.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleUserAction(user.id, 'activate')}
+                                      >
+                                        Activate
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              ) : (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button size="sm" variant="outline">
+                                      <Ban className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Suspend User</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Are you sure you want to suspend this user? They will not be able to access the platform.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleUserAction(user.id, 'suspend')}
+                                      >
+                                        Suspend
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="destructive">
+                                    <Ban className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This action cannot be undone. This will permanently delete the user account and all associated data.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleUserAction(user.id, 'delete')}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
