@@ -1,5 +1,6 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import useSignedImageUrls from "@/hooks/useSignedImageUrls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +11,9 @@ import {
   Trash2, 
   Eye, 
   Clock,
-  Calendar
+  Calendar,
+  Loader2,
+  ImageIcon
 } from "lucide-react";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { cn } from "@/lib/utils";
@@ -40,6 +43,47 @@ export const AssetCard = ({
 }: AssetCardProps) => {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [displayUrl, setDisplayUrl] = useState<string | null>(null);
+  const { getSignedUrl } = useSignedImageUrls();
+
+  // Enhanced URL resolution with proper error handling
+  useEffect(() => {
+    const resolveImageUrl = async () => {
+      try {
+        // Try multiple URL sources in order of preference
+        let url = asset.url;
+        
+        // For SDXL images that have multiple URLs
+        if (!url && asset.signedUrls && Array.isArray(asset.signedUrls) && asset.signedUrls.length > 0) {
+          url = asset.signedUrls[0];
+        }
+        
+        // If we still don't have a URL and asset has bucketHint, try to generate a signed URL
+        if (!url && asset.id && asset.bucketHint) {
+          console.log(`🔄 Attempting to generate signed URL for asset ${asset.id}`);
+          const signedUrl = await getSignedUrl(asset.id + '.png', asset.bucketHint);
+          if (signedUrl) {
+            url = signedUrl;
+            console.log(`✅ Generated signed URL for asset ${asset.id}`);
+          }
+        }
+
+        if (url) {
+          setDisplayUrl(url);
+          console.log(`🖼️ Asset ${asset.id} resolved to URL: ${url.substring(0, 100)}...`);
+        } else {
+          console.warn(`⚠️ No URL found for asset ${asset.id}`);
+          setImageError(true);
+        }
+      } catch (error) {
+        console.error(`❌ Error resolving URL for asset ${asset.id}:`, error);
+        setImageError(true);
+      }
+    };
+
+    resolveImageUrl();
+  }, [asset, getSignedUrl]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -104,41 +148,46 @@ export const AssetCard = ({
               <div className="text-xs">Loading preview...</div>
             </div>
           </div>
-        ) : asset.status === 'completed' && (asset.thumbnailUrl || asset.url) && !imageError ? (
+        ) : asset.type === 'video' ? (
+          <div className="w-full h-full bg-muted flex items-center justify-center">
+            <Video className="w-8 h-8 text-muted-foreground" />
+            <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+              Video
+            </div>
+          </div>
+        ) : displayUrl ? (
           <img
-            src={asset.thumbnailUrl || asset.url}
+            src={displayUrl}
             alt={asset.prompt}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            loading="lazy"
-            onError={() => setImageError(true)}
+            className={`w-full h-full object-cover transition-all duration-300 ${
+              !imageLoaded ? 'opacity-0' : 'opacity-100'
+            } ${imageError ? 'hidden' : ''}`}
+            onLoad={() => {
+              setImageLoaded(true);
+              console.log(`✅ Image loaded successfully for asset ${asset.id}`);
+            }}
+            onError={(e) => {
+              setImageError(true);
+              console.error(`❌ Image failed to load for asset ${asset.id}:`, e);
+            }}
           />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800">
-            {asset.error ? (
-              <div className="text-center text-red-400 p-4">
-                <div className="text-2xl mb-2">⚠️</div>
-                <div className="text-xs">Failed to load</div>
-                {asset.error && (
-                  <div className="text-xs mt-1 opacity-75 max-w-[120px] break-words">{truncateText(asset.error, 50)}</div>
-                )}
-              </div>
-            ) : asset.status === 'processing' || asset.status === 'queued' ? (
-              <div className="text-center text-gray-400 p-4">
-                <div className="animate-spin text-2xl mb-2">⏳</div>
-                <div className="text-xs capitalize">{asset.status}</div>
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 p-4">
-                {asset.type === 'image' ? (
-                  <Image className="h-8 w-8 mx-auto mb-2" />
-                ) : (
-                  <Video className="h-8 w-8 mx-auto mb-2" />
-                )}
-                <div className="text-xs">
-                  {asset.status === 'completed' ? 'No preview available' : 'Preview not ready'}
-                </div>
-              </div>
-            )}
+        ) : null}
+        
+        {!imageLoaded && !imageError && !isLoadingUrl && displayUrl && (
+          <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        
+        {(imageError || (!displayUrl && asset.type === 'image')) && (
+          <div className="w-full h-full bg-muted flex flex-col items-center justify-center">
+            <ImageIcon className="w-8 h-8 text-muted-foreground mb-2" />
+            <div className="text-xs text-muted-foreground text-center px-2">
+              {imageError ? 'Failed to load' : 'No preview available'}
+            </div>
+            <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+              {imageError ? 'Error' : 'No preview'}
+            </div>
           </div>
         )}
 

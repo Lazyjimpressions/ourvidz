@@ -34,11 +34,13 @@ export interface UnifiedAsset {
   isSDXLImage?: boolean;
   sdxlIndex?: number;
   originalAssetId?: string;
+  // Bucket hint for signed URL generation
+  bucketHint?: string;
 }
 
 interface AssetFilters {
-  type?: 'image' | 'video';
-  status?: string;
+  type?: 'all' | 'image' | 'video';
+  status?: 'all' | string;
   quality?: string;
   search?: string;
 }
@@ -193,8 +195,14 @@ export class OptimizedAssetService {
     }
 
     try {
+      // Convert filters for OptimizedDatabaseQuery
+      const queryFilters = {
+        ...filters,
+        type: filters.type === 'all' ? undefined : filters.type
+      };
+      
       // Phase 1: Use OptimizedDatabaseQuery for better performance
-      const result = await OptimizedDatabaseQuery.queryAssets(user.id, filters, {
+      const result = await OptimizedDatabaseQuery.queryAssets(user.id, queryFilters, {
         limit: pagination.limit || 20,
         metadataOnly: false
       });
@@ -221,68 +229,141 @@ export class OptimizedAssetService {
 
     console.log('🔄 Phase 1: Using simple fallback method');
 
-    // Simplified queries with essential fields only
-    const baseQuery = {
-      order: 'created_at',
-      ascending: false,
-      range: [offset, offset + limit - 1] as [number, number]
-    };
+    // Enhanced query with proper fields for image loading
+    const imageQuery = supabase
+      .from('images')
+      .select(`
+        id,
+        prompt,
+        image_url,
+        image_urls,
+        signed_url,
+        signed_url_expires_at,
+        created_at,
+        updated_at,
+        status,
+        quality,
+        generation_mode,
+        metadata,
+        title,
+        format
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-    const [imageResult, videoResult] = await Promise.all([
-      filters.type === 'video' ? { data: [], error: null } : 
-        supabase.from('images')
-          .select('id, prompt, status, quality, format, created_at, metadata, image_url, image_urls')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1),
-      filters.type === 'image' ? { data: [], error: null } :
-        supabase.from('videos')
-          .select('id, status, format, created_at, duration, resolution, video_url, metadata')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + limit - 1)
-    ]);
+    // Apply filters
+    if (filters.type && filters.type !== 'all') {
+      if (filters.type === 'image') {
+        // Already filtering images table
+      } else if (filters.type === 'video') {
+        // Switch to videos table when we implement video support
+        throw new Error('Video filtering not yet implemented');
+      }
+    }
 
-    if (imageResult.error) throw imageResult.error;
-    if (videoResult.error) throw videoResult.error;
+    if (filters.status && filters.status !== 'all') {
+      imageQuery.eq('status', filters.status);
+    }
 
-    // Process with minimal overhead
-    const imageAssets = (imageResult.data || []).map(image => ({
-      id: image.id,
-      type: 'image' as const,
-      prompt: image.prompt || 'Untitled Image',
-      status: image.status || 'pending',
-      quality: image.quality || 'fast',
-      format: image.format || 'png',
-      createdAt: new Date(image.created_at),
-      url: image.image_url,
-      signedUrls: image.image_urls,
-      modelType: image.metadata?.is_sdxl ? 'SDXL' : 'WAN',
-      isSDXL: image.metadata?.is_sdxl || false
-    }));
+    if (filters.search && filters.search.trim()) {
+      imageQuery.or(`prompt.ilike.%${filters.search}%,title.ilike.%${filters.search}%`);
+    }
 
-    const videoAssets = (videoResult.data || []).map(video => ({
-      id: video.id,
-      type: 'video' as const,
-      prompt: video.metadata?.prompt || 'Untitled Video',
-      status: video.status || 'draft',
-      format: video.format || 'mp4',
-      createdAt: new Date(video.created_at),
-      duration: video.duration,
-      resolution: video.resolution,
-      url: video.video_url,
-      modelType: 'WAN'
-    }));
+    const { data: images, error } = await imageQuery;
 
-    const allAssets = [...imageAssets, ...videoAssets]
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice(0, limit);
+    if (error) {
+      console.error('Error fetching assets:', error);
+      throw error;
+    }
+
+    // Enhanced logging for debugging
+    console.log(`📊 Fetched ${images?.length || 0} images for user ${userId}`);
+    
+    if (images && images.length > 0) {
+      console.log('🖼️ Sample image data:', {
+        id: images[0].id,
+        image_url: images[0].image_url,
+        signed_url: images[0].signed_url,
+        generation_mode: images[0].generation_mode,
+        quality: images[0].quality,
+        status: images[0].status
+      });
+    }
+
+    // Process images to ensure proper URL handling
+    const processedImages = images?.map(image => {
+      let displayUrl = image.signed_url || image.image_url;
+      
+      // If we have image_urls array (SDXL), try to get the first valid URL
+      if (!displayUrl && image.image_urls && Array.isArray(image.image_urls)) {
+        displayUrl = image.image_urls[0] as string;
+      }
+
+      // Handle SDXL image URLs properly
+      const signedUrlsArray = image.image_urls && Array.isArray(image.image_urls) 
+        ? image.image_urls.filter((url): url is string => typeof url === 'string')
+        : undefined;
+
+      return {
+        id: image.id,
+        type: 'image' as const,
+        prompt: image.prompt || 'Untitled Image',
+        status: image.status || 'pending',
+        quality: image.quality || 'fast',
+        format: image.format || 'png',
+        createdAt: new Date(image.created_at),
+        // Ensure we have a display URL for the component
+        url: displayUrl,
+        signedUrls: signedUrlsArray,
+        // Add bucket inference for signed URL generation
+        bucketHint: this.inferBucketFromImage(image),
+        modelType: this.getModelType(image),
+        isSDXL: this.isSDXLImage(image),
+        title: image.title,
+        thumbnailUrl: displayUrl // Use same URL for thumbnail for now
+      };
+    }) || [];
 
     return {
-      assets: allAssets,
-      hasMore: allAssets.length === limit,
-      total: allAssets.length
+      assets: processedImages,
+      hasMore: false, // Implement pagination later if needed
+      total: processedImages.length
     };
+  }
+
+  // Helper method to infer bucket from image metadata
+  private static inferBucketFromImage(image: any): string {
+    const { generation_mode, quality } = image;
+    
+    // Infer bucket based on generation mode and quality
+    if (generation_mode === 'sdxl') {
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    }
+    
+    if (generation_mode === 'image7b') {
+      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+    }
+    
+    // Default bucket inference
+    return quality === 'high' ? 'image_high' : 'image_fast';
+  }
+
+  // Helper to determine model type
+  private static getModelType(image: any): string {
+    const metadata = image.metadata || {};
+    if (metadata.is_sdxl || image.generation_mode === 'sdxl') {
+      return 'SDXL';
+    }
+    if (image.generation_mode?.includes('7b') || image.generation_mode?.includes('enhanced')) {
+      return 'Enhanced-7B';
+    }
+    return 'WAN';
+  }
+
+  // Helper to check if image is SDXL
+  private static isSDXLImage(image: any): boolean {
+    const metadata = image.metadata || {};
+    return !!(metadata.is_sdxl || image.generation_mode === 'sdxl');
   }
 
   // ENHANCED: Generate URLs on-demand with advanced caching and error handling

@@ -1040,6 +1040,10 @@ export type Database = {
       }
     }
     Functions: {
+      clean_orphaned_jobs: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       get_system_stats: {
         Args: { p_days?: number }
         Returns: Json
