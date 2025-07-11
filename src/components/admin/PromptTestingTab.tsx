@@ -800,7 +800,7 @@ export function PromptTestingTab() {
                       <div>
                         <label className="text-xs font-medium">Overall Quality</label>
                         <Select 
-                          value={result.overall_quality.toString()} 
+                          value={(result.overall_quality ?? 0).toString()} 
                           onValueChange={(value) => updateTestResult(result.id, { overall_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
@@ -819,7 +819,7 @@ export function PromptTestingTab() {
                       <div>
                         <label className="text-xs font-medium">Technical Quality</label>
                         <Select 
-                          value={result.technical_quality.toString()} 
+                          value={(result.technical_quality ?? 0).toString()} 
                           onValueChange={(value) => updateTestResult(result.id, { technical_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
@@ -838,7 +838,7 @@ export function PromptTestingTab() {
                       <div>
                         <label className="text-xs font-medium">Content Quality</label>
                         <Select 
-                          value={result.content_quality.toString()} 
+                          value={(result.content_quality ?? 0).toString()} 
                           onValueChange={(value) => updateTestResult(result.id, { content_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
@@ -857,7 +857,7 @@ export function PromptTestingTab() {
                       <div>
                         <label className="text-xs font-medium">Consistency</label>
                         <Select 
-                          value={result.consistency.toString()} 
+                          value={(result.consistency ?? 0).toString()} 
                           onValueChange={(value) => updateTestResult(result.id, { consistency: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
@@ -923,7 +923,7 @@ export function PromptTestingTab() {
                     {['artistic', 'explicit', 'unrestricted'].map(tier => {
                       const tierResults = testResults.filter(r => r.test_tier === tier);
                       const avgQuality = tierResults.length > 0 
-                        ? tierResults.reduce((sum, r) => sum + r.overall_quality, 0) / tierResults.length 
+                        ? tierResults.reduce((sum, r) => sum + (r.overall_quality ?? 0), 0) / tierResults.length 
                         : 0;
                       return (
                         <div key={tier} className="flex items-center justify-between">
@@ -943,7 +943,7 @@ export function PromptTestingTab() {
                     {['SDXL', 'WAN'].map(model => {
                       const modelResults = testResults.filter(r => r.model_type === model);
                       const avgQuality = modelResults.length > 0 
-                        ? modelResults.reduce((sum, r) => sum + r.overall_quality, 0) / modelResults.length 
+                        ? modelResults.reduce((sum, r) => sum + (r.overall_quality ?? 0), 0) / modelResults.length 
                         : 0;
                       return (
                         <div key={model} className="flex items-center justify-between">
