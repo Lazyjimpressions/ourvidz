@@ -44,9 +44,9 @@ const TEST_SERIES: TestSeries[] = [
     name: 'Couples Intimacy Progression',
     description: 'Basic couple scenes progressing through tiers',
     prompts: {
-      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple portrait, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
-      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
-      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult content, passionate intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+      artistic: 'intimate couple portrait, soft lighting, romantic atmosphere, artistic photography',
+      explicit: 'passionate couple scene, natural anatomy, professional lighting, explicit content',
+      unrestricted: 'explicit adult content, passionate scene, maximum realism, high detail'
     }
   },
   {
@@ -54,9 +54,9 @@ const TEST_SERIES: TestSeries[] = [
     name: 'Shower/Bath Scenes',
     description: 'Wet scenes with steamy atmosphere',
     prompts: {
-      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple shower scene, steamy atmosphere, soft lighting, artistic composition, tasteful nudity, emotional connection, natural skin tones, professional camera, shallow depth of field, warm lighting, romantic atmosphere, professional photography',
-      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, professional adult content',
-      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+      artistic: 'couple shower scene, steamy atmosphere, soft lighting, artistic composition',
+      explicit: 'passionate shower scene, wet skin, explicit content, professional lighting',
+      unrestricted: 'explicit shower scene, maximum detail, unrestricted content, high realism'
     }
   },
   {
@@ -64,9 +64,9 @@ const TEST_SERIES: TestSeries[] = [
     name: 'Bedroom Intimacy',
     description: 'Classic bedroom scenes',
     prompts: {
-      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple bedroom scene, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
-      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
-      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+      artistic: 'bedroom scene, soft lighting, silk sheets, romantic atmosphere',
+      explicit: 'passionate bedroom scene, explicit content, detailed anatomy, high quality',
+      unrestricted: 'explicit bedroom scene, maximum detail, unrestricted adult content'
     }
   },
   {
@@ -74,9 +74,9 @@ const TEST_SERIES: TestSeries[] = [
     name: 'Multi-Person Scenes',
     description: 'Group scenes and complex interactions',
     prompts: {
-      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate group scene, soft natural lighting, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
-      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
-      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+      artistic: 'group scene, soft lighting, romantic atmosphere, artistic composition',
+      explicit: 'passionate group scene, explicit content, detailed anatomy, professional quality',
+      unrestricted: 'explicit group scene, maximum detail, unrestricted adult content'
     }
   }
 ];
@@ -334,12 +334,12 @@ export function PromptTestingTab() {
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-gray-500">
-                    {Math.ceil(currentPrompt.length / 3)} tokens (max 75)
+                    {Math.ceil(currentPrompt.length / 4)} tokens (max 150)
                   </span>
                   <Badge 
-                    variant={currentPrompt.length > 225 ? 'destructive' : 'secondary'}
+                    variant={currentPrompt.length > 600 ? 'destructive' : 'secondary'}
                   >
-                    {currentPrompt.length > 225 ? 'Token Limit Exceeded' : 'Within Limits'}
+                    {currentPrompt.length > 600 ? 'Token Limit Exceeded' : 'Within Limits'}
                   </Badge>
                 </div>
               </div>
@@ -347,7 +347,7 @@ export function PromptTestingTab() {
               <div className="flex gap-2">
                 <Button 
                   onClick={generateImage}
-                  disabled={isGenerating || currentPrompt.length > 225}
+                  disabled={isGenerating || currentPrompt.length > 600}
                   className="flex-1"
                 >
                   {isGenerating ? 'Generating...' : 'Generate Image'}
