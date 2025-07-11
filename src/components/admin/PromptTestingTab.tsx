@@ -13,16 +13,18 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface TestResult {
   id: string;
-  prompt: string;
-  tier: 'artistic' | 'explicit' | 'unrestricted';
-  series: string;
-  overallQuality: number;
-  anatomicalAccuracy: number;
-  contentLevel: number;
+  prompt_text: string;
+  test_tier: 'artistic' | 'explicit' | 'unrestricted';
+  test_series: string;
+  model_type: 'SDXL' | 'WAN' | 'LORA';
+  overall_quality: number;
+  technical_quality: number;
+  content_quality: number;
   consistency: number;
   notes: string;
-  generatedAt: string;
-  imageUrl?: string;
+  created_at: string;
+  image_id?: string;
+  image_url?: string;
 }
 
 interface TestSeries {
@@ -104,7 +106,7 @@ export function PromptTestingTab() {
   const loadTestResults = async () => {
     try {
       const { data, error } = await supabase
-        .from('prompt_test_results')
+        .from('model_test_results')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -158,16 +160,17 @@ export function PromptTestingTab() {
 
       // Auto-save test result
       await saveTestResult({
-        prompt: currentPrompt,
-        tier: selectedTier,
-        series: selectedSeries,
-        overallQuality: 0,
-        anatomicalAccuracy: 0,
-        contentLevel: 0,
+        prompt_text: currentPrompt,
+        test_tier: selectedTier,
+        test_series: selectedSeries,
+        model_type: 'SDXL',
+        overall_quality: 0,
+        technical_quality: 0,
+        content_quality: 0,
         consistency: 0,
         notes: '',
-        generatedAt: new Date().toISOString(),
-        imageUrl: result.image_url
+        created_at: new Date().toISOString(),
+        image_url: result.image_url
       });
 
     } catch (error) {
@@ -185,7 +188,7 @@ export function PromptTestingTab() {
   const saveTestResult = async (result: Omit<TestResult, 'id'>) => {
     try {
       const { data, error } = await supabase
-        .from('prompt_test_results')
+        .from('model_test_results')
         .insert([result])
         .select()
         .single();
@@ -210,7 +213,7 @@ export function PromptTestingTab() {
   const updateTestResult = async (id: string, updates: Partial<TestResult>) => {
     try {
       const { data, error } = await supabase
-        .from('prompt_test_results')
+        .from('model_test_results')
         .update(updates)
         .eq('id', id)
         .select()
@@ -255,7 +258,7 @@ export function PromptTestingTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">SDXL Prompt Testing</h2>
+        <h2 className="text-2xl font-bold">Model Testing Framework</h2>
         <Badge variant="outline">
           {testResults.length} Tests Completed
         </Badge>
@@ -292,7 +295,7 @@ export function PromptTestingTab() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Content Tier</label>
-                  <Select value={selectedTier} onValueChange={setSelectedTier}>
+                  <Select value={selectedTier} onValueChange={(value: 'artistic' | 'explicit' | 'unrestricted') => setSelectedTier(value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -370,15 +373,18 @@ export function PromptTestingTab() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <Badge className={getTierColor(result.tier)}>
-                            {result.tier}
+                          <Badge className={getTierColor(result.test_tier)}>
+                            {result.test_tier}
                           </Badge>
                           <Badge variant="outline">
-                            {TEST_SERIES.find(s => s.id === result.series)?.name}
+                            {TEST_SERIES.find(s => s.id === result.test_series)?.name}
+                          </Badge>
+                          <Badge variant="secondary">
+                            {result.model_type}
                           </Badge>
                         </div>
                         <p className="text-sm font-mono bg-gray-50 p-2 rounded">
-                          {result.prompt}
+                          {result.prompt_text}
                         </p>
                       </div>
                     </div>
@@ -387,14 +393,14 @@ export function PromptTestingTab() {
                       <div>
                         <label className="text-xs font-medium">Overall Quality</label>
                         <Select 
-                          value={result.overallQuality.toString()} 
-                          onValueChange={(value) => updateTestResult(result.id, { overallQuality: parseInt(value) })}
+                          value={result.overall_quality.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { overall_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                            {[0,1,2,3,4,5,6,7,8,9,10].map(num => (
                               <SelectItem key={num} value={num.toString()}>
                                 <span className={getQualityColor(num)}>{num}/10</span>
                               </SelectItem>
@@ -404,16 +410,16 @@ export function PromptTestingTab() {
                       </div>
 
                       <div>
-                        <label className="text-xs font-medium">Anatomical Accuracy</label>
+                        <label className="text-xs font-medium">Technical Quality</label>
                         <Select 
-                          value={result.anatomicalAccuracy.toString()} 
-                          onValueChange={(value) => updateTestResult(result.id, { anatomicalAccuracy: parseInt(value) })}
+                          value={result.technical_quality.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { technical_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                            {[0,1,2,3,4,5,6,7,8,9,10].map(num => (
                               <SelectItem key={num} value={num.toString()}>
                                 <span className={getQualityColor(num)}>{num}/10</span>
                               </SelectItem>
@@ -423,18 +429,18 @@ export function PromptTestingTab() {
                       </div>
 
                       <div>
-                        <label className="text-xs font-medium">Content Level</label>
+                        <label className="text-xs font-medium">Content Quality</label>
                         <Select 
-                          value={result.contentLevel.toString()} 
-                          onValueChange={(value) => updateTestResult(result.id, { contentLevel: parseInt(value) })}
+                          value={result.content_quality.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { content_quality: parseInt(value) })}
                         >
                           <SelectTrigger className="h-8">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[1,2,3,4,5].map(num => (
+                            {[0,1,2,3,4,5,6,7,8,9,10].map(num => (
                               <SelectItem key={num} value={num.toString()}>
-                                {num}/5
+                                <span className={getQualityColor(num)}>{num}/10</span>
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -451,7 +457,7 @@ export function PromptTestingTab() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                            {[0,1,2,3,4,5,6,7,8,9,10].map(num => (
                               <SelectItem key={num} value={num.toString()}>
                                 <span className={getQualityColor(num)}>{num}/10</span>
                               </SelectItem>
@@ -464,18 +470,18 @@ export function PromptTestingTab() {
                     <div>
                       <label className="text-xs font-medium">Notes</label>
                       <Textarea
-                        value={result.notes}
+                        value={result.notes || ''}
                         onChange={(e) => updateTestResult(result.id, { notes: e.target.value })}
                         placeholder="Add notes about this test result..."
                         className="min-h-[60px] text-sm"
                       />
                     </div>
 
-                    {result.imageUrl && (
+                    {result.image_url && (
                       <div>
                         <label className="text-xs font-medium">Generated Image</label>
                         <img 
-                          src={result.imageUrl} 
+                          src={result.image_url} 
                           alt="Generated test image"
                           className="max-w-xs rounded border"
                         />
@@ -499,9 +505,9 @@ export function PromptTestingTab() {
                   <h3 className="font-medium mb-2">Quality by Tier</h3>
                   <div className="space-y-2">
                     {['artistic', 'explicit', 'unrestricted'].map(tier => {
-                      const tierResults = testResults.filter(r => r.tier === tier);
+                      const tierResults = testResults.filter(r => r.test_tier === tier);
                       const avgQuality = tierResults.length > 0 
-                        ? tierResults.reduce((sum, r) => sum + r.overallQuality, 0) / tierResults.length 
+                        ? tierResults.reduce((sum, r) => sum + r.overall_quality, 0) / tierResults.length 
                         : 0;
                       return (
                         <div key={tier} className="flex items-center justify-between">
@@ -519,7 +525,7 @@ export function PromptTestingTab() {
                   <h3 className="font-medium mb-2">Series Progress</h3>
                   <div className="space-y-2">
                     {TEST_SERIES.map(series => {
-                      const seriesResults = testResults.filter(r => r.series === series.id);
+                      const seriesResults = testResults.filter(r => r.test_series === series.id);
                       const completed = seriesResults.length;
                       const total = 3; // 3 tiers per series
                       const percentage = (completed / total) * 100;
@@ -542,15 +548,15 @@ export function PromptTestingTab() {
                     {testResults.slice(0, 5).map(result => (
                       <div key={result.id} className="text-sm">
                         <div className="flex items-center gap-2">
-                          <Badge className={getTierColor(result.tier)}>
-                            {result.tier}
+                          <Badge className={getTierColor(result.test_tier)}>
+                            {result.test_tier}
                           </Badge>
-                          <span className={getQualityColor(result.overallQuality)}>
-                            {result.overallQuality}/10
+                          <span className={getQualityColor(result.overall_quality)}>
+                            {result.overall_quality}/10
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          {new Date(result.generatedAt).toLocaleDateString()}
+                          {new Date(result.created_at).toLocaleDateString()}
                         </p>
                       </div>
                     ))}

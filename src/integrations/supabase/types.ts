@@ -210,20 +210,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "images_prompt_test_id_fkey"
-            columns: ["prompt_test_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_analytics"
-            referencedColumns: ["test_id"]
-          },
-          {
-            foreignKeyName: "images_prompt_test_id_fkey"
-            columns: ["prompt_test_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_results"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "images_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -327,7 +313,7 @@ export type Database = {
             foreignKeyName: "jobs_image_id_fkey"
             columns: ["image_id"]
             isOneToOne: false
-            referencedRelation: "prompt_test_analytics"
+            referencedRelation: "model_test_analytics"
             referencedColumns: ["image_id"]
           },
           {
@@ -338,20 +324,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "jobs_prompt_test_id_fkey"
-            columns: ["prompt_test_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_analytics"
-            referencedColumns: ["test_id"]
-          },
-          {
-            foreignKeyName: "jobs_prompt_test_id_fkey"
-            columns: ["prompt_test_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_results"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "jobs_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -378,6 +350,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_analytics"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "jobs_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "model_test_analytics"
+            referencedColumns: ["video_id"]
           },
           {
             foreignKeyName: "jobs_video_id_fkey"
@@ -478,6 +457,124 @@ export type Database = {
         }
         Relationships: []
       }
+      model_test_results: {
+        Row: {
+          consistency: number | null
+          content_quality: number | null
+          created_at: string | null
+          file_size_bytes: number | null
+          generation_time_ms: number | null
+          id: string
+          image_id: string | null
+          job_id: string | null
+          model_type: string
+          model_version: string | null
+          notes: string | null
+          overall_quality: number | null
+          prompt_text: string
+          success: boolean
+          technical_quality: number | null
+          test_category: string | null
+          test_metadata: Json
+          test_series: string
+          test_tier: string
+          updated_at: string | null
+          user_id: string | null
+          video_id: string | null
+        }
+        Insert: {
+          consistency?: number | null
+          content_quality?: number | null
+          created_at?: string | null
+          file_size_bytes?: number | null
+          generation_time_ms?: number | null
+          id?: string
+          image_id?: string | null
+          job_id?: string | null
+          model_type: string
+          model_version?: string | null
+          notes?: string | null
+          overall_quality?: number | null
+          prompt_text: string
+          success?: boolean
+          technical_quality?: number | null
+          test_category?: string | null
+          test_metadata?: Json
+          test_series: string
+          test_tier: string
+          updated_at?: string | null
+          user_id?: string | null
+          video_id?: string | null
+        }
+        Update: {
+          consistency?: number | null
+          content_quality?: number | null
+          created_at?: string | null
+          file_size_bytes?: number | null
+          generation_time_ms?: number | null
+          id?: string
+          image_id?: string | null
+          job_id?: string | null
+          model_type?: string
+          model_version?: string | null
+          notes?: string | null
+          overall_quality?: number | null
+          prompt_text?: string
+          success?: boolean
+          technical_quality?: number | null
+          test_category?: string | null
+          test_metadata?: Json
+          test_series?: string
+          test_tier?: string
+          updated_at?: string | null
+          user_id?: string | null
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_test_results_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "images"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_test_results_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "model_test_analytics"
+            referencedColumns: ["image_id"]
+          },
+          {
+            foreignKeyName: "model_test_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_test_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "model_test_analytics"
+            referencedColumns: ["job_id"]
+          },
+          {
+            foreignKeyName: "model_test_results_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "model_test_analytics"
+            referencedColumns: ["video_id"]
+          },
+          {
+            foreignKeyName: "model_test_results_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           age_verified: boolean | null
@@ -575,106 +672,6 @@ export type Database = {
           {
             foreignKeyName: "projects_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      prompt_test_results: {
-        Row: {
-          created_at: string | null
-          error_message: string | null
-          generation_parameters: Json | null
-          generation_time_ms: number | null
-          id: string
-          image_id: string | null
-          job_id: string | null
-          model_type: string
-          model_version: string | null
-          notes: string | null
-          prompt_category: string | null
-          prompt_text: string
-          quality_rating: number | null
-          success: boolean
-          success_rate: number | null
-          tested_by: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          error_message?: string | null
-          generation_parameters?: Json | null
-          generation_time_ms?: number | null
-          id?: string
-          image_id?: string | null
-          job_id?: string | null
-          model_type: string
-          model_version?: string | null
-          notes?: string | null
-          prompt_category?: string | null
-          prompt_text: string
-          quality_rating?: number | null
-          success: boolean
-          success_rate?: number | null
-          tested_by?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          error_message?: string | null
-          generation_parameters?: Json | null
-          generation_time_ms?: number | null
-          id?: string
-          image_id?: string | null
-          job_id?: string | null
-          model_type?: string
-          model_version?: string | null
-          notes?: string | null
-          prompt_category?: string | null
-          prompt_text?: string
-          quality_rating?: number | null
-          success?: boolean
-          success_rate?: number | null
-          tested_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "prompt_test_results_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "images"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "prompt_test_results_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_analytics"
-            referencedColumns: ["image_id"]
-          },
-          {
-            foreignKeyName: "prompt_test_results_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "prompt_test_results_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "prompt_test_analytics"
-            referencedColumns: ["job_id"]
-          },
-          {
-            foreignKeyName: "prompt_test_results_tested_by_fkey"
-            columns: ["tested_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "prompt_test_results_tested_by_fkey"
-            columns: ["tested_by"]
             isOneToOne: false
             referencedRelation: "user_analytics"
             referencedColumns: ["user_id"]
@@ -974,9 +971,11 @@ export type Database = {
         }
         Relationships: []
       }
-      prompt_test_analytics: {
+      model_test_analytics: {
         Row: {
-          generation_parameters: Json | null
+          consistency: number | null
+          content_quality: number | null
+          file_size_bytes: number | null
           generation_time_ms: number | null
           image_id: string | null
           image_metadata: Json | null
@@ -985,14 +984,42 @@ export type Database = {
           job_created_at: string | null
           job_id: string | null
           job_status: string | null
+          job_type: string | null
           model_type: string | null
           model_version: string | null
           notes: string | null
+          overall_quality: number | null
           prompt_text: string | null
-          quality_rating: number | null
-          success_rate: number | null
+          success: boolean | null
+          technical_quality: number | null
+          test_category: string | null
           test_created_at: string | null
           test_id: string | null
+          test_metadata: Json | null
+          test_series: string | null
+          test_tier: string | null
+          user_id: string | null
+          video_id: string | null
+          video_metadata: Json | null
+          video_url: string | null
+        }
+        Relationships: []
+      }
+      model_test_summary: {
+        Row: {
+          avg_consistency: number | null
+          avg_content_quality: number | null
+          avg_file_size_bytes: number | null
+          avg_generation_time_ms: number | null
+          avg_overall_quality: number | null
+          avg_technical_quality: number | null
+          first_test: string | null
+          last_test: string | null
+          model_type: string | null
+          successful_tests: number | null
+          test_series: string | null
+          test_tier: string | null
+          total_tests: number | null
         }
         Relationships: []
       }
