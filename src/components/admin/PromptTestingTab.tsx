@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -25,12 +26,19 @@ interface TestResult {
   created_at: string;
   image_id?: string;
   image_url?: string;
+  video_id?: string;
+  video_url?: string;
+  job_id?: string;
+  generation_time_ms?: number;
+  file_size_bytes?: number;
+  success: boolean;
 }
 
 interface TestSeries {
   id: string;
   name: string;
   description: string;
+  model_type: 'SDXL' | 'WAN';
   prompts: {
     artistic: string;
     explicit: string;
@@ -38,57 +46,134 @@ interface TestSeries {
   };
 }
 
-const TEST_SERIES: TestSeries[] = [
+// SDXL Test Series
+const SDXL_TEST_SERIES: TestSeries[] = [
   {
     id: 'couples-intimacy',
     name: 'Couples Intimacy Progression',
     description: 'Basic couple scenes progressing through tiers',
+    model_type: 'SDXL',
     prompts: {
-      artistic: 'intimate couple portrait, soft lighting, romantic atmosphere, artistic photography',
-      explicit: 'passionate couple scene, natural anatomy, professional lighting, explicit content',
-      unrestricted: 'explicit adult content, passionate scene, maximum realism, high detail'
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple portrait, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult content, passionate intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
     }
   },
   {
     id: 'shower-bath',
     name: 'Shower/Bath Scenes',
     description: 'Wet scenes with steamy atmosphere',
+    model_type: 'SDXL',
     prompts: {
-      artistic: 'couple shower scene, steamy atmosphere, soft lighting, artistic composition',
-      explicit: 'passionate shower scene, wet skin, explicit content, professional lighting',
-      unrestricted: 'explicit shower scene, maximum detail, unrestricted content, high realism'
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple shower scene, steamy atmosphere, soft lighting, artistic composition, tasteful nudity, emotional connection, natural skin tones, professional camera, shallow depth of field, warm lighting, romantic atmosphere, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
     }
   },
   {
     id: 'bedroom-intimacy',
     name: 'Bedroom Intimacy',
     description: 'Classic bedroom scenes',
+    model_type: 'SDXL',
     prompts: {
-      artistic: 'bedroom scene, soft lighting, silk sheets, romantic atmosphere',
-      explicit: 'passionate bedroom scene, explicit content, detailed anatomy, high quality',
-      unrestricted: 'explicit bedroom scene, maximum detail, unrestricted adult content'
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple bedroom scene, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
     }
   },
   {
     id: 'multi-person',
     name: 'Multi-Person Scenes',
     description: 'Group scenes and complex interactions',
+    model_type: 'SDXL',
     prompts: {
-      artistic: 'group scene, soft lighting, romantic atmosphere, artistic composition',
-      explicit: 'passionate group scene, explicit content, detailed anatomy, professional quality',
-      unrestricted: 'explicit group scene, maximum detail, unrestricted adult content'
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate group scene, soft natural lighting, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
     }
   }
 ];
 
+// WAN Test Series
+const WAN_TEST_SERIES: TestSeries[] = [
+  {
+    id: 'couples-motion',
+    name: 'Couples Motion Intimacy',
+    description: 'Smooth romantic motion sequences',
+    model_type: 'WAN',
+    prompts: {
+      artistic: 'attractive couple in intimate embrace, smooth motion, fluid movement, romantic atmosphere, soft natural lighting, intimate setting, stable camera, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, emotional connection, tender moment',
+      explicit: 'unrestricted nsfw, attractive couple, passionate intimate scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism',
+      unrestricted: 'unrestricted nsfw, explicit adult content, passionate couple intimate scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism'
+    }
+  },
+  {
+    id: 'shower-motion',
+    name: 'Shower/Bath Motion Scenes',
+    description: 'Wet motion scenes with steamy atmosphere',
+    model_type: 'WAN',
+    prompts: {
+      artistic: 'attractive couple in steamy shower, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, emotional connection',
+      explicit: 'unrestricted nsfw, attractive couple, passionate shower scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism',
+      unrestricted: 'unrestricted nsfw, explicit adult shower scene, passionate couple intimate moment, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism'
+    }
+  },
+  {
+    id: 'bedroom-motion',
+    name: 'Bedroom Motion Intimacy',
+    description: 'Intimate motion sequences',
+    model_type: 'WAN',
+    prompts: {
+      artistic: 'attractive couple in intimate bedroom scene, smooth motion, fluid movement, romantic atmosphere, soft natural lighting, intimate setting, stable camera, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, emotional connection',
+      explicit: 'unrestricted nsfw, attractive couple, passionate bedroom scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism',
+      unrestricted: 'unrestricted nsfw, explicit adult bedroom scene, passionate couple intimate moment, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism'
+    }
+  },
+  {
+    id: 'group-motion',
+    name: 'Multi-Person Motion Scenes',
+    description: 'Multi-person motion interactions',
+    model_type: 'WAN',
+    prompts: {
+      artistic: 'attractive group in intimate scene, smooth motion, fluid movement, romantic atmosphere, soft natural lighting, intimate setting, stable camera, temporal consistency, natural body movement, elegant gestures, high quality video, tasteful composition, professional cinematography, emotional connection',
+      explicit: 'unrestricted nsfw, attractive group, passionate intimate scene, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism',
+      unrestricted: 'unrestricted nsfw, explicit adult group scene, passionate intimate moment, smooth motion, fluid movement, sensual atmosphere, soft lighting, intimate setting, stable camera, temporal consistency, natural body movement, professional adult content, high quality video, professional cinematography, maximum realism'
+    }
+  }
+];
+
+interface BatchTestConfig {
+  model_type: 'SDXL' | 'WAN';
+  series: string[];
+  tiers: ('artistic' | 'explicit' | 'unrestricted')[];
+  job_type: string;
+  variations_per_prompt: number;
+}
+
 export function PromptTestingTab() {
+  const [selectedModel, setSelectedModel] = useState<'SDXL' | 'WAN'>('SDXL');
   const [selectedSeries, setSelectedSeries] = useState<string>('couples-intimacy');
   const [selectedTier, setSelectedTier] = useState<'artistic' | 'explicit' | 'unrestricted'>('artistic');
   const [currentPrompt, setCurrentPrompt] = useState<string>('');
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [batchConfig, setBatchConfig] = useState<BatchTestConfig>({
+    model_type: 'SDXL',
+    series: [],
+    tiers: ['artistic'],
+    job_type: 'sdxl_image_fast',
+    variations_per_prompt: 3
+  });
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchTotal, setBatchTotal] = useState(0);
   const { toast } = useToast();
+
+  // Get current test series based on selected model
+  const getCurrentTestSeries = () => {
+    return selectedModel === 'SDXL' ? SDXL_TEST_SERIES : WAN_TEST_SERIES;
+  };
 
   // Load test results on component mount
   useEffect(() => {
@@ -97,11 +182,21 @@ export function PromptTestingTab() {
 
   // Update current prompt when series or tier changes
   useEffect(() => {
-    const series = TEST_SERIES.find(s => s.id === selectedSeries);
+    const series = getCurrentTestSeries().find(s => s.id === selectedSeries);
     if (series) {
       setCurrentPrompt(series.prompts[selectedTier]);
     }
-  }, [selectedSeries, selectedTier]);
+  }, [selectedSeries, selectedTier, selectedModel]);
+
+  // Update batch config when model changes
+  useEffect(() => {
+    setBatchConfig(prev => ({
+      ...prev,
+      model_type: selectedModel,
+      job_type: selectedModel === 'SDXL' ? 'sdxl_image_fast' : 'video_fast',
+      series: []
+    }));
+  }, [selectedModel]);
 
   const loadTestResults = async () => {
     try {
@@ -128,62 +223,23 @@ export function PromptTestingTab() {
     }
   };
 
-  const generateImage = async () => {
-    if (!currentPrompt.trim()) {
-      toast({
-        title: 'Error',
-        description: 'Please enter a prompt',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setIsGenerating(true);
+  const generateContent = async (prompt: string, jobType: string, metadata: any) => {
     try {
       const { data: result, error } = await supabase.functions.invoke('queue-job', {
         body: {
-          jobType: 'sdxl_image_fast',
+          jobType,
           metadata: {
-            prompt: currentPrompt,
-            enhancement_tier: selectedTier,
-            test_series: selectedSeries,
-            test_tier: selectedTier,
-            queue: 'sdxl_queue'
+            prompt,
+            ...metadata
           }
         }
       });
 
       if (error) throw error;
-      
-      toast({
-        title: 'Success',
-        description: 'Image generated successfully',
-      });
-
-      // Auto-save test result
-      await saveTestResult({
-        prompt_text: currentPrompt,
-        test_tier: selectedTier,
-        test_series: selectedSeries,
-        model_type: 'SDXL',
-        overall_quality: 0,
-        technical_quality: 0,
-        content_quality: 0,
-        consistency: 0,
-        notes: '',
-        created_at: new Date().toISOString(),
-        image_url: result.image_url
-      });
-
+      return result;
     } catch (error) {
       console.error('Generation error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to generate image',
-        variant: 'destructive'
-      });
-    } finally {
-      setIsGenerating(false);
+      throw error;
     }
   };
 
@@ -209,6 +265,148 @@ export function PromptTestingTab() {
         description: 'Failed to save test result',
         variant: 'destructive'
       });
+    }
+  };
+
+  const generateSingle = async () => {
+    if (!currentPrompt.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a prompt',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const jobType = selectedModel === 'SDXL' ? 'sdxl_image_fast' : 'video_fast';
+      const result = await generateContent(currentPrompt, jobType, {
+        enhancement_tier: selectedTier,
+        test_series: selectedSeries,
+        test_tier: selectedTier,
+        queue: selectedModel === 'SDXL' ? 'sdxl_queue' : 'wan_queue'
+      });
+
+      // Auto-save test result
+      await saveTestResult({
+        prompt_text: currentPrompt,
+        test_tier: selectedTier,
+        test_series: selectedSeries,
+        model_type: selectedModel,
+        overall_quality: 0,
+        technical_quality: 0,
+        content_quality: 0,
+        consistency: 0,
+        notes: '',
+        created_at: new Date().toISOString(),
+        image_url: result.image_url,
+        video_url: result.video_url,
+        job_id: result.job_id,
+        success: true
+      });
+
+      toast({
+        title: 'Success',
+        description: `${selectedModel} content generated successfully`,
+      });
+
+    } catch (error) {
+      console.error('Generation error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate content',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const runBatchTest = async () => {
+    if (batchConfig.series.length === 0 || batchConfig.tiers.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one series and tier for batch testing',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsBatchRunning(true);
+    const totalTests = batchConfig.series.length * batchConfig.tiers.length * batchConfig.variations_per_prompt;
+    setBatchTotal(totalTests);
+    setBatchProgress(0);
+
+    try {
+      const jobType = batchConfig.model_type === 'SDXL' ? 'sdxl_image_fast' : 'video_fast';
+      let completedTests = 0;
+
+      for (const seriesId of batchConfig.series) {
+        const series = getCurrentTestSeries().find(s => s.id === seriesId);
+        if (!series) continue;
+
+        for (const tier of batchConfig.tiers) {
+          const prompt = series.prompts[tier];
+          
+          for (let i = 0; i < batchConfig.variations_per_prompt; i++) {
+            try {
+              const result = await generateContent(prompt, jobType, {
+                enhancement_tier: tier,
+                test_series: seriesId,
+                test_tier: tier,
+                queue: batchConfig.model_type === 'SDXL' ? 'sdxl_queue' : 'wan_queue',
+                batch_variation: i + 1
+              });
+
+              await saveTestResult({
+                prompt_text: prompt,
+                test_tier: tier,
+                test_series: seriesId,
+                model_type: batchConfig.model_type,
+                overall_quality: 0,
+                technical_quality: 0,
+                content_quality: 0,
+                consistency: 0,
+                notes: `Batch test variation ${i + 1}`,
+                created_at: new Date().toISOString(),
+                image_url: result.image_url,
+                video_url: result.video_url,
+                job_id: result.job_id,
+                success: true
+              });
+
+              completedTests++;
+              setBatchProgress(completedTests);
+
+              // Small delay between generations to avoid overwhelming the system
+              await new Promise(resolve => setTimeout(resolve, 1000));
+
+            } catch (error) {
+              console.error(`Batch test error for ${seriesId} ${tier} variation ${i + 1}:`, error);
+              completedTests++;
+              setBatchProgress(completedTests);
+            }
+          }
+        }
+      }
+
+      toast({
+        title: 'Batch Test Complete',
+        description: `Completed ${completedTests} tests successfully`,
+      });
+
+    } catch (error) {
+      console.error('Batch test error:', error);
+      toast({
+        title: 'Error',
+        description: 'Batch test failed',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsBatchRunning(false);
+      setBatchProgress(0);
+      setBatchTotal(0);
     }
   };
 
@@ -253,6 +451,15 @@ export function PromptTestingTab() {
     return 'text-red-600';
   };
 
+  const getModelColor = (model: string) => {
+    switch (model) {
+      case 'SDXL': return 'bg-purple-100 text-purple-800';
+      case 'WAN': return 'bg-green-100 text-green-800';
+      case 'LORA': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center p-8">Loading...</div>;
   }
@@ -261,14 +468,20 @@ export function PromptTestingTab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Model Testing Framework</h2>
-        <Badge variant="outline">
-          {testResults.length} Tests Completed
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">
+            {testResults.length} Tests Completed
+          </Badge>
+          <Badge className={getModelColor(selectedModel)}>
+            {selectedModel}
+          </Badge>
+        </div>
       </div>
 
       <Tabs defaultValue="generator" className="w-full">
         <TabsList>
-          <TabsTrigger value="generator">Prompt Generator</TabsTrigger>
+          <TabsTrigger value="generator">Single Test</TabsTrigger>
+          <TabsTrigger value="batch">Batch Testing</TabsTrigger>
           <TabsTrigger value="results">Test Results</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
@@ -276,10 +489,22 @@ export function PromptTestingTab() {
         <TabsContent value="generator" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Test Series Selection</CardTitle>
+              <CardTitle>Test Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Model Type</label>
+                  <Select value={selectedModel} onValueChange={(value: 'SDXL' | 'WAN') => setSelectedModel(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SDXL">SDXL LUSTIFY (Images)</SelectItem>
+                      <SelectItem value="WAN">WAN 2.1 (Videos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div>
                   <label className="text-sm font-medium">Test Series</label>
                   <Select value={selectedSeries} onValueChange={setSelectedSeries}>
@@ -287,7 +512,7 @@ export function PromptTestingTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {TEST_SERIES.map(series => (
+                      {getCurrentTestSeries().map(series => (
                         <SelectItem key={series.id} value={series.id}>
                           {series.name}
                         </SelectItem>
@@ -313,7 +538,7 @@ export function PromptTestingTab() {
               <div>
                 <label className="text-sm font-medium">Series Description</label>
                 <p className="text-sm text-gray-600 mt-1">
-                  {TEST_SERIES.find(s => s.id === selectedSeries)?.description}
+                  {getCurrentTestSeries().find(s => s.id === selectedSeries)?.description}
                 </p>
               </div>
             </CardContent>
@@ -334,23 +559,23 @@ export function PromptTestingTab() {
                 />
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-xs text-gray-500">
-                    {Math.ceil(currentPrompt.length / 4)} tokens (max 150)
+                    {Math.ceil(currentPrompt.length / 4)} tokens (max {selectedModel === 'SDXL' ? '75' : '100'})
                   </span>
                   <Badge 
-                    variant={currentPrompt.length > 600 ? 'destructive' : 'secondary'}
+                    variant={currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400) ? 'destructive' : 'secondary'}
                   >
-                    {currentPrompt.length > 600 ? 'Token Limit Exceeded' : 'Within Limits'}
+                    {currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400) ? 'Token Limit Exceeded' : 'Within Limits'}
                   </Badge>
                 </div>
               </div>
 
               <div className="flex gap-2">
                 <Button 
-                  onClick={generateImage}
-                  disabled={isGenerating || currentPrompt.length > 600}
+                  onClick={generateSingle}
+                  disabled={isGenerating || currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400)}
                   className="flex-1"
                 >
-                  {isGenerating ? 'Generating...' : 'Generate Image'}
+                  {isGenerating ? 'Generating...' : `Generate ${selectedModel === 'SDXL' ? 'Image' : 'Video'}`}
                 </Button>
                 <Button 
                   variant="outline"
@@ -359,6 +584,114 @@ export function PromptTestingTab() {
                   Copy Prompt
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="batch" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Batch Test Configuration</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Model Type</label>
+                  <Select value={batchConfig.model_type} onValueChange={(value: 'SDXL' | 'WAN') => setBatchConfig(prev => ({ ...prev, model_type: value, job_type: value === 'SDXL' ? 'sdxl_image_fast' : 'video_fast' }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SDXL">SDXL LUSTIFY (Images)</SelectItem>
+                      <SelectItem value="WAN">WAN 2.1 (Videos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Variations per Prompt</label>
+                  <Select value={batchConfig.variations_per_prompt.toString()} onValueChange={(value) => setBatchConfig(prev => ({ ...prev, variations_per_prompt: parseInt(value) }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 variation</SelectItem>
+                      <SelectItem value="3">3 variations</SelectItem>
+                      <SelectItem value="5">5 variations</SelectItem>
+                      <SelectItem value="10">10 variations</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Test Series</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {getCurrentTestSeries().map(series => (
+                    <div key={series.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={series.id}
+                        checked={batchConfig.series.includes(series.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setBatchConfig(prev => ({ ...prev, series: [...prev.series, series.id] }));
+                          } else {
+                            setBatchConfig(prev => ({ ...prev, series: prev.series.filter(s => s !== series.id) }));
+                          }
+                        }}
+                      />
+                      <label htmlFor={series.id} className="text-sm">{series.name}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-2 block">Content Tiers</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['artistic', 'explicit', 'unrestricted'] as const).map(tier => (
+                    <div key={tier} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={tier}
+                        checked={batchConfig.tiers.includes(tier)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setBatchConfig(prev => ({ ...prev, tiers: [...prev.tiers, tier] }));
+                          } else {
+                            setBatchConfig(prev => ({ ...prev, tiers: prev.tiers.filter(t => t !== tier) }));
+                          }
+                        }}
+                      />
+                      <label htmlFor={tier} className="text-sm capitalize">{tier}</label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {batchConfig.series.length > 0 && batchConfig.tiers.length > 0 && (
+                <Alert>
+                  <AlertDescription>
+                    <strong>Batch Test Summary:</strong> {batchConfig.series.length} series × {batchConfig.tiers.length} tiers × {batchConfig.variations_per_prompt} variations = {batchConfig.series.length * batchConfig.tiers.length * batchConfig.variations_per_prompt} total tests
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <Button 
+                onClick={runBatchTest}
+                disabled={isBatchRunning || batchConfig.series.length === 0 || batchConfig.tiers.length === 0}
+                className="w-full"
+              >
+                {isBatchRunning ? 'Running Batch Test...' : 'Start Batch Test'}
+              </Button>
+
+              {isBatchRunning && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Progress</span>
+                    <span>{batchProgress} / {batchTotal}</span>
+                  </div>
+                  <Progress value={(batchProgress / batchTotal) * 100} />
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -378,11 +711,11 @@ export function PromptTestingTab() {
                           <Badge className={getTierColor(result.test_tier)}>
                             {result.test_tier}
                           </Badge>
-                          <Badge variant="outline">
-                            {TEST_SERIES.find(s => s.id === result.test_series)?.name}
-                          </Badge>
-                          <Badge variant="secondary">
+                          <Badge className={getModelColor(result.model_type)}>
                             {result.model_type}
+                          </Badge>
+                          <Badge variant="outline">
+                            {getCurrentTestSeries().find(s => s.id === result.test_series)?.name || result.test_series}
                           </Badge>
                         </div>
                         <p className="text-sm font-mono bg-gray-50 p-2 rounded">
@@ -479,14 +812,23 @@ export function PromptTestingTab() {
                       />
                     </div>
 
-                    {result.image_url && (
+                    {(result.image_url || result.video_url) && (
                       <div>
-                        <label className="text-xs font-medium">Generated Image</label>
-                        <img 
-                          src={result.image_url} 
-                          alt="Generated test image"
-                          className="max-w-xs rounded border"
-                        />
+                        <label className="text-xs font-medium">Generated Content</label>
+                        {result.image_url && (
+                          <img 
+                            src={result.image_url} 
+                            alt="Generated test image"
+                            className="max-w-xs rounded border"
+                          />
+                        )}
+                        {result.video_url && (
+                          <video 
+                            src={result.video_url} 
+                            controls
+                            className="max-w-xs rounded border"
+                          />
+                        )}
                       </div>
                     )}
                   </div>
@@ -524,9 +866,29 @@ export function PromptTestingTab() {
                 </div>
 
                 <div>
+                  <h3 className="font-medium mb-2">Model Performance</h3>
+                  <div className="space-y-2">
+                    {['SDXL', 'WAN'].map(model => {
+                      const modelResults = testResults.filter(r => r.model_type === model);
+                      const avgQuality = modelResults.length > 0 
+                        ? modelResults.reduce((sum, r) => sum + r.overall_quality, 0) / modelResults.length 
+                        : 0;
+                      return (
+                        <div key={model} className="flex items-center justify-between">
+                          <span className="text-sm">{model}</span>
+                          <span className={`text-sm font-medium ${getQualityColor(Math.round(avgQuality))}`}>
+                            {avgQuality.toFixed(1)}/10
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
                   <h3 className="font-medium mb-2">Series Progress</h3>
                   <div className="space-y-2">
-                    {TEST_SERIES.map(series => {
+                    {getCurrentTestSeries().map(series => {
                       const seriesResults = testResults.filter(r => r.test_series === series.id);
                       const completed = seriesResults.length;
                       const total = 3; // 3 tiers per series
@@ -541,27 +903,6 @@ export function PromptTestingTab() {
                         </div>
                       );
                     })}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-medium mb-2">Recent Activity</h3>
-                  <div className="space-y-2">
-                    {testResults.slice(0, 5).map(result => (
-                      <div key={result.id} className="text-sm">
-                        <div className="flex items-center gap-2">
-                          <Badge className={getTierColor(result.test_tier)}>
-                            {result.test_tier}
-                          </Badge>
-                          <span className={getQualityColor(result.overall_quality)}>
-                            {result.overall_quality}/10
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(result.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    ))}
                   </div>
                 </div>
               </div>
