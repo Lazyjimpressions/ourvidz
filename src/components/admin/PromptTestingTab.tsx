@@ -140,22 +140,20 @@ export function PromptTestingTab() {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        },
-        body: JSON.stringify({
-          job_type: 'sdxl_image_fast',
-          prompt: currentPrompt,
-          enhancement_tier: selectedTier
-        })
+      const { data: result, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          jobType: 'sdxl_image_fast',
+          metadata: {
+            prompt: currentPrompt,
+            enhancement_tier: selectedTier,
+            test_series: selectedSeries,
+            test_tier: selectedTier,
+            queue: 'sdxl_queue'
+          }
+        }
       });
 
-      if (!response.ok) throw new Error('Generation failed');
-
-      const result = await response.json();
+      if (error) throw error;
       
       toast({
         title: 'Success',
