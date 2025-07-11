@@ -1,593 +1,566 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Star, Download, RefreshCw, Play, Image } from "lucide-react";
-import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import { useGeneration } from "@/hooks/useGeneration";
-import { GenerationFormat } from "@/types/generation";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Progress } from '@/components/ui/progress';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
-interface PromptTest {
+interface TestResult {
   id: string;
   prompt: string;
-  modelType: 'SDXL' | 'WAN';
-  quality: number;
+  tier: 'artistic' | 'explicit' | 'unrestricted';
+  series: string;
+  overallQuality: number;
+  anatomicalAccuracy: number;
+  contentLevel: number;
+  consistency: number;
   notes: string;
-  status: 'pending' | 'testing' | 'completed' | 'failed';
-  createdAt: Date;
-  jobId?: string;
+  generatedAt: string;
+  imageUrl?: string;
 }
 
-export const PromptTestingTab = () => {
-  const { user } = useAuth();
-  const [prompts, setPrompts] = useState<string[]>(["", "", "", "", ""]);
-  const [selectedModel, setSelectedModel] = useState<'SDXL' | 'WAN'>('SDXL');
-  const [testResults, setTestResults] = useState<PromptTest[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeTests, setActiveTests] = useState<Set<string>>(new Set());
-  
-  // Use the real generation system
-  const { generateContent, isGenerating, currentJob } = useGeneration();
+interface TestSeries {
+  id: string;
+  name: string;
+  description: string;
+  prompts: {
+    artistic: string;
+    explicit: string;
+    unrestricted: string;
+  };
+}
 
+const TEST_SERIES: TestSeries[] = [
+  {
+    id: 'couples-intimacy',
+    name: 'Couples Intimacy Progression',
+    description: 'Basic couple scenes progressing through tiers',
+    prompts: {
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple portrait, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult content, passionate intimate scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+    }
+  },
+  {
+    id: 'shower-bath',
+    name: 'Shower/Bath Scenes',
+    description: 'Wet scenes with steamy atmosphere',
+    prompts: {
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple shower scene, steamy atmosphere, soft lighting, artistic composition, tasteful nudity, emotional connection, natural skin tones, professional camera, shallow depth of field, warm lighting, romantic atmosphere, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult shower scene, steamy atmosphere, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+    }
+  },
+  {
+    id: 'bedroom-intimacy',
+    name: 'Bedroom Intimacy',
+    description: 'Classic bedroom scenes',
+    prompts: {
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate couple bedroom scene, soft natural lighting, silk sheets, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate couple bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult bedroom scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+    }
+  },
+  {
+    id: 'multi-person',
+    name: 'Multi-Person Scenes',
+    description: 'Group scenes and complex interactions',
+    prompts: {
+      artistic: 'score_9, score_8_up, masterpiece, best quality, intimate group scene, soft natural lighting, romantic atmosphere, artistic nude photography, beautiful lighting, professional camera, shallow depth of field, warm color palette, emotional connection, tender moment, professional photography',
+      explicit: 'score_9, score_8_up, explicit nsfw, masterpiece, best quality, passionate group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, romantic atmosphere, professional adult content',
+      unrestricted: 'score_9, score_8_up, unrestricted nsfw, masterpiece, best quality, explicit adult group scene, natural anatomy, detailed skin texture, professional lighting, artistic composition, high resolution, beautiful lighting, professional camera, shallow depth of field, maximum realism'
+    }
+  }
+];
+
+export function PromptTestingTab() {
+  const [selectedSeries, setSelectedSeries] = useState<string>('couples-intimacy');
+  const [selectedTier, setSelectedTier] = useState<'artistic' | 'explicit' | 'unrestricted'>('artistic');
+  const [currentPrompt, setCurrentPrompt] = useState<string>('');
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+
+  // Load test results on component mount
   useEffect(() => {
     loadTestResults();
   }, []);
 
-  // Listen for generation completion events
+  // Update current prompt when series or tier changes
   useEffect(() => {
-    const handleGenerationComplete = async (event: CustomEvent) => {
-      const { assetId, type, jobId } = event.detail || {};
-      
-      console.log('🎯 Admin prompt testing - generation completed:', { 
-        assetId, 
-        type, 
-        jobId 
-      });
-      
-      if (jobId && assetId) {
-        try {
-          // Update the prompt test result with the generated asset ID
-          const updateData = {
-            image_id: type === 'image' ? assetId : null,
-            success: true,
-            generation_time_ms: Date.now()
-          };
-          
-          const { error: updateError } = await supabase
-            .from('prompt_test_results')
-            .update(updateData)
-            .eq('job_id', jobId);
-
-          if (updateError) {
-            console.error('❌ Failed to update test result with asset ID:', updateError);
-          } else {
-            console.log('✅ Test result updated with asset ID:', { jobId, assetId, type });
-          }
-        } catch (error) {
-          console.error('❌ Error updating test result:', error);
-        }
-      }
-      
-      // Find and update the corresponding test
-      setTestResults(prev => 
-        prev.map(test => 
-          test.jobId === jobId 
-            ? { ...test, status: 'completed' as const }
-            : test
-        )
-      );
-      
-      // Remove from active tests
-      setActiveTests(prev => {
-        const newSet = new Set(prev);
-        // Find the test with matching jobId and remove it
-        const testToRemove = testResults.find(t => t.jobId === jobId);
-        if (testToRemove) {
-          newSet.delete(testToRemove.id);
-        }
-        return newSet;
-      });
-    };
-
-    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
-    
-    return () => {
-      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
-    };
-  }, []);
+    const series = TEST_SERIES.find(s => s.id === selectedSeries);
+    if (series) {
+      setCurrentPrompt(series.prompts[selectedTier]);
+    }
+  }, [selectedSeries, selectedTier]);
 
   const loadTestResults = async () => {
     try {
       const { data, error } = await supabase
         .from('prompt_test_results')
         .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      setTestResults(data?.map(result => ({
-        id: result.id,
-        prompt: result.prompt_text,
-        modelType: result.model_type as 'SDXL' | 'WAN',
-        quality: result.quality_rating || 0,
-        notes: result.notes || '',
-        status: result.success ? 'completed' : 'failed',
-        createdAt: new Date(result.created_at),
-        jobId: (result as any).job_id || result.id // Use job_id if available, fallback to id
-      })) || []);
+      setTestResults(data || []);
     } catch (error) {
       console.error('Error loading test results:', error);
       toast({
-        title: "Error",
-        description: "Failed to load test results",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const handlePromptChange = (index: number, value: string) => {
-    const newPrompts = [...prompts];
-    newPrompts[index] = value;
-    setPrompts(newPrompts);
-  };
-
-  const addPrompt = () => {
-    if (prompts.length < 10) {
-      setPrompts([...prompts, ""]);
-    }
-  };
-
-  const removePrompt = (index: number) => {
-    if (prompts.length > 1) {
-      const newPrompts = prompts.filter((_, i) => i !== index);
-      setPrompts(newPrompts);
-    }
-  };
-
-  const clearPrompts = () => {
-    setPrompts(["", "", "", "", ""]);
-  };
-
-  const submitBatch = async () => {
-    const validPrompts = prompts.filter(p => p.trim());
-    if (validPrompts.length === 0) {
-      toast({
-        title: "No Prompts",
-        description: "Please enter at least one prompt to test",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    const newTests: PromptTest[] = [];
-
-    try {
-      for (const prompt of validPrompts) {
-        const testId = crypto.randomUUID();
-        
-        // Create test record in database first
-        const { data: testRecord, error: dbError } = await supabase
-          .from('prompt_test_results')
-          .insert({
-            id: testId,
-            prompt_text: prompt.trim(),
-            model_type: selectedModel,
-            success: false,
-            tested_by: user?.id
-          })
-          .select()
-          .single();
-
-        if (dbError) {
-          console.error('❌ Failed to create test record:', dbError);
-          throw new Error(`Database error: ${dbError.message}`);
-        }
-
-        const test: PromptTest = {
-          id: testId,
-          prompt: prompt.trim(),
-          modelType: selectedModel,
-          quality: 0,
-          notes: "",
-          status: 'pending',
-          createdAt: new Date()
-        };
-
-        newTests.push(test);
-        setActiveTests(prev => new Set([...prev, testId]));
-
-        // Determine generation format based on model selection
-        const generationFormat: GenerationFormat = selectedModel === 'SDXL' 
-          ? 'sdxl_image_fast' 
-          : 'image_fast';
-
-        try {
-          console.log(`🎬 Submitting prompt for ${selectedModel} testing:`, prompt.trim());
-          
-          await generateContent({
-            format: generationFormat,
-            prompt: prompt.trim(),
-            metadata: {
-              source: 'admin_prompt_testing',
-              test_id: testId,
-              model_type: selectedModel.toLowerCase(),
-              admin_test: true
-            }
-          });
-
-          // Update test with job ID if available
-          if (currentJob?.id) {
-            // Update database record with job ID
-            await supabase
-              .from('prompt_test_results')
-              .update({ 
-                job_id: currentJob.id,
-                success: true 
-              })
-              .eq('id', testId);
-
-            setTestResults(prev => 
-              prev.map(t => 
-                t.id === testId 
-                  ? { ...t, jobId: currentJob.id, status: 'testing' as const }
-                  : t
-              )
-            );
-          }
-
-          console.log(`✅ Prompt submitted for ${selectedModel} testing`);
-        } catch (error) {
-          console.error(`❌ Failed to submit prompt for ${selectedModel} testing:`, error);
-          
-          // Update database record with error
-          await supabase
-            .from('prompt_test_results')
-            .update({ 
-              success: false,
-              error_message: error instanceof Error ? error.message : 'Unknown error'
-            })
-            .eq('id', testId);
-          
-          // Update test status to failed
-          setTestResults(prev => 
-            prev.map(t => 
-              t.id === testId 
-                ? { ...t, status: 'failed' as const }
-                : t
-            )
-          );
-          
-          setActiveTests(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(testId);
-            return newSet;
-          });
-        }
-      }
-
-      setTestResults(prev => [...newTests, ...prev]);
-      clearPrompts();
-
-      toast({
-        title: "Batch Submitted",
-        description: `${validPrompts.length} prompts submitted for ${selectedModel} testing`,
-      });
-    } catch (error) {
-      console.error('Error submitting batch:', error);
-      toast({
-        title: "Error",
-        description: "Failed to submit prompts for testing",
-        variant: "destructive"
+        title: 'Error',
+        description: 'Failed to load test results',
+        variant: 'destructive'
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateQualityRating = async (testId: string, rating: number) => {
+  const generateImage = async () => {
+    if (!currentPrompt.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a prompt',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsGenerating(true);
     try {
-      const { error } = await supabase
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify({
+          job_type: 'sdxl_image_fast',
+          prompt: currentPrompt,
+          enhancement_tier: selectedTier
+        })
+      });
+
+      if (!response.ok) throw new Error('Generation failed');
+
+      const result = await response.json();
+      
+      toast({
+        title: 'Success',
+        description: 'Image generated successfully',
+      });
+
+      // Auto-save test result
+      await saveTestResult({
+        prompt: currentPrompt,
+        tier: selectedTier,
+        series: selectedSeries,
+        overallQuality: 0,
+        anatomicalAccuracy: 0,
+        contentLevel: 0,
+        consistency: 0,
+        notes: '',
+        generatedAt: new Date().toISOString(),
+        imageUrl: result.image_url
+      });
+
+    } catch (error) {
+      console.error('Generation error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to generate image',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const saveTestResult = async (result: Omit<TestResult, 'id'>) => {
+    try {
+      const { data, error } = await supabase
         .from('prompt_test_results')
-        .update({ quality_rating: rating })
-        .eq('id', testId);
+        .insert([result])
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setTestResults(prev => 
-        prev.map(test => 
-          test.id === testId 
-            ? { ...test, quality: rating }
-            : test
-        )
-      );
-
+      setTestResults(prev => [data, ...prev]);
       toast({
-        title: "Rating Updated",
-        description: `Quality rating updated to ${rating}/5`,
+        title: 'Success',
+        description: 'Test result saved',
       });
     } catch (error) {
-      console.error('Error updating rating:', error);
+      console.error('Error saving test result:', error);
       toast({
-        title: "Error",
-        description: "Failed to update rating",
-        variant: "destructive"
+        title: 'Error',
+        description: 'Failed to save test result',
+        variant: 'destructive'
       });
     }
   };
 
-  const updateNotes = async (testId: string, notes: string) => {
+  const updateTestResult = async (id: string, updates: Partial<TestResult>) => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('prompt_test_results')
-        .update({ notes })
-        .eq('id', testId);
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setTestResults(prev => 
-        prev.map(test => 
-          test.id === testId 
-            ? { ...test, notes }
-            : test
-        )
-      );
+      setTestResults(prev => prev.map(r => r.id === id ? data : r));
+      toast({
+        title: 'Success',
+        description: 'Test result updated',
+      });
     } catch (error) {
-      console.error('Error updating notes:', error);
+      console.error('Error updating test result:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update test result',
+        variant: 'destructive'
+      });
     }
   };
 
-  const exportResults = () => {
-    const csvContent = [
-      ['Prompt', 'Model', 'Quality Rating', 'Notes', 'Status', 'Created'],
-      ...testResults.map(test => [
-        test.prompt,
-        test.modelType,
-        test.quality.toString(),
-        test.notes,
-        test.status,
-        test.createdAt.toISOString()
-      ])
-    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `prompt-test-results-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-
-    toast({
-      title: "Export Complete",
-      description: "Test results exported to CSV",
-    });
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+      case 'artistic': return 'bg-blue-100 text-blue-800';
+      case 'explicit': return 'bg-yellow-100 text-yellow-800';
+      case 'unrestricted': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      pending: 'secondary',
-      testing: 'default',
-      completed: 'default',
-      failed: 'destructive'
-    } as const;
-
-    return (
-      <Badge variant={variants[status as keyof typeof variants] || 'outline'}>
-        {status}
-      </Badge>
-    );
+  const getQualityColor = (score: number) => {
+    if (score >= 8) return 'text-green-600';
+    if (score >= 6) return 'text-yellow-600';
+    return 'text-red-600';
   };
 
-  const renderStars = (testId: string, currentRating: number) => {
-    return (
-      <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map(star => (
-          <button
-            key={star}
-            onClick={() => updateQualityRating(testId, star)}
-            className={`p-1 rounded transition-colors ${
-              star <= currentRating 
-                ? 'text-yellow-400 hover:text-yellow-300' 
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            <Star className="h-4 w-4 fill-current" />
-          </button>
-        ))}
-      </div>
-    );
-  };
+  if (isLoading) {
+    return <div className="flex items-center justify-center p-8">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">
-      {/* Batch Submission */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Play className="h-5 w-5" />
-            Batch Prompt Testing
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Model Selection */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Label>Model:</Label>
-              <Select value={selectedModel} onValueChange={(value: 'SDXL' | 'WAN') => setSelectedModel(value)}>
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SDXL">
-                    <div className="flex items-center gap-2">
-                      <Image className="h-4 w-4" />
-                      SDXL
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="WAN">
-                    <div className="flex items-center gap-2">
-                      <Play className="h-4 w-4" />
-                      WAN
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Badge variant="outline">
-              {prompts.filter(p => p.trim()).length}/10 prompts
-            </Badge>
-          </div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">SDXL Prompt Testing</h2>
+        <Badge variant="outline">
+          {testResults.length} Tests Completed
+        </Badge>
+      </div>
 
-          {/* Prompt Inputs */}
-          <div className="space-y-3">
-            {prompts.map((prompt, index) => (
-              <div key={index} className="flex gap-2">
-                <div className="flex-1">
-                  <Textarea
-                    value={prompt}
-                    onChange={(e) => handlePromptChange(index, e.target.value)}
-                    placeholder={`Prompt ${index + 1}...`}
-                    rows={2}
-                    disabled={isLoading}
-                  />
+      <Tabs defaultValue="generator" className="w-full">
+        <TabsList>
+          <TabsTrigger value="generator">Prompt Generator</TabsTrigger>
+          <TabsTrigger value="results">Test Results</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="generator" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Test Series Selection</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Test Series</label>
+                  <Select value={selectedSeries} onValueChange={setSelectedSeries}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TEST_SERIES.map(series => (
+                        <SelectItem key={series.id} value={series.id}>
+                          {series.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                {prompts.length > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removePrompt(index)}
-                    disabled={isLoading}
-                    className="text-red-500 hover:text-red-600"
-                  >
-                    ×
-                  </Button>
-                )}
+                <div>
+                  <label className="text-sm font-medium">Content Tier</label>
+                  <Select value={selectedTier} onValueChange={setSelectedTier}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="artistic">Artistic (Tasteful)</SelectItem>
+                      <SelectItem value="explicit">Explicit (Direct)</SelectItem>
+                      <SelectItem value="unrestricted">Unrestricted (Maximum)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            ))}
-          </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={submitBatch}
-              disabled={isLoading || prompts.filter(p => p.trim()).length === 0}
-              className="flex items-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Testing...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4" />
-                  Submit Batch
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={addPrompt}
-              disabled={isLoading || prompts.length >= 10}
-            >
-              Add Prompt
-            </Button>
-            <Button
-              variant="outline"
-              onClick={clearPrompts}
-              disabled={isLoading}
-            >
-              Clear All
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              <div>
+                <label className="text-sm font-medium">Series Description</label>
+                <p className="text-sm text-gray-600 mt-1">
+                  {TEST_SERIES.find(s => s.id === selectedSeries)?.description}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Test Results */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Star className="h-5 w-5" />
-              Test Results ({testResults.length})
-            </CardTitle>
-            <Button
-              variant="outline"
-              onClick={exportResults}
-              disabled={testResults.length === 0}
-              className="flex items-center gap-2"
-            >
-              <Download className="h-4 w-4" />
-              Export CSV
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="max-h-[600px] overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Prompt</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Quality</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {testResults.map((test) => (
-                  <TableRow key={test.id}>
-                    <TableCell className="max-w-xs">
-                      <div className="truncate" title={test.prompt}>
-                        {test.prompt}
+          <Card>
+            <CardHeader>
+              <CardTitle>Current Prompt</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Generated Prompt</label>
+                <Textarea
+                  value={currentPrompt}
+                  onChange={(e) => setCurrentPrompt(e.target.value)}
+                  placeholder="Enter or modify the prompt..."
+                  className="min-h-[100px] font-mono text-sm"
+                />
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs text-gray-500">
+                    {Math.ceil(currentPrompt.length / 3)} tokens (max 75)
+                  </span>
+                  <Badge 
+                    variant={currentPrompt.length > 225 ? 'destructive' : 'secondary'}
+                  >
+                    {currentPrompt.length > 225 ? 'Token Limit Exceeded' : 'Within Limits'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button 
+                  onClick={generateImage}
+                  disabled={isGenerating || currentPrompt.length > 225}
+                  className="flex-1"
+                >
+                  {isGenerating ? 'Generating...' : 'Generate Image'}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => navigator.clipboard.writeText(currentPrompt)}
+                >
+                  Copy Prompt
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="results" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Test Results</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {testResults.map((result) => (
+                  <div key={result.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={getTierColor(result.tier)}>
+                            {result.tier}
+                          </Badge>
+                          <Badge variant="outline">
+                            {TEST_SERIES.find(s => s.id === result.series)?.name}
+                          </Badge>
+                        </div>
+                        <p className="text-sm font-mono bg-gray-50 p-2 rounded">
+                          {result.prompt}
+                        </p>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {test.modelType}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {test.status === 'completed' ? (
-                        renderStars(test.id, test.quality)
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(test.status)}
-                      {activeTests.has(test.id) && (
-                        <RefreshCw className="h-3 w-3 ml-1 animate-spin" />
-                      )}
-                    </TableCell>
-                    <TableCell>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-xs font-medium">Overall Quality</label>
+                        <Select 
+                          value={result.overallQuality.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { overallQuality: parseInt(value) })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                              <SelectItem key={num} value={num.toString()}>
+                                <span className={getQualityColor(num)}>{num}/10</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium">Anatomical Accuracy</label>
+                        <Select 
+                          value={result.anatomicalAccuracy.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { anatomicalAccuracy: parseInt(value) })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                              <SelectItem key={num} value={num.toString()}>
+                                <span className={getQualityColor(num)}>{num}/10</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium">Content Level</label>
+                        <Select 
+                          value={result.contentLevel.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { contentLevel: parseInt(value) })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1,2,3,4,5].map(num => (
+                              <SelectItem key={num} value={num.toString()}>
+                                {num}/5
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-medium">Consistency</label>
+                        <Select 
+                          value={result.consistency.toString()} 
+                          onValueChange={(value) => updateTestResult(result.id, { consistency: parseInt(value) })}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1,2,3,4,5,6,7,8,9,10].map(num => (
+                              <SelectItem key={num} value={num.toString()}>
+                                <span className={getQualityColor(num)}>{num}/10</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-medium">Notes</label>
                       <Textarea
-                        value={test.notes}
-                        onChange={(e) => updateNotes(test.id, e.target.value)}
-                        placeholder="Add notes..."
-                        className="w-32 h-16 text-xs"
-                        disabled={test.status !== 'completed'}
+                        value={result.notes}
+                        onChange={(e) => updateTestResult(result.id, { notes: e.target.value })}
+                        placeholder="Add notes about this test result..."
+                        className="min-h-[60px] text-sm"
                       />
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-500">
-                      {test.createdAt.toLocaleString()}
-                    </TableCell>
-                  </TableRow>
+                    </div>
+
+                    {result.imageUrl && (
+                      <div>
+                        <label className="text-xs font-medium">Generated Image</label>
+                        <img 
+                          src={result.imageUrl} 
+                          alt="Generated test image"
+                          className="max-w-xs rounded border"
+                        />
+                      </div>
+                    )}
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Testing Analytics</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="font-medium mb-2">Quality by Tier</h3>
+                  <div className="space-y-2">
+                    {['artistic', 'explicit', 'unrestricted'].map(tier => {
+                      const tierResults = testResults.filter(r => r.tier === tier);
+                      const avgQuality = tierResults.length > 0 
+                        ? tierResults.reduce((sum, r) => sum + r.overallQuality, 0) / tierResults.length 
+                        : 0;
+                      return (
+                        <div key={tier} className="flex items-center justify-between">
+                          <span className="text-sm capitalize">{tier}</span>
+                          <span className={`text-sm font-medium ${getQualityColor(Math.round(avgQuality))}`}>
+                            {avgQuality.toFixed(1)}/10
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Series Progress</h3>
+                  <div className="space-y-2">
+                    {TEST_SERIES.map(series => {
+                      const seriesResults = testResults.filter(r => r.series === series.id);
+                      const completed = seriesResults.length;
+                      const total = 3; // 3 tiers per series
+                      const percentage = (completed / total) * 100;
+                      return (
+                        <div key={series.id}>
+                          <div className="flex items-center justify-between text-sm">
+                            <span>{series.name}</span>
+                            <span>{completed}/{total}</span>
+                          </div>
+                          <Progress value={percentage} className="h-2" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-2">Recent Activity</h3>
+                  <div className="space-y-2">
+                    {testResults.slice(0, 5).map(result => (
+                      <div key={result.id} className="text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge className={getTierColor(result.tier)}>
+                            {result.tier}
+                          </Badge>
+                          <span className={getQualityColor(result.overallQuality)}>
+                            {result.overallQuality}/10
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(result.generatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
-}; 
+} 
