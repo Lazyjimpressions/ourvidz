@@ -354,8 +354,11 @@ export class OptimizedAssetService {
                 if (error || !data?.signedUrl) {
                   throw new Error(`Failed to get signed URL: ${error?.message}`);
                 }
-                // Cache the URL in session storage temporarily
-                sessionStorage.setItem(`signed_url_${asset.id}`, data.signedUrl);
+          // Cache the URL with user validation
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            sessionStorage.setItem(`signed_url_${user.id}_${asset.id}`, data.signedUrl);
+          }
                 return data.signedUrl;
               }
             );
@@ -466,10 +469,12 @@ export class OptimizedAssetService {
             }
           }
 
-          // Cache the primary URL
+          // Cache the primary URL with user validation
           if (imageUrl) {
-            // Cache in session storage temporarily
-            sessionStorage.setItem(`signed_url_${asset.id}`, imageUrl);
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              sessionStorage.setItem(`signed_url_${user.id}_${asset.id}`, imageUrl);
+            }
           }
 
         } catch (error) {

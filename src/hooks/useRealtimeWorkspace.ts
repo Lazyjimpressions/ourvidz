@@ -66,20 +66,17 @@ export const useRealtimeWorkspace = () => {
           const filterIds = JSON.parse(savedFilter);
           const sessionStartTime = parseInt(sessionStart);
           
-          // Only restore if session is less than 24 hours old
-          const sessionAge = Date.now() - sessionStartTime;
-          if (sessionAge < 24 * 60 * 60 * 1000) {
-            setWorkspaceFilter(new Set(filterIds));
-            console.log('🔄 Loaded workspace filter from session for user:', user.id);
-          } else {
-            sessionStorage.removeItem(userScopedKey);
-            sessionStorage.removeItem(sessionStartKey);
-            console.log('🗑️ Cleared old session workspace data for user:', user.id);
-          }
+          // FORCE clean workspace - no persistence allowed
+          console.log('🚨 FORCING clean workspace in realtime hook - no persistence allowed');
+          sessionStorage.removeItem(userScopedKey);
+          sessionStorage.removeItem(sessionStartKey);
+          setWorkspaceFilter(new Set()); // Force empty workspace
+          
         } catch (error) {
           console.error('Failed to parse workspace filter:', error);
           sessionStorage.removeItem(userScopedKey);
           sessionStorage.removeItem(sessionStartKey);
+          setWorkspaceFilter(new Set()); // Force empty workspace
         }
       }
       

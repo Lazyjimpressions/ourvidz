@@ -89,21 +89,19 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
           const filterIds = JSON.parse(savedFilter);
           const sessionStartTime = parseInt(sessionStart);
           
-          // Only restore workspace if it's from the current session
-          const sessionAge = Date.now() - sessionStartTime;
-          if (sessionAge < 24 * 60 * 60 * 1000) { // 24 hours max
-            setWorkspaceFilter(new Set(filterIds));
-            console.log('🔄 Loaded workspace filter from session:', filterIds.length, 'items');
-          } else {
-            // Clear old session data
-            sessionStorage.removeItem('workspaceFilter');
-            sessionStorage.removeItem('workspaceSessionStart');
-            console.log('🗑️ Cleared old session workspace data');
-          }
+          // FORCE clean workspace - no persistence allowed
+          console.log('🚨 FORCING clean workspace in virtualized hook - no persistence allowed');
+          sessionStorage.removeItem('workspaceFilter');
+          sessionStorage.removeItem('workspaceSessionStart');
+          sessionStorage.removeItem('workspaceUserId');
+          setWorkspaceFilter(new Set()); // Force empty workspace
+          
         } catch (error) {
           console.error('Failed to parse workspace filter:', error);
           sessionStorage.removeItem('workspaceFilter');
           sessionStorage.removeItem('workspaceSessionStart');
+          sessionStorage.removeItem('workspaceUserId');
+          setWorkspaceFilter(new Set()); // Force empty workspace
         }
       }
       

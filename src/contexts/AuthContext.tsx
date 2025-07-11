@@ -95,39 +95,57 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsAdmin(false);
   }, []);
 
-  // Enhanced workspace cleanup for logout - clears ALL workspace data
+  // AGGRESSIVE workspace cleanup for logout - force clear ALL workspace data
   const clearWorkspaceOnLogout = useCallback(() => {
-    console.log('🔄 Clearing all workspace data for logout');
+    console.log('🚨 AGGRESSIVELY clearing ALL workspace data for logout');
+    
+    // Clear React Query cache for workspace (if available)
+    try {
+      if (typeof window !== 'undefined' && (window as any).queryClient) {
+        const queryClient = (window as any).queryClient;
+        queryClient.removeQueries({ queryKey: ['workspace'] });
+        queryClient.removeQueries({ queryKey: ['realtime-workspace'] });
+        queryClient.removeQueries({ queryKey: ['virtualized-workspace'] });
+      }
+    } catch (error) {
+      console.log('Query client not available for cleanup:', error);
+    }
     
     // Clear both localStorage and sessionStorage workspace keys
     if (typeof localStorage !== 'undefined') {
       // Clear legacy localStorage workspace keys
       localStorage.removeItem('workspaceFilter');
       
-      // Clear all user-scoped workspace keys from localStorage
+      // Clear ALL workspace and signed URL related keys
       Object.keys(localStorage).forEach((key) => {
-        if (key.startsWith('workspaceFilter_') || key.startsWith('workspaceSession')) {
+        if (key.includes('workspace') || 
+            key.includes('Workspace') ||
+            key.includes('signed_url') ||
+            key.startsWith('workspaceFilter') || 
+            key.startsWith('workspaceSession')) {
           localStorage.removeItem(key);
+          console.log('🗑️ Removed localStorage key:', key);
         }
       });
     }
     
     if (typeof sessionStorage !== 'undefined') {
-      // Clear all workspace-related session storage
+      // AGGRESSIVELY clear ALL workspace-related session storage
       Object.keys(sessionStorage).forEach((key) => {
-        if (key.startsWith('workspaceFilter') || 
+        if (key.includes('workspace') || 
+            key.includes('Workspace') ||
+            key.includes('signed_url') ||
+            key.startsWith('workspaceFilter') || 
             key.startsWith('workspaceSession') || 
             key.startsWith('workspace-') ||
             key === 'signed_urls') {
           sessionStorage.removeItem(key);
+          console.log('🗑️ Removed sessionStorage key:', key);
         }
       });
-      
-      // Set new session start timestamp
-      sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
     }
     
-    console.log('✅ All workspace data cleared for logout');
+    console.log('✅ AGGRESSIVE workspace cleanup completed for logout');
   }, []);
 
   const fetchProfile = useCallback(async (userId: string, retryCount = 0) => {
