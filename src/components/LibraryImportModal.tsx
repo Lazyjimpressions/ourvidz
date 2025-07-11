@@ -20,7 +20,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const [visibleAssets, setVisibleAssets] = useState<UnifiedAsset[]>([]);
+  
 
   // Debounce search term
   useEffect(() => {
@@ -30,7 +30,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // React Query for efficient asset fetching with caching
+  // React Query for efficient asset fetching with caching - only when modal is open
   const { data: libraryAssets = [], isLoading, error } = useQuery({
     queryKey: ['library-import-assets', debouncedSearchTerm],
     queryFn: async () => {
@@ -104,10 +104,6 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [libraryAssets, debouncedSearchTerm]);
 
-  // Update visible assets for better performance
-  useEffect(() => {
-    setVisibleAssets(filteredAssets);
-  }, [filteredAssets]);
 
   const handleAssetToggle = (assetId: string) => {
     setSelectedAssets(prev => {
@@ -122,7 +118,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   };
 
   const handleSelectAll = () => {
-    setSelectedAssets(new Set(visibleAssets.map(asset => asset.id)));
+    setSelectedAssets(new Set(filteredAssets.map(asset => asset.id)));
   };
 
   const handleClearSelection = () => {
@@ -135,7 +131,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       return;
     }
     
-    const assetsToImport = visibleAssets.filter(asset => selectedAssets.has(asset.id));
+    const assetsToImport = filteredAssets.filter(asset => selectedAssets.has(asset.id));
     
     // For SDXL images, we need to get the original asset data
     const processedAssets: UnifiedAsset[] = [];
@@ -251,7 +247,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                 onClick={handleSelectAll}
                 className="border-gray-600 text-gray-300 hover:bg-gray-800"
               >
-                Select All ({visibleAssets.length})
+                Select All ({filteredAssets.length})
               </Button>
               <Button
                 variant="outline"
@@ -266,10 +262,10 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
           
           <div className="flex items-center justify-between text-sm text-gray-400">
             <span>
-              {selectedAssets.size} of {visibleAssets.length} assets selected
+              {selectedAssets.size} of {filteredAssets.length} assets selected
             </span>
             <span>
-              {isLoading ? 'Loading...' : `${visibleAssets.length} assets found`}
+              {isLoading ? 'Loading...' : `${filteredAssets.length} assets found`}
             </span>
           </div>
         </div>
@@ -283,7 +279,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                 <p className="text-gray-400">Loading your library...</p>
               </div>
             </div>
-          ) : visibleAssets.length === 0 ? (
+          ) : filteredAssets.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Image className="w-8 h-8 text-gray-600" />
@@ -304,7 +300,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
           ) : (
             <ScrollArea className="h-full">
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
-                {visibleAssets.map((asset) => {
+                {filteredAssets.map((asset) => {
                   const displayUrl = getAssetDisplayUrl(asset);
                   const assetCount = getAssetCount(asset);
                   const isSelected = selectedAssets.has(asset.id);

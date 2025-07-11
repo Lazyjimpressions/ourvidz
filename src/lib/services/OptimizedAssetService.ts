@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { getSignedUrl, deleteFile } from '@/lib/storage';
+import { getSignedUrl, deleteFile, type StorageBucket } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
 import { sessionCache } from '@/lib/cache/SessionCache';
 import { assetMetadataCache, assetUrlCache } from '@/lib/cache/StaleWhileRevalidateCache';
@@ -347,14 +347,17 @@ export class OptimizedAssetService {
           // Use enhanced error handling with bucket fallbacks
           try {
             videoUrl = await EnhancedErrorHandling.withBucketFallback(
+              primaryBucket,
+              fallbackBuckets,
               async (bucket) => {
-                const url = await getSignedUrl(bucket as any, videoData.video_url, 3600);
-                // Cache the URL in session
-                // Cache in session storage temporarily
-                sessionStorage.setItem(`signed_url_${asset.id}`, url);
-                return url;
-              },
-              [primaryBucket, ...fallbackBuckets]
+                const { data, error } = await getSignedUrl(bucket as StorageBucket, videoData.video_url!);
+                if (error || !data?.signedUrl) {
+                  throw new Error(`Failed to get signed URL: ${error?.message}`);
+                }
+                // Cache the URL in session storage temporarily
+                sessionStorage.setItem(`signed_url_${asset.id}`, data.signedUrl);
+                return data.signedUrl;
+              }
             );
           } catch (error) {
             console.warn(`⚠️ Failed to generate video URL for ${asset.id}:`, error);
@@ -387,15 +390,14 @@ export class OptimizedAssetService {
         .from('images')
         .select(`
           image_url, image_urls, thumbnail_url, signed_url, signed_url_expires_at, 
-          metadata, quality,
-          job:jobs(id, quality, job_type, model_type, metadata)
+          metadata, quality
         `)
         .eq('id', asset.id)
         .single();
 
       if (!imageData) return asset;
 
-      const jobData = Array.isArray(imageData.job) ? imageData.job[0] : imageData.job;
+      const jobData = null; // Simplified without job data for now
       
       let imageUrl = null;
       let imageUrls: string[] = [];
@@ -429,8 +431,13 @@ export class OptimizedAssetService {
               imageData.image_urls.map(async (imagePath: string, index: number) => {
                 try {
                   return await EnhancedErrorHandling.withBucketFallback(
-                    async (bucket) => await getSignedUrl(bucket as any, imagePath, 3600),
-                    [primaryBucket, ...fallbackBuckets]
+                    primaryBucket,
+                    fallbackBuckets,
+                    async (bucket) => {
+              const { data, error } = await getSignedUrl(bucket as StorageBucket, imagePath);
+                      if (error || !data?.signedUrl) throw new Error(`Failed to get signed URL: ${error?.message}`);
+                      return data.signedUrl;
+                    }
                   );
                 } catch (error) {
                   console.warn(`⚠️ Failed to generate URL for image ${index} in ${asset.id}:`, error);
@@ -447,8 +454,13 @@ export class OptimizedAssetService {
             const imagePath = imageData.image_url;
             if (imagePath) {
               imageUrl = await EnhancedErrorHandling.withBucketFallback(
-                async (bucket) => await getSignedUrl(bucket as any, imagePath, 3600),
-                [primaryBucket, ...fallbackBuckets]
+                primaryBucket,
+                fallbackBuckets,
+                async (bucket) => {
+                  const { data, error } = await getSignedUrl(bucket as StorageBucket, imagePath);
+                  if (error || !data?.signedUrl) throw new Error(`Failed to get signed URL: ${error?.message}`);
+                  return data.signedUrl;
+                }
               );
               imageUrls = [imageUrl];
             }
@@ -524,7 +536,7 @@ export class OptimizedAssetService {
           // Delete files from storage
           await Promise.all(
             filesToDelete.map(filePath => 
-              deleteFile(bucket, filePath).catch(error => 
+              deleteFile(bucket as StorageBucket, filePath).catch(error => 
                 console.warn(`⚠️ Failed to delete file ${filePath}:`, error)
               )
             )
@@ -558,7 +570,7 @@ export class OptimizedAssetService {
 
           await Promise.all(
             filesToDelete.map(filePath => 
-              deleteFile(bucket, filePath).catch(error => 
+              deleteFile(bucket as StorageBucket, filePath).catch(error => 
                 console.warn(`⚠️ Failed to delete file ${filePath}:`, error)
               )
             )
