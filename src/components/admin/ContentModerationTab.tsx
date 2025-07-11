@@ -91,14 +91,13 @@ export const ContentModerationTab = () => {
           id,
           user_id,
           prompt,
-          file_url,
+          image_url,
           nsfw_score,
           moderation_status,
           created_at,
           reviewed_at,
           reviewed_by,
-          review_notes,
-          profiles!inner(email)
+          review_notes
         `)
         .order('created_at', { ascending: false });
 
@@ -107,12 +106,12 @@ export const ContentModerationTab = () => {
       const contentItems: ContentItem[] = (images || []).map(img => ({
         id: img.id,
         user_id: img.user_id,
-        user_email: img.profiles?.email || 'Unknown',
+        user_email: 'Unknown', // Removed profiles dependency for now
         content_type: 'image' as const,
-        file_url: img.file_url,
+        file_url: img.image_url,
         prompt: img.prompt,
         nsfw_score: img.nsfw_score || 0,
-        moderation_status: img.moderation_status || 'pending',
+        moderation_status: (img.moderation_status as 'pending' | 'approved' | 'rejected' | 'flagged') || 'pending',
         created_at: img.created_at,
         reviewed_at: img.reviewed_at,
         reviewed_by: img.reviewed_by,
@@ -165,8 +164,14 @@ export const ContentModerationTab = () => {
 
   const handleModerationAction = async (itemId: string, action: 'approve' | 'reject' | 'flag', notes?: string) => {
     try {
+      const statusMap = {
+        'approve': 'approved',
+        'reject': 'rejected', 
+        'flag': 'flagged'
+      } as const;
+      
       const updateData = {
-        moderation_status: action,
+        moderation_status: statusMap[action],
         reviewed_at: new Date().toISOString(),
         reviewed_by: 'admin', // TODO: Get current admin user
         review_notes: notes

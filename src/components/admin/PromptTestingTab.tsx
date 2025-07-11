@@ -111,7 +111,11 @@ export function PromptTestingTab() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setTestResults(data || []);
+      setTestResults((data || []).map(item => ({
+        ...item,
+        test_tier: item.test_tier as 'artistic' | 'explicit' | 'unrestricted',
+        model_type: item.model_type as 'SDXL' | 'WAN' | 'LORA'
+      })));
     } catch (error) {
       console.error('Error loading test results:', error);
       toast({
@@ -195,7 +199,7 @@ export function PromptTestingTab() {
 
       if (error) throw error;
 
-      setTestResults(prev => [data, ...prev]);
+      setTestResults(prev => [data as TestResult, ...prev]);
       toast({
         title: 'Success',
         description: 'Test result saved',
@@ -221,7 +225,7 @@ export function PromptTestingTab() {
 
       if (error) throw error;
 
-      setTestResults(prev => prev.map(r => r.id === id ? data : r));
+      setTestResults(prev => prev.map(r => r.id === id ? data as TestResult : r));
       toast({
         title: 'Success',
         description: 'Test result updated',

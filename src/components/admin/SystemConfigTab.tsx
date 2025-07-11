@@ -115,7 +115,7 @@ export const SystemConfigTab = () => {
         .single();
 
       if (data && !error) {
-        const loadedConfig = { ...config, ...data.config };
+        const loadedConfig = { ...config, ...(data.config as any) };
         setConfig(loadedConfig);
         setOriginalConfig(loadedConfig);
       } else {
@@ -135,8 +135,7 @@ export const SystemConfigTab = () => {
       const { error } = await supabase
         .from('system_config')
         .upsert({
-          id: 1,
-          config: config,
+          config: config as any,
           updated_at: new Date().toISOString()
         });
 
