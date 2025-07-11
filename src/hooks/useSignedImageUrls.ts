@@ -15,28 +15,34 @@ const useSignedImageUrls = () => {
         return path;
       }
 
-      // Determine bucket from path or use provided bucket
+      // Handle empty or invalid paths
+      if (!path || path.trim() === '') {
+        console.warn('Empty path provided to getSignedUrl');
+        return null;
+      }
+
+      // Determine bucket and clean path
       let bucketName = bucket;
-      
-      if (!bucketName) {
-        // Try to infer bucket from path
-        if (path.includes('sdxl_image_fast/')) bucketName = 'sdxl_image_fast';
-        else if (path.includes('sdxl_image_high/')) bucketName = 'sdxl_image_high';
-        else if (path.includes('image_fast/')) bucketName = 'image_fast';
-        else if (path.includes('image_high/')) bucketName = 'image_high';
-        else if (path.includes('image7b_fast_enhanced/')) bucketName = 'image7b_fast_enhanced';
-        else if (path.includes('image7b_high_enhanced/')) bucketName = 'image7b_high_enhanced';
-        else bucketName = 'sdxl_image_fast'; // default
-      }
-
-      // Clean path - remove bucket prefix if present
       let cleanPath = path;
-      if (path.includes('/')) {
+
+      // If path contains user_id prefix (e.g., "3348b481-8fb1-4745-8e6c-db6e9847e429/filename.png")
+      if (path.includes('/') && !bucketName) {
         const pathParts = path.split('/');
-        cleanPath = pathParts[pathParts.length - 1];
+        if (pathParts.length === 2) {
+          // This is a user_id/filename format, use just the filename
+          cleanPath = pathParts[1];
+        } else {
+          cleanPath = pathParts[pathParts.length - 1];
+        }
       }
 
-      console.log(`Generating signed URL for: ${cleanPath} in bucket: ${bucketName}`);
+      // Infer bucket from generation_mode and quality if not provided
+      if (!bucketName) {
+        // Default bucket inference based on common patterns
+        bucketName = 'sdxl_image_fast'; // Most common default
+      }
+
+      console.log(`🔍 Generating signed URL for path: "${path}" -> cleanPath: "${cleanPath}" in bucket: "${bucketName}"`);
 
       // Try multiple buckets in order of preference
       const bucketsToTry = [
@@ -44,7 +50,9 @@ const useSignedImageUrls = () => {
         'sdxl_image_fast',
         'sdxl_image_high', 
         'image_fast',
-        'image_high'
+        'image_high',
+        'image7b_fast_enhanced',
+        'image7b_high_enhanced'
       ].filter((b, i, arr) => arr.indexOf(b) === i); // Remove duplicates
 
       for (const tryBucket of bucketsToTry) {
@@ -54,20 +62,20 @@ const useSignedImageUrls = () => {
             .createSignedUrl(cleanPath, 3600); // 1 hour expiry
 
           if (!error && data?.signedUrl) {
-            console.log(`✅ Success with bucket: ${tryBucket}`);
+            console.log(`✅ Success: Generated signed URL for "${cleanPath}" in bucket "${tryBucket}"`);
             return data.signedUrl;
           }
           
           if (error) {
-            console.log(`❌ Failed with bucket ${tryBucket}:`, error.message);
+            console.log(`❌ Failed bucket "${tryBucket}": ${error.message}`);
           }
         } catch (bucketError) {
-          console.log(`❌ Error with bucket ${tryBucket}:`, bucketError);
+          console.log(`❌ Error with bucket "${tryBucket}":`, bucketError);
         }
       }
 
-      console.error('All buckets failed for path:', cleanPath);
-      setError('Failed to generate signed URL from any bucket');
+      console.error(`❌ All buckets failed for path: "${cleanPath}"`);
+      setError(`Failed to generate signed URL for ${cleanPath}`);
       return null;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
