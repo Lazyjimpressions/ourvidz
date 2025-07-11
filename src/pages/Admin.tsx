@@ -9,12 +9,103 @@ import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 import { SystemConfigTab } from "@/components/admin/SystemConfigTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Users, Shield, Flag, BarChart3, Settings, Database, Activity } from "lucide-react";
+
+interface ActivityLog {
+  id: string;
+  action: string;
+  created_at: string;
+  user_id: string | null;
+  resource_type: string | null;
+  resource_id: string | null;
+  metadata: any;
+}
 
 /**
  * Admin dashboard page with system monitoring and management tools
  * Protected by AdminRoute component to ensure only admin users can access
  */
 const Admin = () => {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false);
+
+  useEffect(() => {
+    loadRecentActivity();
+  }, []);
+
+  const loadRecentActivity = async () => {
+    setIsLoadingActivity(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setRecentActivity(data || []);
+    } catch (error) {
+      console.error('Error loading recent activity:', error);
+    } finally {
+      setIsLoadingActivity(false);
+    }
+  };
+
+  const handleQuickAction = (action: string) => {
+    switch (action) {
+      case 'users':
+        setActiveTab('users');
+        break;
+      case 'moderation':
+        setActiveTab('moderation');
+        break;
+      case 'analytics':
+        setActiveTab('analytics');
+        break;
+      case 'config':
+        setActiveTab('config');
+        break;
+      case 'database':
+        setActiveTab('database');
+        break;
+      case 'jobs':
+        setActiveTab('jobs');
+        break;
+    }
+  };
+
+  const formatActivityTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getActivityIcon = (action: string) => {
+    switch (action.toLowerCase()) {
+      case 'login':
+        return <Users className="h-4 w-4" />;
+      case 'generate':
+        return <Activity className="h-4 w-4" />;
+      case 'upload':
+        return <Database className="h-4 w-4" />;
+      default:
+        return <Activity className="h-4 w-4" />;
+    }
+  };
+
   return (
     <AdminRoute>
       <div className="min-h-screen bg-gray-50 p-6">
@@ -26,8 +117,8 @@ const Admin = () => {
             </p>
           </div>
 
-          <Tabs defaultValue="overview" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-8">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
@@ -39,8 +130,8 @@ const Admin = () => {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Card>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <Card className="lg:col-span-2">
                   <CardHeader>
                     <CardTitle>System Status</CardTitle>
                     <CardDescription>
@@ -60,42 +151,104 @@ const Admin = () => {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-600">
-                        • Monitor system health
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        • Manage user accounts
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        • Review content moderation
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        • Analyze system performance
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        • Configure system settings
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Activity</CardTitle>
-                    <CardDescription>
-                      Latest system events and changes
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <p className="text-sm text-gray-600">
-                        No recent activity to display
-                      </p>
+                    <div className="space-y-3">
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('users')}
+                      >
+                        <Users className="h-4 w-4 mr-2" />
+                        Manage Users
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('moderation')}
+                      >
+                        <Flag className="h-4 w-4 mr-2" />
+                        Content Moderation
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('analytics')}
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        View Analytics
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('database')}
+                      >
+                        <Database className="h-4 w-4 mr-2" />
+                        Database Management
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('jobs')}
+                      >
+                        <Activity className="h-4 w-4 mr-2" />
+                        Job Queue
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => handleQuickAction('config')}
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        System Config
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
               </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                  <CardDescription>
+                    Latest system events and user actions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {isLoadingActivity ? (
+                    <div className="text-center py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto"></div>
+                      <p className="text-sm text-gray-500 mt-2">Loading activity...</p>
+                    </div>
+                  ) : recentActivity.length > 0 ? (
+                    <div className="space-y-3">
+                      {recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="text-gray-500">
+                            {getActivityIcon(activity.action)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">
+                              {activity.action.charAt(0).toUpperCase() + activity.action.slice(1)}
+                            </p>
+                            {activity.resource_type && (
+                              <p className="text-xs text-gray-500">
+                                {activity.resource_type}: {activity.resource_id}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {formatActivityTime(activity.created_at)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Activity className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No recent activity to display</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="analytics" className="space-y-6">
