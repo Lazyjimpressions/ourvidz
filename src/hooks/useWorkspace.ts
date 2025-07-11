@@ -41,48 +41,39 @@ export const useWorkspace = () => {
     queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
   }, [workspaceFilter, queryClient]);
 
-  // Load workspace filter from sessionStorage with user validation
+  // FORCE empty workspace on every mount - no persistence allowed
   useEffect(() => {
-    const initializeWorkspace = async () => {
+    const forceCleanWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('🚫 No user found, skipping workspace initialization');
-        return;
-      }
-
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      const sessionStartKey = `workspaceSessionStart_${user.id}`;
       
-      const savedFilter = sessionStorage.getItem(userScopedKey);
-      const sessionStart = sessionStorage.getItem(sessionStartKey);
+      console.log('🚨 FORCING completely clean workspace - NO PERSISTENCE');
       
-      if (savedFilter && sessionStart) {
-        try {
-          const filterIds = JSON.parse(savedFilter);
-          const sessionStartTime = parseInt(sessionStart);
-          
-          // FORCE clean workspace on sign-in - no persistence
-          console.log('🚨 FORCING clean workspace on sign-in - no persistence allowed');
-          sessionStorage.removeItem(userScopedKey);
-          sessionStorage.removeItem(sessionStartKey);
-          setWorkspaceFilter(new Set()); // Force empty workspace
-          
-        } catch (error) {
-          console.error('Failed to parse workspace filter:', error);
-          sessionStorage.removeItem(userScopedKey);
-          sessionStorage.removeItem(sessionStartKey);
-          setWorkspaceFilter(new Set()); // Force empty workspace
-        }
+      // Clear ALL workspace storage immediately
+      if (typeof sessionStorage !== 'undefined') {
+        Object.keys(sessionStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            sessionStorage.removeItem(key);
+          }
+        });
       }
       
-      // Initialize session start if not present
-      if (!sessionStart) {
-        sessionStorage.setItem(sessionStartKey, Date.now().toString());
-        console.log('🆕 Started new workspace session for user:', user.id);
+      if (typeof localStorage !== 'undefined') {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+      
+      // Force empty workspace filter
+      setWorkspaceFilter(new Set());
+      
+      if (user) {
+        console.log('✅ Forced clean workspace for user:', user.id);
       }
     };
     
-    initializeWorkspace();
+    forceCleanWorkspace();
   }, []);
 
   // Save workspace filter to sessionStorage with user scoping

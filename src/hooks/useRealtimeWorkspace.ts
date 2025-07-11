@@ -49,64 +49,40 @@ export const useRealtimeWorkspace = () => {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Load workspace filter from sessionStorage with user validation
+  // FORCE empty workspace on every mount - no persistence allowed
   useEffect(() => {
-    const initializeWorkspace = async () => {
+    const forceCleanWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      const sessionStartKey = `workspaceSessionStart_${user.id}`;
       
-      const savedFilter = sessionStorage.getItem(userScopedKey);
-      const sessionStart = sessionStorage.getItem(sessionStartKey);
+      console.log('🚨 REALTIME: FORCING completely clean workspace - NO PERSISTENCE');
       
-      if (savedFilter && sessionStart) {
-        try {
-          const filterIds = JSON.parse(savedFilter);
-          const sessionStartTime = parseInt(sessionStart);
-          
-          // FORCE clean workspace - no persistence allowed
-          console.log('🚨 FORCING clean workspace in realtime hook - no persistence allowed');
-          sessionStorage.removeItem(userScopedKey);
-          sessionStorage.removeItem(sessionStartKey);
-          setWorkspaceFilter(new Set()); // Force empty workspace
-          
-        } catch (error) {
-          console.error('Failed to parse workspace filter:', error);
-          sessionStorage.removeItem(userScopedKey);
-          sessionStorage.removeItem(sessionStartKey);
-          setWorkspaceFilter(new Set()); // Force empty workspace
-        }
+      // Clear ALL workspace storage immediately
+      if (typeof sessionStorage !== 'undefined') {
+        Object.keys(sessionStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            sessionStorage.removeItem(key);
+          }
+        });
       }
       
-      if (!sessionStart) {
-        sessionStorage.setItem(sessionStartKey, Date.now().toString());
-        console.log('🆕 Started new workspace session for user:', user.id);
+      if (typeof localStorage !== 'undefined') {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+      
+      // Force empty workspace filter
+      setWorkspaceFilter(new Set());
+      
+      if (user) {
+        console.log('✅ REALTIME: Forced clean workspace for user:', user.id);
       }
     };
     
-    initializeWorkspace();
+    forceCleanWorkspace();
   }, []);
-
-  // Save workspace filter to sessionStorage with user scoping
-  useEffect(() => {
-    const saveWorkspace = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      const filterArray = Array.from(workspaceFilter);
-      
-      if (filterArray.length > 0) {
-        sessionStorage.setItem(userScopedKey, JSON.stringify(filterArray));
-      } else {
-        sessionStorage.removeItem(userScopedKey);
-      }
-    };
-    
-    saveWorkspace();
-  }, [workspaceFilter]);
 
   // Enhanced realtime subscription with job status tracking
   useEffect(() => {

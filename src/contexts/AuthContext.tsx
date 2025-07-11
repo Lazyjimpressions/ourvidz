@@ -377,7 +377,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       console.log('Signing out...');
       
-      // Clear workspace on logout
+      // Clear workspace BEFORE auth cleanup
       clearWorkspaceOnLogout();
       
       // Clean up auth state

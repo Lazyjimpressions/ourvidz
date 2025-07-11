@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { X, Info } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
 import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
+import { useEmergencyWorkspaceReset } from '@/hooks/useEmergencyWorkspaceReset';
 import { OptimizedAssetService, UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 
 interface WorkspaceAsset {
@@ -81,6 +82,9 @@ const Workspace = () => {
 
   // Use workspace integration hook
   useWorkspaceIntegration();
+
+  // Emergency workspace reset - forces clean workspace
+  useEmergencyWorkspaceReset();
 
   // Listen for generation completion events and add new assets to workspace immediately
   useEffect(() => {
@@ -203,42 +207,26 @@ const Workspace = () => {
     };
   }, [user]);
 
-  // Load workspace from sessionStorage with proper session management
+  // FORCE empty workspace on every load - no persistence allowed
   useEffect(() => {
-    const sessionStart = sessionStorage.getItem('workspace-session');
-    const sessionUserId = sessionStorage.getItem('workspace-user');
-    const currentUserId = user?.id;
+    console.log('🚨 FORCING empty workspace on page load - no persistence allowed');
     
-    // Check if this is a new session or different user
-    if (!sessionStart || sessionUserId !== currentUserId) {
-      // Clear old workspace data and start fresh
-      sessionStorage.removeItem('workspace');
-      sessionStorage.removeItem('workspace-session');
-      sessionStorage.removeItem('workspace-user');
-      
-      // Set new session data
-      if (currentUserId) {
-        sessionStorage.setItem('workspace-session', Date.now().toString());
-        sessionStorage.setItem('workspace-user', currentUserId);
-        console.log('🆕 Started new workspace session for user:', currentUserId);
-      }
-      
-      setWorkspaceAssets([]);
-      return;
-    }
+    // Clear all workspace storage immediately
+    sessionStorage.removeItem('workspace');
+    sessionStorage.removeItem('workspace-session');
+    sessionStorage.removeItem('workspace-user');
+    localStorage.removeItem('workspace');
+    localStorage.removeItem('workspace-session');
+    localStorage.removeItem('workspace-user');
     
-    // Load existing workspace from current session
-    const stored = sessionStorage.getItem('workspace');
-    if (stored) {
-      try {
-        const loadedWorkspace = JSON.parse(stored);
-        setWorkspaceAssets(loadedWorkspace);
-        console.log('🔄 Loaded workspace from current session:', loadedWorkspace.length, 'assets');
-      } catch (error) {
-        console.error('Error parsing workspace data:', error);
-        sessionStorage.removeItem('workspace');
-        setWorkspaceAssets([]);
-      }
+    // Force empty workspace
+    setWorkspaceAssets([]);
+    
+    // Set new clean session
+    if (user?.id) {
+      sessionStorage.setItem('workspace-session', Date.now().toString());
+      sessionStorage.setItem('workspace-user', user.id);
+      console.log('✅ Started fresh clean workspace session for user:', user.id);
     }
   }, [user]);
 
@@ -275,50 +263,10 @@ const Workspace = () => {
     refetchOnWindowFocus: false,
   });
 
-  // Auto-add new assets to workspace (only recent ones not already in workspace)
+  // DISABLED: Auto-add functionality to ensure clean workspace
   useEffect(() => {
-    if (!recentAssets.length || !user) return;
-
-    const workspaceJobIds = new Set(workspaceAssets.map(asset => asset.jobId));
-    const newAssets: WorkspaceAsset[] = [];
-
-    recentAssets.forEach(asset => {
-      // Skip if this job is already in workspace
-      if (workspaceJobIds.has(asset.id)) return;
-
-      if (asset.type === 'image' && asset.signedUrls && asset.signedUrls.length > 0) {
-        // SDXL job with multiple images - add each individually
-        asset.signedUrls.forEach((url, index) => {
-          newAssets.push({
-            id: `${asset.id}_${index}`,
-            url,
-            jobId: asset.id,
-            prompt: `${asset.prompt} (Image ${index + 1})`,
-            type: 'image',
-            quality: asset.quality,
-            modelType: asset.modelType,
-            timestamp: asset.createdAt
-          });
-        });
-      } else if (asset.url) {
-        // Single image or video
-        newAssets.push({
-          id: asset.id,
-          url: asset.url,
-          jobId: asset.id,
-          prompt: asset.prompt,
-          type: asset.type,
-          quality: asset.quality,
-          modelType: asset.modelType,
-          timestamp: asset.createdAt
-        });
-      }
-    });
-
-    if (newAssets.length > 0) {
-      setWorkspaceAssets(prev => [...newAssets, ...prev]);
-      console.log('🔄 Auto-added', newAssets.length, 'new assets to workspace');
-    }
+    console.log('🚫 Auto-add functionality DISABLED for clean workspace experience');
+    // Auto-add is completely disabled to ensure clean workspace on sign-in
   }, [recentAssets, workspaceAssets, user]);
 
   // Listen for library assets being added to workspace

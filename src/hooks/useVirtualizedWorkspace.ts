@@ -63,60 +63,39 @@ export const useVirtualizedWorkspace = (options: VirtualizedWorkspaceOptions = {
     refetchOnWindowFocus: false,
   });
 
-  // Load workspace filter from sessionStorage (session-based workspace)
+  // FORCE empty workspace on every mount - no persistence allowed
   useEffect(() => {
-    const initializeWorkspace = async () => {
+    const forceCleanWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const savedFilter = sessionStorage.getItem('workspaceFilter');
-      const sessionStart = sessionStorage.getItem('workspaceSessionStart');
-      const sessionUserId = sessionStorage.getItem('workspaceUserId');
       
-      // Check if workspace belongs to current user
-      if (sessionUserId && sessionUserId !== user.id) {
-        console.log('🔄 Different user detected, clearing workspace');
-        sessionStorage.removeItem('workspaceFilter');
-        sessionStorage.removeItem('workspaceSessionStart');
-        sessionStorage.removeItem('workspaceUserId');
-        sessionStorage.setItem('workspaceUserId', user.id);
-        sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
-        return;
+      console.log('🚨 VIRTUALIZED: FORCING completely clean workspace - NO PERSISTENCE');
+      
+      // Clear ALL workspace storage immediately
+      if (typeof sessionStorage !== 'undefined') {
+        Object.keys(sessionStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            sessionStorage.removeItem(key);
+          }
+        });
       }
       
-      if (savedFilter && sessionStart) {
-        try {
-          const filterIds = JSON.parse(savedFilter);
-          const sessionStartTime = parseInt(sessionStart);
-          
-          // FORCE clean workspace - no persistence allowed
-          console.log('🚨 FORCING clean workspace in virtualized hook - no persistence allowed');
-          sessionStorage.removeItem('workspaceFilter');
-          sessionStorage.removeItem('workspaceSessionStart');
-          sessionStorage.removeItem('workspaceUserId');
-          setWorkspaceFilter(new Set()); // Force empty workspace
-          
-        } catch (error) {
-          console.error('Failed to parse workspace filter:', error);
-          sessionStorage.removeItem('workspaceFilter');
-          sessionStorage.removeItem('workspaceSessionStart');
-          sessionStorage.removeItem('workspaceUserId');
-          setWorkspaceFilter(new Set()); // Force empty workspace
-        }
+      if (typeof localStorage !== 'undefined') {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.includes('workspace') || key.includes('Workspace')) {
+            localStorage.removeItem(key);
+          }
+        });
       }
       
-      // Initialize session data if not present
-      if (!sessionStart) {
-        sessionStorage.setItem('workspaceSessionStart', Date.now().toString());
-        console.log('🆕 Started new workspace session');
-      }
-      if (!sessionUserId) {
-        sessionStorage.setItem('workspaceUserId', user.id);
-        console.log('🆕 Set workspace user ID:', user.id);
+      // Force empty workspace filter
+      setWorkspaceFilter(new Set());
+      
+      if (user) {
+        console.log('✅ VIRTUALIZED: Forced clean workspace for user:', user.id);
       }
     };
     
-    initializeWorkspace();
+    forceCleanWorkspace();
   }, []);
 
   // Save workspace filter to sessionStorage (session-based workspace)
