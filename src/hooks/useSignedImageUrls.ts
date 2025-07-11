@@ -10,6 +10,11 @@ const useSignedImageUrls = () => {
       setLoading(true);
       setError(null);
 
+      // If path is already a full URL, return it directly
+      if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
+      }
+
       // Determine bucket from path or use provided bucket
       let bucketName = bucket;
       
@@ -33,23 +38,37 @@ const useSignedImageUrls = () => {
 
       console.log(`Generating signed URL for: ${cleanPath} in bucket: ${bucketName}`);
 
-      const { data, error } = await supabase.storage
-        .from(bucketName)
-        .createSignedUrl(cleanPath, 3600); // 1 hour expiry
+      // Try multiple buckets in order of preference
+      const bucketsToTry = [
+        bucketName,
+        'sdxl_image_fast',
+        'sdxl_image_high', 
+        'image_fast',
+        'image_high'
+      ].filter((b, i, arr) => arr.indexOf(b) === i); // Remove duplicates
 
-      if (error) {
-        console.error('Error generating signed URL:', error);
-        setError(error.message);
-        return null;
+      for (const tryBucket of bucketsToTry) {
+        try {
+          const { data, error } = await supabase.storage
+            .from(tryBucket)
+            .createSignedUrl(cleanPath, 3600); // 1 hour expiry
+
+          if (!error && data?.signedUrl) {
+            console.log(`✅ Success with bucket: ${tryBucket}`);
+            return data.signedUrl;
+          }
+          
+          if (error) {
+            console.log(`❌ Failed with bucket ${tryBucket}:`, error.message);
+          }
+        } catch (bucketError) {
+          console.log(`❌ Error with bucket ${tryBucket}:`, bucketError);
+        }
       }
 
-      if (!data?.signedUrl) {
-        console.error('No signed URL returned');
-        setError('No signed URL returned');
-        return null;
-      }
-
-      return data.signedUrl;
+      console.error('All buckets failed for path:', cleanPath);
+      setError('Failed to generate signed URL from any bucket');
+      return null;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Error in getSignedUrl:', errorMessage);

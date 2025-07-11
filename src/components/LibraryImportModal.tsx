@@ -43,12 +43,14 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       
       const result = await OptimizedAssetService.getUserAssets(
         filters,
-        { limit: 100, offset: 0 } // Reduced limit for better performance
+        { limit: 50, offset: 0 } // Reduced for faster loading
       );
       
       console.log('📚 Library assets fetched:', {
         count: result.assets.length,
         hasUrls: result.assets.filter(a => a.url || (a.signedUrls && a.signedUrls.length > 0)).length,
+        withSignedUrls: result.assets.filter(a => a.signedUrls && a.signedUrls.length > 0).length,
+        withDirectUrls: result.assets.filter(a => a.url).length,
         types: result.assets.reduce((acc, a) => { 
           acc[a.type] = (acc[a.type] || 0) + 1; 
           return acc; 
@@ -172,17 +174,24 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   };
 
   const getAssetDisplayUrl = (asset: UnifiedAsset): string | null => {
-    // For SDXL images, use the individual image URL
+    // For SDXL images, use the individual image URL first
     if (asset.isSDXLImage && asset.url) {
       return asset.url;
     }
     
-    // For regular assets, use signedUrls first, then url, then thumbnailUrl
+    // Priority order: existing signed URLs > direct URL > thumbnail URL
+    // Use existing signed URLs first (they're pre-generated and cached)
     if (asset.signedUrls && asset.signedUrls.length > 0) {
       return asset.signedUrls[0];
     }
     
-    return asset.url || asset.thumbnailUrl || null;
+    // Fallback to direct URL if available
+    if (asset.url) {
+      return asset.url;
+    }
+    
+    // Last resort: thumbnail URL
+    return asset.thumbnailUrl || null;
   };
 
   const getAssetCount = (asset: UnifiedAsset): number => {
@@ -327,7 +336,9 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 console.log('❌ Image failed to load:', displayUrl, 'Asset ID:', asset.id);
-                                e.currentTarget.style.display = 'none';
+                                // Show placeholder instead of hiding
+                                e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik03NSA3NUgxMjVWMTI1SDc1Vjc1WiIgZmlsbD0iIzZCNzI4MCIvPgo8L3N2Zz4K';
+                                e.currentTarget.className = "w-full h-full object-cover opacity-50";
                               }}
                             />
                             
@@ -344,7 +355,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                           <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                             <div className="text-center text-gray-400">
                               <Image className="w-8 h-8 mx-auto mb-2" />
-                              <p className="text-xs">No preview</p>
+                              <p className="text-xs">Image unavailable</p>
                             </div>
                           </div>
                         )
