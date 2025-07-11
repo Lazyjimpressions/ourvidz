@@ -3,6 +3,10 @@ import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
 import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { HealthCheckJobCleaner } from "@/components/admin/HealthCheckJobCleaner";
 import { PromptTestingTab } from "@/components/admin/PromptTestingTab";
+import { UserManagementTab } from "@/components/admin/UserManagementTab";
+import { ContentModerationTab } from "@/components/admin/ContentModerationTab";
+import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
+import { SystemConfigTab } from "@/components/admin/SystemConfigTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -22,13 +26,16 @@ const Admin = () => {
             </p>
           </div>
 
-          <Tabs defaultValue="prompt-testing" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="prompt-testing">Prompt Testing</TabsTrigger>
+          <Tabs defaultValue="overview" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-8">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="health">System Health</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              <TabsTrigger value="users">Users</TabsTrigger>
+              <TabsTrigger value="moderation">Moderation</TabsTrigger>
+              <TabsTrigger value="prompt-testing">Prompt Testing</TabsTrigger>
               <TabsTrigger value="database">Database</TabsTrigger>
-              <TabsTrigger value="jobs">Job Management</TabsTrigger>
+              <TabsTrigger value="jobs">Jobs</TabsTrigger>
+              <TabsTrigger value="config">Config</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
@@ -58,10 +65,16 @@ const Admin = () => {
                         • Monitor system health
                       </p>
                       <p className="text-sm text-gray-600">
-                        • Manage database records
+                        • Manage user accounts
                       </p>
                       <p className="text-sm text-gray-600">
-                        • Clean up job queues
+                        • Review content moderation
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        • Analyze system performance
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        • Configure system settings
                       </p>
                     </div>
                   </CardContent>
@@ -85,6 +98,48 @@ const Admin = () => {
               </div>
             </TabsContent>
 
+            <TabsContent value="analytics" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Analytics Dashboard</CardTitle>
+                  <CardDescription>
+                    System performance metrics, user engagement, and business insights
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AnalyticsTab />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="users" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Management</CardTitle>
+                  <CardDescription>
+                    Manage user accounts, view usage statistics, and perform administrative actions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <UserManagementTab />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="moderation" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Content Moderation</CardTitle>
+                  <CardDescription>
+                    Review and manage user-generated content, NSFW detection, and moderation workflows
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ContentModerationTab />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
             <TabsContent value="prompt-testing" className="space-y-6">
               <Card>
                 <CardHeader>
@@ -95,20 +150,6 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <PromptTestingTab />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="health" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Health Monitor</CardTitle>
-                  <CardDescription>
-                    Real-time monitoring of system components and services
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <SystemHealthMonitor />
                 </CardContent>
               </Card>
             </TabsContent>
@@ -137,6 +178,20 @@ const Admin = () => {
                 </CardHeader>
                 <CardContent>
                   <HealthCheckJobCleaner />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="config" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>System Configuration</CardTitle>
+                  <CardDescription>
+                    Manage application settings, model configurations, rate limits, and system parameters
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SystemConfigTab />
                 </CardContent>
               </Card>
             </TabsContent>
