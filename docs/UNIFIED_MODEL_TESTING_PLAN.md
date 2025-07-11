@@ -112,6 +112,11 @@ Consistency (1-10):
   - Predictable results
 ```
 
+#### SDXL Test Series Documentation
+- **Consolidated Series**: `docs/SDXL_TEST_SERIES_CONSOLIDATED.md`
+- **Direct Prompts**: `docs/SDXL_DIRECT_PROMPTS.md`
+- **Series 2**: `docs/SDXL_TEST_SERIES_2.md` and `docs/SDXL_TEST_SERIES_2_PROMPTS.md`
+
 ### 2. WAN 2.1 Testing
 
 #### Test Series Structure
@@ -159,6 +164,11 @@ Consistency (1-10):
   - Stable motion quality
   - Predictable motion results
 ```
+
+#### WAN Test Series Documentation
+- **Consolidated Series**: `docs/WAN_TEST_SERIES_CONSOLIDATED.md`
+- **Direct Prompts**: `docs/WAN_DIRECT_PROMPTS.md`
+- **Series 2**: `docs/WAN_TEST_SERIES_2.md` and `docs/WAN_TEST_SERIES_2_PROMPTS.md`
 
 ### 3. LoRA Model Testing (Future)
 
@@ -292,16 +302,16 @@ LoRA Baselines (Future):
 ## Implementation Timeline
 
 ### Phase 1: SDXL Testing (Week 1-2)
-- [ ] Database migration deployment
-- [ ] SDXL testing UI implementation
-- [ ] 4-series testing completion
-- [ ] Baseline establishment
+- [x] Database migration deployment
+- [x] SDXL testing UI implementation
+- [x] 4-series testing completion
+- [x] Baseline establishment
 
 ### Phase 2: WAN Testing (Week 3-4)
-- [ ] WAN testing UI enhancement
-- [ ] Motion quality assessment
-- [ ] Enhanced model testing
-- [ ] Video quality baselines
+- [x] WAN testing UI enhancement
+- [x] Motion quality assessment
+- [x] Enhanced model testing
+- [x] Video quality baselines
 
 ### Phase 3: LoRA Integration (Future)
 - [ ] LoRA testing framework
