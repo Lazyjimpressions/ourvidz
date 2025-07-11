@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,6 +170,19 @@ export function PromptTestingTab() {
   const [batchTotal, setBatchTotal] = useState(0);
   const { toast } = useToast();
 
+  // Accurate token estimation using tiktoken
+  const estimateTokens = useCallback((text: string) => {
+    try {
+      // Use tiktoken for accurate token counting
+      const { encode } = require('@dqbd/tiktoken/encoders/cl100k_base');
+      return encode(text).length;
+    } catch (error) {
+      console.warn('Tiktoken unavailable, using fallback estimation:', error);
+      // Fallback: More accurate estimation based on GPT tokenization patterns
+      return Math.ceil(text.length / 3.5); // Average 3.5 chars per token for English
+    }
+  }, []);
+
   // Get current test series based on selected model
   const getCurrentTestSeries = () => {
     return selectedModel === 'SDXL' ? SDXL_TEST_SERIES : WAN_TEST_SERIES;
@@ -178,6 +191,29 @@ export function PromptTestingTab() {
   // Load test results on component mount
   useEffect(() => {
     loadTestResults();
+  }, []);
+
+  // Add realtime subscription for test results
+  useEffect(() => {
+    const channel = supabase
+      .channel('model-test-results-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'model_test_results'
+        },
+        (payload) => {
+          console.log('Real-time test result update:', payload);
+          loadTestResults(); // Refresh results on any change
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Update current prompt when series or tier changes
@@ -243,21 +279,50 @@ export function PromptTestingTab() {
     }
   };
 
-  const saveTestResult = async (result: Omit<TestResult, 'id'>) => {
+  const saveTestResult = async (
+    jobId: string,
+    prompt: string,
+    modelType: string,
+    series: string,
+    tier: string
+  ) => {
     try {
-      const { data, error } = await supabase
+      console.log('Saving test result:', { jobId, prompt, modelType, series, tier });
+      
+      const { error } = await supabase
         .from('model_test_results')
-        .insert([result])
-        .select()
-        .single();
+        .insert({
+          job_id: jobId,
+          prompt_text: prompt,
+          model_type: modelType,
+          test_series: series,
+          test_tier: tier,
+          success: true, // Will be updated by job callback
+          test_metadata: {
+            prompt_length: prompt.length,
+            token_count: estimateTokens(prompt),
+            created_from: 'admin_prompt_testing',
+            timestamp: new Date().toISOString(),
+            job_status: 'queued',
+            generation_initiated: true
+          }
+        });
 
-      if (error) throw error;
-
-      setTestResults(prev => [data as TestResult, ...prev]);
-      toast({
-        title: 'Success',
-        description: 'Test result saved',
-      });
+      if (error) {
+        console.error('Error saving test result:', error);
+        toast({
+          title: 'Error',
+          description: `Failed to save test result: ${error.message}`,
+          variant: 'destructive'
+        });
+      } else {
+        console.log('Test result saved successfully');
+        toast({
+          title: 'Success',
+          description: 'Test generation started - result will update when complete',
+        });
+        loadTestResults();
+      }
     } catch (error) {
       console.error('Error saving test result:', error);
       toast({
@@ -281,30 +346,32 @@ export function PromptTestingTab() {
     setIsGenerating(true);
     try {
       const jobType = selectedModel === 'SDXL' ? 'sdxl_image_fast' : 'video_fast';
+      
+      // Generate a unique job ID for test tracking
+      const testJobId = crypto.randomUUID();
+      
       const result = await generateContent(currentPrompt, jobType, {
-        enhancement_tier: selectedTier,
+        prompt: currentPrompt,
         test_series: selectedSeries,
         test_tier: selectedTier,
+        created_from: 'admin_prompt_testing',
+        prompt_test_metadata: {
+          model_type: selectedModel,
+          test_category: 'prompt_testing',
+          generation_source: 'admin_panel'
+        },
+        prompt_test_id: testJobId,
         queue: selectedModel === 'SDXL' ? 'sdxl_queue' : 'wan_queue'
       });
 
-      // Auto-save test result
-      await saveTestResult({
-        prompt_text: currentPrompt,
-        test_tier: selectedTier,
-        test_series: selectedSeries,
-        model_type: selectedModel,
-        overall_quality: 0,
-        technical_quality: 0,
-        content_quality: 0,
-        consistency: 0,
-        notes: '',
-        created_at: new Date().toISOString(),
-        image_url: result.image_url,
-        video_url: result.video_url,
-        job_id: result.job_id,
-        success: true
-      });
+      // Save test result with job tracking
+      await saveTestResult(
+        result.job?.id || testJobId,
+        currentPrompt,
+        selectedModel,
+        selectedSeries,
+        selectedTier
+      );
 
       toast({
         title: 'Success',
@@ -350,31 +417,32 @@ export function PromptTestingTab() {
           const prompt = series.prompts[tier];
           
           for (let i = 0; i < batchConfig.variations_per_prompt; i++) {
-            try {
-              const result = await generateContent(prompt, jobType, {
-                enhancement_tier: tier,
-                test_series: seriesId,
-                test_tier: tier,
-                queue: batchConfig.model_type === 'SDXL' ? 'sdxl_queue' : 'wan_queue',
-                batch_variation: i + 1
-              });
+              try {
+                const testJobId = crypto.randomUUID();
+                
+                const result = await generateContent(prompt, jobType, {
+                  prompt: prompt,
+                  test_series: seriesId,
+                  test_tier: tier,
+                  created_from: 'admin_prompt_testing',
+                  prompt_test_metadata: {
+                    model_type: batchConfig.model_type,
+                    test_category: 'batch_testing',
+                    generation_source: 'admin_panel',
+                    batch_variation: i + 1
+                  },
+                  prompt_test_id: testJobId,
+                  queue: batchConfig.model_type === 'SDXL' ? 'sdxl_queue' : 'wan_queue',
+                  batch_variation: i + 1
+                });
 
-              await saveTestResult({
-                prompt_text: prompt,
-                test_tier: tier,
-                test_series: seriesId,
-                model_type: batchConfig.model_type,
-                overall_quality: 0,
-                technical_quality: 0,
-                content_quality: 0,
-                consistency: 0,
-                notes: `Batch test variation ${i + 1}`,
-                created_at: new Date().toISOString(),
-                image_url: result.image_url,
-                video_url: result.video_url,
-                job_id: result.job_id,
-                success: true
-              });
+                await saveTestResult(
+                  result.job?.id || testJobId,
+                  prompt,
+                  batchConfig.model_type,
+                  seriesId,
+                  tier
+                );
 
               completedTests++;
               setBatchProgress(completedTests);
@@ -557,24 +625,24 @@ export function PromptTestingTab() {
                   placeholder="Enter or modify the prompt..."
                   className="min-h-[100px] font-mono text-sm"
                 />
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-gray-500">
-                    {Math.ceil(currentPrompt.length / 4)} tokens (max {selectedModel === 'SDXL' ? '75' : '100'})
-                  </span>
-                  <Badge 
-                    variant={currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400) ? 'destructive' : 'secondary'}
-                  >
-                    {currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400) ? 'Token Limit Exceeded' : 'Within Limits'}
-                  </Badge>
-                </div>
+                 <div className="flex items-center justify-between mt-2">
+                   <span className="text-xs text-gray-500">
+                     {estimateTokens(currentPrompt)} tokens (max {selectedModel === 'SDXL' ? '150' : '200'})
+                   </span>
+                   <Badge 
+                     variant={estimateTokens(currentPrompt) > (selectedModel === 'SDXL' ? 150 : 200) ? 'destructive' : 'secondary'}
+                   >
+                     {estimateTokens(currentPrompt) > (selectedModel === 'SDXL' ? 150 : 200) ? 'Token Limit Exceeded' : 'Within Limits'}
+                   </Badge>
+                 </div>
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  onClick={generateSingle}
-                  disabled={isGenerating || currentPrompt.length > (selectedModel === 'SDXL' ? 300 : 400)}
-                  className="flex-1"
-                >
+                 <Button 
+                   onClick={generateSingle}
+                   disabled={isGenerating || estimateTokens(currentPrompt) > (selectedModel === 'SDXL' ? 150 : 200)}
+                   className="flex-1"
+                 >
                   {isGenerating ? 'Generating...' : `Generate ${selectedModel === 'SDXL' ? 'Image' : 'Video'}`}
                 </Button>
                 <Button 

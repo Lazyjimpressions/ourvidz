@@ -134,6 +134,16 @@ serve(async (req)=>{
       jobType: job.job_type,
       metadata: job.metadata
     });
+
+    // Handle prompt test results if this is a test job
+    if (job.metadata?.created_from === 'admin_prompt_testing' && job.metadata?.prompt_test_metadata) {
+      console.log('🧪 Processing prompt test job callback:', {
+        job_id: job.id,
+        status,
+        test_metadata: job.metadata.prompt_test_metadata
+      });
+      await handlePromptTestCallback(supabase, job, status, assets, error_message);
+    }
     // Enhanced job type parsing to handle SDXL jobs AND enhanced WAN jobs
     let format, quality, isSDXL = false, isEnhanced = false;
     if (job.job_type.startsWith('sdxl_')) {
@@ -463,5 +473,98 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
     } else {
       console.log('✅ Video job marked as processing');
     }
+  }
+}
+
+async function handlePromptTestCallback(supabase, job, status, assets, error_message) {
+  console.log('🧪 Processing prompt test callback:', {
+    job_id: job.id,
+    status,
+    test_metadata: job.metadata?.prompt_test_metadata,
+    assets: assets
+  });
+
+  try {
+    // Find the test result record by job_id
+    const { data: testResult, error: findError } = await supabase
+      .from('model_test_results')
+      .select('*')
+      .eq('job_id', job.id)
+      .single();
+
+    if (findError) {
+      console.error('❌ Error finding test result:', findError);
+      return;
+    }
+
+    // Prepare update data based on job status
+    let updateData = {
+      success: status === 'completed',
+      test_metadata: {
+        ...testResult.test_metadata,
+        job_status: status,
+        completed_at: status === 'completed' ? new Date().toISOString() : null,
+        error_message: error_message || null
+      }
+    };
+
+    // Add generated content URLs if completed successfully
+    if (status === 'completed' && assets && assets.length > 0) {
+      // For images, link to the image record
+      if (job.image_id) {
+        const { data: imageData } = await supabase
+          .from('images')
+          .select('image_url, image_urls')
+          .eq('id', job.image_id)
+          .single();
+        
+        if (imageData) {
+          updateData.image_id = job.image_id;
+          updateData.test_metadata = {
+            ...updateData.test_metadata,
+            image_url: imageData.image_url,
+            image_urls: imageData.image_urls,
+            content_type: 'image'
+          };
+        }
+      }
+      
+      // For videos, link to the video record
+      if (job.video_id) {
+        const { data: videoData } = await supabase
+          .from('videos')
+          .select('video_url, thumbnail_url')
+          .eq('id', job.video_id)
+          .single();
+        
+        if (videoData) {
+          updateData.video_id = job.video_id;
+          updateData.test_metadata = {
+            ...updateData.test_metadata,
+            video_url: videoData.video_url,
+            thumbnail_url: videoData.thumbnail_url,
+            content_type: 'video'
+          };
+        }
+      }
+    }
+
+    // Update the test result
+    const { error: updateError } = await supabase
+      .from('model_test_results')
+      .update(updateData)
+      .eq('job_id', job.id);
+
+    if (updateError) {
+      console.error('❌ Error updating test result:', updateError);
+    } else {
+      console.log('✅ Test result updated successfully:', {
+        job_id: job.id,
+        success: updateData.success,
+        content_type: updateData.test_metadata?.content_type
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error in prompt test callback handler:', error);
   }
 }

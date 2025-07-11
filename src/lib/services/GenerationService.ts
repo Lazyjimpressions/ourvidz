@@ -93,7 +93,11 @@ export class GenerationService {
         },
         projectId: request.projectId,
         videoId,
-        imageId
+        imageId,
+        // Pass prompt_test_id if this is a test generation
+        ...(request.metadata?.prompt_test_metadata && {
+          prompt_test_id: request.metadata.prompt_test_id
+        })
       };
 
       const { data, error } = await supabase.functions.invoke('queue-job', {
