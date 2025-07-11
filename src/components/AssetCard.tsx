@@ -61,11 +61,23 @@ export const AssetCard = ({
         
         // If we still don't have a URL and asset has bucketHint, try to generate a signed URL
         if (!url && asset.id && asset.bucketHint) {
-          console.log(`🔄 Attempting to generate signed URL for asset ${asset.id}`);
-          const signedUrl = await getSignedUrl(asset.id + '.png', asset.bucketHint);
-          if (signedUrl) {
-            url = signedUrl;
-            console.log(`✅ Generated signed URL for asset ${asset.id}`);
+          console.log(`🔄 Attempting to generate signed URL for asset ${asset.id} using bucket: ${asset.bucketHint}`);
+          
+          // Try different path formats for better resolution
+          const pathsToTry = [
+            asset.id + '.png',
+            asset.id + '.jpg', 
+            asset.id + '.webp',
+            asset.id
+          ];
+          
+          for (const path of pathsToTry) {
+            const signedUrl = await getSignedUrl(path, asset.bucketHint);
+            if (signedUrl) {
+              url = signedUrl;
+              console.log(`✅ Generated signed URL for asset ${asset.id} with path: ${path}`);
+              break;
+            }
           }
         }
 

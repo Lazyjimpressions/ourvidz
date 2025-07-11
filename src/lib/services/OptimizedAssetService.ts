@@ -229,7 +229,7 @@ export class OptimizedAssetService {
 
     console.log('🔄 Phase 1: Using simple fallback method');
 
-    // Enhanced query with proper fields for image loading
+  // Enhanced query with proper job data context for URL generation
     const imageQuery = supabase
       .from('images')
       .select(`
@@ -246,7 +246,14 @@ export class OptimizedAssetService {
         generation_mode,
         metadata,
         title,
-        format
+        format,
+        jobs!images_id_fkey (
+          id,
+          job_type,
+          model_type,
+          quality,
+          metadata
+        )
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
@@ -290,8 +297,11 @@ export class OptimizedAssetService {
       });
     }
 
-    // Process images to ensure proper URL handling
+    // Process images with proper job data context for bucket determination
     const processedImages = images?.map(image => {
+      // Get job data for proper bucket determination
+      const jobData = image.jobs && Array.isArray(image.jobs) ? image.jobs[0] : null;
+      
       let displayUrl = image.signed_url || image.image_url;
       
       // If we have image_urls array (SDXL), try to get the first valid URL
@@ -304,6 +314,9 @@ export class OptimizedAssetService {
         ? image.image_urls.filter((url): url is string => typeof url === 'string')
         : undefined;
 
+      // Determine proper bucket using job context
+      const bucketHint = this.determineImageBucket(image, jobData as any);
+
       return {
         id: image.id,
         type: 'image' as const,
@@ -315,12 +328,13 @@ export class OptimizedAssetService {
         // Ensure we have a display URL for the component
         url: displayUrl,
         signedUrls: signedUrlsArray,
-        // Add bucket inference for signed URL generation
-        bucketHint: this.inferBucketFromImage(image),
-        modelType: this.getModelType(image),
-        isSDXL: this.isSDXLImage(image),
+        // Add proper bucket hint with job context
+        bucketHint,
+        modelType: this.getModelType(image, jobData),
+        isSDXL: this.isSDXLImage(image, jobData),
         title: image.title,
-        thumbnailUrl: displayUrl // Use same URL for thumbnail for now
+        thumbnailUrl: displayUrl, // Use same URL for thumbnail for now
+        jobId: jobData?.id
       };
     }) || [];
 
@@ -331,39 +345,38 @@ export class OptimizedAssetService {
     };
   }
 
-  // Helper method to infer bucket from image metadata
-  private static inferBucketFromImage(image: any): string {
-    const { generation_mode, quality } = image;
-    
-    // Infer bucket based on generation mode and quality
-    if (generation_mode === 'sdxl') {
-      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-    }
-    
-    if (generation_mode === 'image7b') {
-      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-    }
-    
-    // Default bucket inference
-    return quality === 'high' ? 'image_high' : 'image_fast';
-  }
-
-  // Helper to determine model type
-  private static getModelType(image: any): string {
+  // Helper to determine model type with job context
+  private static getModelType(image: any, jobData?: any): string {
     const metadata = image.metadata || {};
-    if (metadata.is_sdxl || image.generation_mode === 'sdxl') {
-      return 'SDXL';
-    }
-    if (image.generation_mode?.includes('7b') || image.generation_mode?.includes('enhanced')) {
+    const jobType = jobData?.job_type || '';
+    const modelType = jobData?.model_type || '';
+    
+    // Enhanced 7B model detection
+    if (jobType.includes('enhanced') || jobType.includes('7b') || modelType.includes('7b')) {
       return 'Enhanced-7B';
     }
+    
+    // SDXL detection with job context
+    if (metadata.is_sdxl || 
+        image.generation_mode === 'sdxl' || 
+        jobType.startsWith('sdxl_') ||
+        modelType.includes('sdxl')) {
+      return 'SDXL';
+    }
+    
     return 'WAN';
   }
 
-  // Helper to check if image is SDXL
-  private static isSDXLImage(image: any): boolean {
+  // Helper to check if image is SDXL with job context
+  private static isSDXLImage(image: any, jobData?: any): boolean {
     const metadata = image.metadata || {};
-    return !!(metadata.is_sdxl || image.generation_mode === 'sdxl');
+    const jobType = jobData?.job_type || '';
+    const modelType = jobData?.model_type || '';
+    
+    return !!(metadata.is_sdxl || 
+              image.generation_mode === 'sdxl' ||
+              jobType.startsWith('sdxl_') ||
+              modelType.includes('sdxl'));
   }
 
   // ENHANCED: Generate URLs on-demand with advanced caching and error handling
@@ -469,19 +482,27 @@ export class OptimizedAssetService {
     }
 
     try {
-      // Get image data from database
+      // Get image data with job context from database
       const { data: imageData } = await supabase
         .from('images')
         .select(`
           image_url, image_urls, thumbnail_url, signed_url, signed_url_expires_at, 
-          metadata, quality
+          metadata, quality,
+          jobs!images_id_fkey (
+            id,
+            job_type,
+            model_type,
+            quality,
+            metadata
+          )
         `)
         .eq('id', asset.id)
         .single();
 
       if (!imageData) return asset;
 
-      const jobData = null; // Simplified without job data for now
+      // Get job data for proper bucket determination
+      const jobData = imageData.jobs && Array.isArray(imageData.jobs) ? imageData.jobs[0] : null;
       
       let imageUrl = null;
       let imageUrls: string[] = [];
@@ -497,60 +518,72 @@ export class OptimizedAssetService {
         }
       }
 
-      // Generate new signed URLs if needed
-      if (!imageUrl) {
-        const primaryBucket = this.determineImageBucket(imageData, jobData);
-        const fallbackBuckets = [
-          'image_fast', 'image_high', 
-          'sdxl_image_fast', 'sdxl_image_high',
-          'image7b_fast_enhanced', 'image7b_high_enhanced'
-        ];
-
+      // Generate new signed URLs if needed with proper bucket context
+      if (!imageUrl && (imageData.image_url || imageData.image_urls)) {
         try {
-          // Handle multiple images (SDXL case)
-          if (imageData.image_urls && Array.isArray(imageData.image_urls) && imageData.image_urls.length > 1) {
-            console.log(`🎨 Generating multiple image URLs for SDXL asset: ${asset.id}`);
+          // Use determineImageBucket with job context for accurate bucket detection
+          const primaryBucket = this.determineImageBucket(imageData, jobData as any);
+          const fallbackBuckets = [
+            'sdxl_image_fast', 'sdxl_image_high',
+            'image7b_fast_enhanced', 'image7b_high_enhanced', 
+            'image_fast', 'image_high'
+          ];
+
+          console.log(`🎯 Using bucket: ${primaryBucket} for asset ${asset.id} (job context: ${!!jobData})`);
+
+          // Handle SDXL multiple images
+          if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
+            const urls = imageData.image_urls.filter((url): url is string => typeof url === 'string');
+            if (urls.length > 0) {
+              // Generate signed URLs for all SDXL images
+              imageUrls = await Promise.all(
+                urls.map(async (url) => {
+                  try {
+                    const path = url.includes('/') ? url.split('/').pop()! : url;
+                    const result = await EnhancedErrorHandling.withBucketFallback(
+                      primaryBucket,
+                      fallbackBuckets,
+                      async (bucket) => {
+                        const signedResult = await getSignedUrl(bucket as StorageBucket, path);
+                        if (signedResult.error || !signedResult.data?.signedUrl) {
+                          throw new Error(`Failed to get signed URL: ${signedResult.error?.message}`);
+                        }
+                        return signedResult.data.signedUrl;
+                      }
+                    );
+                    return result || null;
+                  } catch (error) {
+                    console.warn(`⚠️ Failed to generate URL for ${url}:`, error);
+                    return null;
+                  }
+                })
+              );
+              
+              imageUrls = imageUrls.filter((url): url is string => url !== null);
+              imageUrl = imageUrls[0] || null;
+            }
+          } else if (imageData.image_url) {
+            // Single image handling
+            const path = imageData.image_url.includes('/') ? imageData.image_url.split('/').pop()! : imageData.image_url;
             
-            imageUrls = await Promise.all(
-              imageData.image_urls.map(async (imagePath: string, index: number) => {
-                try {
-                  return await EnhancedErrorHandling.withBucketFallback(
-                    primaryBucket,
-                    fallbackBuckets,
-                    async (bucket) => {
-              const { data, error } = await getSignedUrl(bucket as StorageBucket, imagePath);
-                      if (error || !data?.signedUrl) throw new Error(`Failed to get signed URL: ${error?.message}`);
-                      return data.signedUrl;
-                    }
-                  );
-                } catch (error) {
-                  console.warn(`⚠️ Failed to generate URL for image ${index} in ${asset.id}:`, error);
-                  return null;
+            imageUrl = await EnhancedErrorHandling.withBucketFallback(
+              primaryBucket,
+              fallbackBuckets,
+              async (bucket) => {
+                const { data, error } = await getSignedUrl(bucket as StorageBucket, path);
+                if (error || !data?.signedUrl) {
+                  throw new Error(`Failed to get signed URL: ${error?.message}`);
                 }
-              })
+                return data.signedUrl;
+              }
             );
             
-            // Filter out failed URLs
-            imageUrls = imageUrls.filter(url => url !== null) as string[];
-            imageUrl = imageUrls[0] || null;
-          } else {
-            // Single image case
-            const imagePath = imageData.image_url;
-            if (imagePath) {
-              imageUrl = await EnhancedErrorHandling.withBucketFallback(
-                primaryBucket,
-                fallbackBuckets,
-                async (bucket) => {
-                  const { data, error } = await getSignedUrl(bucket as StorageBucket, imagePath);
-                  if (error || !data?.signedUrl) throw new Error(`Failed to get signed URL: ${error?.message}`);
-                  return data.signedUrl;
-                }
-              );
+            if (imageUrl) {
               imageUrls = [imageUrl];
             }
           }
 
-          // Cache the primary URL with user validation
+          // Cache successful URLs in session storage
           if (imageUrl) {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
@@ -559,7 +592,7 @@ export class OptimizedAssetService {
           }
 
         } catch (error) {
-          console.warn(`⚠️ Failed to generate image URLs for ${asset.id}:`, error);
+          console.warn(`⚠️ Failed to generate image URL for ${asset.id}:`, error);
         }
       }
 
@@ -576,22 +609,28 @@ export class OptimizedAssetService {
     }
   }
 
-  // Batch URL generation (improved for performance)
-  static async generateBatchAssetUrls(assets: UnifiedAsset[], batchSize: number = 5): Promise<UnifiedAsset[]> {
-    console.log(`🔗 Batch generating URLs for ${assets.length} assets`);
+  // Batch URL generation for better performance
+  static async generateAssetUrlsBatch(assets: UnifiedAsset[]): Promise<UnifiedAsset[]> {
+    console.log(`🚀 Batch generating URLs for ${assets.length} assets`);
     
-    const batches = [];
+    // Process in smaller batches to avoid overwhelming the system
+    const batchSize = 5;
+    const results: UnifiedAsset[] = [];
+    
     for (let i = 0; i < assets.length; i += batchSize) {
-      batches.push(assets.slice(i, i + batchSize));
+      const batch = assets.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(asset => this.generateAssetUrls(asset))
+      );
+      results.push(...batchResults);
+      
+      // Small delay between batches to prevent rate limiting
+      if (i + batchSize < assets.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-
-    const results = await Promise.all(
-      batches.map(batch => 
-        Promise.all(batch.map(asset => this.generateAssetUrls(asset)))
-      )
-    );
-
-    return results.flat();
+    
+    return results;
   }
 
   // Complete asset deletion with storage cleanup
