@@ -38,10 +38,19 @@ interface AnalyticsData {
   storageUsed: number;
   revenue: number;
   jobTypeBreakdown: {
+    // SDXL Jobs (2)
+    sdxl_image_fast: number;
+    sdxl_image_high: number;
+    // WAN Standard Jobs (4)
     image_fast: number;
     image_high: number;
     video_fast: number;
     video_high: number;
+    // WAN Enhanced Jobs (4)
+    image7b_fast_enhanced: number;
+    image7b_high_enhanced: number;
+    video7b_fast_enhanced: number;
+    video7b_high_enhanced: number;
   };
   dailyStats: Array<{
     date: string;
@@ -102,11 +111,21 @@ export const AnalyticsTab = () => {
       const failedJobs = jobs?.filter(j => j.status === 'failed').length || 0;
       const successRate = totalJobs > 0 ? (completedJobs / totalJobs) * 100 : 0;
 
+      // Updated job type breakdown with all 10 current job types
       const jobTypeBreakdown = {
-        image_fast: jobs?.filter(j => j.job_type === 'image_fast' || j.job_type === 'sdxl_image_fast').length || 0,
+        // SDXL Jobs (2)
+        sdxl_image_fast: jobs?.filter(j => j.job_type === 'sdxl_image_fast').length || 0,
+        sdxl_image_high: jobs?.filter(j => j.job_type === 'sdxl_image_high').length || 0,
+        // WAN Standard Jobs (4)
+        image_fast: jobs?.filter(j => j.job_type === 'image_fast').length || 0,
         image_high: jobs?.filter(j => j.job_type === 'image_high').length || 0,
         video_fast: jobs?.filter(j => j.job_type === 'video_fast').length || 0,
-        video_high: jobs?.filter(j => j.job_type === 'video_high').length || 0
+        video_high: jobs?.filter(j => j.job_type === 'video_high').length || 0,
+        // WAN Enhanced Jobs (4)
+        image7b_fast_enhanced: jobs?.filter(j => j.job_type === 'image7b_fast_enhanced').length || 0,
+        image7b_high_enhanced: jobs?.filter(j => j.job_type === 'image7b_high_enhanced').length || 0,
+        video7b_fast_enhanced: jobs?.filter(j => j.job_type === 'video7b_fast_enhanced').length || 0,
+        video7b_high_enhanced: jobs?.filter(j => j.job_type === 'video7b_high_enhanced').length || 0
       };
 
       const totalImages = images?.length || 0;
@@ -186,10 +205,16 @@ export const AnalyticsTab = () => {
         storageUsed: 0,
         revenue: 0,
         jobTypeBreakdown: {
+          sdxl_image_fast: 0,
+          sdxl_image_high: 0,
           image_fast: 0,
           image_high: 0,
           video_fast: 0,
-          video_high: 0
+          video_high: 0,
+          image7b_fast_enhanced: 0,
+          image7b_high_enhanced: 0,
+          video7b_fast_enhanced: 0,
+          video7b_high_enhanced: 0
         },
         dailyStats: []
       });
@@ -336,33 +361,95 @@ export const AnalyticsTab = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                  <span className="text-sm">Fast Images</span>
+              {/* SDXL Jobs */}
+              <div className="border-b pb-2">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">SDXL Jobs (Ultra-Fast)</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded"></div>
+                      <span className="text-sm">SDXL Fast</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.sdxl_image_fast}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-600 rounded"></div>
+                      <span className="text-sm">SDXL High</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.sdxl_image_high}</Badge>
+                  </div>
                 </div>
-                <Badge variant="outline">{analytics.jobTypeBreakdown.image_fast}</Badge>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-purple-500 rounded"></div>
-                  <span className="text-sm">High Quality Images</span>
+
+              {/* WAN Standard Jobs */}
+              <div className="border-b pb-2">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">WAN Standard</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-blue-500 rounded"></div>
+                      <span className="text-sm">Image Fast</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.image_fast}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-purple-500 rounded"></div>
+                      <span className="text-sm">Image High</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.image_high}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-green-500 rounded"></div>
+                      <span className="text-sm">Video Fast</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.video_fast}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-orange-500 rounded"></div>
+                      <span className="text-sm">Video High</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.video_high}</Badge>
+                  </div>
                 </div>
-                <Badge variant="outline">{analytics.jobTypeBreakdown.image_high}</Badge>
               </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded"></div>
-                  <span className="text-sm">Fast Videos</span>
+
+              {/* WAN Enhanced Jobs */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">WAN Enhanced (7B)</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-indigo-500 rounded"></div>
+                      <span className="text-sm">Image 7B Fast</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.image7b_fast_enhanced}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-indigo-600 rounded"></div>
+                      <span className="text-sm">Image 7B High</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.image7b_high_enhanced}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-teal-500 rounded"></div>
+                      <span className="text-sm">Video 7B Fast</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.video7b_fast_enhanced}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-teal-600 rounded"></div>
+                      <span className="text-sm">Video 7B High</span>
+                    </div>
+                    <Badge variant="outline">{analytics.jobTypeBreakdown.video7b_high_enhanced}</Badge>
+                  </div>
                 </div>
-                <Badge variant="outline">{analytics.jobTypeBreakdown.video_fast}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                  <span className="text-sm">High Quality Videos</span>
-                </div>
-                <Badge variant="outline">{analytics.jobTypeBreakdown.video_high}</Badge>
               </div>
             </div>
           </CardContent>
