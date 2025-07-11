@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Shield, Flag, BarChart3, Settings, Database, Activity } from "lucide-react";
+import { Users, Shield, Flag, BarChart3, Settings, Database, Activity, Home } from "lucide-react";
 
 interface ActivityLog {
   id: string;
@@ -111,10 +111,22 @@ const Admin = () => {
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-            <p className="text-gray-600 mt-2">
-              System monitoring and management tools for administrators
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+                <p className="text-gray-600 mt-2">
+                  System monitoring and management tools for administrators
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => window.location.href = '/dashboard'}
+                className="gap-2"
+              >
+                <Home className="h-4 w-4" />
+                Back to Dashboard
+              </Button>
+            </div>
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

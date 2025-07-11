@@ -9,7 +9,7 @@ interface OurVidzDashboardLayoutProps {
 }
 
 export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps) => {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -180,6 +180,17 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
             >
               Upgrade
             </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/admin")}
+                className="gap-2 text-white border-gray-600 hover:bg-gray-800"
+              >
+                <Settings className="h-4 w-4" />
+                Admin
+              </Button>
+            )}
             <div className="flex items-center gap-3 text-sm">
               <div className="flex items-center gap-2 text-gray-300">
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">

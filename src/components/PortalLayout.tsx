@@ -1,5 +1,5 @@
 
-import { LogOut, Home, Video, DollarSign, UserRound, Clock, Image } from "lucide-react";
+import { LogOut, Home, Video, DollarSign, UserRound, Clock, Image, Settings } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +21,7 @@ interface PortalLayoutProps {
 
 export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
   const navigate = useNavigate();
-  const { user, profile, session, signOut } = useAuth();
+  const { user, profile, session, signOut, isAdmin } = useAuth();
 
   const handleSignOut = async () => {
     await signOut();
@@ -85,6 +85,16 @@ export const PortalLayout = ({ children, title }: PortalLayoutProps) => {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild tooltip="Admin Portal">
+                    <Link to="/admin">
+                      <Settings />
+                      <span>Admin Portal</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={handleSignOut} tooltip="Sign Out">
                   <LogOut />
