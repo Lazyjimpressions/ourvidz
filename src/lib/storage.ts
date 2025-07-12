@@ -151,57 +151,51 @@ export const uploadFile = async (
   }
 };
 
-// CRITICAL FIX: Simplified signed URL generation with focused debugging
+// PHASE 2 FIX: Simplified signed URL generation that trusts the database paths
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
   expiresIn: number = 86400 // 24 hours default
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    console.log(`🔐 getSignedUrl called:`, { bucket, filePath: filePath.slice(0, 50) + '...', expiresIn });
+    console.log(`🔐 Direct signed URL generation:`, { bucket, path: filePath.slice(0, 40) + '...' });
     
     // Validate inputs
     if (!bucket || !filePath) {
-      const errorMsg = `Missing required params - bucket: ${bucket}, filePath: ${filePath}`;
-      console.error('❌', errorMsg);
-      throw new Error(errorMsg);
+      throw new Error(`Missing required params - bucket: ${bucket}, filePath: ${filePath}`);
     }
 
-    // Check cache first (with shorter key for better debugging)
-    const cacheKey = `${bucket}:${filePath}`;
+    // Check cache first
     const cachedUrl = urlCache.get(bucket, filePath);
     if (cachedUrl) {
       console.log(`✅ Cache hit for: ${bucket}/${filePath.slice(0, 30)}...`);
       return { data: { signedUrl: cachedUrl }, error: null };
     }
 
-    // CRITICAL FIX: Direct Supabase call without complex path resolution
-    console.log(`🎯 Direct Supabase call: ${bucket}/${filePath.slice(0, 50)}...`);
-    
+    // PHASE 2: Direct Supabase call with exact bucket+path from database
     const { data, error } = await supabase.storage
       .from(bucket)
       .createSignedUrl(filePath, expiresIn);
 
     if (error) {
-      console.warn(`❌ Supabase storage error for ${bucket}/${filePath.slice(0, 30)}...:`, error.message);
+      console.error(`❌ Supabase error for ${bucket}/${filePath.slice(0, 30)}...:`, error.message);
       return { data: null, error };
     }
 
     if (!data?.signedUrl) {
-      const errorMsg = `No signed URL returned from Supabase for ${bucket}/${filePath.slice(0, 30)}...`;
-      console.warn(`❌ ${errorMsg}`);
-      return { data: null, error: new Error(errorMsg) };
+      console.error(`❌ No signed URL returned for ${bucket}/${filePath.slice(0, 30)}...`);
+      return { data: null, error: new Error('No signed URL returned') };
     }
 
-    // Cache the successful URL
+    // Cache successful result
     urlCache.set(bucket, filePath, data.signedUrl, expiresIn);
-    console.log(`✅ Generated and cached signed URL for: ${bucket}/${filePath.slice(0, 30)}...`);
+    console.log(`✅ Generated signed URL for: ${bucket}/${filePath.slice(0, 30)}...`);
     
     return { data, error: null };
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`❌ getSignedUrl exception:`, { bucket, filePath: filePath.slice(0, 30) + '...', error: errorMessage });
+    console.error(`❌ getSignedUrl failed:`, { bucket, path: filePath.slice(0, 30) + '...', error: errorMessage });
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')

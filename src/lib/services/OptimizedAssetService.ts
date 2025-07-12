@@ -131,37 +131,7 @@ class SmartCache {
 export class OptimizedAssetService {
   private static cache = new SmartCache();
 
-  private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: JobRecord): string {
-    const metadata = imageData.metadata as any;
-    const jobMetadata = jobData?.metadata as any;
-    
-    // Check for enhanced/7b models first (new bucket types)
-    const jobType = jobData?.job_type || '';
-    const modelType = jobData?.model_type || metadata?.model_type || '';
-    
-    // Enhanced 7B models detection
-    if (jobType.includes('enhanced') || jobType.includes('7b') || modelType.includes('7b')) {
-      const quality = imageData.quality || jobData?.quality || 'fast';
-      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-    }
-    
-    // SDXL detection (improved logic)
-    const isSDXL = metadata?.is_sdxl || 
-                   metadata?.model_type === 'sdxl' || 
-                   jobType.startsWith('sdxl_') ||
-                   modelType.includes('sdxl') ||
-                   jobMetadata?.bucket?.includes('sdxl') ||
-                   metadata?.bucket?.includes('sdxl');
-    
-    const quality = imageData.quality || jobData?.quality || 'fast';
-    
-    if (isSDXL) {
-      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-    }
-    
-    // Default image buckets
-    return quality === 'high' ? 'image_high' : 'image_fast';
-  }
+  // REMOVED: Bucket guessing logic - now trust database metadata directly
 
   private static determineVideoBucket(jobData?: JobRecord): string {
     const quality = jobData?.quality || 'fast';
@@ -301,11 +271,12 @@ export class OptimizedAssetService {
     const processedImages: UnifiedAsset[] = [];
     
     images?.forEach(image => {
-      // Get job data for proper bucket determination
+      // Get job data for context
       const jobData = image.jobs && Array.isArray(image.jobs) ? image.jobs[0] : null;
       
-      // Determine proper bucket using job context
-      const bucketHint = this.determineImageBucket(image, jobData as any);
+      // Trust the metadata bucket directly (Phase 1 fix)
+      const metadata = image.metadata as any;
+      const bucketHint = metadata?.bucket || 'image_fast'; // Fallback only if no metadata
       const isSDXL = this.isSDXLImage(image, jobData);
       
       // Handle SDXL image URLs properly
@@ -497,176 +468,97 @@ export class OptimizedAssetService {
     }
   }
 
-  // ENHANCED: Image URL generation with critical signed URL fixes
+  // PHASE 1 FIX: Trust database metadata, eliminate bucket guessing
   private static async generateImageUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
-    // Check session cache first
-    const cachedUrl = sessionCache.getCachedSignedUrl(asset.id);
-    if (cachedUrl) {
-      console.log(`🎯 Cache hit for asset ${asset.id}`);
-      return { ...asset, url: cachedUrl, signedUrls: [cachedUrl] };
-    }
+    console.log(`🖼️ Generating image URLs for asset:`, asset.id);
 
     try {
-      // Get image data with job context from database
-      const { data: imageData } = await supabase
-        .from('images')
-        .select(`
-          image_url, image_urls, thumbnail_url, signed_url, signed_url_expires_at, 
-          metadata, quality,
-          jobs!images_id_fkey (
-            id,
-            job_type,
-            model_type,
-            quality,
-            metadata
-          )
-        `)
-        .eq('id', asset.id)
-        .single();
-
-      if (!imageData) {
-        console.warn(`⚠️ No image data found for asset ${asset.id}`);
+      // For SDXL individual images, we already have the URL from transformation
+      if (asset.isSDXLImage && asset.url) {
+        console.log(`✅ SDXL image already has URL:`, asset.url.slice(0, 50) + '...');
         return asset;
       }
 
-      // Get job data for proper bucket determination
-      const jobData = imageData.jobs && Array.isArray(imageData.jobs) ? imageData.jobs[0] : null;
+      // Get image data from database
+      const { data: imageData } = await supabase
+        .from('images')
+        .select('image_url, image_urls, signed_url, signed_url_expires_at, metadata, quality')
+        .eq('id', asset.originalAssetId || asset.id)
+        .single();
+
+      if (!imageData) {
+        console.warn(`❌ No image data found for asset:`, asset.id);
+        return asset;
+      }
+
+      // PHASE 1: Trust the metadata bucket directly
+      const metadata = imageData.metadata as any;
+      const bucket = metadata?.bucket;
       
-      let imageUrl = null;
-      let imageUrls: string[] = [];
-      let thumbnailUrl = imageData.thumbnail_url;
-
-      console.log(`🔍 Processing asset ${asset.id}:`, {
-        hasImageUrl: !!imageData.image_url,
-        hasImageUrls: !!imageData.image_urls,
-        imageUrlsLength: Array.isArray(imageData.image_urls) ? imageData.image_urls.length : 0,
-        hasSignedUrl: !!imageData.signed_url,
-        hasJobData: !!jobData,
-        quality: imageData.quality
-      });
-
-      // Check for valid signed URL first
-      if (imageData.signed_url && imageData.signed_url_expires_at) {
-        const expiresAt = new Date(imageData.signed_url_expires_at);
-        if (expiresAt > new Date()) {
-          console.log(`✅ Using cached image URL for:`, asset.id);
-          imageUrl = imageData.signed_url;
-          imageUrls = [imageData.signed_url];
-        } else {
-          console.log(`⏰ Signed URL expired for asset ${asset.id}`);
-        }
+      if (!bucket) {
+        console.warn(`❌ No bucket in metadata for asset:`, asset.id, metadata);
+        return asset;
       }
 
-      // CRITICAL FIX: Generate new signed URLs if needed
-      if (!imageUrl && (imageData.image_url || imageData.image_urls)) {
-        try {
-          // Use metadata.bucket if available, otherwise determine bucket
-          const metadataBucket = (imageData.metadata as any)?.bucket;
-          const primaryBucket = metadataBucket || this.determineImageBucket(imageData, jobData as any);
-          
-          console.log(`🎯 Generating URLs for asset ${asset.id}:`, {
-            primaryBucket,
-            metadataBucket,
-            jobType: jobData?.job_type,
-            modelType: jobData?.model_type
-          });
+      console.log(`🪣 Using bucket from metadata:`, bucket, 'for asset:', asset.id);
 
-          // Handle SDXL multiple images  
-          if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
-            const urls = imageData.image_urls.filter((url): url is string => typeof url === 'string');
-            if (urls.length > 0) {
-              console.log(`🖼️ Processing ${urls.length} SDXL images for asset ${asset.id}`);
-              
-              // Generate signed URLs for all SDXL images with direct getSignedUrl call
-              const urlPromises = urls.map(async (storagePath, index) => {
-                try {
-                  console.log(`🔗 Generating URL ${index + 1}/${urls.length} for path: ${storagePath}`);
-                  
-                  // CRITICAL FIX: Call getSignedUrl directly with proper error handling
-                  const { data, error } = await getSignedUrl(primaryBucket as StorageBucket, storagePath, 3600);
-                  
-                  if (error) {
-                    console.warn(`❌ Failed to generate signed URL for ${storagePath}:`, error.message);
-                    return null;
-                  }
-                  
-                  if (!data?.signedUrl) {
-                    console.warn(`❌ No signed URL returned for ${storagePath}`);
-                    return null;
-                  }
-                  
-                  console.log(`✅ Generated signed URL for ${storagePath.slice(-20)}...`);
-                  return data.signedUrl;
-                  
-                } catch (error) {
-                  console.warn(`⚠️ Exception generating URL for ${storagePath}:`, error);
-                  return null;
-                }
-              });
-              
-              const resolvedUrls = await Promise.all(urlPromises);
-              imageUrls = resolvedUrls.filter((url): url is string => url !== null);
-              imageUrl = imageUrls[0] || null;
-              
-              console.log(`📊 SDXL URL generation complete: ${imageUrls.length}/${urls.length} successful`);
-            }
-          } else if (imageData.image_url) {
-            // Single image handling
-            console.log(`🖼️ Processing single image for asset ${asset.id}: ${imageData.image_url}`);
-            
-            const { data, error } = await getSignedUrl(primaryBucket as StorageBucket, imageData.image_url, 3600);
-            
-            if (error) {
-              console.warn(`❌ Failed to generate signed URL for single image:`, error.message);
-            } else if (data?.signedUrl) {
-              imageUrl = data.signedUrl;
-              imageUrls = [imageUrl];
-              console.log(`✅ Generated signed URL for single image`);
-            } else {
-              console.warn(`❌ No signed URL returned for single image`);
-            }
-          }
+      // Determine the image path to use
+      let imagePath: string | null = null;
 
-          // Cache successful URLs in session storage
-          if (imageUrl) {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-              sessionStorage.setItem(`signed_url_${user.id}_${asset.id}`, imageUrl);
-              console.log(`💾 Cached signed URL for asset ${asset.id}`);
-            }
-          }
-
-        } catch (error) {
-          console.error(`❌ Critical error generating image URLs for ${asset.id}:`, error);
-        }
+      // For SDXL images with multiple URLs, use the specific index
+      if (asset.isSDXLImage && asset.sdxlIndex !== undefined && imageData.image_urls) {
+        const urlsArray = Array.isArray(imageData.image_urls) ? imageData.image_urls : [];
+        imagePath = urlsArray[asset.sdxlIndex] as string;
+        console.log(`🎯 SDXL image ${asset.sdxlIndex}:`, imagePath?.slice(0, 50) + '...');
+      } else {
+        // Single image - prefer image_url over signed_url
+        imagePath = imageData.image_url;
+        console.log(`🎯 Single image path:`, imagePath?.slice(0, 50) + '...');
       }
 
-      // VALIDATION: Ensure we don't return raw storage paths
-      if (imageUrl && !imageUrl.startsWith('http')) {
-        console.error(`🚨 CRITICAL: Raw storage path detected for ${asset.id}: ${imageUrl}`);
-        imageUrl = null;
-        imageUrls = [];
+      if (!imagePath) {
+        console.warn(`❌ No image path found for asset:`, asset.id);
+        return asset;
       }
 
-      const result = {
+      // PHASE 2: Direct signed URL generation
+      console.log(`🔐 Generating signed URL: ${bucket}/${imagePath.slice(0, 30)}...`);
+      
+      const { data, error } = await getSignedUrl(bucket as StorageBucket, imagePath);
+
+      if (error || !data?.signedUrl) {
+        console.warn(`❌ Signed URL generation failed:`, error?.message || 'No URL returned');
+        // PHASE 3: NO raw path fallback - return asset without URL
+        return asset;
+      }
+
+      console.log(`✅ Generated signed URL successfully for:`, asset.id);
+
+      return {
         ...asset,
-        url: imageUrl || undefined,
-        signedUrls: imageUrls.length > 0 ? imageUrls : undefined,
-        thumbnailUrl: thumbnailUrl || imageUrl || undefined,
+        url: data.signedUrl,
+        thumbnailUrl: data.signedUrl,
       };
 
-      console.log(`🏁 Final result for asset ${asset.id}:`, {
-        hasUrl: !!result.url,
-        hasSignedUrls: !!result.signedUrls,
-        signedUrlsCount: result.signedUrls?.length || 0
-      });
-
-      return result;
-
     } catch (error) {
-      console.error(`❌ Fatal error generating image URLs for ${asset.id}:`, error);
+      console.error(`❌ Error generating image URLs for ${asset.id}:`, error);
       return asset;
     }
+  }
+
+  // Simple bucket determination for deletion
+  private static determineBucketFromMetadata(metadata: any, quality?: string): string {
+    // Trust metadata bucket first
+    if (metadata?.bucket) {
+      return metadata.bucket;
+    }
+    
+    // Fallback logic
+    if (metadata?.is_sdxl || metadata?.model_type === 'sdxl') {
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    }
+    
+    return quality === 'high' ? 'image_high' : 'image_fast';
   }
 
   // Batch URL generation for better performance
@@ -708,7 +600,7 @@ export class OptimizedAssetService {
 
         if (imageData) {
           const jobData = Array.isArray(imageData.job) ? imageData.job[0] : imageData.job;
-          const bucket = this.determineImageBucket(imageData, jobData as any);
+          const bucket = this.determineBucketFromMetadata(imageData.metadata, imageData.quality);
           
           // Delete all associated files
           const filesToDelete = [];
