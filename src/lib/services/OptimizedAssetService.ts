@@ -297,46 +297,70 @@ export class OptimizedAssetService {
       });
     }
 
-    // Process images with proper job data context for bucket determination
-    const processedImages = images?.map(image => {
+    // Process images with proper job data context - transform SDXL to individual assets
+    const processedImages: UnifiedAsset[] = [];
+    
+    images?.forEach(image => {
       // Get job data for proper bucket determination
       const jobData = image.jobs && Array.isArray(image.jobs) ? image.jobs[0] : null;
       
-      let displayUrl = image.signed_url || image.image_url;
+      // Determine proper bucket using job context
+      const bucketHint = this.determineImageBucket(image, jobData as any);
+      const isSDXL = this.isSDXLImage(image, jobData);
       
-      // If we have image_urls array (SDXL), try to get the first valid URL
-      if (!displayUrl && image.image_urls && Array.isArray(image.image_urls)) {
-        displayUrl = image.image_urls[0] as string;
-      }
-
       // Handle SDXL image URLs properly
       const signedUrlsArray = image.image_urls && Array.isArray(image.image_urls) 
         ? image.image_urls.filter((url): url is string => typeof url === 'string')
         : undefined;
 
-      // Determine proper bucket using job context
-      const bucketHint = this.determineImageBucket(image, jobData as any);
-
-      return {
-        id: image.id,
+      // Base asset properties
+      const baseAsset = {
         type: 'image' as const,
         prompt: image.prompt || 'Untitled Image',
         status: image.status || 'pending',
         quality: image.quality || 'fast',
         format: image.format || 'png',
         createdAt: new Date(image.created_at),
-        // Ensure we have a display URL for the component
-        url: displayUrl,
-        signedUrls: signedUrlsArray,
-        // Add proper bucket hint with job context
         bucketHint,
         modelType: this.getModelType(image, jobData),
-        isSDXL: this.isSDXLImage(image, jobData),
+        isSDXL,
         title: image.title,
-        thumbnailUrl: displayUrl, // Use same URL for thumbnail for now
         jobId: jobData?.id
       };
-    }) || [];
+
+      // CRITICAL FIX: Transform SDXL jobs into individual assets (like LibraryImportModal does)
+      if (isSDXL && signedUrlsArray && signedUrlsArray.length > 1) {
+        // SDXL job with multiple images - create individual assets for each image
+        signedUrlsArray.forEach((url, index) => {
+          processedImages.push({
+            ...baseAsset,
+            id: `${image.id}_${index}`, // Unique ID for each SDXL image
+            url: url,
+            thumbnailUrl: url,
+            prompt: `${baseAsset.prompt} (Image ${index + 1})`,
+            isSDXLImage: true,
+            sdxlIndex: index,
+            originalAssetId: image.id,
+          });
+        });
+      } else {
+        // Single image (WAN) or SDXL with single URL
+        let displayUrl = image.signed_url || image.image_url;
+        
+        // If we have image_urls array but only one URL, use it
+        if (!displayUrl && signedUrlsArray && signedUrlsArray.length > 0) {
+          displayUrl = signedUrlsArray[0];
+        }
+
+        processedImages.push({
+          ...baseAsset,
+          id: image.id,
+          url: displayUrl,
+          signedUrls: signedUrlsArray,
+          thumbnailUrl: displayUrl,
+        });
+      }
+    });
 
     return {
       assets: processedImages,
@@ -535,11 +559,12 @@ export class OptimizedAssetService {
           if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
             const urls = imageData.image_urls.filter((url): url is string => typeof url === 'string');
             if (urls.length > 0) {
-              // Generate signed URLs for all SDXL images
+              // Generate signed URLs for all SDXL images - CRITICAL FIX: Use full path
               imageUrls = await Promise.all(
                 urls.map(async (url) => {
                   try {
-                    const path = url.includes('/') ? url.split('/').pop()! : url;
+                    // CRITICAL FIX: Use full path for storage access (don't strip user_id prefix)
+                    const path = url; // Use the complete storage path
                     const result = await EnhancedErrorHandling.withBucketFallback(
                       primaryBucket,
                       fallbackBuckets,
@@ -563,8 +588,8 @@ export class OptimizedAssetService {
               imageUrl = imageUrls[0] || null;
             }
           } else if (imageData.image_url) {
-            // Single image handling
-            const path = imageData.image_url.includes('/') ? imageData.image_url.split('/').pop()! : imageData.image_url;
+            // Single image handling - CRITICAL FIX: Use full path
+            const path = imageData.image_url; // Use the complete storage path
             
             imageUrl = await EnhancedErrorHandling.withBucketFallback(
               primaryBucket,

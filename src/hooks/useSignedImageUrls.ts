@@ -21,38 +21,27 @@ const useSignedImageUrls = () => {
         return null;
       }
 
-      // Determine bucket and clean path
+      // CRITICAL FIX: Use full storage path - user_id prefix is part of storage structure
+      const cleanPath = path; // Keep the complete storage path
+
+      // Smart bucket determination based on OptimizedAssetService logic
       let bucketName = bucket;
-      let cleanPath = path;
-
-      // If path contains user_id prefix (e.g., "3348b481-8fb1-4745-8e6c-db6e9847e429/filename.png")
-      if (path.includes('/') && !bucketName) {
-        const pathParts = path.split('/');
-        if (pathParts.length === 2) {
-          // This is a user_id/filename format, use just the filename
-          cleanPath = pathParts[1];
-        } else {
-          cleanPath = pathParts[pathParts.length - 1];
-        }
-      }
-
-      // Infer bucket from generation_mode and quality if not provided
       if (!bucketName) {
-        // Default bucket inference based on common patterns
-        bucketName = 'sdxl_image_fast'; // Most common default
+        // Default to SDXL fast bucket as most common - will be overridden by bucket hint
+        bucketName = 'sdxl_image_fast';
       }
 
-      console.log(`🔍 Generating signed URL for path: "${path}" -> cleanPath: "${cleanPath}" in bucket: "${bucketName}"`);
+      console.log(`🔍 Generating signed URL for path: "${path}" in bucket: "${bucketName}"`);
 
-      // Try multiple buckets in order of preference
+      // Try buckets in order aligned with OptimizedAssetService
       const bucketsToTry = [
         bucketName,
         'sdxl_image_fast',
-        'sdxl_image_high', 
+        'sdxl_image_high',
+        'image7b_fast_enhanced', 
+        'image7b_high_enhanced',
         'image_fast',
-        'image_high',
-        'image7b_fast_enhanced',
-        'image7b_high_enhanced'
+        'image_high'
       ].filter((b, i, arr) => arr.indexOf(b) === i); // Remove duplicates
 
       for (const tryBucket of bucketsToTry) {

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
@@ -25,12 +26,12 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/workspace" element={<Workspace />} />
-              <Route path="/workspace-test" element={<WorkspaceTest />} />
-              <Route path="/library" element={<Library />} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+              <Route path="/workspace-test" element={<ProtectedRoute><WorkspaceTest /></ProtectedRoute>} />
+              <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/admin" element={<Admin />} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             </Routes>
           </BrowserRouter>
         </AuthProvider>
