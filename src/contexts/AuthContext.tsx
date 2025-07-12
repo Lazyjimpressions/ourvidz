@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { debugAuthState } from '@/lib/authDebug';
 
 interface Profile {
   id: string;
@@ -279,9 +280,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setSession(session);
           setUser(session?.user ?? null);
           
-          if (session?.user) {
+        if (session?.user) {
             console.log('👤 User found, fetching profile...');
             await fetchProfile(session.user.id);
+            // Run comprehensive auth debug
+            setTimeout(() => debugAuthState(), 500);
           }
           
           setLoading(false);
