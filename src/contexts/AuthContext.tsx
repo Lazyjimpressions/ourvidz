@@ -243,34 +243,57 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
+    console.log('🔧 Setting up auth state listener...');
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(handleAuthStateChange);
 
     const initializeAuth = async () => {
       try {
-        console.log('Initializing auth...');
+        console.log('🚀 Initializing auth with persistence...');
+        
+        // Get current session with retry logic
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          console.error('Error getting session:', error);
+          console.error('❌ Error getting session:', error);
+          // Try to recover from session error
+          try {
+            console.log('🔄 Attempting session recovery...');
+            await supabase.auth.refreshSession();
+            const { data: { session: recoveredSession } } = await supabase.auth.getSession();
+            if (recoveredSession && mounted) {
+              console.log('✅ Session recovered successfully');
+              setSession(recoveredSession);
+              setUser(recoveredSession.user);
+              await fetchProfile(recoveredSession.user.id);
+            }
+          } catch (recoveryError) {
+            console.error('❌ Session recovery failed:', recoveryError);
+          }
           setLoading(false);
           return;
         }
 
         if (mounted) {
+          console.log('📋 Session status:', session ? '✅ Valid' : '❌ No session');
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
+            console.log('👤 User found, fetching profile...');
             await fetchProfile(session.user.id);
           }
           
           setLoading(false);
-          console.log('Auth initialized successfully');
+          console.log('✅ Auth initialized successfully');
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
+        console.error('❌ Critical error initializing auth:', error);
         if (mounted) {
+          // Clear any corrupted auth state
+          setSession(null);
+          setUser(null);
+          setProfile(null);
           setLoading(false);
         }
       }
