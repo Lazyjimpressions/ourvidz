@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Home, FileText, Play, Image, Library, Settings, User, LogOut } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import LibraryVersionToggle from "@/components/LibraryVersionToggle";
 
 interface OurVidzDashboardLayoutProps {
   children: React.ReactNode;
@@ -172,41 +173,48 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       <div className="flex-1 flex flex-col">
         {/* Simplified Top Header */}
         <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
-          <div className="flex justify-end items-center gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-white border-gray-600 hover:bg-gray-800"
-            >
-              Upgrade
-            </Button>
-            {isAdmin && (
+          <div className="flex justify-between items-center">
+            {/* Library Version Toggle - only show on library pages */}
+            {(location.pathname === '/library' || location.pathname === '/library-v2') && (
+              <LibraryVersionToggle />
+            )}
+            
+            <div className="flex items-center gap-4">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => navigate("/admin")}
-                className="gap-2 text-white border-gray-600 hover:bg-gray-800"
+                className="text-white border-gray-600 hover:bg-gray-800"
               >
-                <Settings className="h-4 w-4" />
-                Admin
+                Upgrade
               </Button>
-            )}
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-2 text-gray-300">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
-                  {profile?.username?.[0]?.toUpperCase() || 'U'}
+              {isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/admin")}
+                  className="gap-2 text-white border-gray-600 hover:bg-gray-800"
+                >
+                  <Settings className="h-4 w-4" />
+                  Admin
+                </Button>
+              )}
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-2 text-gray-300">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-medium">
+                    {profile?.username?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                  <span>{profile?.username || 'User'}</span>
                 </div>
-                <span>{profile?.username || 'User'}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sign Out
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSignOut}
-                className="gap-2 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                Sign Out
-              </Button>
             </div>
           </div>
         </header>
