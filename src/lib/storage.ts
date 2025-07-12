@@ -151,21 +151,14 @@ export const uploadFile = async (
   }
 };
 
-// ENHANCED signed URL generation with intelligent path resolution and validation
+// CRITICAL FIX: Simplified signed URL generation with focused debugging
 export const getSignedUrl = async (
   bucket: StorageBucket,
   filePath: string,
   expiresIn: number = 86400 // 24 hours default
 ): Promise<{ data: { signedUrl: string } | null; error: Error | null }> => {
   try {
-    // Check cache first
-    const cachedUrl = urlCache.get(bucket, filePath);
-    if (cachedUrl) {
-      console.log('✅ Cache hit for URL:', bucket, filePath.substring(0, 50) + '...');
-      return { data: { signedUrl: cachedUrl }, error: null };
-    }
-
-    console.log('🔐 Generating new signed URL with path resolution:', bucket, filePath.substring(0, 50) + '...');
+    console.log(`🔐 getSignedUrl called:`, { bucket, filePath: filePath.slice(0, 50) + '...', expiresIn });
     
     // Validate inputs
     if (!bucket || !filePath) {
@@ -174,63 +167,41 @@ export const getSignedUrl = async (
       throw new Error(errorMsg);
     }
 
-    // Get user for path resolution
-    let user = null;
-    if (!['system_assets'].includes(bucket)) {
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      if (authError || !authUser) {
-        throw new Error('Authentication required');
-      }
-      user = authUser;
+    // Check cache first (with shorter key for better debugging)
+    const cacheKey = `${bucket}:${filePath}`;
+    const cachedUrl = urlCache.get(bucket, filePath);
+    if (cachedUrl) {
+      console.log(`✅ Cache hit for: ${bucket}/${filePath.slice(0, 30)}...`);
+      return { data: { signedUrl: cachedUrl }, error: null };
     }
 
-    // ENHANCED PATH RESOLUTION: Try multiple path formats
-    const pathsToTry = generatePathVariants(filePath, user?.id);
-    console.log('🔍 Path variants to try:', pathsToTry.length);
-
-    // Try primary bucket first, then fallbacks
-    const fallbackBuckets = [
-      'sdxl_image_fast', 'sdxl_image_high', 
-      'image_fast', 'image_high', 
-      'image7b_fast_enhanced', 'image7b_high_enhanced',
-      'video_fast', 'video_high',
-      'video7b_fast_enhanced', 'video7b_high_enhanced'
-    ].filter(b => b !== bucket);
+    // CRITICAL FIX: Direct Supabase call without complex path resolution
+    console.log(`🎯 Direct Supabase call: ${bucket}/${filePath.slice(0, 50)}...`);
     
-    const bucketsToTry = [bucket, ...fallbackBuckets];
-    
-    for (const tryBucket of bucketsToTry) {
-      for (const pathVariant of pathsToTry) {
-        try {
-          const { data, error } = await supabase.storage
-            .from(tryBucket)
-            .createSignedUrl(pathVariant, expiresIn);
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, expiresIn);
 
-          if (!error && data?.signedUrl) {
-            // Cache the successful URL using original path as key
-            urlCache.set(tryBucket, filePath, data.signedUrl, expiresIn);
-            
-            console.log(`✅ Path resolution success: ${tryBucket}/${pathVariant}`);
-            if (tryBucket !== bucket) {
-              console.log(`✅ Fallback bucket used: ${tryBucket} (primary: ${bucket})`);
-            }
-            
-            return { data, error: null };
-          }
-        } catch (err) {
-          // Silent failure for path attempts
-          continue;
-        }
-      }
+    if (error) {
+      console.warn(`❌ Supabase storage error for ${bucket}/${filePath.slice(0, 30)}...:`, error.message);
+      return { data: null, error };
     }
 
-    // Enhanced error with path resolution details
-    const errorMsg = `File not found with any path variant in any bucket. Original: ${filePath}, Tried paths: ${pathsToTry.length}, Tried buckets: ${bucketsToTry.length}`;
-    console.error('❌ Path resolution failed completely:', errorMsg);
-    throw new Error(errorMsg);
+    if (!data?.signedUrl) {
+      const errorMsg = `No signed URL returned from Supabase for ${bucket}/${filePath.slice(0, 30)}...`;
+      console.warn(`❌ ${errorMsg}`);
+      return { data: null, error: new Error(errorMsg) };
+    }
+
+    // Cache the successful URL
+    urlCache.set(bucket, filePath, data.signedUrl, expiresIn);
+    console.log(`✅ Generated and cached signed URL for: ${bucket}/${filePath.slice(0, 30)}...`);
+    
+    return { data, error: null };
     
   } catch (error) {
-    console.error('❌ getSignedUrl failed:', bucket, filePath.substring(0, 50) + '...', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`❌ getSignedUrl exception:`, { bucket, filePath: filePath.slice(0, 30) + '...', error: errorMessage });
     return {
       data: null,
       error: error instanceof Error ? error : new Error('Failed to get signed URL')

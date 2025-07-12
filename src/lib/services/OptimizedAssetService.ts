@@ -497,11 +497,12 @@ export class OptimizedAssetService {
     }
   }
 
-  // Enhanced image URL generation with SDXL support and session caching
+  // ENHANCED: Image URL generation with critical signed URL fixes
   private static async generateImageUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
     // Check session cache first
     const cachedUrl = sessionCache.getCachedSignedUrl(asset.id);
     if (cachedUrl) {
+      console.log(`🎯 Cache hit for asset ${asset.id}`);
       return { ...asset, url: cachedUrl, signedUrls: [cachedUrl] };
     }
 
@@ -523,7 +524,10 @@ export class OptimizedAssetService {
         .eq('id', asset.id)
         .single();
 
-      if (!imageData) return asset;
+      if (!imageData) {
+        console.warn(`⚠️ No image data found for asset ${asset.id}`);
+        return asset;
+      }
 
       // Get job data for proper bucket determination
       const jobData = imageData.jobs && Array.isArray(imageData.jobs) ? imageData.jobs[0] : null;
@@ -532,6 +536,15 @@ export class OptimizedAssetService {
       let imageUrls: string[] = [];
       let thumbnailUrl = imageData.thumbnail_url;
 
+      console.log(`🔍 Processing asset ${asset.id}:`, {
+        hasImageUrl: !!imageData.image_url,
+        hasImageUrls: !!imageData.image_urls,
+        imageUrlsLength: Array.isArray(imageData.image_urls) ? imageData.image_urls.length : 0,
+        hasSignedUrl: !!imageData.signed_url,
+        hasJobData: !!jobData,
+        quality: imageData.quality
+      });
+
       // Check for valid signed URL first
       if (imageData.signed_url && imageData.signed_url_expires_at) {
         const expiresAt = new Date(imageData.signed_url_expires_at);
@@ -539,72 +552,78 @@ export class OptimizedAssetService {
           console.log(`✅ Using cached image URL for:`, asset.id);
           imageUrl = imageData.signed_url;
           imageUrls = [imageData.signed_url];
+        } else {
+          console.log(`⏰ Signed URL expired for asset ${asset.id}`);
         }
       }
 
-      // Generate new signed URLs if needed with proper bucket context
+      // CRITICAL FIX: Generate new signed URLs if needed
       if (!imageUrl && (imageData.image_url || imageData.image_urls)) {
         try {
-          // Use determineImageBucket with job context for accurate bucket detection
-          const primaryBucket = this.determineImageBucket(imageData, jobData as any);
-          const fallbackBuckets = [
-            'sdxl_image_fast', 'sdxl_image_high',
-            'image7b_fast_enhanced', 'image7b_high_enhanced', 
-            'image_fast', 'image_high'
-          ];
+          // Use metadata.bucket if available, otherwise determine bucket
+          const metadataBucket = (imageData.metadata as any)?.bucket;
+          const primaryBucket = metadataBucket || this.determineImageBucket(imageData, jobData as any);
+          
+          console.log(`🎯 Generating URLs for asset ${asset.id}:`, {
+            primaryBucket,
+            metadataBucket,
+            jobType: jobData?.job_type,
+            modelType: jobData?.model_type
+          });
 
-          console.log(`🎯 Using bucket: ${primaryBucket} for asset ${asset.id} (job context: ${!!jobData})`);
-
-          // Handle SDXL multiple images
+          // Handle SDXL multiple images  
           if (imageData.image_urls && Array.isArray(imageData.image_urls)) {
             const urls = imageData.image_urls.filter((url): url is string => typeof url === 'string');
             if (urls.length > 0) {
-              // Generate signed URLs for all SDXL images - CRITICAL FIX: Use full path
-              imageUrls = await Promise.all(
-                urls.map(async (url) => {
-                  try {
-                    // CRITICAL FIX: Use full path for storage access (don't strip user_id prefix)
-                    const path = url; // Use the complete storage path
-                    const result = await EnhancedErrorHandling.withBucketFallback(
-                      primaryBucket,
-                      fallbackBuckets,
-                      async (bucket) => {
-                        const signedResult = await getSignedUrl(bucket as StorageBucket, path);
-                        if (signedResult.error || !signedResult.data?.signedUrl) {
-                          throw new Error(`Failed to get signed URL: ${signedResult.error?.message}`);
-                        }
-                        return signedResult.data.signedUrl;
-                      }
-                    );
-                    return result || null;
-                  } catch (error) {
-                    console.warn(`⚠️ Failed to generate URL for ${url}:`, error);
+              console.log(`🖼️ Processing ${urls.length} SDXL images for asset ${asset.id}`);
+              
+              // Generate signed URLs for all SDXL images with direct getSignedUrl call
+              const urlPromises = urls.map(async (storagePath, index) => {
+                try {
+                  console.log(`🔗 Generating URL ${index + 1}/${urls.length} for path: ${storagePath}`);
+                  
+                  // CRITICAL FIX: Call getSignedUrl directly with proper error handling
+                  const { data, error } = await getSignedUrl(primaryBucket as StorageBucket, storagePath, 3600);
+                  
+                  if (error) {
+                    console.warn(`❌ Failed to generate signed URL for ${storagePath}:`, error.message);
                     return null;
                   }
-                })
-              );
+                  
+                  if (!data?.signedUrl) {
+                    console.warn(`❌ No signed URL returned for ${storagePath}`);
+                    return null;
+                  }
+                  
+                  console.log(`✅ Generated signed URL for ${storagePath.slice(-20)}...`);
+                  return data.signedUrl;
+                  
+                } catch (error) {
+                  console.warn(`⚠️ Exception generating URL for ${storagePath}:`, error);
+                  return null;
+                }
+              });
               
-              imageUrls = imageUrls.filter((url): url is string => url !== null);
+              const resolvedUrls = await Promise.all(urlPromises);
+              imageUrls = resolvedUrls.filter((url): url is string => url !== null);
               imageUrl = imageUrls[0] || null;
+              
+              console.log(`📊 SDXL URL generation complete: ${imageUrls.length}/${urls.length} successful`);
             }
           } else if (imageData.image_url) {
-            // Single image handling - CRITICAL FIX: Use full path
-            const path = imageData.image_url; // Use the complete storage path
+            // Single image handling
+            console.log(`🖼️ Processing single image for asset ${asset.id}: ${imageData.image_url}`);
             
-            imageUrl = await EnhancedErrorHandling.withBucketFallback(
-              primaryBucket,
-              fallbackBuckets,
-              async (bucket) => {
-                const { data, error } = await getSignedUrl(bucket as StorageBucket, path);
-                if (error || !data?.signedUrl) {
-                  throw new Error(`Failed to get signed URL: ${error?.message}`);
-                }
-                return data.signedUrl;
-              }
-            );
+            const { data, error } = await getSignedUrl(primaryBucket as StorageBucket, imageData.image_url, 3600);
             
-            if (imageUrl) {
+            if (error) {
+              console.warn(`❌ Failed to generate signed URL for single image:`, error.message);
+            } else if (data?.signedUrl) {
+              imageUrl = data.signedUrl;
               imageUrls = [imageUrl];
+              console.log(`✅ Generated signed URL for single image`);
+            } else {
+              console.warn(`❌ No signed URL returned for single image`);
             }
           }
 
@@ -613,23 +632,39 @@ export class OptimizedAssetService {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
               sessionStorage.setItem(`signed_url_${user.id}_${asset.id}`, imageUrl);
+              console.log(`💾 Cached signed URL for asset ${asset.id}`);
             }
           }
 
         } catch (error) {
-          console.warn(`⚠️ Failed to generate image URL for ${asset.id}:`, error);
+          console.error(`❌ Critical error generating image URLs for ${asset.id}:`, error);
         }
       }
 
-      return {
+      // VALIDATION: Ensure we don't return raw storage paths
+      if (imageUrl && !imageUrl.startsWith('http')) {
+        console.error(`🚨 CRITICAL: Raw storage path detected for ${asset.id}: ${imageUrl}`);
+        imageUrl = null;
+        imageUrls = [];
+      }
+
+      const result = {
         ...asset,
         url: imageUrl || undefined,
         signedUrls: imageUrls.length > 0 ? imageUrls : undefined,
         thumbnailUrl: thumbnailUrl || imageUrl || undefined,
       };
 
+      console.log(`🏁 Final result for asset ${asset.id}:`, {
+        hasUrl: !!result.url,
+        hasSignedUrls: !!result.signedUrls,
+        signedUrlsCount: result.signedUrls?.length || 0
+      });
+
+      return result;
+
     } catch (error) {
-      console.error(`❌ Error generating image URLs for ${asset.id}:`, error);
+      console.error(`❌ Fatal error generating image URLs for ${asset.id}:`, error);
       return asset;
     }
   }
