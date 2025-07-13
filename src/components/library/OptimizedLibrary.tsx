@@ -163,7 +163,7 @@ const OptimizedLibrary = () => {
     return results;
   }, []);
 
-  // Direct URL generation like LibraryV2 (no lazy loading)
+  // Fixed pagination with proper asset limiting
   const { data: assetsData, isLoading, error } = useQuery({
     queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize],
     queryFn: async () => {
@@ -174,56 +174,97 @@ const OptimizedLibrary = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       
-      console.log('🔄 Fetching library assets with URLs for user:', user.id);
+      console.log('🔄 Fetching library assets with pagination:', { currentPage, pageSize, typeFilter });
       
-      // Build database queries
-      const imageQuery = supabase
-        .from('images')
-        .select(`
-          id, 
-          prompt, 
-          status, 
-          quality, 
-          format, 
-          created_at, 
-          image_url, 
-          image_urls, 
-          metadata
-        `)
-        .eq('user_id', user.id);
-      
-      const videoQuery = supabase
-        .from('videos')
-        .select(`
-          id, 
-          status, 
-          format, 
-          created_at, 
-          video_url, 
-          thumbnail_url, 
-          metadata
-        `)
-        .eq('user_id', user.id);
+      // Get total counts for accurate pagination
+      const [imageCountResult, videoCountResult] = await Promise.all([
+        supabase
+          .from('images')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .then(result => ({ ...result, count: result.count || 0 })),
+        supabase
+          .from('videos')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .then(result => ({ ...result, count: result.count || 0 }))
+      ]);
 
-      // Apply filters
-      if (statusFilter !== 'all') {
-        imageQuery.eq('status', statusFilter);
-        videoQuery.eq('status', statusFilter);
+      // Calculate precise pagination for database records
+      // We need to be conservative with SDXL expansion
+      const totalDbRecords = (imageCountResult.count || 0) + (videoCountResult.count || 0);
+      
+      // For mixed content, fetch a controlled amount from database
+      let imagesToFetch = 0;
+      let videosToFetch = 0;
+      
+      if (typeFilter === 'image') {
+        imagesToFetch = pageSize;
+      } else if (typeFilter === 'video') {
+        videosToFetch = pageSize;
+      } else {
+        // For 'all', split evenly but account for SDXL expansion
+        // Reduce image count to account for SDXL creating multiple assets
+        imagesToFetch = Math.ceil(pageSize * 0.4); // Conservative for SDXL
+        videosToFetch = Math.ceil(pageSize * 0.6);
       }
       
-      if (debouncedSearchTerm) {
-        imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
-      }
-
-      // Execute queries based on type filter with pagination
       const promises = [];
       
-      if (typeFilter !== 'video') {
-        promises.push(imageQuery.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1));
+      // Build and execute image query
+      if (imagesToFetch > 0) {
+        let imageQuery = supabase
+          .from('images')
+          .select(`
+            id, 
+            prompt, 
+            status, 
+            quality, 
+            format, 
+            created_at, 
+            image_url, 
+            image_urls, 
+            metadata
+          `)
+          .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          imageQuery = imageQuery.eq('status', statusFilter);
+        }
+        
+        if (debouncedSearchTerm) {
+          imageQuery = imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
+        }
+        
+        const imageOffset = typeFilter === 'all' ? Math.floor(offset * 0.4) : offset;
+        promises.push(imageQuery.order('created_at', { ascending: false }).range(imageOffset, imageOffset + imagesToFetch - 1));
+      } else {
+        promises.push(Promise.resolve({ data: [], error: null }));
       }
       
-      if (typeFilter !== 'image') {
-        promises.push(videoQuery.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1));
+      // Build and execute video query
+      if (videosToFetch > 0) {
+        let videoQuery = supabase
+          .from('videos')
+          .select(`
+            id, 
+            status, 
+            format, 
+            created_at, 
+            video_url, 
+            thumbnail_url, 
+            metadata
+          `)
+          .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          videoQuery = videoQuery.eq('status', statusFilter);
+        }
+        
+        const videoOffset = typeFilter === 'all' ? Math.floor(offset * 0.6) : offset;
+        promises.push(videoQuery.order('created_at', { ascending: false }).range(videoOffset, videoOffset + videosToFetch - 1));
+      } else {
+        promises.push(Promise.resolve({ data: [], error: null }));
       }
       
       const [imageResult, videoResult] = await Promise.all(promises);
@@ -338,14 +379,20 @@ const OptimizedLibrary = () => {
         search: debouncedSearchTerm || undefined,
       });
       
-      console.log(`✅ Fetched ${allAssets.length} assets with URLs`);
       const sortedAssets = allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       
-      // Return data with pagination info
+      // Strictly limit assets to the page size to prevent loading all assets
+      const limitedAssets = sortedAssets.slice(0, pageSize);
+      
+      console.log(`✅ Fetched ${allAssets.length} expanded assets, limited to ${limitedAssets.length} for page size ${pageSize}`);
+      
+      // Use the previously calculated total count
+      
+      // Return data with accurate pagination info
       return {
-        assets: sortedAssets,
-        totalCount: sortedAssets.length,
-        hasMore: sortedAssets.length === pageSize
+        assets: limitedAssets,
+        totalCount: totalDbRecords,
+        hasMore: limitedAssets.length === pageSize || (currentPage * pageSize) < totalDbRecords
       };
     },
     staleTime: 5 * 60 * 1000,
