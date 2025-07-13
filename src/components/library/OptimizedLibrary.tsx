@@ -11,6 +11,7 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
 import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
@@ -57,6 +58,13 @@ const OptimizedLibrary = () => {
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>("all");
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'processing' | 'failed'>("all");
   
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem('library-page-size');
+    return saved ? Number(saved) : 50;
+  });
+  
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
@@ -79,6 +87,19 @@ const OptimizedLibrary = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [typeFilter, statusFilter, debouncedSearchTerm]);
+
+  // Save page size preference
+  useEffect(() => {
+    localStorage.setItem('library-page-size', pageSize.toString());
+  }, [pageSize]);
+
+  // Calculate pagination
+  const offset = (currentPage - 1) * pageSize;
 
   // Efficient bucket detection (from LibraryV2)
   const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast'): string => {
@@ -143,8 +164,8 @@ const OptimizedLibrary = () => {
   }, []);
 
   // Direct URL generation like LibraryV2 (no lazy loading)
-  const { data: assets = [], isLoading, error } = useQuery({
-    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm],
+  const { data: assetsData, isLoading, error } = useQuery({
+    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize],
     queryFn: async () => {
       performanceMonitor.markStart('assets-fetch');
       
@@ -194,15 +215,15 @@ const OptimizedLibrary = () => {
         imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
       }
 
-      // Execute queries based on type filter
+      // Execute queries based on type filter with pagination
       const promises = [];
       
       if (typeFilter !== 'video') {
-        promises.push(imageQuery.order('created_at', { ascending: false }).limit(100));
+        promises.push(imageQuery.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1));
       }
       
       if (typeFilter !== 'image') {
-        promises.push(videoQuery.order('created_at', { ascending: false }).limit(100));
+        promises.push(videoQuery.order('created_at', { ascending: false }).range(offset, offset + pageSize - 1));
       }
       
       const [imageResult, videoResult] = await Promise.all(promises);
@@ -318,12 +339,27 @@ const OptimizedLibrary = () => {
       });
       
       console.log(`✅ Fetched ${allAssets.length} assets with URLs`);
-      return allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const sortedAssets = allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      // Return data with pagination info
+      return {
+        assets: sortedAssets,
+        totalCount: sortedAssets.length,
+        hasMore: sortedAssets.length === pageSize
+      };
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  // Extract assets and pagination info
+  const assets = assetsData?.assets || [];
+  const totalCount = assetsData?.totalCount || 0;
+  const hasMore = assetsData?.hasMore || false;
+  
+  // Calculate total pages (estimated)
+  const totalPages = Math.max(1, hasMore ? currentPage + 1 : currentPage);
 
   // Use assets directly (no transformation needed since URLs are already generated)
   const transformedAssets = useMemo(() => {
@@ -449,8 +485,8 @@ const OptimizedLibrary = () => {
     setDeletingAssets(prev => new Set(prev).add(asset.id));
     
     // Optimistic update - remove from UI immediately
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-      (oldData: UnifiedAsset[]) => oldData?.filter(a => a.id !== asset.id) || []
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => a.id !== asset.id) || [] } : oldData
     );
     
     if (selectedAssets.has(asset.id)) {
@@ -473,11 +509,14 @@ const OptimizedLibrary = () => {
       console.error('❌ Deletion failed for:', asset.id, error);
       
       // Restore asset on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-        (oldData: UnifiedAsset[]) => {
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+        (oldData: any) => {
           if (!oldData) return oldData;
-          const restored = [...oldData, asset];
-          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          const restored = [...(oldData.assets || []), asset];
+          return { 
+            ...oldData, 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+          };
         }
       );
       
@@ -497,8 +536,8 @@ const OptimizedLibrary = () => {
     
     // Optimistic updates
     const selectedIds = new Set(selectedAssetList.map(a => a.id));
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-      (oldData: UnifiedAsset[]) => oldData?.filter(a => !selectedIds.has(a.id)) || []
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => !selectedIds.has(a.id)) || [] } : oldData
     );
     setSelectedAssets(new Set());
     setShowBulkDelete(false);
@@ -525,11 +564,14 @@ const OptimizedLibrary = () => {
       console.error('❌ Bulk deletion failed:', error);
       
       // Restore all assets on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-        (oldData: UnifiedAsset[]) => {
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+        (oldData: any) => {
           if (!oldData) return oldData;
-          const restored = [...oldData, ...selectedAssetList];
-          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          const restored = [...(oldData.assets || []), ...selectedAssetList];
+          return { 
+            ...oldData, 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+          };
         }
       );
       
@@ -582,6 +624,10 @@ const OptimizedLibrary = () => {
             onViewModeChange={setViewMode}
             totalAssets={transformedAssets.length}
             isLoading={isLoading}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            currentPage={currentPage}
+            totalPages={totalPages}
           />
 
           {/* Simplified Filters */}
@@ -621,7 +667,7 @@ const OptimizedLibrary = () => {
               selectionMode={true}
             />
           ) : (
-              <div className="space-y-6">
+            <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                 {transformedAssets.map((asset) => (
                   <AssetCard
@@ -629,10 +675,10 @@ const OptimizedLibrary = () => {
                     asset={asset}
                     isSelected={selectedAssets.has(asset.id)}
                     onSelect={(selected) => handleAssetSelection(asset.id, selected)}
-                     onPreview={() => {
-                       const index = transformedAssets.findIndex(a => a.id === asset.id);
-                       setSelectedAssetIndex(index);
-                     }}
+                    onPreview={() => {
+                      const index = transformedAssets.findIndex(a => a.id === asset.id);
+                      setSelectedAssetIndex(index);
+                    }}
                     onDelete={() => setAssetToDelete(asset)}
                     onDownload={() => handleDownload(asset)}
                     selectionMode={selectedAssets.size > 0}
@@ -640,6 +686,46 @@ const OptimizedLibrary = () => {
                   />
                 ))}
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex justify-center mt-8">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const page = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                        if (page > totalPages) return null;
+                        
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              onClick={() => setCurrentPage(page)}
+                              isActive={page === currentPage}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </div>
           )}
         </div>
