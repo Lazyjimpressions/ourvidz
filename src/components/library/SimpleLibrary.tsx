@@ -15,7 +15,7 @@ interface SimpleAsset {
   thumbnailUrl: string | null;
   url: string | null;
   status: string;
-  created_at: string;
+  createdAt: Date;
   metadata: any;
 }
 
@@ -57,7 +57,7 @@ const SimpleLibrary = () => {
           thumbnailUrl: item.thumbnail_url || item.image_url,
           url: item.image_url,
           status: item.status,
-          created_at: item.created_at,
+          createdAt: new Date(item.created_at),
           metadata: item.metadata
         })) || [];
       } else {
@@ -80,7 +80,7 @@ const SimpleLibrary = () => {
           thumbnailUrl: item.thumbnail_url,
           url: item.video_url,
           status: item.status,
-          created_at: item.created_at,
+          createdAt: new Date(item.created_at),
           metadata: item.metadata
         })) || [];
       }
