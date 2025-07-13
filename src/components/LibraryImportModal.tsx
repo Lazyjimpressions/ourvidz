@@ -1,14 +1,34 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { X, Calendar, Image, Video, Check, Search, Loader2 } from 'lucide-react';
-import { OptimizedAssetService, UnifiedAsset } from '@/lib/services/OptimizedAssetService';
+import { X, Calendar, Image, Video, Check, Search, Loader2, ChevronDown } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+interface UnifiedAsset {
+  id: string;
+  type: 'image' | 'video';
+  prompt: string;
+  status: string;
+  quality?: string;
+  format?: string;
+  createdAt: Date;
+  url?: string;
+  thumbnailUrl?: string;
+  signedUrls?: string[];
+  modelType?: string;
+  isSDXL?: boolean;
+  isSDXLImage?: boolean;
+  sdxlIndex?: number;
+  originalAssetId?: string;
+  title?: string;
+  metadata?: any;
+}
 
 interface LibraryImportModalProps {
   open: boolean;
@@ -20,91 +40,199 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
+  const [allAssets, setAllAssets] = useState<UnifiedAsset[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  
+  const ASSETS_PER_PAGE = 20;
   
 
   // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
+      // Reset pagination when search changes
+      setCurrentPage(0);
+      setAllAssets([]);
+      setHasMore(true);
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // React Query for efficient asset fetching with caching - only when modal is open
-  const { data: libraryAssets = [], isLoading, error } = useQuery({
-    queryKey: ['library-import-assets', debouncedSearchTerm],
+  // Bucket inference from LibraryV2
+  const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast'): string => {
+    if (metadata?.bucket) {
+      return metadata.bucket;
+    }
+
+    const modelVariant = metadata?.model_variant || '';
+    const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+    const isEnhanced = metadata?.is_enhanced || modelVariant.includes('7b');
+
+    if (isEnhanced) {
+      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+    }
+
+    if (isSDXL) {
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    }
+
+    return quality === 'high' ? 'image_high' : 'image_fast';
+  }, []);
+
+  // Signed URL generation from LibraryV2
+  const generateSignedUrls = useCallback(async (paths: string[], bucket: string): Promise<string[]> => {
+    const results: string[] = [];
+    
+    await Promise.all(paths.map(async (path) => {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(path, 3600); // 1 hour expiry
+        
+        if (data?.signedUrl) {
+          results.push(data.signedUrl);
+        } else {
+          console.warn(`Failed to generate signed URL for ${path} in ${bucket}:`, error);
+        }
+      } catch (error) {
+        console.error(`Error generating signed URL for ${path}:`, error);
+      }
+    }));
+    
+    return results;
+  }, []);
+
+  // Direct asset fetching with pagination (LibraryV2 approach)
+  const { data: pageData, isLoading, error, refetch } = useQuery({
+    queryKey: ['library-import-assets', debouncedSearchTerm, currentPage],
     queryFn: async () => {
-      console.log('🔍 LibraryImportModal: Fetching assets with search:', debouncedSearchTerm);
+      console.log('🔍 LibraryImportModal: Fetching page', currentPage, 'with search:', debouncedSearchTerm);
       
-      const filters: any = { status: 'completed' };
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Direct query like LibraryV2
+      const imageQuery = supabase
+        .from('images')
+        .select(`
+          id, 
+          prompt, 
+          status, 
+          quality, 
+          format, 
+          created_at, 
+          image_url, 
+          image_urls, 
+          metadata,
+          title
+        `)
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .range(currentPage * ASSETS_PER_PAGE, (currentPage + 1) * ASSETS_PER_PAGE - 1);
+
       if (debouncedSearchTerm) {
-        // Note: OptimizedAssetService doesn't support search yet, so we'll filter client-side
+        imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
+      }
+
+      const { data: images, error } = await imageQuery;
+      if (error) throw error;
+
+      const processedAssets: UnifiedAsset[] = [];
+      
+      // Process like LibraryV2
+      if (images) {
+        for (const image of images) {
+          const metadata = image.metadata as any;
+          const bucket = inferBucketFromMetadata(metadata, image.quality);
+          const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+          
+          if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
+            // Generate signed URLs for all SDXL images
+            const imageUrlsArray = image.image_urls.filter((url): url is string => typeof url === 'string');
+            const signedUrls = await generateSignedUrls(imageUrlsArray, bucket);
+            
+            // Create individual assets for each SDXL image
+            signedUrls.forEach((url, index) => {
+              processedAssets.push({
+                id: `${image.id}_${index}`,
+                type: 'image',
+                prompt: `${image.prompt} (Image ${index + 1})`,
+                status: image.status,
+                quality: image.quality,
+                format: image.format,
+                createdAt: new Date(image.created_at),
+                url: url,
+                thumbnailUrl: url,
+                modelType: 'SDXL',
+                isSDXL: true,
+                isSDXLImage: true,
+                sdxlIndex: index,
+                originalAssetId: image.id,
+                title: image.title,
+                metadata: image.metadata
+              });
+            });
+          } else {
+            // Single image
+            let url: string | undefined;
+            
+            if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
+              const firstUrl = image.image_urls[0];
+              if (typeof firstUrl === 'string') {
+                const signedUrls = await generateSignedUrls([firstUrl], bucket);
+                url = signedUrls[0];
+              }
+            } else if (image.image_url && typeof image.image_url === 'string') {
+              const signedUrls = await generateSignedUrls([image.image_url], bucket);
+              url = signedUrls[0];
+            }
+            
+            processedAssets.push({
+              id: image.id,
+              type: 'image',
+              prompt: image.prompt,
+              status: image.status,
+              quality: image.quality,
+              format: image.format,
+              createdAt: new Date(image.created_at),
+              url: url,
+              thumbnailUrl: url,
+              modelType: isSDXL ? 'SDXL' : 'WAN',
+              isSDXL: isSDXL,
+              title: image.title,
+              metadata: image.metadata
+            });
+          }
+        }
       }
       
-      const result = await OptimizedAssetService.getUserAssets(
-        filters,
-        { limit: 50, offset: 0 } // Reduced for faster loading
-      );
-      
-      console.log('📚 Library assets fetched:', {
-        count: result.assets.length,
-        hasUrls: result.assets.filter(a => a.url || (a.signedUrls && a.signedUrls.length > 0)).length,
-        withSignedUrls: result.assets.filter(a => a.signedUrls && a.signedUrls.length > 0).length,
-        withDirectUrls: result.assets.filter(a => a.url).length,
-        types: result.assets.reduce((acc, a) => { 
-          acc[a.type] = (acc[a.type] || 0) + 1; 
-          return acc; 
-        }, {} as Record<string, number>)
-      });
-      
-      return result.assets;
+      return {
+        assets: processedAssets,
+        hasMore: images ? images.length === ASSETS_PER_PAGE : false
+      };
     },
-    enabled: open, // Only fetch when modal is open
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 10 * 60 * 1000,   // 10 minutes
+    enabled: open,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Filter and transform assets for display
-  const filteredAssets = useMemo(() => {
-    let filtered = libraryAssets;
-    
-    // Apply search filter
-    if (debouncedSearchTerm) {
-      const searchLower = debouncedSearchTerm.toLowerCase();
-      filtered = filtered.filter(asset => 
-        asset.prompt.toLowerCase().includes(searchLower) ||
-        asset.title?.toLowerCase().includes(searchLower) ||
-        asset.modelType?.toLowerCase().includes(searchLower)
-      );
-    }
-    
-    // Transform SDXL assets to show individual images
-    const transformed: UnifiedAsset[] = [];
-    
-    filtered.forEach(asset => {
-      if (asset.type === 'image' && asset.signedUrls && asset.signedUrls.length > 1) {
-        // SDXL job with multiple images - create individual assets
-        asset.signedUrls.forEach((url, index) => {
-          transformed.push({
-            ...asset,
-            id: `${asset.id}_${index}`, // Unique ID for each image
-            url: url,
-            thumbnailUrl: url,
-            prompt: `${asset.prompt} (Image ${index + 1})`,
-            isSDXLImage: true,
-            sdxlIndex: index,
-            originalAssetId: asset.id,
-          });
-        });
+  // Update allAssets when new page data arrives
+  useEffect(() => {
+    if (pageData) {
+      if (currentPage === 0) {
+        setAllAssets(pageData.assets);
       } else {
-        // Single image or video
-        transformed.push(asset);
+        setAllAssets(prev => [...prev, ...pageData.assets]);
       }
-    });
-    
-    return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  }, [libraryAssets, debouncedSearchTerm]);
+      setHasMore(pageData.hasMore);
+    }
+  }, [pageData, currentPage]);
+
+  // Use processed assets from pagination
+  const filteredAssets = allAssets;
 
 
   const handleAssetToggle = (assetId: string) => {
@@ -135,16 +263,28 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     
     const assetsToImport = filteredAssets.filter(asset => selectedAssets.has(asset.id));
     
-    // For SDXL images, we need to get the original asset data
+    // Process SDXL images properly
     const processedAssets: UnifiedAsset[] = [];
     
     for (const asset of assetsToImport) {
       if (asset.isSDXLImage && asset.originalAssetId) {
-        // Find the original SDXL asset
-        const originalAsset = libraryAssets.find(a => a.id === asset.originalAssetId);
-        if (originalAsset) {
-          processedAssets.push(originalAsset);
-        }
+        // For SDXL individual images, create a proper asset with all original data
+        const originalAsset: UnifiedAsset = {
+          id: asset.originalAssetId,
+          type: asset.type,
+          prompt: asset.prompt.replace(/ \(Image \d+\)$/, ''), // Remove image number suffix
+          status: asset.status,
+          quality: asset.quality,
+          format: asset.format,
+          createdAt: asset.createdAt,
+          url: asset.url,
+          thumbnailUrl: asset.thumbnailUrl,
+          modelType: asset.modelType,
+          isSDXL: asset.isSDXL,
+          title: asset.title,
+          metadata: asset.metadata
+        };
+        processedAssets.push(originalAsset);
       } else {
         processedAssets.push(asset);
       }
@@ -174,36 +314,18 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   };
 
   const getAssetDisplayUrl = (asset: UnifiedAsset): string | null => {
-    // For SDXL images, use the individual image URL first
-    if (asset.isSDXLImage && asset.url) {
-      return asset.url;
-    }
-    
-    // Priority order: existing signed URLs > direct URL > thumbnail URL
-    // Use existing signed URLs first (they're pre-generated and cached)
-    if (asset.signedUrls && asset.signedUrls.length > 0) {
-      return asset.signedUrls[0];
-    }
-    
-    // Fallback to direct URL if available
-    if (asset.url) {
-      return asset.url;
-    }
-    
-    // Last resort: thumbnail URL
-    return asset.thumbnailUrl || null;
+    // Direct URL is now pre-generated during fetch
+    return asset.url || asset.thumbnailUrl || null;
   };
 
   const getAssetCount = (asset: UnifiedAsset): number => {
-    if (asset.isSDXLImage) {
-      return 1; // Individual SDXL image
+    return 1; // Each displayed asset is now individual
+  };
+
+  const loadMoreAssets = () => {
+    if (!isLoading && hasMore) {
+      setCurrentPage(prev => prev + 1);
     }
-    
-    if (asset.signedUrls && asset.signedUrls.length > 1) {
-      return asset.signedUrls.length; // SDXL set
-    }
-    
-    return 1; // Single asset
   };
 
   if (error) {
@@ -426,25 +548,49 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                     </div>
                   );
                 })}
-              </div>
-            </ScrollArea>
+               </div>
+               
+               {/* Load More Button */}
+               {hasMore && !isLoading && (
+                 <div className="p-4 text-center">
+                   <Button
+                     onClick={loadMoreAssets}
+                     variant="outline"
+                     className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                   >
+                     <ChevronDown className="w-4 h-4 mr-2" />
+                     Load More Assets
+                   </Button>
+                 </div>
+               )}
+               
+               {isLoading && currentPage > 0 && (
+                 <div className="p-4 text-center">
+                   <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
+                   <p className="text-gray-400 text-sm mt-2">Loading more assets...</p>
+                 </div>
+               )}
+             </ScrollArea>
           )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-gray-800 pt-4 flex-shrink-0">
-          <p className="text-sm text-gray-400">
-            {selectedAssets.size} asset{selectedAssets.size !== 1 ? 's' : ''} selected
-          </p>
+          <div className="text-sm text-gray-400">
+            <p>{selectedAssets.size} asset{selectedAssets.size !== 1 ? 's' : ''} selected</p>
+            <p>Page {currentPage + 1} • {filteredAssets.length} assets loaded{hasMore ? ' • More available' : ''}</p>
+          </div>
+          
           <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button 
               onClick={handleImport}
               disabled={selectedAssets.size === 0}
+              className="bg-blue-600 hover:bg-blue-700"
             >
-              Import {selectedAssets.size > 0 && `(${selectedAssets.size})`}
+              Import Selected
             </Button>
           </div>
         </div>
