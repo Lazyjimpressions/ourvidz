@@ -190,23 +190,26 @@ const OptimizedLibrary = () => {
           .then(result => ({ ...result, count: result.count || 0 }))
       ]);
 
-      // Calculate precise pagination for database records
-      // We need to be conservative with SDXL expansion
-      const totalDbRecords = (imageCountResult.count || 0) + (videoCountResult.count || 0);
+      // Estimate total UI assets accounting for SDXL expansion (approximately 3x)
+      const estimatedSDXLMultiplier = 2.5; // Conservative estimate
+      const estimatedTotalAssets = (imageCountResult.count || 0) * estimatedSDXLMultiplier + (videoCountResult.count || 0);
       
-      // For mixed content, fetch a controlled amount from database
+      // Calculate database records needed to get approximately pageSize UI assets
       let imagesToFetch = 0;
       let videosToFetch = 0;
       
       if (typeFilter === 'image') {
-        imagesToFetch = pageSize;
+        // For images only, fetch fewer DB records to account for SDXL expansion
+        imagesToFetch = Math.ceil(pageSize / 2.5);
       } else if (typeFilter === 'video') {
         videosToFetch = pageSize;
       } else {
-        // For 'all', split evenly but account for SDXL expansion
-        // Reduce image count to account for SDXL creating multiple assets
-        imagesToFetch = Math.ceil(pageSize * 0.4); // Conservative for SDXL
-        videosToFetch = Math.ceil(pageSize * 0.6);
+        // For mixed content, calculate proportional amounts
+        const imageRatio = (imageCountResult.count || 0) / Math.max(1, (imageCountResult.count || 0) + (videoCountResult.count || 0));
+        const videoRatio = 1 - imageRatio;
+        
+        imagesToFetch = Math.ceil((pageSize * imageRatio) / 2.5); // Account for SDXL
+        videosToFetch = Math.ceil(pageSize * videoRatio);
       }
       
       const promises = [];
@@ -381,18 +384,13 @@ const OptimizedLibrary = () => {
       
       const sortedAssets = allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       
-      // Strictly limit assets to the page size to prevent loading all assets
-      const limitedAssets = sortedAssets.slice(0, pageSize);
-      
-      console.log(`✅ Fetched ${allAssets.length} expanded assets, limited to ${limitedAssets.length} for page size ${pageSize}`);
-      
-      // Use the previously calculated total count
+      console.log(`✅ Fetched ${allAssets.length} expanded assets for page ${currentPage}`);
       
       // Return data with accurate pagination info
       return {
-        assets: limitedAssets,
-        totalCount: totalDbRecords,
-        hasMore: limitedAssets.length === pageSize || (currentPage * pageSize) < totalDbRecords
+        assets: sortedAssets,
+        totalCount: Math.ceil(estimatedTotalAssets),
+        hasMore: allAssets.length >= pageSize
       };
     },
     staleTime: 5 * 60 * 1000,
@@ -405,8 +403,8 @@ const OptimizedLibrary = () => {
   const totalCount = assetsData?.totalCount || 0;
   const hasMore = assetsData?.hasMore || false;
   
-  // Calculate total pages (estimated)
-  const totalPages = Math.max(1, hasMore ? currentPage + 1 : currentPage);
+  // Calculate total pages accurately
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   // Use assets directly (no transformation needed since URLs are already generated)
   const transformedAssets = useMemo(() => {
