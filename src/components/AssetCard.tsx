@@ -116,7 +116,10 @@ export const AssetCard = ({
     return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | undefined | null) => {
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      return 'Unknown date';
+    }
     return date.toLocaleDateString('en-US', { 
       month: 'short', 
       day: 'numeric',

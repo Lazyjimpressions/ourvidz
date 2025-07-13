@@ -53,11 +53,11 @@ const SimpleLibrary = () => {
           id: item.id,
           type: 'image' as const,
           title: item.title,
-          prompt: item.prompt,
+          prompt: item.prompt || '',
           thumbnailUrl: item.thumbnail_url || item.image_url,
           url: item.image_url,
           status: item.status,
-          createdAt: new Date(item.created_at),
+          createdAt: item.created_at ? new Date(item.created_at) : new Date(),
           metadata: item.metadata
         })) || [];
       } else {
@@ -80,7 +80,7 @@ const SimpleLibrary = () => {
           thumbnailUrl: item.thumbnail_url,
           url: item.video_url,
           status: item.status,
-          createdAt: new Date(item.created_at),
+          createdAt: item.created_at ? new Date(item.created_at) : new Date(),
           metadata: item.metadata
         })) || [];
       }
