@@ -19,6 +19,7 @@ import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
+  console.log('🔍 OptimizedLibrary component rendering...');
   const queryClient = useQueryClient();
   
   // Phase 3: Initialize performance monitoring
@@ -60,6 +61,7 @@ const OptimizedLibrary = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [selectedAssetIndex, setSelectedAssetIndex] = useState<number>(-1);
+  console.log('🔍 selectedAssetIndex state:', selectedAssetIndex);
 
   // Modal states  
   const [assetToDelete, setAssetToDelete] = useState<UnifiedAsset | null>(null);
