@@ -435,7 +435,7 @@ const LibraryV2 = () => {
                   key={asset.id}
                   asset={asset as UnifiedAsset}
                   isSelected={selectedAssets.has(asset.id)}
-                  onSelect={handleAssetSelection}
+                  onSelect={(selected) => handleAssetSelection(asset.id, selected)}
                   onPreview={() => handlePreview(asset)}
                   onDelete={() => toast.info('Delete functionality coming soon')}
                   onDownload={() => toast.info('Download functionality coming soon')}
@@ -450,8 +450,9 @@ const LibraryV2 = () => {
         {previewAsset && (
           <AssetPreviewModal
             asset={previewAsset as UnifiedAsset}
-            isOpen={!!previewAsset}
+            open={!!previewAsset}
             onClose={handleClosePreview}
+            onDownload={() => toast.info('Download functionality coming soon')}
           />
         )}
       </div>

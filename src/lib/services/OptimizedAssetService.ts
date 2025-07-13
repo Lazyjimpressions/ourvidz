@@ -30,6 +30,8 @@ export interface UnifiedAsset {
   isSDXL?: boolean;
   signedUrls?: string[];
   jobId?: string;
+  metadata?: any;
+  rawPaths?: string[];
   // SDXL image handling properties
   isSDXLImage?: boolean;
   sdxlIndex?: number;

@@ -11,7 +11,7 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
-import { useLazyAssetsV2 } from "@/hooks/useLazyAssetsV2";
+import { useLazyUrlGeneration } from "@/hooks/useLazyUrlGeneration";
 import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
 import { progressiveEnhancement } from "@/lib/cache/ProgressiveEnhancement";
@@ -78,32 +78,140 @@ const OptimizedLibrary = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // React Query for intelligent caching with Phase 3 enhancements
+  // Optimized asset fetching - only fetch metadata, not URLs
   const { data: assets = [], isLoading, error } = useQuery({
     queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm],
     queryFn: async () => {
       performanceMonitor.markStart('assets-fetch');
       
-      const filters = {
-        type: typeFilter !== 'all' ? typeFilter : undefined,
-        status: statusFilter !== 'all' ? statusFilter : undefined,
-        search: debouncedSearchTerm || undefined,
-      };
+      if (!supabase) throw new Error('Supabase not available');
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+      
+      console.log('🔄 Fetching library assets without URLs for user:', user.id);
+      
+      // Build efficient database queries - fetch metadata only, generate URLs later
+      const imageQuery = supabase
+        .from('images')
+        .select(`
+          id, 
+          prompt, 
+          status, 
+          quality, 
+          format, 
+          created_at, 
+          image_url, 
+          image_urls, 
+          metadata
+        `)
+        .eq('user_id', user.id);
+      
+      const videoQuery = supabase
+        .from('videos')
+        .select(`
+          id, 
+          status, 
+          format, 
+          created_at, 
+          video_url, 
+          thumbnail_url, 
+          metadata
+        `)
+        .eq('user_id', user.id);
 
-      const result = await OptimizedAssetService.getUserAssets(filters, {
-        limit: 1000, // Support up to 1000 assets as requested
-        offset: 0
-      });
+      // Apply filters
+      if (statusFilter !== 'all') {
+        imageQuery.eq('status', statusFilter);
+        videoQuery.eq('status', statusFilter);
+      }
+      
+      if (debouncedSearchTerm) {
+        imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
+      }
+
+      // Execute queries based on type filter
+      const promises = [];
+      
+      if (typeFilter !== 'video') {
+        promises.push(imageQuery.order('created_at', { ascending: false }).limit(100));
+      }
+      
+      if (typeFilter !== 'image') {
+        promises.push(videoQuery.order('created_at', { ascending: false }).limit(100));
+      }
+      
+      const [imageResult, videoResult] = await Promise.all(promises);
+      
+      if (imageResult?.error) throw imageResult.error;
+      if (videoResult?.error) throw videoResult.error;
+      
+      const allAssets: UnifiedAsset[] = [];
+      
+      // Process images without generating URLs (lazy approach)
+      if (imageResult?.data) {
+        imageResult.data.forEach(image => {
+          const metadata = image.metadata as any;
+          const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+          
+          allAssets.push({
+            id: image.id,
+            type: 'image' as const,
+            prompt: image.prompt,
+            status: image.status,
+            quality: image.quality || 'fast',
+            format: image.format || 'png',
+            createdAt: new Date(image.created_at),
+            metadata: metadata,
+            title: image.prompt,
+            // URLs will be generated lazily when visible
+            url: undefined,
+            thumbnailUrl: undefined,
+            signedUrls: undefined,
+            rawPaths: image.image_urls || (image.image_url ? [image.image_url] : []),
+            isSDXL: isSDXL,
+          });
+        });
+      }
+      
+      // Process videos without generating URLs (lazy approach)
+      if (videoResult?.data) {
+        videoResult.data.forEach(video => {
+          const metadata = video.metadata as any;
+          
+          allAssets.push({
+            id: video.id,
+            type: 'video' as const,
+            prompt: metadata?.prompt || 'Generated video',
+            status: video.status,
+            quality: video.quality || 'fast',
+            format: video.format || 'mp4',
+            createdAt: new Date(video.created_at),
+            metadata: metadata,
+            title: metadata?.prompt || 'Generated video',
+            // URLs will be generated lazily when visible
+            url: undefined,
+            thumbnailUrl: video.thumbnail_url,
+            signedUrls: undefined,
+            rawPaths: video.video_url ? [video.video_url] : [],
+          });
+        });
+      }
 
       performanceMonitor.markEnd('assets-fetch');
       
-      // Phase 3: Track search patterns and enable smart prefetching
+      // Track search patterns and enable smart prefetching
       if (debouncedSearchTerm) {
         progressiveEnhancement.trackSearch(debouncedSearchTerm);
       }
-      progressiveEnhancement.trackFilterChange(filters);
+      progressiveEnhancement.trackFilterChange({ 
+        type: typeFilter !== 'all' ? typeFilter : undefined,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        search: debouncedSearchTerm || undefined,
+      });
       
-      return result.assets;
+      console.log(`✅ Fetched ${allAssets.length} assets metadata without URLs`);
+      return allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 15 * 60 * 1000,   // 15 minutes
@@ -115,22 +223,24 @@ const OptimizedLibrary = () => {
     const transformed: UnifiedAsset[] = [];
     
     assets.forEach(asset => {
-      if (asset.type === 'image' && asset.signedUrls && asset.signedUrls.length > 1) {
+      if (asset.type === 'image' && asset.rawPaths && asset.rawPaths.length > 1) {
         // SDXL job with multiple images - create individual assets
-        asset.signedUrls.forEach((url, index) => {
+        asset.rawPaths.forEach((path, index) => {
           transformed.push({
             ...asset,
             id: `${asset.id}_${index}`, // Unique ID for each image
-            url: url,
-            thumbnailUrl: url,
+            rawPaths: [path], // Single path for this individual image
             prompt: `${asset.prompt} (Image ${index + 1})`,
             isSDXLImage: true,
             sdxlIndex: index,
             originalAssetId: asset.id,
+            url: undefined, // Will be generated lazily
+            thumbnailUrl: undefined,
+            signedUrls: undefined,
           });
         });
       } else {
-        // Single image or video
+        // Single image or video - keep as is
         transformed.push(asset);
       }
     });
@@ -148,17 +258,17 @@ const OptimizedLibrary = () => {
     return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [assets, typeFilter, statusFilter]);
 
-  // Initialize optimized lazy loading for assets with Phase 3 enhancements
+  // Initialize lazy URL generation for better performance
   const { 
     lazyAssets, 
     loadingUrls, 
     registerAssetRef, 
     forceLoadAssetUrls,
     preloadNextAssets
-  } = useLazyAssetsV2({ 
+  } = useLazyUrlGeneration({ 
     assets: transformedAssets, 
-    enabled: viewMode === 'grid',
-    prefetchThreshold: 100 // Start loading when 100px away from viewport
+    enabled: true,
+    prefetchThreshold: 200 // Start loading when 200px away from viewport
   });
   
   // Phase 3: Track asset visibility separately
@@ -443,7 +553,7 @@ const OptimizedLibrary = () => {
               selectionMode={true}
             />
           ) : (
-            <div className="space-y-6">
+              <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                 {lazyAssets.map((asset) => (
                   <div
@@ -455,6 +565,7 @@ const OptimizedLibrary = () => {
                       isSelected={selectedAssets.has(asset.id)}
                       onSelect={(selected) => handleAssetSelection(asset.id, selected)}
                       onPreview={async () => {
+                        // Force load URL before preview for better UX
                         await forceLoadAssetUrls(asset.id);
                         setPreviewAsset(asset);
                       }}
