@@ -55,7 +55,7 @@ const OptimizedLibrary = () => {
   
   // Simplified filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>("all");
+  const [typeFilter, setTypeFilter] = useState<'image' | 'video'>("image");
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'processing' | 'failed'>("all");
   
   // Pagination states
@@ -176,46 +176,20 @@ const OptimizedLibrary = () => {
       
       console.log('🔄 Fetching library assets with pagination:', { currentPage, pageSize, typeFilter });
       
-      // Get total counts for accurate pagination
-      const [imageCountResult, videoCountResult] = await Promise.all([
-        supabase
-          .from('images')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .then(result => ({ ...result, count: result.count || 0 })),
-        supabase
-          .from('videos')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .then(result => ({ ...result, count: result.count || 0 }))
-      ]);
-
-      // Estimate total UI assets accounting for SDXL expansion (approximately 3x)
-      const estimatedSDXLMultiplier = 2.5; // Conservative estimate
-      const estimatedTotalAssets = (imageCountResult.count || 0) * estimatedSDXLMultiplier + (videoCountResult.count || 0);
-      
-      // Calculate database records needed to get approximately pageSize UI assets
-      let imagesToFetch = 0;
-      let videosToFetch = 0;
+      // Simple single-type pagination
+      let totalCount = 0;
+      let data = [];
       
       if (typeFilter === 'image') {
-        // For images only, fetch fewer DB records to account for SDXL expansion
-        imagesToFetch = Math.ceil(pageSize / 2.5);
-      } else if (typeFilter === 'video') {
-        videosToFetch = pageSize;
-      } else {
-        // For mixed content, calculate proportional amounts
-        const imageRatio = (imageCountResult.count || 0) / Math.max(1, (imageCountResult.count || 0) + (videoCountResult.count || 0));
-        const videoRatio = 1 - imageRatio;
+        // Get total count for images
+        const { count } = await supabase
+          .from('images')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
         
-        imagesToFetch = Math.ceil((pageSize * imageRatio) / 2.5); // Account for SDXL
-        videosToFetch = Math.ceil(pageSize * videoRatio);
-      }
-      
-      const promises = [];
-      
-      // Build and execute image query
-      if (imagesToFetch > 0) {
+        totalCount = count || 0;
+        
+        // Build image query
         let imageQuery = supabase
           .from('images')
           .select(`
@@ -239,14 +213,23 @@ const OptimizedLibrary = () => {
           imageQuery = imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
         }
         
-        const imageOffset = typeFilter === 'all' ? Math.floor(offset * 0.4) : offset;
-        promises.push(imageQuery.order('created_at', { ascending: false }).range(imageOffset, imageOffset + imagesToFetch - 1));
+        const { data: imageData, error } = await imageQuery
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+          
+        if (error) throw error;
+        data = imageData || [];
+        
       } else {
-        promises.push(Promise.resolve({ data: [], error: null }));
-      }
-      
-      // Build and execute video query
-      if (videosToFetch > 0) {
+        // Get total count for videos
+        const { count } = await supabase
+          .from('videos')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        
+        totalCount = count || 0;
+        
+        // Build video query
         let videoQuery = supabase
           .from('videos')
           .select(`
@@ -264,27 +247,25 @@ const OptimizedLibrary = () => {
           videoQuery = videoQuery.eq('status', statusFilter);
         }
         
-        const videoOffset = typeFilter === 'all' ? Math.floor(offset * 0.6) : offset;
-        promises.push(videoQuery.order('created_at', { ascending: false }).range(videoOffset, videoOffset + videosToFetch - 1));
-      } else {
-        promises.push(Promise.resolve({ data: [], error: null }));
+        const { data: videoData, error } = await videoQuery
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+          
+        if (error) throw error;
+        data = videoData || [];
       }
-      
-      const [imageResult, videoResult] = await Promise.all(promises);
-      
-      if (imageResult?.error) throw imageResult.error;
-      if (videoResult?.error) throw videoResult.error;
       
       const allAssets: UnifiedAsset[] = [];
       
-      // Process images with direct URL generation
-      if (imageResult?.data) {
-        for (const image of imageResult.data) {
+      // Process assets
+      for (const item of data) {
+        if (typeFilter === 'image') {
+          const image = item as any;
           const metadata = image.metadata as any;
           const bucket = inferBucketFromMetadata(metadata, image.quality);
           const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
           
-          // Handle SDXL multiple images
+          // Handle SDXL multiple images - expand after fetching
           if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
             const signedUrls = await generateSignedUrls(image.image_urls, bucket);
             
@@ -338,12 +319,9 @@ const OptimizedLibrary = () => {
               isSDXL: isSDXL,
             });
           }
-        }
-      }
-      
-      // Process videos with direct URL generation
-      if (videoResult?.data) {
-        for (const video of videoResult.data) {
+        } else {
+          // Process video
+          const video = item as any;
           const metadata = video.metadata as any;
           const bucket = metadata?.bucket || (video.quality === 'high' ? 'video_high' : 'video_fast');
           
@@ -377,20 +355,18 @@ const OptimizedLibrary = () => {
         progressiveEnhancement.trackSearch(debouncedSearchTerm);
       }
       progressiveEnhancement.trackFilterChange({ 
-        type: typeFilter !== 'all' ? typeFilter : undefined,
+        type: typeFilter,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         search: debouncedSearchTerm || undefined,
       });
-      
-      const sortedAssets = allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       
       console.log(`✅ Fetched ${allAssets.length} expanded assets for page ${currentPage}`);
       
       // Return data with accurate pagination info
       return {
-        assets: sortedAssets,
-        totalCount: Math.ceil(estimatedTotalAssets),
-        hasMore: allAssets.length >= pageSize
+        assets: allAssets,
+        totalCount,
+        hasMore: data.length === pageSize
       };
     },
     staleTime: 5 * 60 * 1000,
@@ -433,14 +409,13 @@ const OptimizedLibrary = () => {
     const failed = transformedAssets.filter(a => a.status === 'failed' || a.status === 'error').length;
     
     return {
-      total: transformedAssets.length,
-      images: transformedAssets.filter(a => a.type === 'image').length,
-      videos: transformedAssets.filter(a => a.type === 'video').length,
+      images: typeFilter === 'image' ? totalCount : 0,
+      videos: typeFilter === 'video' ? totalCount : 0,
       completed: completed,
       processing: processing,
       failed: failed,
     };
-  }, [transformedAssets]);
+  }, [transformedAssets, totalCount, typeFilter]);
 
   // Selection handlers
   const handleAssetSelection = (assetId: string, selected: boolean) => {

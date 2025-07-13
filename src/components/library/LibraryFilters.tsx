@@ -11,12 +11,11 @@ import {
 } from "lucide-react";
 
 interface LibraryFiltersProps {
-  typeFilter: 'all' | 'image' | 'video';
-  onTypeFilterChange: (type: 'all' | 'image' | 'video') => void;
+  typeFilter: 'image' | 'video';
+  onTypeFilterChange: (type: 'image' | 'video') => void;
   statusFilter: 'all' | 'completed' | 'processing' | 'failed';
   onStatusFilterChange: (status: 'all' | 'completed' | 'processing' | 'failed') => void;
   counts: {
-    total: number;
     images: number;
     videos: number;
     completed: number;
@@ -34,16 +33,8 @@ export const LibraryFilters = ({
 }: LibraryFiltersProps) => {
   return (
     <div className="space-y-3">
-      {/* Type Filters */}
+      {/* Content Type Tabs */}
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant={typeFilter === 'all' ? "default" : "outline"}
-          size="sm"
-          onClick={() => onTypeFilterChange('all')}
-          className="border-gray-600"
-        >
-          All ({counts.total})
-        </Button>
         <Button
           variant={typeFilter === 'image' ? "default" : "outline"}
           size="sm"
