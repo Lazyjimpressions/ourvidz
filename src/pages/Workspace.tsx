@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { X, Info } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
+import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
 import { useEmergencyWorkspaceReset } from '@/hooks/useEmergencyWorkspaceReset';
 import { OptimizedAssetService, UnifiedAsset } from '@/lib/services/OptimizedAssetService';
@@ -84,7 +85,7 @@ const Workspace = () => {
   useWorkspaceIntegration();
 
   // Emergency workspace reset - forces clean workspace
-  useEmergencyWorkspaceReset();
+  // useEmergencyWorkspaceReset(); // DISABLED to allow persistence
 
   // Listen for generation completion events and add new assets to workspace immediately
   useEffect(() => {
@@ -207,36 +208,43 @@ const Workspace = () => {
     };
   }, [user]);
 
-  // FORCE empty workspace on every load - no persistence allowed
+  // Restore workspace from session storage on user load
   useEffect(() => {
-    console.log('🚨 FORCING empty workspace on page load - no persistence allowed');
+    if (!user?.id) return;
     
-    // Clear all workspace storage immediately
-    sessionStorage.removeItem('workspace');
-    sessionStorage.removeItem('workspace-session');
-    sessionStorage.removeItem('workspace-user');
-    localStorage.removeItem('workspace');
-    localStorage.removeItem('workspace-session');
-    localStorage.removeItem('workspace-user');
+    console.log('🔄 Restoring workspace from session storage for user:', user.id);
     
-    // Force empty workspace
-    setWorkspaceAssets([]);
+    // Check if this is the same user session
+    const storedUser = sessionStorage.getItem('workspace-user');
+    const storedWorkspace = sessionStorage.getItem('workspace');
     
-    // Set new clean session
-    if (user?.id) {
-      sessionStorage.setItem('workspace-session', Date.now().toString());
-      sessionStorage.setItem('workspace-user', user.id);
-      console.log('✅ Started fresh clean workspace session for user:', user.id);
+    if (storedUser === user.id && storedWorkspace) {
+      try {
+        const parsedWorkspace = JSON.parse(storedWorkspace);
+        if (Array.isArray(parsedWorkspace) && parsedWorkspace.length > 0) {
+          setWorkspaceAssets(parsedWorkspace);
+          console.log('✅ Restored workspace with', parsedWorkspace.length, 'assets');
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to parse stored workspace:', error);
+      }
     }
-  }, [user]);
+    
+    // Set new session info
+    sessionStorage.setItem('workspace-user', user.id);
+    sessionStorage.setItem('workspace-session', Date.now().toString());
+  }, [user?.id]);
 
   // Save workspace to sessionStorage with debouncing
   useEffect(() => {
+    if (!user?.id) return;
+    
     const timeout = setTimeout(() => {
       sessionStorage.setItem('workspace', JSON.stringify(workspaceAssets));
+      console.log('💾 Saved workspace to session storage:', workspaceAssets.length, 'assets');
     }, 300);
     return () => clearTimeout(timeout);
-  }, [workspaceAssets]);
+  }, [workspaceAssets, user?.id]);
 
   // React Query for recent completed assets (for auto-add functionality)
   const { data: recentAssets = [] } = useQuery({
@@ -676,37 +684,64 @@ const Workspace = () => {
         )}
       </div>
 
-      {/* Lightbox Viewer for Images */}
-      {lightboxIndex !== null && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-          <div className="relative max-w-4xl max-h-[90vh]">
-            <img
-              src={imageAssets[lightboxIndex]?.url}
-              alt="Expanded view"
-              className="max-w-full max-h-full object-contain"
-            />
-            <div className="absolute top-4 right-4 flex gap-2">
-              {imageAssets[lightboxIndex] && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleShowPromptInfo(imageAssets[lightboxIndex])}
-                  className="bg-white/20 text-white hover:bg-white/30"
-                >
-                  <Info className="h-4 w-4" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setLightboxIndex(null)}
-                className="bg-white/20 text-white hover:bg-white/30"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
+      {/* Workspace Content Modal */}
+      {lightboxIndex !== null && workspaceAssets.length > 0 && (
+        <WorkspaceContentModal
+          tiles={workspaceAssets.map(asset => ({
+            id: asset.id,
+            originalAssetId: asset.jobId,
+            type: asset.type || 'image',
+            url: asset.url,
+            prompt: asset.prompt,
+            timestamp: asset.timestamp || new Date(),
+            quality: (asset.quality as 'fast' | 'high') || 'fast',
+            modelType: asset.modelType,
+            duration: undefined,
+            thumbnailUrl: asset.url
+          }))}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onRemoveFromWorkspace={(tileId) => {
+            setWorkspaceAssets(prev => prev.filter(asset => asset.id !== tileId));
+            toast.success('Removed from workspace');
+            
+            // Adjust lightbox index if needed
+            const newAssets = workspaceAssets.filter(asset => asset.id !== tileId);
+            if (newAssets.length === 0) {
+              setLightboxIndex(null);
+            } else if (lightboxIndex >= newAssets.length) {
+              setLightboxIndex(newAssets.length - 1);
+            }
+          }}
+          onDeleteFromLibrary={async (originalAssetId) => {
+            try {
+              // Delete from database
+              const { error } = await supabase
+                .from('images')
+                .delete()
+                .eq('id', originalAssetId)
+                .eq('user_id', user?.id);
+                
+              if (error) throw error;
+              
+              // Remove from workspace
+              setWorkspaceAssets(prev => prev.filter(asset => asset.jobId !== originalAssetId));
+              toast.success('Deleted from library and removed from workspace');
+              
+              // Close modal if no assets left
+              const remainingAssets = workspaceAssets.filter(asset => asset.jobId !== originalAssetId);
+              if (remainingAssets.length === 0) {
+                setLightboxIndex(null);
+              } else if (lightboxIndex >= remainingAssets.length) {
+                setLightboxIndex(remainingAssets.length - 1);
+              }
+            } catch (error) {
+              console.error('Error deleting from library:', error);
+              toast.error('Failed to delete from library');
+            }
+          }}
+        />
       )}
 
       {/* Video Modal */}

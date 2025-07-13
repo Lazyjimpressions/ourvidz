@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, X, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PromptInfoModal } from "@/components/PromptInfoModal";
 import { MediaTile } from "@/types/workspace";
@@ -11,9 +11,11 @@ interface WorkspaceContentModalProps {
   currentIndex: number;
   onClose: () => void;
   onIndexChange: (index: number) => void;
+  onRemoveFromWorkspace?: (tileId: string) => void;
+  onDeleteFromLibrary?: (originalAssetId: string) => void;
 }
 
-export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange }: WorkspaceContentModalProps) => {
+export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange, onRemoveFromWorkspace, onDeleteFromLibrary }: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
   const [showPromptModal, setShowPromptModal] = useState(false);
   
@@ -89,6 +91,28 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
             >
               <Info className="w-4 h-4" />
             </Button>
+            {onRemoveFromWorkspace && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onRemoveFromWorkspace(currentTile.id)}
+                className="bg-black/50 hover:bg-black/70 text-white p-2 backdrop-blur-sm"
+                title="Remove from workspace"
+              >
+                <Minus className="w-4 h-4" />
+              </Button>
+            )}
+            {onDeleteFromLibrary && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDeleteFromLibrary(currentTile.originalAssetId)}
+                className="bg-red-600/50 hover:bg-red-600/70 text-white p-2 backdrop-blur-sm"
+                title="Delete from library"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"

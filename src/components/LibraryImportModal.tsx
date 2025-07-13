@@ -44,7 +44,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   const [allAssets, setAllAssets] = useState<UnifiedAsset[]>([]);
   const [hasMore, setHasMore] = useState(true);
   
-  const ASSETS_PER_PAGE = 20;
+  const ASSETS_PER_PAGE = 50;
   
 
   // Debounce search term
@@ -141,77 +141,107 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
       const processedAssets: UnifiedAsset[] = [];
       
-      // Process like LibraryV2
+      // Process like LibraryV2 with batch URL generation for performance
       if (images) {
+        // Collect all URLs that need signing for batch processing
+        const urlBatches: { urls: string[], bucket: string, imageData: any }[] = [];
+        
         for (const image of images) {
           const metadata = image.metadata as any;
           const bucket = inferBucketFromMetadata(metadata, image.quality);
           const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
           
           if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
-            // Generate signed URLs for all SDXL images
             const imageUrlsArray = image.image_urls.filter((url): url is string => typeof url === 'string');
-            const signedUrls = await generateSignedUrls(imageUrlsArray, bucket);
-            
-            // Create individual assets for each SDXL image
-            signedUrls.forEach((url, index) => {
-              processedAssets.push({
-                id: `${image.id}_${index}`,
-                type: 'image',
-                prompt: `${image.prompt} (Image ${index + 1})`,
-                status: image.status,
-                quality: image.quality,
-                format: image.format,
-                createdAt: new Date(image.created_at),
-                url: url,
-                thumbnailUrl: url,
-                modelType: 'SDXL',
-                isSDXL: true,
-                isSDXLImage: true,
-                sdxlIndex: index,
-                originalAssetId: image.id,
-                title: image.title,
-                metadata: image.metadata
-              });
-            });
+            urlBatches.push({ urls: imageUrlsArray, bucket, imageData: { ...image, isSDXL: true } });
           } else {
-            // Single image
-            let url: string | undefined;
-            
+            let urlToProcess: string | undefined;
             if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
               const firstUrl = image.image_urls[0];
               if (typeof firstUrl === 'string') {
-                const signedUrls = await generateSignedUrls([firstUrl], bucket);
-                url = signedUrls[0];
+                urlToProcess = firstUrl;
               }
             } else if (image.image_url && typeof image.image_url === 'string') {
-              const signedUrls = await generateSignedUrls([image.image_url], bucket);
-              url = signedUrls[0];
+              urlToProcess = image.image_url;
             }
             
-            processedAssets.push({
-              id: image.id,
-              type: 'image',
-              prompt: image.prompt,
-              status: image.status,
-              quality: image.quality,
-              format: image.format,
-              createdAt: new Date(image.created_at),
-              url: url,
-              thumbnailUrl: url,
-              modelType: isSDXL ? 'SDXL' : 'WAN',
-              isSDXL: isSDXL,
-              title: image.title,
-              metadata: image.metadata
-            });
+            if (urlToProcess) {
+              urlBatches.push({ urls: [urlToProcess], bucket, imageData: { ...image, isSDXL } });
+            }
           }
         }
+        
+        // Generate signed URLs in parallel with error handling
+        console.log(`📸 Processing ${urlBatches.length} URL batches for ${images.length} images...`);
+        
+        const urlResults = await Promise.allSettled(
+          urlBatches.map(async ({ urls, bucket, imageData }) => {
+            try {
+              const signedUrls = await generateSignedUrls(urls, bucket);
+              return { signedUrls, imageData, success: true };
+            } catch (error) {
+              console.warn(`Failed to generate signed URLs for image ${imageData.id}:`, error);
+              return { signedUrls: [], imageData, success: false };
+            }
+          })
+        );
+        
+        // Create processed assets from successful URL generations
+        urlResults.forEach((result) => {
+          if (result.status === 'fulfilled' && result.value.success) {
+            const { signedUrls, imageData } = result.value;
+            const isSDXL = imageData.isSDXL;
+            
+            if (isSDXL && signedUrls.length > 1) {
+              // Create individual assets for each SDXL image
+              signedUrls.forEach((url, index) => {
+                processedAssets.push({
+                  id: `${imageData.id}_${index}`,
+                  type: 'image',
+                  prompt: `${imageData.prompt} (Image ${index + 1})`,
+                  status: imageData.status,
+                  quality: imageData.quality,
+                  format: imageData.format,
+                  createdAt: new Date(imageData.created_at),
+                  url: url,
+                  thumbnailUrl: url,
+                  modelType: 'SDXL',
+                  isSDXL: true,
+                  isSDXLImage: true,
+                  sdxlIndex: index,
+                  originalAssetId: imageData.id,
+                  title: imageData.title,
+                  metadata: imageData.metadata
+                });
+              });
+            } else if (signedUrls.length > 0) {
+              // Single image
+              processedAssets.push({
+                id: imageData.id,
+                type: 'image',
+                prompt: imageData.prompt,
+                status: imageData.status,
+                quality: imageData.quality,
+                format: imageData.format,
+                createdAt: new Date(imageData.created_at),
+                url: signedUrls[0],
+                thumbnailUrl: signedUrls[0],
+                modelType: isSDXL ? 'SDXL' : 'WAN',
+                isSDXL: isSDXL,
+                title: imageData.title,
+                metadata: imageData.metadata
+              });
+            }
+          }
+        });
       }
       
-      return {
-        assets: processedAssets,
-        hasMore: images ? images.length === ASSETS_PER_PAGE : false
-      };
+        console.log(`✅ Successfully processed ${processedAssets.length} assets from ${images?.length || 0} database records`);
+        
+        return {
+          assets: processedAssets,
+          hasMore: images ? images.length === ASSETS_PER_PAGE : false
+        };
     },
     enabled: open,
     staleTime: 2 * 60 * 1000,
