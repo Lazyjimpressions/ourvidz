@@ -599,6 +599,245 @@ Worker Testing:
 
 ---
 
+## **Component Architecture & Performance Optimizations**
+
+### **Critical Implementation Patterns**
+
+#### **Supabase Client Management**
+**Problem**: Creating new Supabase clients in components causes authentication context conflicts and black screen issues.
+
+**❌ Problematic Pattern**
+```typescript
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  'https://ulmdmzhcdwfadbvfpckt.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+```
+
+**✅ Correct Pattern**
+```typescript
+import { supabase } from '@/integrations/supabase/client';
+```
+
+**Why This Matters**: 
+- Prevents authentication context conflicts
+- Maintains consistent session state
+- Avoids multiple client instances
+
+#### **Data Structure Access Patterns**
+**Problem**: Incorrect data access patterns lead to missing prompts and failed imports.
+
+**❌ Incorrect Pattern**
+```typescript
+// Tried to access job.prompt directly
+onClick={() => handleImport(signed, job.id, job.prompt)}
+```
+
+**✅ Correct Pattern**
+```typescript
+// Correctly accessed job.metadata?.prompt
+const jobPrompt = job.metadata?.prompt || job.prompt || 'No prompt available';
+onClick={() => handleImport(signed, job.id, jobPrompt)}
+```
+
+**Why This Matters**:
+- Images store prompts in `metadata.prompt`
+- Videos also use `metadata.prompt`
+- Fallback ensures compatibility
+
+#### **Bucket Detection Logic**
+**Problem**: Simplified bucket detection fails with different model types and quality variations.
+
+**❌ Basic Pattern**
+```typescript
+const bucket = job.metadata?.bucket || 'sdxl_image_fast';
+```
+
+**✅ Enhanced Pattern**
+```typescript
+const inferBucketFromJob = (job: any): string => {
+  // Primary: Use bucket from metadata if available
+  if (job.metadata?.bucket) {
+    return job.metadata.bucket;
+  }
+
+  // Fallback logic based on job properties
+  const mode = job.generation_mode || '';
+  const quality = job.quality || 'fast';
+  const modelVariant = job.metadata?.model_variant || '';
+
+  // Enhanced model variants
+  if (modelVariant.includes('image7b')) {
+    return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+  }
+
+  // SDXL models
+  if (mode.includes('sdxl')) {
+    return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+  }
+
+  // Default buckets
+  return quality === 'high' ? 'image_high' : 'image_fast';
+};
+```
+
+### **Performance Optimizations**
+
+#### **Session-Based URL Caching**
+**Problem**: Individual signed URL requests for each image/video on every page load caused slow loading and excessive API calls.
+
+**❌ Before Optimization**
+```typescript
+// Each image triggered individual storage request
+for (const path of imageUrls) {
+  const { data, error } = await supabase
+    .storage
+    .from(bucket)
+    .createSignedUrl(path, 3600);
+}
+```
+
+**✅ After Optimization**
+```typescript
+// Cache URLs in sessionStorage to avoid repeated requests
+const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
+const key = `${bucket}|${path}`;
+
+if (sessionCache[key]) {
+  result[path] = sessionCache[key]; // Use cached URL
+  if (onAutoAdd) onAutoAdd(sessionCache[key], job.id, jobPrompt); // Auto-add to workspace
+} else {
+  // Only request if not cached
+  const { data, error } = await supabase
+    .storage
+    .from(bucket)
+    .createSignedUrl(path, 3600);
+  
+  if (data?.signedUrl) {
+    sessionCache[key] = data.signedUrl; // Cache for future use
+    if (onAutoAdd) onAutoAdd(data.signedUrl, job.id, jobPrompt); // Auto-add to workspace
+  }
+}
+```
+
+#### **Automatic Workspace Population**
+**Problem**: Manual import workflow created friction and inconsistent workspace population.
+
+**❌ Manual Import**
+```typescript
+// Users had to click import buttons for each image
+<button onClick={() => handleImport(signed, job.id, jobPrompt)}>
+  Import
+</button>
+```
+
+**✅ Auto-Add System**
+```typescript
+// Images automatically added to workspace when signed URLs are generated
+if (onAutoAdd) {
+  onAutoAdd(data.signedUrl, job.id, jobPrompt);
+}
+```
+
+### **Error Handling & Debugging**
+
+#### **Comprehensive Error Handling**
+**❌ Basic Error Handling**
+```typescript
+if (data?.signedUrl) {
+  result[path] = data.signedUrl;
+} else {
+  console.warn('Failed to sign:', key, error);
+}
+```
+
+**✅ Enhanced Error Handling**
+```typescript
+try {
+  console.log(`Requesting signed URL for bucket=${bucket}, path=${path}`);
+  const { data, error } = await supabase
+    .storage
+    .from(bucket)
+    .createSignedUrl(path, 3600);
+
+  if (data?.signedUrl) {
+    result[path] = data.signedUrl;
+    console.log(`Successfully signed URL for ${path}`);
+    
+    // Preload image for better UX
+    const preload = new Image();
+    preload.src = data.signedUrl;
+  } else {
+    console.error(`Failed to sign URL for ${path}:`, error);
+    toast({ 
+      title: 'Signing Failed', 
+      description: `Failed to sign ${path} in ${bucket}`, 
+      variant: 'destructive' 
+    });
+  }
+} catch (error) {
+  console.error(`Error signing URL for ${path}:`, error);
+  toast({ 
+    title: 'Signing Error', 
+    description: `Error signing ${path}`, 
+    variant: 'destructive' 
+  });
+}
+```
+
+### **Performance Impact**
+
+#### **Before Optimizations**
+- **Storage Requests**: 1 request per image/video per page load
+- **Loading Time**: Slow due to sequential requests
+- **User Experience**: Repeated loading states + manual imports
+- **API Usage**: High due to repeated requests
+- **Workflow**: Manual import required for each item
+
+#### **After Optimizations**
+- **Storage Requests**: 1 request per image/video per session
+- **Loading Time**: Fast after initial load
+- **User Experience**: Instant loading from cache + automatic workspace population
+- **API Usage**: Significantly reduced
+- **Workflow**: Fully automated workspace population
+
+### **Session Management Utilities**
+
+#### **Utility Functions**
+```typescript
+// Clear all workspace session data
+export const clearWorkspaceSessionData = () => {
+  sessionStorage.removeItem('workspace');
+  sessionStorage.removeItem('signed_urls');
+  sessionStorage.removeItem('workspace_mode');
+};
+
+// Clear only URL cache
+export const clearSignedUrlCache = () => {
+  sessionStorage.removeItem('signed_urls');
+};
+
+// Monitor storage usage
+export const getSessionStorageStats = () => {
+  const workspace = sessionStorage.getItem('workspace');
+  const signedUrls = sessionStorage.getItem('signed_urls');
+  const mode = sessionStorage.getItem('workspace_mode');
+  
+  return {
+    workspaceSize: workspace ? JSON.stringify(workspace).length : 0,
+    signedUrlsSize: signedUrls ? JSON.stringify(signedUrls).length : 0,
+    modeSize: mode ? mode.length : 0,
+    totalSize: (workspace ? JSON.stringify(workspace).length : 0) +
+               (signedUrls ? JSON.stringify(signedUrls).length : 0) +
+               (mode ? mode.length : 0)
+  };
+};
+```
+
+---
+
 ## **Current Testing Status**
 
 ### **✅ Successfully Tested Job Types**
