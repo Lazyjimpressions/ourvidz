@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
-import { AssetPreviewModal } from "@/components/AssetPreviewModal";
+import { LibraryLightbox } from "./LibraryLightbox";
 import { AssetTableView } from "@/components/AssetTableView";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -59,9 +59,9 @@ const OptimizedLibrary = () => {
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [selectedAssetIndex, setSelectedAssetIndex] = useState<number>(-1);
 
   // Modal states  
-  const [previewAsset, setPreviewAsset] = useState<UnifiedAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<UnifiedAsset | null>(null);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
 
@@ -610,7 +610,10 @@ const OptimizedLibrary = () => {
               assets={transformedAssets}
               selectedAssets={selectedAssets}
               onAssetSelection={handleAssetSelection}
-              onPreview={setPreviewAsset}
+              onPreview={(asset) => {
+                const index = transformedAssets.findIndex(a => a.id === asset.id);
+                setSelectedAssetIndex(index);
+              }}
               onDelete={setAssetToDelete}
               onDownload={handleDownload}
               selectionMode={true}
@@ -624,7 +627,10 @@ const OptimizedLibrary = () => {
                     asset={asset}
                     isSelected={selectedAssets.has(asset.id)}
                     onSelect={(selected) => handleAssetSelection(asset.id, selected)}
-                    onPreview={() => setPreviewAsset(asset)}
+                     onPreview={() => {
+                       const index = transformedAssets.findIndex(a => a.id === asset.id);
+                       setSelectedAssetIndex(index);
+                     }}
                     onDelete={() => setAssetToDelete(asset)}
                     onDownload={() => handleDownload(asset)}
                     selectionMode={selectedAssets.size > 0}
@@ -647,13 +653,15 @@ const OptimizedLibrary = () => {
           totalFilteredCount={transformedAssets.length}
         />
 
-        {/* Modals */}
-        <AssetPreviewModal
-          asset={previewAsset}
-          open={!!previewAsset}
-          onClose={() => setPreviewAsset(null)}
-          onDownload={handleDownload}
-        />
+        {/* Library Lightbox */}
+        {selectedAssetIndex >= 0 && (
+          <LibraryLightbox
+            assets={transformedAssets}
+            startIndex={selectedAssetIndex}
+            onClose={() => setSelectedAssetIndex(-1)}
+            onDownload={handleDownload}
+          />
+        )}
 
         <DeleteConfirmationModal
           video={assetToDelete ? { 
