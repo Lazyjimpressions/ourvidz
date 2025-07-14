@@ -6,7 +6,7 @@ import { AssetCard } from "@/components/AssetCard";
 import { AssetListView } from "@/components/library/AssetListView";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Image as ImageIcon, Video as VideoIcon, Grid3X3, List } from "lucide-react";
+import { Image as ImageIcon, Video as VideoIcon, Grid3X3, List, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LibraryLightboxStatic } from "@/components/library/LibraryLightboxStatic";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
@@ -31,6 +31,7 @@ const SimpleLibrary = () => {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [newAssetsBanner, setNewAssetsBanner] = useState(false);
   const pageSize = 20;
   const queryClient = useQueryClient();
 
@@ -38,7 +39,67 @@ const SimpleLibrary = () => {
   useEffect(() => {
     setCurrentPage(1);
     setSelectedAssets(new Set());
+    setNewAssetsBanner(false);
   }, [typeFilter, viewMode]);
+
+  // Listen for generation completion events and update library
+  useEffect(() => {
+    const handleGenerationComplete = (event: CustomEvent) => {
+      const { assetId, type, jobId } = event.detail;
+      
+      console.log('📚 Library received generation completion:', { assetId, type, jobId });
+      
+      // Show new assets banner if user is on first page
+      if (currentPage === 1) {
+        setNewAssetsBanner(true);
+      }
+      
+      // Invalidate queries for the completed asset type
+      if (type === typeFilter || !type) {
+        // Smart invalidation: only invalidate page 1 and counts
+        queryClient.invalidateQueries({ 
+          queryKey: ['simple-assets', typeFilter, 1] 
+        });
+        queryClient.invalidateQueries({ 
+          queryKey: ['asset-counts', typeFilter] 
+        });
+        
+        toast.success(`New ${type || 'asset'} added to library!`, {
+          duration: 3000,
+          action: {
+            label: 'View',
+            onClick: () => {
+              if (type && type !== typeFilter) {
+                setTypeFilter(type as 'image' | 'video');
+              }
+              if (currentPage !== 1) {
+                setCurrentPage(1);
+              }
+              setNewAssetsBanner(false);
+            }
+          }
+        });
+      }
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [currentPage, typeFilter, queryClient]);
+
+  // Handle new assets banner refresh
+  const handleRefreshForNewAssets = () => {
+    queryClient.invalidateQueries({ 
+      queryKey: ['simple-assets', typeFilter, currentPage] 
+    });
+    queryClient.invalidateQueries({ 
+      queryKey: ['asset-counts', typeFilter] 
+    });
+    setNewAssetsBanner(false);
+    toast.success('Library refreshed!');
+  };
 
   // Simple bucket detection from metadata
   const inferBucketFromMetadata = useCallback((metadata: any, assetType: 'image' | 'video' = 'image'): string => {
@@ -639,6 +700,31 @@ const SimpleLibrary = () => {
             </Button>
           </div>
         </div>
+
+        {/* New Assets Banner */}
+        {newAssetsBanner && currentPage === 1 && (
+          <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
+                <p className="text-primary font-medium">
+                  New {typeFilter}s available! 
+                </p>
+                <span className="text-sm text-muted-foreground">
+                  Your latest generations are ready to view.
+                </span>
+              </div>
+              <Button
+                onClick={handleRefreshForNewAssets}
+                size="sm"
+                className="gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Refresh
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Assets Display */}
         {assets.length === 0 ? (
