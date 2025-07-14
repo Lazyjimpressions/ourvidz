@@ -467,7 +467,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         (payload) => {
           const newImage = payload.new as any;
           if (newImage.status === 'completed' && !processedUpdatesRef.has(newImage.id)) {
-            console.log('🎉 Global: New image completed:', newImage.id);
+            console.log('🎉 Global: Image completed via UPDATE:', newImage.id);
+            processedUpdatesRef.add(newImage.id);
+            
+            // Emit completion event for workspace to pick up
+            window.dispatchEvent(new CustomEvent('generation-completed', {
+              detail: { 
+                assetId: newImage.id, 
+                type: 'image',
+                prompt: newImage.prompt 
+              }
+            }));
+            
+            setTimeout(() => processedUpdatesRef.delete(newImage.id), 30000);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'images',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const newImage = payload.new as any;
+          if (newImage.status === 'completed' && !processedUpdatesRef.has(newImage.id)) {
+            console.log('🎉 Global: Image completed via INSERT:', newImage.id);
             processedUpdatesRef.add(newImage.id);
             
             // Emit completion event for workspace to pick up
