@@ -253,16 +253,14 @@ serve(async (req)=>{
 // REMOVED: Path normalization - workers now upload with correct paths
 // No longer needed as all workers upload to standardized paths
 async function handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced) {
-  console.log('🖼️ STANDARDIZED IMAGE CALLBACK PROCESSING:', {
+  console.log('🖼️ IMAGE CALLBACK PROCESSING:', {
     job_id: job.id,
-    imageId: job.image_id,
     status,
     assets,
     assetsCount: assets ? assets.length : 0,
-    jobType: job.job_type,
     quality,
     isSDXL,
-    expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`
+    isEnhanced
   });
   
   if (status === 'completed' && assets && assets.length > 0) {
@@ -289,13 +287,12 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
         quality: quality,
         format: 'png',
         generation_mode: 'standalone',
-        job_id: job.id, // Link back to originating job
+        job_id: job.id,
         metadata: {
           ...jobMetadata,
           model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
           is_sdxl: isSDXL,
           is_enhanced: isEnhanced,
-          bucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`,
           callback_processed_at: new Date().toISOString(),
           original_job_id: job.id,
           image_index: i,
@@ -312,21 +309,49 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
       if (imageError) {
         console.error('❌ Error creating image record:', {
           imageIndex: i,
-          error: imageError,
-          imageData
+          error: imageError
         });
       } else {
         console.log('✅ Image record created:', {
           imageId: newImage.id,
           imageIndex: i,
-          imageUrl: newImage.image_url,
           jobId: job.id
         });
         createdImages.push(newImage);
       }
     }
     
-    console.log('✅ Created individual image records:', {
+    // Emit browser event with created image IDs for workspace
+    if (createdImages.length > 0) {
+      const imageIds = createdImages.map(img => img.id);
+      console.log('📡 Emitting generation-completed events for images:', imageIds);
+      
+      // Emit individual events for each image
+      for (const imageId of imageIds) {
+        const eventDetail = {
+          assetId: imageId,
+          type: 'image',
+          jobId: job.id,
+          userId: job.user_id
+        };
+        
+        // Create and dispatch the event
+        const event = new CustomEvent('generation-completed', {
+          detail: eventDetail
+        });
+        
+        // Dispatch on global scope for browser context
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(event);
+        } else if (typeof globalThis !== 'undefined') {
+          globalThis.dispatchEvent(event);
+        }
+        
+        console.log('📡 Dispatched generation-completed event:', eventDetail);
+      }
+    }
+    
+    console.log('✅ Created individual image records and emitted events:', {
       jobId: job.id,
       totalImages: assets.length,
       createdCount: createdImages.length
@@ -498,7 +523,7 @@ async function handlePromptTestCallback(supabase, job, status, assets, error_mes
       if (job.image_id) {
         const { data: imageData } = await supabase
           .from('images')
-          .select('image_url, image_urls')
+          .select('image_url')
           .eq('id', job.image_id)
           .single();
         
@@ -507,7 +532,6 @@ async function handlePromptTestCallback(supabase, job, status, assets, error_mes
           updateData.test_metadata = {
             ...updateData.test_metadata,
             image_url: imageData.image_url,
-            image_urls: imageData.image_urls,
             content_type: 'image'
           };
         }
