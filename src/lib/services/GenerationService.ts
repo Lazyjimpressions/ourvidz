@@ -32,6 +32,7 @@ export class GenerationService {
       // Create record in appropriate table with enhanced model tracking
       let videoId: string | undefined;
       let imageId: string | undefined;
+      let imageIds: string[] = [];
 
       if (config.isVideo) {
         console.log('📹 Creating video record...');
@@ -72,6 +73,7 @@ export class GenerationService {
               }
             });
             imageRecords.push(image);
+            imageIds.push(image.id);
             console.log(`✅ SDXL image record ${i + 1}/${numImages} created:`, {
               imageId: image.id,
               imageIndex: i,
@@ -84,6 +86,7 @@ export class GenerationService {
           console.log('✅ All SDXL image records created:', {
             totalRecords: numImages,
             firstImageId: imageId,
+            allImageIds: imageIds,
             bucket: config.bucket
           });
         } else {
@@ -165,22 +168,29 @@ export class GenerationService {
         bucket: config.bucket
       });
 
-      // Update SDXL image records with the actual job_id
-      if (config.isSDXL && imageId && data.job?.id) {
-        console.log('🔗 Updating SDXL image records with job_id:', data.job.id);
-        const { error: updateError } = await supabase
-          .from('images')
-          .update({ job_id: data.job.id })
-          .eq('user_id', user.id)
-          .eq('status', 'queued')
-          .eq('prompt', request.prompt)
-          .gte('created_at', new Date(Date.now() - 60000).toISOString()); // Within last minute
+      // Update SDXL image records with the actual job_id using stored image IDs
+      if (config.isSDXL && imageIds && imageIds.length > 0 && data.job?.id) {
+        console.log('🔗 Updating SDXL image records with job_id:', {
+          jobId: data.job.id,
+          imageIds,
+          totalImages: imageIds.length
+        });
         
-        if (updateError) {
-          console.error('❌ Failed to update SDXL image records with job_id:', updateError);
-        } else {
-          console.log('✅ SDXL image records updated with job_id');
+        // Update each image record individually using their specific IDs
+        for (const id of imageIds) {
+          const { error: updateError } = await supabase
+            .from('images')
+            .update({ job_id: data.job.id })
+            .eq('id', id)
+            .eq('user_id', user.id);
+          
+          if (updateError) {
+            console.error(`❌ Failed to update SDXL image record ${id} with job_id:`, updateError);
+          } else {
+            console.log(`✅ SDXL image record ${id} updated with job_id`);
+          }
         }
+        console.log('✅ All SDXL image records processed for job linking');
       }
       
       // Log usage with enhanced metadata
