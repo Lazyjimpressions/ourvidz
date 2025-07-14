@@ -7,6 +7,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
 import { Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { toast } from "sonner";
+import { LibraryLightboxStatic } from "@/components/library/LibraryLightboxStatic";
+import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 
 interface SimpleAsset {
   id: string;
@@ -23,6 +25,8 @@ interface SimpleAsset {
 const SimpleLibrary = () => {
   const [typeFilter, setTypeFilter] = useState<'image' | 'video'>('image');
   const [currentPage, setCurrentPage] = useState(1);
+  const [lightboxAsset, setLightboxAsset] = useState<UnifiedAsset | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const pageSize = 20;
 
   // Reset page when switching types
@@ -218,6 +222,56 @@ const SimpleLibrary = () => {
 
   const totalPages = Math.ceil((typeFilter === 'image' ? (counts?.images || 0) : (counts?.videos || 0)) / pageSize);
 
+  // Transform SimpleAsset to UnifiedAsset format
+  const transformToUnifiedAssets = (assets: SimpleAsset[]): UnifiedAsset[] => {
+    return assets.map(asset => ({
+      id: asset.id,
+      type: asset.type as 'image' | 'video',
+      url: asset.url,
+      thumbnailUrl: asset.thumbnailUrl,
+      prompt: asset.prompt,
+      title: asset.title,
+      status: asset.status as 'completed' | 'processing' | 'failed',
+      createdAt: asset.createdAt,
+      metadata: asset.metadata,
+      quality: 'fast', // Default quality for SimpleLibrary
+      bucketHint: asset.type === 'image' ? 'image_fast' : 'video_fast'
+    }));
+  };
+
+  const unifiedAssets = transformToUnifiedAssets(assets);
+
+  // Handle lightbox actions
+  const handlePreview = (asset: SimpleAsset) => {
+    const assetIndex = assets.findIndex(a => a.id === asset.id);
+    if (assetIndex !== -1) {
+      setLightboxIndex(assetIndex);
+      setLightboxAsset(unifiedAssets[assetIndex]);
+    }
+  };
+
+  const handleCloseLightbox = () => {
+    setLightboxAsset(null);
+    setLightboxIndex(0);
+  };
+
+  const handleDownload = async (asset: UnifiedAsset) => {
+    if (!asset.url) return;
+    
+    try {
+      const link = document.createElement('a');
+      link.href = asset.url;
+      link.download = `${asset.title || asset.id}.${asset.type === 'image' ? 'png' : 'mp4'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success(`${asset.type === 'image' ? 'Image' : 'Video'} download started`);
+    } catch (error) {
+      toast.error("Failed to download asset");
+    }
+  };
+
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
@@ -282,14 +336,14 @@ const SimpleLibrary = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {assets.map((asset) => (
+              {assets.map((asset, index) => (
                 <AssetCard
                   key={asset.id}
-                  asset={asset}
+                  asset={unifiedAssets[index]}
                   onSelect={() => {}}
-                  onPreview={() => {}}
+                  onPreview={() => handlePreview(asset)}
                   onDelete={() => {}}
-                  onDownload={() => {}}
+                  onDownload={() => handleDownload(unifiedAssets[index])}
                   isSelected={false}
                   selectionMode={false}
                   isDeleting={false}
@@ -322,6 +376,16 @@ const SimpleLibrary = () => {
           </>
         )}
       </div>
+      
+      {/* Lightbox Modal */}
+      {lightboxAsset && (
+        <LibraryLightboxStatic
+          assets={unifiedAssets}
+          startIndex={lightboxIndex}
+          onClose={handleCloseLightbox}
+          onDownload={handleDownload}
+        />
+      )}
     </OurVidzDashboardLayout>
   );
 };
