@@ -264,71 +264,94 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
   });
   
   if (status === 'completed' && assets && assets.length > 0) {
-    console.log('✅ Processing completed image job - creating individual records');
-    
     // Extract title from job metadata or prompt
     const jobMetadata = job.metadata || {};
     const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image';
     const baseTitle = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
     
-    // Create individual image records for each asset
-    const createdImages = [];
-    for (let i = 0; i < assets.length; i++) {
-      const imageUrl = assets[i];
-      const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+    if (isSDXL) {
+      console.log('✅ Processing completed SDXL job - updating existing queued records');
       
-      const imageData = {
-        user_id: job.user_id,
-        prompt: prompt,
-        title: title,
-        image_url: imageUrl,
-        thumbnail_url: imageUrl,
-        status: 'completed',
-        quality: quality,
-        format: 'png',
-        generation_mode: 'standalone',
-        job_id: job.id,
-        metadata: {
-          ...jobMetadata,
-          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-          is_sdxl: isSDXL,
-          is_enhanced: isEnhanced,
-          callback_processed_at: new Date().toISOString(),
-          original_job_id: job.id,
-          image_index: i,
-          total_images: assets.length
-        }
-      };
-      
-      const { data: newImage, error: imageError } = await supabase
+      // Query for existing queued image records for this job
+      const { data: queuedImages, error: queryError } = await supabase
         .from('images')
-        .insert(imageData)
-        .select()
-        .single();
+        .select('*')
+        .eq('job_id', job.id)
+        .eq('status', 'queued')
+        .order('image_index', { ascending: true });
       
-      if (imageError) {
-        console.error('❌ Error creating image record:', {
-          imageIndex: i,
-          error: imageError
+      if (queryError) {
+        console.error('❌ Error querying queued images:', queryError);
+        return;
+      }
+      
+      console.log('📋 Found queued images to update:', {
+        jobId: job.id,
+        queuedCount: queuedImages?.length || 0,
+        assetsCount: assets.length
+      });
+      
+      if (queuedImages && queuedImages.length > 0) {
+        // Update existing queued records with completed data
+        const updatedImages = [];
+        for (let i = 0; i < Math.min(assets.length, queuedImages.length); i++) {
+          const imageUrl = assets[i];
+          const queuedImage = queuedImages[i];
+          const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+          
+          const { data: updatedImage, error: updateError } = await supabase
+            .from('images')
+            .update({
+              title: title,
+              image_url: imageUrl,
+              thumbnail_url: imageUrl,
+              status: 'completed',
+              metadata: {
+                ...queuedImage.metadata,
+                ...jobMetadata,
+                model_type: 'sdxl',
+                is_sdxl: true,
+                is_enhanced: isEnhanced,
+                callback_processed_at: new Date().toISOString(),
+                original_job_id: job.id,
+                image_index: i,
+                total_images: assets.length
+              }
+            })
+            .eq('id', queuedImage.id)
+            .select()
+            .single();
+          
+          if (updateError) {
+            console.error('❌ Error updating queued image record:', {
+              imageId: queuedImage.id,
+              imageIndex: i,
+              error: updateError
+            });
+          } else {
+            console.log('✅ Updated queued image record:', {
+              imageId: updatedImage.id,
+              imageIndex: i,
+              jobId: job.id
+            });
+            updatedImages.push(updatedImage);
+          }
+        }
+        
+        console.log('✅ Updated SDXL image records:', {
+          jobId: job.id,
+          totalAssets: assets.length,
+          updatedCount: updatedImages.length
         });
       } else {
-        console.log('✅ Image record created:', {
-          imageId: newImage.id,
-          imageIndex: i,
-          jobId: job.id
-        });
-        createdImages.push(newImage);
+        console.warn('⚠️ No queued images found for SDXL job, falling back to INSERT');
+        // Fallback to INSERT if no queued records found
+        await handleLegacyImageInsert(supabase, job, assets, jobMetadata, baseTitle, quality, isSDXL, isEnhanced);
       }
+    } else {
+      console.log('✅ Processing completed non-SDXL job - creating individual records');
+      await handleLegacyImageInsert(supabase, job, assets, jobMetadata, baseTitle, quality, isSDXL, isEnhanced);
     }
-    
-    // Event emission now handled by useRealtimeGenerationStatus hook
-    // which detects job completion and queries for created images
-    
-    console.log('✅ Created individual image records:', {
-      jobId: job.id,
-      totalImages: assets.length,
-      createdCount: createdImages.length
-    });
     
   } else if (status === 'failed' && job.image_id) {
     console.log('❌ Processing failed image job');
@@ -361,6 +384,66 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
     }
   }
 }
+
+// ============= LEGACY IMAGE INSERT HANDLER =============
+async function handleLegacyImageInsert(supabase, job, assets, jobMetadata, baseTitle, quality, isSDXL, isEnhanced) {
+  const createdImages = [];
+  for (let i = 0; i < assets.length; i++) {
+    const imageUrl = assets[i];
+    const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+    
+    const imageData = {
+      user_id: job.user_id,
+      prompt: jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image',
+      title: title,
+      image_url: imageUrl,
+      thumbnail_url: imageUrl,
+      status: 'completed',
+      quality: quality,
+      format: 'png',
+      generation_mode: 'standalone',
+      job_id: job.id,
+      metadata: {
+        ...jobMetadata,
+        model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
+        is_sdxl: isSDXL,
+        is_enhanced: isEnhanced,
+        callback_processed_at: new Date().toISOString(),
+        original_job_id: job.id,
+        image_index: i,
+        total_images: assets.length
+      }
+    };
+    
+    const { data: newImage, error: imageError } = await supabase
+      .from('images')
+      .insert(imageData)
+      .select()
+      .single();
+    
+    if (imageError) {
+      console.error('❌ Error creating image record:', {
+        imageIndex: i,
+        error: imageError
+      });
+    } else {
+      console.log('✅ Image record created:', {
+        imageId: newImage.id,
+        imageIndex: i,
+        jobId: job.id
+      });
+      createdImages.push(newImage);
+    }
+  }
+  
+  console.log('✅ Created individual image records:', {
+    jobId: job.id,
+    totalImages: assets.length,
+    createdCount: createdImages.length
+  });
+}
+
+// ============= VIDEO JOB CALLBACK HANDLER =============
 async function handleVideoJobCallback(supabase, job, status, assets, error_message, quality, isEnhanced) {
   console.log('📹 STANDARDIZED VIDEO CALLBACK PROCESSING:', {
     job_id: job.id,
