@@ -164,6 +164,24 @@ export class GenerationService {
         queue: data.queue,
         bucket: config.bucket
       });
+
+      // Update SDXL image records with the actual job_id
+      if (config.isSDXL && imageId && data.job?.id) {
+        console.log('🔗 Updating SDXL image records with job_id:', data.job.id);
+        const { error: updateError } = await supabase
+          .from('images')
+          .update({ job_id: data.job.id })
+          .eq('user_id', user.id)
+          .eq('status', 'queued')
+          .eq('prompt', request.prompt)
+          .gte('created_at', new Date(Date.now() - 60000).toISOString()); // Within last minute
+        
+        if (updateError) {
+          console.error('❌ Failed to update SDXL image records with job_id:', updateError);
+        } else {
+          console.log('✅ SDXL image records updated with job_id');
+        }
+      }
       
       // Log usage with enhanced metadata
       await usageAPI.logAction(request.format, config.credits, {
