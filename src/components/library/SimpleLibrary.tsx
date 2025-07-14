@@ -41,13 +41,19 @@ const SimpleLibrary = () => {
   }, [typeFilter, viewMode]);
 
   // Simple bucket detection from metadata
-  const inferBucketFromMetadata = useCallback((metadata: any): string => {
-    // Use bucket from metadata if available
+  const inferBucketFromMetadata = useCallback((metadata: any, assetType: 'image' | 'video' = 'image'): string => {
+    // Use bucket from metadata if available (videos especially need this)
     if (metadata?.bucket) {
       return metadata.bucket;
     }
 
-    // Fallback based on model type
+    // Video-specific bucket detection
+    if (assetType === 'video') {
+      const quality = metadata?.quality || metadata?.generation_format?.includes('high') ? 'high' : 'fast';
+      return `video_${quality}`;
+    }
+
+    // Image bucket fallback logic
     const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
     const isEnhanced = metadata?.is_enhanced;
     const quality = metadata?.quality || 'fast';
@@ -121,15 +127,19 @@ const SimpleLibrary = () => {
         // Process each image - simple 1:1 mapping
         for (const image of data || []) {
           const metadata = image.metadata as any;
-          const bucket = inferBucketFromMetadata(metadata);
+          const bucket = inferBucketFromMetadata(metadata, 'image');
           
           // Generate signed URL for the single image
           let url: string | null = null;
           if (image.image_url) {
             url = await generateSignedUrl(image.image_url, bucket);
+            if (!url) {
+              console.warn(`Failed to generate signed URL for image ${image.id}, bucket: ${bucket}, path: ${image.image_url}`);
+            }
           }
           
-          if (url) { // Only add if URL was successfully generated
+          // Only add images with successful URL generation (images need URLs to display)
+          if (url) {
             allAssets.push({
               id: image.id,
               type: 'image',
@@ -169,27 +179,40 @@ const SimpleLibrary = () => {
         // Process videos with signed URLs
         for (const video of data || []) {
           const metadata = video.metadata as any;
-          const bucket = metadata?.bucket || 'video_fast';
+          const bucket = inferBucketFromMetadata(metadata, 'video');
           
           // Generate signed URL for video
           let url: string | null = null;
           if (video.video_url) {
             url = await generateSignedUrl(video.video_url, bucket);
+            if (!url) {
+              console.warn(`Failed to generate signed URL for video ${video.id}, bucket: ${bucket}, path: ${video.video_url}`);
+            }
           }
           
-          if (url) { // Only add if URL was successfully generated
-            allAssets.push({
-              id: video.id,
-              type: 'video',
-              title: video.title,
-              prompt: metadata?.prompt || 'Generated video',
-              thumbnailUrl: video.thumbnail_url,
-              url: url,
-              status: video.status,
-              createdAt: video.created_at ? new Date(video.created_at) : new Date(),
-              metadata: metadata,
-            });
+          // Generate signed URL for thumbnail if it's in system_assets
+          let thumbnailUrl = video.thumbnail_url;
+          if (thumbnailUrl && thumbnailUrl.startsWith('system_assets/')) {
+            const { data: thumbData } = await supabase.storage
+              .from('system_assets')
+              .createSignedUrl(thumbnailUrl.replace('system_assets/', ''), 3600);
+            if (thumbData?.signedUrl) {
+              thumbnailUrl = thumbData.signedUrl;
+            }
           }
+          
+          // Always add video, even if URL generation failed - show with placeholder
+          allAssets.push({
+            id: video.id,
+            type: 'video',
+            title: video.title,
+            prompt: metadata?.prompt || video.title || 'Generated video',
+            thumbnailUrl: thumbnailUrl,
+            url: url, // Can be null - UI will handle gracefully
+            status: video.status,
+            createdAt: video.created_at ? new Date(video.created_at) : new Date(),
+            metadata: metadata,
+          });
         }
       }
       
@@ -383,7 +406,7 @@ const SimpleLibrary = () => {
             // Delete from storage if video_url exists
             if (videoData.video_url) {
               const metadata = videoData.metadata as any;
-              const bucket = metadata?.bucket || 'video_fast';
+              const bucket = inferBucketFromMetadata(metadata, 'video');
               const { error: storageError } = await supabase.storage
                 .from(bucket)
                 .remove([videoData.video_url]);
