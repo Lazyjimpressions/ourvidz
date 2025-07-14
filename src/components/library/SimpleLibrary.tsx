@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
+import { AssetListView } from "@/components/library/AssetListView";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Image as ImageIcon, Video as VideoIcon } from "lucide-react";
+import { Image as ImageIcon, Video as VideoIcon, Grid3X3, List } from "lucide-react";
 import { toast } from "sonner";
 import { LibraryLightboxStatic } from "@/components/library/LibraryLightboxStatic";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
@@ -24,15 +25,20 @@ interface SimpleAsset {
 
 const SimpleLibrary = () => {
   const [typeFilter, setTypeFilter] = useState<'image' | 'video'>('image');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [currentPage, setCurrentPage] = useState(1);
   const [lightboxAsset, setLightboxAsset] = useState<UnifiedAsset | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
   const pageSize = 20;
+  const queryClient = useQueryClient();
 
-  // Reset page when switching types
+  // Reset page and selection when switching types or view modes
   useEffect(() => {
     setCurrentPage(1);
-  }, [typeFilter]);
+    setSelectedAssets(new Set());
+  }, [typeFilter, viewMode]);
 
   // Simple bucket detection from metadata
   const inferBucketFromMetadata = useCallback((metadata: any): string => {
@@ -272,6 +278,161 @@ const SimpleLibrary = () => {
     }
   };
 
+  // Bulk selection handlers
+  const handleSelectAsset = (assetId: string) => {
+    setSelectedAssets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(assetId)) {
+        newSet.delete(assetId);
+      } else {
+        newSet.add(assetId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedAssets(new Set(assets.map(asset => asset.id)));
+    } else {
+      setSelectedAssets(new Set());
+    }
+  };
+
+  // Bulk delete functionality
+  const handleBulkDelete = async () => {
+    if (selectedAssets.size === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${selectedAssets.size} asset${selectedAssets.size !== 1 ? 's' : ''}? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    let deletedCount = 0;
+    let errorCount = 0;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      for (const assetId of selectedAssets) {
+        const asset = assets.find(a => a.id === assetId);
+        if (!asset) continue;
+
+        try {
+          if (asset.type === 'image') {
+            // Get image details including job_id
+            const { data: imageData, error: fetchError } = await supabase
+              .from('images')
+              .select('id, image_url, metadata, job_id')
+              .eq('id', assetId)
+              .eq('user_id', user.id)
+              .single();
+
+            if (fetchError) throw fetchError;
+
+            // Delete from storage if image_url exists
+            if (imageData.image_url) {
+              const bucket = inferBucketFromMetadata(imageData.metadata);
+              const { error: storageError } = await supabase.storage
+                .from(bucket)
+                .remove([imageData.image_url]);
+              
+              if (storageError) {
+                console.warn(`Failed to delete file from storage: ${storageError.message}`);
+              }
+            }
+
+            // Delete image record
+            const { error: deleteError } = await supabase
+              .from('images')
+              .delete()
+              .eq('id', assetId)
+              .eq('user_id', user.id);
+
+            if (deleteError) throw deleteError;
+
+            // Check if job should be deleted (if no other images remain for this job)
+            if (imageData.job_id) {
+              const { count } = await supabase
+                .from('images')
+                .select('id', { count: 'exact', head: true })
+                .eq('job_id', imageData.job_id);
+
+              if (count === 0) {
+                await supabase
+                  .from('jobs')
+                  .delete()
+                  .eq('id', imageData.job_id)
+                  .eq('user_id', user.id);
+              }
+            }
+          } else {
+            // Video deletion
+            const { data: videoData, error: fetchError } = await supabase
+              .from('videos')
+              .select('id, video_url, metadata')
+              .eq('id', assetId)
+              .eq('user_id', user.id)
+              .single();
+
+            if (fetchError) throw fetchError;
+
+            // Delete from storage if video_url exists
+            if (videoData.video_url) {
+              const metadata = videoData.metadata as any;
+              const bucket = metadata?.bucket || 'video_fast';
+              const { error: storageError } = await supabase.storage
+                .from(bucket)
+                .remove([videoData.video_url]);
+              
+              if (storageError) {
+                console.warn(`Failed to delete file from storage: ${storageError.message}`);
+              }
+            }
+
+            // Delete video record
+            const { error: deleteError } = await supabase
+              .from('videos')
+              .delete()
+              .eq('id', assetId)
+              .eq('user_id', user.id);
+
+            if (deleteError) throw deleteError;
+          }
+
+          deletedCount++;
+        } catch (error) {
+          console.error(`Failed to delete asset ${assetId}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ['simple-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['asset-counts'] });
+
+      // Clear selection
+      setSelectedAssets(new Set());
+
+      // Show result toast
+      if (deletedCount > 0) {
+        toast.success(`Successfully deleted ${deletedCount} asset${deletedCount !== 1 ? 's' : ''}`);
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to delete ${errorCount} asset${errorCount !== 1 ? 's' : ''}`);
+      }
+
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      toast.error('Failed to delete assets');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
@@ -306,74 +467,101 @@ const SimpleLibrary = () => {
           </p>
         </div>
 
-        {/* Type Filters */}
-        <div className="flex gap-2">
-          <Button
-            variant={typeFilter === 'image' ? "default" : "outline"}
-            onClick={() => setTypeFilter('image')}
-            className="gap-2"
-          >
-            <ImageIcon className="h-4 w-4" />
-            Images ({counts?.images || 0})
-          </Button>
-          <Button
-            variant={typeFilter === 'video' ? "default" : "outline"}
-            onClick={() => setTypeFilter('video')}
-            className="gap-2"
-          >
-            <VideoIcon className="h-4 w-4" />
-            Videos ({counts?.videos || 0})
-          </Button>
+        {/* Filters and View Toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2">
+            <Button
+              variant={typeFilter === 'image' ? "default" : "outline"}
+              onClick={() => setTypeFilter('image')}
+              className="gap-2"
+            >
+              <ImageIcon className="h-4 w-4" />
+              Images ({counts?.images || 0})
+            </Button>
+            <Button
+              variant={typeFilter === 'video' ? "default" : "outline"}
+              onClick={() => setTypeFilter('video')}
+              className="gap-2"
+            >
+              <VideoIcon className="h-4 w-4" />
+              Videos ({counts?.videos || 0})
+            </Button>
+          </div>
+          
+          <div className="flex gap-1">
+            <Button
+              variant={viewMode === 'grid' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode('grid')}
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-        {/* Assets Grid */}
+        {/* Assets Display */}
         {assets.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
               No {typeFilter}s found. Start creating some content!
             </p>
           </div>
+        ) : viewMode === 'grid' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {assets.map((asset, index) => (
+              <AssetCard
+                key={asset.id}
+                asset={unifiedAssets[index]}
+                onSelect={() => handleSelectAsset(asset.id)}
+                onPreview={() => handlePreview(asset)}
+                onDelete={() => {}}
+                onDownload={() => handleDownload(unifiedAssets[index])}
+                isSelected={selectedAssets.has(asset.id)}
+                selectionMode={selectedAssets.size > 0}
+                isDeleting={isDeleting}
+              />
+            ))}
+          </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {assets.map((asset, index) => (
-                <AssetCard
-                  key={asset.id}
-                  asset={unifiedAssets[index]}
-                  onSelect={() => {}}
-                  onPreview={() => handlePreview(asset)}
-                  onDelete={() => {}}
-                  onDownload={() => handleDownload(unifiedAssets[index])}
-                  isSelected={false}
-                  selectionMode={false}
-                  isDeleting={false}
-                />
-              ))}
-            </div>
+          <AssetListView
+            assets={assets}
+            selectedAssets={selectedAssets}
+            onSelectAsset={handleSelectAsset}
+            onSelectAll={handleSelectAll}
+            onBulkDelete={handleBulkDelete}
+            onPreview={handlePreview}
+            isDeleting={isDeleting}
+          />
+        )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-4 mt-8">
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex justify-center items-center gap-4 mt-8">
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+            >
+              Next
+            </Button>
+          </div>
         )}
       </div>
       
