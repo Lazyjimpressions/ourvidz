@@ -324,6 +324,115 @@ const SimpleLibrary = () => {
     }
   };
 
+  // Individual delete functionality
+  const handleIndividualDelete = async (asset: SimpleAsset) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${asset.title || asset.prompt.substring(0, 50)}"? This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      if (asset.type === 'image') {
+        // Get image details including job_id
+        const { data: imageData, error: fetchError } = await supabase
+          .from('images')
+          .select('id, image_url, metadata, job_id')
+          .eq('id', asset.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Delete from storage if image_url exists
+        if (imageData.image_url) {
+          const bucket = inferBucketFromMetadata(imageData.metadata);
+          const { error: storageError } = await supabase.storage
+            .from(bucket)
+            .remove([imageData.image_url]);
+          
+          if (storageError) {
+            console.warn(`Failed to delete file from storage: ${storageError.message}`);
+          }
+        }
+
+        // Delete image record
+        const { error: deleteError } = await supabase
+          .from('images')
+          .delete()
+          .eq('id', asset.id)
+          .eq('user_id', user.id);
+
+        if (deleteError) throw deleteError;
+
+        // Check if job should be deleted (if no other images remain for this job)
+        if (imageData.job_id) {
+          const { count } = await supabase
+            .from('images')
+            .select('id', { count: 'exact', head: true })
+            .eq('job_id', imageData.job_id);
+
+          if (count === 0) {
+            await supabase
+              .from('jobs')
+              .delete()
+              .eq('id', imageData.job_id)
+              .eq('user_id', user.id);
+          }
+        }
+      } else {
+        // Video deletion
+        const { data: videoData, error: fetchError } = await supabase
+          .from('videos')
+          .select('id, video_url, metadata')
+          .eq('id', asset.id)
+          .eq('user_id', user.id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Delete from storage if video_url exists
+        if (videoData.video_url) {
+          const metadata = videoData.metadata as any;
+          const bucket = inferBucketFromMetadata(metadata, 'video');
+          const { error: storageError } = await supabase.storage
+            .from(bucket)
+            .remove([videoData.video_url]);
+          
+          if (storageError) {
+            console.warn(`Failed to delete file from storage: ${storageError.message}`);
+          }
+        }
+
+        // Delete video record
+        const { error: deleteError } = await supabase
+          .from('videos')
+          .delete()
+          .eq('id', asset.id)
+          .eq('user_id', user.id);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ['simple-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['asset-counts'] });
+
+      toast.success(`Successfully deleted ${asset.type}`);
+
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete asset');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Bulk delete functionality
   const handleBulkDelete = async () => {
     if (selectedAssets.size === 0) return;
@@ -546,7 +655,7 @@ const SimpleLibrary = () => {
                 asset={unifiedAssets[index]}
                 onSelect={() => handleSelectAsset(asset.id)}
                 onPreview={() => handlePreview(asset)}
-                onDelete={() => {}}
+                onDelete={() => handleIndividualDelete(asset)}
                 onDownload={() => handleDownload(unifiedAssets[index])}
                 isSelected={selectedAssets.has(asset.id)}
                 selectionMode={selectedAssets.size > 0}
@@ -561,6 +670,7 @@ const SimpleLibrary = () => {
             onSelectAsset={handleSelectAsset}
             onSelectAll={handleSelectAll}
             onBulkDelete={handleBulkDelete}
+            onIndividualDelete={handleIndividualDelete}
             onPreview={handlePreview}
             isDeleting={isDeleting}
           />

@@ -25,6 +25,7 @@ interface AssetListViewProps {
   onSelectAsset: (assetId: string) => void;
   onSelectAll: (checked: boolean) => void;
   onBulkDelete: () => void;
+  onIndividualDelete: (asset: SimpleAsset) => void;
   onPreview: (asset: SimpleAsset) => void;
   isDeleting: boolean;
 }
@@ -35,6 +36,7 @@ export const AssetListView = ({
   onSelectAsset,
   onSelectAll,
   onBulkDelete,
+  onIndividualDelete,
   onPreview,
   isDeleting
 }: AssetListViewProps) => {
@@ -155,14 +157,24 @@ export const AssetListView = ({
                 {format(asset.createdAt, 'MMM d, yyyy')}
               </TableCell>
               <TableCell>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onPreview(asset)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onPreview(asset)}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onIndividualDelete(asset)}
+                    disabled={isDeleting}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
