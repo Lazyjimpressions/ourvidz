@@ -310,8 +310,8 @@ serve(async (req)=>{
       sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
       sample_solver: 'unipc',
       sample_shift: 5.0,
-      // Batch settings
-      num_images: isSDXL ? 6 : 1,
+      // User-controlled batch settings
+      num_images: metadata?.num_images || (isSDXL ? 1 : 1), // Default to 1, user can select 1, 3, or 6
       batch_count: metadata?.batch_count || 1,
       // Content type tracking
       content_type: format,
