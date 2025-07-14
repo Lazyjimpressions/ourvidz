@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
-import { AssetPreviewModal } from "@/components/AssetPreviewModal";
+import { LibraryLightbox } from "./LibraryLightbox";
 import { AssetTableView } from "@/components/AssetTableView";
 import { DeleteConfirmationModal } from "@/components/DeleteConfirmationModal";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
@@ -11,7 +11,8 @@ import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
-import { useLazyUrlGeneration } from "@/hooks/useLazyUrlGeneration";
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+
 import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
 import { progressiveEnhancement } from "@/lib/cache/ProgressiveEnhancement";
@@ -19,6 +20,7 @@ import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
 import { toast } from "sonner";
 
 const OptimizedLibrary = () => {
+  console.log('🔍 OptimizedLibrary component rendering...');
   const queryClient = useQueryClient();
   
   // Phase 3: Initialize performance monitoring
@@ -53,15 +55,23 @@ const OptimizedLibrary = () => {
   
   // Simplified filter states
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>("all");
+  const [typeFilter, setTypeFilter] = useState<'image' | 'video'>("image");
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'processing' | 'failed'>("all");
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem('library-page-size');
+    return saved ? Number(saved) : 50;
+  });
   
   // UI states
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [selectedAssetIndex, setSelectedAssetIndex] = useState<number>(-1);
+  console.log('🔍 selectedAssetIndex state:', selectedAssetIndex);
 
   // Modal states  
-  const [previewAsset, setPreviewAsset] = useState<UnifiedAsset | null>(null);
   const [assetToDelete, setAssetToDelete] = useState<UnifiedAsset | null>(null);
   const [showBulkDelete, setShowBulkDelete] = useState(false);
 
@@ -78,9 +88,84 @@ const OptimizedLibrary = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Optimized asset fetching - only fetch metadata, not URLs
-  const { data: assets = [], isLoading, error } = useQuery({
-    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm],
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [typeFilter, statusFilter, debouncedSearchTerm]);
+
+  // Save page size preference
+  useEffect(() => {
+    localStorage.setItem('library-page-size', pageSize.toString());
+  }, [pageSize]);
+
+  // Calculate pagination
+  const offset = (currentPage - 1) * pageSize;
+
+  // Efficient bucket detection (from LibraryV2)
+  const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast'): string => {
+    if (metadata?.bucket) {
+      return metadata.bucket;
+    }
+
+    const modelVariant = metadata?.model_variant || '';
+    const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+    const isEnhanced = metadata?.is_enhanced || modelVariant.includes('7b');
+
+    if (isEnhanced) {
+      return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+    }
+
+    if (isSDXL) {
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    }
+
+    return quality === 'high' ? 'image_high' : 'image_fast';
+  }, []);
+
+  // Efficient signed URL generation with caching (from LibraryV2)
+  const generateSignedUrls = useCallback(async (paths: string[], bucket: string): Promise<string[]> => {
+    const cacheKey = `signed_urls_${bucket}`;
+    const cached = sessionStorage.getItem(cacheKey);
+    const urlCache = cached ? JSON.parse(cached) : {};
+    
+    const results: string[] = [];
+    const newUrls: { [key: string]: string } = {};
+    
+    await Promise.all(paths.map(async (path) => {
+      const cacheKey = `${bucket}|${path}`;
+      
+      if (urlCache[cacheKey]) {
+        results.push(urlCache[cacheKey]);
+        return;
+      }
+      
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(path, 3600);
+        
+        if (data?.signedUrl) {
+          results.push(data.signedUrl);
+          newUrls[cacheKey] = data.signedUrl;
+        } else {
+          console.warn(`Failed to generate signed URL for ${path} in ${bucket}:`, error);
+        }
+      } catch (error) {
+        console.error(`Error generating signed URL for ${path}:`, error);
+      }
+    }));
+    
+    if (Object.keys(newUrls).length > 0) {
+      const updatedCache = { ...urlCache, ...newUrls };
+      sessionStorage.setItem(cacheKey, JSON.stringify(updatedCache));
+    }
+    
+    return results;
+  }, []);
+
+  // Fixed pagination with proper asset limiting
+  const { data: assetsData, isLoading, error } = useQuery({
+    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize],
     queryFn: async () => {
       performanceMonitor.markStart('assets-fetch');
       
@@ -89,95 +174,162 @@ const OptimizedLibrary = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       
-      console.log('🔄 Fetching library assets without URLs for user:', user.id);
+      console.log('🔄 Fetching library assets with pagination:', { currentPage, pageSize, typeFilter });
       
-      // Build efficient database queries - fetch metadata only, generate URLs later
-      const imageQuery = supabase
-        .from('images')
-        .select(`
-          id, 
-          prompt, 
-          status, 
-          quality, 
-          format, 
-          created_at, 
-          image_url, 
-          image_urls, 
-          metadata
-        `)
-        .eq('user_id', user.id);
+      // Simple single-type pagination
+      let totalCount = 0;
+      let data = [];
       
-      const videoQuery = supabase
-        .from('videos')
-        .select(`
-          id, 
-          status, 
-          format, 
-          created_at, 
-          video_url, 
-          thumbnail_url, 
-          metadata
-        `)
-        .eq('user_id', user.id);
-
-      // Apply filters
-      if (statusFilter !== 'all') {
-        imageQuery.eq('status', statusFilter);
-        videoQuery.eq('status', statusFilter);
+      if (typeFilter === 'image') {
+        // Get total count for images
+        const { count } = await supabase
+          .from('images')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        
+        totalCount = count || 0;
+        
+        // Build image query
+        let imageQuery = supabase
+          .from('images')
+          .select(`
+            id, 
+            prompt, 
+            status, 
+            quality, 
+            format, 
+            created_at, 
+            image_url, 
+            image_urls, 
+            metadata
+          `)
+          .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          imageQuery = imageQuery.eq('status', statusFilter);
+        }
+        
+        if (debouncedSearchTerm) {
+          imageQuery = imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
+        }
+        
+        const { data: imageData, error } = await imageQuery
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+          
+        if (error) throw error;
+        data = imageData || [];
+        
+      } else {
+        // Get total count for videos
+        const { count } = await supabase
+          .from('videos')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id);
+        
+        totalCount = count || 0;
+        
+        // Build video query
+        let videoQuery = supabase
+          .from('videos')
+          .select(`
+            id, 
+            status, 
+            format, 
+            created_at, 
+            video_url, 
+            thumbnail_url, 
+            metadata
+          `)
+          .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          videoQuery = videoQuery.eq('status', statusFilter);
+        }
+        
+        const { data: videoData, error } = await videoQuery
+          .order('created_at', { ascending: false })
+          .range(offset, offset + pageSize - 1);
+          
+        if (error) throw error;
+        data = videoData || [];
       }
-      
-      if (debouncedSearchTerm) {
-        imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
-      }
-
-      // Execute queries based on type filter
-      const promises = [];
-      
-      if (typeFilter !== 'video') {
-        promises.push(imageQuery.order('created_at', { ascending: false }).limit(100));
-      }
-      
-      if (typeFilter !== 'image') {
-        promises.push(videoQuery.order('created_at', { ascending: false }).limit(100));
-      }
-      
-      const [imageResult, videoResult] = await Promise.all(promises);
-      
-      if (imageResult?.error) throw imageResult.error;
-      if (videoResult?.error) throw videoResult.error;
       
       const allAssets: UnifiedAsset[] = [];
       
-      // Process images without generating URLs (lazy approach)
-      if (imageResult?.data) {
-        imageResult.data.forEach(image => {
+      // Process assets
+      for (const item of data) {
+        if (typeFilter === 'image') {
+          const image = item as any;
           const metadata = image.metadata as any;
+          const bucket = inferBucketFromMetadata(metadata, image.quality);
           const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
           
-          allAssets.push({
-            id: image.id,
-            type: 'image' as const,
-            prompt: image.prompt,
-            status: image.status,
-            quality: image.quality || 'fast',
-            format: image.format || 'png',
-            createdAt: new Date(image.created_at),
-            metadata: metadata,
-            title: image.prompt,
-            // URLs will be generated lazily when visible
-            url: undefined,
-            thumbnailUrl: undefined,
-            signedUrls: undefined,
-            rawPaths: image.image_urls || (image.image_url ? [image.image_url] : []),
-            isSDXL: isSDXL,
-          });
-        });
-      }
-      
-      // Process videos without generating URLs (lazy approach)
-      if (videoResult?.data) {
-        videoResult.data.forEach(video => {
+          // Handle SDXL multiple images - expand after fetching
+          if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
+            const signedUrls = await generateSignedUrls(image.image_urls, bucket);
+            
+            signedUrls.forEach((url, index) => {
+              allAssets.push({
+                id: `${image.id}_${index}`,
+                type: 'image' as const,
+                prompt: `${image.prompt} (Image ${index + 1})`,
+                status: image.status,
+                quality: image.quality || 'fast',
+                format: image.format || 'png',
+                createdAt: new Date(image.created_at),
+                metadata: metadata,
+                title: `${image.prompt} (Image ${index + 1})`,
+                url: url,
+                thumbnailUrl: url,
+                signedUrls: [url],
+                rawPaths: [image.image_urls[index]],
+                isSDXL: isSDXL,
+                isSDXLImage: true,
+                sdxlIndex: index,
+                originalAssetId: image.id,
+              });
+            });
+          } else {
+            // Single image
+            let url: string | undefined;
+            
+            if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
+              const signedUrls = await generateSignedUrls([image.image_urls[0]], bucket);
+              url = signedUrls[0];
+            } else if (image.image_url) {
+              const signedUrls = await generateSignedUrls([image.image_url], bucket);
+              url = signedUrls[0];
+            }
+            
+            allAssets.push({
+              id: image.id,
+              type: 'image' as const,
+              prompt: image.prompt,
+              status: image.status,
+              quality: image.quality || 'fast',
+              format: image.format || 'png',
+              createdAt: new Date(image.created_at),
+              metadata: metadata,
+              title: image.prompt,
+              url: url,
+              thumbnailUrl: url,
+              signedUrls: url ? [url] : undefined,
+              rawPaths: image.image_urls || (image.image_url ? [image.image_url] : []),
+              isSDXL: isSDXL,
+            });
+          }
+        } else {
+          // Process video
+          const video = item as any;
           const metadata = video.metadata as any;
+          const bucket = metadata?.bucket || (video.quality === 'high' ? 'video_high' : 'video_fast');
+          
+          let url: string | undefined;
+          if (video.video_url) {
+            const signedUrls = await generateSignedUrls([video.video_url], bucket);
+            url = signedUrls[0];
+          }
           
           allAssets.push({
             id: video.id,
@@ -189,96 +341,66 @@ const OptimizedLibrary = () => {
             createdAt: new Date(video.created_at),
             metadata: metadata,
             title: metadata?.prompt || 'Generated video',
-            // URLs will be generated lazily when visible
-            url: undefined,
+            url: url,
             thumbnailUrl: video.thumbnail_url,
-            signedUrls: undefined,
+            signedUrls: url ? [url] : undefined,
             rawPaths: video.video_url ? [video.video_url] : [],
           });
-        });
+        }
       }
 
       performanceMonitor.markEnd('assets-fetch');
       
-      // Track search patterns and enable smart prefetching
       if (debouncedSearchTerm) {
         progressiveEnhancement.trackSearch(debouncedSearchTerm);
       }
       progressiveEnhancement.trackFilterChange({ 
-        type: typeFilter !== 'all' ? typeFilter : undefined,
+        type: typeFilter,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         search: debouncedSearchTerm || undefined,
       });
       
-      console.log(`✅ Fetched ${allAssets.length} assets metadata without URLs`);
-      return allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      console.log(`✅ Fetched ${allAssets.length} expanded assets for page ${currentPage}`);
+      
+      // Return data with accurate pagination info
+      return {
+        assets: allAssets,
+        totalCount,
+        hasMore: data.length === pageSize
+      };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 15 * 60 * 1000,   // 15 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Transform assets to handle SDXL images like workspace (individual images)
+  // Extract assets and pagination info
+  const assets = assetsData?.assets || [];
+  const totalCount = assetsData?.totalCount || 0;
+  const hasMore = assetsData?.hasMore || false;
+  
+  // Calculate total pages accurately
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  // Use assets directly (no transformation needed since URLs are already generated)
   const transformedAssets = useMemo(() => {
-    const transformed: UnifiedAsset[] = [];
-    
+    // Register assets with memory manager and progressive enhancement
     assets.forEach(asset => {
-      if (asset.type === 'image' && asset.rawPaths && asset.rawPaths.length > 1) {
-        // SDXL job with multiple images - create individual assets
-        asset.rawPaths.forEach((path, index) => {
-          transformed.push({
-            ...asset,
-            id: `${asset.id}_${index}`, // Unique ID for each image
-            rawPaths: [path], // Single path for this individual image
-            prompt: `${asset.prompt} (Image ${index + 1})`,
-            isSDXLImage: true,
-            sdxlIndex: index,
-            originalAssetId: asset.id,
-            url: undefined, // Will be generated lazily
-            thumbnailUrl: undefined,
-            signedUrls: undefined,
-          });
-        });
-      } else {
-        // Single image or video - keep as is
-        transformed.push(asset);
-      }
-    });
-    
-    // Phase 3: Register assets with memory manager and progressive enhancement
-    transformed.forEach(asset => {
       memoryManager.registerAsset(asset.id, 1024, 'medium');
     });
     
-    // Phase 3: Smart prefetching analysis
-    if (transformed.length > 0) {
-      progressiveEnhancement.analyzeAndPrefetch(transformed, { typeFilter, statusFilter });
+    if (assets.length > 0) {
+      progressiveEnhancement.analyzeAndPrefetch(assets, { typeFilter, statusFilter });
     }
     
-    return transformed.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  }, [assets, typeFilter, statusFilter]);
-
-  // Initialize lazy URL generation for better performance
-  const { 
-    lazyAssets, 
-    loadingUrls, 
-    registerAssetRef, 
-    forceLoadAssetUrls,
-    preloadNextAssets
-  } = useLazyUrlGeneration({ 
-    assets: transformedAssets, 
-    enabled: true,
-    prefetchThreshold: 200 // Start loading when 200px away from viewport
-  });
-  
-  // Phase 3: Track asset visibility separately
-  useEffect(() => {
-    transformedAssets.forEach(asset => {
-      // Register with memory manager on asset change
+    // Track asset visibility
+    assets.forEach(asset => {
       memoryManager.updateAssetVisibility(asset.id, true);
       progressiveEnhancement.trackAssetView(asset);
     });
-  }, [transformedAssets]);
+    
+    return assets;
+  }, [assets, typeFilter, statusFilter]);
 
   // Calculate simplified counts for filter UI
   const counts = useMemo(() => {
@@ -287,14 +409,13 @@ const OptimizedLibrary = () => {
     const failed = transformedAssets.filter(a => a.status === 'failed' || a.status === 'error').length;
     
     return {
-      total: transformedAssets.length,
-      images: transformedAssets.filter(a => a.type === 'image').length,
-      videos: transformedAssets.filter(a => a.type === 'video').length,
+      images: typeFilter === 'image' ? totalCount : 0,
+      videos: typeFilter === 'video' ? totalCount : 0,
       completed: completed,
       processing: processing,
       failed: failed,
     };
-  }, [transformedAssets]);
+  }, [transformedAssets, totalCount, typeFilter]);
 
   // Selection handlers
   const handleAssetSelection = (assetId: string, selected: boolean) => {
@@ -384,8 +505,8 @@ const OptimizedLibrary = () => {
     setDeletingAssets(prev => new Set(prev).add(asset.id));
     
     // Optimistic update - remove from UI immediately
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-      (oldData: UnifiedAsset[]) => oldData?.filter(a => a.id !== asset.id) || []
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => a.id !== asset.id) || [] } : oldData
     );
     
     if (selectedAssets.has(asset.id)) {
@@ -408,11 +529,14 @@ const OptimizedLibrary = () => {
       console.error('❌ Deletion failed for:', asset.id, error);
       
       // Restore asset on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-        (oldData: UnifiedAsset[]) => {
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+        (oldData: any) => {
           if (!oldData) return oldData;
-          const restored = [...oldData, asset];
-          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          const restored = [...(oldData.assets || []), asset];
+          return { 
+            ...oldData, 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+          };
         }
       );
       
@@ -432,8 +556,8 @@ const OptimizedLibrary = () => {
     
     // Optimistic updates
     const selectedIds = new Set(selectedAssetList.map(a => a.id));
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-      (oldData: UnifiedAsset[]) => oldData?.filter(a => !selectedIds.has(a.id)) || []
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => !selectedIds.has(a.id)) || [] } : oldData
     );
     setSelectedAssets(new Set());
     setShowBulkDelete(false);
@@ -460,11 +584,14 @@ const OptimizedLibrary = () => {
       console.error('❌ Bulk deletion failed:', error);
       
       // Restore all assets on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm], 
-        (oldData: UnifiedAsset[]) => {
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+        (oldData: any) => {
           if (!oldData) return oldData;
-          const restored = [...oldData, ...selectedAssetList];
-          return restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          const restored = [...(oldData.assets || []), ...selectedAssetList];
+          return { 
+            ...oldData, 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+          };
         }
       );
       
@@ -517,6 +644,10 @@ const OptimizedLibrary = () => {
             onViewModeChange={setViewMode}
             totalAssets={transformedAssets.length}
             isLoading={isLoading}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            currentPage={currentPage}
+            totalPages={totalPages}
           />
 
           {/* Simplified Filters */}
@@ -547,37 +678,74 @@ const OptimizedLibrary = () => {
               assets={transformedAssets}
               selectedAssets={selectedAssets}
               onAssetSelection={handleAssetSelection}
-              onPreview={setPreviewAsset}
+              onPreview={(asset) => {
+                const index = transformedAssets.findIndex(a => a.id === asset.id);
+                setSelectedAssetIndex(index);
+              }}
               onDelete={setAssetToDelete}
               onDownload={handleDownload}
               selectionMode={true}
             />
           ) : (
-              <div className="space-y-6">
+            <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                {lazyAssets.map((asset) => (
-                  <div
+                {transformedAssets.map((asset) => (
+                  <AssetCard
                     key={asset.id}
-                    ref={(el) => registerAssetRef(asset.id, el)}
-                  >
-                    <AssetCard
-                      asset={asset}
-                      isSelected={selectedAssets.has(asset.id)}
-                      onSelect={(selected) => handleAssetSelection(asset.id, selected)}
-                      onPreview={async () => {
-                        // Force load URL before preview for better UX
-                        await forceLoadAssetUrls(asset.id);
-                        setPreviewAsset(asset);
-                      }}
-                      onDelete={() => setAssetToDelete(asset)}
-                      onDownload={() => handleDownload(asset)}
-                      selectionMode={true}
-                      isDeleting={deletingAssets.has(asset.id)}
-                      isLoadingUrl={loadingUrls.has(asset.id)}
-                    />
-                  </div>
+                    asset={asset}
+                    isSelected={selectedAssets.has(asset.id)}
+                    onSelect={(selected) => handleAssetSelection(asset.id, selected)}
+                    onPreview={() => {
+                      const index = transformedAssets.findIndex(a => a.id === asset.id);
+                      setSelectedAssetIndex(index);
+                    }}
+                    onDelete={() => setAssetToDelete(asset)}
+                    onDownload={() => handleDownload(asset)}
+                    selectionMode={selectedAssets.size > 0}
+                    isDeleting={deletingAssets.has(asset.id)}
+                  />
                 ))}
               </div>
+
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex justify-center mt-8">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious 
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const page = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                        if (page > totalPages) return null;
+                        
+                        return (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              onClick={() => setCurrentPage(page)}
+                              isActive={page === currentPage}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        );
+                      })}
+                      
+                      <PaginationItem>
+                        <PaginationNext 
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -593,13 +761,15 @@ const OptimizedLibrary = () => {
           totalFilteredCount={transformedAssets.length}
         />
 
-        {/* Modals */}
-        <AssetPreviewModal
-          asset={previewAsset}
-          open={!!previewAsset}
-          onClose={() => setPreviewAsset(null)}
-          onDownload={handleDownload}
-        />
+        {/* Library Lightbox */}
+        {selectedAssetIndex >= 0 && (
+          <LibraryLightbox
+            assets={transformedAssets}
+            startIndex={selectedAssetIndex}
+            onClose={() => setSelectedAssetIndex(-1)}
+            onDownload={handleDownload}
+          />
+        )}
 
         <DeleteConfirmationModal
           video={assetToDelete ? { 

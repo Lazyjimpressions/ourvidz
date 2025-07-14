@@ -310,8 +310,8 @@ serve(async (req)=>{
       sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
       sample_solver: 'unipc',
       sample_shift: 5.0,
-      // Batch settings
-      num_images: isSDXL ? 6 : 1,
+      // User-controlled batch settings
+      num_images: metadata?.num_images || (isSDXL ? 1 : 1), // Default to 1, user can select 1, 3, or 6
       batch_count: metadata?.batch_count || 1,
       // Content type tracking
       content_type: format,
@@ -374,7 +374,8 @@ serve(async (req)=>{
         enhance_prompt: isEnhanced,
         expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,  // 🔧 UPDATED: New performance baselines
         content_type: format,
-        file_extension: format === 'video' ? 'mp4' : 'png'
+        file_extension: format === 'video' ? 'mp4' : 'png',
+        num_images: metadata?.num_images || 1  // CRITICAL FIX: Pass user-selected image quantity to worker
       },
       user_id: user.id,
       created_at: new Date().toISOString(),

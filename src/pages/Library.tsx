@@ -1,7 +1,7 @@
-import OptimizedLibrary from "@/components/library/OptimizedLibrary";
+import SimpleLibrary from "@/components/library/SimpleLibrary";
 
 const Library = () => {
-  return <OptimizedLibrary />;
+  return <SimpleLibrary />;
 };
 
 export default Library;

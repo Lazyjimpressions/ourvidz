@@ -126,6 +126,7 @@ export type Database = {
           id: string
           image_url: string | null
           image_urls: Json | null
+          job_id: string | null
           metadata: Json | null
           moderation_status: string | null
           nsfw_score: number | null
@@ -154,6 +155,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           image_urls?: Json | null
+          job_id?: string | null
           metadata?: Json | null
           moderation_status?: string | null
           nsfw_score?: number | null
@@ -182,6 +184,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           image_urls?: Json | null
+          job_id?: string | null
           metadata?: Json | null
           moderation_status?: string | null
           nsfw_score?: number | null
@@ -202,6 +205,20 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "images_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "images_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "model_test_analytics"
+            referencedColumns: ["job_id"]
+          },
           {
             foreignKeyName: "images_project_id_fkey"
             columns: ["project_id"]

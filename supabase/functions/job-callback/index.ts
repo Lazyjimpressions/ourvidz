@@ -182,7 +182,7 @@ serve(async (req)=>{
       expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`
     });
     // Handle different job types based on parsed format with standardized assets
-    if (format === 'image' && job.image_id) {
+    if (format === 'image') {
       console.log('🖼️ Processing image job callback...');
       await handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced);
     } else if (format === 'video' && job.video_id) {
@@ -264,91 +264,75 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
     isSDXL,
     expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`
   });
+  
   if (status === 'completed' && assets && assets.length > 0) {
-    console.log('✅ Processing completed image job with standardized assets');
-    // Store paths exactly as returned by workers - no normalization needed
-    let primaryImageUrl = assets[0];
-    let imageUrlsArray = null;
-    if (assets.length > 1) {
-      console.log('🖼️ Multiple images received:', assets.length);
-      imageUrlsArray = assets; // Store as-is from worker
-      primaryImageUrl = imageUrlsArray[0]; // Use first image as primary
-    } else {
-      console.log('🖼️ Single image received:', assets[0]);
-    }
-    // Validate file path format
-    const filePathValidation = {
-      hasSlash: primaryImageUrl ? primaryImageUrl.includes('/') : false,
-      hasUnderscore: primaryImageUrl ? primaryImageUrl.includes('_') : false,
-      hasPngExtension: primaryImageUrl ? primaryImageUrl.endsWith('.png') : false,
-      length: primaryImageUrl ? primaryImageUrl.length : 0,
-      startsWithUserId: primaryImageUrl ? primaryImageUrl.startsWith(job.user_id || 'unknown') : false,
-      expectedPattern: `${job.user_id}/${isSDXL ? 'sdxl_' : ''}${job.id}_*.png`,
-      isMultipleImages: !!imageUrlsArray,
-      imageCount: imageUrlsArray ? imageUrlsArray.length : 1
-    };
-    console.log('🔍 File path validation:', filePathValidation);
+    console.log('✅ Processing completed image job - creating individual records');
+    
     // Extract title from job metadata or prompt
     const jobMetadata = job.metadata || {};
     const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image';
-    const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
-
-    // Update image record with model type information and enhanced debugging
-    const updateData = {
-      status: 'completed',
-      title: title,
-      image_url: primaryImageUrl,
-      image_urls: imageUrlsArray,
-      thumbnail_url: primaryImageUrl,
-      quality: quality,
-      metadata: {
-        ...jobMetadata,
-        model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-        is_sdxl: isSDXL,
-        is_enhanced: isEnhanced,
-        bucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`,
-        callback_processed_at: new Date().toISOString(),
-        file_path_validation: filePathValidation,
-        debug_info: {
-          original_assets: assets,
-          image_urls_received: imageUrlsArray,
-          job_type: job.job_type,
-          processed_at: new Date().toISOString()
+    const baseTitle = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+    
+    // Create individual image records for each asset
+    const createdImages = [];
+    for (let i = 0; i < assets.length; i++) {
+      const imageUrl = assets[i];
+      const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+      
+      const imageData = {
+        user_id: job.user_id,
+        prompt: prompt,
+        title: title,
+        image_url: imageUrl,
+        thumbnail_url: imageUrl,
+        status: 'completed',
+        quality: quality,
+        format: 'png',
+        generation_mode: 'standalone',
+        job_id: job.id, // Link back to originating job
+        metadata: {
+          ...jobMetadata,
+          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
+          is_sdxl: isSDXL,
+          is_enhanced: isEnhanced,
+          bucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `image7b_${quality}_enhanced` : `image_${quality}`,
+          callback_processed_at: new Date().toISOString(),
+          original_job_id: job.id,
+          image_index: i,
+          total_images: assets.length
         }
+      };
+      
+      const { data: newImage, error: imageError } = await supabase
+        .from('images')
+        .insert(imageData)
+        .select()
+        .single();
+      
+      if (imageError) {
+        console.error('❌ Error creating image record:', {
+          imageIndex: i,
+          error: imageError,
+          imageData
+        });
+      } else {
+        console.log('✅ Image record created:', {
+          imageId: newImage.id,
+          imageIndex: i,
+          imageUrl: newImage.image_url,
+          jobId: job.id
+        });
+        createdImages.push(newImage);
       }
-    };
-    console.log('🔄 Updating image record:', {
-      imageId: job.image_id,
-      updateData,
-      expectedBucket: updateData.metadata.bucket
-    });
-    const { data: updatedImage, error: imageError } = await supabase.from('images').update(updateData).eq('id', job.image_id).select().single();
-    if (imageError) {
-      console.error('❌ CRITICAL: Error updating image record:', {
-        imageId: job.image_id,
-        error: imageError,
-        updateData
-      });
-    } else {
-      console.log('✅ Image record updated successfully:', {
-        imageId: updatedImage.id,
-        status: updatedImage.status,
-        imageUrl: updatedImage.image_url,
-        quality: updatedImage.quality,
-        bucket: updatedImage.metadata?.bucket,
-        isSDXL: updatedImage.metadata?.is_sdxl
-      });
-      // Verify the image can be found by AssetService logic
-      console.log('🔍 Verifying image accessibility for AssetService:', {
-        imageId: updatedImage.id,
-        userId: job.user_id,
-        imageUrl: updatedImage.image_url,
-        status: updatedImage.status,
-        quality: updatedImage.quality,
-        metadata: updatedImage.metadata
-      });
     }
-  } else if (status === 'failed') {
+    
+    console.log('✅ Created individual image records:', {
+      jobId: job.id,
+      totalImages: assets.length,
+      createdCount: createdImages.length
+    });
+    
+  } else if (status === 'failed' && job.image_id) {
     console.log('❌ Processing failed image job');
     const { error: imageError } = await supabase.from('images').update({
       status: 'failed',
@@ -363,7 +347,7 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
     } else {
       console.log('✅ Image job marked as failed');
     }
-  } else if (status === 'processing') {
+  } else if (status === 'processing' && job.image_id) {
     console.log('🔄 Processing image job in progress');
     const { error: imageError } = await supabase.from('images').update({
       status: 'generating',
