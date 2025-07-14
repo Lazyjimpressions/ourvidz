@@ -1,19 +1,24 @@
 
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ImagesQuantityButton } from './ImagesQuantityButton';
 
 interface AdvancedControlsSectionProps {
   mode: 'image' | 'video';
   motionIntensity?: 'low' | 'medium' | 'high';
   onMotionClick?: () => void;
   layout: 'mobile' | 'desktop';
+  numImages?: number;
+  setNumImages?: (count: number) => void;
 }
 
-export const AdvancedControlsSection = ({ 
-  mode, 
-  motionIntensity = 'medium', 
-  onMotionClick, 
-  layout 
+export const AdvancedControlsSection = ({
+  mode,
+  motionIntensity = 'medium',
+  onMotionClick,
+  layout,
+  numImages = 1,
+  setNumImages
 }: AdvancedControlsSectionProps) => {
   if (mode === 'image') {
     return (
@@ -64,6 +69,15 @@ export const AdvancedControlsSection = ({
             <SelectItem value="cinematic">Cinematic</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Images Quantity Button - Only for image mode */}
+        {setNumImages && (
+          <ImagesQuantityButton 
+            numImages={numImages}
+            onQuantityChange={setNumImages}
+            layout={layout}
+          />
+        )}
       </div>
     );
   }

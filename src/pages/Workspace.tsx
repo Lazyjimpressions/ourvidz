@@ -9,8 +9,7 @@ import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
-import { ImageInputControls } from '@/components/ImageInputControls';
-import { VideoInputControls } from '@/components/VideoInputControls';
+import { WorkspaceInputControls } from '@/components/WorkspaceInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -53,6 +52,7 @@ const Workspace = () => {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [numImages, setNumImages] = useState<number>(1);
   
   // Workspace state - Simplified and optimized
   const [workspaceAssets, setWorkspaceAssets] = useState<WorkspaceAsset[]>([]);
@@ -392,6 +392,8 @@ const Workspace = () => {
       } else {
         setSelectedMode(quality === 'high' ? 'video_high' : 'video_fast');
       }
+      // Reset image quantity for video mode
+      setNumImages(1);
     } else {
       if (enhanced) {
         setSelectedMode(quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced');
@@ -423,7 +425,8 @@ const Workspace = () => {
         prompt: prompt.trim(),
         metadata: {
           reference_image: referenceImage ? true : false,
-          model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b'
+          model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b',
+          num_images: numImages
         }
       });
 
@@ -619,69 +622,25 @@ const Workspace = () => {
 
       {/* Bottom Input Controls */}
       <div className="p-6 bg-black">
-        {isVideoMode ? (
-          <VideoInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onBeginningFrameUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
-            onEndingFrameUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
-            onSwitchToImage={() => navigate('/workspace?mode=image')}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-          />
-        ) : (
-          <ImageInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onReferenceImageUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
-            onSwitchToVideo={() => navigate('/workspace?mode=video')}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-          />
-        )}
+        <WorkspaceInputControls
+          selectedMode={selectedMode}
+          setSelectedMode={setSelectedMode}
+          prompt={prompt}
+          setPrompt={setPrompt}
+          onGenerate={handleGenerate}
+          isGenerating={isGenerating}
+          referenceImage={referenceImage}
+          setReferenceImage={setReferenceImage}
+          referenceImageUrl={referenceImageUrl}
+          setReferenceImageUrl={setReferenceImageUrl}
+          generationProgress={generationProgress}
+          currentJob={currentJob}
+          generationError={generationError}
+          onRegenerate={handleRegenerate}
+          onClearError={clearError}
+          numImages={numImages}
+          setNumImages={setNumImages}
+        />
       </div>
 
       {/* Workspace Content Modal */}

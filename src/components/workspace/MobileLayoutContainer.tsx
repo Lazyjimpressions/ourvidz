@@ -22,6 +22,8 @@ interface MobileLayoutContainerProps {
   generationError: string | null;
   onRegenerate: () => void;
   onClearError: () => void;
+  numImages: number;
+  setNumImages: (count: number) => void;
 }
 
 export const MobileLayoutContainer = ({
@@ -34,7 +36,9 @@ export const MobileLayoutContainer = ({
   referenceImage,
   setReferenceImage,
   referenceImageUrl,
-  setReferenceImageUrl
+  setReferenceImageUrl,
+  numImages,
+  setNumImages
 }: MobileLayoutContainerProps) => {
   const isVideoMode = selectedMode.includes('video');
 
@@ -84,6 +88,8 @@ export const MobileLayoutContainer = ({
         motionIntensity="medium"
         onMotionClick={() => console.log('Motion clicked')}
         layout="mobile"
+        numImages={numImages}
+        setNumImages={setNumImages}
       />
     </div>
   );

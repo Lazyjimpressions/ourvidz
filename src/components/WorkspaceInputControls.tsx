@@ -21,6 +21,8 @@ interface WorkspaceInputControlsProps {
   generationError: string | null;
   onRegenerate: () => void;
   onClearError: () => void;
+  numImages: number;
+  setNumImages: (count: number) => void;
 }
 
 export const WorkspaceInputControls = ({
@@ -38,7 +40,9 @@ export const WorkspaceInputControls = ({
   currentJob,
   generationError,
   onRegenerate,
-  onClearError
+  onClearError,
+  numImages,
+  setNumImages
 }: WorkspaceInputControlsProps) => {
   const isMobile = useIsMobile();
 
@@ -61,6 +65,8 @@ export const WorkspaceInputControls = ({
           generationError={generationError}
           onRegenerate={onRegenerate}
           onClearError={onClearError}
+          numImages={numImages}
+          setNumImages={setNumImages}
         />
       ) : (
         <DesktopLayoutContainer
@@ -79,6 +85,8 @@ export const WorkspaceInputControls = ({
           generationError={generationError}
           onRegenerate={onRegenerate}
           onClearError={onClearError}
+          numImages={numImages}
+          setNumImages={setNumImages}
         />
       )}
     </div>

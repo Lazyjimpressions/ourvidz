@@ -22,6 +22,8 @@ interface DesktopLayoutContainerProps {
   generationError: string | null;
   onRegenerate: () => void;
   onClearError: () => void;
+  numImages: number;
+  setNumImages: (count: number) => void;
 }
 
 export const DesktopLayoutContainer = ({
@@ -34,7 +36,9 @@ export const DesktopLayoutContainer = ({
   referenceImage,
   setReferenceImage,
   referenceImageUrl,
-  setReferenceImageUrl
+  setReferenceImageUrl,
+  numImages,
+  setNumImages
 }: DesktopLayoutContainerProps) => {
   const isVideoMode = selectedMode.includes('video');
 
@@ -91,6 +95,8 @@ export const DesktopLayoutContainer = ({
             motionIntensity="medium"
             onMotionClick={() => console.log('Motion clicked')}
             layout="desktop"
+            numImages={numImages}
+            setNumImages={setNumImages}
           />
         </div>
       </div>
