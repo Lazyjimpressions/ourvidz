@@ -23,6 +23,10 @@ export const useRealtimeWorkspace = () => {
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   const processedUpdatesRef = useRef<Set<string>>(new Set());
   
+  // Batching state for rapid completions
+  const batchUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingBatchUpdatesRef = useRef<Set<string>>(new Set());
+  
   // Efficient workspace query with aggressive caching
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['realtime-workspace-assets', Array.from(workspaceFilter).sort()],
@@ -91,13 +95,45 @@ export const useRealtimeWorkspace = () => {
     }
   }, [workspaceFilter]);
 
-  // Simplified realtime subscription - immediate asset addition
+  // Batched realtime subscription with debouncing for rapid SDXL completions
   useEffect(() => {
     const setupRealtimeSubscriptions = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔔 Setting up simplified realtime subscriptions');
+      console.log('🔔 Setting up batched realtime subscriptions');
+      
+      // Batched update processor
+      const processBatchedUpdates = () => {
+        if (pendingBatchUpdatesRef.current.size > 0) {
+          const batchIds = Array.from(pendingBatchUpdatesRef.current);
+          console.log('🚀 Processing batched workspace updates:', batchIds);
+          
+          setWorkspaceFilter(prev => {
+            const newFilter = new Set(prev);
+            batchIds.forEach(id => newFilter.add(id));
+            return newFilter;
+          });
+          
+          // Single query invalidation for all batched items
+          queryClient.invalidateQueries({ 
+            queryKey: ['realtime-workspace-assets'],
+            exact: false 
+          });
+          
+          // Dispatch batch completion event
+          window.dispatchEvent(new CustomEvent('generation-completed', {
+            detail: { 
+              assetIds: batchIds, 
+              type: 'batch', 
+              status: 'completed'
+            }
+          }));
+          
+          pendingBatchUpdatesRef.current.clear();
+        }
+        batchUpdateTimerRef.current = null;
+      };
       
       // Combined channel for all asset updates
       const combinedChannel = supabase
@@ -117,26 +153,17 @@ export const useRealtimeWorkspace = () => {
             if (eventType === 'UPDATE' && image.status === 'completed' && 
                 !processedUpdatesRef.current.has(image.id)) {
               
-              console.log('🎉 Image completed - adding immediately:', image.id);
+              console.log('🎉 Image completed - adding to batch:', image.id, 'job_id:', image.job_id);
               processedUpdatesRef.current.add(image.id);
+              pendingBatchUpdatesRef.current.add(image.id);
               
-              // Add to workspace immediately - no batch waiting
-              setWorkspaceFilter(prev => new Set([...prev, image.id]));
+              // Clear existing timer and set new one (debouncing)
+              if (batchUpdateTimerRef.current) {
+                clearTimeout(batchUpdateTimerRef.current);
+              }
               
-              // Dispatch single completion event
-              window.dispatchEvent(new CustomEvent('generation-completed', {
-                detail: { 
-                  assetId: image.id, 
-                  type: 'image', 
-                  status: 'completed'
-                }
-              }));
-              
-              // Invalidate cache to force refresh
-              queryClient.invalidateQueries({ 
-                queryKey: ['realtime-workspace-assets'],
-                exact: false 
-              });
+              // Process batch after 500ms of no new completions
+              batchUpdateTimerRef.current = setTimeout(processBatchedUpdates, 500);
               
               setTimeout(() => processedUpdatesRef.current.delete(image.id), 60000);
             }
@@ -222,7 +249,10 @@ export const useRealtimeWorkspace = () => {
         .subscribe();
 
       return () => {
-        console.log('🔕 Cleaning up enhanced realtime subscriptions');
+        console.log('🔕 Cleaning up batched realtime subscriptions');
+        if (batchUpdateTimerRef.current) {
+          clearTimeout(batchUpdateTimerRef.current);
+        }
         supabase.removeChannel(combinedChannel);
       };
     };
@@ -230,27 +260,17 @@ export const useRealtimeWorkspace = () => {
     setupRealtimeSubscriptions();
   }, [queryClient]);
 
-  // Simplified generation completion event system - prevent duplicates
+  // Enhanced generation completion event system with batch support
   useEffect(() => {
     const handleGenerationComplete = (event: CustomEvent) => {
-      const { assetId, type } = event.detail;
-      console.log('🎉 Generation completion event:', { assetId, type });
+      const { assetId, assetIds, type } = event.detail;
       
-      // Add to workspace filter with deduplication
-      if (assetId && !processedUpdatesRef.current.has(assetId)) {
-        processedUpdatesRef.current.add(assetId);
-        setWorkspaceFilter(prev => new Set([...prev, assetId]));
-        
-        // Trigger cache invalidation for the new asset
-        queryClient.invalidateQueries({ 
-          queryKey: ['realtime-workspace-assets'],
-          exact: false 
-        });
-        
+      if (type === 'batch' && assetIds) {
+        console.log('🎉 Batch generation completion event:', { assetIds, count: assetIds.length });
+        toast.success(`${assetIds.length} new images completed!`);
+      } else if (assetId) {
+        console.log('🎉 Single generation completion event:', { assetId, type });
         toast.success(`New ${type} completed!`);
-        
-        // Cleanup
-        setTimeout(() => processedUpdatesRef.current.delete(assetId), 60000);
       }
     };
 
