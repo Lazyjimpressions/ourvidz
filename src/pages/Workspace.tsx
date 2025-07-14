@@ -9,7 +9,8 @@ import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
-import { WorkspaceInputControls } from '@/components/WorkspaceInputControls';
+import { ImageInputControls } from '@/components/ImageInputControls';
+import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -40,7 +41,7 @@ const Workspace = () => {
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
-  const isVideoMode = mode === 'video';
+  const [isVideoMode, setIsVideoMode] = useState(mode === 'video');
   
   // Generation state
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
@@ -622,25 +623,41 @@ const Workspace = () => {
 
       {/* Bottom Input Controls */}
       <div className="p-6 bg-black">
-        <WorkspaceInputControls
-          selectedMode={selectedMode}
-          setSelectedMode={setSelectedMode}
-          prompt={prompt}
-          setPrompt={setPrompt}
-          onGenerate={handleGenerate}
-          isGenerating={isGenerating}
-          referenceImage={referenceImage}
-          setReferenceImage={setReferenceImage}
-          referenceImageUrl={referenceImageUrl}
-          setReferenceImageUrl={setReferenceImageUrl}
-          generationProgress={generationProgress}
-          currentJob={currentJob}
-          generationError={generationError}
-          onRegenerate={handleRegenerate}
-          onClearError={clearError}
-          numImages={numImages}
-          setNumImages={setNumImages}
-        />
+        {isVideoMode ? (
+          <VideoInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onBeginningFrameUpload={() => {/* TODO: implement video frame upload */}}
+            onEndingFrameUpload={() => {/* TODO: implement video frame upload */}}
+            onSwitchToImage={() => {
+              setIsVideoMode(false);
+              setNumImages(1); // Reset to 1 when switching from video
+            }}
+            quality={quality}
+            setQuality={setQuality}
+            onLibraryClick={() => setShowLibraryModal(true)}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
+          />
+        ) : (
+          <ImageInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onReferenceImageUpload={() => {/* TODO: implement reference image upload */}}
+            onSwitchToVideo={() => setIsVideoMode(true)}
+            quality={quality}
+            setQuality={setQuality}
+            onLibraryClick={() => setShowLibraryModal(true)}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
+            numImages={numImages}
+            setNumImages={setNumImages}
+          />
+        )}
       </div>
 
       {/* Workspace Content Modal */}

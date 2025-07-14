@@ -512,6 +512,8 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
+            numImages={1}
+            setNumImages={() => {}}
           />
         )}
       </div>

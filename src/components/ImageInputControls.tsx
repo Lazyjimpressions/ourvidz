@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
+import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import {
   Popover,
   PopoverContent,
@@ -20,6 +21,8 @@ interface ImageInputControlsProps {
   onLibraryClick: () => void;
   enhanced: boolean;
   setEnhanced: (enhanced: boolean) => void;
+  numImages: number;
+  setNumImages: (count: number) => void;
 }
 
 export const ImageInputControls = ({
@@ -33,7 +36,9 @@ export const ImageInputControls = ({
   setQuality,
   onLibraryClick,
   enhanced,
-  setEnhanced
+  setEnhanced,
+  numImages,
+  setNumImages
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -111,6 +116,13 @@ export const ImageInputControls = ({
           <Archive className="w-3 h-3" />
           Library
         </Button>
+        
+        {/* Images Quantity Button */}
+        <ImagesQuantityButton 
+          numImages={numImages}
+          onQuantityChange={setNumImages}
+          layout="desktop"
+        />
         {/* Aspect Ratio */}
         <Popover>
           <PopoverTrigger asChild>
