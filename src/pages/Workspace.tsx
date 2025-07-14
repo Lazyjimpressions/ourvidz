@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus';
-import { useWorkspace } from '@/hooks/useWorkspace';
+import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
@@ -50,7 +50,7 @@ const Workspace = () => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
   
-  // Use the workspace hook
+  // Use the realtime workspace hook
   const { 
     tiles: workspaceTiles, 
     isLoading: workspaceLoading, 
@@ -59,7 +59,7 @@ const Workspace = () => {
     importToWorkspace, 
     clearWorkspace, 
     deleteTile 
-  } = useWorkspace();
+  } = useRealtimeWorkspace();
   
   const [isClearing, setIsClearing] = useState(false);
   
@@ -89,36 +89,7 @@ const Workspace = () => {
   // Use workspace integration hook
   useWorkspaceIntegration();
 
-  // Listen for generation completion events and add new assets to workspace
-  useEffect(() => {
-    const handleGenerationComplete = async (event: CustomEvent) => {
-      const { assetId, type } = event.detail || {};
-      
-      console.log('🎯 Workspace received generation completion event:', { 
-        assetId, 
-        type
-      });
-      
-      if (!assetId || !user) {
-        console.warn('⚠️ Generation complete event missing assetId or user');
-        return;
-      }
-
-      // Add the new asset to workspace using the hook
-      addToWorkspace([assetId]);
-      
-      console.log('🚀 Added new asset to workspace via hook:', assetId);
-      toast.success(`New ${type} added to workspace!`);
-    };
-
-    console.log('🔗 Setting up generation completion event listener in workspace');
-    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
-    
-    return () => {
-      console.log('🔌 Removing generation completion event listener from workspace');
-      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
-    };
-  }, [user, addToWorkspace]);
+  // The realtime workspace hook already handles generation completion events
 
   // Handle authentication state and navigation
   useEffect(() => {
