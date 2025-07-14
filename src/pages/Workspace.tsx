@@ -85,7 +85,7 @@ const Workspace = () => {
   // Use workspace integration hook
   useWorkspaceIntegration();
 
-  // Emergency workspace reset - forces clean workspace
+  // Emergency workspace reset - DISABLED to enable persistence
   // useEmergencyWorkspaceReset(); // DISABLED to allow persistence
 
   // Listen for generation completion events and add new assets to workspace immediately

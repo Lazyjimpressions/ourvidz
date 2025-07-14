@@ -49,39 +49,31 @@ export const useRealtimeWorkspace = () => {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // FORCE empty workspace on every mount - no persistence allowed
+  // Restore workspace from session storage on mount
   useEffect(() => {
-    const forceCleanWorkspace = async () => {
+    const restoreWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
       
-      console.log('🚨 REALTIME: FORCING completely clean workspace - NO PERSISTENCE');
+      console.log('🔄 REALTIME: Restoring workspace from session storage for user:', user.id);
       
-      // Clear ALL workspace storage immediately
-      if (typeof sessionStorage !== 'undefined') {
-        Object.keys(sessionStorage).forEach((key) => {
-          if (key.includes('workspace') || key.includes('Workspace')) {
-            sessionStorage.removeItem(key);
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      const storedFilter = sessionStorage.getItem(userScopedKey);
+      
+      if (storedFilter) {
+        try {
+          const filterArray = JSON.parse(storedFilter);
+          if (Array.isArray(filterArray) && filterArray.length > 0) {
+            setWorkspaceFilter(new Set(filterArray));
+            console.log('✅ REALTIME: Restored workspace with', filterArray.length, 'assets');
           }
-        });
-      }
-      
-      if (typeof localStorage !== 'undefined') {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.includes('workspace') || key.includes('Workspace')) {
-            localStorage.removeItem(key);
-          }
-        });
-      }
-      
-      // Force empty workspace filter
-      setWorkspaceFilter(new Set());
-      
-      if (user) {
-        console.log('✅ REALTIME: Forced clean workspace for user:', user.id);
+        } catch (error) {
+          console.warn('⚠️ Failed to parse stored workspace filter:', error);
+        }
       }
     };
     
-    forceCleanWorkspace();
+    restoreWorkspace();
   }, []);
 
   // Enhanced realtime subscription with job status tracking
@@ -267,16 +259,16 @@ export const useRealtimeWorkspace = () => {
     };
   }, [queryClient]);
 
-  // Transform assets to tiles with enhanced SDXL array handling
+  // Transform assets to tiles - simplified for individual image handling
   const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {
     const tiles: MediaTile[] = [];
     
     if (asset.type === 'image') {
-      // Handle SDXL 6-image arrays
+      // Handle multiple image URLs (from SDXL generation with user-selected quantity)
       if (asset.signedUrls && asset.signedUrls.length > 0) {
         asset.signedUrls.forEach((url: string, index: number) => {
           tiles.push({
-            id: `${asset.id}-${index}`,
+            id: `${asset.id}_${index}`,
             originalAssetId: asset.id,
             type: 'image',
             url: url,

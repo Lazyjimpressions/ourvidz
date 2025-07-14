@@ -374,7 +374,8 @@ serve(async (req)=>{
         enhance_prompt: isEnhanced,
         expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,  // 🔧 UPDATED: New performance baselines
         content_type: format,
-        file_extension: format === 'video' ? 'mp4' : 'png'
+        file_extension: format === 'video' ? 'mp4' : 'png',
+        num_images: metadata?.num_images || 1  // CRITICAL FIX: Pass user-selected image quantity to worker
       },
       user_id: user.id,
       created_at: new Date().toISOString(),
