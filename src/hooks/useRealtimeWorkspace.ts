@@ -101,14 +101,35 @@ export const useRealtimeWorkspace = () => {
             
             if (eventType === 'UPDATE' && image.status === 'completed' && 
                 !processedUpdatesRef.current.has(image.id)) {
-              console.log('🎉 Image completed with enhanced tracking:', image.id);
+              
+              const metadata = image.metadata as any;
+              const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+              const imageIndex = metadata?.image_index;
+              const totalImages = metadata?.total_images;
+              
+              console.log('🎉 Image completed with enhanced tracking:', {
+                imageId: image.id,
+                isSDXL,
+                imageIndex,
+                totalImages,
+                jobId: metadata?.original_job_id || image.job_id
+              });
+              
               processedUpdatesRef.current.add(image.id);
               
+              // Add to workspace immediately
               setWorkspaceFilter(prev => new Set([...prev, image.id]));
               
-              // Dispatch enhanced completion event
+              // Dispatch enhanced completion event with SDXL details
               window.dispatchEvent(new CustomEvent('generation-completed', {
-                detail: { assetId: image.id, type: 'image', status: 'completed' }
+                detail: { 
+                  assetId: image.id, 
+                  type: 'image', 
+                  status: 'completed',
+                  isSDXL,
+                  imageIndex,
+                  totalImages
+                }
               }));
               
               // Invalidate cache to force refresh
