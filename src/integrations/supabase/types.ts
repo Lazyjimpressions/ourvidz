@@ -124,6 +124,7 @@ export type Database = {
           format: string | null
           generation_mode: string
           id: string
+          image_index: number | null
           image_url: string | null
           image_urls: Json | null
           job_id: string | null
@@ -153,6 +154,7 @@ export type Database = {
           format?: string | null
           generation_mode?: string
           id?: string
+          image_index?: number | null
           image_url?: string | null
           image_urls?: Json | null
           job_id?: string | null
@@ -182,6 +184,7 @@ export type Database = {
           format?: string | null
           generation_mode?: string
           id?: string
+          image_index?: number | null
           image_url?: string | null
           image_urls?: Json | null
           job_id?: string | null
