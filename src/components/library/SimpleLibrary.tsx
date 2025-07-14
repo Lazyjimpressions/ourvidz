@@ -190,18 +190,20 @@ const SimpleLibrary = () => {
             }
           }
           
-          // Generate signed URL for thumbnail if it's in system_assets
-          let thumbnailUrl = video.thumbnail_url;
-          if (thumbnailUrl && thumbnailUrl.startsWith('system_assets/')) {
-            const { data: thumbData } = await supabase.storage
-              .from('system_assets')
-              .createSignedUrl(thumbnailUrl.replace('system_assets/', ''), 3600);
-            if (thumbData?.signedUrl) {
-              thumbnailUrl = thumbData.signedUrl;
-            }
+          // Don't use system_assets thumbnails - they're just placeholders
+          // For videos, use the video URL for both playback and thumbnail display
+          let thumbnailUrl = null;
+          
+          // Check if thumbnail is a placeholder from system_assets
+          const isPlaceholderThumbnail = video.thumbnail_url?.startsWith('system_assets/') || 
+                                       (metadata && typeof metadata === 'object' && metadata.thumbnail_placeholder);
+          
+          // If not a placeholder, use the actual thumbnail
+          if (video.thumbnail_url && !isPlaceholderThumbnail) {
+            thumbnailUrl = video.thumbnail_url;
           }
           
-          // Always add video, even if URL generation failed - show with placeholder
+          // Always add video, use video URL for display when thumbnail is placeholder
           allAssets.push({
             id: video.id,
             type: 'video',

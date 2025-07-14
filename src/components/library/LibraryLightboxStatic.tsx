@@ -196,9 +196,10 @@ export const LibraryLightboxStatic: React.FC<LibraryLightboxStaticProps> = ({
                   <video
                     src={currentAsset.url}
                     controls
+                    autoPlay
                     className="max-h-[70vh] max-w-full object-contain rounded-lg shadow-lg"
-                    poster={currentAsset.thumbnailUrl}
-                    onLoad={handleImageLoad}
+                    poster={currentAsset.thumbnailUrl || undefined}
+                    onLoadedMetadata={handleImageLoad}
                     onError={handleImageError}
                     style={{ opacity: isLoading ? 0 : 1 }}
                   >

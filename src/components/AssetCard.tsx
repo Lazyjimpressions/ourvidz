@@ -164,12 +164,41 @@ export const AssetCard = ({
             </div>
           </div>
         ) : asset.type === 'video' ? (
-          <div className="w-full h-full bg-muted flex items-center justify-center">
-            <Video className="w-8 h-8 text-muted-foreground" />
-            <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
-              Video
+          displayUrl ? (
+            <video
+              src={displayUrl}
+              className="w-full h-full object-cover"
+              muted
+              preload="metadata"
+              onMouseEnter={(e) => {
+                const video = e.currentTarget;
+                video.currentTime = 0;
+                video.play().catch(() => {
+                  // Ignore play errors - some videos might not be ready
+                });
+              }}
+              onMouseLeave={(e) => {
+                const video = e.currentTarget;
+                video.pause();
+                video.currentTime = 0;
+              }}
+              onLoad={() => {
+                setImageLoaded(true);
+                console.log(`✅ Video loaded successfully for asset ${asset.id}`);
+              }}
+              onError={(e) => {
+                setImageError(true);
+                console.error(`❌ Video failed to load for asset ${asset.id}:`, e);
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <Video className="w-8 h-8 text-muted-foreground" />
+              <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+                Video
+              </div>
             </div>
-          </div>
+          )
         ) : displayUrl ? (
           <img
             src={displayUrl}
@@ -202,6 +231,18 @@ export const AssetCard = ({
             </div>
             <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
               {imageError ? 'Error' : 'No preview'}
+            </div>
+          </div>
+        )}
+
+        {asset.type === 'video' && !displayUrl && (
+          <div className="w-full h-full bg-muted flex flex-col items-center justify-center">
+            <Video className="w-8 h-8 text-muted-foreground mb-2" />
+            <div className="text-xs text-muted-foreground text-center px-2">
+              Video not ready
+            </div>
+            <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+              Processing
             </div>
           </div>
         )}
