@@ -140,14 +140,38 @@ export const useRealtimeGenerationStatus = (
           .single();
         
         if (!jobError && jobData) {
-          const assetId = jobData.image_id || jobData.video_id;
-          const assetType = jobData.image_id ? 'image' : 'video';
-          
-          if (assetId) {
-            console.log('🎉 Emitting generation completed event:', { assetId, assetType });
+          // Handle single asset case (WAN videos, legacy images)
+          if (jobData.image_id || jobData.video_id) {
+            const assetId = jobData.image_id || jobData.video_id;
+            const assetType = jobData.image_id ? 'image' : 'video';
+            
+            console.log('🎉 Emitting generation completed event for single asset:', { assetId, assetType });
             window.dispatchEvent(new CustomEvent('generation-completed', {
               detail: { assetId, type: assetType, jobId: completedJobId }
             }));
+          }
+          // Handle multi-image case (SDXL, enhanced models)
+          else if (jobData.job_type && jobData.job_type.includes('image')) {
+            console.log('🔍 Looking for multiple images linked to job:', completedJobId);
+            
+            const { data: images, error: imagesError } = await supabase
+              .from('images')
+              .select('id')
+              .eq('job_id', completedJobId)
+              .eq('status', 'completed');
+            
+            if (!imagesError && images && images.length > 0) {
+              console.log(`🎉 Emitting generation completed events for ${images.length} images from job:`, completedJobId);
+              
+              // Emit individual events for each image
+              for (const image of images) {
+                window.dispatchEvent(new CustomEvent('generation-completed', {
+                  detail: { assetId: image.id, type: 'image', jobId: completedJobId }
+                }));
+              }
+            } else {
+              console.warn('⚠️ No completed images found for job:', completedJobId);
+            }
           }
         }
       } catch (error) {

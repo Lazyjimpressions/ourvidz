@@ -321,37 +321,10 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
       }
     }
     
-    // Emit browser event with created image IDs for workspace
-    if (createdImages.length > 0) {
-      const imageIds = createdImages.map(img => img.id);
-      console.log('📡 Emitting generation-completed events for images:', imageIds);
-      
-      // Emit individual events for each image
-      for (const imageId of imageIds) {
-        const eventDetail = {
-          assetId: imageId,
-          type: 'image',
-          jobId: job.id,
-          userId: job.user_id
-        };
-        
-        // Create and dispatch the event
-        const event = new CustomEvent('generation-completed', {
-          detail: eventDetail
-        });
-        
-        // Dispatch on global scope for browser context
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(event);
-        } else if (typeof globalThis !== 'undefined') {
-          globalThis.dispatchEvent(event);
-        }
-        
-        console.log('📡 Dispatched generation-completed event:', eventDetail);
-      }
-    }
+    // Event emission now handled by useRealtimeGenerationStatus hook
+    // which detects job completion and queries for created images
     
-    console.log('✅ Created individual image records and emitted events:', {
+    console.log('✅ Created individual image records:', {
       jobId: job.id,
       totalImages: assets.length,
       createdCount: createdImages.length
