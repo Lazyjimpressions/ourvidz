@@ -29,96 +29,12 @@ export class GenerationService {
     });
 
     try {
-      // Create record in appropriate table with enhanced model tracking
+      // Phase 1: Create job first, then records with job_id (like videos)
       let videoId: string | undefined;
       let imageId: string | undefined;
-      let imageIds: string[] = [];
 
-      if (config.isVideo) {
-        console.log('📹 Creating video record...');
-        const video = await videoAPI.create({
-          user_id: user.id,
-          project_id: request.projectId,
-          status: 'queued',
-          format: 'mp4',
-          resolution: config.format.includes('high') ? '1280x720' : '832x480'
-        });
-        videoId = video.id;
-        console.log('✅ Video record created:', { videoId, resolution: video.resolution });
-      } else {
-        console.log('🖼️ Creating image record(s) with SDXL model tracking...');
-        
-        // For SDXL jobs, create N image records based on num_images
-        if (config.isSDXL) {
-          const numImages = request.metadata?.num_images || 1;
-          console.log(`📸 Creating ${numImages} SDXL image records...`);
-          
-          const imageRecords = [];
-          for (let i = 0; i < numImages; i++) {
-            const image = await imageAPI.create({
-              user_id: user.id,
-              project_id: request.projectId,
-              prompt: request.prompt,
-              generation_mode: 'standalone',
-              status: 'queued',
-              format: 'png',
-              quality: config.format.includes('high') ? 'high' : 'fast',
-              image_index: i,
-              metadata: {
-                model_type: 'sdxl',
-                is_sdxl: true,
-                bucket: config.bucket,
-                job_format: request.format,
-                generation_timestamp: new Date().toISOString()
-              }
-            });
-            imageRecords.push(image);
-            imageIds.push(image.id);
-            console.log(`✅ SDXL image record ${i + 1}/${numImages} created:`, {
-              imageId: image.id,
-              imageIndex: i,
-              quality: image.quality
-            });
-          }
-          
-          // Use the first image ID for job linking
-          imageId = imageRecords[0].id;
-          console.log('✅ All SDXL image records created:', {
-            totalRecords: numImages,
-            firstImageId: imageId,
-            allImageIds: imageIds,
-            bucket: config.bucket
-          });
-        } else {
-          // Non-SDXL jobs: create single image record (existing behavior)
-          const image = await imageAPI.create({
-            user_id: user.id,
-            project_id: request.projectId,
-            prompt: request.prompt,
-            generation_mode: 'standalone',
-            status: 'queued',
-            format: 'png',
-            quality: config.format.includes('high') ? 'high' : 'fast',
-            metadata: {
-              model_type: 'wan',
-              is_sdxl: false,
-              bucket: config.bucket,
-              job_format: request.format,
-              generation_timestamp: new Date().toISOString()
-            }
-          });
-          imageId = image.id;
-          console.log('✅ Single image record created:', {
-            imageId,
-            quality: image.quality,
-            modelType: 'wan',
-            bucket: config.bucket
-          });
-        }
-      }
-
-      // Queue the job with enhanced metadata
-      console.log('📤 Queueing job with enhanced SDXL model tracking...');
+      // Queue the job FIRST to get job_id
+      console.log('📤 Creating job first (video table pattern)...');
       const jobBody = {
         jobType: request.format,
         metadata: {
@@ -137,8 +53,6 @@ export class GenerationService {
           reference_image_url: request.referenceImageUrl
         },
         projectId: request.projectId,
-        videoId,
-        imageId,
         // Pass prompt_test_id if this is a test generation
         ...(request.metadata?.prompt_test_metadata && {
           prompt_test_id: request.metadata.prompt_test_id
@@ -159,8 +73,13 @@ export class GenerationService {
         throw new Error(data?.error || 'Failed to queue generation');
       }
 
-      console.log('✅ Job queued successfully with enhanced SDXL tracking:', {
-        jobId: data.job?.id,
+      const jobId = data.job?.id;
+      if (!jobId) {
+        throw new Error('No job ID returned from queue-job');
+      }
+
+      console.log('✅ Job created successfully:', {
+        jobId,
         queueLength: data.queueLength,
         modelVariant: data.modelVariant,
         isSDXL: data.isSDXL,
@@ -168,29 +87,99 @@ export class GenerationService {
         bucket: config.bucket
       });
 
-      // Update SDXL image records with the actual job_id using stored image IDs
-      if (config.isSDXL && imageIds && imageIds.length > 0 && data.job?.id) {
-        console.log('🔗 Updating SDXL image records with job_id:', {
-          jobId: data.job.id,
-          imageIds,
-          totalImages: imageIds.length
+      // Phase 2: Create records with job_id directly (like videos)
+      if (config.isVideo) {
+        console.log('📹 Creating video record with job_id...');
+        const video = await videoAPI.create({
+          user_id: user.id,
+          project_id: request.projectId,
+          status: 'queued',
+          format: 'mp4',
+          resolution: config.format.includes('high') ? '1280x720' : '832x480'
         });
+        videoId = video.id;
         
-        // Update each image record individually using their specific IDs
-        for (const id of imageIds) {
-          const { error: updateError } = await supabase
-            .from('images')
-            .update({ job_id: data.job.id })
-            .eq('id', id)
-            .eq('user_id', user.id);
+        // Update job with video_id
+        await supabase.from('jobs').update({ video_id: video.id }).eq('id', jobId);
+        console.log('✅ Video record created and linked:', { videoId, jobId });
+      } else {
+        console.log('🖼️ Creating image record(s) with job_id directly...');
+        
+        if (config.isSDXL) {
+          const numImages = request.metadata?.num_images || 1;
+          console.log(`📸 Creating ${numImages} SDXL image records with job_id...`);
           
-          if (updateError) {
-            console.error(`❌ Failed to update SDXL image record ${id} with job_id:`, updateError);
-          } else {
-            console.log(`✅ SDXL image record ${id} updated with job_id`);
+          for (let i = 0; i < numImages; i++) {
+            const image = await imageAPI.create({
+              user_id: user.id,
+              project_id: request.projectId,
+              prompt: request.prompt,
+              generation_mode: 'standalone',
+              status: 'queued',
+              format: 'png',
+              quality: config.format.includes('high') ? 'high' : 'fast',
+              image_index: i,
+              job_id: jobId, // Direct assignment, no update needed
+              metadata: {
+                model_type: 'sdxl',
+                is_sdxl: true,
+                bucket: config.bucket,
+                job_format: request.format,
+                generation_timestamp: new Date().toISOString()
+              }
+            });
+            
+            // Use first image as the primary for job linking
+            if (i === 0) {
+              imageId = image.id;
+              await supabase.from('jobs').update({ image_id: image.id }).eq('id', jobId);
+            }
+            
+            console.log(`✅ SDXL image record ${i + 1}/${numImages} created:`, {
+              imageId: image.id,
+              imageIndex: i,
+              jobId,
+              quality: image.quality
+            });
           }
+          
+          console.log('✅ All SDXL image records created with job_id:', {
+            totalRecords: numImages,
+            firstImageId: imageId,
+            jobId,
+            bucket: config.bucket
+          });
+        } else {
+          // Non-SDXL jobs: create single image record
+          const image = await imageAPI.create({
+            user_id: user.id,
+            project_id: request.projectId,
+            prompt: request.prompt,
+            generation_mode: 'standalone',
+            status: 'queued',
+            format: 'png',
+            quality: config.format.includes('high') ? 'high' : 'fast',
+            job_id: jobId, // Direct assignment
+            metadata: {
+              model_type: 'wan',
+              is_sdxl: false,
+              bucket: config.bucket,
+              job_format: request.format,
+              generation_timestamp: new Date().toISOString()
+            }
+          });
+          imageId = image.id;
+          
+          // Update job with image_id
+          await supabase.from('jobs').update({ image_id: image.id }).eq('id', jobId);
+          console.log('✅ Single image record created and linked:', {
+            imageId,
+            jobId,
+            quality: image.quality,
+            modelType: 'wan',
+            bucket: config.bucket
+          });
         }
-        console.log('✅ All SDXL image records processed for job linking');
       }
       
       // Log usage with enhanced metadata
