@@ -82,6 +82,44 @@ This document explores the evolution and standardization of job handling for SDX
 
 ---
 
+## July 2025 Deep Dive: Implementation Details & Code Changes
+
+### GenerationService.ts (Frontend/Backend Job Submission)
+- **SDXL Jobs:**
+  - Now creates N image records (one per image) at job submission, each with `status: 'queued'` and a unique `image_index` (0..N-1).
+  - Each record is linked to the user, project, and prompt, and includes enhanced metadata for SDXL tracking.
+  - After job submission, all SDXL image records are updated with the actual `job_id` once the job is created in the queue.
+  - Logging and error handling have been improved for traceability.
+- **WAN Jobs:**
+  - Continue to create a single image or video record per job, as before.
+- **Job Queue:**
+  - The job payload now includes all relevant metadata, including the array of image IDs for SDXL jobs.
+
+### job-callback/index.ts (Supabase Edge Function Callback)
+- **Standardized Callback Handling:**
+  - All workers now send an `assets` array, regardless of job type.
+  - The callback fetches the job, merges new asset data into the job's metadata, and updates the job record.
+- **Image Job Callback:**
+  - For SDXL jobs, the callback now updates existing image records (matched by `job_id` and `image_index`) with their respective URLs and sets `status: 'completed'`.
+  - No new image records are inserted on completion—this eliminates orphans and placeholder records.
+  - Enhanced logging and error handling for missing assets or mismatches.
+- **WAN Jobs:**
+  - Continue to update the single image or video record as before.
+- **Partial Failure Handling:**
+  - The callback is structured to handle partial asset failures and retries, ensuring robust updates.
+
+### Key Code References
+- `src/lib/services/GenerationService.ts` (see SDXL image record creation and job_id update logic)
+- `supabase/functions/job-callback/index.ts` (see standardized asset update logic in handleImageJobCallback)
+
+### Summary of the New Approach
+- **Record-per-asset:** All SDXL jobs now create one image record per expected output at submission, with deterministic `image_index`.
+- **Standardized updates:** On job completion, each image record is updated in place, not inserted anew.
+- **Consistent event flow:** Both SDXL and WAN jobs now use UPDATE events for asset completion, simplifying real-time UI updates.
+- **No more orphans:** Placeholder and orphaned records are eliminated, and mapping between jobs and assets is deterministic and reliable.
+
+---
+
 ## Workspace vs. Library: Asset Flow
 
 - **Library:**
