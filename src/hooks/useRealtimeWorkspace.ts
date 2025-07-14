@@ -22,6 +22,7 @@ export const useRealtimeWorkspace = () => {
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   const processedUpdatesRef = useRef<Set<string>>(new Set());
+  const sdxlBatchCacheRef = useRef<Map<string, { images: string[], totalImages: number, jobId: string }>>(new Map());
   
   // Efficient workspace query with aggressive caching
   const { data: assets = [], isLoading } = useQuery({
@@ -101,15 +102,98 @@ export const useRealtimeWorkspace = () => {
             
             if (eventType === 'UPDATE' && image.status === 'completed' && 
                 !processedUpdatesRef.current.has(image.id)) {
-              console.log('🎉 Image completed with enhanced tracking:', image.id);
+              
+              const metadata = image.metadata as any;
+              const totalImages = metadata?.num_images || metadata?.total_images;
+              const jobId = image.job_id;
+              
+              console.log('🎉 Image completed with enhanced tracking:', {
+                imageId: image.id,
+                totalImages,
+                jobId,
+                metadata
+              });
+              
               processedUpdatesRef.current.add(image.id);
               
-              setWorkspaceFilter(prev => new Set([...prev, image.id]));
-              
-              // Dispatch enhanced completion event
-              window.dispatchEvent(new CustomEvent('generation-completed', {
-                detail: { assetId: image.id, type: 'image', status: 'completed' }
-              }));
+              // Check if this is part of a multi-image batch (SDXL)
+              if (totalImages && totalImages > 1 && jobId) {
+                console.log('📦 Processing SDXL batch image:', {
+                  imageId: image.id,
+                  jobId,
+                  totalImages
+                });
+                
+                // Check if all images for this job are already complete
+                const checkCompleteImages = async () => {
+                  try {
+                    const { data: completedImages, error } = await supabase
+                      .from('images')
+                      .select('id')
+                      .eq('job_id', jobId)
+                      .eq('status', 'completed');
+                    
+                    if (error) {
+                      console.error('Error checking batch images:', error);
+                      // Fallback: add individual image
+                      setWorkspaceFilter(prev => new Set([...prev, image.id]));
+                      return;
+                    }
+                    
+                    console.log('🔍 Found completed images for job:', {
+                      jobId,
+                      foundImages: completedImages?.length,
+                      expectedTotal: totalImages
+                    });
+                    
+                    if (completedImages && completedImages.length >= totalImages) {
+                      // All images are complete - add them all to workspace
+                      const allImageIds = completedImages.map(img => img.id);
+                      console.log('✅ SDXL Batch complete! Adding all images:', allImageIds);
+                      
+                      setWorkspaceFilter(prev => {
+                        const newFilter = new Set(prev);
+                        allImageIds.forEach(id => newFilter.add(id));
+                        return newFilter;
+                      });
+                      
+                      // Dispatch batch completion event
+                      window.dispatchEvent(new CustomEvent('generation-completed', {
+                        detail: { 
+                          assetIds: allImageIds,
+                          type: 'image', 
+                          status: 'completed',
+                          isSDXL: true,
+                          batchSize: totalImages
+                        }
+                      }));
+                    } else {
+                      console.log('⏳ SDXL Batch incomplete, waiting for more images...');
+                    }
+                  } catch (error) {
+                    console.error('Error in batch processing:', error);
+                    // Fallback: add individual image
+                    setWorkspaceFilter(prev => new Set([...prev, image.id]));
+                  }
+                };
+                
+                // Small delay to allow other images to complete
+                setTimeout(checkCompleteImages, 500);
+              } else {
+                // Single image - add immediately
+                console.log('📷 Single image completed, adding to workspace:', image.id);
+                setWorkspaceFilter(prev => new Set([...prev, image.id]));
+                
+                // Dispatch single image completion event
+                window.dispatchEvent(new CustomEvent('generation-completed', {
+                  detail: { 
+                    assetId: image.id, 
+                    type: 'image', 
+                    status: 'completed',
+                    isSDXL: false
+                  }
+                }));
+              }
               
               // Invalidate cache to force refresh
               queryClient.invalidateQueries({ 
