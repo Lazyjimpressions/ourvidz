@@ -264,21 +264,8 @@ export const useRealtimeWorkspace = () => {
     const tiles: MediaTile[] = [];
     
     if (asset.type === 'image') {
-      // Handle multiple image URLs (from SDXL generation with user-selected quantity)
-      if (asset.signedUrls && asset.signedUrls.length > 0) {
-        asset.signedUrls.forEach((url: string, index: number) => {
-          tiles.push({
-            id: `${asset.id}_${index}`,
-            originalAssetId: asset.id,
-            type: 'image',
-            url: url,
-            prompt: asset.prompt,
-            timestamp: asset.createdAt,
-            quality: (asset.quality as 'fast' | 'high') || 'fast',
-            modelType: asset.modelType
-          });
-        });
-      } else if (asset.url) {
+      // Handle individual image records only
+      if (asset.url) {
         // Handle single image
         tiles.push({
           id: asset.id,
@@ -311,8 +298,7 @@ export const useRealtimeWorkspace = () => {
   // Optimized workspace tiles with enhanced caching
   const workspaceTiles = useCallback(() => {
     const completedAssets = assets.filter(asset => 
-      asset.status === 'completed' && 
-      (asset.url || (asset.signedUrls && asset.signedUrls.length > 0))
+      asset.status === 'completed' && asset.url
     );
     
     const allTiles: MediaTile[] = [];

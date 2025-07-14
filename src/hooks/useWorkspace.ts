@@ -89,39 +89,22 @@ export const useWorkspace = () => {
     saveWorkspace();
   }, [workspaceFilter]);
 
-  // Transform assets to tiles - simplified for individual image handling
+  // Transform assets to tiles - simplified for individual image records only
   const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {
     const tiles: MediaTile[] = [];
     
-    if (asset.type === 'image') {
-      // Handle multiple image URLs (from SDXL generation with user-selected quantity)
-      if (asset.signedUrls && asset.signedUrls.length > 0) {
-        console.log(`🖼️ Processing ${asset.signedUrls.length} images for asset ${asset.id}`);
-        asset.signedUrls.forEach((url: string, index: number) => {
-          tiles.push({
-            id: `${asset.id}_${index}`,
-            originalAssetId: asset.id,
-            type: 'image',
-            url: url,
-            prompt: asset.prompt,
-            timestamp: asset.createdAt,
-            quality: (asset.quality as 'fast' | 'high') || 'fast',
-            modelType: asset.modelType
-          });
-        });
-      } else if (asset.url) {
-        // Handle single image
-        tiles.push({
-          id: asset.id,
-          originalAssetId: asset.id,
-          type: 'image',
-          url: asset.url,
-          prompt: asset.prompt,
-          timestamp: asset.createdAt,
-          quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.modelType
-        });
-      }
+    if (asset.type === 'image' && asset.url) {
+      // Each image is now its own individual database record
+      tiles.push({
+        id: asset.id,
+        originalAssetId: asset.id,
+        type: 'image',
+        url: asset.url,
+        prompt: asset.prompt,
+        timestamp: asset.createdAt,
+        quality: (asset.quality as 'fast' | 'high') || 'fast',
+        modelType: asset.modelType
+      });
     } else if (asset.type === 'video' && asset.url) {
       tiles.push({
         id: asset.id,
@@ -148,8 +131,7 @@ export const useWorkspace = () => {
     });
     
     const completedAssets = assets.filter(asset => 
-      asset.status === 'completed' && 
-      (asset.url || (asset.signedUrls && asset.signedUrls.length > 0))
+      asset.status === 'completed' && asset.url
     );
     
     console.log('✅ Completed assets ready for display:', {
@@ -158,9 +140,7 @@ export const useWorkspace = () => {
         id: a.id, 
         status: a.status, 
         hasUrl: !!a.url, 
-        hasSignedUrls: !!(a.signedUrls && a.signedUrls.length > 0),
-        type: a.type,
-        signedUrlCount: a.signedUrls?.length || 0
+        type: a.type
       }))
     });
     

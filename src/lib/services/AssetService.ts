@@ -23,8 +23,7 @@ export interface UnifiedAsset {
   error?: string;
   modelType?: string;
   isSDXL?: boolean;
-  // Array of signed URLs for 6-image generations
-  signedUrls?: string[];
+  // Individual image record now - no arrays needed
 }
 
 export class AssetService {
@@ -108,13 +107,12 @@ export class AssetService {
         
         if (validUrls.length > 0) {
           console.log(`✅ Generated URLs with bucket ${bucket}:`, validUrls.length);
-          return {
-            id: imageId,
-            thumbnailUrl: validUrls[0],
-            url: validUrls[0],
-            signedUrls: validUrls,
-            error: undefined
-          };
+            return {
+              id: imageId,
+              thumbnailUrl: validUrls[0],
+              url: validUrls[0],
+              error: undefined
+            };
         }
       } catch (error) {
         console.warn(`⚠️ Bucket ${bucket} failed for image ${imageId}:`, error);
@@ -122,13 +120,12 @@ export class AssetService {
       }
     }
     
-    return {
-      id: imageId,
-      thumbnailUrl: undefined,
-      url: undefined,
-      signedUrls: undefined,
-      error: 'Failed to generate URLs from any bucket'
-    };
+      return {
+        id: imageId,
+        thumbnailUrl: undefined,
+        url: undefined,
+        error: 'Failed to generate URLs from any bucket'
+      };
   }
 
   private static async generateSingleImageUrlWithFallback(imagePath: string, primaryBucket: any, imageId: string): Promise<any> {
@@ -145,8 +142,7 @@ export class AssetService {
             id: imageId,
             thumbnailUrl: data.signedUrl,
             url: data.signedUrl,
-            error: undefined,
-            signedUrls: undefined
+            error: undefined
           };
         }
       } catch (error) {
@@ -155,13 +151,12 @@ export class AssetService {
       }
     }
     
-    return {
-      id: imageId,
-      thumbnailUrl: undefined,
-      url: undefined,
-      error: 'Failed to generate URL from any bucket',
-      signedUrls: undefined
-    };
+      return {
+        id: imageId,
+        thumbnailUrl: undefined,
+        url: undefined,
+        error: 'Failed to generate URL from any bucket'
+      };
   }
 
   private static async generateVideoUrlWithFallback(videoPath: string, primaryBucket: any, videoId: string, thumbnailPath?: string): Promise<any> {
@@ -269,18 +264,12 @@ export class AssetService {
         id: image.id,
         thumbnailUrl: undefined,
         url: undefined,
-        error: undefined,
-        signedUrls: undefined
+        error: undefined
       });
 
       if (image.status === 'completed') {
         const bucket = AssetService.determineImageBucket(image, jobData);
-        const imageUrlsArray = image.image_urls || metadata?.image_urls;
-        
-        if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
-          // OPTIMIZATION: Generate all URLs in parallel with fallback buckets
-          urlPromise = AssetService.generateImageUrlsWithFallback(imageUrlsArray, bucket as any, image.id);
-        } else if (image.image_url) {
+        if (image.image_url) {
           urlPromise = AssetService.generateSingleImageUrlWithFallback(image.image_url, bucket as any, image.id);
         }
       }
@@ -303,8 +292,7 @@ export class AssetService {
         // URLs will be populated after Promise resolves
         thumbnailUrl: undefined,
         url: undefined,
-        error: undefined,
-        signedUrls: undefined
+        error: undefined
       };
     });
 
@@ -356,9 +344,6 @@ export class AssetService {
         asset.thumbnailUrl = result.thumbnailUrl;
         asset.url = result.url;
         asset.error = result.error;
-        if (result.signedUrls) {
-          asset.signedUrls = result.signedUrls;
-        }
       }
     });
 
@@ -630,8 +615,6 @@ export class AssetService {
           modelType,
           isSDXL,
           error,
-          // Include signed URLs array if available
-          signedUrls: (metadata as any)?.signed_urls
         };
 
         console.log('📦 Final asset created:', {
