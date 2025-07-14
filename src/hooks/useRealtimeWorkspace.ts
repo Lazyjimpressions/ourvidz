@@ -22,7 +22,6 @@ export const useRealtimeWorkspace = () => {
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   const processedUpdatesRef = useRef<Set<string>>(new Set());
-  const sdxlBatchCacheRef = useRef<Map<string, { images: string[], totalImages: number, jobId: string }>>(new Map());
   
   // Efficient workspace query with aggressive caching
   const { data: assets = [], isLoading } = useQuery({
@@ -50,7 +49,7 @@ export const useRealtimeWorkspace = () => {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Restore workspace from session storage on mount
+  // Restore workspace from session storage on mount  
   useEffect(() => {
     const restoreWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -77,13 +76,28 @@ export const useRealtimeWorkspace = () => {
     restoreWorkspace();
   }, []);
 
-  // Enhanced realtime subscription with job status tracking
+  // Save workspace filter to session storage whenever it changes
+  useEffect(() => {
+    const saveWorkspace = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      const userScopedKey = `workspaceFilter_${user.id}`;
+      sessionStorage.setItem(userScopedKey, JSON.stringify(Array.from(workspaceFilter)));
+    };
+    
+    if (workspaceFilter.size > 0) {
+      saveWorkspace();
+    }
+  }, [workspaceFilter]);
+
+  // Simplified realtime subscription - immediate asset addition
   useEffect(() => {
     const setupRealtimeSubscriptions = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      console.log('🔔 Setting up enhanced realtime subscriptions');
+      console.log('🔔 Setting up simplified realtime subscriptions');
       
       // Combined channel for all asset updates
       const combinedChannel = supabase
@@ -103,97 +117,20 @@ export const useRealtimeWorkspace = () => {
             if (eventType === 'UPDATE' && image.status === 'completed' && 
                 !processedUpdatesRef.current.has(image.id)) {
               
-              const metadata = image.metadata as any;
-              const totalImages = metadata?.num_images || metadata?.total_images;
-              const jobId = image.job_id;
-              
-              console.log('🎉 Image completed with enhanced tracking:', {
-                imageId: image.id,
-                totalImages,
-                jobId,
-                metadata
-              });
-              
+              console.log('🎉 Image completed - adding immediately:', image.id);
               processedUpdatesRef.current.add(image.id);
               
-              // Check if this is part of a multi-image batch (SDXL)
-              if (totalImages && totalImages > 1 && jobId) {
-                console.log('📦 Processing SDXL batch image:', {
-                  imageId: image.id,
-                  jobId,
-                  totalImages
-                });
-                
-                // Check if all images for this job are already complete
-                const checkCompleteImages = async () => {
-                  try {
-                    const { data: completedImages, error } = await supabase
-                      .from('images')
-                      .select('id')
-                      .eq('job_id', jobId)
-                      .eq('status', 'completed');
-                    
-                    if (error) {
-                      console.error('Error checking batch images:', error);
-                      // Fallback: add individual image
-                      setWorkspaceFilter(prev => new Set([...prev, image.id]));
-                      return;
-                    }
-                    
-                    console.log('🔍 Found completed images for job:', {
-                      jobId,
-                      foundImages: completedImages?.length,
-                      expectedTotal: totalImages
-                    });
-                    
-                    if (completedImages && completedImages.length >= totalImages) {
-                      // All images are complete - add them all to workspace
-                      const allImageIds = completedImages.map(img => img.id);
-                      console.log('✅ SDXL Batch complete! Adding all images:', allImageIds);
-                      
-                      setWorkspaceFilter(prev => {
-                        const newFilter = new Set(prev);
-                        allImageIds.forEach(id => newFilter.add(id));
-                        return newFilter;
-                      });
-                      
-                      // Dispatch batch completion event
-                      window.dispatchEvent(new CustomEvent('generation-completed', {
-                        detail: { 
-                          assetIds: allImageIds,
-                          type: 'image', 
-                          status: 'completed',
-                          isSDXL: true,
-                          batchSize: totalImages
-                        }
-                      }));
-                    } else {
-                      console.log('⏳ SDXL Batch incomplete, waiting for more images...');
-                    }
-                  } catch (error) {
-                    console.error('Error in batch processing:', error);
-                    // Fallback: add individual image
-                    setWorkspaceFilter(prev => new Set([...prev, image.id]));
-                  }
-                };
-                
-                // Small delay to allow other images to complete
-                setTimeout(checkCompleteImages, 500);
-              } else {
-                // Single image - add immediately
-                console.log('📷 Single image completed, adding to workspace:', image.id);
-                setWorkspaceFilter(prev => new Set([...prev, image.id]));
-                
-                // Dispatch single image completion event
-                window.dispatchEvent(new CustomEvent('generation-completed', {
-                  detail: { 
-                    assetId: image.id, 
-                    type: 'image', 
-                    status: 'completed',
-                    isSDXL: false
-                  }
-                }));
-              }
+              // Add to workspace immediately - no batch waiting
+              setWorkspaceFilter(prev => new Set([...prev, image.id]));
+              
+              // Dispatch single completion event
+              window.dispatchEvent(new CustomEvent('generation-completed', {
+                detail: { 
+                  assetId: image.id, 
+                  type: 'image', 
+                  status: 'completed'
+                }
+              }));
               
               // Invalidate cache to force refresh
               queryClient.invalidateQueries({ 
@@ -293,14 +230,15 @@ export const useRealtimeWorkspace = () => {
     setupRealtimeSubscriptions();
   }, [queryClient]);
 
-  // Enhanced generation completion event system
+  // Simplified generation completion event system - prevent duplicates
   useEffect(() => {
     const handleGenerationComplete = (event: CustomEvent) => {
-      const { assetId, jobId, type } = event.detail;
-      console.log('🎉 Enhanced generation completion event:', { assetId, jobId, type });
+      const { assetId, type } = event.detail;
+      console.log('🎉 Generation completion event:', { assetId, type });
       
-      // Add to workspace filter with proper asset ID
-      if (assetId) {
+      // Add to workspace filter with deduplication
+      if (assetId && !processedUpdatesRef.current.has(assetId)) {
+        processedUpdatesRef.current.add(assetId);
         setWorkspaceFilter(prev => new Set([...prev, assetId]));
         
         // Trigger cache invalidation for the new asset
@@ -310,36 +248,16 @@ export const useRealtimeWorkspace = () => {
         });
         
         toast.success(`New ${type} completed!`);
-      } else if (jobId) {
-        // If we only have job ID, try to find the asset ID
-        console.log('🔍 Looking up asset ID for job:', jobId);
-        queryClient.invalidateQueries({ 
-          queryKey: ['realtime-workspace-assets'],
-          exact: false 
-        });
-      }
-    };
-
-    const handleJobStatusUpdate = (event: CustomEvent) => {
-      const { jobId, status, assetId, assetType } = event.detail;
-      console.log('📊 Job status update event:', { jobId, status, assetId, assetType });
-      
-      if (status === 'completed' && assetId) {
-        // Direct asset completion - add to workspace
-        setWorkspaceFilter(prev => new Set([...prev, assetId]));
-        queryClient.invalidateQueries({ 
-          queryKey: ['realtime-workspace-assets'],
-          exact: false 
-        });
+        
+        // Cleanup
+        setTimeout(() => processedUpdatesRef.current.delete(assetId), 60000);
       }
     };
 
     window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
-    window.addEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     
     return () => {
       window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
-      window.removeEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     };
   }, [queryClient]);
 

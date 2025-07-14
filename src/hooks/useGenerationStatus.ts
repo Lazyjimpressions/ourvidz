@@ -99,7 +99,7 @@ export const useGenerationStatus = (
           // Background refresh will handle the update
           queryClient.invalidateQueries({ queryKey: ASSETS_QUERY_KEY });
           
-          // Emit completion event with asset ID resolution for workspace auto-population
+          // Emit completion event with asset ID resolution - simplified
           try {
             const { data: jobData, error: jobError } = await supabase
               .from('jobs')
@@ -108,22 +108,46 @@ export const useGenerationStatus = (
               .single();
             
             if (!jobError && jobData) {
-              const assetId = jobData.image_id || jobData.video_id;
-              const assetType = jobData.image_id ? 'image' : 'video';
-              
-              if (assetId) {
-                // OPTIMIZATION: Debounced event emission to prevent duplicates
-                const eventKey = `generation-completed-${id}`;
+              // Handle single asset case
+              if (jobData.image_id || jobData.video_id) {
+                const assetId = jobData.image_id || jobData.video_id;
+                const assetType = jobData.image_id ? 'image' : 'video';
                 
+                const eventKey = `generation-completed-${id}`;
                 if (!processedEventsRef.current.has(eventKey)) {
                   processedEventsRef.current.add(eventKey);
-                  
-                  // Clean up old events (prevent memory leaks)
-                  setTimeout(() => processedEventsRef.current.delete(eventKey), 30000);
                   
                   window.dispatchEvent(new CustomEvent('generation-completed', {
                     detail: { assetId, type: assetType, jobId: id }
                   }));
+                  
+                  setTimeout(() => processedEventsRef.current.delete(eventKey), 30000);
+                }
+              }
+              // Handle multi-image case - emit for ALL images immediately
+              else if (jobData.job_type && jobData.job_type.includes('image')) {
+                const { data: images, error: imagesError } = await supabase
+                  .from('images')
+                  .select('id')
+                  .eq('job_id', id)
+                  .eq('status', 'completed');
+                
+                if (!imagesError && images && images.length > 0) {
+                  console.log(`🎉 Found ${images.length} completed images for job:`, id);
+                  
+                  // Emit event for each image immediately
+                  for (const image of images) {
+                    const eventKey = `generation-completed-${image.id}`;
+                    if (!processedEventsRef.current.has(eventKey)) {
+                      processedEventsRef.current.add(eventKey);
+                      
+                      window.dispatchEvent(new CustomEvent('generation-completed', {
+                        detail: { assetId: image.id, type: 'image', jobId: id }
+                      }));
+                      
+                      setTimeout(() => processedEventsRef.current.delete(eventKey), 30000);
+                    }
+                  }
                 }
               }
             }

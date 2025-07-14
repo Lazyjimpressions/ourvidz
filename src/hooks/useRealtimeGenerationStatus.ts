@@ -150,9 +150,9 @@ export const useRealtimeGenerationStatus = (
               detail: { assetId, type: assetType, jobId: completedJobId }
             }));
           }
-          // Handle multi-image case (SDXL, enhanced models)
+          // Handle multi-image case - emit for ALL images found immediately
           else if (jobData.job_type && jobData.job_type.includes('image')) {
-            console.log('🔍 Looking for multiple images linked to job:', completedJobId);
+            console.log('🔍 Looking for ALL images linked to job:', completedJobId);
             
             const { data: images, error: imagesError } = await supabase
               .from('images')
@@ -163,7 +163,7 @@ export const useRealtimeGenerationStatus = (
             if (!imagesError && images && images.length > 0) {
               console.log(`🎉 Emitting generation completed events for ${images.length} images from job:`, completedJobId);
               
-              // Emit individual events for each image
+              // Emit individual events for each image immediately
               for (const image of images) {
                 window.dispatchEvent(new CustomEvent('generation-completed', {
                   detail: { assetId: image.id, type: 'image', jobId: completedJobId }
