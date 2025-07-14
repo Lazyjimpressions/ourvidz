@@ -45,31 +45,73 @@ export class GenerationService {
         videoId = video.id;
         console.log('✅ Video record created:', { videoId, resolution: video.resolution });
       } else {
-        console.log('🖼️ Creating image record with SDXL model tracking...');
-        const image = await imageAPI.create({
-          user_id: user.id,
-          project_id: request.projectId,
-          prompt: request.prompt,
-          generation_mode: 'standalone',
-          status: 'queued',
-          format: 'png',
-          quality: config.format.includes('high') ? 'high' : 'fast',
-          metadata: {
-            model_type: config.isSDXL ? 'sdxl' : 'wan',
-            is_sdxl: config.isSDXL,
-            bucket: config.bucket,
-            job_format: request.format,
-            generation_timestamp: new Date().toISOString()
+        console.log('🖼️ Creating image record(s) with SDXL model tracking...');
+        
+        // For SDXL jobs, create N image records based on num_images
+        if (config.isSDXL) {
+          const numImages = request.metadata?.num_images || 1;
+          console.log(`📸 Creating ${numImages} SDXL image records...`);
+          
+          const imageRecords = [];
+          for (let i = 0; i < numImages; i++) {
+            const image = await imageAPI.create({
+              user_id: user.id,
+              project_id: request.projectId,
+              prompt: request.prompt,
+              generation_mode: 'standalone',
+              status: 'queued',
+              format: 'png',
+              quality: config.format.includes('high') ? 'high' : 'fast',
+              image_index: i,
+              metadata: {
+                model_type: 'sdxl',
+                is_sdxl: true,
+                bucket: config.bucket,
+                job_format: request.format,
+                generation_timestamp: new Date().toISOString()
+              }
+            });
+            imageRecords.push(image);
+            console.log(`✅ SDXL image record ${i + 1}/${numImages} created:`, {
+              imageId: image.id,
+              imageIndex: i,
+              quality: image.quality
+            });
           }
-        });
-        imageId = image.id;
-        console.log('✅ Image record created with enhanced SDXL tracking:', {
-          imageId,
-          quality: image.quality,
-          isSDXL: config.isSDXL,
-          modelType: config.isSDXL ? 'sdxl' : 'wan',
-          bucket: config.bucket
-        });
+          
+          // Use the first image ID for job linking
+          imageId = imageRecords[0].id;
+          console.log('✅ All SDXL image records created:', {
+            totalRecords: numImages,
+            firstImageId: imageId,
+            bucket: config.bucket
+          });
+        } else {
+          // Non-SDXL jobs: create single image record (existing behavior)
+          const image = await imageAPI.create({
+            user_id: user.id,
+            project_id: request.projectId,
+            prompt: request.prompt,
+            generation_mode: 'standalone',
+            status: 'queued',
+            format: 'png',
+            quality: config.format.includes('high') ? 'high' : 'fast',
+            metadata: {
+              model_type: 'wan',
+              is_sdxl: false,
+              bucket: config.bucket,
+              job_format: request.format,
+              generation_timestamp: new Date().toISOString()
+            }
+          });
+          imageId = image.id;
+          console.log('✅ Single image record created:', {
+            imageId,
+            quality: image.quality,
+            modelType: 'wan',
+            bucket: config.bucket
+          });
+        }
       }
 
       // Queue the job with enhanced metadata
