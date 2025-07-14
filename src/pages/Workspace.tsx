@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus';
 import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
-import { useWorkspaceIntegration } from '@/hooks/useWorkspaceIntegration';
+
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
@@ -86,8 +86,6 @@ const Workspace = () => {
     !!currentJob && isGenerating
   );
 
-  // Use workspace integration hook
-  useWorkspaceIntegration();
 
   // The realtime workspace hook already handles generation completion events
 

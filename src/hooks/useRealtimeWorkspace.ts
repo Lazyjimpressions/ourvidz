@@ -104,8 +104,8 @@ export const useRealtimeWorkspace = () => {
                 !processedUpdatesRef.current.has(image.id)) {
               
               const metadata = image.metadata as any;
-              const totalImages = metadata?.total_images;
-              const jobId = image.job_id; // Use the direct job_id field
+              const totalImages = metadata?.num_images || metadata?.total_images;
+              const jobId = image.job_id;
               
               console.log('🎉 Image completed with enhanced tracking:', {
                 imageId: image.id,
@@ -116,7 +116,7 @@ export const useRealtimeWorkspace = () => {
               
               processedUpdatesRef.current.add(image.id);
               
-              // Check if this is part of a multi-image batch (SDXL or other)
+              // Check if this is part of a multi-image batch (SDXL)
               if (totalImages && totalImages > 1 && jobId) {
                 console.log('📦 Processing SDXL batch image:', {
                   imageId: image.id,

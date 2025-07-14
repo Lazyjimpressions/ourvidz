@@ -16,7 +16,7 @@ import {
 import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
 import { LibraryImportModal } from "@/components/LibraryImportModal";
 import { UnifiedAsset } from '@/lib/services/AssetService';
-import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
+import { useMediaGridWorkspace } from '@/hooks/useMediaGridWorkspace';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -45,8 +45,8 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
 
-  // Use the new realtime workspace hook
-  const { tiles, isLoading, deletingTiles, importToWorkspace, clearWorkspace, deleteTile } = useRealtimeWorkspace();
+  // Use the isolated media grid workspace hook
+  const { tiles, isLoading, deletingTiles, importToWorkspace, clearWorkspace, deleteTile } = useMediaGridWorkspace();
 
   const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
