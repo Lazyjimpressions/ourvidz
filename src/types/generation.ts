@@ -145,12 +145,16 @@ export interface GenerationRequest {
   videoId?: string;
   imageId?: string;
   referenceImageUrl?: string;
+  startReferenceImageUrl?: string;
+  endReferenceImageUrl?: string;
   batchCount?: number;
   metadata?: {
     model_variant?: string;
     credits?: number;
     reference_image?: boolean;
-    similarity_strength?: number;
+    reference_strength?: number;
+    reference_type?: 'style' | 'composition' | 'character';
+    similarity_strength?: number; // Legacy support
     [key: string]: any;
   };
 }

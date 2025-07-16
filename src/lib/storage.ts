@@ -93,7 +93,8 @@ export type StorageBucket =
   | 'image7b_high_enhanced'
   | 'video7b_fast_enhanced'
   | 'video7b_high_enhanced'
-  | 'system_assets';
+  | 'system_assets'
+  | 'reference_images';
 
 export interface UploadProgress {
   loaded: number;
@@ -358,6 +359,23 @@ export const uploadSDXLHighImage = async (
 
 export const getSDXLHighImageUrl = async (filePath: string): Promise<string | null> => {
   const { data, error } = await getSignedUrl('sdxl_image_high', filePath);
+  return error ? null : data?.signedUrl || null;
+};
+
+// Reference image functions
+export const uploadReferenceImage = async (
+  file: File,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<UploadResult> => {
+  const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'png';
+  const fileName = `${Date.now()}-ref.${fileExtension}`;
+  console.log('🖼️ Uploading reference image:', fileName, 'Size:', (file.size / 1024 / 1024).toFixed(2), 'MB');
+  
+  return uploadFile('reference_images', fileName, file, onProgress);
+};
+
+export const getReferenceImageUrl = async (filePath: string): Promise<string | null> => {
+  const { data, error } = await getSignedUrl('reference_images', filePath);
   return error ? null : data?.signedUrl || null;
 };
 

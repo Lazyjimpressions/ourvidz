@@ -12,9 +12,11 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
+import { EnhancedReferenceUpload } from '@/components/workspace/EnhancedReferenceUpload';
+import { ReferenceStrengthSlider } from '@/components/workspace/ReferenceStrengthSlider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Info } from 'lucide-react';
+import { X, Info, Image } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 
@@ -45,8 +47,19 @@ const Workspace = () => {
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
   const [prompt, setPrompt] = useState('');
+  
+  // Reference image state for image mode
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
+  const [referenceStrength, setReferenceStrength] = useState(0.5);
+  const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('style');
+  
+  // Reference image state for video mode (start/end)
+  const [startReferenceImage, setStartReferenceImage] = useState<File | null>(null);
+  const [startReferenceImageUrl, setStartReferenceImageUrl] = useState<string>('');
+  const [endReferenceImage, setEndReferenceImage] = useState<File | null>(null);
+  const [endReferenceImageUrl, setEndReferenceImageUrl] = useState<string>('');
+  
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
   
@@ -101,6 +114,41 @@ const Workspace = () => {
     }
   }, [user, loading, navigate]);
 
+  // State persistence for reference images
+  useEffect(() => {
+    const savedReferenceStrength = sessionStorage.getItem('workspace_reference_strength');
+    if (savedReferenceStrength) {
+      setReferenceStrength(parseFloat(savedReferenceStrength));
+    }
+
+    const savedReferenceType = sessionStorage.getItem('workspace_reference_type');
+    if (savedReferenceType) {
+      setReferenceType(savedReferenceType as 'style' | 'composition' | 'character');
+    }
+  }, []);
+
+  // Save reference state to session storage
+  useEffect(() => {
+    sessionStorage.setItem('workspace_reference_strength', referenceStrength.toString());
+  }, [referenceStrength]);
+
+  useEffect(() => {
+    sessionStorage.setItem('workspace_reference_type', referenceType);
+  }, [referenceType]);
+
+  // Clear reference images when switching modes
+  useEffect(() => {
+    if (isVideoMode) {
+      setReferenceImage(null);
+      setReferenceImageUrl('');
+    } else {
+      setStartReferenceImage(null);
+      setStartReferenceImageUrl('');
+      setEndReferenceImage(null);
+      setEndReferenceImageUrl('');
+    }
+  }, [isVideoMode]);
+
   // Update selected mode when URL mode changes, quality changes, or enhancement changes
   useEffect(() => {
     if (isVideoMode) {
@@ -134,18 +182,27 @@ const Workspace = () => {
       console.log('🚀 Starting generation with:', {
         format: selectedMode,
         prompt: prompt.trim(),
-        referenceImage: referenceImage?.name
+        referenceImage: referenceImage?.name,
+        referenceStrength,
+        referenceType
       });
 
-      await generateContent({
+      const generationRequest = {
         format: selectedMode,
         prompt: prompt.trim(),
+        referenceImageUrl: isVideoMode ? undefined : referenceImageUrl || undefined,
+        startReferenceImageUrl: isVideoMode ? startReferenceImageUrl || undefined : undefined,
+        endReferenceImageUrl: isVideoMode ? endReferenceImageUrl || undefined : undefined,
         metadata: {
-          reference_image: referenceImage ? true : false,
+          reference_image: referenceImage || startReferenceImage || endReferenceImage ? true : false,
+          reference_strength: referenceStrength,
+          reference_type: referenceType,
           model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b',
           num_images: numImages
         }
-      });
+      };
+
+      await generateContent(generationRequest);
 
       toast.success('Generation started successfully!');
     } catch (error) {
@@ -220,6 +277,53 @@ const Workspace = () => {
     setCurrentPromptAsset(null);
   };
 
+  // Reference image handlers
+  const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
+    setReferenceImage(file);
+    setReferenceImageUrl(url);
+  }, []);
+
+  const handleClearReference = useCallback(() => {
+    setReferenceImage(null);
+    setReferenceImageUrl('');
+  }, []);
+
+  const handleStartReferenceChange = useCallback((file: File | null, url: string) => {
+    setStartReferenceImage(file);
+    setStartReferenceImageUrl(url);
+  }, []);
+
+  const handleEndReferenceChange = useCallback((file: File | null, url: string) => {
+    setEndReferenceImage(file);
+    setEndReferenceImageUrl(url);
+  }, []);
+
+  const handleClearStartReference = useCallback(() => {
+    setStartReferenceImage(null);
+    setStartReferenceImageUrl('');
+  }, []);
+
+  const handleClearEndReference = useCallback(() => {
+    setEndReferenceImage(null);
+    setEndReferenceImageUrl('');
+  }, []);
+
+  // Use as reference functionality
+  const handleUseAsReference = useCallback((tile: any) => {
+    if (isVideoMode) {
+      // For video mode, ask user if it's start or end reference
+      // For now, default to start reference
+      setStartReferenceImage(null); // Clear file since we're using URL
+      setStartReferenceImageUrl(tile.url);
+      toast.success('Image set as video start reference');
+    } else {
+      // For image mode
+      setReferenceImage(null); // Clear file since we're using URL  
+      setReferenceImageUrl(tile.url);
+      toast.success('Image set as reference');
+    }
+  }, [isVideoMode]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -274,6 +378,23 @@ const Workspace = () => {
                       className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
                     />
                   )}
+                  
+                  {/* Action buttons */}
+                  <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                    {tile.type === 'image' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUseAsReference(tile);
+                        }}
+                        className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
+                        title="Use as Reference"
+                      >
+                        <Image className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  
                   <button
                     onClick={() => handleRemoveFromWorkspace(tile.id)}
                     className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
@@ -290,6 +411,69 @@ const Workspace = () => {
             </div>
           )}
         </div>
+        
+        {/* Reference Controls Section */}
+        {(referenceImageUrl || startReferenceImageUrl || endReferenceImageUrl) && (
+          <div className="mt-4 mx-6 p-4 bg-muted/20 rounded-lg border border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium">Reference Settings</h3>
+              <div className="flex items-center gap-2">
+                <select
+                  value={referenceType}
+                  onChange={(e) => setReferenceType(e.target.value as 'style' | 'composition' | 'character')}
+                  className="bg-background border border-border rounded px-2 py-1 text-xs"
+                >
+                  <option value="style">Style</option>
+                  <option value="composition">Composition</option>
+                  <option value="character">Character</option>
+                </select>
+                <button
+                  onClick={() => {
+                    if (isVideoMode) {
+                      setStartReferenceImageUrl('');
+                      setEndReferenceImageUrl('');
+                    } else {
+                      setReferenceImageUrl('');
+                    }
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            
+            <ReferenceStrengthSlider
+              value={referenceStrength}
+              onChange={setReferenceStrength}
+            />
+            
+            <div className="flex items-center gap-4 mt-3">
+              {!isVideoMode && referenceImageUrl && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Reference:</span>
+                  <img src={referenceImageUrl} alt="Reference" className="w-8 h-8 rounded border object-cover" />
+                </div>
+              )}
+              {isVideoMode && (
+                <>
+                  {startReferenceImageUrl && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Start:</span>
+                      <img src={startReferenceImageUrl} alt="Start Reference" className="w-8 h-8 rounded border object-cover" />
+                    </div>
+                  )}
+                  {endReferenceImageUrl && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">End:</span>
+                      <img src={endReferenceImageUrl} alt="End Reference" className="w-8 h-8 rounded border object-cover" />
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Scroll Navigation */}
@@ -303,8 +487,8 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onBeginningFrameUpload={() => {/* TODO: implement video frame upload */}}
-            onEndingFrameUpload={() => {/* TODO: implement video frame upload */}}
+            onBeginningFrameUpload={() => {/* Enhanced reference upload handles this */}}
+            onEndingFrameUpload={() => {/* Enhanced reference upload handles this */}}
             onSwitchToImage={() => {
               setIsVideoMode(false);
               setNumImages(1); // Reset to 1 when switching from video
@@ -330,6 +514,10 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             numImages={numImages}
             setNumImages={setNumImages}
+            referenceImage={referenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageChange={handleReferenceImageChange}
+            onClearReference={handleClearReference}
           />
         )}
       </div>

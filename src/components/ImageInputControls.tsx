@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
+import { EnhancedReferenceUpload } from "@/components/workspace/EnhancedReferenceUpload";
 import {
   Popover,
   PopoverContent,
@@ -23,6 +24,11 @@ interface ImageInputControlsProps {
   setEnhanced: (enhanced: boolean) => void;
   numImages: number;
   setNumImages: (count: number) => void;
+  // Enhanced reference props
+  referenceImage?: File | null;
+  referenceImageUrl?: string;
+  onReferenceImageChange?: (file: File | null, url: string) => void;
+  onClearReference?: () => void;
 }
 
 export const ImageInputControls = ({
@@ -38,7 +44,11 @@ export const ImageInputControls = ({
   enhanced,
   setEnhanced,
   numImages,
-  setNumImages
+  setNumImages,
+  referenceImage,
+  referenceImageUrl,
+  onReferenceImageChange,
+  onClearReference
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -68,14 +78,14 @@ export const ImageInputControls = ({
           </Button>
         </div>
 
-        {/* Reference Upload Square */}
-        <Button
-          variant="ghost"
-          onClick={onReferenceImageUpload}
-          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
-        >
-          <Upload className="w-3.5 h-3.5 text-gray-400" />
-        </Button>
+        {/* Enhanced Reference Upload */}
+        <EnhancedReferenceUpload
+          mode="image"
+          referenceImage={referenceImage}
+          referenceImageUrl={referenceImageUrl}
+          onReferenceImageChange={onReferenceImageChange}
+          onClearReference={onClearReference}
+        />
 
         {/* Main Text Input */}
         <div className="flex-1">
