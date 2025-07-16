@@ -3,8 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
-import { EnhancedReferenceUpload } from "@/components/workspace/EnhancedReferenceUpload";
-import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
@@ -26,15 +24,6 @@ interface ImageInputControlsProps {
   setEnhanced: (enhanced: boolean) => void;
   numImages: number;
   setNumImages: (count: number) => void;
-  // Enhanced reference props
-  referenceImage?: File | null;
-  referenceImageUrl?: string;
-  onReferenceImageChange?: (file: File | null, url: string) => void;
-  onClearReference?: () => void;
-  referenceStrength?: number;
-  referenceType?: string;
-  onReferenceStrengthChange?: (strength: number) => void;
-  onReferenceTypeChange?: (type: string) => void;
 }
 
 export const ImageInputControls = ({
@@ -50,49 +39,12 @@ export const ImageInputControls = ({
   enhanced,
   setEnhanced,
   numImages,
-  setNumImages,
-  referenceImage,
-  referenceImageUrl,
-  onReferenceImageChange,
-  onClearReference,
-  referenceStrength,
-  referenceType,
-  onReferenceStrengthChange,
-  onReferenceTypeChange
+  setNumImages
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => {
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-      return validTypes.includes(file.type);
-    });
-    
-    if (imageFile && onReferenceImageChange) {
-      const url = URL.createObjectURL(imageFile);
-      onReferenceImageChange(imageFile, url);
-    }
-  };
-
-  const hasReference = referenceImage || referenceImageUrl;
 
   return (
     <TooltipProvider>
@@ -118,28 +70,13 @@ export const ImageInputControls = ({
           </Button>
         </div>
 
-        {/* Enhanced Reference Upload */}
-        <EnhancedReferenceUpload
-          mode="image"
-          referenceImage={referenceImage}
-          referenceImageUrl={referenceImageUrl}
-          onReferenceImageChange={onReferenceImageChange}
-          onClearReference={onClearReference}
-        />
 
-        {/* Main Text Input with Enhanced Drag & Drop */}
-        <div 
-          className={`flex-1 transition-all duration-200 relative ${
-            isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
-          }`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
+        {/* Main Text Input */}
+        <div className="flex-1">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="A close-up of a woman talking on the phone... (Drag reference images here)"
+            placeholder="A close-up of a woman talking on the phone..."
             className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
@@ -150,11 +87,6 @@ export const ImageInputControls = ({
               }
             }}
           />
-          {isDragging && (
-            <div className="absolute inset-0 bg-blue-600/20 rounded-md flex items-center justify-center border-2 border-blue-600/50">
-              <span className="text-sm font-medium text-blue-600">Drop reference image here</span>
-            </div>
-          )}
         </div>
 
         {/* Generate Button */}

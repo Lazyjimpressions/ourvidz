@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
-import { EnhancedReferenceUpload } from "@/components/workspace/EnhancedReferenceUpload";
-import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
@@ -24,19 +22,6 @@ interface VideoInputControlsProps {
   onLibraryClick: () => void;
   enhanced: boolean;
   setEnhanced: (enhanced: boolean) => void;
-  // Video reference props
-  startReferenceImage?: File | null;
-  startReferenceImageUrl?: string;
-  endReferenceImage?: File | null;
-  endReferenceImageUrl?: string;
-  onStartReferenceChange?: (file: File | null, url: string) => void;
-  onEndReferenceChange?: (file: File | null, url: string) => void;
-  onClearStartReference?: () => void;
-  onClearEndReference?: () => void;
-  referenceStrength?: number;
-  referenceType?: string;
-  onReferenceStrengthChange?: (strength: number) => void;
-  onReferenceTypeChange?: (type: string) => void;
 }
 
 export const VideoInputControls = ({
@@ -51,51 +36,10 @@ export const VideoInputControls = ({
   setQuality,
   onLibraryClick,
   enhanced,
-  setEnhanced,
-  startReferenceImage,
-  startReferenceImageUrl,
-  endReferenceImage,
-  endReferenceImageUrl,
-  onStartReferenceChange,
-  onEndReferenceChange,
-  onClearStartReference,
-  onClearEndReference,
-  referenceStrength,
-  referenceType,
-  onReferenceStrengthChange,
-  onReferenceTypeChange
+  setEnhanced
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [duration, setDuration] = useState("5s");
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => {
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-      return validTypes.includes(file.type);
-    });
-    
-    if (imageFile && onStartReferenceChange) {
-      const url = URL.createObjectURL(imageFile);
-      onStartReferenceChange(imageFile, url);
-    }
-  };
-
-  const hasAnyReference = startReferenceImage || startReferenceImageUrl || endReferenceImage || endReferenceImageUrl;
 
   return (
     <TooltipProvider>
@@ -121,32 +65,13 @@ export const VideoInputControls = ({
           </Button>
         </div>
 
-        {/* Enhanced Reference Upload for Video */}
-        <EnhancedReferenceUpload
-          mode="video"
-          startReferenceImage={startReferenceImage}
-          startReferenceImageUrl={startReferenceImageUrl}
-          endReferenceImage={endReferenceImage}
-          endReferenceImageUrl={endReferenceImageUrl}
-          onStartReferenceChange={onStartReferenceChange}
-          onEndReferenceChange={onEndReferenceChange}
-          onClearStartReference={onClearStartReference}
-          onClearEndReference={onClearEndReference}
-        />
 
-        {/* Main Text Input with Enhanced Drag & Drop */}
-        <div 
-          className={`flex-1 transition-all duration-200 relative ${
-            isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
-          }`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
+        {/* Main Text Input */}
+        <div className="flex-1">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="A close-up of a woman talking on the phone... (Drag reference images here)"
+            placeholder="A close-up of a woman talking on the phone..."
             className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
@@ -157,11 +82,6 @@ export const VideoInputControls = ({
               }
             }}
           />
-          {isDragging && (
-            <div className="absolute inset-0 bg-blue-600/20 rounded-md flex items-center justify-center border-2 border-blue-600/50">
-              <span className="text-sm font-medium text-blue-600">Drop reference image here</span>
-            </div>
-          )}
         </div>
 
         {/* Generate Button */}

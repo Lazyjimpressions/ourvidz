@@ -12,8 +12,7 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
-import { EnhancedReferenceUpload } from '@/components/workspace/EnhancedReferenceUpload';
-import { ReferenceStrengthSlider } from '@/components/workspace/ReferenceStrengthSlider';
+import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { X, Info, Image } from 'lucide-react';
@@ -414,59 +413,24 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Reference Controls Section */}
-        {(referenceImageUrl || startReferenceImageUrl || endReferenceImageUrl) && (
-          <div className="mt-4 mx-6 p-4 bg-muted/20 rounded-lg border border-border">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">Reference Settings</h3>
-              <button
-                onClick={() => {
-                  if (isVideoMode) {
-                    setStartReferenceImageUrl('');
-                    setEndReferenceImageUrl('');
-                  } else {
-                    setReferenceImageUrl('');
-                  }
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Clear
-              </button>
-            </div>
-            
-            <ReferenceStrengthSlider
-              value={referenceStrength}
-              onChange={setReferenceStrength}
-              referenceType={referenceType}
-              onTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
-            />
-            
-            <div className="flex items-center gap-4 mt-3">
-              {!isVideoMode && referenceImageUrl && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Reference:</span>
-                  <img src={referenceImageUrl} alt="Reference" className="w-8 h-8 rounded border object-cover" />
-                </div>
-              )}
-              {isVideoMode && (
-                <>
-                  {startReferenceImageUrl && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Start:</span>
-                      <img src={startReferenceImageUrl} alt="Start Reference" className="w-8 h-8 rounded border object-cover" />
-                    </div>
-                  )}
-                  {endReferenceImageUrl && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">End:</span>
-                      <img src={endReferenceImageUrl} alt="End Reference" className="w-8 h-8 rounded border object-cover" />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Multi-Reference Panel */}
+        <MultiReferencePanel
+          mode={isVideoMode ? 'video' : 'image'}
+          strength={referenceStrength}
+          onStrengthChange={setReferenceStrength}
+          onReferencesChange={(references) => {
+            // Handle multi-reference state updates
+            console.log('References updated:', references);
+          }}
+          onClear={() => {
+            if (isVideoMode) {
+              setStartReferenceImageUrl('');
+              setEndReferenceImageUrl('');
+            } else {
+              setReferenceImageUrl('');
+            }
+          }}
+        />
       </div>
 
       {/* Scroll Navigation */}
@@ -491,18 +455,6 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
-            startReferenceImage={startReferenceImage}
-            startReferenceImageUrl={startReferenceImageUrl}
-            endReferenceImage={endReferenceImage}
-            endReferenceImageUrl={endReferenceImageUrl}
-            onStartReferenceChange={handleStartReferenceChange}
-            onEndReferenceChange={handleEndReferenceChange}
-            onClearStartReference={handleClearStartReference}
-            onClearEndReference={handleClearEndReference}
-            referenceStrength={referenceStrength}
-            referenceType={referenceType}
-            onReferenceStrengthChange={setReferenceStrength}
-            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
           />
         ) : (
           <ImageInputControls
@@ -519,14 +471,6 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             numImages={numImages}
             setNumImages={setNumImages}
-            referenceImage={referenceImage}
-            referenceImageUrl={referenceImageUrl}
-            onReferenceImageChange={handleReferenceImageChange}
-            onClearReference={handleClearReference}
-            referenceStrength={referenceStrength}
-            referenceType={referenceType}
-            onReferenceStrengthChange={setReferenceStrength}
-            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
           />
         )}
       </div>
