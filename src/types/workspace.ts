@@ -1,3 +1,16 @@
+// Reference image interfaces
+export interface ReferenceImage {
+  file?: File;
+  url?: string;
+  type?: 'style' | 'composition' | 'character';
+  strength?: number;
+}
+
+export interface VideoReferenceImages {
+  start?: ReferenceImage;
+  end?: ReferenceImage;
+}
+
 export interface MediaTile {
   id: string;
   originalAssetId: string;
