@@ -370,6 +370,25 @@ const Workspace = () => {
                       onMouseEnter={(e) => e.currentTarget.play()}
                       onMouseLeave={(e) => e.currentTarget.pause()}
                       onClick={() => handleImageClick(tile)}
+                      draggable="true"
+                      onDragStart={(e) => {
+                        const assetData = {
+                          url: tile.url,
+                          thumbnailUrl: tile.thumbnailUrl,
+                          prompt: tile.prompt,
+                          modelType: tile.modelType,
+                          quality: tile.quality,
+                          type: tile.type,
+                          duration: tile.duration,
+                          generationParams: {
+                            originalAssetId: tile.originalAssetId,
+                            timestamp: tile.timestamp
+                          }
+                        };
+                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      style={{ cursor: 'move' }}
                     />
                   ) : (
                     <img
@@ -377,6 +396,26 @@ const Workspace = () => {
                       alt={`Workspace ${tile.id}`}
                       onClick={() => handleImageClick(tile)}
                       className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
+                      draggable="true"
+                      onDragStart={(e) => {
+                        const assetData = {
+                          url: tile.url,
+                          prompt: tile.prompt,
+                          modelType: tile.modelType,
+                          quality: tile.quality,
+                          type: tile.type,
+                          generationParams: {
+                            originalAssetId: tile.originalAssetId,
+                            timestamp: tile.timestamp
+                          }
+                        };
+                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      onDragEnd={(e) => {
+                        e.currentTarget.style.opacity = '1';
+                      }}
+                      style={{ cursor: 'move' }}
                     />
                   )}
                   

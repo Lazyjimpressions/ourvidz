@@ -15,6 +15,14 @@ interface ReferenceType {
   file?: File | null;
   url?: string;
   enabled?: boolean;
+  // Enhanced workspace metadata
+  isWorkspaceAsset?: boolean;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  seed?: string;
+  modelType?: string;
+  quality?: 'fast' | 'high';
+  generationParams?: Record<string, any>;
 }
 
 interface MultiReferencePanelProps {
@@ -114,6 +122,38 @@ export const MultiReferencePanel = ({
     e.stopPropagation();
     setIsDragging(null);
     
+    // Check for workspace asset data first
+    const workspaceData = e.dataTransfer.getData('application/workspace-asset');
+    if (workspaceData) {
+      try {
+        const assetData = JSON.parse(workspaceData);
+        
+        const updatedReferences = references.map(ref => 
+          ref.id === referenceId 
+            ? { 
+                ...ref, 
+                url: assetData.url,
+                enabled: true,
+                isWorkspaceAsset: true,
+                originalPrompt: assetData.prompt,
+                modelType: assetData.modelType,
+                quality: assetData.quality,
+                generationParams: assetData.generationParams,
+                file: null // No file for workspace assets
+              }
+            : ref
+        );
+        
+        setReferences(updatedReferences);
+        onReferencesChange(updatedReferences);
+        toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from workspace`);
+        return;
+      } catch (error) {
+        console.error('Failed to parse workspace asset data:', error);
+      }
+    }
+    
+    // Fall back to file handling
     const files = Array.from(e.dataTransfer.files);
     const imageFile = files.find(file => {
       const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -123,9 +163,9 @@ export const MultiReferencePanel = ({
     if (imageFile) {
       handleFileUpload(imageFile, referenceId);
     } else {
-      toast.error('Please drag an image file (JPEG, PNG, WebP, or GIF)');
+      toast.error('Please drag an image file or workspace asset');
     }
-  }, [handleFileUpload]);
+  }, [handleFileUpload, references, onReferencesChange]);
 
   const handleDragOver = useCallback((e: React.DragEvent, referenceId: string) => {
     e.preventDefault();
@@ -207,6 +247,16 @@ export const MultiReferencePanel = ({
                         alt={ref.label} 
                         className="w-full h-full object-cover"
                       />
+                      {/* Reference Type Badge */}
+                      <div className="absolute bottom-1 left-1">
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                          ref.isWorkspaceAsset 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-secondary text-secondary-foreground'
+                        }`}>
+                          {ref.isWorkspaceAsset ? 'Workspace' : 'Uploaded'}
+                        </span>
+                      </div>
                     </div>
                     <button
                       onClick={() => clearReference(ref.id)}
@@ -239,12 +289,12 @@ export const MultiReferencePanel = ({
                       {uploading.has(ref.id) ? (
                         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                       ) : (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                          <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
-                            {ref.enabled ? 'Upload' : 'Drop'}
-                          </span>
-                        </div>
+                         <div className="flex flex-col items-center gap-0.5">
+                           <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                           <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
+                             Drag or Click
+                           </span>
+                         </div>
                       )}
                     </Button>
                   </div>
@@ -290,11 +340,18 @@ export const MultiReferencePanel = ({
         {activeReferences.length > 0 && (
           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
             <span className="text-xs text-muted-foreground">Active:</span>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
               {activeReferences.map(ref => (
-                <span key={ref.id} className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
-                  {ref.label}
-                </span>
+                <div key={ref.id} className="flex items-center gap-1">
+                  <span className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
+                    {ref.label}
+                  </span>
+                  {ref.isWorkspaceAsset && ref.modelType && (
+                    <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary-foreground rounded text-xs">
+                      {ref.modelType}
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </div>

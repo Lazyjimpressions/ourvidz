@@ -4,6 +4,14 @@ export interface ReferenceImage {
   url?: string;
   type?: 'style' | 'composition' | 'character';
   strength?: number;
+  // Enhanced workspace metadata
+  isWorkspaceAsset?: boolean;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  seed?: string;
+  modelType?: string;
+  quality?: 'fast' | 'high';
+  generationParams?: Record<string, any>;
 }
 
 export interface VideoReferenceImages {
@@ -31,4 +39,7 @@ export interface MediaTile {
   setSize?: number;
   setImageUrls?: string[];
   selectedImageIndices?: number[];
+  // Enhanced workspace metadata for dragging
+  enhancedPrompt?: string;
+  seed?: string;
 }
