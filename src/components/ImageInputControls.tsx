@@ -332,21 +332,6 @@ export const ImageInputControls = ({
           </TooltipContent>
         </Tooltip>
       </div>
-
-      {/* Reference Settings Panel */}
-      {hasReference && (
-        <div className="mt-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
-          <h4 className="text-sm font-medium text-white mb-2">Reference Settings</h4>
-          <div className="space-y-3">
-            <ReferenceStrengthSlider
-              value={referenceStrength || 0.5}
-              onChange={onReferenceStrengthChange}
-              referenceType={referenceType}
-              onTypeChange={onReferenceTypeChange}
-            />
-          </div>
-        </div>
-      )}
     </div>
     </TooltipProvider>
   );

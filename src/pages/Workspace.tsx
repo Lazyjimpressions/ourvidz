@@ -419,35 +419,26 @@ const Workspace = () => {
           <div className="mt-4 mx-6 p-4 bg-muted/20 rounded-lg border border-border">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium">Reference Settings</h3>
-              <div className="flex items-center gap-2">
-                <select
-                  value={referenceType}
-                  onChange={(e) => setReferenceType(e.target.value as 'style' | 'composition' | 'character')}
-                  className="bg-background border border-border rounded px-2 py-1 text-xs"
-                >
-                  <option value="style">Style</option>
-                  <option value="composition">Composition</option>
-                  <option value="character">Character</option>
-                </select>
-                <button
-                  onClick={() => {
-                    if (isVideoMode) {
-                      setStartReferenceImageUrl('');
-                      setEndReferenceImageUrl('');
-                    } else {
-                      setReferenceImageUrl('');
-                    }
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  if (isVideoMode) {
+                    setStartReferenceImageUrl('');
+                    setEndReferenceImageUrl('');
+                  } else {
+                    setReferenceImageUrl('');
+                  }
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
             </div>
             
             <ReferenceStrengthSlider
               value={referenceStrength}
               onChange={setReferenceStrength}
+              referenceType={referenceType}
+              onTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
             />
             
             <div className="flex items-center gap-4 mt-3">
