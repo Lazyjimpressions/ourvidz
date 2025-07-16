@@ -19,11 +19,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   const currentTile = tiles[currentIndex];
   const [showPromptModal, setShowPromptModal] = useState(false);
   
-  // Skip if current tile doesn't have URL
-  if (!currentTile?.url) {
-    return null;
-  }
-  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
@@ -67,6 +62,11 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
       console.error('Download failed:', error);
     }
   };
+
+  // Skip rendering if current tile doesn't have URL
+  if (!currentTile?.url) {
+    return null;
+  }
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
