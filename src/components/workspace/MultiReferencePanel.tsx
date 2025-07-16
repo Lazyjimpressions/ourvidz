@@ -184,7 +184,6 @@ export const MultiReferencePanel = ({
                   id={`ref-${ref.id}`}
                   checked={ref.enabled}
                   onCheckedChange={(checked) => toggleReference(ref.id, checked as boolean)}
-                  disabled={!ref.url}
                 />
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -217,12 +216,14 @@ export const MultiReferencePanel = ({
                       <X className="w-2.5 h-2.5 text-destructive-foreground" />
                     </button>
                   </div>
-                ) : (
+                 ) : (
                   <div
                     className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
                       isDragging === ref.id
                         ? 'border-primary bg-primary/10' 
-                        : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
+                        : ref.enabled 
+                          ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
+                          : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
                     }`}
                     onDrop={(e) => handleDrop(e, ref.id)}
                     onDragOver={(e) => handleDragOver(e, ref.id)}
@@ -239,8 +240,10 @@ export const MultiReferencePanel = ({
                         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                       ) : (
                         <div className="flex flex-col items-center gap-0.5">
-                          <Upload className="w-4 h-4 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground/70">Drop</span>
+                          <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
+                            {ref.enabled ? 'Upload' : 'Drop'}
+                          </span>
                         </div>
                       )}
                     </Button>
