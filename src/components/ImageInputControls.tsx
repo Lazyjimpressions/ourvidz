@@ -4,6 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { EnhancedReferenceUpload } from "@/components/workspace/EnhancedReferenceUpload";
+import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
@@ -29,6 +31,10 @@ interface ImageInputControlsProps {
   referenceImageUrl?: string;
   onReferenceImageChange?: (file: File | null, url: string) => void;
   onClearReference?: () => void;
+  referenceStrength?: number;
+  referenceType?: string;
+  onReferenceStrengthChange?: (strength: number) => void;
+  onReferenceTypeChange?: (type: string) => void;
 }
 
 export const ImageInputControls = ({
@@ -48,15 +54,38 @@ export const ImageInputControls = ({
   referenceImage,
   referenceImageUrl,
   onReferenceImageChange,
-  onClearReference
+  onClearReference,
+  referenceStrength,
+  referenceType,
+  onReferenceStrengthChange,
+  onReferenceTypeChange
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const hasReference = referenceImage && referenceImageUrl;
 
   return (
-    <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
+    <TooltipProvider>
+      <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
       {/* Main Row */}
       <div className="flex items-center gap-2">
         {/* Stacked IMAGE/VIDEO Toggle Buttons */}
@@ -87,12 +116,19 @@ export const ImageInputControls = ({
           onClearReference={onClearReference}
         />
 
-        {/* Main Text Input */}
-        <div className="flex-1">
+        {/* Main Text Input with Enhanced Drag & Drop */}
+        <div 
+          className={`flex-1 transition-colors ${
+            isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="A close-up of a woman talking on the phone..."
+            placeholder="A close-up of a woman talking on the phone... (Drag reference images here)"
             className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
@@ -238,42 +274,72 @@ export const ImageInputControls = ({
         </Button>
 
         {/* Fast/High Quality Toggle */}
-        <Button
-          variant="ghost"
-          onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
-          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
-            quality === 'high' 
-              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
-              : 'bg-gray-800 hover:bg-gray-700 text-white'
-          }`}
-        >
-          {quality === 'high' ? (
-            <>
-              <Crown className="w-3 h-3" />
-              High
-            </>
-          ) : (
-            <>
-              <Zap className="w-3 h-3" />
-              Fast
-            </>
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
+              className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                quality === 'high' 
+                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+                  : 'bg-gray-800 hover:bg-gray-700 text-white'
+              }`}
+            >
+              {quality === 'high' ? (
+                <>
+                  <Crown className="w-3 h-3" />
+                  High
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3 h-3" />
+                  Fast
+                </>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{quality === 'high' ? 'High quality (slower, better)' : 'Fast generation (quicker, standard)'}</p>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Enhanced Toggle */}
-        <Button
-          variant="ghost"
-          onClick={() => setEnhanced(!enhanced)}
-          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
-            enhanced 
-              ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-              : 'bg-gray-800 hover:bg-gray-700 text-white'
-          }`}
-        >
-          <Sparkles className="w-3 h-3" />
-          {enhanced ? 'Enhanced' : 'Enhance'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              onClick={() => setEnhanced(!enhanced)}
+              className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                enhanced 
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                  : 'bg-gray-800 hover:bg-gray-700 text-white'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              {enhanced ? 'Enhanced' : 'Enhance'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{enhanced ? 'Enhanced model (premium features)' : 'Enable enhanced AI model'}</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
+
+      {/* Reference Settings Panel */}
+      {hasReference && (
+        <div className="mt-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+          <h4 className="text-sm font-medium text-white mb-2">Reference Settings</h4>
+          <div className="space-y-3">
+            <ReferenceStrengthSlider
+              value={referenceStrength || 0.5}
+              onChange={onReferenceStrengthChange}
+              referenceType={referenceType}
+              onTypeChange={onReferenceTypeChange}
+            />
+          </div>
+        </div>
+      )}
     </div>
+    </TooltipProvider>
   );
 };

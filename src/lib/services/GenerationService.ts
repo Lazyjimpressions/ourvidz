@@ -50,7 +50,11 @@ export class GenerationService {
           generation_format: request.format,
           client_timestamp: new Date().toISOString(),
           batch_count: request.batchCount || 1,
-          reference_image_url: request.referenceImageUrl
+          reference_image_url: request.referenceImageUrl,
+          reference_strength: request.metadata?.reference_strength,
+          reference_type: request.metadata?.reference_type,
+          start_reference_url: request.metadata?.start_reference_url,
+          end_reference_url: request.metadata?.end_reference_url
         },
         projectId: request.projectId,
         // Pass prompt_test_id if this is a test generation

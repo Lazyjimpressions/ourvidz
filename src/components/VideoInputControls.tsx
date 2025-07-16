@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
+import { EnhancedReferenceUpload } from "@/components/workspace/EnhancedReferenceUpload";
+import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
@@ -21,6 +24,19 @@ interface VideoInputControlsProps {
   onLibraryClick: () => void;
   enhanced: boolean;
   setEnhanced: (enhanced: boolean) => void;
+  // Video reference props
+  startReferenceImage?: File | null;
+  startReferenceImageUrl?: string;
+  endReferenceImage?: File | null;
+  endReferenceImageUrl?: string;
+  onStartReferenceChange?: (file: File | null, url: string) => void;
+  onEndReferenceChange?: (file: File | null, url: string) => void;
+  onClearStartReference?: () => void;
+  onClearEndReference?: () => void;
+  referenceStrength?: number;
+  referenceType?: string;
+  onReferenceStrengthChange?: (strength: number) => void;
+  onReferenceTypeChange?: (type: string) => void;
 }
 
 export const VideoInputControls = ({
@@ -35,15 +51,47 @@ export const VideoInputControls = ({
   setQuality,
   onLibraryClick,
   enhanced,
-  setEnhanced
+  setEnhanced,
+  startReferenceImage,
+  startReferenceImageUrl,
+  endReferenceImage,
+  endReferenceImageUrl,
+  onStartReferenceChange,
+  onEndReferenceChange,
+  onClearStartReference,
+  onClearEndReference,
+  referenceStrength,
+  referenceType,
+  onReferenceStrengthChange,
+  onReferenceTypeChange
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [duration, setDuration] = useState("5s");
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    // Handle the dropped file here if needed
+  };
+
+  const hasAnyReference = (startReferenceImage && startReferenceImageUrl) || (endReferenceImage && endReferenceImageUrl);
 
   return (
-    <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
-      {/* Main Row */}
-      <div className="flex items-center gap-2">
+    <TooltipProvider>
+      <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
+        {/* Main Row */}
+        <div className="flex items-center gap-2">
         {/* Stacked IMAGE/VIDEO Toggle Buttons */}
         <div className="flex flex-col gap-1">
           <Button
@@ -63,32 +111,32 @@ export const VideoInputControls = ({
           </Button>
         </div>
 
-        {/* Beginning Frame Upload */}
-        <Button
-          variant="ghost"
-          onClick={onBeginningFrameUpload}
-          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
-          title="Beginning frame"
-        >
-          <Upload className="w-3.5 h-3.5 text-gray-400" />
-        </Button>
+        {/* Enhanced Reference Upload for Video */}
+        <EnhancedReferenceUpload
+          mode="video"
+          startReferenceImage={startReferenceImage}
+          startReferenceImageUrl={startReferenceImageUrl}
+          endReferenceImage={endReferenceImage}
+          endReferenceImageUrl={endReferenceImageUrl}
+          onStartReferenceChange={onStartReferenceChange}
+          onEndReferenceChange={onEndReferenceChange}
+          onClearStartReference={onClearStartReference}
+          onClearEndReference={onClearEndReference}
+        />
 
-        {/* Ending Frame Upload */}
-        <Button
-          variant="ghost"
-          onClick={onEndingFrameUpload}
-          className="w-8 h-8 p-0 bg-transparent border border-dashed border-gray-600 hover:border-gray-500 rounded"
-          title="Ending frame"
+        {/* Main Text Input with Enhanced Drag & Drop */}
+        <div 
+          className={`flex-1 transition-colors ${
+            isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
-          <Upload className="w-3.5 h-3.5 text-gray-400" />
-        </Button>
-
-        {/* Main Text Input */}
-        <div className="flex-1">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="A close-up of a woman talking on the phone..."
+            placeholder="A close-up of a woman talking on the phone... (Drag reference images here)"
             className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
             rows={3}
             disabled={isGenerating}
@@ -172,42 +220,72 @@ export const VideoInputControls = ({
         </Popover>
 
         {/* Fast/High Quality Toggle */}
-        <Button
-          variant="ghost"
-          onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
-          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
-            quality === 'high' 
-              ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
-              : 'bg-gray-800 hover:bg-gray-700 text-white'
-          }`}
-        >
-          {quality === 'high' ? (
-            <>
-              <Crown className="w-3 h-3" />
-              High
-            </>
-          ) : (
-            <>
-              <Zap className="w-3 h-3" />
-              Fast
-            </>
-          )}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              onClick={() => setQuality(quality === 'fast' ? 'high' : 'fast')}
+              className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                quality === 'high' 
+                  ? 'bg-yellow-600 hover:bg-yellow-700 text-white' 
+                  : 'bg-gray-800 hover:bg-gray-700 text-white'
+              }`}
+            >
+              {quality === 'high' ? (
+                <>
+                  <Crown className="w-3 h-3" />
+                  High
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3 h-3" />
+                  Fast
+                </>
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{quality === 'high' ? 'High quality (slower, better)' : 'Fast generation (quicker, standard)'}</p>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Enhanced Toggle */}
-        <Button
-          variant="ghost"
-          onClick={() => setEnhanced(!enhanced)}
-          className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
-            enhanced 
-              ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-              : 'bg-gray-800 hover:bg-gray-700 text-white'
-          }`}
-        >
-          <Sparkles className="w-3 h-3" />
-          {enhanced ? 'Enhanced' : 'Enhance'}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              onClick={() => setEnhanced(!enhanced)}
+              className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                enhanced 
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                  : 'bg-gray-800 hover:bg-gray-700 text-white'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" />
+              {enhanced ? 'Enhanced' : 'Enhance'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{enhanced ? 'Enhanced model (premium features)' : 'Enable enhanced AI model'}</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
+
+      {/* Reference Settings Panel */}
+      {hasAnyReference && (
+        <div className="mt-2 p-3 bg-gray-800/50 rounded-lg border border-gray-700/50">
+          <h4 className="text-sm font-medium text-white mb-2">Video Reference Settings</h4>
+          <div className="space-y-3">
+            <ReferenceStrengthSlider
+              value={referenceStrength || 0.5}
+              onChange={onReferenceStrengthChange}
+              referenceType={referenceType}
+              onTypeChange={onReferenceTypeChange}
+            />
+          </div>
+        </div>
+      )}
     </div>
+    </TooltipProvider>
   );
 };

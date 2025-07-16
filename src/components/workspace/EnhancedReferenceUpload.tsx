@@ -134,18 +134,20 @@ export const EnhancedReferenceUpload = ({
     imageUrl, 
     onClick, 
     onClear, 
-    label 
+    label,
+    dragTarget 
   }: { 
     hasImage: boolean; 
     imageUrl?: string; 
     onClick: () => void; 
     onClear: () => void;
     label?: string;
+    dragTarget?: 'main' | 'start' | 'end';
   }) => (
     <div className="flex items-center">
       {hasImage && imageUrl ? (
         <div className="relative group">
-          <div className="w-10 h-10 rounded border border-border overflow-hidden bg-muted">
+          <div className="w-12 h-12 rounded border border-border overflow-hidden bg-muted">
             <img 
               src={imageUrl} 
               alt={label || "Reference"} 
@@ -154,33 +156,45 @@ export const EnhancedReferenceUpload = ({
           </div>
           <button
             onClick={onClear}
-            className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute -top-1 -right-1 w-5 h-5 bg-destructive rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             title="Clear reference"
           >
-            <X className="w-2 h-2 text-destructive-foreground" />
+            <X className="w-3 h-3 text-destructive-foreground" />
           </button>
         </div>
       ) : (
-        <Button
-          variant="ghost"
-          onClick={onClick}
-          disabled={isUploading}
-          onDrop={(e) => handleDrop(e, mode === 'image' ? 'main' : (label?.includes('Start') ? 'start' : 'end'))}
+        <div
+          className={`relative w-16 h-16 border-2 border-dashed rounded-lg transition-all duration-200 ${
+            isDragging && dragTarget 
+              ? 'border-primary bg-primary/10 scale-105' 
+              : 'border-muted-foreground/50 hover:border-muted-foreground hover:bg-muted/20'
+          }`}
+          onDrop={(e) => handleDrop(e, dragTarget || 'main')}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          className={`w-10 h-10 p-0 bg-transparent border border-dashed transition-colors ${
-            isDragging 
-              ? 'border-primary bg-primary/10' 
-              : 'border-muted-foreground/50 hover:border-muted-foreground'
-          }`}
-          title={`Upload ${label || 'reference image'}`}
         >
-          {isUploading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Upload className="w-4 h-4" />
+          <Button
+            variant="ghost"
+            onClick={onClick}
+            disabled={isUploading}
+            className="w-full h-full p-0 bg-transparent border-0 hover:bg-transparent"
+            title={`Upload ${label || 'reference image'} - Click or drag image here`}
+          >
+            {isUploading ? (
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <Upload className="w-5 h-5 text-muted-foreground" />
+                {label && <span className="text-xs text-muted-foreground">{label}</span>}
+              </div>
+            )}
+          </Button>
+          {isDragging && dragTarget && (
+            <div className="absolute inset-0 bg-primary/20 rounded-lg flex items-center justify-center">
+              <span className="text-xs font-medium text-primary">Drop here</span>
+            </div>
           )}
-        </Button>
+        </div>
       )}
     </div>
   );
@@ -192,13 +206,14 @@ export const EnhancedReferenceUpload = ({
         imageUrl={referenceImageUrl}
         onClick={() => handleFileSelect('main')}
         onClear={() => onClearReference?.()}
+        dragTarget="main"
       />
     );
   }
 
   // Video mode - start and end references
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-3">
       <div className="flex flex-col items-center gap-1">
         <ReferenceButton
           hasImage={!!(startReferenceImage && startReferenceImageUrl)}
@@ -206,8 +221,8 @@ export const EnhancedReferenceUpload = ({
           onClick={() => handleFileSelect('start')}
           onClear={() => onClearStartReference?.()}
           label="Start"
+          dragTarget="start"
         />
-        <span className="text-xs text-muted-foreground">Start</span>
       </div>
       
       <div className="flex flex-col items-center gap-1">
@@ -217,8 +232,8 @@ export const EnhancedReferenceUpload = ({
           onClick={() => handleFileSelect('end')}
           onClear={() => onClearEndReference?.()}
           label="End"
+          dragTarget="end"
         />
-        <span className="text-xs text-muted-foreground">End</span>
       </div>
     </div>
   );

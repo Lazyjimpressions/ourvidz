@@ -288,6 +288,7 @@ const Workspace = () => {
     setReferenceImageUrl('');
   }, []);
 
+  // Video reference handlers
   const handleStartReferenceChange = useCallback((file: File | null, url: string) => {
     setStartReferenceImage(file);
     setStartReferenceImageUrl(url);
@@ -307,6 +308,7 @@ const Workspace = () => {
     setEndReferenceImage(null);
     setEndReferenceImageUrl('');
   }, []);
+
 
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
@@ -498,6 +500,18 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
+            startReferenceImage={startReferenceImage}
+            startReferenceImageUrl={startReferenceImageUrl}
+            endReferenceImage={endReferenceImage}
+            endReferenceImageUrl={endReferenceImageUrl}
+            onStartReferenceChange={handleStartReferenceChange}
+            onEndReferenceChange={handleEndReferenceChange}
+            onClearStartReference={handleClearStartReference}
+            onClearEndReference={handleClearEndReference}
+            referenceStrength={referenceStrength}
+            referenceType={referenceType}
+            onReferenceStrengthChange={setReferenceStrength}
+            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
           />
         ) : (
           <ImageInputControls
@@ -518,6 +532,10 @@ const Workspace = () => {
             referenceImageUrl={referenceImageUrl}
             onReferenceImageChange={handleReferenceImageChange}
             onClearReference={handleClearReference}
+            referenceStrength={referenceStrength}
+            referenceType={referenceType}
+            onReferenceStrengthChange={setReferenceStrength}
+            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'composition' | 'character')}
           />
         )}
       </div>
