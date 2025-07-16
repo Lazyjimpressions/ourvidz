@@ -147,7 +147,7 @@ export const EnhancedReferenceUpload = ({
     <div className="flex items-center">
       {hasImage && imageUrl ? (
         <div className="relative group">
-          <div className="w-12 h-12 rounded border border-border overflow-hidden bg-muted">
+          <div className="w-20 h-20 rounded-lg border border-border overflow-hidden bg-muted">
             <img 
               src={imageUrl} 
               alt={label || "Reference"} 
@@ -164,7 +164,7 @@ export const EnhancedReferenceUpload = ({
         </div>
       ) : (
         <div
-          className={`relative w-16 h-16 border-2 border-dashed rounded-lg transition-all duration-200 ${
+          className={`relative w-20 h-20 border-2 border-dashed rounded-lg transition-all duration-200 cursor-pointer ${
             isDragging && dragTarget 
               ? 'border-primary bg-primary/10 scale-105' 
               : 'border-muted-foreground/50 hover:border-muted-foreground hover:bg-muted/20'
@@ -184,14 +184,15 @@ export const EnhancedReferenceUpload = ({
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             ) : (
               <div className="flex flex-col items-center gap-1">
-                <Upload className="w-5 h-5 text-muted-foreground" />
-                {label && <span className="text-xs text-muted-foreground">{label}</span>}
+                <Upload className="w-6 h-6 text-muted-foreground" />
+                {label && <span className="text-xs text-muted-foreground font-medium">{label}</span>}
+                <span className="text-xs text-muted-foreground/70">Drop here</span>
               </div>
             )}
           </Button>
           {isDragging && dragTarget && (
-            <div className="absolute inset-0 bg-primary/20 rounded-lg flex items-center justify-center">
-              <span className="text-xs font-medium text-primary">Drop here</span>
+            <div className="absolute inset-0 bg-primary/20 rounded-lg flex items-center justify-center border-2 border-primary">
+              <span className="text-sm font-medium text-primary">Drop image here</span>
             </div>
           )}
         </div>

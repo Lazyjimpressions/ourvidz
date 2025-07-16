@@ -79,6 +79,14 @@ export const ImageInputControls = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+    
+    if (imageFile && onReferenceImageChange) {
+      const url = URL.createObjectURL(imageFile);
+      onReferenceImageChange(imageFile, url);
+    }
   };
 
   const hasReference = referenceImage && referenceImageUrl;
@@ -118,7 +126,7 @@ export const ImageInputControls = ({
 
         {/* Main Text Input with Enhanced Drag & Drop */}
         <div 
-          className={`flex-1 transition-colors ${
+          className={`flex-1 transition-all duration-200 relative ${
             isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
           }`}
           onDragOver={handleDragOver}
@@ -139,6 +147,11 @@ export const ImageInputControls = ({
               }
             }}
           />
+          {isDragging && (
+            <div className="absolute inset-0 bg-blue-600/20 rounded-md flex items-center justify-center border-2 border-blue-600/50">
+              <span className="text-sm font-medium text-blue-600">Drop reference image here</span>
+            </div>
+          )}
         </div>
 
         {/* Generate Button */}

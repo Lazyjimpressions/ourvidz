@@ -82,7 +82,14 @@ export const VideoInputControls = ({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    // Handle the dropped file here if needed
+    
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+    
+    if (imageFile && onStartReferenceChange) {
+      const url = URL.createObjectURL(imageFile);
+      onStartReferenceChange(imageFile, url);
+    }
   };
 
   const hasAnyReference = (startReferenceImage && startReferenceImageUrl) || (endReferenceImage && endReferenceImageUrl);
@@ -126,7 +133,7 @@ export const VideoInputControls = ({
 
         {/* Main Text Input with Enhanced Drag & Drop */}
         <div 
-          className={`flex-1 transition-colors ${
+          className={`flex-1 transition-all duration-200 relative ${
             isDragging ? 'bg-blue-600/10 border border-blue-600/50 rounded-md' : ''
           }`}
           onDragOver={handleDragOver}
@@ -147,6 +154,11 @@ export const VideoInputControls = ({
               }
             }}
           />
+          {isDragging && (
+            <div className="absolute inset-0 bg-blue-600/20 rounded-md flex items-center justify-center border-2 border-blue-600/50">
+              <span className="text-sm font-medium text-blue-600">Drop reference image here</span>
+            </div>
+          )}
         </div>
 
         {/* Generate Button */}
