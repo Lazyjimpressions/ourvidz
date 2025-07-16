@@ -107,15 +107,23 @@ export const EnhancedReferenceUpload = ({
 
   const handleDrop = useCallback((e: React.DragEvent, target: 'main' | 'start' | 'end' = 'main') => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragging(false);
     
     const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => file.type.startsWith('image/'));
+    console.log('Files dropped:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
+    
+    const imageFile = files.find(file => {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      return validTypes.includes(file.type);
+    });
     
     if (imageFile) {
+      console.log('Valid image file found:', imageFile.name, imageFile.type);
       handleFileUpload(imageFile, target);
     } else {
-      toast.error('Please drop an image file');
+      console.log('No valid image file found in drop');
+      toast.error('Please drag an image file (JPEG, PNG, WebP, or GIF)');
     }
   }, [handleFileUpload]);
 

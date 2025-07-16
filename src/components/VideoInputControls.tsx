@@ -83,13 +83,8 @@ export const VideoInputControls = ({
     e.preventDefault();
     setIsDragging(false);
     
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => file.type.startsWith('image/'));
-    
-    if (imageFile && onStartReferenceChange) {
-      const url = URL.createObjectURL(imageFile);
-      onStartReferenceChange(imageFile, url);
-    }
+    // Don't handle drops here - let EnhancedReferenceUpload handle it
+    // This prevents duplicate handling and validation conflicts
   };
 
   const hasAnyReference = (startReferenceImage && startReferenceImageUrl) || (endReferenceImage && endReferenceImageUrl);

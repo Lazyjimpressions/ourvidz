@@ -80,13 +80,8 @@ export const ImageInputControls = ({
     e.preventDefault();
     setIsDragging(false);
     
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => file.type.startsWith('image/'));
-    
-    if (imageFile && onReferenceImageChange) {
-      const url = URL.createObjectURL(imageFile);
-      onReferenceImageChange(imageFile, url);
-    }
+    // Don't handle drops here - let EnhancedReferenceUpload handle it
+    // This prevents duplicate handling and validation conflicts
   };
 
   const hasReference = referenceImage && referenceImageUrl;
