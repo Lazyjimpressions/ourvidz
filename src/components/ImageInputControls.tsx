@@ -46,6 +46,9 @@ export const ImageInputControls = ({
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
 
+  // Force fresh build to clear cache
+  console.log('ImageInputControls loaded - clean version');
+
   return (
     <TooltipProvider>
       <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
