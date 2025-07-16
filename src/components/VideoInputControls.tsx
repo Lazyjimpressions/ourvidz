@@ -83,11 +83,19 @@ export const VideoInputControls = ({
     e.preventDefault();
     setIsDragging(false);
     
-    // Don't handle drops here - let EnhancedReferenceUpload handle it
-    // This prevents duplicate handling and validation conflicts
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      return validTypes.includes(file.type);
+    });
+    
+    if (imageFile && onStartReferenceChange) {
+      const url = URL.createObjectURL(imageFile);
+      onStartReferenceChange(imageFile, url);
+    }
   };
 
-  const hasAnyReference = (startReferenceImage && startReferenceImageUrl) || (endReferenceImage && endReferenceImageUrl);
+  const hasAnyReference = startReferenceImage || startReferenceImageUrl || endReferenceImage || endReferenceImageUrl;
 
   return (
     <TooltipProvider>

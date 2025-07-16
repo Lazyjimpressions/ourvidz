@@ -80,11 +80,19 @@ export const ImageInputControls = ({
     e.preventDefault();
     setIsDragging(false);
     
-    // Don't handle drops here - let EnhancedReferenceUpload handle it
-    // This prevents duplicate handling and validation conflicts
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      return validTypes.includes(file.type);
+    });
+    
+    if (imageFile && onReferenceImageChange) {
+      const url = URL.createObjectURL(imageFile);
+      onReferenceImageChange(imageFile, url);
+    }
   };
 
-  const hasReference = referenceImage && referenceImageUrl;
+  const hasReference = referenceImage || referenceImageUrl;
 
   return (
     <TooltipProvider>
@@ -272,14 +280,6 @@ export const ImageInputControls = ({
             </div>
           </PopoverContent>
         </Popover>
-
-        {/* Style ref */}
-        <Button
-          variant="ghost"
-          className="px-2 py-1 h-7 bg-gray-800 hover:bg-gray-700 text-white text-xs rounded"
-        >
-          Style ref
-        </Button>
 
         {/* Fast/High Quality Toggle */}
         <Tooltip>
