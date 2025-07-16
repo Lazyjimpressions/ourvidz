@@ -12,6 +12,7 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
+import { EnhancedReferenceUpload } from '@/components/workspace/EnhancedReferenceUpload';
 import { ReferenceStrengthSlider } from '@/components/workspace/ReferenceStrengthSlider';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -276,6 +277,37 @@ const Workspace = () => {
     setCurrentPromptAsset(null);
   };
 
+  // Reference image handlers
+  const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
+    setReferenceImage(file);
+    setReferenceImageUrl(url);
+  }, []);
+
+  const handleClearReference = useCallback(() => {
+    setReferenceImage(null);
+    setReferenceImageUrl('');
+  }, []);
+
+  const handleStartReferenceChange = useCallback((file: File | null, url: string) => {
+    setStartReferenceImage(file);
+    setStartReferenceImageUrl(url);
+  }, []);
+
+  const handleEndReferenceChange = useCallback((file: File | null, url: string) => {
+    setEndReferenceImage(file);
+    setEndReferenceImageUrl(url);
+  }, []);
+
+  const handleClearStartReference = useCallback(() => {
+    setStartReferenceImage(null);
+    setStartReferenceImageUrl('');
+  }, []);
+
+  const handleClearEndReference = useCallback(() => {
+    setEndReferenceImage(null);
+    setEndReferenceImageUrl('');
+  }, []);
+
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
     if (isVideoMode) {
@@ -455,8 +487,8 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onBeginningFrameUpload={() => {/* TODO: implement video frame upload */}}
-            onEndingFrameUpload={() => {/* TODO: implement video frame upload */}}
+            onBeginningFrameUpload={() => {/* Enhanced reference upload handles this */}}
+            onEndingFrameUpload={() => {/* Enhanced reference upload handles this */}}
             onSwitchToImage={() => {
               setIsVideoMode(false);
               setNumImages(1); // Reset to 1 when switching from video
@@ -482,6 +514,10 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             numImages={numImages}
             setNumImages={setNumImages}
+            referenceImage={referenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageChange={handleReferenceImageChange}
+            onClearReference={handleClearReference}
           />
         )}
       </div>
