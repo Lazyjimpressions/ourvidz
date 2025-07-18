@@ -4,7 +4,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { User, AlertTriangle, Settings } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { User, AlertTriangle, Settings, Dice6 } from 'lucide-react';
 
 interface CharacterReferenceWarningProps {
   hasCharacterReference: boolean;
@@ -12,6 +14,8 @@ interface CharacterReferenceWarningProps {
   numImages: number;
   onOptimizeChange: (enabled: boolean) => void;
   optimizeEnabled: boolean;
+  seed?: number;
+  onSeedChange?: (seed: number | undefined) => void;
 }
 
 export const CharacterReferenceWarning = ({
@@ -19,7 +23,9 @@ export const CharacterReferenceWarning = ({
   referenceStrength,
   numImages,
   onOptimizeChange,
-  optimizeEnabled
+  optimizeEnabled,
+  seed,
+  onSeedChange
 }: CharacterReferenceWarningProps) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -33,15 +39,20 @@ export const CharacterReferenceWarning = ({
 
   const recommendation = getStrengthRecommendation();
 
+  const generateRandomSeed = () => {
+    const randomSeed = Math.floor(Math.random() * 1000000);
+    onSeedChange?.(randomSeed);
+  };
+
   return (
-    <Alert className="border-blue-200 bg-blue-50/50">
+    <Alert className="border-blue-200 bg-blue-50/30">
       <User className="h-4 w-4" />
       <AlertDescription className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-medium">Character Reference Active</span>
+            <span className="font-medium text-sm">Character Reference Active</span>
             <Badge variant="secondary" className="text-xs">
-              Strength: {referenceStrength.toFixed(3)}
+              {referenceStrength.toFixed(3)}
             </Badge>
             {numImages > 1 && (
               <Badge variant="outline" className="text-xs text-amber-600">
@@ -75,7 +86,7 @@ export const CharacterReferenceWarning = ({
         )}
 
         {showAdvanced && (
-          <div className="space-y-2 pt-2 border-t border-blue-200">
+          <div className="space-y-3 pt-2 border-t border-blue-200">
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="optimize-character"
@@ -88,20 +99,50 @@ export const CharacterReferenceWarning = ({
             </div>
             
             {optimizeEnabled && (
-              <div className="text-xs text-muted-foreground pl-6">
-                • Adds "single portrait" to prevent split-screen effects
-                • Replaces "same girl/person" with "this person"
-                • Adds "solo" if not already present
+              <div className="text-xs text-muted-foreground pl-6 bg-blue-50 p-2 rounded">
+                <strong>Applied optimizations:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-0.5">
+                  <li>Replaces "same girl/person" → "this person"</li>
+                  <li>Adds "single portrait" to prevent comparisons</li>
+                  <li>Ensures "solo" character focus</li>
+                </ul>
+              </div>
+            )}
+
+            {onSeedChange && (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium">Seed (optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={seed || ''}
+                    onChange={(e) => onSeedChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                    placeholder="Random"
+                    className="h-7 text-xs"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={generateRandomSeed}
+                    className="h-7 px-2"
+                  >
+                    <Dice6 className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use the same seed for reproducible results
+                </p>
               </div>
             )}
 
             <div className="text-xs text-muted-foreground">
               <strong>Tips for better character consistency:</strong>
               <ul className="list-disc list-inside mt-1 space-y-0.5">
-                <li>Use "Transform this person to..." prompts</li>
-                <li>Avoid "same girl" or comparison language</li>
+                <li>Use descriptive prompts: "Transform this person to..."</li>
+                <li>Avoid comparison language</li>
                 <li>Set strength between 0.850-0.950</li>
                 <li>Generate 1 image at a time</li>
+                <li>Use consistent seed values</li>
               </ul>
             </div>
           </div>

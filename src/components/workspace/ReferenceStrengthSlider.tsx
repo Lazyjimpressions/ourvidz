@@ -31,7 +31,7 @@ export const ReferenceStrengthSlider = ({
   const getOptimalRange = (type: string) => {
     switch (type) {
       case 'character':
-        return { min: 0.750, max: 0.950, optimal: 0.900, presets: [0.850, 0.900, 0.950] };
+        return { min: 0.700, max: 1.000, optimal: 0.900, presets: [0.850, 0.900, 0.950] };
       case 'style':
         return { min: 0.300, max: 0.800, optimal: 0.600, presets: [0.500, 0.600, 0.700] };
       case 'composition':
@@ -90,7 +90,7 @@ export const ReferenceStrengthSlider = ({
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1">
-                  <p>Character: 0.750-0.950 (optimal: 0.900)</p>
+                  <p>Character: 0.700-1.000 (optimal: 0.900)</p>
                   <p>Style: 0.300-0.800 (optimal: 0.600)</p>
                   <p>Composition: 0.400-0.900 (optimal: 0.700)</p>
                   <p className="text-xs text-muted-foreground">Higher = stronger influence</p>
@@ -110,7 +110,7 @@ export const ReferenceStrengthSlider = ({
               className="w-full"
             />
           </div>
-          <span className={`text-xs min-w-12 text-center ${
+          <span className={`text-xs min-w-14 text-center font-mono ${
             Math.abs(value - range.optimal) <= 0.050 ? 'text-green-500' : 'text-muted-foreground'
           }`}>
             {value.toFixed(3)}
@@ -127,7 +127,7 @@ export const ReferenceStrengthSlider = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => onChange(preset)}
-                className="h-5 px-2 text-xs"
+                className="h-5 px-2 text-xs font-mono"
                 disabled={disabled}
               >
                 {preset.toFixed(3)}

@@ -50,15 +50,16 @@ const Workspace = () => {
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
-  const [referenceStrength, setReferenceStrength] = useState(0.900); // Higher default for better character consistency
+  const [referenceStrength, setReferenceStrength] = useState(0.900); // Default to 0.900 for better consistency
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
   
-  // New prompt optimization state
+  // New prompt optimization and seed state
   const [optimizeForCharacter, setOptimizeForCharacter] = useState(false);
+  const [seed, setSeed] = useState<number | undefined>();
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
@@ -144,18 +145,6 @@ const Workspace = () => {
     }
   }, [isVideoMode]);
 
-  // Auto-adjust numImages when character references are used
-  useEffect(() => {
-    const hasCharacterReference = activeReferences.some(ref => 
-      ref.enabled && ref.id === 'character' && ref.url
-    );
-    
-    if (hasCharacterReference && numImages > 1) {
-      console.log('🎭 Character reference detected, recommending numImages = 1 for consistency');
-      // Don't auto-set, just warn in the UI
-    }
-  }, [activeReferences, numImages]);
-
   // Update selected mode when URL mode changes, quality changes, or enhancement changes
   useEffect(() => {
     if (isVideoMode) {
@@ -174,25 +163,34 @@ const Workspace = () => {
     }
   }, [isVideoMode, quality, enhanced]);
 
-  // Helper function to apply optional prompt optimizations
+  // Helper function to apply optional prompt optimizations ONLY when enabled
   const optimizePromptForCharacter = (originalPrompt: string) => {
-    if (!optimizeForCharacter) return originalPrompt;
+    if (!optimizeForCharacter) {
+      console.log('🎭 Character optimization disabled, using original prompt:', originalPrompt);
+      return originalPrompt;
+    }
     
     let optimizedPrompt = originalPrompt.trim();
     
-    // Replace "same girl/person" with "this person"
+    // Only apply these specific optimizations when explicitly enabled
     optimizedPrompt = optimizedPrompt.replace(/same girl/gi, 'this person');
     optimizedPrompt = optimizedPrompt.replace(/same person/gi, 'this person');
     
-    // Add single portrait instructions to prevent split-screen
-    if (!optimizedPrompt.includes('single portrait')) {
-      optimizedPrompt = `${optimizedPrompt}, single portrait, not comparison, not side-by-side`;
+    // Add single portrait instruction to prevent split-screen
+    if (!optimizedPrompt.includes('single portrait') && !optimizedPrompt.includes('portrait')) {
+      optimizedPrompt = `${optimizedPrompt}, single portrait`;
     }
     
-    // Only add solo/single character if not already present
-    if (!optimizedPrompt.includes('solo') && !optimizedPrompt.includes('single character')) {
+    // Add solo if not present and not contradictory
+    if (!optimizedPrompt.includes('solo') && !optimizedPrompt.includes('group') && !optimizedPrompt.includes('multiple')) {
       optimizedPrompt = `${optimizedPrompt}, solo`;
     }
+    
+    console.log('🎭 Character optimization applied:', {
+      original: originalPrompt,
+      optimized: optimizedPrompt,
+      enabled: optimizeForCharacter
+    });
     
     return optimizedPrompt;
   };
@@ -215,23 +213,18 @@ const Workspace = () => {
         num_images: numImages
       };
 
-      // Apply optional prompt optimization
+      // Apply optional prompt optimization ONLY when explicitly enabled
       let finalPrompt = prompt.trim();
-      if (enabledReferences.some(ref => ref.id === 'character')) {
+      const hasCharacterReference = enabledReferences.some(ref => ref.id === 'character');
+      
+      if (hasCharacterReference && optimizeForCharacter) {
         finalPrompt = optimizePromptForCharacter(finalPrompt);
-        
-        if (optimizeForCharacter) {
-          console.log('🎭 Character prompt optimization applied:', {
-            original: prompt,
-            optimized: finalPrompt
-          });
-        }
       }
       
       // Add reference data if we have active references
       if (enabledReferences.length > 0) {
         referenceMetadata.reference_image = true;
-        referenceMetadata.reference_strength = referenceStrength;
+        referenceMetadata.reference_strength = referenceStrength; // Use the exact value from slider
         
         // Set reference type based on the primary reference
         const characterRef = enabledReferences.find(ref => ref.id === 'character');
@@ -253,14 +246,20 @@ const Workspace = () => {
         referenceMetadata.reference_source = primaryReference.isWorkspaceAsset ? 'workspace' : 'upload';
       }
 
-      console.log('🚀 Starting generation with user-controlled settings:', {
+      // Add seed if provided
+      if (seed !== undefined) {
+        referenceMetadata.seed = seed;
+      }
+
+      console.log('🚀 Starting generation with corrected settings:', {
         format: selectedMode,
         originalPrompt: prompt.trim(),
         finalPrompt,
         optimizationEnabled: optimizeForCharacter,
         activeReferences: enabledReferences,
-        referenceStrength,
-        numImages
+        referenceStrength: referenceStrength, // Log the actual value being used
+        numImages,
+        seed
       });
 
       // Build generation request
@@ -429,6 +428,8 @@ const Workspace = () => {
               numImages={numImages}
               onOptimizeChange={setOptimizeForCharacter}
               optimizeEnabled={optimizeForCharacter}
+              seed={seed}
+              onSeedChange={setSeed}
             />
           </div>
         )}
