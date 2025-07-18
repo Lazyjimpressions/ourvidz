@@ -45,6 +45,30 @@ export const PromptInfoModal = ({
   negativePrompt,
   generationParams
 }: PromptInfoModalProps) => {
+  // DEBUG: Log all received props
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log('🔍 PromptInfoModal - Received Props Debug:', {
+        prompt,
+        quality,
+        mode,
+        timestamp,
+        contentCount,
+        itemId,
+        originalImageUrl,
+        seed,
+        seedType: typeof seed,
+        seedValue: seed,
+        modelType,
+        referenceStrength,
+        negativePrompt,
+        generationParams,
+        generationParamsType: typeof generationParams,
+        generationParamsKeys: generationParams ? Object.keys(generationParams) : null
+      });
+    }
+  }, [isOpen, seed, generationParams]);
+
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
@@ -64,6 +88,30 @@ export const PromptInfoModal = ({
   const extractedSeed = seed || generationParams?.seed;
   const generationTime = generationParams?.generation_time;
   const extractedNegativePrompt = negativePrompt || generationParams?.negative_prompt;
+
+  // DEBUG: Log extracted values
+  React.useEffect(() => {
+    if (isOpen) {
+      console.log('🎯 PromptInfoModal - Extracted Values Debug:', {
+        seed,
+        'generationParams?.seed': generationParams?.seed,
+        extractedSeed,
+        extractedSeedType: typeof extractedSeed,
+        extractedSeedTruthy: !!extractedSeed,
+        generationTime,
+        generationTimeType: typeof generationTime,
+        extractedNegativePrompt,
+        conditionalCheck: {
+          'extractedSeed exists': !!extractedSeed,
+          'extractedSeed !== undefined': extractedSeed !== undefined,
+          'extractedSeed !== null': extractedSeed !== null,
+          'extractedSeed !== 0': extractedSeed !== 0,
+          'Number(extractedSeed)': Number(extractedSeed),
+          'Boolean(extractedSeed)': Boolean(extractedSeed)
+        }
+      });
+    }
+  }, [isOpen, extractedSeed, generationTime, seed, generationParams]);
 
   const getModelIcon = () => {
     if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
@@ -138,6 +186,16 @@ export const PromptInfoModal = ({
               </Badge>
             </div>
 
+            {/* DEBUG: Always show seed debug info */}
+            <div className="bg-red-100 border border-red-300 p-2 rounded text-xs">
+              <strong>DEBUG - Seed Info:</strong><br/>
+              Raw seed prop: {String(seed)} (type: {typeof seed})<br/>
+              generationParams?.seed: {String(generationParams?.seed)} (type: {typeof generationParams?.seed})<br/>
+              extractedSeed: {String(extractedSeed)} (type: {typeof extractedSeed})<br/>
+              Truthy check: {!!extractedSeed ? 'PASS' : 'FAIL'}<br/>
+              Should show: {extractedSeed ? 'YES' : 'NO'}
+            </div>
+
             {/* Seed Information */}
             {extractedSeed && (
               <SeedDisplay 
@@ -147,6 +205,13 @@ export const PromptInfoModal = ({
                 }}
                 className="justify-start"
               />
+            )}
+
+            {/* Alternative seed display for debugging */}
+            {!extractedSeed && (seed || generationParams?.seed) && (
+              <div className="bg-yellow-100 border border-yellow-300 p-2 rounded">
+                <strong>DEBUG SEED:</strong> {seed || generationParams?.seed} (should be showing but condition failed)
+              </div>
             )}
 
             {/* Reference Strength */}
@@ -216,11 +281,18 @@ export const PromptInfoModal = ({
                 <span className="text-muted-foreground">Job ID:</span>
                 <span className="ml-2 font-mono text-xs">{itemId}</span>
               </div>
-              {/* PHASE 1 FIX: Add seed display */}
+              {/* PHASE 1 FIX: Add seed display - with debug info */}
               {extractedSeed && (
                 <div>
                   <span className="text-muted-foreground">Seed:</span>
                   <span className="ml-2 font-mono">{extractedSeed}</span>
+                </div>
+              )}
+              {/* DEBUG: Always show seed in technical details for debugging */}
+              {!extractedSeed && (seed || generationParams?.seed) && (
+                <div className="col-span-2 bg-red-100 p-1 rounded text-xs">
+                  <span className="text-muted-foreground">DEBUG Seed:</span>
+                  <span className="ml-2 font-mono">{seed || generationParams?.seed}</span>
                 </div>
               )}
               {/* PHASE 1 FIX: Add generation time display */}

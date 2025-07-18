@@ -19,6 +19,23 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   const currentTile = tiles[currentIndex];
   const [showPromptModal, setShowPromptModal] = useState(false);
   
+  // DEBUG: Log current tile data when modal opens or tile changes
+  useEffect(() => {
+    if (currentTile) {
+      console.log('🔍 WorkspaceContentModal - Current Tile Debug:', {
+        id: currentTile.id,
+        originalAssetId: currentTile.originalAssetId,
+        seed: currentTile.seed,
+        seedType: typeof currentTile.seed,
+        generationParams: currentTile.generationParams,
+        generationParamsKeys: currentTile.generationParams ? Object.keys(currentTile.generationParams) : null,
+        generationParamsSeed: currentTile.generationParams?.seed,
+        generationParamsSeedType: typeof currentTile.generationParams?.seed,
+        timestamp: currentTile.timestamp
+      });
+    }
+  }, [currentTile]);
+  
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
@@ -46,6 +63,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
     const newIndex = currentIndex < tiles.length - 1 ? currentIndex + 1 : 0;
     onIndexChange(newIndex);
   };
+  
   const handleDownload = async () => {
     try {
       const response = await fetch(currentTile.url);
@@ -67,6 +85,23 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   if (!currentTile?.url) {
     return null;
   }
+
+  // DEBUG: Log data being passed to PromptInfoModal
+  const seedValue = typeof currentTile.seed === 'string' ? parseInt(currentTile.seed) : currentTile.seed;
+  console.log('🎯 WorkspaceContentModal - Data passed to PromptInfoModal:', {
+    prompt: currentTile.prompt,
+    quality: currentTile.quality,
+    mode: currentTile.type,
+    timestamp: currentTile.timestamp,
+    itemId: currentTile.originalAssetId,
+    originalImageUrl: currentTile.type === 'image' ? currentTile.url : undefined,
+    seed: seedValue,
+    seedType: typeof seedValue,
+    modelType: currentTile.modelType,
+    referenceStrength: currentTile.generationParams?.reference_strength,
+    negativePrompt: currentTile.generationParams?.negative_prompt,
+    generationParams: currentTile.generationParams
+  });
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -183,7 +218,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
           contentCount={1}
           itemId={currentTile.originalAssetId}
           originalImageUrl={currentTile.type === 'image' ? currentTile.url : undefined}
-          seed={typeof currentTile.seed === 'string' ? parseInt(currentTile.seed) : currentTile.seed}
+          seed={seedValue}
           modelType={currentTile.modelType}
           referenceStrength={currentTile.generationParams?.reference_strength}
           negativePrompt={currentTile.generationParams?.negative_prompt}
