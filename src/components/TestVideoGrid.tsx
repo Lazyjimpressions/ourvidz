@@ -253,6 +253,7 @@ const TestVideoGrid = ({ jobs, onAutoAdd }: TestVideoGridProps) => {
           timestamp={new Date()}
           contentCount={1}
           itemId={selectedVideo.jobId}
+          modelType={selectedVideo.modelType}
         />
       )}
     </>

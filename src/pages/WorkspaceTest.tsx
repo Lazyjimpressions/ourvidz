@@ -16,6 +16,9 @@ interface WorkspaceAsset {
   jobId: string;
   prompt: string;
   type?: 'image' | 'video';
+  modelType?: string;
+  quality?: string;
+  metadata?: any;
 }
 
 const WorkspaceTest = () => {
@@ -133,13 +136,21 @@ const WorkspaceTest = () => {
       return;
     }
 
+    // Find the job data to extract metadata
+    const jobData = type === 'image' 
+      ? imageJobs.find(job => job.id === jobId)
+      : videoJobs.find(job => job.id === jobId);
+
     const assetId = `${jobId}_${Date.now()}`;
     const newAsset: WorkspaceAsset = {
       id: assetId,
       url: signedUrl,
       jobId,
       prompt,
-      type
+      type,
+      modelType: jobData?.metadata?.job_type || jobData?.generation_mode,
+      quality: jobData?.quality,
+      metadata: jobData?.metadata
     };
     
     // Check if this exact URL is already in workspace (double-check)
@@ -149,7 +160,7 @@ const WorkspaceTest = () => {
       setAutoAddedUrls(prev => new Set([...prev, signedUrl]));
       console.log(`Auto-added ${type} asset ${assetId} to workspace`);
     }
-  }, [workspace, autoAddedUrls]);
+  }, [workspace, autoAddedUrls, imageJobs, videoJobs]);
 
   const handleRemoveFromWorkspace = (assetId: string) => {
     setWorkspace(prev => {
@@ -348,12 +359,15 @@ const WorkspaceTest = () => {
           isOpen={showPromptModal}
           onClose={handleClosePromptModal}
           prompt={currentPromptAsset.prompt}
-          quality="fast"
+          quality={(currentPromptAsset.quality as 'fast' | 'high') || 'fast'}
           mode={currentPromptAsset.type || 'image'}
           timestamp={new Date()}
           contentCount={1}
           itemId={currentPromptAsset.jobId}
           originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
+          modelType={currentPromptAsset.modelType}
+          seed={currentPromptAsset.metadata?.seed}
+          generationParams={currentPromptAsset.metadata}
         />
       )}
 

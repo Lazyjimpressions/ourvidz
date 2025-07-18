@@ -569,6 +569,7 @@ const Workspace = () => {
           contentCount={1}
           itemId={currentPromptAsset.jobId}
           originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
+          modelType={currentPromptAsset.modelType}
         />
       )}
 

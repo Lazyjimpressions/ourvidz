@@ -183,6 +183,11 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
           contentCount={1}
           itemId={currentTile.originalAssetId}
           originalImageUrl={currentTile.type === 'image' ? currentTile.url : undefined}
+          seed={typeof currentTile.seed === 'string' ? parseInt(currentTile.seed) : currentTile.seed}
+          modelType={currentTile.modelType}
+          referenceStrength={currentTile.generationParams?.reference_strength}
+          negativePrompt={currentTile.generationParams?.negative_prompt}
+          generationParams={currentTile.generationParams}
         />
       )}
     </Dialog>
