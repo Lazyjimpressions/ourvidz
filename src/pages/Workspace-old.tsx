@@ -457,30 +457,6 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onBeginningFrameUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
-            onEndingFrameUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
             onSwitchToImage={() => navigate('/workspace?mode=image')}
             quality={quality}
             setQuality={setQuality}
@@ -494,18 +470,6 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onReferenceImageUpload={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'image/*';
-              input.onchange = (e) => {
-                const file = (e.target as HTMLInputElement).files?.[0];
-                if (file) {
-                  setReferenceImage(file);
-                }
-              };
-              input.click();
-            }}
             onSwitchToVideo={() => navigate('/workspace?mode=video')}
             quality={quality}
             setQuality={setQuality}

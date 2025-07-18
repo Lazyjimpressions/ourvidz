@@ -333,43 +333,29 @@ const Workspace = () => {
     setReferenceImageUrl('');
   }, []);
 
-  // Video reference handlers
-  const handleStartReferenceChange = useCallback((file: File | null, url: string) => {
-    setStartReferenceImage(file);
-    setStartReferenceImageUrl(url);
+  // Multi-reference handlers for MultiReferencePanel
+  const handleReferencesChange = useCallback((references: any[]) => {
+    setActiveReferences(references);
   }, []);
 
-  const handleEndReferenceChange = useCallback((file: File | null, url: string) => {
-    setEndReferenceImage(file);
-    setEndReferenceImageUrl(url);
-  }, []);
-
-  const handleClearStartReference = useCallback(() => {
-    setStartReferenceImage(null);
-    setStartReferenceImageUrl('');
-  }, []);
-
-  const handleClearEndReference = useCallback(() => {
-    setEndReferenceImage(null);
-    setEndReferenceImageUrl('');
+  const handleClearReferences = useCallback(() => {
+    setActiveReferences([]);
   }, []);
 
 
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
-    if (isVideoMode) {
-      // For video mode, ask user if it's start or end reference
-      // For now, default to start reference
-      setStartReferenceImage(null); // Clear file since we're using URL
-      setStartReferenceImageUrl(tile.url);
-      toast.success('Image set as video start reference');
-    } else {
-      // For image mode
-      setReferenceImage(null); // Clear file since we're using URL  
-      setReferenceImageUrl(tile.url);
-      toast.success('Image set as reference');
-    }
-  }, [isVideoMode]);
+    // Add to active references via MultiReferencePanel
+    const newReference = {
+      id: tile.id,
+      url: tile.url,
+      type: 'character', // Default to character for consistency workflow
+      strength: referenceStrength
+    };
+    
+    setActiveReferences(prev => [...prev, newReference]);
+    toast.success('Image added as reference');
+  }, [referenceStrength]);
 
   if (loading) {
     return (
