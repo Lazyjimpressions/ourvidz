@@ -33,6 +33,7 @@ interface WorkspaceAsset {
   seed?: string | number;
   referenceStrength?: number;
   negativePrompt?: string;
+  generationParams?: any;
 }
 
 const Workspace = () => {
@@ -729,6 +730,7 @@ const Workspace = () => {
           modelType={currentPromptAsset.modelType}
           referenceStrength={currentPromptAsset.referenceStrength}
           negativePrompt={currentPromptAsset.negativePrompt}
+          generationParams={currentPromptAsset.generationParams}
         />
       )}
 
