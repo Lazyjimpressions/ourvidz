@@ -49,7 +49,7 @@ const Workspace = () => {
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
-  const [referenceStrength, setReferenceStrength] = useState(0.7); // Optimal for character consistency
+  const [referenceStrength, setReferenceStrength] = useState(0.8); // Stronger default for character consistency
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
@@ -57,7 +57,7 @@ const Workspace = () => {
   const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [numImages, setNumImages] = useState<number>(4); // Default 4 for character reference workflow
+  const [numImages, setNumImages] = useState<number>(1); // Changed default from 4 to 1 for better character consistency
   
   // Use the realtime workspace hook
   const { 
@@ -94,9 +94,6 @@ const Workspace = () => {
     selectedMode,
     !!currentJob && isGenerating
   );
-
-
-  // The realtime workspace hook already handles generation completion events
 
   // Handle authentication state and navigation
   useEffect(() => {
@@ -142,6 +139,19 @@ const Workspace = () => {
       setActiveReferences([]);
     }
   }, [isVideoMode]);
+
+  // Auto-adjust numImages when character references are used
+  useEffect(() => {
+    const hasCharacterReference = activeReferences.some(ref => 
+      ref.enabled && ref.id === 'character' && ref.url
+    );
+    
+    if (hasCharacterReference && numImages > 1) {
+      console.log('🎭 Character reference detected, setting numImages to 1 for consistency');
+      setNumImages(1);
+      toast.info('Image quantity set to 1 for better character consistency');
+    }
+  }, [activeReferences, numImages]);
 
   // Update selected mode when URL mode changes, quality changes, or enhancement changes
   useEffect(() => {
@@ -198,25 +208,35 @@ const Workspace = () => {
         num_images: numImages
       };
 
+      let enhancedPrompt = prompt.trim();
+      
       // Add reference data if we have active references
       if (enabledReferences.length > 0) {
         referenceMetadata.reference_image = true;
         referenceMetadata.reference_strength = referenceStrength;
         
-        // For character references, use optimal settings
+        // For character references, use optimal settings and enhance prompt
         const characterRef = enabledReferences.find(ref => ref.id === 'character');
         if (characterRef) {
           referenceMetadata.reference_type = 'character';
           referenceMetadata.character_consistency = true;
-          // Add negative prompt for character consistency
-          const enhancedPrompt = prompt.includes('same person') 
-            ? prompt 
-            : `${prompt}, same person, same facial features`;
+          
+          // Enhanced prompt for character consistency
+          if (!enhancedPrompt.includes('solo') && !enhancedPrompt.includes('single character')) {
+            enhancedPrompt = `${enhancedPrompt}, solo, single character, one person only`;
+          }
+          if (!enhancedPrompt.includes('same person')) {
+            enhancedPrompt = `${enhancedPrompt}, same person, same facial features`;
+          }
+          
+          // Add negative prompts for character consistency
+          referenceMetadata.negative_prompt = 'multiple people, twins, crowd, group, two girls, multiple characters, duplicate person';
           
           console.log('🎭 Character reference detected, enhancing prompt:', {
             original: prompt,
             enhanced: enhancedPrompt,
-            strength: referenceStrength
+            strength: referenceStrength,
+            negativePrompt: referenceMetadata.negative_prompt
           });
         } else if (enabledReferences.find(ref => ref.id === 'style')) {
           referenceMetadata.reference_type = 'style';
@@ -236,7 +256,7 @@ const Workspace = () => {
       // Build generation request
       const generationRequest = {
         format: selectedMode,
-        prompt: prompt.trim(),
+        prompt: enhancedPrompt,
         referenceImageUrl: enabledReferences.length > 0 ? enabledReferences[0].url : undefined,
         metadata: referenceMetadata
       };
@@ -342,20 +362,32 @@ const Workspace = () => {
     setActiveReferences([]);
   }, []);
 
-
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
     // Add to active references via MultiReferencePanel
     const newReference = {
-      id: tile.id,
+      id: 'character', // Always use character for workspace assets
       url: tile.url,
-      type: 'character', // Default to character for consistency workflow
-      strength: referenceStrength
+      enabled: true,
+      isWorkspaceAsset: true,
+      originalPrompt: tile.prompt,
+      modelType: tile.modelType,
+      quality: tile.quality
     };
     
-    setActiveReferences(prev => [...prev, newReference]);
-    toast.success('Image added as reference');
-  }, [referenceStrength]);
+    // Replace any existing character reference or add as new
+    setActiveReferences(prev => {
+      const filtered = prev.filter(ref => ref.id !== 'character');
+      return [...filtered, newReference];
+    });
+    
+    // Automatically set to 1 image for character consistency
+    if (numImages > 1) {
+      setNumImages(1);
+    }
+    
+    toast.success('Image set as character reference');
+  }, [numImages]);
 
   if (loading) {
     return (
@@ -460,7 +492,7 @@ const Workspace = () => {
                           handleUseAsReference(tile);
                         }}
                         className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
-                        title="Use as Reference"
+                        title="Use as Character Reference"
                       >
                         <Image className="w-3 h-3" />
                       </button>
@@ -507,7 +539,7 @@ const Workspace = () => {
             isGenerating={isGenerating}
             onSwitchToImage={() => {
               setIsVideoMode(false);
-              setNumImages(4); // Reset to 4 for image mode
+              setNumImages(1); // Reset to 1 for image mode
             }}
             quality={quality}
             setQuality={setQuality}
