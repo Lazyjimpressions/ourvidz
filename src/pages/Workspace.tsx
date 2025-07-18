@@ -13,6 +13,7 @@ import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
+import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { X, Info, Image } from 'lucide-react';
@@ -49,12 +50,15 @@ const Workspace = () => {
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
-  const [referenceStrength, setReferenceStrength] = useState(0.85); // Increased for better character consistency
+  const [referenceStrength, setReferenceStrength] = useState(0.900); // Higher default for better character consistency
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
+  
+  // New prompt optimization state
+  const [optimizeForCharacter, setOptimizeForCharacter] = useState(false);
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
@@ -147,9 +151,8 @@ const Workspace = () => {
     );
     
     if (hasCharacterReference && numImages > 1) {
-      console.log('🎭 Character reference detected, setting numImages to 1 for consistency');
-      setNumImages(1);
-      toast.info('Image quantity set to 1 for better character consistency');
+      console.log('🎭 Character reference detected, recommending numImages = 1 for consistency');
+      // Don't auto-set, just warn in the UI
     }
   }, [activeReferences, numImages]);
 
@@ -166,44 +169,32 @@ const Workspace = () => {
       if (enhanced) {
         setSelectedMode(quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced');
       } else {
-        // For character reference, prefer high quality SDXL for better consistency
-        const hasCharacterReference = activeReferences.some(ref => 
-          ref.enabled && ref.id === 'character' && ref.url
-        );
-        if (hasCharacterReference) {
-          setSelectedMode('sdxl_image_high'); // Force high quality for character references
-          if (quality !== 'high') {
-            setQuality('high'); // Auto-upgrade quality for character consistency
-          }
-        } else {
-          setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
-        }
+        setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
       }
     }
-  }, [isVideoMode, quality, enhanced, activeReferences]);
+  }, [isVideoMode, quality, enhanced]);
 
-  // Helper function to validate reference image for character consistency
-  const validateReferenceImage = (refData: any) => {
-    // Check if it's a character reference with proper settings
-    if (refData.id === 'character' && refData.url) {
-      console.log('🎭 Validating character reference for consistency:', {
-        url: refData.url,
-        isWorkspaceAsset: refData.isWorkspaceAsset,
-        originalPrompt: refData.originalPrompt
-      });
-      
-      // Warn if reference might cause issues
-      if (refData.originalPrompt && (
-        refData.originalPrompt.toLowerCase().includes('two') ||
-        refData.originalPrompt.toLowerCase().includes('multiple') ||
-        refData.originalPrompt.toLowerCase().includes('comparison')
-      )) {
-        toast.warning('Reference image prompt contains multiple subjects - may affect consistency');
-      }
-      
-      return true;
+  // Helper function to apply optional prompt optimizations
+  const optimizePromptForCharacter = (originalPrompt: string) => {
+    if (!optimizeForCharacter) return originalPrompt;
+    
+    let optimizedPrompt = originalPrompt.trim();
+    
+    // Replace "same girl/person" with "this person"
+    optimizedPrompt = optimizedPrompt.replace(/same girl/gi, 'this person');
+    optimizedPrompt = optimizedPrompt.replace(/same person/gi, 'this person');
+    
+    // Add single portrait instructions to prevent split-screen
+    if (!optimizedPrompt.includes('single portrait')) {
+      optimizedPrompt = `${optimizedPrompt}, single portrait, not comparison, not side-by-side`;
     }
-    return false;
+    
+    // Only add solo/single character if not already present
+    if (!optimizedPrompt.includes('solo') && !optimizedPrompt.includes('single character')) {
+      optimizedPrompt = `${optimizedPrompt}, solo`;
+    }
+    
+    return optimizedPrompt;
   };
 
   const handleGenerate = async () => {
@@ -217,14 +208,6 @@ const Workspace = () => {
     }
 
     try {
-      console.log('🚀 Starting generation with enhanced character reference support:', {
-        format: selectedMode,
-        prompt: prompt.trim(),
-        activeReferences: activeReferences.filter(ref => ref.enabled && ref.url),
-        referenceStrength,
-        numImages
-      });
-
       // Build reference metadata from MultiReferencePanel
       const enabledReferences = activeReferences.filter(ref => ref.enabled && ref.url);
       const referenceMetadata: any = {
@@ -232,46 +215,29 @@ const Workspace = () => {
         num_images: numImages
       };
 
-      let enhancedPrompt = prompt.trim();
+      // Apply optional prompt optimization
+      let finalPrompt = prompt.trim();
+      if (enabledReferences.some(ref => ref.id === 'character')) {
+        finalPrompt = optimizePromptForCharacter(finalPrompt);
+        
+        if (optimizeForCharacter) {
+          console.log('🎭 Character prompt optimization applied:', {
+            original: prompt,
+            optimized: finalPrompt
+          });
+        }
+      }
       
       // Add reference data if we have active references
       if (enabledReferences.length > 0) {
         referenceMetadata.reference_image = true;
         referenceMetadata.reference_strength = referenceStrength;
         
-        // For character references, use optimal settings and enhance prompt
+        // Set reference type based on the primary reference
         const characterRef = enabledReferences.find(ref => ref.id === 'character');
         if (characterRef) {
-          // Validate the character reference
-          validateReferenceImage(characterRef);
-          
           referenceMetadata.reference_type = 'character';
           referenceMetadata.character_consistency = true;
-          
-          // Simplified prompt enhancement - avoid redundancy
-          if (enhancedPrompt.toLowerCase().includes('same girl') || enhancedPrompt.toLowerCase().includes('same person')) {
-            // Use transformation-based prompts for better results
-            enhancedPrompt = enhancedPrompt.replace(/same girl/gi, 'this person');
-            enhancedPrompt = enhancedPrompt.replace(/same person/gi, 'this person');
-          }
-          
-          // Add single portrait instructions to prevent split-screen
-          if (!enhancedPrompt.includes('single portrait')) {
-            enhancedPrompt = `${enhancedPrompt}, single portrait, not comparison, not side-by-side`;
-          }
-          
-          // Only add solo/single character if not already present
-          if (!enhancedPrompt.includes('solo') && !enhancedPrompt.includes('single character')) {
-            enhancedPrompt = `${enhancedPrompt}, solo`;
-          }
-          
-          console.log('🎭 Character reference optimization:', {
-            original: prompt,
-            enhanced: enhancedPrompt,
-            strength: referenceStrength,
-            mode: selectedMode
-          });
-          
         } else if (enabledReferences.find(ref => ref.id === 'style')) {
           referenceMetadata.reference_type = 'style';
         } else if (enabledReferences.find(ref => ref.id === 'composition')) {
@@ -287,10 +253,20 @@ const Workspace = () => {
         referenceMetadata.reference_source = primaryReference.isWorkspaceAsset ? 'workspace' : 'upload';
       }
 
+      console.log('🚀 Starting generation with user-controlled settings:', {
+        format: selectedMode,
+        originalPrompt: prompt.trim(),
+        finalPrompt,
+        optimizationEnabled: optimizeForCharacter,
+        activeReferences: enabledReferences,
+        referenceStrength,
+        numImages
+      });
+
       // Build generation request
       const generationRequest = {
         format: selectedMode,
-        prompt: enhancedPrompt,
+        prompt: finalPrompt,
         referenceImageUrl: enabledReferences.length > 0 ? enabledReferences[0].url : undefined,
         metadata: referenceMetadata
       };
@@ -298,11 +274,6 @@ const Workspace = () => {
       await generateContent(generationRequest);
 
       toast.success('Generation started successfully!');
-      
-      // Log successful generation start for character reference workflow
-      if (enabledReferences.some(ref => ref.id === 'character')) {
-        console.log('✅ Character reference generation started with optimized settings');
-      }
       
     } catch (error) {
       console.error('❌ Generation failed:', error);
@@ -415,13 +386,8 @@ const Workspace = () => {
       return [...filtered, newReference];
     });
     
-    // Automatically set to 1 image for character consistency
-    if (numImages > 1) {
-      setNumImages(1);
-    }
-    
     toast.success('Image set as character reference');
-  }, [numImages]);
+  }, []);
 
   if (loading) {
     return (
@@ -439,6 +405,11 @@ const Workspace = () => {
     return null;
   }
 
+  // Check if character reference is active
+  const hasCharacterReference = activeReferences.some(ref => 
+    ref.enabled && ref.id === 'character' && ref.url
+  );
+
   // Filter workspace tiles for lightbox (images only)
   const imageTiles = workspaceTiles.filter(tile => tile.type !== 'video');
 
@@ -449,6 +420,19 @@ const Workspace = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
+        {/* Character Reference Warning */}
+        {hasCharacterReference && (
+          <div className="p-6 pb-0">
+            <CharacterReferenceWarning
+              hasCharacterReference={hasCharacterReference}
+              referenceStrength={referenceStrength}
+              numImages={numImages}
+              onOptimizeChange={setOptimizeForCharacter}
+              optimizeEnabled={optimizeForCharacter}
+            />
+          </div>
+        )}
+
         {/* Current Workspace */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">

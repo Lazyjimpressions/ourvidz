@@ -18,7 +18,7 @@ export const ReferenceStrengthSlider = ({
   value, 
   onChange, 
   disabled = false,
-  referenceType = 'style',
+  referenceType = 'character',
   onTypeChange
 }: ReferenceStrengthSliderProps) => {
   const referenceTypes = [
@@ -31,13 +31,13 @@ export const ReferenceStrengthSlider = ({
   const getOptimalRange = (type: string) => {
     switch (type) {
       case 'character':
-        return { min: 0.7, max: 0.95, optimal: 0.85 };
+        return { min: 0.750, max: 0.950, optimal: 0.900, presets: [0.850, 0.900, 0.950] };
       case 'style':
-        return { min: 0.3, max: 0.8, optimal: 0.6 };
+        return { min: 0.300, max: 0.800, optimal: 0.600, presets: [0.500, 0.600, 0.700] };
       case 'composition':
-        return { min: 0.4, max: 0.9, optimal: 0.7 };
+        return { min: 0.400, max: 0.900, optimal: 0.700, presets: [0.600, 0.700, 0.800] };
       default:
-        return { min: 0.1, max: 1.0, optimal: 0.8 };
+        return { min: 0.100, max: 1.000, optimal: 0.900, presets: [0.700, 0.850, 0.950] };
     }
   };
 
@@ -90,9 +90,9 @@ export const ReferenceStrengthSlider = ({
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1">
-                  <p>Character: 0.7-0.95 (optimal: 0.85)</p>
-                  <p>Style: 0.3-0.8 (optimal: 0.6)</p>
-                  <p>Composition: 0.4-0.9 (optimal: 0.7)</p>
+                  <p>Character: 0.750-0.950 (optimal: 0.900)</p>
+                  <p>Style: 0.300-0.800 (optimal: 0.600)</p>
+                  <p>Composition: 0.400-0.900 (optimal: 0.700)</p>
                   <p className="text-xs text-muted-foreground">Higher = stronger influence</p>
                 </div>
               </TooltipContent>
@@ -105,23 +105,42 @@ export const ReferenceStrengthSlider = ({
               onValueChange={(values) => onChange(values[0])}
               min={range.min}
               max={range.max}
-              step={0.05}
+              step={0.001}
               disabled={disabled}
               className="w-full"
             />
           </div>
-          <span className={`text-xs min-w-8 text-center ${
-            Math.abs(value - range.optimal) <= 0.1 ? 'text-green-500' : 'text-muted-foreground'
+          <span className={`text-xs min-w-12 text-center ${
+            Math.abs(value - range.optimal) <= 0.050 ? 'text-green-500' : 'text-muted-foreground'
           }`}>
-            {value.toFixed(2)}
+            {value.toFixed(3)}
           </span>
         </div>
 
+        {/* Preset Buttons */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Presets:</span>
+          <div className="flex gap-1">
+            {range.presets.map((preset) => (
+              <Button
+                key={preset}
+                variant="ghost"
+                size="sm"
+                onClick={() => onChange(preset)}
+                className="h-5 px-2 text-xs"
+                disabled={disabled}
+              >
+                {preset.toFixed(3)}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         {/* Optimal indicator */}
-        {Math.abs(value - range.optimal) > 0.1 && (
+        {Math.abs(value - range.optimal) > 0.050 && (
           <div className="text-xs text-amber-500 flex items-center gap-1">
             <InfoIcon className="w-3 h-3" />
-            <span>Optimal for {referenceType}: {range.optimal}</span>
+            <span>Optimal for {referenceType}: {range.optimal.toFixed(3)}</span>
             <Button
               variant="ghost"
               size="sm"
