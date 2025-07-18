@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -14,9 +15,10 @@ import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
+import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Info, Image } from 'lucide-react';
+import { X, Info, Image, Dice6 } from 'lucide-react';
 import { PromptInfoModal } from '@/components/PromptInfoModal';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 
@@ -388,6 +390,17 @@ const Workspace = () => {
     toast.success('Image set as character reference');
   }, []);
 
+  // NEW: Use seed from workspace asset
+  const handleUseSeed = useCallback((tile: any) => {
+    const tileSeed = tile.generationParams?.seed || tile.seed;
+    if (tileSeed) {
+      setSeed(tileSeed);
+      toast.success(`Using seed ${tileSeed} for generation`);
+    } else {
+      toast.error('No seed information available for this image');
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -465,13 +478,15 @@ const Workspace = () => {
                           duration: tile.duration,
                           generationParams: {
                             originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp
+                            timestamp: tile.timestamp,
+                            seed: tile.generationParams?.seed || tile.seed
                           }
                         };
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
                       style={{ cursor: 'move' }}
+                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
                     />
                   ) : (
                     <img
@@ -489,7 +504,8 @@ const Workspace = () => {
                           type: tile.type,
                           generationParams: {
                             originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp
+                            timestamp: tile.timestamp,
+                            seed: tile.generationParams?.seed || tile.seed
                           }
                         };
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
@@ -499,22 +515,37 @@ const Workspace = () => {
                         e.currentTarget.style.opacity = '1';
                       }}
                       style={{ cursor: 'move' }}
+                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
                     />
                   )}
                   
                   {/* Action buttons */}
                   <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                     {tile.type === 'image' && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleUseAsReference(tile);
-                        }}
-                        className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
-                        title="Use as Character Reference"
-                      >
-                        <Image className="w-3 h-3" />
-                      </button>
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUseAsReference(tile);
+                          }}
+                          className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
+                          title="Use as Character Reference"
+                        >
+                          <Image className="w-3 h-3" />
+                        </button>
+                        {(tile.generationParams?.seed || tile.seed) && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUseSeed(tile);
+                            }}
+                            className="bg-secondary text-secondary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-secondary/80 transition"
+                            title={`Use seed ${tile.generationParams?.seed || tile.seed}`}
+                          >
+                            <Dice6 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                   
@@ -525,6 +556,16 @@ const Workspace = () => {
                   >
                     {deletingTiles.has(tile.id) ? '⌛' : '×'}
                   </button>
+
+                  {/* Seed display in bottom corner */}
+                  {(tile.generationParams?.seed || tile.seed) && (
+                    <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition">
+                      <SeedDisplay 
+                        seed={tile.generationParams?.seed || tile.seed}
+                        className="text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

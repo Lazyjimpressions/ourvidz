@@ -359,6 +359,7 @@ serve(async (req)=>{
       });
     }
     console.log('✅ Job created successfully in database:', job.id);
+    
     // Format job payload for appropriate worker
     const jobPayload = {
       id: job.id,
@@ -367,15 +368,17 @@ serve(async (req)=>{
       config: {
         size: '480*832',
         sample_steps: quality === 'high' ? 50 : 25,
-        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,  // 🔧 ENHANCED: NSFW-optimized guidance scales
-        sample_solver: 'unipc',                              // 🔧 NEW: UniPC sampling for smooth motion
-        sample_shift: 5.0,                                   // 🔧 NEW: Temporal consistency
+        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
+        sample_solver: 'unipc',
+        sample_shift: 5.0,
         frame_num: format === 'video' ? 83 : 1,
         enhance_prompt: isEnhanced,
-        expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,  // 🔧 UPDATED: New performance baselines
+        // SEED SUPPORT: Pass seed from metadata to worker config
+        ...(metadata?.seed && { seed: metadata.seed }),
+        expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
         content_type: format,
         file_extension: format === 'video' ? 'mp4' : 'png',
-        num_images: metadata?.num_images || 1  // CRITICAL FIX: Pass user-selected image quantity to worker
+        num_images: metadata?.num_images || 1
       },
       user_id: user.id,
       created_at: new Date().toISOString(),
@@ -389,21 +392,25 @@ serve(async (req)=>{
       character_id: characterId,
       model_variant: modelVariant,
       bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`),
-      metadata: jobMetadata // Use the same comprehensive metadata structure
+      metadata: jobMetadata
     };
-    console.log('📤 Pushing FIXED job to Redis queue:', {
+    
+    console.log('📤 Pushing FIXED job to Redis queue with seed support:', {
       jobId: job.id,
       jobType,
       queueName,
       isSDXL,
       hasPrompt: !!prompt,
       hasNegativePrompt: isSDXL && !!negativePrompt,
+      hasSeed: !!metadata?.seed,
+      seedValue: metadata?.seed,
       negativePromptSupported: isSDXL,
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
       negativePromptError: negativePromptError,
       payloadSize: JSON.stringify(jobPayload).length
     });
+    
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
     const redisResponse = await fetch(`${redisUrl}/lpush/${queueName}`, {
       method: 'POST',
@@ -450,6 +457,7 @@ serve(async (req)=>{
       queueName,
       negativePromptIncluded: isSDXL
     });
+    
     // Log usage with enhanced dual worker tracking
     const usageLogResult = await supabase.from('usage_logs').insert({
       user_id: user.id,

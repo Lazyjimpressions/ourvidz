@@ -4,9 +4,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { User, AlertTriangle, Settings, Dice6 } from 'lucide-react';
+import { User, AlertTriangle, Settings } from 'lucide-react';
+import { EnhancedSeedInput } from './EnhancedSeedInput';
 
 interface CharacterReferenceWarningProps {
   hasCharacterReference: boolean;
@@ -38,11 +37,6 @@ export const CharacterReferenceWarning = ({
   };
 
   const recommendation = getStrengthRecommendation();
-
-  const generateRandomSeed = () => {
-    const randomSeed = Math.floor(Math.random() * 1000000);
-    onSeedChange?.(randomSeed);
-  };
 
   return (
     <Alert className="border-blue-200 bg-blue-50/30">
@@ -110,29 +104,10 @@ export const CharacterReferenceWarning = ({
             )}
 
             {onSeedChange && (
-              <div className="space-y-2">
-                <Label className="text-xs font-medium">Seed (optional)</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    value={seed || ''}
-                    onChange={(e) => onSeedChange(e.target.value ? parseInt(e.target.value) : undefined)}
-                    placeholder="Random"
-                    className="h-7 text-xs"
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={generateRandomSeed}
-                    className="h-7 px-2"
-                  >
-                    <Dice6 className="w-3 h-3" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Use the same seed for reproducible results
-                </p>
-              </div>
+              <EnhancedSeedInput 
+                seed={seed}
+                onSeedChange={onSeedChange}
+              />
             )}
 
             <div className="text-xs text-muted-foreground">
@@ -142,7 +117,7 @@ export const CharacterReferenceWarning = ({
                 <li>Avoid comparison language</li>
                 <li>Set strength between 0.850-0.950</li>
                 <li>Generate 1 image at a time</li>
-                <li>Use consistent seed values</li>
+                <li>Use consistent seed values for reproducible results</li>
               </ul>
             </div>
           </div>
