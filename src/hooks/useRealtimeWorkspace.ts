@@ -300,10 +300,16 @@ export const useRealtimeWorkspace = () => {
           prompt: asset.prompt,
           timestamp: asset.createdAt,
           quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.modelType,
+          modelType: asset.metadata?.job_type || asset.modelType, // PHASE 1 FIX: Use job_type for accurate model detection
           enhancedPrompt: asset.enhancedPrompt,
           seed: asset.metadata?.seed,
-          generationParams: asset.metadata
+          generationParams: {
+            ...asset.metadata,
+            seed: asset.metadata?.seed,
+            generation_time: asset.metadata?.generation_time,
+            negative_prompt: asset.metadata?.negative_prompt,
+            reference_strength: asset.metadata?.reference_strength
+          }
         });
       }
     } else if (asset.type === 'video' && asset.url) {

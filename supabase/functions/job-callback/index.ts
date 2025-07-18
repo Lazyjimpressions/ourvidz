@@ -72,6 +72,21 @@ serve(async (req)=>{
     };
     // Merge metadata instead of overwriting
     let updatedMetadata = currentJob.metadata || {};
+    
+    // PHASE 1 FIX: Extract worker metadata from requestBody.metadata
+    const workerMetadata = requestBody.metadata || {};
+    if (workerMetadata.seed) {
+      updatedMetadata.seed = workerMetadata.seed;
+      console.log('🌱 Storing seed from worker:', workerMetadata.seed);
+    }
+    if (workerMetadata.generation_time) {
+      updatedMetadata.generation_time = workerMetadata.generation_time;
+      console.log('⏱️ Storing generation time from worker:', workerMetadata.generation_time);
+    }
+    if (workerMetadata.num_images) {
+      updatedMetadata.num_images = workerMetadata.num_images;
+    }
+    
     // Handle enhanced prompt for image_high jobs (enhancement)
     if (currentJob.job_type === 'image_high' && enhancedPrompt) {
       updatedMetadata.enhanced_prompt = enhancedPrompt;
@@ -301,6 +316,11 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
             original_job_id: job.id,
             image_index: i,
             total_images: assets.length,
+            // PHASE 1 FIX: Store worker metadata in image metadata
+            seed: jobMetadata.seed,
+            generation_time: jobMetadata.generation_time,
+            negative_prompt: jobMetadata.negative_prompt,
+            job_type: job.job_type, // Store job_type for model detection
             callback_debug: {
               job_type: job.job_type,
               primary_asset: assets[0],

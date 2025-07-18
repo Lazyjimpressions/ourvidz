@@ -66,14 +66,24 @@ export const PromptInfoModal = ({
   };
 
   const getModelName = () => {
-    // Check for SDXL in modelType first
+    // PHASE 1 FIX: Check job_type for accurate model detection
+    if (modelType?.includes('sdxl_image_fast') || modelType?.includes('sdxl_image_high')) {
+      return modelType.includes('fast') ? 'SDXL Fast' : 'SDXL High';
+    }
+    
+    // Check for SDXL patterns in modelType
     if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
       return 'SDXL';
     }
     
     // Check for Enhanced models
-    if (modelType?.includes('Enhanced') || modelType?.includes('7B')) {
+    if (modelType?.includes('enhanced') || modelType?.includes('Enhanced') || modelType?.includes('7B')) {
       return 'Enhanced 7B';
+    }
+    
+    // WAN models
+    if (modelType?.includes('image_fast') || modelType?.includes('image_high')) {
+      return modelType.includes('fast') ? 'WAN Fast' : 'WAN High';
     }
     
     // Default fallback
