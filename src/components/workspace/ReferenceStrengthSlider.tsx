@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
@@ -26,6 +27,22 @@ export const ReferenceStrengthSlider = ({
     { value: 'character', label: 'Character', description: 'Preserve character appearance and features' }
   ];
 
+  // Get optimal strength range based on reference type
+  const getOptimalRange = (type: string) => {
+    switch (type) {
+      case 'character':
+        return { min: 0.7, max: 0.95, optimal: 0.85 };
+      case 'style':
+        return { min: 0.3, max: 0.8, optimal: 0.6 };
+      case 'composition':
+        return { min: 0.4, max: 0.9, optimal: 0.7 };
+      default:
+        return { min: 0.1, max: 1.0, optimal: 0.8 };
+    }
+  };
+
+  const range = getOptimalRange(referenceType);
+
   return (
     <TooltipProvider>
       <div className="space-y-3">
@@ -40,7 +57,12 @@ export const ReferenceStrengthSlider = ({
                     <Button
                       variant={referenceType === type.value ? "default" : "outline"}
                       size="sm"
-                      onClick={() => onTypeChange(type.value)}
+                      onClick={() => {
+                        onTypeChange(type.value);
+                        // Auto-adjust strength to optimal value for the type
+                        const newRange = getOptimalRange(type.value);
+                        onChange(newRange.optimal);
+                      }}
                       disabled={disabled}
                       className="px-2 py-1 h-6 text-xs"
                     >
@@ -67,7 +89,12 @@ export const ReferenceStrengthSlider = ({
                 <InfoIcon className="w-3 h-3 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent>
-                <p>0.1 = Subtle influence, 1.0 = Strong influence</p>
+                <div className="space-y-1">
+                  <p>Character: 0.7-0.95 (optimal: 0.85)</p>
+                  <p>Style: 0.3-0.8 (optimal: 0.6)</p>
+                  <p>Composition: 0.4-0.9 (optimal: 0.7)</p>
+                  <p className="text-xs text-muted-foreground">Higher = stronger influence</p>
+                </div>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -76,17 +103,35 @@ export const ReferenceStrengthSlider = ({
               id="reference-strength"
               value={[value]}
               onValueChange={(values) => onChange(values[0])}
-              min={0.1}
-              max={1.0}
-              step={0.1}
+              min={range.min}
+              max={range.max}
+              step={0.05}
               disabled={disabled}
               className="w-full"
             />
           </div>
-          <span className="text-xs text-muted-foreground min-w-8 text-center">
-            {value.toFixed(1)}
+          <span className={`text-xs min-w-8 text-center ${
+            Math.abs(value - range.optimal) <= 0.1 ? 'text-green-500' : 'text-muted-foreground'
+          }`}>
+            {value.toFixed(2)}
           </span>
         </div>
+
+        {/* Optimal indicator */}
+        {Math.abs(value - range.optimal) > 0.1 && (
+          <div className="text-xs text-amber-500 flex items-center gap-1">
+            <InfoIcon className="w-3 h-3" />
+            <span>Optimal for {referenceType}: {range.optimal}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange(range.optimal)}
+              className="h-4 px-1 text-xs text-amber-500 hover:text-amber-400"
+            >
+              Set
+            </Button>
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

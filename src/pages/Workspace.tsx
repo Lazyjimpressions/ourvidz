@@ -49,7 +49,7 @@ const Workspace = () => {
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
-  const [referenceStrength, setReferenceStrength] = useState(0.8); // Stronger default for character consistency
+  const [referenceStrength, setReferenceStrength] = useState(0.85); // Increased for better character consistency
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
@@ -57,7 +57,7 @@ const Workspace = () => {
   const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [numImages, setNumImages] = useState<number>(1); // Changed default from 4 to 1 for better character consistency
+  const [numImages, setNumImages] = useState<number>(1);
   
   // Use the realtime workspace hook
   const { 
@@ -182,6 +182,30 @@ const Workspace = () => {
     }
   }, [isVideoMode, quality, enhanced, activeReferences]);
 
+  // Helper function to validate reference image for character consistency
+  const validateReferenceImage = (refData: any) => {
+    // Check if it's a character reference with proper settings
+    if (refData.id === 'character' && refData.url) {
+      console.log('🎭 Validating character reference for consistency:', {
+        url: refData.url,
+        isWorkspaceAsset: refData.isWorkspaceAsset,
+        originalPrompt: refData.originalPrompt
+      });
+      
+      // Warn if reference might cause issues
+      if (refData.originalPrompt && (
+        refData.originalPrompt.toLowerCase().includes('two') ||
+        refData.originalPrompt.toLowerCase().includes('multiple') ||
+        refData.originalPrompt.toLowerCase().includes('comparison')
+      )) {
+        toast.warning('Reference image prompt contains multiple subjects - may affect consistency');
+      }
+      
+      return true;
+    }
+    return false;
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a prompt');
@@ -193,7 +217,7 @@ const Workspace = () => {
     }
 
     try {
-      console.log('🚀 Starting generation with multi-reference support:', {
+      console.log('🚀 Starting generation with enhanced character reference support:', {
         format: selectedMode,
         prompt: prompt.trim(),
         activeReferences: activeReferences.filter(ref => ref.enabled && ref.url),
@@ -218,26 +242,36 @@ const Workspace = () => {
         // For character references, use optimal settings and enhance prompt
         const characterRef = enabledReferences.find(ref => ref.id === 'character');
         if (characterRef) {
+          // Validate the character reference
+          validateReferenceImage(characterRef);
+          
           referenceMetadata.reference_type = 'character';
           referenceMetadata.character_consistency = true;
           
-          // Enhanced prompt for character consistency
+          // Simplified prompt enhancement - avoid redundancy
+          if (enhancedPrompt.toLowerCase().includes('same girl') || enhancedPrompt.toLowerCase().includes('same person')) {
+            // Use transformation-based prompts for better results
+            enhancedPrompt = enhancedPrompt.replace(/same girl/gi, 'this person');
+            enhancedPrompt = enhancedPrompt.replace(/same person/gi, 'this person');
+          }
+          
+          // Add single portrait instructions to prevent split-screen
+          if (!enhancedPrompt.includes('single portrait')) {
+            enhancedPrompt = `${enhancedPrompt}, single portrait, not comparison, not side-by-side`;
+          }
+          
+          // Only add solo/single character if not already present
           if (!enhancedPrompt.includes('solo') && !enhancedPrompt.includes('single character')) {
-            enhancedPrompt = `${enhancedPrompt}, solo, single character, one person only`;
-          }
-          if (!enhancedPrompt.includes('same person')) {
-            enhancedPrompt = `${enhancedPrompt}, same person, same facial features`;
+            enhancedPrompt = `${enhancedPrompt}, solo`;
           }
           
-          // Add negative prompts for character consistency
-          referenceMetadata.negative_prompt = 'multiple people, twins, crowd, group, two girls, multiple characters, duplicate person';
-          
-          console.log('🎭 Character reference detected, enhancing prompt:', {
+          console.log('🎭 Character reference optimization:', {
             original: prompt,
             enhanced: enhancedPrompt,
             strength: referenceStrength,
-            negativePrompt: referenceMetadata.negative_prompt
+            mode: selectedMode
           });
+          
         } else if (enabledReferences.find(ref => ref.id === 'style')) {
           referenceMetadata.reference_type = 'style';
         } else if (enabledReferences.find(ref => ref.id === 'composition')) {
@@ -267,7 +301,7 @@ const Workspace = () => {
       
       // Log successful generation start for character reference workflow
       if (enabledReferences.some(ref => ref.id === 'character')) {
-        console.log('✅ Character reference generation started with optimal settings');
+        console.log('✅ Character reference generation started with optimized settings');
       }
       
     } catch (error) {
