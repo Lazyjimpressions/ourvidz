@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -16,25 +17,8 @@ import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel'
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Info, Image, Dice6 } from 'lucide-react';
-import { PromptInfoModal } from '@/components/PromptInfoModal';
+import { Image, Dice6 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
-
-interface WorkspaceAsset {
-  id: string;
-  url: string;
-  jobId: string;
-  prompt: string;
-  type?: 'image' | 'video';
-  quality?: string;
-  modelType?: string;
-  timestamp?: Date;
-  seed?: string | number;
-  referenceStrength?: number;
-  negativePrompt?: string;
-  generationParams?: any;
-}
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -82,11 +66,8 @@ const Workspace = () => {
   
   const [isClearing, setIsClearing] = useState(false);
   
-  // Modal states
+  // Unified modal state - only one modal system
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<WorkspaceAsset | null>(null);
-  const [showPromptModal, setShowPromptModal] = useState(false);
-  const [currentPromptAsset, setCurrentPromptAsset] = useState<WorkspaceAsset | null>(null);
   
   // Generation hooks
   const {
@@ -308,50 +289,12 @@ const Workspace = () => {
     }, 100);
   };
 
+  // Unified modal handler for both images and videos
   const handleImageClick = (tile: any) => {
-    if (tile.type === 'video') {
-      setSelectedVideo({
-        id: tile.id,
-        url: tile.url,
-        jobId: tile.originalAssetId,
-        prompt: tile.prompt,
-        type: tile.type,
-        quality: tile.quality,
-        modelType: tile.modelType,
-        timestamp: tile.timestamp
-      });
-    } else {
-      const index = workspaceTiles.findIndex(t => t.id === tile.id);
-      if (index !== -1) {
-        setLightboxIndex(index);
-      }
+    const index = workspaceTiles.findIndex(t => t.id === tile.id);
+    if (index !== -1) {
+      setLightboxIndex(index);
     }
-  };
-
-  const handleCloseVideoModal = () => {
-    setSelectedVideo(null);
-  };
-
-  const handleShowPromptInfo = (tile: any) => {
-    setCurrentPromptAsset({
-      id: tile.id,
-      url: tile.url,
-      jobId: tile.originalAssetId,
-      prompt: tile.prompt,
-      type: tile.type,
-      quality: tile.quality,
-      modelType: tile.modelType,
-      timestamp: tile.timestamp,
-      seed: tile.generationParams?.seed || tile.seed,
-      referenceStrength: tile.generationParams?.reference_strength,
-      negativePrompt: tile.generationParams?.negative_prompt
-    });
-    setShowPromptModal(true);
-  };
-
-  const handleClosePromptModal = () => {
-    setShowPromptModal(false);
-    setCurrentPromptAsset(null);
   };
 
   // Reference image handlers
@@ -427,9 +370,6 @@ const Workspace = () => {
   const hasCharacterReference = activeReferences.some(ref => 
     ref.enabled && ref.id === 'character' && ref.url
   );
-
-  // Filter workspace tiles for lightbox (images only)
-  const imageTiles = workspaceTiles.filter(tile => tile.type !== 'video');
 
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
@@ -631,10 +571,10 @@ const Workspace = () => {
         )}
       </div>
 
-      {/* Workspace Content Modal */}
-      {lightboxIndex !== null && imageTiles.length > 0 && (
+      {/* Unified Modal System - WorkspaceContentModal handles everything */}
+      {lightboxIndex !== null && workspaceTiles.length > 0 && (
         <WorkspaceContentModal
-          tiles={imageTiles}
+          tiles={workspaceTiles}
           currentIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onIndexChange={setLightboxIndex}
@@ -642,11 +582,11 @@ const Workspace = () => {
             handleRemoveFromWorkspace(tileId);
             
             // Adjust lightbox index if needed
-            const newImageTiles = imageTiles.filter(tile => tile.id !== tileId);
-            if (newImageTiles.length === 0) {
+            const newTiles = workspaceTiles.filter(tile => tile.id !== tileId);
+            if (newTiles.length === 0) {
               setLightboxIndex(null);
-            } else if (lightboxIndex >= newImageTiles.length) {
-              setLightboxIndex(newImageTiles.length - 1);
+            } else if (lightboxIndex >= newTiles.length) {
+              setLightboxIndex(newTiles.length - 1);
             }
           }}
           onDeleteFromLibrary={async (originalAssetId) => {
@@ -657,11 +597,11 @@ const Workspace = () => {
                 toast.success('Deleted from library and removed from workspace');
                 
                 // Close modal if no assets left
-                const remainingImageTiles = imageTiles.filter(t => t.originalAssetId !== originalAssetId);
-                if (remainingImageTiles.length === 0) {
+                const remainingTiles = workspaceTiles.filter(t => t.originalAssetId !== originalAssetId);
+                if (remainingTiles.length === 0) {
                   setLightboxIndex(null);
-                } else if (lightboxIndex >= remainingImageTiles.length) {
-                  setLightboxIndex(remainingImageTiles.length - 1);
+                } else if (lightboxIndex >= remainingTiles.length) {
+                  setLightboxIndex(remainingTiles.length - 1);
                 }
               }
             } catch (error) {
@@ -669,68 +609,6 @@ const Workspace = () => {
               toast.error('Failed to delete from library');
             }
           }}
-        />
-      )}
-
-      {/* Video Modal */}
-      <Dialog open={!!selectedVideo} onOpenChange={handleCloseVideoModal}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-hidden">
-          <DialogHeader className="flex flex-row items-center justify-between">
-            <DialogTitle className="text-lg pr-8">
-              {selectedVideo?.prompt}
-            </DialogTitle>
-            <div className="flex items-center gap-2">
-              {selectedVideo && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleShowPromptInfo(selectedVideo)}
-                  className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-                >
-                  <Info className="h-4 w-4" />
-                </Button>
-              )}
-              <button
-                onClick={handleCloseVideoModal}
-                className="rounded-full p-1 hover:bg-gray-100 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </DialogHeader>
-          
-          {selectedVideo && (
-            <div className="flex justify-center">
-              <video
-                controls
-                className="max-w-full max-h-[70vh] rounded"
-                autoPlay
-              >
-                <source src={selectedVideo.url} type="video/mp4" />
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Prompt Info Modal */}
-      {currentPromptAsset && (
-        <PromptInfoModal
-          isOpen={showPromptModal}
-          onClose={handleClosePromptModal}
-          prompt={currentPromptAsset.prompt}
-          quality={(currentPromptAsset.quality as 'fast' | 'high') || "fast"}
-          mode={currentPromptAsset.type || 'image'}
-          timestamp={currentPromptAsset.timestamp || new Date()}
-          contentCount={1}
-          itemId={currentPromptAsset.jobId}
-          originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
-          seed={typeof currentPromptAsset.seed === 'string' ? parseInt(currentPromptAsset.seed) : currentPromptAsset.seed}
-          modelType={currentPromptAsset.modelType}
-          referenceStrength={currentPromptAsset.referenceStrength}
-          negativePrompt={currentPromptAsset.negativePrompt}
-          generationParams={currentPromptAsset.generationParams}
         />
       )}
 
