@@ -47,20 +47,17 @@ const Workspace = () => {
   );
   const [prompt, setPrompt] = useState('');
   
-  // Reference image state for image mode
+  // Multi-reference state (connected to MultiReferencePanel)
+  const [activeReferences, setActiveReferences] = useState<any[]>([]);
+  const [referenceStrength, setReferenceStrength] = useState(0.7); // Optimal for character consistency
+  
+  // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
-  const [referenceStrength, setReferenceStrength] = useState(0.5);
-  const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('style');
-  
-  // Reference image state for video mode (start/end)
-  const [startReferenceImage, setStartReferenceImage] = useState<File | null>(null);
-  const [startReferenceImageUrl, setStartReferenceImageUrl] = useState<string>('');
-  const [endReferenceImage, setEndReferenceImage] = useState<File | null>(null);
-  const [endReferenceImageUrl, setEndReferenceImageUrl] = useState<string>('');
+  const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [numImages, setNumImages] = useState<number>(1);
+  const [numImages, setNumImages] = useState<number>(4); // Default 4 for character reference workflow
   
   // Use the realtime workspace hook
   const { 
@@ -140,11 +137,9 @@ const Workspace = () => {
     if (isVideoMode) {
       setReferenceImage(null);
       setReferenceImageUrl('');
+      setActiveReferences([]);
     } else {
-      setStartReferenceImage(null);
-      setStartReferenceImageUrl('');
-      setEndReferenceImage(null);
-      setEndReferenceImageUrl('');
+      setActiveReferences([]);
     }
   }, [isVideoMode]);
 
@@ -156,16 +151,26 @@ const Workspace = () => {
       } else {
         setSelectedMode(quality === 'high' ? 'video_high' : 'video_fast');
       }
-      // Reset image quantity for video mode
       setNumImages(1);
     } else {
       if (enhanced) {
         setSelectedMode(quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced');
       } else {
-        setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+        // For character reference, prefer high quality SDXL for better consistency
+        const hasCharacterReference = activeReferences.some(ref => 
+          ref.enabled && ref.id === 'character' && ref.url
+        );
+        if (hasCharacterReference) {
+          setSelectedMode('sdxl_image_high'); // Force high quality for character references
+          if (quality !== 'high') {
+            setQuality('high'); // Auto-upgrade quality for character consistency
+          }
+        } else {
+          setSelectedMode(quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+        }
       }
     }
-  }, [isVideoMode, quality, enhanced]);
+  }, [isVideoMode, quality, enhanced, activeReferences]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -178,32 +183,73 @@ const Workspace = () => {
     }
 
     try {
-      console.log('🚀 Starting generation with:', {
+      console.log('🚀 Starting generation with multi-reference support:', {
         format: selectedMode,
         prompt: prompt.trim(),
-        referenceImage: referenceImage?.name,
+        activeReferences: activeReferences.filter(ref => ref.enabled && ref.url),
         referenceStrength,
-        referenceType
+        numImages
       });
 
+      // Build reference metadata from MultiReferencePanel
+      const enabledReferences = activeReferences.filter(ref => ref.enabled && ref.url);
+      const referenceMetadata: any = {
+        model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b',
+        num_images: numImages
+      };
+
+      // Add reference data if we have active references
+      if (enabledReferences.length > 0) {
+        referenceMetadata.reference_image = true;
+        referenceMetadata.reference_strength = referenceStrength;
+        
+        // For character references, use optimal settings
+        const characterRef = enabledReferences.find(ref => ref.id === 'character');
+        if (characterRef) {
+          referenceMetadata.reference_type = 'character';
+          referenceMetadata.character_consistency = true;
+          // Add negative prompt for character consistency
+          const enhancedPrompt = prompt.includes('same person') 
+            ? prompt 
+            : `${prompt}, same person, same facial features`;
+          
+          console.log('🎭 Character reference detected, enhancing prompt:', {
+            original: prompt,
+            enhanced: enhancedPrompt,
+            strength: referenceStrength
+          });
+        } else if (enabledReferences.find(ref => ref.id === 'style')) {
+          referenceMetadata.reference_type = 'style';
+        } else if (enabledReferences.find(ref => ref.id === 'composition')) {
+          referenceMetadata.reference_type = 'composition';
+        }
+
+        // Use the first enabled reference URL (prioritize character > style > composition)
+        const primaryReference = enabledReferences.find(ref => ref.id === 'character') ||
+                               enabledReferences.find(ref => ref.id === 'style') ||
+                               enabledReferences[0];
+        
+        referenceMetadata.reference_url = primaryReference.url;
+        referenceMetadata.reference_source = primaryReference.isWorkspaceAsset ? 'workspace' : 'upload';
+      }
+
+      // Build generation request
       const generationRequest = {
         format: selectedMode,
         prompt: prompt.trim(),
-        referenceImageUrl: isVideoMode ? undefined : referenceImageUrl || undefined,
-        startReferenceImageUrl: isVideoMode ? startReferenceImageUrl || undefined : undefined,
-        endReferenceImageUrl: isVideoMode ? endReferenceImageUrl || undefined : undefined,
-        metadata: {
-          reference_image: referenceImage || startReferenceImage || endReferenceImage ? true : false,
-          reference_strength: referenceStrength,
-          reference_type: referenceType,
-          model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b',
-          num_images: numImages
-        }
+        referenceImageUrl: enabledReferences.length > 0 ? enabledReferences[0].url : undefined,
+        metadata: referenceMetadata
       };
 
       await generateContent(generationRequest);
 
       toast.success('Generation started successfully!');
+      
+      // Log successful generation start for character reference workflow
+      if (enabledReferences.some(ref => ref.id === 'character')) {
+        console.log('✅ Character reference generation started with optimal settings');
+      }
+      
     } catch (error) {
       console.error('❌ Generation failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Generation failed';
@@ -452,30 +498,20 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Multi-Reference Panel */}
+        {/* Multi-Reference Panel - Connected to Generation Pipeline */}
         <MultiReferencePanel
           mode={isVideoMode ? 'video' : 'image'}
           strength={referenceStrength}
           onStrengthChange={setReferenceStrength}
-          onReferencesChange={(references) => {
-            // Handle multi-reference state updates
-            console.log('References updated:', references);
-          }}
-          onClear={() => {
-            if (isVideoMode) {
-              setStartReferenceImageUrl('');
-              setEndReferenceImageUrl('');
-            } else {
-              setReferenceImageUrl('');
-            }
-          }}
+          onReferencesChange={handleReferencesChange}
+          onClear={handleClearReferences}
         />
       </div>
 
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls */}
+      {/* Bottom Input Controls - Simplified (No Reference Upload) */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -483,11 +519,9 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onBeginningFrameUpload={() => {/* Enhanced reference upload handles this */}}
-            onEndingFrameUpload={() => {/* Enhanced reference upload handles this */}}
             onSwitchToImage={() => {
               setIsVideoMode(false);
-              setNumImages(1); // Reset to 1 when switching from video
+              setNumImages(4); // Reset to 4 for image mode
             }}
             quality={quality}
             setQuality={setQuality}
@@ -501,7 +535,6 @@ const Workspace = () => {
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
-            onReferenceImageUpload={() => {/* TODO: implement reference image upload */}}
             onSwitchToVideo={() => setIsVideoMode(true)}
             quality={quality}
             setQuality={setQuality}
