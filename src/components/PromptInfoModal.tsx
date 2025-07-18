@@ -59,16 +59,24 @@ export const PromptInfoModal = ({
   };
 
   const getModelIcon = () => {
-    if (modelType?.includes('sdxl') || modelType?.includes('SDXL')) {
+    if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
       return quality === 'high' ? <Crown className="h-4 w-4" /> : <Zap className="h-4 w-4" />;
     }
     return mode === 'image' ? <Image className="h-4 w-4" /> : <Video className="h-4 w-4" />;
   };
 
   const getModelName = () => {
-    if (modelType?.includes('sdxl') || modelType?.includes('SDXL')) {
+    // Check for SDXL in modelType first
+    if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
       return 'SDXL';
     }
+    
+    // Check for Enhanced models
+    if (modelType?.includes('Enhanced') || modelType?.includes('7B')) {
+      return 'Enhanced 7B';
+    }
+    
+    // Default fallback
     return 'WAN 2.1';
   };
 

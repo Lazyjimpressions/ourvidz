@@ -41,6 +41,6 @@ export interface MediaTile {
   selectedImageIndices?: number[];
   // Enhanced workspace metadata for dragging
   enhancedPrompt?: string;
-  seed?: string;
+  seed?: string | number;
   generationParams?: Record<string, any>;
 }

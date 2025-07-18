@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -31,6 +30,9 @@ interface WorkspaceAsset {
   quality?: string;
   modelType?: string;
   timestamp?: Date;
+  seed?: string | number;
+  referenceStrength?: number;
+  negativePrompt?: string;
 }
 
 const Workspace = () => {
@@ -338,7 +340,10 @@ const Workspace = () => {
       type: tile.type,
       quality: tile.quality,
       modelType: tile.modelType,
-      timestamp: tile.timestamp
+      timestamp: tile.timestamp,
+      seed: tile.generationParams?.seed || tile.seed,
+      referenceStrength: tile.generationParams?.reference_strength,
+      negativePrompt: tile.generationParams?.negative_prompt
     });
     setShowPromptModal(true);
   };
@@ -720,6 +725,10 @@ const Workspace = () => {
           contentCount={1}
           itemId={currentPromptAsset.jobId}
           originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
+          seed={currentPromptAsset.seed}
+          modelType={currentPromptAsset.modelType}
+          referenceStrength={currentPromptAsset.referenceStrength}
+          negativePrompt={currentPromptAsset.negativePrompt}
         />
       )}
 
