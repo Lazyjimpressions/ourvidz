@@ -42,4 +42,5 @@ export interface MediaTile {
   // Enhanced workspace metadata for dragging
   enhancedPrompt?: string;
   seed?: string;
+  generationParams?: Record<string, any>;
 }

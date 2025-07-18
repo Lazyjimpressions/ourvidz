@@ -15,6 +15,9 @@ interface MediaTile {
   modelType?: string;
   duration?: number;
   thumbnailUrl?: string;
+  enhancedPrompt?: string;
+  seed?: string;
+  generationParams?: Record<string, any>;
 }
 
 export const useRealtimeWorkspace = () => {
@@ -297,7 +300,10 @@ export const useRealtimeWorkspace = () => {
           prompt: asset.prompt,
           timestamp: asset.createdAt,
           quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.modelType
+          modelType: asset.modelType,
+          enhancedPrompt: asset.enhancedPrompt,
+          seed: asset.metadata?.seed,
+          generationParams: asset.metadata
         });
       }
     } else if (asset.type === 'video' && asset.url) {
@@ -310,7 +316,10 @@ export const useRealtimeWorkspace = () => {
         timestamp: asset.createdAt,
         quality: (asset.quality as 'fast' | 'high') || 'fast',
         duration: asset.duration,
-        thumbnailUrl: asset.thumbnailUrl
+        thumbnailUrl: asset.thumbnailUrl,
+        enhancedPrompt: asset.enhancedPrompt,
+        seed: asset.metadata?.seed,
+        generationParams: asset.metadata
       });
     }
     

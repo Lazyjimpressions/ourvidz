@@ -10,6 +10,7 @@ export interface UnifiedAsset {
   type: 'image' | 'video';
   title?: string;
   prompt: string;
+  enhancedPrompt?: string;
   thumbnailUrl?: string;
   url?: string;
   status: string;
@@ -23,6 +24,7 @@ export interface UnifiedAsset {
   error?: string;
   modelType?: string;
   isSDXL?: boolean;
+  metadata?: Record<string, any>;
   // Individual image record now - no arrays needed
 }
 
@@ -604,6 +606,7 @@ export class AssetService {
           type: 'image' as const,
           title: image.title || undefined,
           prompt: image.prompt,
+          enhancedPrompt: image.enhanced_prompt,
           thumbnailUrl,
           url,
           status: image.status,
@@ -614,6 +617,7 @@ export class AssetService {
           projectTitle: (image.project as any)?.title,
           modelType,
           isSDXL,
+          metadata: image.metadata as Record<string, any>,
           error,
         };
 
@@ -681,6 +685,7 @@ export class AssetService {
           id: video.id,
           type: 'video' as const,
           prompt: (video.project as any)?.title || 'Untitled Video',
+          enhancedPrompt: undefined, // Videos don't have enhanced prompts currently
           thumbnailUrl: thumbnailUrl || video.thumbnail_url || undefined,
           url,
           status: video.status || 'draft',
@@ -690,6 +695,7 @@ export class AssetService {
           projectTitle: (video.project as any)?.title,
           duration: video.duration || undefined,
           resolution: video.resolution || undefined,
+          metadata: video.metadata as Record<string, any>,
           error
         };
       })
