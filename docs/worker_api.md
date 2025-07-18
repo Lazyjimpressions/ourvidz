@@ -6,735 +6,558 @@
 
 ---
 
-## **🎯 Quick Reference**
+## **🎯 Worker System Overview**
 
-### **Active Job Types (10 Total)**
-```yaml
-SDXL Jobs (2) - Flexible Quantities (1, 3, or 6 images):
-  sdxl_image_fast: 3-8s per image - 1024x1024 PNG
-  sdxl_image_high: 5-15s per image - 1024x1024 PNG
+OurVidz operates with a dual-worker architecture:
 
-WAN Standard Jobs (4) - Single Files:
-  image_fast: 73s - 480x832 PNG
-  image_high: 90s - 480x832 PNG  
-  video_fast: 241.4s - 480x832 MP4 (5s duration)
-  video_high: 360s - 480x832 MP4 (6s duration)
+1. **SDXL Worker** - High-quality image generation with flexible quantities
+2. **WAN Worker** - Video generation and enhanced image processing
 
-WAN Enhanced Jobs (4) - AI-Enhanced:
-  image7b_fast_enhanced: 233.5s - 480x832 PNG (Qwen enhanced)
-  image7b_high_enhanced: 104s - 480x832 PNG (Qwen enhanced)
-  video7b_fast_enhanced: 266.1s - 480x832 MP4 (Qwen enhanced)
-  video7b_high_enhanced: 361s - 480x832 MP4 (Qwen enhanced)
-```
-
-### **NEW: Reference Image Support**
-```yaml
-SDXL Reference Types:
-  - Style Reference: Transfer visual style from reference image
-  - Composition Reference: Use reference for layout/structure guidance
-  - Character Reference: Maintain character consistency across generations
-
-Video Reference Support:
-  - Start Frame: Reference image for first video frame
-  - End Frame: Reference image for last video frame
-  - Both: Smooth transition between start and end references
-
-Reference Parameters:
-  - Strength: 0.0-1.0 (controls influence level)
-  - Type: style/composition/character (SDXL only)
-  - Optional: All reference images are optional
-```
+Both workers use standardized callback parameters and comprehensive metadata management.
 
 ---
 
-## **🚀 Job Creation API**
+## **📤 Job Queue System**
 
-### **Endpoint: `POST /api/queue-job`**
-**Authentication:** Required (JWT token)
+### **Queue Structure**
+- **`sdxl_queue`** - SDXL image generation jobs
+- **`wan_queue`** - WAN video and enhanced image jobs
 
-### **Request Payload:**
-```typescript
+### **Job Payload Format (Standardized)**
+
+#### **SDXL Job Payload**
+```json
 {
-  jobType: string,           // One of 10 job types above
-  metadata?: {
-    prompt?: string,         // User input prompt
-    credits?: number,        // Credits consumed (default: 1)
-    bucket?: string,         // Storage bucket (auto-detected)
-    
-    // NEW: Reference Image Support
-    reference_image_url?: string,        // SDXL reference image URL
-    start_reference_image_url?: string,  // Video start frame URL
-    end_reference_image_url?: string,    // Video end frame URL
-    reference_strength?: number,         // 0.0-1.0 (default: 0.5)
-    reference_type?: string,             // 'style'|'composition'|'character'
-    
-    // NEW: Flexible Quantities (SDXL only)
-    num_images?: number,                 // 1, 3, or 6 (default: 1)
-    
-    // Enhanced Features
-    negative_prompt?: string,            // SDXL only
-    similarity_strength?: number,        // Alternative to reference_strength
+  "id": "uuid",
+  "type": "sdxl_image_fast" | "sdxl_image_high",
+  "prompt": "string",
+  "config": {
+    "size": "480*832",
+    "sample_steps": 15 | 25,
+    "sample_guide_scale": 6.0 | 7.5,
+    "sample_solver": "unipc",
+    "sample_shift": 5.0,
+    "frame_num": 1,
+    "enhance_prompt": false,
+    "seed": 123456789,
+    "expected_time": 4 | 8,
+    "content_type": "image",
+    "file_extension": "png",
+    "num_images": 1 | 3 | 6
   },
-  projectId?: string,        // Optional project reference
-  videoId?: string,          // Optional video ID
-  imageId?: string           // Optional image ID
+  "user_id": "uuid",
+  "created_at": "2025-07-16T...",
+  "negative_prompt": "string",
+  "video_id": null,
+  "image_id": "uuid",
+  "character_id": "uuid",
+  "model_variant": "lustify_sdxl",
+  "bucket": "sdxl_image_fast" | "sdxl_image_high",
+  "metadata": {
+    "model_variant": "lustify_sdxl",
+    "queue": "sdxl_queue",
+    "negative_prompt": "string",
+    "seed": 123456789,
+    "num_images": 1 | 3 | 6,
+    "reference_image_url": "string",
+    "reference_type": "style" | "composition" | "character",
+    "reference_strength": 0.1-1.0,
+    "expected_generation_time": 4 | 8,
+    "dual_worker_routing": true,
+    "negative_prompt_supported": true,
+    "edge_function_version": "2.1.0"
+  }
 }
 ```
 
-### **Response:**
-```typescript
+#### **WAN Job Payload**
+```json
 {
-  success: boolean,
-  job: {
-    id: string,              // Database job ID
-    user_id: string,         // User identifier
-    job_type: string,        // Job type
-    status: 'queued',        // Initial status
-    created_at: string,      // ISO timestamp
-    metadata: object         // Job metadata including reference info
+  "id": "uuid",
+  "type": "image_fast" | "image_high" | "video_fast" | "video_high" | "image7b_fast_enhanced" | "image7b_high_enhanced" | "video7b_fast_enhanced" | "video7b_high_enhanced",
+  "prompt": "string",
+  "config": {
+    "size": "480*832",
+    "sample_steps": 25 | 50,
+    "sample_guide_scale": 6.5 | 7.5,
+    "sample_solver": "unipc",
+    "sample_shift": 5.0,
+    "frame_num": 1 | 83,
+    "enhance_prompt": true | false,
+    "seed": 123456789,
+    "expected_time": 25-240,
+    "content_type": "image" | "video",
+    "file_extension": "png" | "mp4",
+    "num_images": 1
   },
-  message: string,           // Success message
-  queueLength: number,       // Current queue depth
-  modelVariant: string,      // Model being used
-  isSDXL: boolean,          // SDXL vs WAN job
-  negativePromptSupported: boolean,  // SDXL only
-  referenceImageSupported: boolean,  // NEW: Reference support flag
-  flexibleQuantitiesSupported: boolean  // NEW: Quantity support flag
-}
-```
-
-### **Example Requests:**
-
-#### **SDXL with Reference Image:**
-```typescript
-// SDXL Fast with Style Reference (3 images)
-const response = await fetch('/api/queue-job', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    jobType: 'sdxl_image_fast',
-    metadata: {
-      prompt: 'beautiful woman in garden',
-      credits: 1,
-      reference_image_url: 'https://storage.example.com/reference.jpg',
-      reference_strength: 0.7,
-      reference_type: 'style',
-      num_images: 3,
-      negative_prompt: 'blurry, low quality, watermark'
-    }
-  })
-});
-```
-
-#### **Video with Reference Frames:**
-```typescript
-// WAN Video with Start/End References
-const response = await fetch('/api/queue-job', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    jobType: 'video_fast',
-    metadata: {
-      prompt: 'woman walking in park',
-      credits: 1,
-      start_reference_image_url: 'https://storage.example.com/start.jpg',
-      end_reference_image_url: 'https://storage.example.com/end.jpg',
-      reference_strength: 0.6
-    }
-  })
-});
-```
-
-#### **Standard SDXL (No Reference):**
-```typescript
-// SDXL High Quality (6 images, no reference)
-const response = await fetch('/api/queue-job', {
-  method: 'POST',
-  headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    jobType: 'sdxl_image_high',
-    metadata: {
-      prompt: 'beautiful woman in garden',
-      credits: 2,
-      num_images: 6,
-      negative_prompt: 'blurry, low quality, watermark, text, logo'
-    }
-  })
-});
-```
-
----
-
-## **📊 Job Status & Monitoring**
-
-### **Job Status Values:**
-```yaml
-queued: Job created, waiting in queue
-processing: Job picked up by worker, generating content
-completed: Job finished successfully
-failed: Job failed with error
-```
-
-### **Real-time Status Updates:**
-Workers automatically call back to update job status. Frontend should poll for updates:
-
-```typescript
-// Poll job status every 2-5 seconds
-const checkJobStatus = async (jobId: string) => {
-  const response = await fetch(`/api/jobs/${jobId}`);
-  const job = await response.json();
-  
-  switch (job.status) {
-    case 'completed':
-      // Handle completion - assets available
-      handleJobCompletion(job);
-      break;
-    case 'failed':
-      // Handle failure - show error
-      handleJobFailure(job);
-      break;
-    case 'processing':
-      // Update progress UI
-      updateProgressUI(job);
-      break;
+  "user_id": "uuid",
+  "created_at": "2025-07-16T...",
+  "video_id": "uuid",
+  "image_id": "uuid",
+  "character_id": "uuid",
+  "model_variant": "wan_2_1_1_3b",
+  "bucket": "image_fast" | "image_high" | "video_fast" | "video_high" | "image7b_fast_enhanced" | "image7b_high_enhanced" | "video7b_fast_enhanced" | "video7b_high_enhanced",
+  "metadata": {
+    "model_variant": "wan_2_1_1_3b",
+    "queue": "wan_queue",
+    "seed": 123456789,
+    "num_images": 1,
+    "reference_image_url": "string",
+    "reference_type": "style" | "composition" | "character",
+    "reference_strength": 0.1-1.0,
+    "expected_generation_time": 25-240,
+    "dual_worker_routing": true,
+    "negative_prompt_supported": false,
+    "edge_function_version": "2.1.0"
   }
-};
-```
-
----
-
-## **📁 Asset Handling**
-
-### **SDXL Jobs (Flexible Quantities):**
-```typescript
-// SDXL returns array of 1, 3, or 6 image URLs
-const handleSDXLCompletion = (job) => {
-  const imageUrls = job.metadata.all_assets; // Array of URLs
-  const numImages = imageUrls.length; // 1, 3, or 6
-  const primaryImage = job.metadata.primary_asset; // First image
-  
-  // Display images in grid based on quantity
-  if (numImages === 1) {
-    displaySingleImage(primaryImage);
-  } else {
-    displayImageGrid(imageUrls);
-  }
-  
-  // Store in database
-  await saveImagesToDatabase(imageUrls, job.id);
-};
-```
-
-### **WAN Jobs (Single Files):**
-```typescript
-// WAN returns single file URL
-const handleWANCompletion = (job) => {
-  const fileUrl = job.metadata.primary_asset; // Single URL
-  
-  if (job.job_type.includes('video')) {
-    // Handle video
-    displayVideoPlayer(fileUrl);
-    await saveVideoToDatabase(fileUrl, job.id);
-  } else {
-    // Handle image
-    displayImage(fileUrl);
-    await saveImageToDatabase(fileUrl, job.id);
-  }
-};
-```
-
----
-
-## **🎨 Job Type Details**
-
-### **SDXL Image Generation (Enhanced)**
-```yaml
-Models: LUSTIFY SDXL v2.0 (NSFW-capable)
-Resolution: 1024x1024 (square)
-Format: PNG
-Batch Size: 1, 3, or 6 images per job (user-selectable)
-Quality: Excellent NSFW content
-
-Performance (RTX 6000 ADA):
-  sdxl_image_fast: 3-8s per image
-  sdxl_image_high: 5-15s per image
-  Total time scales linearly with quantity
-
-Reference Image Support:
-  - Style Transfer: Transfer visual style from reference
-  - Composition Guidance: Use reference for layout
-  - Character Consistency: Maintain character features
-  - Strength Control: 0.0-1.0 influence level
-
-Storage Buckets:
-  sdxl_image_fast: 5MB limit per image
-  sdxl_image_high: 10MB limit per image
-
-Frontend Handling:
-  - Display images in grid layout (1, 3, or 6)
-  - Allow user to select preferred image
-  - Store all images in user library
-  - Enable download of individual images
-  - Show reference image preview if used
-```
-
-### **WAN Video Generation (Enhanced)**
-```yaml
-Models: WAN 2.1 T2V 1.3B
-Resolution: 480x832 (portrait)
-Format: MP4
-Duration: 5-6 seconds
-Quality: Good to excellent
-
-Performance:
-  video_fast: 241.4s average (4m 1s)
-  video_high: 360s average (6m)
-  video7b_fast_enhanced: 266.1s average (4m 26s)
-  video7b_high_enhanced: 361s average (6m 1s)
-
-Reference Frame Support:
-  - Start Frame: Reference image for first video frame
-  - End Frame: Reference image for last video frame
-  - Both Frames: Smooth transition between references
-  - Optional: Can use start only, end only, both, or none
-
-Storage Buckets:
-  video_fast: 50MB limit
-  video_high: 200MB limit
-  video7b_fast_enhanced: 100MB limit
-  video7b_high_enhanced: 100MB limit
-
-Frontend Handling:
-  - Display video player with controls
-  - Show generation progress (0-100%)
-  - Enable download of MP4 file
-  - Store in user video library
-  - Show reference frame previews if used
-```
-
-### **WAN Image Generation (Enhanced)**
-```yaml
-Models: WAN 2.1 T2V 1.3B
-Resolution: 480x832 (portrait)
-Format: PNG
-Quality: Backup images (not primary)
-
-Performance:
-  image_fast: 73s (estimated)
-  image_high: 90s (estimated)
-  image7b_fast_enhanced: 233.5s (Qwen enhanced)
-  image7b_high_enhanced: 104s (Qwen enhanced)
-
-Storage Buckets:
-  image_fast: 5MB limit
-  image_high: 10MB limit
-  image7b_fast_enhanced: 20MB limit
-  image7b_high_enhanced: 20MB limit
-
-Frontend Handling:
-  - Display single image
-  - Enable download
-  - Store in user image library
-```
-
----
-
-## **🖼️ Reference Image System**
-
-### **SDXL Reference Types:**
-
-#### **Style Reference:**
-```yaml
-Purpose: Transfer visual style from reference image
-Use Case: Maintain consistent artistic style across generations
-Strength Range: 0.3-0.8 (recommended)
-Example: Use painting style reference for consistent art direction
-```
-
-#### **Composition Reference:**
-```yaml
-Purpose: Use reference image for layout and structure guidance
-Use Case: Maintain similar framing, positioning, or scene layout
-Strength Range: 0.5-0.9 (recommended)
-Example: Use photo reference for consistent camera angle and framing
-```
-
-#### **Character Reference:**
-```yaml
-Purpose: Maintain character consistency across generations
-Use Case: Keep same character appearance in different scenes
-Strength Range: 0.4-0.7 (recommended)
-Example: Use character portrait for consistent facial features
-```
-
-### **Video Reference Frames:**
-
-#### **Start Frame Reference:**
-```yaml
-Purpose: Set the first frame of the video
-Use Case: Ensure video starts with specific scene or character
-Strength Range: 0.5-0.8 (recommended)
-Example: Use character close-up for video opening
-```
-
-#### **End Frame Reference:**
-```yaml
-Purpose: Set the last frame of the video
-Use Case: Ensure video ends with specific scene or pose
-Strength Range: 0.5-0.8 (recommended)
-Example: Use action pose for video conclusion
-```
-
-### **Reference Image Requirements:**
-```yaml
-Format: JPEG, PNG, or WebP
-Size: Maximum 10MB per image
-Resolution: Any size (auto-resized to target)
-Security: Must be from authorized domains
-Validation: Automatic format and size validation
-```
-
-### **Reference Image Upload Flow:**
-```typescript
-// 1. Upload reference image
-const uploadReferenceImage = async (file) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  
-  const response = await fetch('/api/upload-reference', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
-    body: formData
-  });
-  
-  const result = await response.json();
-  return result.url; // Returns storage URL
-};
-
-// 2. Use in job creation
-const createJobWithReference = async (jobType, prompt, referenceUrl, strength, type) => {
-  const response = await fetch('/api/queue-job', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({
-      jobType,
-      metadata: {
-        prompt,
-        reference_image_url: referenceUrl,
-        reference_strength: strength,
-        reference_type: type
-      }
-    })
-  });
-  
-  return response.json();
-};
-```
-
----
-
-## **🔧 Enhanced Jobs (Qwen 7B)**
-
-### **What Enhanced Jobs Do:**
-```yaml
-Input: "woman walking"
-Output: "一位穿着简约白色连衣裙的东方女性在阳光明媚的公园小径上散步。她的头发自然披肩，步伐轻盈。背景中有绿树和鲜花点缀的小道，阳光透过树叶洒下斑驳光影。镜头采用跟随镜头，捕捉她自然行走的姿态。纪实摄影风格。中景镜头。"
-
-Benefits:
-  - 3,400% prompt expansion (75 → 2,627 characters)
-  - Professional cinematic descriptions
-  - Enhanced anatomical accuracy
-  - Better visual quality and detail
-  - NSFW-optimized content enhancement
-
-Performance Overhead:
-  - 14-112s additional processing time
-  - Qwen 7B model loading and enhancement
-  - Higher quality output justifies time cost
-```
-
-### **When to Use Enhanced Jobs:**
-```yaml
-Recommended:
-  - Professional content creation
-  - High-quality output requirements
-  - Complex scene descriptions
-  - NSFW content with anatomical accuracy
-
-Not Recommended:
-  - Quick previews or iterations
-  - Simple prompts that work well as-is
-  - Time-sensitive content creation
-```
-
----
-
-## **🚨 Error Handling**
-
-### **Common Error Scenarios:**
-```yaml
-Job Creation Errors:
-  - Invalid job type: Return 400 with valid job types list
-  - Authentication failed: Return 401
-  - Redis queue full: Return 503 with retry guidance
-  - User credits insufficient: Return 402 with upgrade prompt
-  - Invalid reference image: Return 400 with validation details
-  - Invalid quantity (SDXL): Return 400 (only 1, 3, or 6 allowed)
-
-Job Processing Errors:
-  - Model loading failed: Retry automatically
-  - Generation timeout: Mark as failed after 15 minutes
-  - Storage upload failed: Retry with exponential backoff
-  - GPU memory issues: Worker auto-restart
-  - Reference image download failed: Continue without reference
-
-Frontend Error Handling:
-  - Show user-friendly error messages
-  - Provide retry options where appropriate
-  - Log errors for debugging
-  - Graceful degradation for partial failures
-  - Reference image preview failures
-```
-
-### **Error Response Format:**
-```typescript
-{
-  success: false,
-  error: string,           // User-friendly error message
-  details?: string,        // Technical details for debugging
-  retryable?: boolean,     // Whether retry is recommended
-  suggestedAction?: string, // What user should do
-  referenceImageError?: boolean, // NEW: Reference image specific error
-  invalidQuantity?: boolean     // NEW: Quantity validation error
 }
 ```
 
 ---
 
-## **📈 Performance Monitoring**
+## **📥 Callback System (Standardized)**
 
-### **Key Metrics to Track:**
-```yaml
-Job Success Rate: >95% target
-Average Generation Times:
-  - SDXL fast (1 image): 3-8s
-  - SDXL fast (3 images): 9-24s
-  - SDXL fast (6 images): 18-48s
-  - SDXL high (1 image): 5-15s
-  - SDXL high (3 images): 15-45s
-  - SDXL high (6 images): 30-90s
-  - WAN video_fast: 241.4s
-  - WAN video_high: 360s
-  - Enhanced jobs: +14-112s overhead
-
-Reference Image Performance:
-  - Download time: <5s per reference
-  - Processing overhead: +10-30% generation time
-  - Success rate: >98% for valid references
-
-Queue Performance:
-  - sdxl_queue: 2-second polling
-  - wan_queue: 5-second polling
-  - Average queue depth: <10 jobs
-  - Max queue wait time: <5 minutes
-
-System Health:
-  - GPU memory usage: <35GB peak
-  - Worker uptime: >99%
-  - Storage bucket availability: 100%
-  - API response time: <500ms
-  - Reference image storage: <1GB per user
+### **Callback Endpoint**
+```
+POST /functions/v1/job-callback
 ```
 
-### **Frontend Monitoring:**
-```typescript
-// Track job performance with reference images
-const trackJobPerformance = (jobType, startTime, endTime, hasReference) => {
-  const duration = endTime - startTime;
-  analytics.track('job_completed', {
-    jobType,
-    duration,
-    success: true,
-    hasReference,
-    referenceType: hasReference ? jobType.reference_type : null
-  });
-};
-
-// Monitor queue health
-const checkQueueHealth = async () => {
-  const response = await fetch('/api/queue-status');
-  const status = await response.json();
-  
-  if (status.queueDepth > 10) {
-    showQueueWarning('High queue volume, expect longer wait times');
+### **Callback Payload Format (Standardized)**
+```json
+{
+  "job_id": "uuid",
+  "status": "processing" | "completed" | "failed",
+  "assets": ["url1", "url2", "url3"],
+  "error_message": "string",
+  "enhancedPrompt": "string",
+  "metadata": {
+    "seed": 123456789,
+    "generation_time": 15.5,
+    "num_images": 3
   }
-};
+}
+```
 
-// Track reference image usage
-const trackReferenceUsage = (referenceType, strength, success) => {
-  analytics.track('reference_image_used', {
-    referenceType,
-    strength,
-    success
-  });
-};
+### **Callback Response**
+```json
+{
+  "success": true,
+  "message": "Job callback processed successfully with standardized parameters",
+  "debug": {
+    "job_id": "uuid",
+    "jobStatus": "completed",
+    "jobType": "sdxl_image_fast",
+    "format": "image",
+    "quality": "fast",
+    "isSDXL": true,
+    "isEnhanced": false,
+    "assetsProcessed": 3,
+    "processingTimestamp": "2025-07-16T..."
+  }
+}
 ```
 
 ---
 
-## **🔗 Integration Examples**
+## **🎨 SDXL Worker Specifications**
 
-### **Complete Job Flow with Reference Images:**
-```typescript
-// 1. Upload reference image
-const uploadAndCreateJob = async (jobType, prompt, referenceFile, strength, type) => {
-  // Upload reference image first
-  const referenceUrl = await uploadReferenceImage(referenceFile);
-  
-  // Create job with reference
-  const response = await fetch('/api/queue-job', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({
-      jobType,
-      metadata: {
-        prompt,
-        reference_image_url: referenceUrl,
-        reference_strength: strength,
-        reference_type: type,
-        num_images: 3 // For SDXL
-      }
-    })
-  });
-  
-  const result = await response.json();
-  if (result.success) {
-    return result.job.id;
-  } else {
-    throw new Error(result.error);
-  }
-};
+### **Model Configuration**
+- **Model Path**: `/workspace/models/sdxl-lustify/lustifySDXLNSFWSFW_v20.safetensors`
+- **Pipeline**: StableDiffusionXLPipeline
+- **VRAM**: 48GB RTX 6000 ADA
 
-// 2. Monitor progress
-const monitorJob = async (jobId) => {
-  const interval = setInterval(async () => {
-    const response = await fetch(`/api/jobs/${jobId}`);
-    const job = await response.json();
-    
-    updateProgressUI(job);
-    
-    if (job.status === 'completed') {
-      clearInterval(interval);
-      handleJobCompletion(job);
-    } else if (job.status === 'failed') {
-      clearInterval(interval);
-      handleJobFailure(job);
-    }
-  }, 2000); // Poll every 2 seconds
-};
+### **Job Types Supported**
+| Job Type | Quality | Steps | Guidance | Time | Quantity |
+|----------|---------|-------|----------|------|----------|
+| `sdxl_image_fast` | Fast | 15 | 6.0 | 3-8s | 1,3,6 |
+| `sdxl_image_high` | High | 25 | 7.5 | 9-24s | 1,3,6 |
 
-// 3. Handle completion
-const handleJobCompletion = (job) => {
-  if (job.job_type.startsWith('sdxl_')) {
-    // Handle flexible quantity batch
-    const imageUrls = job.metadata.all_assets;
-    const numImages = imageUrls.length;
-    
-    if (numImages === 1) {
-      displaySingleImage(imageUrls[0]);
-    } else {
-      displayImageGrid(imageUrls);
-    }
-  } else {
-    // Handle single file
-    const fileUrl = job.metadata.primary_asset;
-    if (job.job_type.includes('video')) {
-      displayVideoPlayer(fileUrl);
-    } else {
-      displayImage(fileUrl);
-    }
-  }
-};
+### **Performance Metrics**
+- **1 Image**: 3-8 seconds
+- **3 Images**: 9-24 seconds
+- **6 Images**: 18-48 seconds
+
+### **Key Features**
+- **Flexible Quantities**: User-selectable 1, 3, or 6 images per batch
+- **Image-to-Image**: Support for style, composition, and character references
+- **Seed Control**: Reproducible generation with user-controlled seeds
+- **Enhanced Negative Prompts**: Intelligent generation with multi-party scene detection
+- **Batch Processing**: Efficient multi-image generation
+
+### **Reference Image Support**
+```python
+# Reference image parameters
+reference_image_url = "https://storage.example.com/reference.jpg"
+reference_type = "style" | "composition" | "character"
+reference_strength = 0.1-1.0
+
+# Image-to-image generation
+if reference_image_url:
+    # Load and process reference image
+    reference_image = load_reference_image(reference_image_url)
+    # Apply reference influence based on type and strength
+    result = generate_with_reference(prompt, reference_image, reference_type, reference_strength)
 ```
 
-### **Video with Reference Frames:**
-```typescript
-// Create video job with start/end references
-const createVideoWithReferences = async (prompt, startRef, endRef, strength) => {
-  const response = await fetch('/api/queue-job', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({
-      jobType: 'video_fast',
-      metadata: {
-        prompt,
-        start_reference_image_url: startRef,
-        end_reference_image_url: endRef,
-        reference_strength: strength
-      }
-    })
-  });
-  
-  return response.json();
-};
+### **Enhanced Negative Prompt Generation**
+```python
+def generate_negative_prompt_for_sdxl(user_prompt):
+    # Priority 1: Critical Quality (Always Included)
+    critical_negatives = [
+        "bad anatomy", "extra limbs", "deformed", "missing limbs",
+        "worst quality", "low quality", "normal quality", "lowres"
+    ]
+    
+    # Priority 2: Anatomical Accuracy (Always Included)
+    anatomical_negatives = [
+        "deformed hands", "extra fingers", "deformed face", "malformed",
+        "bad hands", "bad fingers", "missing fingers", "distorted features"
+    ]
+    
+    # Priority 3: Technical Artifacts (High Priority)
+    artifact_negatives = [
+        "text", "watermark", "logo", "signature", "contact info",
+        "username", "artist name", "title", "caption"
+    ]
+    
+    # Priority 4: Style Prevention (Medium Priority)
+    style_negatives = [
+        "anime", "cartoon", "graphic", "render", "cgi", "3d",
+        "painting", "drawing", "illustration", "sketch"
+    ]
+    
+    # Priority 5: NSFW-Specific (Conditional)
+    nsfw_negatives = ["child", "minor"]
+    
+    # Priority 6: Multi-Party Scene Prevention (Critical for group scenes)
+    multi_party_negatives = [
+        "three girls", "all girls", "only girls", "no male", "missing male",
+        "disembodied penis", "floating penis", "detached penis",
+        "penis not attached", "wrong gender ratio", "incorrect participants",
+        "wrong number of people"
+    ]
+    
+    # Priority 7: Position and Action Accuracy (Critical for explicit scenes)
+    position_negatives = [
+        "wrong position", "incorrect pose", "impossible position",
+        "unnatural pose", "penis in wrong place", "anatomical mismatch",
+        "position confusion", "wrong body parts", "misplaced anatomy",
+        "anatomical errors"
+    ]
+    
+    # Priority 8: NSFW Anatomical Improvements (Conditional)
+    nsfw_anatomical_negatives = [
+        "deformed breasts", "extra breasts", "anatomical errors",
+        "wrong anatomy", "distorted bodies", "unnatural poses"
+    ]
+    
+    # Build SDXL negative prompt with priority system
+    sdxl_negatives = [
+        *critical_negatives,
+        *anatomical_negatives,
+        *artifact_negatives[:4],
+        *style_negatives[:3],
+        *nsfw_negatives
+    ]
+    
+    # Enhanced multi-party prevention for group scenes
+    prompt_lower = user_prompt.lower()
+    has_multiple_people = any(word in prompt_lower for word in ['two', 'both', 'sisters', 'girls'])
+    has_females = any(word in prompt_lower for word in ['girl', 'woman', 'sister', 'female'])
+    has_males = any(word in prompt_lower for word in ['guy', 'man', 'male', 'boy'])
+    
+    if has_multiple_people and has_females and has_males:
+        sdxl_negatives.extend(multi_party_negatives[:6])
+    elif has_multiple_people and has_females and not has_males:
+        sdxl_negatives.extend(["three girls", "all girls", "only girls", "wrong number of people"])
+    
+    # Add position accuracy for explicit scenes
+    if any(word in prompt_lower for word in ['sex', 'oral', 'doggy', 'sucking']):
+        sdxl_negatives.extend(position_negatives[:5])
+    
+    # Add NSFW anatomical improvements if applicable
+    if any(word in prompt_lower for word in ['naked', 'nude', 'sex', 'topless']):
+        sdxl_negatives.extend(nsfw_anatomical_negatives[:4])
+    
+    return ", ".join(sdxl_negatives)
 ```
 
 ---
 
-## **📋 Quick Reference Cheat Sheet**
+## **🎬 WAN Worker Specifications**
 
-### **Job Type Matrix:**
-| Job Type | Output | Time | Quality | Enhancement | Reference Support | Flexible Quantities |
-|----------|--------|------|---------|-------------|-------------------|-------------------|
-| `sdxl_image_fast` | 1-6 PNG | 3-48s | Excellent | No | ✅ Style/Comp/Char | ✅ 1,3,6 |
-| `sdxl_image_high` | 1-6 PNG | 5-90s | Premium | No | ✅ Style/Comp/Char | ✅ 1,3,6 |
-| `image_fast` | 1 PNG | 73s | Good | No | ❌ | ❌ |
-| `image_high` | 1 PNG | 90s | Better | No | ❌ | ❌ |
-| `video_fast` | 1 MP4 | 241s | Good | No | ✅ Start/End | ❌ |
-| `video_high` | 1 MP4 | 360s | Better | No | ✅ Start/End | ❌ |
-| `image7b_fast_enhanced` | 1 PNG | 234s | Enhanced | Yes | ❌ | ❌ |
-| `image7b_high_enhanced` | 1 PNG | 104s | Enhanced | Yes | ❌ | ❌ |
-| `video7b_fast_enhanced` | 1 MP4 | 266s | Enhanced | Yes | ✅ Start/End | ❌ |
-| `video7b_high_enhanced` | 1 MP4 | 361s | Enhanced | Yes | ✅ Start/End | ❌ |
+### **Model Configuration**
+- **Model**: WAN 2.1.1.3B
+- **Pipeline**: Video generation and enhanced image processing
+- **VRAM**: 48GB RTX 6000 ADA
 
-### **Reference Image Matrix:**
-| Reference Type | SDXL | Video | Strength Range | Use Case |
-|----------------|------|-------|----------------|----------|
-| Style | ✅ | ❌ | 0.3-0.8 | Visual style transfer |
-| Composition | ✅ | ❌ | 0.5-0.9 | Layout/structure guidance |
-| Character | ✅ | ❌ | 0.4-0.7 | Character consistency |
-| Start Frame | ❌ | ✅ | 0.5-0.8 | Video opening scene |
-| End Frame | ❌ | ✅ | 0.5-0.8 | Video closing scene |
+### **Job Types Supported**
+| Job Type | Quality | Steps | Guidance | Time | Quantity |
+|----------|---------|-------|----------|------|----------|
+| `image_fast` | Fast | 25 | 6.5 | 25-40s | 1 |
+| `image_high` | High | 50 | 7.5 | 40-100s | 1 |
+| `video_fast` | Fast | 25 | 6.5 | 135-180s | 1 |
+| `video_high` | High | 50 | 7.5 | 180-240s | 1 |
+| `image7b_fast_enhanced` | Fast Enhanced | 25 | 6.5 | 85-100s | 1 |
+| `image7b_high_enhanced` | High Enhanced | 50 | 7.5 | 100-240s | 1 |
+| `video7b_fast_enhanced` | Fast Enhanced | 25 | 6.5 | 195-240s | 1 |
+| `video7b_high_enhanced` | High Enhanced | 50 | 7.5 | 240+s | 1 |
 
-### **API Endpoints:**
-```yaml
-POST /api/queue-job: Create new job
-POST /api/upload-reference: Upload reference image
-GET /api/jobs/{id}: Get job status
-GET /api/assets: Get user assets
-DELETE /api/assets/{id}: Delete asset
-GET /api/reference-images: Get user reference images
-```
+### **Key Features**
+- **Video Generation**: High-quality video output with temporal consistency
+- **Enhanced Processing**: 7B model variants for improved quality
+- **Reference Support**: Image-to-image for video start/end frames
+- **Seed Control**: Reproducible generation (no negative prompts)
+- **Path Consistency**: Fixed video path handling
 
-### **Status Values:**
-```yaml
-queued → processing → completed/failed
-```
+### **Video Generation**
+```python
+# Video generation parameters
+frame_num = 83  # Number of frames
+sample_solver = "unipc"  # Temporal consistency
+sample_shift = 5.0  # Motion control
 
-### **Reference Image Flow:**
-```yaml
-Upload → Validate → Store → Use in Job → Process → Complete
+# Generate video with reference frames
+if reference_image_url:
+    # Use reference for start/end frame consistency
+    video = generate_video_with_reference(prompt, reference_image_url, frame_num)
+else:
+    # Standard video generation
+    video = generate_video(prompt, frame_num)
 ```
 
 ---
 
-**This document provides everything needed to integrate with the OurVidz worker system, including the new reference image functionality and flexible quantities. For technical implementation details, see the worker source code in this repository.** 
+## **🔄 Job Processing Flow**
+
+### **1. Job Retrieval**
+```python
+# Worker retrieves job from queue
+job = redis_client.rpop(queue_name)
+job_data = json.loads(job)
+
+# Extract job parameters
+job_id = job_data["id"]
+job_type = job_data["type"]
+prompt = job_data["prompt"]
+config = job_data["config"]
+user_id = job_data["user_id"]
+```
+
+### **2. Model Loading**
+```python
+# Load appropriate model based on job type
+if job_type.startswith("sdxl_"):
+    model = load_sdxl_model()
+elif job_type.startswith("video"):
+    model = load_wan_video_model()
+else:
+    model = load_wan_image_model()
+```
+
+### **3. Generation Execution**
+```python
+# Execute generation with parameters
+if job_type.startswith("sdxl_"):
+    # SDXL generation with flexible quantities
+    num_images = config.get("num_images", 1)
+    results = []
+    
+    for i in range(num_images):
+        # Generate with seed for consistency
+        seed = config.get("seed", random.randint(1, 999999999))
+        result = generate_sdxl_image(prompt, config, seed)
+        results.append(result)
+    
+    assets = results
+else:
+    # WAN generation (single output)
+    result = generate_wan_content(prompt, config)
+    assets = [result]
+```
+
+### **4. Asset Upload**
+```python
+# Upload generated assets to storage
+uploaded_assets = []
+for asset in assets:
+    # Upload to appropriate bucket
+    bucket = determine_bucket(job_type)
+    asset_url = upload_to_storage(asset, bucket, user_id, job_id)
+    uploaded_assets.append(asset_url)
+```
+
+### **5. Callback Execution**
+```python
+# Send standardized callback
+callback_data = {
+    "job_id": job_id,
+    "status": "completed",
+    "assets": uploaded_assets,
+    "metadata": {
+        "seed": config.get("seed"),
+        "generation_time": generation_time,
+        "num_images": len(uploaded_assets)
+    }
+}
+
+response = requests.post(callback_url, json=callback_data)
+```
+
+---
+
+## **📊 Performance Monitoring**
+
+### **Generation Time Tracking**
+```python
+# Track actual generation time
+start_time = time.time()
+result = generate_content(prompt, config)
+generation_time = time.time() - start_time
+
+# Include in callback metadata
+callback_metadata = {
+    "generation_time": generation_time,
+    "expected_time": config.get("expected_time"),
+    "performance_ratio": generation_time / config.get("expected_time")
+}
+```
+
+### **Resource Utilization**
+```python
+# Monitor VRAM usage
+import torch
+vram_used = torch.cuda.memory_allocated() / 1024**3  # GB
+vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+
+# Include in metadata
+metadata["vram_used_gb"] = vram_used
+metadata["vram_total_gb"] = vram_total
+metadata["vram_utilization"] = vram_used / vram_total
+```
+
+---
+
+## **🔧 Error Handling**
+
+### **Standardized Error Responses**
+```python
+# Error callback format
+error_callback = {
+    "job_id": job_id,
+    "status": "failed",
+    "error_message": str(error),
+    "metadata": {
+        "error_type": type(error).__name__,
+        "error_timestamp": datetime.now().isoformat(),
+        "worker_version": "2.1.0"
+    }
+}
+```
+
+### **Common Error Scenarios**
+```python
+try:
+    # Generation attempt
+    result = generate_content(prompt, config)
+except torch.cuda.OutOfMemoryError:
+    # Handle VRAM issues
+    error_message = "Insufficient VRAM for generation"
+    cleanup_gpu_memory()
+except ValueError as e:
+    # Handle parameter errors
+    error_message = f"Invalid parameters: {str(e)}"
+except Exception as e:
+    # Handle unexpected errors
+    error_message = f"Generation failed: {str(e)}"
+    log_error(e)
+```
+
+---
+
+## **🛠️ Storage Buckets**
+
+### **SDXL Buckets**
+- `sdxl_image_fast` - Fast SDXL image generation
+- `sdxl_image_high` - High quality SDXL image generation
+
+### **WAN Buckets**
+- `image_fast` - Fast WAN image generation
+- `image_high` - High quality WAN image generation
+- `video_fast` - Fast WAN video generation
+- `video_high` - High quality WAN video generation
+
+### **Enhanced WAN Buckets**
+- `image7b_fast_enhanced` - Enhanced fast image generation
+- `image7b_high_enhanced` - Enhanced high quality image generation
+- `video7b_fast_enhanced` - Enhanced fast video generation
+- `video7b_high_enhanced` - Enhanced high quality video generation
+
+### **Reference Image Buckets**
+- `reference_images` - User-uploaded reference images
+- `workspace_assets` - Workspace reference assets
+
+---
+
+## **📈 Usage Tracking**
+
+### **Worker Metrics**
+```python
+# Track worker performance
+worker_metrics = {
+    "worker_id": worker_id,
+    "job_type": job_type,
+    "generation_time": generation_time,
+    "vram_used": vram_used,
+    "success": True,
+    "timestamp": datetime.now().isoformat()
+}
+
+# Send to metrics endpoint
+requests.post(metrics_url, json=worker_metrics)
+```
+
+### **Job Completion Tracking**
+```python
+# Track job completion statistics
+completion_stats = {
+    "job_id": job_id,
+    "user_id": user_id,
+    "job_type": job_type,
+    "assets_generated": len(assets),
+    "total_size_mb": sum(get_file_size(asset) for asset in assets),
+    "completion_timestamp": datetime.now().isoformat()
+}
+```
+
+---
+
+## **🚀 Recent Updates (July 16, 2025)**
+
+### **Major Enhancements**
+1. **Standardized Callback Parameters**: Consistent `job_id`, `assets` array across all workers
+2. **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
+3. **Seed Support**: User-controlled seeds for reproducible generation
+4. **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
+5. **Reference Image Support**: Optional image-to-image with type and strength control
+6. **Comprehensive Error Handling**: Enhanced debugging and error tracking
+7. **Metadata Consistency**: Improved data flow and storage
+8. **Path Consistency Fix**: Fixed video path handling for WAN workers
+
+### **Performance Improvements**
+- Optimized batch processing for multi-image SDXL jobs
+- Enhanced error recovery and retry mechanisms
+- Improved Redis queue management
+- Better resource utilization tracking
+
+### **Developer Experience**
+- Enhanced API documentation and examples
+- Comprehensive debugging information
+- Backward compatibility preservation
+- Clear error messages and status codes
+
+### **Backward Compatibility**
+- All existing job types remain functional
+- Legacy metadata fields are preserved
+- Single-reference workflows continue to work
+- Non-reference generation unchanged 
