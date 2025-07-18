@@ -26,6 +26,7 @@ interface PromptInfoModalProps {
   modelType?: string;
   referenceStrength?: number;
   negativePrompt?: string;
+  generationParams?: any;
 }
 
 export const PromptInfoModal = ({
@@ -41,7 +42,8 @@ export const PromptInfoModal = ({
   seed,
   modelType,
   referenceStrength,
-  negativePrompt
+  negativePrompt,
+  generationParams
 }: PromptInfoModalProps) => {
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -57,6 +59,11 @@ export const PromptInfoModal = ({
       minute: '2-digit'
     });
   };
+
+  // PHASE 1 FIX: Extract seed and generation time from generationParams
+  const extractedSeed = seed || generationParams?.seed;
+  const generationTime = generationParams?.generation_time;
+  const extractedNegativePrompt = negativePrompt || generationParams?.negative_prompt;
 
   const getModelIcon = () => {
     if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
@@ -90,6 +97,17 @@ export const PromptInfoModal = ({
     return 'WAN 2.1';
   };
 
+  // Format generation time for display
+  const formatGenerationTime = (timeInSeconds: number) => {
+    if (timeInSeconds < 60) {
+      return `${timeInSeconds.toFixed(1)}s`;
+    } else {
+      const minutes = Math.floor(timeInSeconds / 60);
+      const seconds = (timeInSeconds % 60).toFixed(1);
+      return `${minutes}m ${seconds}s`;
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
@@ -121,9 +139,9 @@ export const PromptInfoModal = ({
             </div>
 
             {/* Seed Information */}
-            {seed && (
+            {extractedSeed && (
               <SeedDisplay 
-                seed={seed}
+                seed={extractedSeed}
                 onUseSeed={(seedValue) => {
                   copyToClipboard(seedValue.toString(), 'Seed');
                 }}
@@ -159,21 +177,21 @@ export const PromptInfoModal = ({
           </div>
 
           {/* Negative Prompt Section */}
-          {negativePrompt && (
+          {extractedNegativePrompt && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Negative Prompt</h3>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyToClipboard(negativePrompt, 'Negative Prompt')}
+                  onClick={() => copyToClipboard(extractedNegativePrompt, 'Negative Prompt')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
               </div>
               <div className="bg-muted p-3 rounded-md">
-                <p className="text-sm leading-relaxed text-muted-foreground">{negativePrompt}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{extractedNegativePrompt}</p>
               </div>
             </div>
           )}
@@ -198,6 +216,20 @@ export const PromptInfoModal = ({
                 <span className="text-muted-foreground">Job ID:</span>
                 <span className="ml-2 font-mono text-xs">{itemId}</span>
               </div>
+              {/* PHASE 1 FIX: Add seed display */}
+              {extractedSeed && (
+                <div>
+                  <span className="text-muted-foreground">Seed:</span>
+                  <span className="ml-2 font-mono">{extractedSeed}</span>
+                </div>
+              )}
+              {/* PHASE 1 FIX: Add generation time display */}
+              {generationTime && (
+                <div>
+                  <span className="text-muted-foreground">Generation Time:</span>
+                  <span className="ml-2">{formatGenerationTime(generationTime)}</span>
+                </div>
+              )}
             </div>
           </div>
 
