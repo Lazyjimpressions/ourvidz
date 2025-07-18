@@ -725,7 +725,7 @@ const Workspace = () => {
           contentCount={1}
           itemId={currentPromptAsset.jobId}
           originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
-          seed={currentPromptAsset.seed}
+          seed={typeof currentPromptAsset.seed === 'string' ? parseInt(currentPromptAsset.seed) : currentPromptAsset.seed}
           modelType={currentPromptAsset.modelType}
           referenceStrength={currentPromptAsset.referenceStrength}
           negativePrompt={currentPromptAsset.negativePrompt}
