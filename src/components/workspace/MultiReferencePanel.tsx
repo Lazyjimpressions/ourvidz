@@ -1,9 +1,9 @@
+
 import React, { useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Upload, X, Loader2, InfoIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { uploadReferenceImage } from '@/lib/storage';
@@ -49,22 +49,6 @@ export const MultiReferencePanel = ({
   
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState<string | null>(null);
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    const saved = localStorage.getItem('workspace-references-collapsed');
-    return saved !== null ? JSON.parse(saved) : true; // Default to collapsed for max workspace
-  });
-
-  // Save collapse state to localStorage
-  useEffect(() => {
-    localStorage.setItem('workspace-references-collapsed', JSON.stringify(isCollapsed));
-  }, [isCollapsed]);
-
-  // Auto-expand when dragging workspace assets
-  useEffect(() => {
-    if (isDragging && isCollapsed) {
-      setIsCollapsed(false);
-    }
-  }, [isDragging, isCollapsed]);
 
   const validateFile = (file: File): string | null => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -215,213 +199,182 @@ export const MultiReferencePanel = ({
   const hasAnyReference = references.some(ref => ref.url);
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
 
-  // Auto-expand when references are first enabled
-  const handleToggleReference = useCallback((referenceId: string, enabled: boolean) => {
-    if (enabled && isCollapsed) {
-      setIsCollapsed(false);
-    }
-    toggleReference(referenceId, enabled);
-  }, [isCollapsed, toggleReference]);
+  // Only show the panel if there are active references or if user is actively working with references
+  if (!hasAnyReference && activeReferences.length === 0) {
+    return null;
+  }
 
   return (
     <TooltipProvider>
       <div className="mt-4 mx-6">
-        <Accordion 
-          type="single" 
-          collapsible 
-          value={isCollapsed ? undefined : "references"}
-          onValueChange={(value) => setIsCollapsed(!value)}
-          className="bg-muted/20 rounded-lg border border-border"
-        >
-          <AccordionItem value="references" className="border-0">
-            <AccordionTrigger className="px-4 py-3 hover:no-underline">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">Reference Settings</span>
-                  {activeReferences.length > 0 && (
-                    <div className="flex items-center gap-1">
-                      <span className="px-2 py-1 bg-primary text-primary-foreground rounded-full text-xs font-medium">
-                        {activeReferences.length} active
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        @ {strength.toFixed(1)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {isCollapsed && activeReferences.length > 0 && (
-                  <div className="flex gap-1 mr-2">
-                    {activeReferences.slice(0, 3).map(ref => (
-                      <span key={ref.id} className="px-1.5 py-0.5 bg-primary/20 text-primary rounded text-xs">
-                        {ref.label.slice(0, 3)}
-                      </span>
-                    ))}
-                    {activeReferences.length > 3 && (
-                      <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-xs">
-                        +{activeReferences.length - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </AccordionTrigger>
-            
-            <AccordionContent className="px-4 pb-4">
-              <div className="flex justify-end mb-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onClear}
-                  className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-                >
-                  Clear All
-                </Button>
-              </div>
-
-              {/* Reference Type Grid */}
-              <div className="grid grid-cols-3 gap-3 mb-4">
-                {references.map((ref) => (
-                  <div key={ref.id} className="space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`ref-${ref.id}`}
-                        checked={ref.enabled}
-                        onCheckedChange={(checked) => handleToggleReference(ref.id, checked as boolean)}
-                      />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Label htmlFor={`ref-${ref.id}`} className="text-xs font-medium cursor-pointer">
-                            {ref.label}
-                          </Label>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>{ref.description}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-
-                    {/* Upload Slot */}
-                    <div className="relative">
-                      {ref.url ? (
-                        <div className="relative group">
-                          <div className="w-full h-16 rounded border border-border overflow-hidden bg-muted">
-                            <img 
-                              src={ref.url} 
-                              alt={ref.label} 
-                              className="w-full h-full object-cover"
-                            />
-                            {/* Reference Type Badge */}
-                            <div className="absolute bottom-1 left-1">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                ref.isWorkspaceAsset 
-                                  ? 'bg-primary text-primary-foreground' 
-                                  : 'bg-secondary text-secondary-foreground'
-                              }`}>
-                                {ref.isWorkspaceAsset ? 'Workspace' : 'Uploaded'}
-                              </span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => clearReference(ref.id)}
-                            className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                            title={`Clear ${ref.label} reference`}
-                          >
-                            <X className="w-2.5 h-2.5 text-destructive-foreground" />
-                          </button>
-                        </div>
-                       ) : (
-                        <div
-                          className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
-                            isDragging === ref.id
-                              ? 'border-primary bg-primary/10' 
-                              : ref.enabled 
-                                ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
-                                : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
-                          }`}
-                          onDrop={(e) => handleDrop(e, ref.id)}
-                          onDragOver={(e) => handleDragOver(e, ref.id)}
-                          onDragLeave={handleDragLeave}
-                        >
-                          <Button
-                            variant="ghost"
-                            onClick={() => handleFileSelect(ref.id)}
-                            disabled={uploading.has(ref.id)}
-                            className="w-full h-full p-1 bg-transparent border-0 hover:bg-transparent"
-                            title={`Upload ${ref.label} reference - Click or drag image here`}
-                          >
-                            {uploading.has(ref.id) ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                            ) : (
-                               <div className="flex flex-col items-center gap-0.5">
-                                 <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                                 <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
-                                   Drag or Click
-                                 </span>
-                               </div>
-                            )}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Strength Control */}
+        <div className="bg-muted/20 rounded-lg border border-border p-4">
+          {/* Static Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium">Reference Settings</span>
               {activeReferences.length > 0 && (
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="flex items-center gap-1">
-                    <Label className="text-xs text-muted-foreground whitespace-nowrap">
-                      Strength
-                    </Label>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <InfoIcon className="w-3 h-3 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>0.1 = Subtle influence, 1.0 = Strong influence</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div className="flex-1 max-w-32">
-                    <Slider
-                      value={[strength]}
-                      onValueChange={(values) => onStrengthChange(values[0])}
-                      min={0.1}
-                      max={1.0}
-                      step={0.1}
-                      className="w-full"
-                    />
-                  </div>
-                  <span className="text-xs text-muted-foreground min-w-8 text-center">
-                    {strength.toFixed(1)}
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-1 bg-primary text-primary-foreground rounded-full text-xs font-medium">
+                    {activeReferences.length} active
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    @ {strength.toFixed(1)}
                   </span>
                 </div>
               )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClear}
+              className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+            >
+              Clear All
+            </Button>
+          </div>
 
-              {/* Active References Summary */}
-              {activeReferences.length > 0 && (
-                <div className="flex items-center gap-2 pt-3 border-t border-border">
-                  <span className="text-xs text-muted-foreground">Active:</span>
-                  <div className="flex gap-1 flex-wrap">
-                    {activeReferences.map(ref => (
-                      <div key={ref.id} className="flex items-center gap-1">
-                        <span className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
-                          {ref.label}
-                        </span>
-                        {ref.isWorkspaceAsset && ref.modelType && (
-                          <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary-foreground rounded text-xs">
-                            {ref.modelType}
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+          {/* Reference Type Grid - Always Visible */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            {references.map((ref) => (
+              <div key={ref.id} className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`ref-${ref.id}`}
+                    checked={ref.enabled}
+                    onCheckedChange={(checked) => toggleReference(ref.id, checked as boolean)}
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Label htmlFor={`ref-${ref.id}`} className="text-xs font-medium cursor-pointer">
+                        {ref.label}
+                      </Label>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{ref.description}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+
+                {/* Upload Slot */}
+                <div className="relative">
+                  {ref.url ? (
+                    <div className="relative group">
+                      <div className="w-full h-16 rounded border border-border overflow-hidden bg-muted">
+                        <img 
+                          src={ref.url} 
+                          alt={ref.label} 
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Reference Type Badge */}
+                        <div className="absolute bottom-1 left-1">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                            ref.isWorkspaceAsset 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-secondary text-secondary-foreground'
+                          }`}>
+                            {ref.isWorkspaceAsset ? 'Workspace' : 'Uploaded'}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => clearReference(ref.id)}
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={`Clear ${ref.label} reference`}
+                      >
+                        <X className="w-2.5 h-2.5 text-destructive-foreground" />
+                      </button>
+                    </div>
+                   ) : (
+                    <div
+                      className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
+                        isDragging === ref.id
+                          ? 'border-primary bg-primary/10' 
+                          : ref.enabled 
+                            ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
+                            : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
+                      }`}
+                      onDrop={(e) => handleDrop(e, ref.id)}
+                      onDragOver={(e) => handleDragOver(e, ref.id)}
+                      onDragLeave={handleDragLeave}
+                    >
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleFileSelect(ref.id)}
+                        disabled={uploading.has(ref.id)}
+                        className="w-full h-full p-1 bg-transparent border-0 hover:bg-transparent"
+                        title={`Upload ${ref.label} reference - Click or drag image here`}
+                      >
+                        {uploading.has(ref.id) ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        ) : (
+                           <div className="flex flex-col items-center gap-0.5">
+                             <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                             <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
+                               Drag or Click
+                             </span>
+                           </div>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Strength Control - Always Visible When Active References */}
+          {activeReferences.length > 0 && (
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-1">
+                <Label className="text-xs text-muted-foreground whitespace-nowrap">
+                  Strength
+                </Label>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <InfoIcon className="w-3 h-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>0.1 = Subtle influence, 1.0 = Strong influence</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="flex-1 max-w-32">
+                <Slider
+                  value={[strength]}
+                  onValueChange={(values) => onStrengthChange(values[0])}
+                  min={0.1}
+                  max={1.0}
+                  step={0.1}
+                  className="w-full"
+                />
+              </div>
+              <span className="text-xs text-muted-foreground min-w-8 text-center">
+                {strength.toFixed(1)}
+              </span>
+            </div>
+          )}
+
+          {/* Active References Summary - Always Visible When Active */}
+          {activeReferences.length > 0 && (
+            <div className="flex items-center gap-2 pt-3 border-t border-border">
+              <span className="text-xs text-muted-foreground">Active:</span>
+              <div className="flex gap-1 flex-wrap">
+                {activeReferences.map(ref => (
+                  <div key={ref.id} className="flex items-center gap-1">
+                    <span className="px-2 py-1 bg-primary/10 text-primary rounded text-xs">
+                      {ref.label}
+                    </span>
+                    {ref.isWorkspaceAsset && ref.modelType && (
+                      <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary-foreground rounded text-xs">
+                        {ref.modelType}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );
