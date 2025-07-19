@@ -1,466 +1,303 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+import React, { useState, useRef, useCallback, useMemo } from 'react';
+import { FixedSizeGrid as Grid } from 'react-window';
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Trash2, Download, MoreHorizontal, Copy, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Download, 
-  Trash2, 
-  Eye, 
-  Image, 
-  Video, 
-  Play,
-  Clock,
-  Calendar,
-  Copy,
-  Plus
-} from "lucide-react";
-import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
-import { LibraryImportModal } from "@/components/LibraryImportModal";
-import { SDXLImageSelector } from "@/components/workspace/SDXLImageSelector";
-import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
-import { useVirtualizedWorkspace } from '@/hooks/useVirtualizedWorkspace';
-import { MediaTile } from '@/types/workspace';
+import { MediaTile } from "@/types/workspace";
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 
 interface VirtualizedMediaGridProps {
-  onRegenerateItem?: (itemId: string) => void;
-  onGenerateMoreLike?: (tile: MediaTile) => void;
-  onClearWorkspace?: boolean;
-  onImport?: (importHandler: (assets: UnifiedAsset[]) => void) => void;
+  tiles: MediaTile[];
+  isLoading?: boolean;
+  onDeleteTile?: (tile: MediaTile) => void;
+  onClearWorkspace?: () => void;
 }
 
-const TileLoadingSkeleton = () => (
-  <div className="aspect-square bg-gray-900 rounded-lg animate-pulse">
-    <div className="w-full h-full bg-gray-800 rounded-lg" />
-  </div>
-);
-
-const MediaTileComponent = React.memo(({ 
-  tile, 
-  onPreview, 
-  onDownload, 
-  onGenerateMoreLike, 
-  onDelete, 
-  onSDXLManage,
-  isDeleting,
-  isLoadingUrl,
-  registerElement 
-}: {
-  tile: MediaTile;
-  onPreview: () => void;
-  onDownload: (e: React.MouseEvent) => void;
-  onGenerateMoreLike?: (tile: MediaTile) => void;
-  onDelete: () => void;
-  onSDXLManage?: () => void;
-  isDeleting: boolean;
-  isLoadingUrl: boolean;
-  registerElement: (element: HTMLElement | null) => void;
-}) => {
-  const [imageError, setImageError] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-    });
-  };
-
-  return (
-    <div
-      ref={registerElement}
-      data-index={tile.virtualIndex}
-      className={cn(
-        "group relative cursor-pointer bg-gray-900 rounded-lg overflow-hidden aspect-square transition-all duration-300 hover:scale-[1.02] hover:shadow-lg",
-        isDeleting && "opacity-50 pointer-events-none"
-      )}
-      onClick={onPreview}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Media Content */}
-      {isLoadingUrl || !tile.url ? (
-        <TileLoadingSkeleton />
-      ) : tile.type === 'image' ? (
-        <img
-          src={tile.url}
-          alt="Generated content"
-          className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
-          loading="lazy"
-          onError={() => setImageError(true)}
-        />
-      ) : (
-        <div className="relative w-full h-full">
-          {tile.thumbnailUrl ? (
-            <img
-              src={tile.thumbnailUrl}
-              alt="Video thumbnail"
-              className="w-full h-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <video
-              src={tile.url}
-              className="w-full h-full object-cover"
-              muted
-              preload="metadata"
-            />
-          )}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <div className="bg-black/70 rounded-full p-3">
-              <Play className="w-6 h-6 text-white fill-white" />
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Content Type Icon */}
-      <div className="absolute top-2 left-2">
-        <Badge variant="secondary" className="bg-black/70 text-white border-gray-600 text-xs">
-          {tile.type === 'image' ? (
-            <Image className="h-3 w-3 mr-1" />
-          ) : (
-            <Video className="h-3 w-3 mr-1" />
-          )}
-          {tile.type}
-        </Badge>
-      </div>
-
-      {/* Model Type Badge (for images) */}
-      {tile.type === 'image' && tile.modelType && (
-        <div className="absolute top-2 right-2">
-          <Badge 
-            variant="secondary" 
-            className={cn(
-              "text-xs border",
-              tile.modelType === 'SDXL'
-                ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
-                : "bg-blue-500/20 text-blue-300 border-blue-500/40"
-            )}
-          >
-            {tile.modelType}
-            {tile.isPartOfSet && ` (${tile.selectedImageIndices?.length || tile.setSize}/${tile.setSize})`}
-          </Badge>
-        </div>
-      )}
-
-      {/* Duration for videos */}
-      {tile.type === 'video' && tile.duration && (
-        <div className="absolute bottom-2 right-2">
-          <Badge variant="secondary" className="bg-black/70 text-white text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            {tile.duration}s
-          </Badge>
-        </div>
-      )}
-
-      {/* Hover Actions */}
-      {(isHovered) && tile.url && (
-        <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onPreview();
-            }}
-            className="h-6 w-6 p-0 bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm"
-          >
-            <Eye className="h-3 w-3" />
-          </Button>
-          
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onDownload}
-            className="h-6 w-6 p-0 bg-gray-700/80 hover:bg-gray-600 backdrop-blur-sm"
-          >
-            <Download className="h-3 w-3" />
-          </Button>
-          
-          {tile.type === 'image' && onGenerateMoreLike && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onGenerateMoreLike(tile);
-              }}
-              className="h-6 w-6 p-0 bg-blue-600/80 hover:bg-blue-700 backdrop-blur-sm"
-              title="Generate 3 more like this"
-            >
-              <Copy className="h-3 w-3" />
-            </Button>
-          )}
-          
-          {/* SDXL Image Management Button */}
-          {tile.isPartOfSet && onSDXLManage && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSDXLManage();
-              }}
-              className="h-6 w-6 p-0 bg-purple-600/80 hover:bg-purple-700 backdrop-blur-sm"
-              title="Manage SDXL images"
-            >
-              <Image className="h-3 w-3" />
-            </Button>
-          )}
-          
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="h-6 w-6 p-0 bg-red-600/80 hover:bg-red-700 backdrop-blur-sm"
-            disabled={isDeleting}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
-        </div>
-      )}
-
-      {/* Tile Info Footer */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <div className="flex items-center justify-between text-xs text-white">
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs px-1 py-0.5 bg-black/50 border-white/20 text-white">
-              {tile.quality === 'high' ? 'HD' : 'Fast'}
-            </Badge>
-          </div>
-          <div className="flex items-center text-xs text-gray-300">
-            <Calendar className="h-3 w-3 mr-1" />
-            {formatDate(tile.timestamp)}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-MediaTileComponent.displayName = 'MediaTileComponent';
-
 export const VirtualizedMediaGrid = ({ 
-  onRegenerateItem, 
-  onGenerateMoreLike, 
-  onClearWorkspace, 
-  onImport 
+  tiles, 
+  isLoading = false, 
+  onDeleteTile,
+  onClearWorkspace 
 }: VirtualizedMediaGridProps) => {
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [showLibraryModal, setShowLibraryModal] = useState(false);
-  const [showSDXLSelector, setShowSDXLSelector] = useState(false);
-  const [currentSDXLTile, setCurrentSDXLTile] = useState<MediaTile | null>(null);
+  const [gridDimensions, setGridDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Use optimized virtualized workspace hook
-  const { 
-    tiles,
-    visibleTiles, 
-    totalCount,
-    isLoading, 
-    loadingUrls,
-    deletingTiles, 
-    importToWorkspace, 
-    clearWorkspace, 
-    deleteTile,
-    deleteIndividualImages,
-    updateImageSelection,
-    registerTileElement,
-    getSessionInfo
-  } = useVirtualizedWorkspace({
-    itemHeight: 300,
-    overscan: 3,
-    visibleCount: 12
-  });
+  // Calculate grid layout
+  const { columnCount, rowCount, columnWidth, rowHeight } = useMemo(() => {
+    const containerWidth = gridDimensions.width || 1200;
+    const itemWidth = 280;
+    const itemHeight = 320;
+    const gap = 16;
+    
+    const cols = Math.max(1, Math.floor((containerWidth + gap) / (itemWidth + gap)));
+    const rows = Math.ceil(tiles.length / cols);
+    const actualColumnWidth = (containerWidth - (cols - 1) * gap) / cols;
+    
+    return {
+      columnCount: cols,
+      rowCount: rows,
+      columnWidth: actualColumnWidth,
+      rowHeight: itemHeight + gap
+    };
+  }, [gridDimensions.width, tiles.length]);
 
-  const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!tile.url) {
-      toast.error('Image not ready for download');
-      return;
-    }
+  // Resize observer
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    
+    const resizeObserver = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setGridDimensions({ width, height });
+    });
+    
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  const handleDownload = useCallback(async (tile: MediaTile) => {
+    if (!tile.url) return;
     
     try {
       const response = await fetch(tile.url);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `generated-${tile.type}-${tile.id}.${tile.type === 'image' ? 'png' : 'mp4'}`;
-      document.body.appendChild(a);
-      a.click();
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${tile.type}-${tile.id}.${tile.type === 'image' ? 'webp' : 'mp4'}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      toast.success('Download started');
+      toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} downloaded`);
     } catch (error) {
-      console.error('Download failed:', error);
-      toast.error('Download failed');
+      toast.error('Failed to download');
     }
-  };
+  }, []);
 
-  // Handle workspace clearing from parent
-  useEffect(() => {
-    if (onClearWorkspace) {
-      clearWorkspace();
-    }
-  }, [onClearWorkspace, clearWorkspace]);
+  const handleCopyPrompt = useCallback((prompt: string) => {
+    navigator.clipboard.writeText(prompt);
+    toast.success('Prompt copied to clipboard');
+  }, []);
 
-  // Register import handler with parent component
-  useEffect(() => {
-    if (onImport) {
-      onImport(importToWorkspace);
-    }
-  }, [onImport, importToWorkspace]);
+  const Cell = useCallback(({ columnIndex, rowIndex, style }: any) => {
+    const index = rowIndex * columnCount + columnIndex;
+    const tile = tiles[index];
+    
+    if (!tile) return null;
 
-  // Handle SDXL image management
-  const handleSDXLManage = (tile: MediaTile) => {
-    setCurrentSDXLTile(tile);
-    setShowSDXLSelector(true);
-  };
+    return (
+      <div style={style} className="p-2">
+        <div className="bg-card rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border">
+          {/* Media Display */}
+          <div className="aspect-square bg-muted relative group cursor-pointer" onClick={() => setSelectedTile(tile)}>
+            {tile.type === 'image' ? (
+              <img 
+                src={tile.url} 
+                alt={tile.prompt}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <video 
+                src={tile.url}
+                poster={tile.thumbnailUrl}
+                className="w-full h-full object-cover"
+                muted
+                loop
+                onMouseEnter={(e) => e.currentTarget.play()}
+                onMouseLeave={(e) => e.currentTarget.pause()}
+              />
+            )}
+            
+            {/* Overlay Controls */}
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownload(tile);
+                  }}
+                >
+                  <Download className="w-4 h-4" />
+                </Button>
+                {onDeleteTile && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteTile(tile);
+                    }}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
 
-  const handleSDXLSelectionUpdate = (selectedIndices: number[]) => {
-    if (currentSDXLTile) {
-      updateImageSelection(currentSDXLTile, selectedIndices);
-    }
-  };
-
-  const handleSDXLIndividualDelete = (imageIndices: number[]) => {
-    if (currentSDXLTile) {
-      deleteIndividualImages(currentSDXLTile, imageIndices);
-    }
-  };
+          {/* Tile Info */}
+          <div className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {tile.quality} • {tile.modelType || 'Standard'}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleCopyPrompt(tile.prompt)}
+                className="h-6 px-2"
+              >
+                <Copy className="w-3 h-3" />
+              </Button>
+            </div>
+            <p className="text-sm text-foreground line-clamp-2">
+              {tile.prompt}
+            </p>
+            <div className="text-xs text-muted-foreground">
+              {new Date(tile.timestamp).toLocaleDateString()}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }, [tiles, columnCount, handleDownload, handleCopyPrompt, onDeleteTile]);
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin text-2xl mb-2">⚡</div>
-          <p className="text-gray-400">Loading optimized workspace...</p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="bg-card rounded-lg overflow-hidden">
+            <Skeleton className="aspect-square w-full" />
+            <div className="p-3 space-y-2">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
-  if (totalCount === 0) {
+  if (tiles.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-medium text-gray-400 mb-2">
-            Your workspace is empty
-          </h3>
-          <p className="text-gray-600 mb-4">
-            Generate new content or import from your library
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => setShowLibraryModal(true)}
-            className="gap-2 border-gray-700 hover:bg-gray-800"
-          >
-            <Plus className="w-4 h-4" />
-            Import from Library
-          </Button>
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-6">
+          <Sparkles className="w-12 h-12 text-muted-foreground" />
         </div>
+        <h3 className="text-lg font-semibold mb-2">No assets in workspace</h3>
+        <p className="text-muted-foreground mb-6 max-w-md">
+          Generate images or videos, or import from your library to get started with your workspace.
+        </p>
       </div>
     );
   }
 
   return (
     <>
-      {/* Performance Stats and Session Info */}
-      <div className="px-6 py-2 text-xs text-gray-500 border-b border-gray-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span>⚡ Optimized: {totalCount} total, {visibleTiles.length} visible</span>
-            {(() => {
-              const sessionInfo = getSessionInfo();
-              return sessionInfo && (
-                <span className="text-blue-400">
-                  Session: {sessionInfo.duration}
-                  {sessionInfo.isNewSession && " (new)"}
-                </span>
-              );
-            })()}
-          </div>
-          {loadingUrls.size > 0 && (
-            <span className="animate-pulse">Loading {loadingUrls.size} images...</span>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">
+          Workspace ({tiles.length} {tiles.length === 1 ? 'item' : 'items'})
+        </h2>
+        {onClearWorkspace && tiles.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearWorkspace}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Clear Workspace
+          </Button>
+        )}
+      </div>
+
+      <div ref={containerRef} className="flex-1 min-h-0">
+        {gridDimensions.width > 0 && (
+          <Grid
+            columnCount={columnCount}
+            rowCount={rowCount}
+            columnWidth={columnWidth}
+            rowHeight={rowHeight}
+            height={gridDimensions.height}
+            width={gridDimensions.width}
+          >
+            {Cell}
+          </Grid>
+        )}
+      </div>
+
+      {/* Detail Modal */}
+      <Dialog open={!!selectedTile} onOpenChange={() => setSelectedTile(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Asset Details</DialogTitle>
+          </DialogHeader>
+          {selectedTile && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                {selectedTile.type === 'image' ? (
+                  <img 
+                    src={selectedTile.url} 
+                    alt={selectedTile.prompt}
+                    className="w-full rounded-lg"
+                  />
+                ) : (
+                  <video 
+                    src={selectedTile.url}
+                    controls
+                    className="w-full rounded-lg"
+                  />
+                )}
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Prompt</label>
+                  <p className="text-sm text-muted-foreground mt-1">{selectedTile.prompt}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Quality</label>
+                    <p className="text-sm text-muted-foreground mt-1">{selectedTile.quality}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Model</label>
+                    <p className="text-sm text-muted-foreground mt-1">{selectedTile.modelType || 'Standard'}</p>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Created</label>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {new Date(selectedTile.timestamp).toLocaleString()}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleDownload(selectedTile)}
+                    className="flex-1"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleCopyPrompt(selectedTile.prompt)}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Prompt
+                  </Button>
+                </div>
+              </div>
+            </div>
           )}
-        </div>
-      </div>
-
-      {/* Virtualized Grid Container */}
-      <div 
-        ref={containerRef}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-6"
-      >
-        {visibleTiles.map((tile) => (
-          <MediaTileComponent
-            key={tile.id}
-            tile={tile}
-            onPreview={() => {
-              const index = tiles.findIndex(t => t.id === tile.id);
-              setSelectedIndex(index);
-              setSelectedTile(tile);
-            }}
-            onDownload={(e) => handleDownload(tile, e)}
-            onGenerateMoreLike={onGenerateMoreLike}
-            onDelete={() => deleteTile(tile)}
-            onSDXLManage={tile.isPartOfSet ? () => handleSDXLManage(tile) : undefined}
-            isDeleting={deletingTiles.has(tile.id)}
-            isLoadingUrl={loadingUrls.has(tile.originalAssetId)}
-            registerElement={(element) => registerTileElement(tile.id, element)}
-          />
-        ))}
-      </div>
-
-      {/* Modal for Full Resolution */}
-      {selectedTile && selectedTile.url && (
-        <WorkspaceContentModal
-          tiles={tiles.filter(t => t.url)} // Only pass tiles with URLs
-          currentIndex={tiles.filter(t => t.url).findIndex(t => t.id === selectedTile.id)}
-          onClose={() => setSelectedTile(null)}
-          onIndexChange={(newIndex) => {
-            const tilesWithUrls = tiles.filter(t => t.url);
-            const newTile = tilesWithUrls[newIndex];
-            if (newTile) {
-              setSelectedIndex(tiles.findIndex(t => t.id === newTile.id));
-              setSelectedTile(newTile);
-            }
-          }}
-        />
-      )}
-
-      {/* Library Import Modal */}
-      <LibraryImportModal
-        open={showLibraryModal}
-        onClose={() => setShowLibraryModal(false)}
-        onImport={importToWorkspace}
-      />
-
-      {/* SDXL Image Selector Modal */}
-      {currentSDXLTile && (
-        <SDXLImageSelector
-          open={showSDXLSelector}
-          onClose={() => {
-            setShowSDXLSelector(false);
-            setCurrentSDXLTile(null);
-          }}
-          tile={currentSDXLTile}
-          onSelectionUpdate={handleSDXLSelectionUpdate}
-          onIndividualDelete={handleSDXLIndividualDelete}
-        />
-      )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
