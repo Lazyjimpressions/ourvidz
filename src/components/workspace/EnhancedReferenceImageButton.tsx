@@ -1,4 +1,3 @@
-
 import React, { useCallback, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Upload, X, Loader2, Image, Eye, Copy } from "lucide-react";
@@ -9,7 +8,8 @@ import { cn } from '@/lib/utils';
 interface EnhancedReferenceImageButtonProps {
   referenceImage?: File | null;
   referenceImageUrl?: string;
-  onReferenceChange: (file: File | null, url: string) => void;
+  thumbnailUrl?: string;
+  onReferenceChange: (file: File | null, url: string, thumbnailUrl?: string) => void;
   onClear: () => void;
   onPreview?: () => void;
   className?: string;
@@ -20,6 +20,7 @@ interface EnhancedReferenceImageButtonProps {
 export const EnhancedReferenceImageButton = ({
   referenceImage,
   referenceImageUrl,
+  thumbnailUrl,
   onReferenceChange,
   onClear,
   onPreview,
@@ -100,7 +101,8 @@ export const EnhancedReferenceImageButton = ({
     if (workspaceData) {
       try {
         const assetData = JSON.parse(workspaceData);
-        onReferenceChange(null, assetData.url);
+        // Use both full URL and thumbnail URL from workspace asset
+        onReferenceChange(null, assetData.url, assetData.thumbnailUrl);
         toast.success('Reference image set from workspace');
         return;
       } catch (error) {
@@ -132,6 +134,7 @@ export const EnhancedReferenceImageButton = ({
   }, []);
 
   const hasReference = referenceImage || referenceImageUrl;
+  const displayUrl = thumbnailUrl || referenceImageUrl;
 
   if (hasReference) {
     return (
@@ -147,7 +150,7 @@ export const EnhancedReferenceImageButton = ({
           onClick={onPreview}
         >
           <img 
-            src={referenceImageUrl} 
+            src={displayUrl} 
             alt="Reference" 
             className="w-full h-full object-cover"
           />

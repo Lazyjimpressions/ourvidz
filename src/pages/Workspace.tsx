@@ -16,7 +16,7 @@ import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel'
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
-import { Image, Dice6, Wand2 } from 'lucide-react';
+import { Image, Dice6, Wand2, ImageIcon } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
 import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
@@ -312,12 +312,12 @@ const Workspace = () => {
     }
   };
 
-  // Reference image handlers - Updated to sync with multi-reference system
-  const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
+  // Updated reference image handlers to support thumbnails
+  const handleReferenceImageChange = useCallback((file: File | null, url: string, thumbnailUrl?: string) => {
     setReferenceImage(file);
     setReferenceImageUrl(url);
     
-    // Also sync with multi-reference system as character reference
+    // Sync with multi-reference system as character reference
     if (url) {
       const characterReference = {
         id: 'character' as const,
@@ -325,8 +325,10 @@ const Workspace = () => {
         description: 'Preserve character appearance and features',
         file,
         url,
+        thumbnailUrl,
         enabled: true,
-        isWorkspaceAsset: !file // If no file, it's from workspace
+        isWorkspaceAsset: !file,
+        icon: User
       };
       
       setActiveReferences(prev => {
@@ -360,20 +362,22 @@ const Workspace = () => {
     setActiveReferences([]);
   }, []);
 
-  // Use as reference functionality
+  // Updated handleUseAsReference to include thumbnail
   const handleUseAsReference = useCallback((tile: any) => {
-    // Add to active references via MultiReferencePanel
     const newReference = {
-      id: 'character', // Always use character for workspace assets
+      id: 'character' as const,
+      label: 'Character',
+      description: 'Preserve character appearance and features',
       url: tile.url,
+      thumbnailUrl: tile.thumbnailUrl || tile.url, // Use thumbnail if available
       enabled: true,
       isWorkspaceAsset: true,
       originalPrompt: tile.prompt,
       modelType: tile.modelType,
-      quality: tile.quality
+      quality: tile.quality,
+      icon: User
     };
     
-    // Replace any existing character reference or add as new
     setActiveReferences(prev => {
       const filtered = prev.filter(ref => ref.id !== 'character');
       return [...filtered, newReference];
@@ -444,7 +448,7 @@ const Workspace = () => {
           </div>
         )}
 
-        {/* Current Workspace with Enhanced Reference Integration */}
+        {/* Enhanced Current Workspace */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Current Workspace ({workspaceTiles.length} assets)</h2>
@@ -474,20 +478,7 @@ const Workspace = () => {
                         onClick={() => handleImageClick(tile)}
                         draggable="true"
                         onDragStart={(e) => {
-                          const assetData = {
-                            url: tile.url,
-                            thumbnailUrl: tile.thumbnailUrl,
-                            prompt: tile.prompt,
-                            modelType: tile.modelType,
-                            quality: tile.quality,
-                            type: tile.type,
-                            duration: tile.duration,
-                            generationParams: {
-                              originalAssetId: tile.originalAssetId,
-                              timestamp: tile.timestamp,
-                              seed: tile.generationParams?.seed || tile.seed
-                            }
-                          };
+                          const assetData = createDragData(tile);
                           e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                           e.dataTransfer.effectAllowed = 'copy';
                         }}
@@ -502,20 +493,12 @@ const Workspace = () => {
                         className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
                         draggable="true"
                         onDragStart={(e) => {
-                          const assetData = {
-                            url: tile.url,
-                            prompt: tile.prompt,
-                            modelType: tile.modelType,
-                            quality: tile.quality,
-                            type: tile.type,
-                            generationParams: {
-                              originalAssetId: tile.originalAssetId,
-                              timestamp: tile.timestamp,
-                              seed: tile.generationParams?.seed || tile.seed
-                            }
-                          };
+                          const assetData = createDragData(tile);
                           e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                           e.dataTransfer.effectAllowed = 'copy';
+                          
+                          // Visual feedback during drag
+                          e.currentTarget.style.opacity = '0.5';
                         }}
                         onDragEnd={(e) => {
                           e.currentTarget.style.opacity = '1';
@@ -601,13 +584,18 @@ const Workspace = () => {
               })}
             </div>
           ) : (
-            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-              <p className="text-muted-foreground">Workspace is empty. Generated images and videos will automatically appear here.</p>
+            <div className="border-2 border-dashed border-border rounded-lg p-12 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-muted/50 rounded-full flex items-center justify-center">
+                <ImageIcon className="w-8 h-8 text-muted-foreground/50" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">Workspace is empty</h3>
+              <p className="text-muted-foreground">Generated images and videos will automatically appear here.</p>
+              <p className="text-sm text-muted-foreground mt-2">Drag images to reference blocks below to start creating variations.</p>
             </div>
           )}
         </div>
         
-        {/* Refined Multi-Reference Panel - Replaces both old panels */}
+        {/* Enhanced Multi-Reference Panel */}
         <RefinedMultiReferencePanel
           mode={isVideoMode ? 'video' : 'image'}
           strength={referenceStrength}
