@@ -84,8 +84,8 @@ export const PromptInfoModal = ({
     });
   };
 
-  // PHASE 1 FIX: Extract seed and generation time from generationParams
-  const extractedSeed = seed || generationParams?.seed;
+  // PHASE 2 FIX: Extract seed and generation time from generationParams
+  const extractedSeed = seed !== undefined ? seed : generationParams?.seed;
   const generationTime = generationParams?.generation_time;
   const extractedNegativePrompt = negativePrompt || generationParams?.negative_prompt;
 
@@ -105,7 +105,7 @@ export const PromptInfoModal = ({
           'extractedSeed exists': !!extractedSeed,
           'extractedSeed !== undefined': extractedSeed !== undefined,
           'extractedSeed !== null': extractedSeed !== null,
-          'extractedSeed !== 0': extractedSeed !== 0,
+          'extractedSeed is valid': extractedSeed !== undefined && extractedSeed !== null,
           'Number(extractedSeed)': Number(extractedSeed),
           'Boolean(extractedSeed)': Boolean(extractedSeed)
         }
@@ -121,7 +121,7 @@ export const PromptInfoModal = ({
   };
 
   const getModelName = () => {
-    // PHASE 1 FIX: Check job_type for accurate model detection
+    // PHASE 2 FIX: Check job_type for accurate model detection
     if (modelType?.includes('sdxl_image_fast') || modelType?.includes('sdxl_image_high')) {
       return modelType.includes('fast') ? 'SDXL Fast' : 'SDXL High';
     }
@@ -155,6 +155,9 @@ export const PromptInfoModal = ({
       return `${minutes}m ${seconds}s`;
     }
   };
+
+  // PHASE 2 FIX: Proper validation for seed display - handle 0 as valid value
+  const shouldShowSeed = extractedSeed !== undefined && extractedSeed !== null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -192,12 +195,12 @@ export const PromptInfoModal = ({
               Raw seed prop: {String(seed)} (type: {typeof seed})<br/>
               generationParams?.seed: {String(generationParams?.seed)} (type: {typeof generationParams?.seed})<br/>
               extractedSeed: {String(extractedSeed)} (type: {typeof extractedSeed})<br/>
-              Truthy check: {!!extractedSeed ? 'PASS' : 'FAIL'}<br/>
-              Should show: {extractedSeed ? 'YES' : 'NO'}
+              shouldShowSeed: {shouldShowSeed ? 'YES' : 'NO'}<br/>
+              Old truthy check: {!!extractedSeed ? 'PASS' : 'FAIL'}
             </div>
 
-            {/* Seed Information */}
-            {extractedSeed && (
+            {/* PHASE 2 FIX: Seed Information - Fixed conditional to handle seed: 0 */}
+            {shouldShowSeed && (
               <SeedDisplay 
                 seed={extractedSeed}
                 onUseSeed={(seedValue) => {
@@ -208,9 +211,9 @@ export const PromptInfoModal = ({
             )}
 
             {/* Alternative seed display for debugging */}
-            {!extractedSeed && (seed || generationParams?.seed) && (
+            {!shouldShowSeed && (seed !== undefined || generationParams?.seed !== undefined) && (
               <div className="bg-yellow-100 border border-yellow-300 p-2 rounded">
-                <strong>DEBUG SEED:</strong> {seed || generationParams?.seed} (should be showing but condition failed)
+                <strong>DEBUG SEED:</strong> {seed !== undefined ? seed : generationParams?.seed} (should be showing but condition failed)
               </div>
             )}
 
@@ -281,21 +284,21 @@ export const PromptInfoModal = ({
                 <span className="text-muted-foreground">Job ID:</span>
                 <span className="ml-2 font-mono text-xs">{itemId}</span>
               </div>
-              {/* PHASE 1 FIX: Add seed display - with debug info */}
-              {extractedSeed && (
+              {/* PHASE 2 FIX: Add seed display with fixed condition */}
+              {shouldShowSeed && (
                 <div>
                   <span className="text-muted-foreground">Seed:</span>
                   <span className="ml-2 font-mono">{extractedSeed}</span>
                 </div>
               )}
               {/* DEBUG: Always show seed in technical details for debugging */}
-              {!extractedSeed && (seed || generationParams?.seed) && (
+              {!shouldShowSeed && (seed !== undefined || generationParams?.seed !== undefined) && (
                 <div className="col-span-2 bg-red-100 p-1 rounded text-xs">
                   <span className="text-muted-foreground">DEBUG Seed:</span>
-                  <span className="ml-2 font-mono">{seed || generationParams?.seed}</span>
+                  <span className="ml-2 font-mono">{seed !== undefined ? seed : generationParams?.seed}</span>
                 </div>
               )}
-              {/* PHASE 1 FIX: Add generation time display */}
+              {/* PHASE 2 FIX: Add generation time display */}
               {generationTime && (
                 <div>
                   <span className="text-muted-foreground">Generation Time:</span>
