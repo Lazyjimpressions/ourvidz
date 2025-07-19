@@ -582,7 +582,7 @@ const Workspace = () => {
 
       {/* Library Import Modal */}
       <LibraryImportModal
-        isOpen={showLibraryModal}
+        open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
           // Convert imported assets to workspace format

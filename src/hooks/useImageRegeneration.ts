@@ -112,12 +112,9 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       // Get a valid project ID (existing or create new one)
       const projectId = await getValidProjectId();
       
-      // Enhanced reference image validation with longer expiration (3 hours)
+      // Generate and validate a signed URL for the reference image
       console.log('🔄 Preparing reference image for regeneration:', currentTile.url);
-      const validatedReferenceUrl = await getRegenerationSignedUrl(
-        currentTile.url, 
-        currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'
-      );
+      const validatedReferenceUrl = await getRegenerationSignedUrl(currentTile.url, currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
       
       if (!validatedReferenceUrl) {
         toast.error('Failed to prepare reference image for regeneration');
@@ -127,20 +124,6 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       console.log('✅ Reference image validated for regeneration:', validatedReferenceUrl);
       
       const format = currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-      
-      // Enhanced seed handling - get from multiple sources with priority
-      const seedValue = state.keepSeed && originalDetails?.seed ? originalDetails.seed : 
-                       state.keepSeed && currentTile.seed ? currentTile.seed :
-                       state.keepSeed && currentTile.generationParams?.seed ? currentTile.generationParams.seed :
-                       undefined;
-
-      console.log('🌱 Seed handling for regeneration:', {
-        keepSeed: state.keepSeed,
-        originalDetailsSeed: originalDetails?.seed,
-        tileSeed: currentTile.seed,
-        paramsSeed: currentTile.generationParams?.seed,
-        finalSeedValue: seedValue
-      });
       
       const generationRequest: GenerationRequest = {
         format,
@@ -152,7 +135,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
           reference_strength: state.referenceStrength,
           reference_type: 'composition',
           negative_prompt: state.negativePrompt.trim() || undefined,
-          ...(seedValue && { seed: seedValue }),
+          ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),
           credits: currentTile.quality === 'high' ? 2 : 1,
           num_images: 1,
           // Enhanced regeneration metadata
@@ -160,9 +143,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
           original_image_url: currentTile.url,
           original_prompt: currentTile.prompt,
           prompt_modified: state.isModified,
-          reference_validation: 'passed',
-          keep_seed_requested: state.keepSeed,
-          seed_source: seedValue ? 'preserved' : 'random'
+          reference_validation: 'passed'
         }
       };
 
@@ -170,7 +151,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
         originalImageId: currentTile.id,
         projectId,
         keepSeed: state.keepSeed,
-        seed: seedValue || 'random',
+        seed: state.keepSeed ? originalDetails?.seed : 'random',
         referenceStrength: state.referenceStrength,
         negativePrompt: state.negativePrompt.trim() || 'none',
         promptModified: state.isModified,
@@ -178,7 +159,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       });
 
       await generateContent(generationRequest);
-      toast.success(`Image regeneration started! ${seedValue ? `Using seed ${seedValue}` : 'Using random seed'}`);
+      toast.success('Image regeneration started! New image will appear in workspace when ready.');
     } catch (error) {
       console.error('❌ Enhanced regeneration failed:', error);
       toast.error(`Failed to start regeneration: ${error instanceof Error ? error.message : 'Unknown error'}`);

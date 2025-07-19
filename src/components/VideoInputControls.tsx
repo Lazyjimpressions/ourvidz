@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
-import { ReferenceImageButton } from "@/components/workspace/ReferenceImageButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
@@ -22,15 +21,6 @@ interface VideoInputControlsProps {
   onLibraryClick: () => void;
   enhanced: boolean;
   setEnhanced: (enhanced: boolean) => void;
-  // Reference image props
-  startReferenceImage?: File | null;
-  startReferenceImageUrl?: string;
-  endReferenceImage?: File | null;
-  endReferenceImageUrl?: string;
-  onStartReferenceChange?: (file: File | null, url: string) => void;
-  onEndReferenceChange?: (file: File | null, url: string) => void;
-  onClearStartReference?: () => void;
-  onClearEndReference?: () => void;
 }
 
 export const VideoInputControls = ({
@@ -43,15 +33,7 @@ export const VideoInputControls = ({
   setQuality,
   onLibraryClick,
   enhanced,
-  setEnhanced,
-  startReferenceImage,
-  startReferenceImageUrl,
-  endReferenceImage,
-  endReferenceImageUrl,
-  onStartReferenceChange,
-  onEndReferenceChange,
-  onClearStartReference,
-  onClearEndReference
+  setEnhanced
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -80,28 +62,6 @@ export const VideoInputControls = ({
               <Play className="w-3.5 h-3.5" />
               VIDEO
             </Button>
-          </div>
-
-          {/* Reference Image Buttons for Start and End */}
-          <div className="flex items-center gap-1">
-            <ReferenceImageButton
-              mode="video"
-              referenceImage={startReferenceImage}
-              referenceImageUrl={startReferenceImageUrl}
-              onReferenceImageChange={onStartReferenceChange}
-              onClearReference={onClearStartReference}
-              size="small"
-              label="start frame"
-            />
-            <ReferenceImageButton
-              mode="video"
-              referenceImage={endReferenceImage}
-              referenceImageUrl={endReferenceImageUrl}
-              onReferenceImageChange={onEndReferenceChange}
-              onClearReference={onClearEndReference}
-              size="small"
-              label="end frame"
-            />
           </div>
 
           {/* Main Text Input */}

@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
-import { ReferenceImageButton } from "@/components/workspace/ReferenceImageButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
@@ -25,11 +24,6 @@ interface ImageInputControlsProps {
   setEnhanced: (enhanced: boolean) => void;
   numImages: number;
   setNumImages: (count: number) => void;
-  // Reference image props
-  referenceImage?: File | null;
-  referenceImageUrl?: string;
-  onReferenceImageChange?: (file: File | null, url: string) => void;
-  onClearReference?: () => void;
 }
 
 export const ImageInputControls = ({
@@ -44,11 +38,7 @@ export const ImageInputControls = ({
   enhanced,
   setEnhanced,
   numImages,
-  setNumImages,
-  referenceImage,
-  referenceImageUrl,
-  onReferenceImageChange,
-  onClearReference
+  setNumImages
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -78,17 +68,6 @@ export const ImageInputControls = ({
               VIDEO
             </Button>
           </div>
-
-          {/* Reference Image Button */}
-          <ReferenceImageButton
-            mode="image"
-            referenceImage={referenceImage}
-            referenceImageUrl={referenceImageUrl}
-            onReferenceImageChange={onReferenceImageChange}
-            onClearReference={onClearReference}
-            size="small"
-            label="character reference"
-          />
 
           {/* Main Text Input */}
           <div className="flex-1">
