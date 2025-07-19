@@ -14,6 +14,7 @@ import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
+import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,26 @@ const Workspace = () => {
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
   const [referenceStrength, setReferenceStrength] = useState(0.85); // Default to 0.85 for optimal character consistency
+  
+  // Video reference state (for video mode)
+  const [videoReferences, setVideoReferences] = useState<Array<{
+    id: 'start' | 'end';
+    label: string;
+    description: string;
+    enabled: boolean;
+    file?: File | null;
+    url?: string;
+    isWorkspaceAsset?: boolean;
+    originalPrompt?: string;
+    enhancedPrompt?: string;
+    seed?: string;
+    modelType?: string;
+    quality?: 'fast' | 'high';
+    generationParams?: Record<string, any>;
+  }>>([
+    { id: 'start', label: 'Starting Point', description: 'Initial frame for video generation', enabled: false },
+    { id: 'end', label: 'Ending Point', description: 'Final frame for video generation', enabled: false }
+  ]);
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
@@ -329,6 +350,18 @@ const Workspace = () => {
     setActiveReferences([]);
   }, []);
 
+  // Video reference handlers for VideoReferencePanel
+  const handleVideoReferencesChange = useCallback((references: any[]) => {
+    setVideoReferences(references);
+  }, []);
+
+  const handleClearVideoReferences = useCallback(() => {
+    setVideoReferences([
+      { id: 'start' as const, label: 'Starting Point', description: 'Initial frame for video generation', enabled: false },
+      { id: 'end' as const, label: 'Ending Point', description: 'Final frame for video generation', enabled: false }
+    ]);
+  }, []);
+
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
     // Create character reference with proper structure
@@ -547,16 +580,26 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Multi-Reference Panel - Connected to Generation Pipeline */}
+        {/* Reference Panel - Connected to Generation Pipeline */}
         {showReferencePanel && (
-          <MultiReferencePanel
-            mode={isVideoMode ? 'video' : 'image'}
-            strength={referenceStrength}
-            onStrengthChange={setReferenceStrength}
-            onReferencesChange={handleReferencesChange}
-            onClear={handleClearReferences}
-            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-          />
+          isVideoMode ? (
+            <VideoReferencePanel
+              strength={referenceStrength}
+              onStrengthChange={setReferenceStrength}
+              onReferencesChange={handleVideoReferencesChange}
+              onClear={handleClearVideoReferences}
+              references={videoReferences}
+            />
+          ) : (
+            <MultiReferencePanel
+              mode="image"
+              strength={referenceStrength}
+              onStrengthChange={setReferenceStrength}
+              onReferencesChange={handleReferencesChange}
+              onClear={handleClearReferences}
+              references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+            />
+          )
         )}
       </div>
 
@@ -580,7 +623,7 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
-            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
+            hasReference={videoReferences.some(ref => ref.enabled && ref.url)}
             onReferenceClick={handleReferenceClick}
           />
         ) : (
