@@ -86,6 +86,17 @@ serve(async (req)=>{
     if (workerMetadata.num_images) {
       updatedMetadata.num_images = workerMetadata.num_images;
     }
+    // REFERENCE IMAGE SUPPORT: Store reference data from worker
+    if (workerMetadata.reference_image_url) {
+      updatedMetadata.reference_image_url = workerMetadata.reference_image_url;
+      updatedMetadata.reference_strength = workerMetadata.reference_strength;
+      updatedMetadata.reference_type = workerMetadata.reference_type;
+      console.log('🖼️ Storing reference image data from worker:', {
+        url: workerMetadata.reference_image_url,
+        strength: workerMetadata.reference_strength,
+        type: workerMetadata.reference_type
+      });
+    }
     
     // Handle enhanced prompt for image_high jobs (enhancement)
     if (currentJob.job_type === 'image_high' && enhancedPrompt) {
@@ -320,6 +331,10 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
             seed: jobMetadata.seed,
             generation_time: jobMetadata.generation_time,
             negative_prompt: jobMetadata.negative_prompt,
+            // REFERENCE IMAGE SUPPORT: Store reference data in image metadata
+            reference_image_url: jobMetadata.reference_image_url,
+            reference_strength: jobMetadata.reference_strength,
+            reference_type: jobMetadata.reference_type,
             job_type: job.job_type, // Store job_type for model detection
             callback_debug: {
               job_type: job.job_type,
@@ -408,16 +423,20 @@ async function handleLegacyImageInsert(supabase, job, assets, jobMetadata, baseT
       format: 'png',
       generation_mode: 'standalone',
       job_id: job.id,
-      metadata: {
-        ...jobMetadata,
-        model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-        is_sdxl: isSDXL,
-        is_enhanced: isEnhanced,
-        callback_processed_at: new Date().toISOString(),
-        original_job_id: job.id,
-        image_index: i,
-        total_images: assets.length
-      }
+              metadata: {
+          ...jobMetadata,
+          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
+          is_sdxl: isSDXL,
+          is_enhanced: isEnhanced,
+          callback_processed_at: new Date().toISOString(),
+          original_job_id: job.id,
+          image_index: i,
+          total_images: assets.length,
+          // REFERENCE IMAGE SUPPORT: Store reference data in image metadata
+          reference_image_url: jobMetadata.reference_image_url,
+          reference_strength: jobMetadata.reference_strength,
+          reference_type: jobMetadata.reference_type
+        }
     };
     
     const { data: newImage, error: imageError } = await supabase
