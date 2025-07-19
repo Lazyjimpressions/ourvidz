@@ -27,7 +27,7 @@ export const useFetchImageDetails = () => {
       if (error) throw error;
 
       if (data?.metadata) {
-        const metadata = data.metadata;
+        const metadata = data.metadata as any; // Type cast to access properties
         
         // Parse seed - handles both integers and scientific notation
         let seed: number | undefined;

@@ -366,8 +366,6 @@ const WorkspaceTest = () => {
           itemId={currentPromptAsset.jobId}
           originalImageUrl={currentPromptAsset.type === 'image' ? currentPromptAsset.url : undefined}
           modelType={currentPromptAsset.modelType}
-          seed={currentPromptAsset.metadata?.seed}
-          generationParams={currentPromptAsset.metadata}
         />
       )}
 
