@@ -20,6 +20,7 @@ import { Image, Dice6 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
 import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
+import { RefinedMultiReferencePanel } from '@/components/workspace/RefinedMultiReferencePanel';
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -433,127 +434,150 @@ const Workspace = () => {
           </div>
         )}
 
-        {/* Current Workspace */}
+        {/* Current Workspace with Enhanced Reference Integration */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Current Workspace ({workspaceTiles.length} assets)</h2>
+            {hasCharacterReference && (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-green-600/20 border border-green-600/30 rounded-lg">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-sm text-green-400 font-medium">Reference Mode Active</span>
+              </div>
+            )}
           </div>
           
           {workspaceTiles.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {workspaceTiles.map((tile) => (
-                <div key={tile.id} className="relative group">
-                  {tile.type === 'video' ? (
-                    <video
-                      src={tile.url}
-                      className="w-full aspect-square object-cover rounded-lg border border-border cursor-pointer hover:scale-105 transition"
-                      muted
-                      loop
-                      onMouseEnter={(e) => e.currentTarget.play()}
-                      onMouseLeave={(e) => e.currentTarget.pause()}
-                      onClick={() => handleImageClick(tile)}
-                      draggable="true"
-                      onDragStart={(e) => {
-                        const assetData = {
-                          url: tile.url,
-                          thumbnailUrl: tile.thumbnailUrl,
-                          prompt: tile.prompt,
-                          modelType: tile.modelType,
-                          quality: tile.quality,
-                          type: tile.type,
-                          duration: tile.duration,
-                          generationParams: {
-                            originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp,
-                            seed: tile.generationParams?.seed || tile.seed
-                          }
-                        };
-                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      style={{ cursor: 'move' }}
-                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
-                    />
-                  ) : (
-                    <img
-                      src={tile.url}
-                      alt={`Workspace ${tile.id}`}
-                      onClick={() => handleImageClick(tile)}
-                      className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
-                      draggable="true"
-                      onDragStart={(e) => {
-                        const assetData = {
-                          url: tile.url,
-                          prompt: tile.prompt,
-                          modelType: tile.modelType,
-                          quality: tile.quality,
-                          type: tile.type,
-                          generationParams: {
-                            originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp,
-                            seed: tile.generationParams?.seed || tile.seed
-                          }
-                        };
-                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      onDragEnd={(e) => {
-                        e.currentTarget.style.opacity = '1';
-                      }}
-                      style={{ cursor: 'move' }}
-                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
-                    />
-                  )}
-                  
-                  {/* Action buttons */}
-                  <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                    {tile.type === 'image' && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUseAsReference(tile);
-                          }}
-                          className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
-                          title="Use as Character Reference"
-                        >
-                          <Image className="w-3 h-3" />
-                        </button>
-                        {(tile.generationParams?.seed || tile.seed) && (
+              {workspaceTiles.map((tile) => {
+                const isUsedAsReference = activeReferences.some(ref => ref.url === tile.url);
+                
+                return (
+                  <div key={tile.id} className={`relative group ${isUsedAsReference ? 'ring-2 ring-primary ring-offset-2 ring-offset-black' : ''}`}>
+                    {tile.type === 'video' ? (
+                      <video
+                        src={tile.url}
+                        className="w-full aspect-square object-cover rounded-lg border border-border cursor-pointer hover:scale-105 transition"
+                        muted
+                        loop
+                        onMouseEnter={(e) => e.currentTarget.play()}
+                        onMouseLeave={(e) => e.currentTarget.pause()}
+                        onClick={() => handleImageClick(tile)}
+                        draggable="true"
+                        onDragStart={(e) => {
+                          const assetData = {
+                            url: tile.url,
+                            thumbnailUrl: tile.thumbnailUrl,
+                            prompt: tile.prompt,
+                            modelType: tile.modelType,
+                            quality: tile.quality,
+                            type: tile.type,
+                            duration: tile.duration,
+                            generationParams: {
+                              originalAssetId: tile.originalAssetId,
+                              timestamp: tile.timestamp,
+                              seed: tile.generationParams?.seed || tile.seed
+                            }
+                          };
+                          e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        style={{ cursor: 'move' }}
+                        title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
+                      />
+                    ) : (
+                      <img
+                        src={tile.url}
+                        alt={`Workspace ${tile.id}`}
+                        onClick={() => handleImageClick(tile)}
+                        className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
+                        draggable="true"
+                        onDragStart={(e) => {
+                          const assetData = {
+                            url: tile.url,
+                            prompt: tile.prompt,
+                            modelType: tile.modelType,
+                            quality: tile.quality,
+                            type: tile.type,
+                            generationParams: {
+                              originalAssetId: tile.originalAssetId,
+                              timestamp: tile.timestamp,
+                              seed: tile.generationParams?.seed || tile.seed
+                            }
+                          };
+                          e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        onDragEnd={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                        }}
+                        style={{ cursor: 'move' }}
+                        title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
+                      />
+                    )}
+                    
+                    {/* Enhanced Action buttons with Reference indicator */}
+                    <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      {tile.type === 'image' && (
+                        <>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleUseSeed(tile);
+                              handleUseAsReference(tile);
                             }}
-                            className="bg-secondary text-secondary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-secondary/80 transition"
-                            title={`Use seed ${tile.generationParams?.seed || tile.seed}`}
+                            className={`rounded-full w-6 h-6 flex items-center justify-center text-xs transition ${
+                              isUsedAsReference 
+                                ? 'bg-primary text-primary-foreground ring-2 ring-white/50' 
+                                : 'bg-primary/80 text-primary-foreground hover:bg-primary'
+                            }`}
+                            title="Use as Character Reference"
                           >
-                            <Dice6 className="w-3 h-3" />
+                            <Image className="w-3 h-3" />
                           </button>
-                        )}
-                      </>
+                          {(tile.generationParams?.seed || tile.seed) && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUseSeed(tile);
+                              }}
+                              className="bg-secondary text-secondary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-secondary/80 transition"
+                              title={`Use seed ${tile.generationParams?.seed || tile.seed}`}
+                            >
+                              <Dice6 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Reference indicator badge */}
+                    {isUsedAsReference && (
+                      <div className="absolute top-2 right-2">
+                        <div className="bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
+                          Reference
+                        </div>
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={() => handleRemoveFromWorkspace(tile.id)}
+                      className="absolute bottom-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
+                      disabled={deletingTiles.has(tile.id)}
+                    >
+                      {deletingTiles.has(tile.id) ? '⌛' : '×'}
+                    </button>
+
+                    {/* Seed display in bottom corner */}
+                    {(tile.generationParams?.seed || tile.seed) && (
+                      <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition">
+                        <SeedDisplay 
+                          seed={tile.generationParams?.seed || tile.seed}
+                          className="text-xs"
+                        />
+                      </div>
                     )}
                   </div>
-                  
-                  <button
-                    onClick={() => handleRemoveFromWorkspace(tile.id)}
-                    className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
-                    disabled={deletingTiles.has(tile.id)}
-                  >
-                    {deletingTiles.has(tile.id) ? '⌛' : '×'}
-                  </button>
-
-                  {/* Seed display in bottom corner */}
-                  {(tile.generationParams?.seed || tile.seed) && (
-                    <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition">
-                      <SeedDisplay 
-                        seed={tile.generationParams?.seed || tile.seed}
-                        className="text-xs"
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
@@ -562,8 +586,8 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Multi-Reference Panel - Connected to Generation Pipeline */}
-        <EnhancedMultiReferencePanel
+        {/* Refined Multi-Reference Panel - Replaces both old panels */}
+        <RefinedMultiReferencePanel
           mode={isVideoMode ? 'video' : 'image'}
           strength={referenceStrength}
           onStrengthChange={setReferenceStrength}
@@ -577,7 +601,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Now with Reference Image Support */}
+      {/* Bottom Input Controls - Enhanced with reference integration */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -587,7 +611,7 @@ const Workspace = () => {
             isGenerating={isGenerating}
             onSwitchToImage={() => {
               setIsVideoMode(false);
-              setNumImages(1); // Reset to 1 for image mode
+              setNumImages(1);
             }}
             quality={quality}
             setQuality={setQuality}
@@ -626,10 +650,8 @@ const Workspace = () => {
         previewUrl={generationPreviewUrl}
         onCancel={() => {
           setShowGenerationPreview(false);
-          // Add actual cancellation logic here if available
         }}
         onShowPreview={() => {
-          // Open preview modal or expand preview
           toast.info('Full preview coming soon');
         }}
       />
