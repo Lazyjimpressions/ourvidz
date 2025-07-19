@@ -46,7 +46,7 @@ export const CharacterReferenceWarning = ({
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm">Character Reference Active</span>
             <Badge variant="secondary" className="text-xs">
-              {referenceStrength.toFixed(3)}
+              {referenceStrength.toFixed(2)}
             </Badge>
             {numImages > 1 && (
               <Badge variant="outline" className="text-xs text-amber-600">

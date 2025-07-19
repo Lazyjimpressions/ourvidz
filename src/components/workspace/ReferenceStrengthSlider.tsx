@@ -113,7 +113,7 @@ export const ReferenceStrengthSlider = ({
           <span className={`text-xs min-w-14 text-center font-mono ${
             Math.abs(value - range.optimal) <= 0.050 ? 'text-green-500' : 'text-muted-foreground'
           }`}>
-            {value.toFixed(3)}
+            {value.toFixed(2)}
           </span>
         </div>
 
@@ -130,7 +130,7 @@ export const ReferenceStrengthSlider = ({
                 className="h-5 px-2 text-xs font-mono"
                 disabled={disabled}
               >
-                {preset.toFixed(3)}
+                {preset.toFixed(2)}
               </Button>
             ))}
           </div>
@@ -140,7 +140,7 @@ export const ReferenceStrengthSlider = ({
         {Math.abs(value - range.optimal) > 0.050 && (
           <div className="text-xs text-amber-500 flex items-center gap-1">
             <InfoIcon className="w-3 h-3" />
-            <span>Optimal for {referenceType}: {range.optimal.toFixed(3)}</span>
+            <span>Optimal for {referenceType}: {range.optimal.toFixed(2)}</span>
             <Button
               variant="ghost"
               size="sm"

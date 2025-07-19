@@ -244,7 +244,7 @@ export const MultiReferencePanel = ({
                         {activeReferences.length} active
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        @ {strength.toFixed(1)}
+                        @ {strength.toFixed(2)}
                       </span>
                     </div>
                   )}
@@ -394,7 +394,7 @@ export const MultiReferencePanel = ({
                     />
                   </div>
                   <span className="text-xs text-muted-foreground min-w-8 text-center">
-                    {strength.toFixed(1)}
+                    {strength.toFixed(2)}
                   </span>
                 </div>
               )}

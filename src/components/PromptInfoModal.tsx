@@ -173,7 +173,7 @@ export const PromptInfoModal = ({
                 {details.referenceStrength && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Reference Strength:</span>
-                    <Badge variant="outline">{details.referenceStrength.toFixed(3)}</Badge>
+                                            <Badge variant="outline">{details.referenceStrength.toFixed(2)}</Badge>
                   </div>
                 )}
               </div>

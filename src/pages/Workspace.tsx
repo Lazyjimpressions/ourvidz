@@ -39,7 +39,7 @@ const Workspace = () => {
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
-  const [referenceStrength, setReferenceStrength] = useState(0.900); // Default to 0.900 for better consistency
+  const [referenceStrength, setReferenceStrength] = useState(0.85); // Default to 0.85 for optimal character consistency
   
   // Legacy reference state (kept for backwards compatibility)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
