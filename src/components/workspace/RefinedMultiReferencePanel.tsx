@@ -135,7 +135,6 @@ export const RefinedMultiReferencePanel = ({
               <Switch
                 checked={showAdvanced}
                 onCheckedChange={setShowAdvanced}
-                size="sm"
               />
             </div>
           </div>
@@ -228,7 +227,7 @@ export const RefinedMultiReferencePanel = ({
                   <type.icon className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{type.label}</span>
                   {hasReference && !isPrimary && (
-                    <Badge variant="outline" size="sm">Active</Badge>
+                    <Badge variant="outline">Active</Badge>
                   )}
                 </div>
 

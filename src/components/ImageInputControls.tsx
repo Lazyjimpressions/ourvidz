@@ -55,7 +55,7 @@ export const ImageInputControls = ({
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
 
-  const hasReference = referenceImage || referenceImageUrl;
+  const hasReference = Boolean(referenceImage || referenceImageUrl);
 
   return (
     <TooltipProvider>
