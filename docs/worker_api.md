@@ -210,10 +210,10 @@ start_reference_url = "https://storage.example.com/start_frame.jpg"
 end_reference_url = "https://storage.example.com/end_frame.jpg"
 reference_strength = 0.85
 
-# Video generation with reference frames using FLF2V task
-if start_reference_url or end_reference_url:
-    # Use FLF2V (First-Last Frame to Video) task
-    task_type = "flf2v-14B"  # or "flf2v-1.3B" for smaller model
+# Video generation with reference frames using I2V task (1.3B Model)
+if start_reference_url:
+    # Use I2V (Image-to-Video) task for single reference frame
+    task_type = "i2v-1.3B"  # ✅ CORRECT: Image-to-Video with reference
     
     # Generate video with reference frames
     video = generate_flf2v_video(
@@ -400,12 +400,12 @@ reference_strength = metadata.get('reference_strength', 0.85)
 
 # Determine task type based on reference availability (1.3B Model)
 if start_reference_url:
-    # Use I2V-style generation with start reference frame (1.3B limitation)
-    task_type = "t2v-1.3B"  # Use T2V task with --image parameter
-    print(f"🎬 Using I2V-style generation with start reference frame")
+    # Use I2V task for video with reference frame
+    task_type = "i2v-1.3B"  # ✅ CORRECT: Image-to-Video with reference
+    print(f"🎬 Using I2V task for video with reference frame")
 else:
-    # Use standard T2V (Text to Video) task
-    task_type = "t2v-1.3B"  # Standard video generation
+    # Use T2V task for standard video generation
+    task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
     print(f"🎬 Using T2V task for standard video generation")
 
 # Note: WAN 1.3B model does not support FLF2V (dual reference frames)
