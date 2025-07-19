@@ -21,6 +21,14 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   const [showInfoPanel, setShowInfoPanel] = useState(false);
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
   
+  console.log('🎭 WORKSPACE MODAL RENDER:', {
+    currentTileId: currentTile?.id,
+    originalAssetId: currentTile?.originalAssetId,
+    type: currentTile?.type,
+    showInfoPanel,
+    hasDetails: !!details
+  });
+  
   // Reset details when tile changes
   useEffect(() => {
     reset();
@@ -40,12 +48,17 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
       } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
         setShowInfoPanel(!showInfoPanel);
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        if (details?.seed) {
+          handleCopySeed();
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, tiles.length, showInfoPanel]);
+  }, [currentIndex, tiles.length, showInfoPanel, details?.seed]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -75,9 +88,19 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   };
 
   const handleLoadDetails = () => {
-    if (currentTile.originalAssetId) {
-      fetchDetails(currentTile.originalAssetId);
+    console.log('🔍 LOAD DETAILS CLICKED:', {
+      currentTileId: currentTile.id,
+      originalAssetId: currentTile.originalAssetId,
+      tileData: currentTile
+    });
+
+    if (!currentTile.originalAssetId) {
+      console.error('❌ No originalAssetId available for tile:', currentTile.id);
+      toast.error('No original asset ID available for this image');
+      return;
     }
+
+    fetchDetails(currentTile.originalAssetId);
   };
 
   const handleCopySeed = () => {
@@ -91,6 +114,8 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   if (!currentTile?.url) {
     return null;
   }
+
+  const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -247,13 +272,25 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   <h4 className="text-sm font-medium text-white/70 mb-1">Type</h4>
                   <p className="text-sm text-white capitalize">{currentTile.type}</p>
                 </div>
+
+                {/* Debug Info (only in development) */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-4 p-3 bg-white/5 rounded border border-white/10">
+                    <h4 className="text-xs font-medium text-white/50 mb-2">Debug Info</h4>
+                    <div className="text-xs text-white/40 space-y-1">
+                      <div>Tile ID: {currentTile.id}</div>
+                      <div>Original Asset ID: {currentTile.originalAssetId || 'None'}</div>
+                      <div>Can Load Details: {canLoadDetails ? 'Yes' : 'No'}</div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Generation Details */}
               <div className="border-t border-white/10 pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-sm font-medium text-white/70">Generation Details</h4>
-                  {!details && !loading && (
+                  {!details && !loading && canLoadDetails && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -262,6 +299,9 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                     >
                       Load Details
                     </Button>
+                  )}
+                  {!canLoadDetails && (
+                    <span className="text-xs text-white/50">Not available</span>
                   )}
                 </div>
 
@@ -285,6 +325,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                           size="sm"
                           onClick={handleCopySeed}
                           className="text-white/70 hover:text-white hover:bg-white/10 p-1"
+                          title="Copy seed (or press 'c')"
                         >
                           <Copy className="w-3 h-3" />
                         </Button>
@@ -295,6 +336,13 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                       <div>
                         <h5 className="text-xs font-medium text-white/70">Generation Time</h5>
                         <p className="text-sm text-white">{details.generationTime.toFixed(2)}s</p>
+                      </div>
+                    )}
+                    
+                    {details.modelType && (
+                      <div>
+                        <h5 className="text-xs font-medium text-white/70">Model Type</h5>
+                        <p className="text-sm text-white">{details.modelType}</p>
                       </div>
                     )}
                     
@@ -315,9 +363,15 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                 )}
               </div>
 
-              {/* Keyboard Shortcut Hint */}
+              {/* Keyboard Shortcuts */}
               <div className="mt-8 pt-6 border-t border-white/10">
-                <p className="text-xs text-white/50">Press 'i' to toggle this panel</p>
+                <p className="text-xs text-white/50 mb-2">Keyboard Shortcuts</p>
+                <div className="text-xs text-white/40 space-y-1">
+                  <div>'i' - Toggle info panel</div>
+                  <div>'c' - Copy seed</div>
+                  <div>'←/→' - Navigate images</div>
+                  <div>'Esc' - Close lightbox</div>
+                </div>
               </div>
             </div>
           </div>
