@@ -358,7 +358,7 @@ const Workspace = () => {
 
       {/* Library Import Modal */}
       <LibraryImportModal
-        isOpen={showLibrary}
+        open={showLibrary}
         onClose={() => setShowLibrary(false)}
         onImport={handleImport}
       />
