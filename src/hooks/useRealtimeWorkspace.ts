@@ -4,22 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-
-interface MediaTile {
-  id: string;
-  originalAssetId: string;
-  type: 'image' | 'video';
-  url: string;
-  prompt: string;
-  timestamp: Date;
-  quality: 'fast' | 'high';
-  modelType?: string;
-  duration?: number;
-  thumbnailUrl?: string;
-  enhancedPrompt?: string;
-  seed?: string | number;
-  generationParams?: Record<string, any>;
-}
+import { MediaTile } from '@/types/workspace';
 
 export const useRealtimeWorkspace = () => {
   const queryClient = useQueryClient();
@@ -286,10 +271,10 @@ export const useRealtimeWorkspace = () => {
   }, [queryClient]);
 
   // Helper function to safely convert seed values from scientific notation
-  const convertSeedValue = (seedValue: any): number | undefined => {
+  const convertSeedValue = (seedValue: any): number => {
     if (seedValue === null || seedValue === undefined) {
       console.log('🔍 SEED CONVERSION: Seed value is null/undefined:', seedValue);
-      return undefined;
+      return 0; // Return 0 as default for missing seeds
     }
     
     if (typeof seedValue === 'number') {
@@ -307,7 +292,7 @@ export const useRealtimeWorkspace = () => {
     }
     
     console.warn('🔍 SEED CONVERSION: Could not convert seed value:', seedValue, typeof seedValue);
-    return undefined;
+    return 0; // Return 0 as fallback
   };
 
   // Transform assets to tiles - FIXED: Proper seed extraction and conversion
