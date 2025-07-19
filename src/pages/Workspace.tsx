@@ -9,8 +9,7 @@ import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
-import { ImageInputControls } from '@/components/ImageInputControls';
-import { VideoInputControls } from '@/components/VideoInputControls';
+import { QwenImageControls } from '@/components/workspace/QwenImageControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
@@ -610,44 +609,22 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Enhanced with reference integration */}
+      {/* NEW: Unified Qwen-Optimized Input Controls */}
       <div className="p-6 bg-black">
-        {isVideoMode ? (
-          <VideoInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onSwitchToImage={() => {
-              setIsVideoMode(false);
-              setNumImages(1);
-            }}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-          />
-        ) : (
-          <ImageInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onSwitchToVideo={() => setIsVideoMode(true)}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-            numImages={numImages}
-            setNumImages={setNumImages}
-            referenceImage={referenceImage}
-            referenceImageUrl={referenceImageUrl}
-            onReferenceImageChange={handleReferenceImageChange}
-            onClearReference={handleClearReference}
-          />
-        )}
+        <QwenImageControls
+          prompt={prompt}
+          setPrompt={setPrompt}
+          onGenerate={handleGenerate}
+          isGenerating={isGenerating}
+          onSwitchToVideo={() => setIsVideoMode(true)}
+          isVideoMode={isVideoMode}
+          numImages={numImages}
+          setNumImages={setNumImages}
+          referenceImage={referenceImage}
+          referenceImageUrl={referenceImageUrl}
+          onReferenceImageChange={handleReferenceImageChange}
+          onClearReference={handleClearReference}
+        />
       </div>
 
       {/* Generation Preview Panel */}
