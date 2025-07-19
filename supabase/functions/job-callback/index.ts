@@ -65,7 +65,7 @@ serve(async (req)=>{
       existingMetadata: currentJob.metadata
     });
     // Prepare update data
-    const updateData = {
+    const updateData: any = {
       status,
       completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
       error_message: error_message || null
@@ -587,7 +587,7 @@ async function handlePromptTestCallback(supabase, job, status, assets, error_mes
     }
 
     // Prepare update data based on job status
-    let updateData = {
+    let updateData: any = {
       success: status === 'completed',
       test_metadata: {
         ...testResult.test_metadata,
