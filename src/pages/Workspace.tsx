@@ -25,6 +25,8 @@ const Workspace = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   
+  console.log('🔍 Workspace component rendering:', { user: !!user, loading, timestamp: new Date().toISOString() });
+  
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
   const [isVideoMode, setIsVideoMode] = useState(mode === 'video');

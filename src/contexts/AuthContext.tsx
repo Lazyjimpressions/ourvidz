@@ -46,6 +46,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [profileFetchAttempts, setProfileFetchAttempts] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  console.log('🔐 AuthProvider state:', { user: !!user, loading, timestamp: new Date().toISOString() });
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
 
