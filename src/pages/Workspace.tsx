@@ -409,12 +409,6 @@ const Workspace = () => {
     }
   }, []);
 
-  // Remove the modification modal state since it's now integrated
-  // const [modificationTile, setModificationTile] = useState<MediaTile | null>(null);
-  // const handleModifyImage = useCallback((tile: MediaTile) => {
-  //   setModificationTile(tile);
-  // }, []);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -609,7 +603,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* NEW: Unified Qwen-Optimized Input Controls */}
+      {/* Enhanced Qwen-Optimized Input Controls with Full Drag & Drop */}
       <div className="p-6 bg-black">
         <QwenImageControls
           prompt={prompt}
@@ -624,6 +618,9 @@ const Workspace = () => {
           referenceImageUrl={referenceImageUrl}
           onReferenceImageChange={handleReferenceImageChange}
           onClearReference={handleClearReference}
+          selectedMode={selectedMode}
+          activeReferences={activeReferences}
+          onReferencesChange={handleReferencesChange}
         />
       </div>
 
