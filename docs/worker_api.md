@@ -386,7 +386,7 @@ def generate_negative_prompt_for_sdxl(user_prompt):
 - **Seed Control**: Reproducible generation (no negative prompts)
 - **Path Consistency**: Fixed video path handling
 
-### **Video Generation with Reference Frames**
+### **Video Generation with Reference Frames (WAN 1.3B Model)**
 ```python
 # Video generation parameters
 frame_num = 83  # Number of frames
@@ -398,23 +398,26 @@ start_reference_url = config.get('first_frame') or metadata.get('start_reference
 end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
 reference_strength = metadata.get('reference_strength', 0.85)
 
-# Determine task type based on reference availability
-if start_reference_url or end_reference_url:
-    # Use FLF2V (First-Last Frame to Video) task for reference frames
-    task_type = "flf2v-14B"  # or "flf2v-1.3B" for smaller model
-    print(f"🎬 Using FLF2V task for video with reference frames")
+# Determine task type based on reference availability (1.3B Model)
+if start_reference_url:
+    # Use I2V-style generation with start reference frame (1.3B limitation)
+    task_type = "t2v-1.3B"  # Use T2V task with --image parameter
+    print(f"🎬 Using I2V-style generation with start reference frame")
 else:
     # Use standard T2V (Text to Video) task
-    task_type = "t2v-14B"  # or "t2v-1.3B" for smaller model
+    task_type = "t2v-1.3B"  # Standard video generation
     print(f"🎬 Using T2V task for standard video generation")
 
-# Generate video with appropriate task type
-if task_type.startswith("flf2v"):
-    # FLF2V generation with reference frames
-    video = generate_flf2v_video(
+# Note: WAN 1.3B model does not support FLF2V (dual reference frames)
+# Only start reference frame is used for I2V-style generation
+```
+
+# Generate video with appropriate task type (1.3B Model)
+if start_reference_url:
+    # I2V-style generation with start reference frame
+    video = generate_video_with_reference_frame(
         prompt, 
         start_reference_url, 
-        end_reference_url, 
         frame_num,
         task_type
     )
@@ -756,7 +759,7 @@ completion_stats = {
 3. **Seed Support**: User-controlled seeds for reproducible generation
 4. **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
 5. **Reference Image Support**: Optional image-to-image with type and strength control
-6. **Video Reference Frame Support**: ✅ NEW: FLF2V task with start/end frame references for video generation
+6. **Video Reference Frame Support**: ✅ NEW: I2V-style generation with start reference frame for WAN 1.3B model
 7. **Comprehensive Error Handling**: Enhanced debugging and error tracking
 8. **Metadata Consistency**: Improved data flow and storage
 9. **Path Consistency Fix**: Fixed video path handling for WAN workers
