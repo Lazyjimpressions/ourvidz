@@ -210,10 +210,10 @@ start_reference_url = "https://storage.example.com/start_frame.jpg"
 end_reference_url = "https://storage.example.com/end_frame.jpg"
 reference_strength = 0.85
 
-# Video generation with reference frames using I2V task (1.3B Model)
+# Video generation with reference frames using T2V task (1.3B Model)
 if start_reference_url:
-    # Use I2V (Image-to-Video) task for single reference frame
-    task_type = "i2v-1.3B"  # ✅ CORRECT: Image-to-Video with reference
+    # Use T2V task with --first_frame parameter for start reference
+    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with start frame reference
     
     # Generate video with reference frames
     video = generate_flf2v_video(
@@ -231,14 +231,14 @@ else:
 
 ### **WAN Command with FLF2V Task for Reference Frames**
 ```python
-# Determine task type based on reference availability
+# Determine task type based on reference availability (1.3B Model)
 if start_ref_path or end_ref_path:
-    # Use FLF2V task for video with reference frames
-    task_type = "flf2v-14B"  # or "flf2v-1.3B" for smaller model
-    print(f"🎬 Using FLF2V task for video with reference frames")
+    # Use T2V task with --first_frame and/or --last_frame parameters
+    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with frame references
+    print(f"🎬 Using T2V task with frame references (1.3B model)")
 else:
     # Use standard T2V task
-    task_type = "t2v-14B"  # or "t2v-1.3B" for smaller model
+    task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
     print(f"🎬 Using T2V task for standard video generation")
 
 # Build WAN command with correct task type
@@ -260,19 +260,16 @@ cmd = [
     "--save_file", output_path
 ]
 
-# Add reference frame parameters for FLF2V task
-if task_type.startswith("flf2v"):
-    if start_ref_path:
-        cmd.extend(["--first_frame", start_ref_path])
-        print(f"🖼️ Start reference frame: {start_ref_path}")
-    
-    if end_ref_path:
-        cmd.extend(["--last_frame", end_ref_path])
-        print(f"🖼️ End reference frame: {end_ref_path}")
-    
-    print(f"🎬 FLF2V command: {' '.join(cmd)}")
-else:
-    print(f"🎬 T2V command: {' '.join(cmd)}")
+# Add reference frame parameters for T2V task (1.3B Model)
+if start_ref_path:
+    cmd.extend(["--first_frame", start_ref_path])
+    print(f"🖼️ Start reference frame: {start_ref_path}")
+
+if end_ref_path:
+    cmd.extend(["--last_frame", end_ref_path])
+    print(f"🖼️ End reference frame: {end_ref_path}")
+
+print(f"🎬 T2V command with references: {' '.join(cmd)}")
 ```
 
 ### **Enhanced Negative Prompt Generation**
@@ -400,9 +397,9 @@ reference_strength = metadata.get('reference_strength', 0.85)
 
 # Determine task type based on reference availability (1.3B Model)
 if start_reference_url:
-    # Use T2V task with --image parameter for reference frame (1.3B limitation)
-    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with reference image
-    print(f"🎬 Using T2V task with reference image (1.3B model)")
+    # Use T2V task with --first_frame parameter for start reference
+    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with start frame reference
+    print(f"🎬 Using T2V task with start frame reference (1.3B model)")
 else:
     # Use T2V task for standard video generation
     task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
@@ -581,12 +578,12 @@ else:
         end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
         
         if start_reference_url or end_reference_url:
-            # Use FLF2V task for video with reference frames
-            task_type = "flf2v-14B"  # or "flf2v-1.3B" for smaller model
-            result = generate_flf2v_video(prompt, start_reference_url, end_reference_url, config.get('frame_num', 83), task_type)
+            # Use T2V task with --first_frame and/or --last_frame parameters (1.3B Model)
+            task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with frame references
+            result = generate_t2v_video_with_references(prompt, start_reference_url, end_reference_url, config.get('frame_num', 83), task_type)
         else:
             # Use T2V task for standard video generation
-            task_type = "t2v-14B"  # or "t2v-1.3B" for smaller model
+            task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
             result = generate_t2v_video(prompt, config.get('frame_num', 83), task_type)
     else:
         # Standard image generation
