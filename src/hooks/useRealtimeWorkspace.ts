@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
@@ -16,7 +17,7 @@ interface MediaTile {
   duration?: number;
   thumbnailUrl?: string;
   enhancedPrompt?: string;
-  seed?: string;
+  seed?: string | number;
   generationParams?: Record<string, any>;
 }
 
@@ -284,13 +285,58 @@ export const useRealtimeWorkspace = () => {
     };
   }, [queryClient]);
 
-  // Transform assets to tiles - simplified for individual image handling
+  // Helper function to safely convert seed values from scientific notation
+  const convertSeedValue = (seedValue: any): number | undefined => {
+    if (seedValue === null || seedValue === undefined) {
+      console.log('🔍 SEED CONVERSION: Seed value is null/undefined:', seedValue);
+      return undefined;
+    }
+    
+    if (typeof seedValue === 'number') {
+      console.log('🔍 SEED CONVERSION: Seed is already a number:', seedValue);
+      return seedValue;
+    }
+    
+    if (typeof seedValue === 'string') {
+      // Handle scientific notation strings like "1.752888178e+09"
+      const parsed = parseFloat(seedValue);
+      if (!isNaN(parsed)) {
+        console.log('🔍 SEED CONVERSION: Converted string to number:', seedValue, '->', parsed);
+        return Math.round(parsed); // Round to integer for display
+      }
+    }
+    
+    console.warn('🔍 SEED CONVERSION: Could not convert seed value:', seedValue, typeof seedValue);
+    return undefined;
+  };
+
+  // Transform assets to tiles - FIXED: Proper seed extraction and conversion
   const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {
+    console.log('🔄 TRANSFORM ASSET TO TILES:', {
+      assetId: asset.id,
+      type: asset.type,
+      rawMetadata: asset.metadata,
+      metadataKeys: asset.metadata ? Object.keys(asset.metadata) : null,
+      rawSeed: asset.metadata?.seed,
+      seedType: typeof asset.metadata?.seed
+    });
+
     const tiles: MediaTile[] = [];
     
     if (asset.type === 'image') {
       // Handle individual image records only
       if (asset.url) {
+        // FIXED: Proper seed extraction and conversion
+        const extractedSeed = convertSeedValue(asset.metadata?.seed);
+        
+        console.log('🎯 SEED EXTRACTION FOR IMAGE:', {
+          assetId: asset.id,
+          rawSeed: asset.metadata?.seed,
+          extractedSeed,
+          generationTime: asset.metadata?.generation_time,
+          negativePrompt: asset.metadata?.negative_prompt
+        });
+
         // Handle single image
         tiles.push({
           id: asset.id,
@@ -302,10 +348,10 @@ export const useRealtimeWorkspace = () => {
           quality: (asset.quality as 'fast' | 'high') || 'fast',
           modelType: asset.metadata?.job_type || asset.modelType, // PHASE 1 FIX: Use job_type for accurate model detection
           enhancedPrompt: asset.enhancedPrompt,
-          seed: asset.metadata?.seed,
+          seed: extractedSeed, // FIXED: Use converted seed value
           generationParams: {
             ...asset.metadata,
-            seed: asset.metadata?.seed,
+            seed: extractedSeed, // FIXED: Ensure seed is properly converted in generationParams too
             generation_time: asset.metadata?.generation_time,
             negative_prompt: asset.metadata?.negative_prompt,
             reference_strength: asset.metadata?.reference_strength
@@ -313,6 +359,14 @@ export const useRealtimeWorkspace = () => {
         });
       }
     } else if (asset.type === 'video' && asset.url) {
+      const extractedSeed = convertSeedValue(asset.metadata?.seed);
+      
+      console.log('🎯 SEED EXTRACTION FOR VIDEO:', {
+        assetId: asset.id,
+        rawSeed: asset.metadata?.seed,
+        extractedSeed
+      });
+
       tiles.push({
         id: asset.id,
         originalAssetId: asset.id,
@@ -324,8 +378,11 @@ export const useRealtimeWorkspace = () => {
         duration: asset.duration,
         thumbnailUrl: asset.thumbnailUrl,
         enhancedPrompt: asset.enhancedPrompt,
-        seed: asset.metadata?.seed,
-        generationParams: asset.metadata
+        seed: extractedSeed, // FIXED: Use converted seed value
+        generationParams: {
+          ...asset.metadata,
+          seed: extractedSeed // FIXED: Ensure seed is properly converted
+        }
       });
     }
     

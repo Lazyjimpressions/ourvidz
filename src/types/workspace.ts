@@ -1,3 +1,4 @@
+
 // Reference image interfaces
 export interface ReferenceImage {
   file?: File;
@@ -39,8 +40,8 @@ export interface MediaTile {
   setSize?: number;
   setImageUrls?: string[];
   selectedImageIndices?: number[];
-  // Enhanced workspace metadata for dragging
+  // Enhanced workspace metadata for dragging - FIXED: Proper type handling for seed
   enhancedPrompt?: string;
-  seed?: string | number;
+  seed?: number; // FIXED: Changed from string | number to just number for consistency
   generationParams?: Record<string, any>;
 }
