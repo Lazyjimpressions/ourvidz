@@ -17,11 +17,10 @@ import { CharacterReferenceWarning } from '@/components/workspace/CharacterRefer
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Image, Dice6, Wand2, ImageIcon, User } from 'lucide-react';
-import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
+import { UnifiedImageModal } from '@/components/workspace/UnifiedImageModal';
 import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
 import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
 import { RefinedMultiReferencePanel } from '@/components/workspace/RefinedMultiReferencePanel';
-import { ImageModificationModal } from '@/components/workspace/ImageModificationModal';
 import { MediaTile } from '@/types/workspace';
 
 const Workspace = () => {
@@ -411,13 +410,11 @@ const Workspace = () => {
     }
   }, []);
 
-  // NEW: State for modification modal
-  const [modificationTile, setModificationTile] = useState<MediaTile | null>(null);
-
-  // NEW: Handle modify action
-  const handleModifyImage = useCallback((tile: MediaTile) => {
-    setModificationTile(tile);
-  }, []);
+  // Remove the modification modal state since it's now integrated
+  // const [modificationTile, setModificationTile] = useState<MediaTile | null>(null);
+  // const handleModifyImage = useCallback((tile: MediaTile) => {
+  //   setModificationTile(tile);
+  // }, []);
 
   if (loading) {
     return (
@@ -522,21 +519,10 @@ const Workspace = () => {
                       />
                     )}
                     
-                    {/* Enhanced Action buttons with prominent Modify button */}
+                    {/* Simplified Action buttons - removed redundant modify button */}
                     <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                       {tile.type === 'image' && (
                         <>
-                          {/* NEW: Prominent Modify button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleModifyImage(tile);
-                            }}
-                            className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition ring-2 ring-white/50"
-                            title="Modify this image"
-                          >
-                            <Wand2 className="w-3 h-3" />
-                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -604,7 +590,7 @@ const Workspace = () => {
               </div>
               <h3 className="text-lg font-medium mb-2">Workspace is empty</h3>
               <p className="text-muted-foreground">Generated images and videos will automatically appear here.</p>
-              <p className="text-sm text-muted-foreground mt-2">Drag images to reference blocks below to start creating variations.</p>
+              <p className="text-sm text-muted-foreground mt-2">Click any image to view and modify it instantly.</p>
             </div>
           )}
         </div>
@@ -679,11 +665,12 @@ const Workspace = () => {
         }}
       />
 
-      {/* Unified Modal System - WorkspaceContentModal handles everything */}
+      {/* Unified Modal System - Single modal for viewing and modification */}
       {lightboxIndex !== null && workspaceTiles.length > 0 && (
-        <WorkspaceContentModal
+        <UnifiedImageModal
           tiles={workspaceTiles}
           currentIndex={lightboxIndex}
+          open={lightboxIndex !== null}
           onClose={() => setLightboxIndex(null)}
           onIndexChange={setLightboxIndex}
           onRemoveFromWorkspace={(tileId) => {
@@ -717,15 +704,6 @@ const Workspace = () => {
               toast.error('Failed to delete from library');
             }
           }}
-        />
-      )}
-
-      {/* NEW: Image Modification Modal */}
-      {modificationTile && (
-        <ImageModificationModal
-          tile={modificationTile}
-          open={!!modificationTile}
-          onClose={() => setModificationTile(null)}
         />
       )}
 
