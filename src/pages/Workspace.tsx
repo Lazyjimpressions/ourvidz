@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -41,7 +40,7 @@ const Workspace = () => {
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
   const [referenceStrength, setReferenceStrength] = useState(0.900); // Default to 0.900 for better consistency
   
-  // Legacy reference state (kept for backwards compatibility)
+  // Legacy reference state (kept for backwards compatibility AND connected to input controls)
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string>('');
   const [referenceType, setReferenceType] = useState<'style' | 'composition' | 'character'>('character');
@@ -297,15 +296,36 @@ const Workspace = () => {
     }
   };
 
-  // Reference image handlers
+  // Reference image handlers - Updated to sync with multi-reference system
   const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
     setReferenceImage(file);
     setReferenceImageUrl(url);
+    
+    // Also sync with multi-reference system as character reference
+    if (url) {
+      const characterReference = {
+        id: 'character' as const,
+        label: 'Character',
+        description: 'Preserve character appearance and features',
+        file,
+        url,
+        enabled: true,
+        isWorkspaceAsset: !file // If no file, it's from workspace
+      };
+      
+      setActiveReferences(prev => {
+        const filtered = prev.filter(ref => ref.id !== 'character');
+        return [...filtered, characterReference];
+      });
+    }
   }, []);
 
   const handleClearReference = useCallback(() => {
     setReferenceImage(null);
     setReferenceImageUrl('');
+    
+    // Also clear from multi-reference system
+    setActiveReferences(prev => prev.filter(ref => ref.id !== 'character'));
   }, []);
 
   // Multi-reference handlers for MultiReferencePanel
@@ -535,7 +555,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Simplified (No Reference Upload) */}
+      {/* Bottom Input Controls - Now with Reference Image Support */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -567,6 +587,10 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             numImages={numImages}
             setNumImages={setNumImages}
+            referenceImage={referenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageChange={handleReferenceImageChange}
+            onClearReference={handleClearReference}
           />
         )}
       </div>

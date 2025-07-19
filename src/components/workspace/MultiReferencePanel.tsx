@@ -199,8 +199,8 @@ export const MultiReferencePanel = ({
   const hasAnyReference = references.some(ref => ref.url);
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
 
-  // Only show the panel if there are active references or if user is actively working with references
-  if (!hasAnyReference && activeReferences.length === 0) {
+  // Always show the panel in image mode, but make it collapsible when no references
+  if (mode === 'video') {
     return null;
   }
 
@@ -208,10 +208,10 @@ export const MultiReferencePanel = ({
     <TooltipProvider>
       <div className="mt-4 mx-6">
         <div className="bg-muted/20 rounded-lg border border-border p-4">
-          {/* Static Header */}
+          {/* Header - Always Visible */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">Reference Settings</span>
+              <span className="text-sm font-medium">Advanced Reference Settings</span>
               {activeReferences.length > 0 && (
                 <div className="flex items-center gap-1">
                   <span className="px-2 py-1 bg-primary text-primary-foreground rounded-full text-xs font-medium">
@@ -223,14 +223,16 @@ export const MultiReferencePanel = ({
                 </div>
               )}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
-            >
-              Clear All
-            </Button>
+            {hasAnyReference && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                className="text-xs text-muted-foreground hover:text-foreground h-6 px-2"
+              >
+                Clear All
+              </Button>
+            )}
           </div>
 
           {/* Reference Type Grid - Always Visible */}
@@ -322,7 +324,7 @@ export const MultiReferencePanel = ({
             ))}
           </div>
 
-          {/* Strength Control - Always Visible When Active References */}
+          {/* Strength Control - Show When Active References */}
           {activeReferences.length > 0 && (
             <div className="flex items-center gap-3 mb-4">
               <div className="flex items-center gap-1">
@@ -354,7 +356,7 @@ export const MultiReferencePanel = ({
             </div>
           )}
 
-          {/* Active References Summary - Always Visible When Active */}
+          {/* Active References Summary - Show When Active */}
           {activeReferences.length > 0 && (
             <div className="flex items-center gap-2 pt-3 border-t border-border">
               <span className="text-xs text-muted-foreground">Active:</span>
@@ -372,6 +374,15 @@ export const MultiReferencePanel = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Help Text - Show When No References */}
+          {!hasAnyReference && (
+            <div className="text-center py-4 border-t border-border mt-4">
+              <p className="text-xs text-muted-foreground">
+                Upload reference images or drag from workspace to influence generation style, composition, or character appearance.
+              </p>
             </div>
           )}
         </div>
