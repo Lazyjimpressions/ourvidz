@@ -384,6 +384,48 @@ def generate_negative_prompt_for_sdxl(user_prompt):
 - **Path Consistency**: Fixed video path handling
 
 ### **Video Generation with Reference Frames (WAN 1.3B Model)**
+
+#### **Reference Strength Control Implementation**
+The WAN 1.3B model uses `--first_frame` parameter for reference frames, but doesn't have built-in strength control. The worker implements reference strength by adjusting the `sample_guide_scale` parameter:
+
+```python
+def adjust_guidance_for_reference_strength(base_guide_scale, reference_strength):
+    """
+    Adjust sample_guide_scale based on reference strength to control reference influence
+    
+    Args:
+        base_guide_scale (float): Base guidance scale from job config
+        reference_strength (float): Reference strength (0.1-1.0)
+        
+    Returns:
+        float: Adjusted guidance scale
+    """
+    if reference_strength is None:
+        return base_guide_scale
+        
+    # Reference strength affects how much the reference frame influences generation
+    # Higher reference strength = higher guidance scale = stronger reference influence
+    # Base range: 6.5-7.5, adjusted range: 5.0-9.0
+    
+    # Calculate adjustment factor
+    # 0.1 strength = minimal influence (5.0 guidance)
+    # 1.0 strength = maximum influence (9.0 guidance)
+    min_guidance = 5.0
+    max_guidance = 9.0
+    
+    # Linear interpolation between min and max guidance
+    adjusted_guidance = min_guidance + (max_guidance - min_guidance) * reference_strength
+    
+    return adjusted_guidance
+```
+
+#### **Reference Strength Mapping**
+- **0.1 strength** → **5.0 guidance** (minimal reference influence)
+- **0.5 strength** → **7.0 guidance** (moderate reference influence)  
+- **0.9 strength** → **8.6 guidance** (strong reference influence)
+- **1.0 strength** → **9.0 guidance** (maximum reference influence)
+
+#### **Video Generation Process**
 ```python
 # Video generation parameters
 frame_num = 83  # Number of frames
@@ -395,11 +437,17 @@ start_reference_url = config.get('first_frame') or metadata.get('start_reference
 end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
 reference_strength = metadata.get('reference_strength', 0.85)
 
+# Adjust guidance scale based on reference strength
+base_guide_scale = config.get('sample_guide_scale', 6.5)
+adjusted_guide_scale = adjust_guidance_for_reference_strength(base_guide_scale, reference_strength)
+config['sample_guide_scale'] = adjusted_guide_scale
+
 # Determine task type based on reference availability (1.3B Model)
 if start_reference_url:
     # Use T2V task with --first_frame parameter for start reference
     task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with start frame reference
     print(f"🎬 Using T2V task with start frame reference (1.3B model)")
+    print(f"🎯 Reference strength: {reference_strength} → Guidance scale: {adjusted_guide_scale}")
 else:
     # Use T2V task for standard video generation
     task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
@@ -409,7 +457,8 @@ else:
 # Only start reference frame is used for I2V-style generation
 ```
 
-# Generate video with appropriate task type (1.3B Model)
+#### **Generate video with appropriate task type (1.3B Model)**
+```python
 if start_reference_url:
     # I2V-style generation with start reference frame
     video = generate_video_with_reference_frame(
@@ -422,6 +471,13 @@ else:
     # Standard T2V generation
     video = generate_t2v_video(prompt, frame_num, task_type)
 ```
+
+#### **Optimal Reference Strength Settings**
+- **Character Consistency**: 0.8-0.9 (strong character influence)
+- **Motion Quality**: 0.7-0.8 (balanced motion and reference)
+- **Style Transfer**: 0.6-0.7 (preserve style while allowing changes)
+- **Portrait Videos**: 0.8-0.9 (maintain facial features)
+- **Action Sequences**: 0.7-0.8 (allow motion flexibility)
 
 ### **Reference Frame Processing with FLF2V Task**
 ```python

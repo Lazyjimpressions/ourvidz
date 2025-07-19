@@ -115,18 +115,19 @@ WAN Worker:
 ### **Current Documentation (Consolidation Planned)**
 ```markdown
 docs/
-├── PROJECT.md              # Complete project context
+├── README.md               # Main project overview (this file)
 ├── ARCHITECTURE.md         # Technical architecture
-├── SERVICES.md             # Service configurations
-├── PROJECT_STATUS.md       # Current development status
-├── SERVERCODEBASE_OVERVIEW.md # Server-side overview
+├── API.md                  # API reference
 ├── EDGE_FUNCTIONS.md       # Supabase edge functions
-├── WORKER_API.md           # Worker API reference
-├── PERFORMANCE_BENCHMARKS.md # Detailed performance data
-├── PERFORMANCE_SUMMARY.md  # Quick performance reference
-├── NEGATIVE_PROMPT_IMPROVEMENTS.md # Prompt optimization
-├── ourvidz_status_update.md # Status updates
-└── CHANGELOG.md            # Version history (new)
+├── worker_api.md           # Worker API reference
+├── ReferenceWorkflowGuide.md # Reference image/video workflows
+├── SDXL_WAN_Job_Standardization.md # Job standardization details
+├── PROMPTS.md              # Prompt optimization
+├── ADMIN.md                # Admin dashboard documentation
+├── TESTING.md              # Testing procedures
+├── DEPLOYMENT.md           # Deployment guides
+├── CHANGELOG.md            # Version history
+└── ourvidz-admin-prd.md    # Admin PRD
 ```
 
 ### **Planned Simplified Structure**
