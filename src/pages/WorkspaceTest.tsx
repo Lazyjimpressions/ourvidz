@@ -303,10 +303,7 @@ const WorkspaceTest = () => {
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onShowPromptInfo={() => {
-            const currentAsset = imageAssets[lightboxIndex];
-            if (currentAsset) {
-              handleShowPromptInfo(currentAsset);
-            }
+            // Info is now handled within the lightbox itself
           }}
         />
       )}
