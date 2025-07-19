@@ -16,11 +16,13 @@ import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel'
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
-import { Image, Dice6 } from 'lucide-react';
+import { Image, Dice6, Wand2 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
 import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
 import { RefinedMultiReferencePanel } from '@/components/workspace/RefinedMultiReferencePanel';
+import { ImageModificationModal } from '@/components/workspace/ImageModificationModal';
+import { MediaTile } from '@/types/workspace';
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -391,6 +393,14 @@ const Workspace = () => {
     }
   }, []);
 
+  // NEW: State for modification modal
+  const [modificationTile, setModificationTile] = useState<MediaTile | null>(null);
+
+  // NEW: Handle modify action
+  const handleModifyImage = useCallback((tile: MediaTile) => {
+    setModificationTile(tile);
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -515,10 +525,21 @@ const Workspace = () => {
                       />
                     )}
                     
-                    {/* Enhanced Action buttons with Reference indicator */}
+                    {/* Enhanced Action buttons with prominent Modify button */}
                     <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                       {tile.type === 'image' && (
                         <>
+                          {/* NEW: Prominent Modify button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleModifyImage(tile);
+                            }}
+                            className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition ring-2 ring-white/50"
+                            title="Modify this image"
+                          >
+                            <Wand2 className="w-3 h-3" />
+                          </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -694,6 +715,15 @@ const Workspace = () => {
               toast.error('Failed to delete from library');
             }
           }}
+        />
+      )}
+
+      {/* NEW: Image Modification Modal */}
+      {modificationTile && (
+        <ImageModificationModal
+          tile={modificationTile}
+          open={!!modificationTile}
+          onClose={() => setModificationTile(null)}
         />
       )}
 
