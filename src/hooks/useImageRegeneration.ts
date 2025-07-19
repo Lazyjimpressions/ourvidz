@@ -1,9 +1,11 @@
+
 import { useState, useCallback } from 'react';
 import { useGeneration } from '@/hooks/useGeneration';
 import { GenerationRequest } from '@/types/generation';
 import { MediaTile } from '@/types/workspace';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 
 interface RegenerationState {
   positivePrompt: string;
@@ -15,6 +17,7 @@ interface RegenerationState {
 
 export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: { seed?: number; negativePrompt?: string }) => {
   const { generateContent, isGenerating } = useGeneration();
+  const { getRegenerationSignedUrl } = useSignedImageUrls();
   
   const [state, setState] = useState<RegenerationState>({
     positivePrompt: currentTile.prompt,
@@ -68,7 +71,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
 
     // If we have an existing project, use it
     if (existingProjects && existingProjects.length > 0) {
-      console.log('✅ Using existing project:', existingProjects[0].id);
+      console.log('✅ Using existing project for regeneration:', existingProjects[0].id);
       return existingProjects[0].id;
     }
 
@@ -90,7 +93,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       throw new Error('Failed to create project for regeneration');
     }
 
-    console.log('✅ Created new project:', newProject.id);
+    console.log('✅ Created new project for regeneration:', newProject.id);
     return newProject.id;
   }, []);
 
@@ -109,12 +112,23 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       // Get a valid project ID (existing or create new one)
       const projectId = await getValidProjectId();
       
+      // Generate and validate a signed URL for the reference image
+      console.log('🔄 Preparing reference image for regeneration:', currentTile.url);
+      const validatedReferenceUrl = await getRegenerationSignedUrl(currentTile.url, currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast');
+      
+      if (!validatedReferenceUrl) {
+        toast.error('Failed to prepare reference image for regeneration');
+        return;
+      }
+
+      console.log('✅ Reference image validated for regeneration:', validatedReferenceUrl);
+      
       const format = currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
       
       const generationRequest: GenerationRequest = {
         format,
         prompt: state.positivePrompt.trim(),
-        referenceImageUrl: currentTile.url,
+        referenceImageUrl: validatedReferenceUrl,
         projectId,
         metadata: {
           reference_image: true,
@@ -123,26 +137,34 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
           negative_prompt: state.negativePrompt.trim() || undefined,
           ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),
           credits: currentTile.quality === 'high' ? 2 : 1,
-          num_images: 1
+          num_images: 1,
+          // Enhanced regeneration metadata
+          regeneration_source: 'workspace',
+          original_image_url: currentTile.url,
+          original_prompt: currentTile.prompt,
+          prompt_modified: state.isModified,
+          reference_validation: 'passed'
         }
       };
 
-      console.log('🎨 Starting image regeneration with valid project:', {
+      console.log('🎨 Starting enhanced image regeneration:', {
         originalImageId: currentTile.id,
         projectId,
         keepSeed: state.keepSeed,
         seed: state.keepSeed ? originalDetails?.seed : 'random',
         referenceStrength: state.referenceStrength,
-        negativePrompt: state.negativePrompt.trim() || 'none'
+        negativePrompt: state.negativePrompt.trim() || 'none',
+        promptModified: state.isModified,
+        validatedReferenceUrl: validatedReferenceUrl.substring(0, 100) + '...'
       });
 
       await generateContent(generationRequest);
       toast.success('Image regeneration started! New image will appear in workspace when ready.');
     } catch (error) {
-      console.error('❌ Regeneration failed:', error);
+      console.error('❌ Enhanced regeneration failed:', error);
       toast.error(`Failed to start regeneration: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [state, currentTile, originalDetails, generateContent, getValidProjectId]);
+  }, [state, currentTile, originalDetails, generateContent, getValidProjectId, getRegenerationSignedUrl]);
 
   return {
     state,
