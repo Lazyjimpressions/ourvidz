@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -313,6 +313,13 @@ const Workspace = () => {
     setReferenceImageUrl('');
   }, []);
 
+  // Initialize default references structure
+  const defaultReferences = useMemo(() => [
+    { id: 'style', label: 'Style', description: 'Transfer artistic style and visual aesthetics', enabled: false },
+    { id: 'composition', label: 'Composition', description: 'Match layout, positioning, and structure', enabled: false },
+    { id: 'character', label: 'Character', description: 'Preserve character appearance and features', enabled: false }
+  ], []);
+
   // Multi-reference handlers for MultiReferencePanel
   const handleReferencesChange = useCallback((references: any[]) => {
     setActiveReferences(references);
@@ -324,25 +331,33 @@ const Workspace = () => {
 
   // Use as reference functionality
   const handleUseAsReference = useCallback((tile: any) => {
-    // Add to active references via MultiReferencePanel
-    const newReference = {
-      id: 'character', // Always use character for workspace assets
+    // Create character reference with proper structure
+    const characterReference = {
+      id: 'character',
+      label: 'Character',
+      description: 'Preserve character appearance and features',
       url: tile.url,
       enabled: true,
       isWorkspaceAsset: true,
       originalPrompt: tile.prompt,
       modelType: tile.modelType,
-      quality: tile.quality
+      quality: tile.quality,
+      generationParams: tile.generationParams
     };
     
-    // Replace any existing character reference or add as new
+    // Update references: replace character, keep others
     setActiveReferences(prev => {
-      const filtered = prev.filter(ref => ref.id !== 'character');
-      return [...filtered, newReference];
+      const otherRefs = prev.filter(ref => ref.id !== 'character');
+      return [...otherRefs, characterReference];
     });
     
+    // Show reference panel if not already visible
+    if (!showReferencePanel) {
+      setShowReferencePanel(true);
+    }
+    
     toast.success('Image set as character reference');
-  }, []);
+  }, [showReferencePanel]);
 
   // NEW: Use seed from workspace asset
   const handleUseSeed = useCallback((tile: any) => {
@@ -540,6 +555,7 @@ const Workspace = () => {
             onStrengthChange={setReferenceStrength}
             onReferencesChange={handleReferencesChange}
             onClear={handleClearReferences}
+            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
           />
         )}
       </div>

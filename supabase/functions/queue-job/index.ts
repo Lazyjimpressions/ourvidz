@@ -374,7 +374,15 @@ serve(async (req)=>{
         frame_num: format === 'video' ? 83 : 1,
         enhance_prompt: isEnhanced,
         // SEED SUPPORT: Pass seed from metadata to worker config
-        ...(metadata?.seed && { seed: metadata.seed }),
+        ...metadata?.seed && {
+          seed: metadata.seed
+        },
+        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config
+        ...metadata?.reference_image && {
+          reference_image_url: metadata.reference_url,
+          reference_strength: metadata.reference_strength || 0.85,
+          reference_type: metadata.reference_type || 'character'
+        },
         expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
         content_type: format,
         file_extension: format === 'video' ? 'mp4' : 'png',
@@ -404,6 +412,10 @@ serve(async (req)=>{
       hasNegativePrompt: isSDXL && !!negativePrompt,
       hasSeed: !!metadata?.seed,
       seedValue: metadata?.seed,
+      hasReferenceImage: !!metadata?.reference_image,
+      referenceUrl: metadata?.reference_url,
+      referenceStrength: metadata?.reference_strength,
+      referenceType: metadata?.reference_type,
       negativePromptSupported: isSDXL,
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,

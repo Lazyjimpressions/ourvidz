@@ -32,6 +32,8 @@ interface MultiReferencePanelProps {
   onStrengthChange: (value: number) => void;
   onReferencesChange: (references: ReferenceType[]) => void;
   onClear: () => void;
+  // Controlled references
+  references: ReferenceType[];
 }
 
 export const MultiReferencePanel = ({
@@ -39,13 +41,9 @@ export const MultiReferencePanel = ({
   strength,
   onStrengthChange,
   onReferencesChange,
-  onClear
+  onClear,
+  references
 }: MultiReferencePanelProps) => {
-  const [references, setReferences] = useState<ReferenceType[]>([
-    { id: 'style', label: 'Style', description: 'Transfer artistic style and visual aesthetics', enabled: false },
-    { id: 'composition', label: 'Composition', description: 'Match layout, positioning, and structure', enabled: false },
-    { id: 'character', label: 'Character', description: 'Preserve character appearance and features', enabled: false }
-  ]);
   
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState<string | null>(null);
@@ -105,7 +103,6 @@ export const MultiReferencePanel = ({
           : ref
       );
       
-      setReferences(updatedReferences);
       onReferencesChange(updatedReferences);
       toast.success(`${references.find(r => r.id === referenceId)?.label} reference uploaded successfully`);
       
@@ -161,7 +158,6 @@ export const MultiReferencePanel = ({
             : ref
         );
         
-        setReferences(updatedReferences);
         onReferencesChange(updatedReferences);
         toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from workspace`);
         return;
@@ -198,7 +194,6 @@ export const MultiReferencePanel = ({
     const updatedReferences = references.map(ref => 
       ref.id === referenceId ? { ...ref, enabled } : ref
     );
-    setReferences(updatedReferences);
     onReferencesChange(updatedReferences);
   }, [references, onReferencesChange]);
 
@@ -208,7 +203,6 @@ export const MultiReferencePanel = ({
         ? { ...ref, file: null, url: undefined, enabled: false }
         : ref
     );
-    setReferences(updatedReferences);
     onReferencesChange(updatedReferences);
   }, [references, onReferencesChange]);
 
