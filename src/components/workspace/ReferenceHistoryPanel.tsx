@@ -7,10 +7,12 @@ import { Clock, Image, Trash2 } from "lucide-react";
 interface ReferenceHistoryItem {
   id: string;
   url: string;
+  thumbnailUrl?: string;
   timestamp: Date;
   prompt?: string;
   strength?: number;
   type?: 'character' | 'style' | 'composition';
+  analysis?: any;
 }
 
 interface ReferenceHistoryPanelProps {

@@ -16,7 +16,7 @@ import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel'
 import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
-import { Image, Dice6, Wand2, ImageIcon } from 'lucide-react';
+import { Image, Dice6, Wand2, ImageIcon, User } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
 import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
@@ -53,6 +53,20 @@ const Workspace = () => {
   // New prompt optimization and seed state
   const [optimizeForCharacter, setOptimizeForCharacter] = useState(false);
   const [seed, setSeed] = useState<number | undefined>();
+
+  // Helper function to create drag data
+  const createDragData = (tile: MediaTile) => {
+    return {
+      assetId: tile.originalAssetId,
+      url: tile.url,
+      thumbnailUrl: tile.thumbnailUrl || tile.url,
+      prompt: tile.prompt,
+      enhancedPrompt: tile.enhancedPrompt,
+      seed: tile.seed,
+      generationParams: tile.generationParams,
+      isWorkspaceAsset: true
+    };
+  };
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
