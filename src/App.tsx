@@ -14,6 +14,10 @@ import Library from "@/pages/Library";
 import LibraryV2 from "@/pages/LibraryV2";
 import Workspace from "@/pages/Workspace";
 import Admin from "@/pages/Admin";
+import Storyboard from "@/pages/Storyboard";
+import Profile from "@/pages/Profile";
+import Pricing from "@/pages/Pricing";
+import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
 
@@ -31,8 +35,12 @@ function App() {
               <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
               <Route path="/library-v2" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
+              <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </AuthProvider>
