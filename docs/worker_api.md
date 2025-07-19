@@ -400,9 +400,9 @@ reference_strength = metadata.get('reference_strength', 0.85)
 
 # Determine task type based on reference availability (1.3B Model)
 if start_reference_url:
-    # Use I2V task for video with reference frame
-    task_type = "i2v-1.3B"  # ✅ CORRECT: Image-to-Video with reference
-    print(f"🎬 Using I2V task for video with reference frame")
+    # Use T2V task with --image parameter for reference frame (1.3B limitation)
+    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with reference image
+    print(f"🎬 Using T2V task with reference image (1.3B model)")
 else:
     # Use T2V task for standard video generation
     task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
