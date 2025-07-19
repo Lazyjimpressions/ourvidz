@@ -44,9 +44,4 @@ export interface MediaTile {
   enhancedPrompt?: string;
   seed?: number;
   generationParams?: Record<string, any>;
-  // Additional metadata for proper asset handling
-  storagePath?: string;
-  bucket?: string;
-  signedUrl?: string;
-  signedUrlExpiresAt?: Date;
 }
