@@ -4,13 +4,16 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useGeneration } from '@/hooks/useGeneration';
 
 import { ImageInputControls } from "@/components/ImageInputControls";
 import { VideoInputControls } from "@/components/VideoInputControls";
 import { MultiReferencePanel } from "@/components/workspace/MultiReferencePanel";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { SimpleWorkspaceGrid } from "@/components/workspace/SimpleWorkspaceGrid";
+import { LibraryImportModal } from "@/components/LibraryImportModal";
 import { ReferenceImage, MediaTile } from "@/types/workspace";
+import { GenerationRequest } from "@/types/generation";
 
 const defaultWorkspaceData = {
   mediaTiles: [] as MediaTile[],
@@ -21,7 +24,6 @@ const defaultWorkspaceData = {
 const Workspace = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isGenerating, setIsGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [numImages, setNumImages] = useState(4);
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
@@ -29,9 +31,11 @@ const Workspace = () => {
   const [showLibrary, setShowLibrary] = useState(false);
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [referenceStrength, setReferenceStrength] = useState(0.8);
-  const [generationCount, setGenerationCount] = useState(0);
   const [workspaceData, setWorkspaceData] = useState(defaultWorkspaceData);
   const isMobile = useIsMobile();
+
+  // Use the real generation hook
+  const { generateContent, isGenerating, currentJob, error } = useGeneration();
 
   // Ensure user is authenticated
   useEffect(() => {
@@ -58,6 +62,42 @@ const Workspace = () => {
     sessionStorage.setItem('workspaceData', JSON.stringify(workspaceData));
   }, [workspaceData]);
 
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationComplete = (event: CustomEvent) => {
+      const { assetId, type, jobId } = event.detail;
+      console.log('Generation completed:', { assetId, type, jobId });
+      
+      // Add the new asset to workspace
+      const newMediaTile: MediaTile = {
+        id: crypto.randomUUID(),
+        originalAssetId: assetId,
+        type: type as 'image' | 'video',
+        url: undefined, // Will be loaded by the grid component
+        prompt,
+        timestamp: new Date(),
+        quality,
+        modelType: enhanced ? 'enhanced' : 'standard',
+        duration: type === 'video' ? 30 : undefined,
+        isUrlLoaded: false,
+        isVisible: true,
+        virtualIndex: workspaceData.mediaTiles.length,
+      };
+
+      setWorkspaceData(prev => ({
+        ...prev,
+        mediaTiles: [...prev.mediaTiles, newMediaTile],
+      }));
+      
+      toast.success(`${type === 'image' ? 'Image' : 'Video'} generated successfully!`);
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [prompt, quality, enhanced, workspaceData.mediaTiles.length]);
+
   const handleModeSwitch = (newMode: 'image' | 'video') => {
     setMode(newMode);
   };
@@ -68,45 +108,67 @@ const Workspace = () => {
       return;
     }
 
-    setIsGenerating(true);
+    if (!user) {
+      toast.error('Please sign in to generate content.');
+      return;
+    }
+
     try {
-      // Simulate generation for now - replace with actual API call
-      const mockAssets = Array.from({ length: mode === 'image' ? numImages : 1 }, (_, i) => ({
-        id: crypto.randomUUID(),
-        url: mode === 'image' 
-          ? `https://picsum.photos/512/512?random=${Date.now() + i}`
-          : `https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4`,
-      }));
+      // Determine the generation format based on mode, quality, and enhanced settings
+      let format: string;
+      if (mode === 'image') {
+        if (enhanced) {
+          format = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+        } else {
+          format = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        }
+      } else {
+        if (enhanced) {
+          format = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+        } else {
+          format = quality === 'high' ? 'video_high' : 'video_fast';
+        }
+      }
 
-      const newMediaTiles = mockAssets.map((asset, index) => ({
-        id: crypto.randomUUID(),
-        originalAssetId: asset.id,
-        type: mode,
-        url: asset.url,
-        prompt,
-        timestamp: new Date(),
-        quality,
-        modelType: enhanced ? 'enhanced' : 'standard',
-        duration: mode === 'video' ? 30 : undefined,
-        isUrlLoaded: true,
-        isVisible: true,
-        virtualIndex: workspaceData.mediaTiles.length + index,
-      }));
+      // Prepare the generation request
+      const generationRequest: GenerationRequest = {
+        format: format as any,
+        prompt: prompt.trim(),
+        metadata: {
+          credits: quality === 'high' ? 2 : 1,
+          num_images: mode === 'image' ? numImages : 1,
+        }
+      };
 
-      setWorkspaceData(prev => ({
-        ...prev,
-        mediaTiles: [...prev.mediaTiles, ...newMediaTiles],
-      }));
+      // Add reference image if present
+      const characterRef = workspaceData.references?.find(ref => ref.type === 'character');
+      if (characterRef?.url && mode === 'image') {
+        generationRequest.referenceImageUrl = characterRef.url;
+        generationRequest.metadata = {
+          ...generationRequest.metadata,
+          reference_strength: referenceStrength,
+          reference_type: 'character'
+        };
+      }
+
+      // Add video references if present
+      if (mode === 'video') {
+        if (workspaceData.videoReferences?.start?.url) {
+          generationRequest.startReferenceImageUrl = workspaceData.videoReferences.start.url;
+        }
+        if (workspaceData.videoReferences?.end?.url) {
+          generationRequest.endReferenceImageUrl = workspaceData.videoReferences.end.url;
+        }
+      }
+
+      console.log('Starting generation with request:', generationRequest);
+      await generateContent(generationRequest);
       
-      setGenerationCount(count => count + 1);
-      toast.success(`${mode === 'image' ? numImages : 1} ${mode === 'image' ? 'image(s)' : 'video'} generated successfully!`);
     } catch (error: any) {
       console.error('Generation failed:', error);
       toast.error(`Generation failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsGenerating(false);
     }
-  }, [prompt, numImages, quality, enhanced, mode, workspaceData.mediaTiles.length]);
+  }, [prompt, numImages, quality, enhanced, mode, workspaceData.references, workspaceData.videoReferences, referenceStrength, user, generateContent]);
 
   const handleReferenceChange = (newReferences: ReferenceImage[]) => {
     setWorkspaceData(prev => ({
@@ -147,6 +209,31 @@ const Workspace = () => {
       mediaTiles: prev.mediaTiles.filter(tile => tile.id !== tileId),
     }));
     toast.success('Removed from workspace');
+  };
+
+  const handleImport = (assets: any[]) => {
+    const newMediaTiles = assets.map((asset, index) => ({
+      id: crypto.randomUUID(),
+      originalAssetId: asset.id,
+      type: asset.type || 'image',
+      url: asset.url || asset.signed_url,
+      prompt: asset.prompt || 'Imported from library',
+      timestamp: new Date(asset.created_at || Date.now()),
+      quality: asset.quality || 'fast',
+      modelType: asset.modelType || 'standard',
+      duration: asset.duration,
+      isUrlLoaded: true,
+      isVisible: true,
+      virtualIndex: workspaceData.mediaTiles.length + index,
+    }));
+
+    setWorkspaceData(prev => ({
+      ...prev,
+      mediaTiles: [...prev.mediaTiles, ...newMediaTiles],
+    }));
+    
+    toast.success(`Imported ${assets.length} asset(s) to workspace`);
+    setShowLibrary(false);
   };
 
   return (
@@ -268,6 +355,13 @@ const Workspace = () => {
           )}
         </div>
       </div>
+
+      {/* Library Import Modal */}
+      <LibraryImportModal
+        isOpen={showLibrary}
+        onClose={() => setShowLibrary(false)}
+        onImport={handleImport}
+      />
     </div>
   );
 };
