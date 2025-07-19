@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -401,119 +400,124 @@ const Workspace = () => {
           
           {workspaceTiles.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {workspaceTiles.map((tile) => (
-                <div key={tile.id} className="relative group">
-                  {tile.type === 'video' ? (
-                    <video
-                      src={tile.url}
-                      className="w-full aspect-square object-cover rounded-lg border border-border cursor-pointer hover:scale-105 transition"
-                      muted
-                      loop
-                      onMouseEnter={(e) => e.currentTarget.play()}
-                      onMouseLeave={(e) => e.currentTarget.pause()}
-                      onClick={() => handleImageClick(tile)}
-                      draggable="true"
-                      onDragStart={(e) => {
-                        const assetData = {
-                          url: tile.url,
-                          thumbnailUrl: tile.thumbnailUrl,
-                          prompt: tile.prompt,
-                          modelType: tile.modelType,
-                          quality: tile.quality,
-                          type: tile.type,
-                          duration: tile.duration,
-                          generationParams: {
-                            originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp,
-                            seed: tile.generationParams?.seed || tile.seed
-                          }
-                        };
-                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      style={{ cursor: 'move' }}
-                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
-                    />
-                  ) : (
-                    <img
-                      src={tile.url}
-                      alt={`Workspace ${tile.id}`}
-                      onClick={() => handleImageClick(tile)}
-                      className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
-                      draggable="true"
-                      onDragStart={(e) => {
-                        const assetData = {
-                          url: tile.url,
-                          prompt: tile.prompt,
-                          modelType: tile.modelType,
-                          quality: tile.quality,
-                          type: tile.type,
-                          generationParams: {
-                            originalAssetId: tile.originalAssetId,
-                            timestamp: tile.timestamp,
-                            seed: tile.generationParams?.seed || tile.seed
-                          }
-                        };
-                        e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      onDragEnd={(e) => {
-                        e.currentTarget.style.opacity = '1';
-                      }}
-                      style={{ cursor: 'move' }}
-                      title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
-                    />
-                  )}
-                  
-                  {/* Action buttons */}
-                  <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                    {tile.type === 'image' && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUseAsReference(tile);
-                          }}
-                          className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
-                          title="Use as Character Reference"
-                        >
-                          <Image className="w-3 h-3" />
-                        </button>
-                        {(tile.generationParams?.seed || tile.seed) && (
+              {workspaceTiles.map((tile) => {
+                // Enhanced seed detection with multiple fallbacks
+                const tileSeed = tile.generationParams?.seed || tile.seed || 0;
+                
+                return (
+                  <div key={tile.id} className="relative group">
+                    {tile.type === 'video' ? (
+                      <video
+                        src={tile.url}
+                        className="w-full aspect-square object-cover rounded-lg border border-border cursor-pointer hover:scale-105 transition"
+                        muted
+                        loop
+                        onMouseEnter={(e) => e.currentTarget.play()}
+                        onMouseLeave={(e) => e.currentTarget.pause()}
+                        onClick={() => handleImageClick(tile)}
+                        draggable="true"
+                        onDragStart={(e) => {
+                          const assetData = {
+                            url: tile.url,
+                            thumbnailUrl: tile.thumbnailUrl,
+                            prompt: tile.prompt,
+                            modelType: tile.modelType,
+                            quality: tile.quality,
+                            type: tile.type,
+                            duration: tile.duration,
+                            generationParams: {
+                              originalAssetId: tile.originalAssetId,
+                              timestamp: tile.timestamp,
+                              seed: tileSeed
+                            }
+                          };
+                          e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        style={{ cursor: 'move' }}
+                        title={`${tile.prompt}${tileSeed ? ` | Seed: ${tileSeed}` : ''}`}
+                      />
+                    ) : (
+                      <img
+                        src={tile.url}
+                        alt={`Workspace ${tile.id}`}
+                        onClick={() => handleImageClick(tile)}
+                        className="w-full aspect-square object-cover rounded-lg border border-border hover:scale-105 transition cursor-pointer"
+                        draggable="true"
+                        onDragStart={(e) => {
+                          const assetData = {
+                            url: tile.url,
+                            prompt: tile.prompt,
+                            modelType: tile.modelType,
+                            quality: tile.quality,
+                            type: tile.type,
+                            generationParams: {
+                              originalAssetId: tile.originalAssetId,
+                              timestamp: tile.timestamp,
+                              seed: tileSeed
+                            }
+                          };
+                          e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
+                          e.dataTransfer.effectAllowed = 'copy';
+                        }}
+                        onDragEnd={(e) => {
+                          e.currentTarget.style.opacity = '1';
+                        }}
+                        style={{ cursor: 'move' }}
+                        title={`${tile.prompt}${tileSeed ? ` | Seed: ${tileSeed}` : ''}`}
+                      />
+                    )}
+                    
+                    {/* Action buttons */}
+                    <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      {tile.type === 'image' && (
+                        <>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleUseSeed(tile);
+                              handleUseAsReference(tile);
                             }}
-                            className="bg-secondary text-secondary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-secondary/80 transition"
-                            title={`Use seed ${tile.generationParams?.seed || tile.seed}`}
+                            className="bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-primary/80 transition"
+                            title="Use as Character Reference"
                           >
-                            <Dice6 className="w-3 h-3" />
+                            <Image className="w-3 h-3" />
                           </button>
-                        )}
-                      </>
+                          {tileSeed && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUseSeed(tile);
+                              }}
+                              className="bg-secondary text-secondary-foreground rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-secondary/80 transition"
+                              title={`Use seed ${tileSeed}`}
+                            >
+                              <Dice6 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    
+                    <button
+                      onClick={() => handleRemoveFromWorkspace(tile.id)}
+                      className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
+                      disabled={deletingTiles.has(tile.id)}
+                    >
+                      {deletingTiles.has(tile.id) ? '⌛' : '×'}
+                    </button>
+
+                    {/* Enhanced Seed display - Always show if available */}
+                    {tileSeed && (
+                      <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition">
+                        <SeedDisplay 
+                          seed={tileSeed}
+                          className="text-xs"
+                        />
+                      </div>
                     )}
                   </div>
-                  
-                  <button
-                    onClick={() => handleRemoveFromWorkspace(tile.id)}
-                    className="absolute top-2 right-2 bg-destructive text-destructive-foreground rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-xs"
-                    disabled={deletingTiles.has(tile.id)}
-                  >
-                    {deletingTiles.has(tile.id) ? '⌛' : '×'}
-                  </button>
-
-                  {/* Seed display in bottom corner */}
-                  {(tile.generationParams?.seed || tile.seed) && (
-                    <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition">
-                      <SeedDisplay 
-                        seed={tile.generationParams?.seed || tile.seed}
-                        className="text-xs"
-                      />
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">

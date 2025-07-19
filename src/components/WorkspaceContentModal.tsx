@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,9 +23,12 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   const [showInfoPanel, setShowInfoPanel] = useState(true);
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
   
-  // Initialize regeneration hook with better fallback handling
+  // Enhanced seed handling - always show seed even when not loaded from details
+  const displaySeed = details?.seed || currentTile.seed || currentTile.generationParams?.seed || 0;
+  
+  // Initialize regeneration hook with enhanced seed fallback
   const regeneration = useImageRegeneration(currentTile, {
-    seed: details?.seed || currentTile.seed,
+    seed: displaySeed,
     negativePrompt: details?.negativePrompt || currentTile.generationParams?.negative_prompt || ''
   });
   
@@ -87,9 +91,8 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   };
 
   const handleCopySeed = () => {
-    const seedValue = details?.seed || currentTile.seed || 0;
-    navigator.clipboard.writeText(seedValue.toString());
-    toast.success(`Seed ${seedValue} copied to clipboard`);
+    navigator.clipboard.writeText(displaySeed.toString());
+    toast.success(`Seed ${displaySeed} copied to clipboard`);
   };
 
   // Skip rendering if current tile doesn't have URL
@@ -98,7 +101,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   }
 
   const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
-  const displaySeed = details?.seed || currentTile.seed || 0;
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -306,7 +308,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                 </div>
               )}
 
-              {/* Seed Row */}
+              {/* Enhanced Seed Row - Always show seed */}
               {currentTile.type === 'image' && (
                 <div className="mb-3">
                   <div className="flex items-center justify-between">
@@ -329,7 +331,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                           onClick={handleLoadDetails}
                           disabled={loading}
                           className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
-                          title="Refresh seed"
+                          title="Refresh seed and details"
                         >
                           {loading ? (
                             <Loader2 className="w-3 h-3 animate-spin" />

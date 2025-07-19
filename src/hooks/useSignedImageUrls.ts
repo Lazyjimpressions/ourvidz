@@ -22,8 +22,8 @@ const useSignedImageUrls = () => {
         return null;
       }
 
-      // Use longer expiration for regeneration scenarios (2 hours instead of 1)
-      const defaultExpiresIn = expiresIn || 7200; // 2 hours
+      // Extended expiration for regeneration scenarios (3 hours instead of 2)
+      const defaultExpiresIn = expiresIn || 10800; // 3 hours
       const cleanPath = path; // Keep the complete storage path
 
       // Smart bucket determination based on OptimizedAssetService logic
@@ -83,9 +83,9 @@ const useSignedImageUrls = () => {
     return Promise.all(promises);
   }, [getSignedUrl]);
 
-  // New function specifically for regeneration with validation
+  // Enhanced function specifically for regeneration with extended validation
   const getRegenerationSignedUrl = useCallback(async (path: string, bucket?: string): Promise<string | null> => {
-    console.log('🔄 Getting regeneration signed URL with validation:', { path, bucket });
+    console.log('🔄 Getting regeneration signed URL with extended validation:', { path, bucket });
     
     // Use 3-hour expiration for regeneration to ensure it doesn't expire during queue processing
     const signedUrl = await getSignedUrl(path, bucket, 10800); // 3 hours
@@ -95,11 +95,12 @@ const useSignedImageUrls = () => {
       return null;
     }
 
-    // Validate the signed URL is accessible
+    // Enhanced validation - test the signed URL is accessible
     try {
+      console.log('🔍 Validating regeneration reference image accessibility...');
       const response = await fetch(signedUrl, { method: 'HEAD' });
       if (!response.ok) {
-        console.error('❌ Regeneration reference image not accessible:', response.status);
+        console.error('❌ Regeneration reference image not accessible:', response.status, response.statusText);
         setError('Reference image is not accessible');
         return null;
       }
