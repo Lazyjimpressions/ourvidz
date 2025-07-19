@@ -22,7 +22,8 @@ export const LibraryImportModal = ({ isOpen, onClose, onImport }: LibraryImportM
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>('all');
   
-  const { data: assets = [], isLoading } = useAssets(false);
+  const assetsQuery = useAssets(false);
+  const { data: assets = [], isLoading } = assetsQuery;
 
   // Filter and search assets
   const filteredAssets = useMemo(() => {
