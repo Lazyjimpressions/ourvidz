@@ -40,6 +40,12 @@ export const TextInputSection = ({
           placeholder={getPlaceholderText()}
           className="bg-transparent border-gray-600 text-white placeholder:text-gray-400 h-10 focus:border-gray-400"
           disabled={isGenerating}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onGenerate();
+            }
+          }}
         />
       </div>
 

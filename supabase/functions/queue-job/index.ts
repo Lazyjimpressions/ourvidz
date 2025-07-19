@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const corsHeaders = {
@@ -13,7 +12,7 @@ serve(async (req)=>{
     });
   }
   try {
-    console.log('🚀 Queue-job function called - ENHANCED: Reference image regeneration support');
+    console.log('🚀 Queue-job function called - STANDARDIZED: Worker callback parameter consistency');
     const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_ANON_KEY') ?? '', {
       global: {
         headers: {
@@ -39,56 +38,15 @@ serve(async (req)=>{
     }
     console.log('✅ User authenticated:', user.id);
     const { jobType, metadata, projectId, videoId, imageId } = await req.json();
-    console.log('📋 Creating job with ENHANCED regeneration parameters:', {
+    console.log('📋 Creating job with STANDARDIZED worker parameters:', {
       jobType,
       projectId,
       videoId,
       imageId,
       userId: user.id,
       queue: metadata?.queue,
-      hasReferenceImage: !!metadata?.reference_image,
-      referenceImageUrl: metadata?.reference_image_url ? metadata.reference_image_url.substring(0, 100) + '...' : 'none',
-      referenceStrength: metadata?.reference_strength,
-      seed: metadata?.seed,
       timestamp: new Date().toISOString()
     });
-    
-    // ENHANCED: Reference image validation for regeneration
-    if (metadata?.reference_image && metadata?.reference_image_url) {
-      try {
-        console.log('🔍 Validating reference image URL for regeneration...');
-        const referenceResponse = await fetch(metadata.reference_image_url, { method: 'HEAD' });
-        if (!referenceResponse.ok) {
-          console.error('❌ Reference image validation failed:', referenceResponse.status);
-          return new Response(JSON.stringify({
-            error: 'Reference image is not accessible',
-            success: false,
-            details: `HTTP ${referenceResponse.status}`
-          }), {
-            headers: {
-              ...corsHeaders,
-              'Content-Type': 'application/json'
-            },
-            status: 400
-          });
-        }
-        console.log('✅ Reference image validation passed');
-      } catch (error) {
-        console.error('❌ Reference image validation error:', error);
-        return new Response(JSON.stringify({
-          error: 'Failed to validate reference image',
-          success: false,
-          details: error.message
-        }), {
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json'
-          },
-          status: 400
-        });
-      }
-    }
-    
     // ENHANCED: Negative prompt generation - ONLY for SDXL jobs with multi-party and anatomical accuracy
     function generateNegativePromptForSDXL(userPrompt = '') {
       console.log('🎨 Generating enhanced negative prompt for SDXL job only');
@@ -253,7 +211,7 @@ serve(async (req)=>{
     // Determine queue routing - all enhanced jobs use wan_queue
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
     // Enhanced logging with format and quality detection
-    console.log('🎯 ENHANCED job routing determined:', {
+    console.log('🎯 FIXED job routing determined:', {
       isSDXL,
       isEnhanced,
       queueName,
@@ -314,14 +272,8 @@ serve(async (req)=>{
     
     if (isSDXL) {
       try {
-        // Use custom negative prompt if provided, otherwise generate one
-        if (metadata?.negative_prompt) {
-          negativePrompt = metadata.negative_prompt;
-          console.log('🚫 Using custom negative prompt from metadata:', negativePrompt);
-        } else {
-          negativePrompt = generateNegativePromptForSDXL(prompt);
-          console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
-        }
+        negativePrompt = generateNegativePromptForSDXL(prompt);
+        console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
       } catch (error) {
         negativePromptError = error.message;
         console.error('❌ Error generating negative prompt:', error);
@@ -348,10 +300,7 @@ serve(async (req)=>{
       prompt_length: prompt.length,
       prompt_word_count: prompt.split(' ').length,
       generation_timestamp: new Date().toISOString(),
-      edge_function_version: '2.2.0',
-      // ENHANCED: Reference image regeneration support
-      reference_image_regeneration: metadata?.regeneration_source === 'workspace',
-      reference_validation: metadata?.reference_validation || 'none',
+      edge_function_version: '2.1.0',
       // Performance tracking
       expected_generation_time: isEnhanced ? 
         (format === 'video' ? (quality === 'high' ? 240 : 195) : (quality === 'high' ? 100 : 85)) :
@@ -411,7 +360,7 @@ serve(async (req)=>{
     }
     console.log('✅ Job created successfully in database:', job.id);
     
-    // ENHANCED: Format job payload for worker with reference image prioritization
+    // Format job payload for appropriate worker
     const jobPayload = {
       id: job.id,
       type: jobType,
@@ -426,14 +375,6 @@ serve(async (req)=>{
         enhance_prompt: isEnhanced,
         // SEED SUPPORT: Pass seed from metadata to worker config
         ...(metadata?.seed && { seed: metadata.seed }),
-        // ENHANCED: Reference image support with proper prioritization
-        ...(metadata?.reference_image && metadata?.reference_image_url && {
-          reference_image: metadata.reference_image_url,
-          reference_strength: metadata.reference_strength || 0.7,
-          reference_type: metadata.reference_type || 'composition',
-          image_to_image: true, // Enable image-to-image mode
-          denoise_strength: 1.0 - (metadata.reference_strength || 0.7) // Convert to denoise strength
-        }),
         expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
         content_type: format,
         file_extension: format === 'video' ? 'mp4' : 'png',
@@ -445,12 +386,6 @@ serve(async (req)=>{
       ...isSDXL && {
         negative_prompt: negativePrompt
       },
-      // ENHANCED: Reference image URL at root level for worker compatibility
-      ...(metadata?.reference_image && metadata?.reference_image_url && {
-        reference_image_url: metadata.reference_image_url,
-        reference_strength: metadata.reference_strength || 0.7,
-        reference_type: metadata.reference_type || 'composition'
-      }),
       // Additional metadata - use same structure as database
       video_id: videoId,
       image_id: imageId,
@@ -460,7 +395,7 @@ serve(async (req)=>{
       metadata: jobMetadata
     };
     
-    console.log('📤 Pushing ENHANCED job to Redis queue with regeneration support:', {
+    console.log('📤 Pushing FIXED job to Redis queue with seed support:', {
       jobId: job.id,
       jobType,
       queueName,
@@ -469,16 +404,11 @@ serve(async (req)=>{
       hasNegativePrompt: isSDXL && !!negativePrompt,
       hasSeed: !!metadata?.seed,
       seedValue: metadata?.seed,
-      hasReferenceImage: !!metadata?.reference_image,
-      referenceImageUrl: metadata?.reference_image_url ? metadata.reference_image_url.substring(0, 50) + '...' : 'none',
-      referenceStrength: metadata?.reference_strength || 'none',
-      referenceType: metadata?.reference_type || 'none',
       negativePromptSupported: isSDXL,
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
       negativePromptError: negativePromptError,
-      payloadSize: JSON.stringify(jobPayload).length,
-      regenerationSource: metadata?.regeneration_source || 'none'
+      payloadSize: JSON.stringify(jobPayload).length
     });
     
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
@@ -525,8 +455,7 @@ serve(async (req)=>{
       jobId: job.id,
       queueLength: redisResult.result || 0,
       queueName,
-      negativePromptIncluded: isSDXL,
-      referenceImageIncluded: !!metadata?.reference_image
+      negativePromptIncluded: isSDXL
     });
     
     // Log usage with enhanced dual worker tracking
@@ -546,7 +475,6 @@ serve(async (req)=>{
         queue: queueName,
         dual_worker_routing: true,
         negative_prompt_supported: isSDXL,
-        reference_image_regeneration: metadata?.regeneration_source === 'workspace',
         usage_timestamp: new Date().toISOString()
       }
     });
@@ -558,21 +486,20 @@ serve(async (req)=>{
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - ENHANCED: Reference image regeneration support',
+      message: 'Job queued successfully - ENHANCED: Comprehensive negative prompt system',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
       queue: queueName,
       isSDXL: isSDXL,
       negativePromptSupported: isSDXL,
-      referenceImageSupported: !!metadata?.reference_image,
       fixes_applied: [
-        'Enhanced reference image validation',
-        'Improved signed URL generation with longer expiration',
-        'Fixed worker payload for reference image + seed processing',
-        'Added comprehensive reference image logging',
-        'Enhanced metadata for regeneration tracking',
-        'Improved error handling for failed reference images'
+        'Fixed negative prompt generation timing',
+        'Enhanced multi-party scene detection',
+        'Added comprehensive error handling',
+        'Improved metadata consistency',
+        'Added performance tracking fields',
+        'Enhanced logging and debugging'
       ],
       debug: {
         userId: user.id,
@@ -583,11 +510,6 @@ serve(async (req)=>{
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
         negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
         negativePromptError: negativePromptError,
-        hasReferenceImage: !!metadata?.reference_image,
-        referenceImageUrl: metadata?.reference_image_url ? metadata.reference_image_url.substring(0, 50) + '...' : 'none',
-        referenceStrength: metadata?.reference_strength || 'none',
-        referenceValidation: metadata?.reference_validation || 'none',
-        regenerationSource: metadata?.regeneration_source || 'none',
         redisConfigured: true,
         metadataFields: Object.keys(jobMetadata).length,
         timestamp: new Date().toISOString()
@@ -600,7 +522,7 @@ serve(async (req)=>{
       status: 200
     });
   } catch (error) {
-    console.error('❌ Unhandled error in enhanced queue-job function:', {
+    console.error('❌ Unhandled error in queue-job function:', {
       error: error.message,
       stack: error.stack,
       timestamp: new Date().toISOString()
