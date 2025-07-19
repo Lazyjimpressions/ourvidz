@@ -1,10 +1,11 @@
-
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
+import { useImageRegeneration } from "@/hooks/useImageRegeneration";
 import { toast } from "sonner";
 
 interface WorkspaceContentModalProps {
@@ -20,6 +21,12 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   const currentTile = tiles[currentIndex];
   const [showInfoPanel, setShowInfoPanel] = useState(true); // Default to open
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
+  
+  // Initialize regeneration hook
+  const regeneration = useImageRegeneration(currentTile, {
+    seed: details?.seed || currentTile.seed,
+    negativePrompt: details?.negativePrompt
+  });
   
   console.log('🎭 WORKSPACE MODAL RENDER:', {
     currentTileId: currentTile?.id,
@@ -57,12 +64,17 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
         if (details?.seed) {
           handleCopySeed();
         }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (regeneration.canRegenerate && !regeneration.isGenerating) {
+          regeneration.regenerateImage();
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, tiles.length, showInfoPanel, details?.seed]);
+  }, [currentIndex, tiles.length, showInfoPanel, details?.seed, regeneration]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -239,7 +251,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
             <div className="p-6 h-full overflow-y-auto">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-white">Details</h3>
+                <h3 className="text-lg font-semibold text-white">Details & Edit</h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -250,11 +262,108 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                 </Button>
               </div>
 
-              {/* Prompt */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-white/70 mb-2">Prompt</h4>
-                <p className="text-sm text-white leading-relaxed">{currentTile.prompt}</p>
-              </div>
+              {/* Prompts Section - Only for images */}
+              {currentTile.type === 'image' && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-white/70">Prompts</h4>
+                    {regeneration.state.isModified && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={regeneration.resetToOriginal}
+                        className="text-orange-400 hover:text-orange-300 hover:bg-white/10 p-1 text-xs"
+                        title="Reset to original"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Reset
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {/* Positive Prompt */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-white/60">Positive Prompt</label>
+                      <span className="text-xs text-white/40">
+                        {regeneration.state.positivePrompt.length}/4000
+                      </span>
+                    </div>
+                    <Textarea
+                      value={regeneration.state.positivePrompt}
+                      onChange={(e) => regeneration.updatePrompts({ positivePrompt: e.target.value })}
+                      placeholder="Describe what you want to see..."
+                      className="min-h-[80px] text-sm bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                      maxLength={4000}
+                    />
+                  </div>
+
+                  {/* Negative Prompt */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-white/60">Negative Prompt</label>
+                      <span className="text-xs text-white/40">
+                        {regeneration.state.negativePrompt.length}/1000
+                      </span>
+                    </div>
+                    <Textarea
+                      value={regeneration.state.negativePrompt}
+                      onChange={(e) => regeneration.updatePrompts({ negativePrompt: e.target.value })}
+                      placeholder="Describe what you don't want to see..."
+                      className="min-h-[60px] text-sm bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                      maxLength={1000}
+                    />
+                  </div>
+
+                  {/* Keep Seed Toggle */}
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-white/60">Keep Seed</label>
+                      <button
+                        onClick={() => regeneration.updateSettings({ keepSeed: !regeneration.state.keepSeed })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          regeneration.state.keepSeed ? 'bg-blue-600' : 'bg-white/20'
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          regeneration.state.keepSeed ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-white/40 mt-1">
+                      {regeneration.state.keepSeed 
+                        ? 'Will use original seed for consistent composition' 
+                        : 'Will generate with random seed for new composition'
+                      }
+                    </p>
+                  </div>
+
+                  {/* Regenerate Button */}
+                  <Button
+                    onClick={regeneration.regenerateImage}
+                    disabled={!regeneration.canRegenerate || regeneration.isGenerating}
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium py-2"
+                  >
+                    {regeneration.isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Regenerate Image
+                      </>
+                    )}
+                  </Button>
+
+                  {regeneration.state.isModified && (
+                    <p className="text-xs text-orange-400 mt-2 text-center">
+                      Prompts modified • Press Ctrl+Enter to regenerate
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Static Seed Field with Refresh */}
               {currentTile.type === 'image' && (
@@ -357,6 +466,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   <div>'i' - Toggle info panel</div>
                   <div>'c' - Copy seed</div>
                   <div>'←/→' - Navigate images</div>
+                  <div>'Ctrl+Enter' - Regenerate</div>
                   <div>'Esc' - Close lightbox</div>
                 </div>
               </div>
