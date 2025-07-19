@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus } from "lucide-react";
@@ -85,23 +84,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   if (!currentTile?.url) {
     return null;
   }
-
-  // DEBUG: Log data being passed to PromptInfoModal
-  const seedValue = typeof currentTile.seed === 'string' ? parseInt(currentTile.seed) : currentTile.seed;
-  console.log('🎯 WorkspaceContentModal - Data passed to PromptInfoModal:', {
-    prompt: currentTile.prompt,
-    quality: currentTile.quality,
-    mode: currentTile.type,
-    timestamp: currentTile.timestamp,
-    itemId: currentTile.originalAssetId,
-    originalImageUrl: currentTile.type === 'image' ? currentTile.url : undefined,
-    seed: seedValue,
-    seedType: typeof seedValue,
-    modelType: currentTile.modelType,
-    referenceStrength: currentTile.generationParams?.reference_strength,
-    negativePrompt: currentTile.generationParams?.negative_prompt,
-    generationParams: currentTile.generationParams
-  });
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -206,7 +188,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
         
       </DialogContent>
 
-      {/* Prompt Info Modal */}
+      {/* Simplified Prompt Info Modal */}
       {showPromptModal && (
         <PromptInfoModal
           isOpen={showPromptModal}
@@ -218,11 +200,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
           contentCount={1}
           itemId={currentTile.originalAssetId}
           originalImageUrl={currentTile.type === 'image' ? currentTile.url : undefined}
-          seed={seedValue}
           modelType={currentTile.modelType}
-          referenceStrength={currentTile.generationParams?.reference_strength}
-          negativePrompt={currentTile.generationParams?.negative_prompt}
-          generationParams={currentTile.generationParams}
         />
       )}
     </Dialog>

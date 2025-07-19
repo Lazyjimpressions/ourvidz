@@ -8,9 +8,10 @@ import {
 } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Copy, Calendar, Clock, Image, Video, Zap, Crown } from 'lucide-react';
+import { Copy, Calendar, Clock, Image, Video, Zap, Crown, Download } from 'lucide-react';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { toast } from 'sonner';
+import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 
 interface PromptInfoModalProps {
   isOpen: boolean;
@@ -22,11 +23,7 @@ interface PromptInfoModalProps {
   contentCount: number;
   itemId: string;
   originalImageUrl?: string;
-  seed?: number;
   modelType?: string;
-  referenceStrength?: number;
-  negativePrompt?: string;
-  generationParams?: any;
 }
 
 export const PromptInfoModal = ({
@@ -39,35 +36,16 @@ export const PromptInfoModal = ({
   contentCount,
   itemId,
   originalImageUrl,
-  seed,
-  modelType,
-  referenceStrength,
-  negativePrompt,
-  generationParams
+  modelType
 }: PromptInfoModalProps) => {
-  // DEBUG: Log all received props
+  const { fetchDetails, loading, details, reset } = useFetchImageDetails();
+
+  // Reset details when modal closes
   React.useEffect(() => {
-    if (isOpen) {
-      console.log('🔍 PromptInfoModal - Received Props Debug:', {
-        prompt,
-        quality,
-        mode,
-        timestamp,
-        contentCount,
-        itemId,
-        originalImageUrl,
-        seed,
-        seedType: typeof seed,
-        seedValue: seed,
-        modelType,
-        referenceStrength,
-        negativePrompt,
-        generationParams,
-        generationParamsType: typeof generationParams,
-        generationParamsKeys: generationParams ? Object.keys(generationParams) : null
-      });
+    if (!isOpen) {
+      reset();
     }
-  }, [isOpen, seed, generationParams]);
+  }, [isOpen, reset]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -84,35 +62,6 @@ export const PromptInfoModal = ({
     });
   };
 
-  // PHASE 2 FIX: Extract seed and generation time from generationParams
-  const extractedSeed = seed !== undefined ? seed : generationParams?.seed;
-  const generationTime = generationParams?.generation_time;
-  const extractedNegativePrompt = negativePrompt || generationParams?.negative_prompt;
-
-  // DEBUG: Log extracted values
-  React.useEffect(() => {
-    if (isOpen) {
-      console.log('🎯 PromptInfoModal - Extracted Values Debug:', {
-        seed,
-        'generationParams?.seed': generationParams?.seed,
-        extractedSeed,
-        extractedSeedType: typeof extractedSeed,
-        extractedSeedTruthy: !!extractedSeed,
-        generationTime,
-        generationTimeType: typeof generationTime,
-        extractedNegativePrompt,
-        conditionalCheck: {
-          'extractedSeed exists': !!extractedSeed,
-          'extractedSeed !== undefined': extractedSeed !== undefined,
-          'extractedSeed !== null': extractedSeed !== null,
-          'extractedSeed is valid': extractedSeed !== undefined && extractedSeed !== null,
-          'Number(extractedSeed)': Number(extractedSeed),
-          'Boolean(extractedSeed)': Boolean(extractedSeed)
-        }
-      });
-    }
-  }, [isOpen, extractedSeed, generationTime, seed, generationParams]);
-
   const getModelIcon = () => {
     if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
       return quality === 'high' ? <Crown className="h-4 w-4" /> : <Zap className="h-4 w-4" />;
@@ -121,31 +70,25 @@ export const PromptInfoModal = ({
   };
 
   const getModelName = () => {
-    // PHASE 2 FIX: Check job_type for accurate model detection
     if (modelType?.includes('sdxl_image_fast') || modelType?.includes('sdxl_image_high')) {
       return modelType.includes('fast') ? 'SDXL Fast' : 'SDXL High';
     }
     
-    // Check for SDXL patterns in modelType
     if (modelType?.includes('sdxl') || modelType?.includes('SDXL') || modelType?.toLowerCase().includes('sdxl')) {
       return 'SDXL';
     }
     
-    // Check for Enhanced models
     if (modelType?.includes('enhanced') || modelType?.includes('Enhanced') || modelType?.includes('7B')) {
       return 'Enhanced 7B';
     }
     
-    // WAN models
     if (modelType?.includes('image_fast') || modelType?.includes('image_high')) {
       return modelType.includes('fast') ? 'WAN Fast' : 'WAN High';
     }
     
-    // Default fallback
     return 'WAN 2.1';
   };
 
-  // Format generation time for display
   const formatGenerationTime = (timeInSeconds: number) => {
     if (timeInSeconds < 60) {
       return `${timeInSeconds.toFixed(1)}s`;
@@ -156,8 +99,9 @@ export const PromptInfoModal = ({
     }
   };
 
-  // PHASE 2 FIX: Proper validation for seed display - handle 0 as valid value
-  const shouldShowSeed = extractedSeed !== undefined && extractedSeed !== null;
+  const handleLoadDetails = () => {
+    fetchDetails(itemId);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -189,39 +133,49 @@ export const PromptInfoModal = ({
               </Badge>
             </div>
 
-            {/* DEBUG: Always show seed debug info */}
-            <div className="bg-red-100 border border-red-300 p-2 rounded text-xs">
-              <strong>DEBUG - Seed Info:</strong><br/>
-              Raw seed prop: {String(seed)} (type: {typeof seed})<br/>
-              generationParams?.seed: {String(generationParams?.seed)} (type: {typeof generationParams?.seed})<br/>
-              extractedSeed: {String(extractedSeed)} (type: {typeof extractedSeed})<br/>
-              shouldShowSeed: {shouldShowSeed ? 'YES' : 'NO'}<br/>
-              Old truthy check: {!!extractedSeed ? 'PASS' : 'FAIL'}
-            </div>
-
-            {/* PHASE 2 FIX: Seed Information - Fixed conditional to handle seed: 0 */}
-            {shouldShowSeed && (
-              <SeedDisplay 
-                seed={extractedSeed}
-                onUseSeed={(seedValue) => {
-                  copyToClipboard(seedValue.toString(), 'Seed');
-                }}
-                className="justify-start"
-              />
-            )}
-
-            {/* Alternative seed display for debugging */}
-            {!shouldShowSeed && (seed !== undefined || generationParams?.seed !== undefined) && (
-              <div className="bg-yellow-100 border border-yellow-300 p-2 rounded">
-                <strong>DEBUG SEED:</strong> {seed !== undefined ? seed : generationParams?.seed} (should be showing but condition failed)
+            {/* Load Generation Details Button */}
+            {!details && (
+              <div className="flex justify-center py-4">
+                <Button
+                  onClick={handleLoadDetails}
+                  disabled={loading}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  {loading ? 'Loading Details...' : 'Load Generation Details'}
+                </Button>
               </div>
             )}
 
-            {/* Reference Strength */}
-            {referenceStrength && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Reference Strength:</span>
-                <Badge variant="outline">{referenceStrength.toFixed(3)}</Badge>
+            {/* Generation Details */}
+            {details && (
+              <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
+                <h4 className="font-medium">Generation Details</h4>
+                
+                {details.seed !== undefined && (
+                  <SeedDisplay 
+                    seed={details.seed}
+                    onUseSeed={(seedValue) => {
+                      copyToClipboard(seedValue.toString(), 'Seed');
+                    }}
+                    className="justify-start"
+                  />
+                )}
+
+                {details.generationTime && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Generation Time:</span>
+                    <Badge variant="outline">{formatGenerationTime(details.generationTime)}</Badge>
+                  </div>
+                )}
+
+                {details.referenceStrength && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Reference Strength:</span>
+                    <Badge variant="outline">{details.referenceStrength.toFixed(3)}</Badge>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -245,21 +199,21 @@ export const PromptInfoModal = ({
           </div>
 
           {/* Negative Prompt Section */}
-          {extractedNegativePrompt && (
+          {details?.negativePrompt && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold">Negative Prompt</h3>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => copyToClipboard(extractedNegativePrompt, 'Negative Prompt')}
+                  onClick={() => copyToClipboard(details.negativePrompt!, 'Negative Prompt')}
                 >
                   <Copy className="h-4 w-4 mr-2" />
                   Copy
                 </Button>
               </div>
               <div className="bg-muted p-3 rounded-md">
-                <p className="text-sm leading-relaxed text-muted-foreground">{extractedNegativePrompt}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">{details.negativePrompt}</p>
               </div>
             </div>
           )}
@@ -284,25 +238,16 @@ export const PromptInfoModal = ({
                 <span className="text-muted-foreground">Job ID:</span>
                 <span className="ml-2 font-mono text-xs">{itemId}</span>
               </div>
-              {/* PHASE 2 FIX: Add seed display with fixed condition */}
-              {shouldShowSeed && (
+              {details?.seed !== undefined && (
                 <div>
                   <span className="text-muted-foreground">Seed:</span>
-                  <span className="ml-2 font-mono">{extractedSeed}</span>
+                  <span className="ml-2 font-mono">{details.seed}</span>
                 </div>
               )}
-              {/* DEBUG: Always show seed in technical details for debugging */}
-              {!shouldShowSeed && (seed !== undefined || generationParams?.seed !== undefined) && (
-                <div className="col-span-2 bg-red-100 p-1 rounded text-xs">
-                  <span className="text-muted-foreground">DEBUG Seed:</span>
-                  <span className="ml-2 font-mono">{seed !== undefined ? seed : generationParams?.seed}</span>
-                </div>
-              )}
-              {/* PHASE 2 FIX: Add generation time display */}
-              {generationTime && (
+              {details?.generationTime && (
                 <div>
                   <span className="text-muted-foreground">Generation Time:</span>
-                  <span className="ml-2">{formatGenerationTime(generationTime)}</span>
+                  <span className="ml-2">{formatGenerationTime(details.generationTime)}</span>
                 </div>
               )}
             </div>
