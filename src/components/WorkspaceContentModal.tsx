@@ -283,57 +283,53 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                     />
                   </div>
 
-                  {/* Negative Prompt */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-white/60">Negative</label>
-                      <span className="text-xs text-white/40">
-                        {regeneration.state.negativePrompt.length}/1000
-                      </span>
-                    </div>
-                    <Textarea
-                      value={regeneration.state.negativePrompt}
-                      onChange={(e) => regeneration.updatePrompts({ negativePrompt: e.target.value })}
-                      placeholder="Describe what you don't want to see..."
-                      className="min-h-[40px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
-                      maxLength={1000}
-                    />
-                  </div>
+                   {/* Negative Prompt */}
+                   <div className="mb-3">
+                     <div className="flex items-center justify-between mb-1">
+                       <label className="text-xs font-medium text-white/60">Negative</label>
+                       <span className="text-xs text-white/40">
+                         {regeneration.state.negativePrompt.length}/1000
+                       </span>
+                     </div>
+                     <Textarea
+                       value={regeneration.state.negativePrompt}
+                       onChange={(e) => regeneration.updatePrompts({ negativePrompt: e.target.value })}
+                       className="min-h-[40px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                       maxLength={1000}
+                     />
+                   </div>
 
-                  {/* Controls Row - Keep Seed Toggle + Regenerate Button */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-white/60">Keep Seed</label>
-                      <button
-                        onClick={() => regeneration.updateSettings({ keepSeed: !regeneration.state.keepSeed })}
-                        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                          regeneration.state.keepSeed ? 'bg-blue-600' : 'bg-white/20'
-                        }`}
-                      >
-                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                          regeneration.state.keepSeed ? 'translate-x-4' : 'translate-x-0.5'
-                        }`} />
-                      </button>
-                    </div>
+                   {/* Controls Row - Keep Seed Toggle + Regenerate Button */}
+                   <div className="flex items-center justify-between gap-2 mb-3">
+                     <div className="flex items-center gap-1.5">
+                       <span className="text-xs text-white/60">Keep Seed</span>
+                       <button
+                         onClick={() => regeneration.updateSettings({ keepSeed: !regeneration.state.keepSeed })}
+                         className={`h-3 w-5 rounded-full border transition-colors ${
+                           regeneration.state.keepSeed ? 'bg-white/90 border-white/90' : 'bg-white/10 border-white/30'
+                         }`}
+                       >
+                         <div className={`h-2 w-2 rounded-full bg-black transition-transform ${
+                           regeneration.state.keepSeed ? 'translate-x-2.5' : 'translate-x-0.5'
+                         }`} />
+                       </button>
+                     </div>
 
-                    <Button
-                      onClick={regeneration.regenerateImage}
-                      disabled={!regeneration.canRegenerate || regeneration.isGenerating}
-                      className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium py-1 px-3 h-7 text-xs"
-                    >
-                      {regeneration.isGenerating ? (
-                        <>
-                          <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                          Gen...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3 h-3 mr-1" />
-                          Regenerate
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                     <button
+                       onClick={regeneration.regenerateImage}
+                       disabled={!regeneration.canRegenerate || regeneration.isGenerating}
+                       className="bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 text-white text-xs px-2 py-1 rounded"
+                     >
+                       {regeneration.isGenerating ? (
+                         <>
+                           <Loader2 className="w-3 h-3 mr-1 inline animate-spin" />
+                           Gen...
+                         </>
+                       ) : (
+                         'Regenerate'
+                       )}
+                     </button>
+                   </div>
 
                   {regeneration.state.isModified && (
                     <p className="text-xs text-orange-400 mb-3 text-center">
