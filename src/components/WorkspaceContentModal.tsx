@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2 } from "lucide-react";
+import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
@@ -18,7 +18,7 @@ interface WorkspaceContentModalProps {
 
 export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange, onRemoveFromWorkspace, onDeleteFromLibrary }: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
-  const [showInfoPanel, setShowInfoPanel] = useState(false);
+  const [showInfoPanel, setShowInfoPanel] = useState(true); // Default to open
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
   
   console.log('🎭 WORKSPACE MODAL RENDER:', {
@@ -29,10 +29,14 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
     hasDetails: !!details
   });
   
-  // Reset details when tile changes
+  // Only reset details when switching to a completely different image
+  const [lastTileId, setLastTileId] = useState<string>("");
   useEffect(() => {
-    reset();
-  }, [currentTile?.id, reset]);
+    if (currentTile?.id !== lastTileId) {
+      reset();
+      setLastTileId(currentTile?.id || "");
+    }
+  }, [currentTile?.id, lastTileId, reset]);
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -104,10 +108,9 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   };
 
   const handleCopySeed = () => {
-    if (details?.seed) {
-      navigator.clipboard.writeText(details.seed.toString());
-      toast.success('Seed copied to clipboard');
-    }
+    const seedValue = details?.seed || currentTile.seed || 0;
+    navigator.clipboard.writeText(seedValue.toString());
+    toast.success(`Seed ${seedValue} copied to clipboard`);
   };
 
   // Skip rendering if current tile doesn't have URL
@@ -116,6 +119,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   }
 
   const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
+  const displaySeed = details?.seed || currentTile.seed || 0;
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -252,6 +256,45 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                 <p className="text-sm text-white leading-relaxed">{currentTile.prompt}</p>
               </div>
 
+              {/* Static Seed Field with Refresh */}
+              {currentTile.type === 'image' && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium text-white/70">Seed</h4>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleCopySeed}
+                        className="text-white/70 hover:text-white hover:bg-white/10 p-1"
+                        title="Copy seed (or press 'c')"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </Button>
+                      {canLoadDetails && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleLoadDetails}
+                          disabled={loading}
+                          className="text-white/70 hover:text-white hover:bg-white/10 p-1"
+                          title="Refresh seed"
+                        >
+                          {loading ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-white font-mono">
+                    {loading ? 'Loading...' : displaySeed}
+                  </p>
+                </div>
+              )}
+
               {/* Basic Info */}
               <div className="space-y-4 mb-6">
                 {currentTile.quality && (
@@ -261,10 +304,10 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   </div>
                 )}
                 
-                {currentTile.modelType && (
+                {(currentTile.modelType || details?.modelType) && (
                   <div>
                     <h4 className="text-sm font-medium text-white/70 mb-1">Model</h4>
-                    <p className="text-sm text-white">{currentTile.modelType}</p>
+                    <p className="text-sm text-white">{details?.modelType || currentTile.modelType}</p>
                   </div>
                 )}
                 
@@ -272,6 +315,27 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   <h4 className="text-sm font-medium text-white/70 mb-1">Type</h4>
                   <p className="text-sm text-white capitalize">{currentTile.type}</p>
                 </div>
+
+                {details?.generationTime && (
+                  <div>
+                    <h4 className="text-sm font-medium text-white/70 mb-1">Generation Time</h4>
+                    <p className="text-sm text-white">{details.generationTime.toFixed(2)}s</p>
+                  </div>
+                )}
+
+                {details?.negativePrompt && (
+                  <div>
+                    <h4 className="text-sm font-medium text-white/70 mb-1">Negative Prompt</h4>
+                    <p className="text-sm text-white/90 leading-relaxed">{details.negativePrompt}</p>
+                  </div>
+                )}
+
+                {details?.referenceStrength && (
+                  <div>
+                    <h4 className="text-sm font-medium text-white/70 mb-1">Reference Strength</h4>
+                    <p className="text-sm text-white">{details.referenceStrength}</p>
+                  </div>
+                )}
 
                 {/* Debug Info (only in development) */}
                 {process.env.NODE_ENV === 'development' && (
@@ -282,83 +346,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                       <div>Original Asset ID: {currentTile.originalAssetId || 'None'}</div>
                       <div>Can Load Details: {canLoadDetails ? 'Yes' : 'No'}</div>
                     </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Generation Details */}
-              <div className="border-t border-white/10 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-white/70">Generation Details</h4>
-                  {!details && !loading && canLoadDetails && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleLoadDetails}
-                      className="text-xs bg-white/10 border-white/20 text-white hover:bg-white/20"
-                    >
-                      Load Details
-                    </Button>
-                  )}
-                  {!canLoadDetails && (
-                    <span className="text-xs text-white/50">Not available</span>
-                  )}
-                </div>
-
-                {loading && (
-                  <div className="flex items-center gap-2 text-white/70">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Loading details...</span>
-                  </div>
-                )}
-
-                {details && (
-                  <div className="space-y-3">
-                    {details.seed && (
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h5 className="text-xs font-medium text-white/70">Seed</h5>
-                          <p className="text-sm text-white font-mono">{details.seed}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopySeed}
-                          className="text-white/70 hover:text-white hover:bg-white/10 p-1"
-                          title="Copy seed (or press 'c')"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </Button>
-                      </div>
-                    )}
-                    
-                    {details.generationTime && (
-                      <div>
-                        <h5 className="text-xs font-medium text-white/70">Generation Time</h5>
-                        <p className="text-sm text-white">{details.generationTime.toFixed(2)}s</p>
-                      </div>
-                    )}
-                    
-                    {details.modelType && (
-                      <div>
-                        <h5 className="text-xs font-medium text-white/70">Model Type</h5>
-                        <p className="text-sm text-white">{details.modelType}</p>
-                      </div>
-                    )}
-                    
-                    {details.negativePrompt && (
-                      <div>
-                        <h5 className="text-xs font-medium text-white/70">Negative Prompt</h5>
-                        <p className="text-sm text-white/90 leading-relaxed">{details.negativePrompt}</p>
-                      </div>
-                    )}
-                    
-                    {details.referenceStrength && (
-                      <div>
-                        <h5 className="text-xs font-medium text-white/70">Reference Strength</h5>
-                        <p className="text-sm text-white">{details.referenceStrength}</p>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
