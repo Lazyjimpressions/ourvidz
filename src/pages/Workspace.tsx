@@ -1,9 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
-import { v4 as uuidv4 } from 'uuid';
-import { useRouter } from 'next/router';
-import { useSession } from 'next-auth/react';
-import { useMediaQuery } from 'usehooks-ts'
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,11 +23,9 @@ import {
 import { ImageInputControls } from "@/components/ImageInputControls";
 import { VideoInputControls } from "@/components/VideoInputControls";
 import { MultiReferencePanel } from "@/components/workspace/MultiReferencePanel";
-import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
-import { WorkspaceTiles } from "@/components/workspace/WorkspaceTiles";
-import { LibraryPanel } from "@/components/workspace/LibraryPanel";
-import { MediaTile } from "@/components/workspace/MediaTile";
-import { ReferenceImage } from "@/types/workspace";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
+import { VirtualizedMediaGrid } from "@/components/VirtualizedMediaGrid";
+import { ReferenceImage, MediaTile } from "@/types/workspace";
 
 const defaultWorkspaceData = {
   mediaTiles: [] as MediaTile[],
@@ -37,8 +34,8 @@ const defaultWorkspaceData = {
 };
 
 const Workspace = () => {
-  const router = useRouter();
-  const { data: session, status } = useSession();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [isGenerating, setIsGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [numImages, setNumImages] = useState(4);
@@ -49,14 +46,14 @@ const Workspace = () => {
 	const [referenceStrength, setReferenceStrength] = useState(0.8);
   const [generationCount, setGenerationCount] = useState(0);
   const [workspaceData, setWorkspaceData] = useState(defaultWorkspaceData);
-	const isMobile = useMediaQuery('(max-width: 768px)')
+	const isMobile = useIsMobile();
 
   // Ensure user is authenticated
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth');
+    if (!user) {
+      navigate('/auth');
     }
-  }, [status, router]);
+  }, [user, navigate]);
 
   // Reset workspace data on unmount
   useEffect(() => {
@@ -88,7 +85,7 @@ const Workspace = () => {
           quality,
           enhanced,
           mode,
-          referenceImage: workspaceData.references?.find(ref => ref.id === 'character'),
+          referenceImage: workspaceData.references?.find(ref => ref.type === 'character'),
 					referenceStrength
         }),
       });
@@ -101,7 +98,7 @@ const Workspace = () => {
 
       if (data && data.assets) {
         const newMediaTiles = data.assets.map((asset: any) => ({
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           originalAssetId: asset.id,
           type: mode,
           url: asset.url,
@@ -140,8 +137,8 @@ const Workspace = () => {
     setWorkspaceData(prev => ({
       ...prev,
       references: newReferences.length > 0
-        ? [...(prev.references || []).filter(ref => !newReferences.find(newRef => newRef.id === ref.id)), ...newReferences]
-        : (prev.references || []).filter(ref => !newReferences.find(newRef => newRef.id === ref.id)),
+        ? [...(prev.references || []).filter(ref => !newReferences.find(newRef => newRef.type === ref.type)), ...newReferences]
+        : (prev.references || []).filter(ref => !newReferences.find(newRef => newRef.type === ref.type)),
     }));
   };
 
@@ -164,13 +161,8 @@ const Workspace = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <WorkspaceHeader
-        generationCount={generationCount}
-        hasGeneratedMedia={workspaceData.mediaTiles.length > 0}
-        onLibraryClick={() => setShowLibrary(true)}
-        isLibraryOpen={showLibrary}
-        mode={mode}
-        onModeSwitch={handleModeSwitch}
+      <WorkspaceHeader 
+        onClearWorkspace={() => setWorkspaceData(defaultWorkspaceData)}
       />
 
       <main className="pt-20">
@@ -191,30 +183,23 @@ const Workspace = () => {
                 numImages={numImages}
                 setNumImages={setNumImages}
                 referenceImage={
-                  workspaceData.references?.find(ref => ref.id === 'character')?.file || null
+                  workspaceData.references?.find(ref => ref.type === 'character')?.file || null
                 }
                 referenceImageUrl={
-                  workspaceData.references?.find(ref => ref.id === 'character')?.url
+                  workspaceData.references?.find(ref => ref.type === 'character')?.url
                 }
                 onReferenceImageChange={(file, url) => {
                   handleReferenceChange([{
-                    id: 'character' as const,
-                    label: 'Character',
-                    description: 'Preserve character appearance and features',
+                    type: 'character' as const,
                     file,
-                    url,
-                    enabled: true
+                    url
                   }]);
                 }}
                 onClearReference={() => {
-                  handleReferenceChange([{
-                    id: 'character' as const,
-                    label: 'Character',
-                    description: 'Preserve character appearance and features',
-                    file: null,
-                    url: undefined,
-                    enabled: false
-                  }]);
+                  setWorkspaceData(prev => ({
+                    ...prev,
+                    references: prev.references?.filter(ref => ref.type !== 'character') || []
+                  }));
                 }}
               />
             ) : (
@@ -282,21 +267,13 @@ const Workspace = () => {
 
           {/* Workspace Content */}
           <div className="space-y-6">
-            <WorkspaceTiles
-              mediaTiles={workspaceData.mediaTiles}
-              setMediaTiles={(updatedTiles) => setWorkspaceData(prev => ({ ...prev, mediaTiles: updatedTiles }))}
+            <VirtualizedMediaGrid 
+              onClearWorkspace={workspaceData.mediaTiles.length > 0}
             />
           </div>
         </div>
       </main>
 
-      {/* Library Panel */}
-      <LibraryPanel
-        isOpen={showLibrary}
-        onClose={() => setShowLibrary(false)}
-        mediaTiles={workspaceData.mediaTiles}
-        setMediaTiles={(updatedTiles) => setWorkspaceData(prev => ({ ...prev, mediaTiles: updatedTiles }))}
-      />
     </div>
   );
 };
