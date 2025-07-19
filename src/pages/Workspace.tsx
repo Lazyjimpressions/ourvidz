@@ -664,6 +664,7 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             hasReference={videoReferences.some(ref => ref.enabled && ref.url)}
             onReferenceClick={handleReferenceClick}
+            jobType={selectedMode}
           />
         ) : (
           <ImageInputControls
@@ -681,6 +682,7 @@ const Workspace = () => {
             setNumImages={setNumImages}
             hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
             onReferenceClick={handleReferenceClick}
+            jobType={selectedMode}
           />
         )}
       </div>

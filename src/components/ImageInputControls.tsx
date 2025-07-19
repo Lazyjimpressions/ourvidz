@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2 } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PromptEnhancementModal } from './PromptEnhancementModal';
 
 interface ImageInputControlsProps {
   prompt: string;
@@ -27,6 +28,8 @@ interface ImageInputControlsProps {
   // Reference functionality
   hasReference?: boolean;
   onReferenceClick?: () => void;
+  // Job type for enhancement
+  jobType?: string;
 }
 
 export const ImageInputControls = ({
@@ -43,12 +46,14 @@ export const ImageInputControls = ({
   numImages,
   setNumImages,
   hasReference = false,
-  onReferenceClick
+  onReferenceClick,
+  jobType = 'sdxl_image_fast'
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
+  const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
   return (
     <TooltipProvider>
@@ -114,6 +119,24 @@ export const ImageInputControls = ({
               }}
             />
           </div>
+
+          {/* Enhance Prompt Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => setShowEnhancementModal(true)}
+                disabled={isGenerating || !prompt.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                ✨
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Enhance prompt with AI suggestions</p>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Generate Button */}
           <Button
@@ -292,6 +315,20 @@ export const ImageInputControls = ({
           </Tooltip>
         </div>
       </div>
+
+      {/* Prompt Enhancement Modal */}
+      <PromptEnhancementModal
+        isOpen={showEnhancementModal}
+        onClose={() => setShowEnhancementModal(false)}
+        onAccept={(enhancedPrompt) => {
+          setPrompt(enhancedPrompt);
+          setShowEnhancementModal(false);
+        }}
+        originalPrompt={prompt}
+        jobType={jobType}
+        format="image"
+        quality={quality}
+      />
     </TooltipProvider>
   );
 };

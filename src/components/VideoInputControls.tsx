@@ -2,13 +2,14 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PromptEnhancementModal } from './PromptEnhancementModal';
 
 interface VideoInputControlsProps {
   prompt: string;
@@ -24,6 +25,8 @@ interface VideoInputControlsProps {
   // Reference functionality
   hasReference?: boolean;
   onReferenceClick?: () => void;
+  // Job type for enhancement
+  jobType?: string;
 }
 
 export const VideoInputControls = ({
@@ -38,12 +41,14 @@ export const VideoInputControls = ({
   enhanced,
   setEnhanced,
   hasReference = false,
-  onReferenceClick
+  onReferenceClick,
+  jobType = 'video_fast'
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
+  const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
   return (
     <TooltipProvider>
@@ -109,6 +114,24 @@ export const VideoInputControls = ({
               }}
             />
           </div>
+
+          {/* Enhance Prompt Button */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                onClick={() => setShowEnhancementModal(true)}
+                disabled={isGenerating || !prompt.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                ✨
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Enhance prompt with AI suggestions</p>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Generate Button */}
           <Button
@@ -280,6 +303,20 @@ export const VideoInputControls = ({
           </Tooltip>
         </div>
       </div>
+
+      {/* Prompt Enhancement Modal */}
+      <PromptEnhancementModal
+        isOpen={showEnhancementModal}
+        onClose={() => setShowEnhancementModal(false)}
+        onAccept={(enhancedPrompt) => {
+          setPrompt(enhancedPrompt);
+          setShowEnhancementModal(false);
+        }}
+        originalPrompt={prompt}
+        jobType={jobType}
+        format="video"
+        quality={quality}
+      />
     </TooltipProvider>
   );
 };
