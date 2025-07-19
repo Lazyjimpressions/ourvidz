@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,36 +37,18 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
     }
   }, [currentTile?.id, lastTileId, reset]);
   
+  // Only keep Escape key for closing modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        handlePrevious();
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === 'Escape') {
+      if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
-      } else if (e.key === 'i' || e.key === 'I') {
-        e.preventDefault();
-        setShowInfoPanel(!showInfoPanel);
-      } else if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        if (details?.seed || currentTile.seed) {
-          handleCopySeed();
-        }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (regeneration.canRegenerate && !regeneration.isGenerating) {
-          regeneration.regenerateImage();
-        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, tiles.length, showInfoPanel, details?.seed, currentTile.seed, regeneration]);
+  }, [onClose]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -128,13 +109,14 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
           <div className={`relative flex items-center justify-center transition-all duration-300 ${
             showInfoPanel ? 'w-[70%]' : 'w-full'
           }`}>
-            {/* Single Overlay Controls - FIXED: Removed duplicate X button */}
+            {/* Single Overlay Controls */}
             <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity duration-200">
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleDownload}
                 className="bg-black/50 hover:bg-black/70 text-white p-1.5 backdrop-blur-sm h-7 w-7"
+                title="Download"
               >
                 <Download className="w-3 h-3" />
               </Button>
@@ -147,6 +129,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                     ? 'bg-blue-600/70 hover:bg-blue-600/80 text-white' 
                     : 'bg-black/50 hover:bg-black/70 text-white'
                 }`}
+                title="Toggle info panel"
               >
                 <Info className="w-3 h-3" />
               </Button>
@@ -206,6 +189,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   size="icon"
                   onClick={handlePrevious}
                   className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white h-9 w-9 rounded-full backdrop-blur-sm"
+                  title="Previous image"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -215,6 +199,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   size="icon"
                   onClick={handleNext}
                   className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white h-9 w-9 rounded-full backdrop-blur-sm"
+                  title="Next image"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -315,7 +300,7 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
 
                   {regeneration.state.isModified && (
                     <p className="text-xs text-orange-400 mb-2 text-center">
-                      Modified • Ctrl+Enter to regenerate
+                      Modified
                     </p>
                   )}
                 </div>
@@ -398,19 +383,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                     <p className="text-xs text-white">{details.referenceStrength}</p>
                   </div>
                 )}
-              </div>
-
-              {/* Keyboard Shortcuts */}
-              <div className="mt-4 pt-3 border-t border-white/10">
-                <p className="text-xs text-white/50 mb-1">Shortcuts</p>
-                <div className="text-xs text-white/40 space-y-0.5">
-                  <div className="grid grid-cols-2 gap-1">
-                    <div>'i' - Toggle panel</div>
-                    <div>'c' - Copy seed</div>
-                    <div>'←/→' - Navigate</div>
-                    <div>'Ctrl+Enter' - Regen</div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
