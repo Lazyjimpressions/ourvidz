@@ -88,7 +88,9 @@ Both workers use standardized callback parameters and comprehensive metadata man
     "expected_time": 25-240,
     "content_type": "image" | "video",
     "file_extension": "png" | "mp4",
-    "num_images": 1
+    "num_images": 1,
+    "first_frame": "string",  // ✅ NEW: Start reference frame URL for video generation
+    "last_frame": "string"    // ✅ NEW: End reference frame URL for video generation
   },
   "user_id": "uuid",
   "created_at": "2025-07-16T...",
@@ -105,6 +107,8 @@ Both workers use standardized callback parameters and comprehensive metadata man
     "reference_image_url": "string",
     "reference_type": "style" | "composition" | "character",
     "reference_strength": 0.1-1.0,
+    "start_reference_url": "string",  // ✅ NEW: Start reference frame URL for video generation
+    "end_reference_url": "string",    // ✅ NEW: End reference frame URL for video generation
     "expected_generation_time": 25-240,
     "dual_worker_routing": true,
     "negative_prompt_supported": false,
@@ -197,6 +201,72 @@ if reference_image_url:
     reference_image = load_reference_image(reference_image_url)
     # Apply reference influence based on type and strength
     result = generate_with_reference(prompt, reference_image, reference_type, reference_strength)
+```
+
+### **Video Reference Frame Support** ✅ NEW
+```python
+# Video reference frame parameters
+start_reference_url = "https://storage.example.com/start_frame.jpg"
+end_reference_url = "https://storage.example.com/end_frame.jpg"
+reference_strength = 0.1-1.0
+
+# Video generation with reference frames
+if start_reference_url or end_reference_url:
+    # Download and process reference images
+    start_reference = None
+    end_reference = None
+    
+    if start_reference_url:
+        start_reference = download_image_from_url(start_reference_url)
+        start_reference = preprocess_reference_image(start_reference)
+    
+    if end_reference_url:
+        end_reference = download_image_from_url(end_reference_url)
+        end_reference = preprocess_reference_image(end_reference)
+    
+    # Generate video with reference frames
+    video = generate_video_with_references(
+        prompt, 
+        start_reference, 
+        end_reference, 
+        reference_strength,
+        job_type
+    )
+else:
+    # Standard video generation
+    video = generate_standard_video(prompt, job_type)
+```
+
+### **WAN Command with Reference Frames**
+```python
+# Build WAN command with reference frame support
+cmd = [
+    "python", "generate.py",
+    "--task", "t2v-1.3B",
+    "--ckpt_dir", model_path,
+    "--offload_model", "True",
+    "--size", config['size'],
+    "--sample_steps", str(config['sample_steps']),
+    "--sample_guide_scale", str(config['sample_guide_scale']),
+    "--sample_solver", config.get('sample_solver', 'unipc'),
+    "--sample_shift", str(config.get('sample_shift', 5.0)),
+    "--frame_num", str(config['frame_num']),
+    "--prompt", prompt,
+    "--save_file", output_path
+]
+
+# Add reference frame parameters if provided
+if start_ref_path:
+    cmd.extend(["--start_frame", start_ref_path])
+    print(f"🖼️ Start reference frame: {start_ref_path}")
+
+if end_ref_path:
+    cmd.extend(["--end_frame", end_ref_path])
+    print(f"🖼️ End reference frame: {end_ref_path}")
+
+if start_ref_path or end_ref_path:
+    cmd.extend(["--reference_strength", str(strength)])
+    print(f"🔧 Reference strength: {strength}")
 ```
 
 ### **Enhanced Negative Prompt Generation**
@@ -310,20 +380,75 @@ def generate_negative_prompt_for_sdxl(user_prompt):
 - **Seed Control**: Reproducible generation (no negative prompts)
 - **Path Consistency**: Fixed video path handling
 
-### **Video Generation**
+### **Video Generation with Reference Frames**
 ```python
 # Video generation parameters
 frame_num = 83  # Number of frames
 sample_solver = "unipc"  # Temporal consistency
 sample_shift = 5.0  # Motion control
 
+# Extract reference frame parameters from job config and metadata
+start_reference_url = config.get('first_frame') or metadata.get('start_reference_url')
+end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
+reference_strength = metadata.get('reference_strength', 0.5)
+
 # Generate video with reference frames
-if reference_image_url:
-    # Use reference for start/end frame consistency
-    video = generate_video_with_reference(prompt, reference_image_url, frame_num)
+if start_reference_url or end_reference_url:
+    # Download and process reference images
+    start_reference = None
+    end_reference = None
+    
+    if start_reference_url:
+        start_reference = download_image_from_url(start_reference_url)
+        start_reference = preprocess_reference_image(start_reference)
+    
+    if end_reference_url:
+        end_reference = download_image_from_url(end_reference_url)
+        end_reference = preprocess_reference_image(end_reference)
+    
+    # Generate video with reference frames
+    video = generate_video_with_references(
+        prompt, 
+        start_reference, 
+        end_reference, 
+        reference_strength,
+        job_type
+    )
 else:
     # Standard video generation
     video = generate_video(prompt, frame_num)
+```
+
+### **Reference Frame Processing**
+```python
+def download_image_from_url(image_url):
+    """Download image from URL and return PIL Image object"""
+    response = requests.get(image_url, timeout=30)
+    response.raise_for_status()
+    image = Image.open(io.BytesIO(response.content))
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    return image
+
+def preprocess_reference_image(image, target_size=(480, 832)):
+    """Preprocess reference image for WAN video generation"""
+    image.thumbnail(target_size, Image.Resampling.LANCZOS)
+    new_image = Image.new('RGB', target_size, (0, 0, 0))
+    x = (target_size[0] - image.width) // 2
+    y = (target_size[1] - image.height) // 2
+    new_image.paste(image, (x, y))
+    return new_image
+
+def generate_video_with_references(prompt, start_reference, end_reference, strength, job_type):
+    """Generate video with start and/or end reference frames"""
+    if start_reference and end_reference:
+        return generate_video_with_start_end_references(prompt, start_reference, end_reference, strength, job_type)
+    elif start_reference:
+        return generate_video_with_start_reference(prompt, start_reference, strength, job_type)
+    elif end_reference:
+        return generate_video_with_end_reference(prompt, end_reference, strength, job_type)
+    else:
+        return generate_standard_video(prompt, job_type)
 ```
 
 ---
@@ -371,8 +496,22 @@ if job_type.startswith("sdxl_"):
     
     assets = results
 else:
-    # WAN generation (single output)
-    result = generate_wan_content(prompt, config)
+    # WAN generation with reference frame support
+    if config.get('content_type') == 'video':
+        # Check for video reference frames
+        start_reference_url = config.get('first_frame') or metadata.get('start_reference_url')
+        end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
+        
+        if start_reference_url or end_reference_url:
+            # Generate video with reference frames
+            result = generate_wan_video_with_references(prompt, config, start_reference_url, end_reference_url)
+        else:
+            # Standard video generation
+            result = generate_wan_content(prompt, config)
+    else:
+        # Standard image generation
+        result = generate_wan_content(prompt, config)
+    
     assets = [result]
 ```
 
@@ -540,9 +679,10 @@ completion_stats = {
 3. **Seed Support**: User-controlled seeds for reproducible generation
 4. **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
 5. **Reference Image Support**: Optional image-to-image with type and strength control
-6. **Comprehensive Error Handling**: Enhanced debugging and error tracking
-7. **Metadata Consistency**: Improved data flow and storage
-8. **Path Consistency Fix**: Fixed video path handling for WAN workers
+6. **Video Reference Frame Support**: ✅ NEW: Start/end frame references for video generation
+7. **Comprehensive Error Handling**: Enhanced debugging and error tracking
+8. **Metadata Consistency**: Improved data flow and storage
+9. **Path Consistency Fix**: Fixed video path handling for WAN workers
 
 ### **Performance Improvements**
 - Optimized batch processing for multi-image SDXL jobs

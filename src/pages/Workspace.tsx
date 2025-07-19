@@ -218,44 +218,80 @@ const Workspace = () => {
     }
 
     try {
-      // Build reference metadata from MultiReferencePanel
-      const enabledReferences = activeReferences.filter(ref => ref.enabled && ref.url);
-      const referenceMetadata: any = {
+      // Build reference metadata based on mode
+      let referenceMetadata: any = {
         model_variant: selectedMode.startsWith('sdxl') ? 'lustify_sdxl' : 'wan_2_1_1_3b',
         num_images: numImages
       };
 
       // Apply optional prompt optimization ONLY when explicitly enabled
       let finalPrompt = prompt.trim();
-      const hasCharacterReference = enabledReferences.some(ref => ref.id === 'character');
       
-      if (hasCharacterReference && optimizeForCharacter) {
-        finalPrompt = optimizePromptForCharacter(finalPrompt);
-      }
-      
-      // Add reference data if we have active references
-      if (enabledReferences.length > 0) {
-        referenceMetadata.reference_image = true;
-        referenceMetadata.reference_strength = referenceStrength; // Use the exact value from slider
+      if (isVideoMode) {
+        // VIDEO MODE: Handle video references (start/end frames)
+        const enabledVideoReferences = videoReferences.filter(ref => ref.enabled && ref.url);
         
-        // Set reference type based on the primary reference
-        const characterRef = enabledReferences.find(ref => ref.id === 'character');
-        if (characterRef) {
+        if (enabledVideoReferences.length > 0) {
+          referenceMetadata.reference_image = true;
+          referenceMetadata.reference_strength = referenceStrength;
+          
+          // Add start and end reference URLs if available
+          const startRef = enabledVideoReferences.find(ref => ref.id === 'start');
+          const endRef = enabledVideoReferences.find(ref => ref.id === 'end');
+          
+          if (startRef) {
+            referenceMetadata.start_reference_url = startRef.url;
+            referenceMetadata.start_reference_source = startRef.isWorkspaceAsset ? 'workspace' : 'upload';
+          }
+          
+          if (endRef) {
+            referenceMetadata.end_reference_url = endRef.url;
+            referenceMetadata.end_reference_source = endRef.isWorkspaceAsset ? 'workspace' : 'upload';
+          }
+          
+          // For video mode, use character reference type by default
           referenceMetadata.reference_type = 'character';
           referenceMetadata.character_consistency = true;
-        } else if (enabledReferences.find(ref => ref.id === 'style')) {
-          referenceMetadata.reference_type = 'style';
-        } else if (enabledReferences.find(ref => ref.id === 'composition')) {
-          referenceMetadata.reference_type = 'composition';
+          
+          console.log('🎬 Video references configured:', {
+            startRef: startRef?.url,
+            endRef: endRef?.url,
+            strength: referenceStrength
+          });
         }
-
-        // Use the first enabled reference URL (prioritize character > style > composition)
-        const primaryReference = enabledReferences.find(ref => ref.id === 'character') ||
-                               enabledReferences.find(ref => ref.id === 'style') ||
-                               enabledReferences[0];
+      } else {
+        // IMAGE MODE: Handle image references (style/composition/character)
+        const enabledReferences = activeReferences.filter(ref => ref.enabled && ref.url);
+        const hasCharacterReference = enabledReferences.some(ref => ref.id === 'character');
         
-        referenceMetadata.reference_url = primaryReference.url;
-        referenceMetadata.reference_source = primaryReference.isWorkspaceAsset ? 'workspace' : 'upload';
+        if (hasCharacterReference && optimizeForCharacter) {
+          finalPrompt = optimizePromptForCharacter(finalPrompt);
+        }
+        
+        // Add reference data if we have active references
+        if (enabledReferences.length > 0) {
+          referenceMetadata.reference_image = true;
+          referenceMetadata.reference_strength = referenceStrength; // Use the exact value from slider
+          
+          // Set reference type based on the primary reference
+          const characterRef = enabledReferences.find(ref => ref.id === 'character');
+          if (characterRef) {
+            referenceMetadata.reference_type = 'character';
+            referenceMetadata.character_consistency = true;
+          } else if (enabledReferences.find(ref => ref.id === 'style')) {
+            referenceMetadata.reference_type = 'style';
+          } else if (enabledReferences.find(ref => ref.id === 'composition')) {
+            referenceMetadata.reference_type = 'composition';
+          }
+
+          // Use the first enabled reference URL (prioritize character > style > composition)
+          const primaryReference = enabledReferences.find(ref => ref.id === 'character') ||
+                                 enabledReferences.find(ref => ref.id === 'style') ||
+                                 enabledReferences[0];
+          
+          referenceMetadata.reference_url = primaryReference.url;
+          referenceMetadata.reference_source = primaryReference.isWorkspaceAsset ? 'workspace' : 'upload';
+        }
       }
 
       // Add seed if provided
@@ -268,17 +304,20 @@ const Workspace = () => {
         originalPrompt: prompt.trim(),
         finalPrompt,
         optimizationEnabled: optimizeForCharacter,
-        activeReferences: enabledReferences,
+        activeReferences: isVideoMode ? videoReferences : activeReferences,
         referenceStrength: referenceStrength, // Log the actual value being used
         numImages,
-        seed
+        seed,
+        isVideoMode
       });
 
       // Build generation request
       const generationRequest = {
         format: selectedMode,
         prompt: finalPrompt,
-        referenceImageUrl: enabledReferences.length > 0 ? enabledReferences[0].url : undefined,
+        referenceImageUrl: isVideoMode 
+          ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
+          : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
         metadata: referenceMetadata
       };
 

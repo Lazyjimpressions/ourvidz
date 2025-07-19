@@ -381,7 +381,14 @@ serve(async (req)=>{
         ...metadata?.reference_image && {
           reference_image_url: metadata.reference_url,
           reference_strength: metadata.reference_strength || 0.85,
-          reference_type: metadata.reference_type || 'character'
+          reference_type: metadata.reference_type || 'character',
+          // VIDEO REFERENCE SUPPORT: Add start/end frame references for video generation
+          ...(format === 'video' && metadata?.start_reference_url && {
+            first_frame: metadata.start_reference_url
+          }),
+          ...(format === 'video' && metadata?.end_reference_url && {
+            last_frame: metadata.end_reference_url
+          })
         },
         expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
         content_type: format,
@@ -416,6 +423,9 @@ serve(async (req)=>{
       referenceUrl: metadata?.reference_url,
       referenceStrength: metadata?.reference_strength,
       referenceType: metadata?.reference_type,
+      hasVideoReferences: format === 'video' && (!!metadata?.start_reference_url || !!metadata?.end_reference_url),
+      startReferenceUrl: metadata?.start_reference_url,
+      endReferenceUrl: metadata?.end_reference_url,
       negativePromptSupported: isSDXL,
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
