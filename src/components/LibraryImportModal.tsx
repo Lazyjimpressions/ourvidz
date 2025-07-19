@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Search, Image, Video, Calendar, Filter, Plus } from "lucide-react";
-import { useLazyAssets } from '@/hooks/useLazyAssets';
+import { useAssets } from '@/hooks/useAssets';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { toast } from 'sonner';
 
@@ -22,18 +22,15 @@ export const LibraryImportModal = ({ isOpen, onClose, onImport }: LibraryImportM
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>('all');
   
-  const { assets, isLoading, hasMore, loadMore } = useLazyAssets({
-    searchQuery,
-    typeFilter: typeFilter === 'all' ? undefined : typeFilter
-  });
+  const { data: assets = [], isLoading } = useAssets(false);
 
   // Filter and search assets
   const filteredAssets = useMemo(() => {
     return assets.filter(asset => {
       const matchesSearch = !searchQuery || 
-        asset.prompt.toLowerCase().includes(searchQuery.toLowerCase());
+        asset.prompt?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = typeFilter === 'all' || asset.type === typeFilter;
-      return matchesSearch && matchesType && asset.status === 'completed' && asset.url;
+      return matchesSearch && matchesType;
     });
   }, [assets, searchQuery, typeFilter]);
 
@@ -177,7 +174,7 @@ export const LibraryImportModal = ({ isOpen, onClose, onImport }: LibraryImportM
                   {asset.type === 'image' ? (
                     <img
                       src={asset.url}
-                      alt={asset.prompt}
+                      alt={asset.prompt || 'Generated image'}
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
@@ -205,7 +202,7 @@ export const LibraryImportModal = ({ isOpen, onClose, onImport }: LibraryImportM
                   {/* Asset Info */}
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
                     <p className="text-white text-xs line-clamp-2 mb-1">
-                      {asset.prompt}
+                      {asset.prompt || 'No prompt'}
                     </p>
                     <div className="flex items-center gap-1 text-white/70 text-xs">
                       <Calendar className="w-3 h-3" />
@@ -217,17 +214,6 @@ export const LibraryImportModal = ({ isOpen, onClose, onImport }: LibraryImportM
             </div>
           )}
           
-          {hasMore && (
-            <div className="flex justify-center py-4">
-              <Button
-                variant="outline"
-                onClick={loadMore}
-                disabled={isLoading}
-              >
-                {isLoading ? 'Loading...' : 'Load More'}
-              </Button>
-            </div>
-          )}
         </ScrollArea>
       </DialogContent>
     </Dialog>

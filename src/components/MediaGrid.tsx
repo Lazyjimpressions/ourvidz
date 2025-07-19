@@ -314,7 +314,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
 
       {/* Library Import Modal */}
       <LibraryImportModal
-        open={showLibraryModal}
+        isOpen={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={importToWorkspace}
       />

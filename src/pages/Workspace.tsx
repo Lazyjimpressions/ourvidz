@@ -70,13 +70,14 @@ const Workspace = () => {
     const generationRequest: GenerationRequest = {
       prompt,
       format: mode === 'image' ? 'sdxl_image_fast' : 'video_fast',
-      quality,
-      enhanced,
-      numImages: mode === 'image' ? numImages : 1,
-      referenceImage: references?.find(ref => ref.type === 'character'),
-      referenceStrength,
-      startReferenceImage: videoReferences?.start,
-      endReferenceImage: videoReferences?.end
+      batchCount: mode === 'image' ? numImages : 1,
+      referenceImageUrl: references?.find(ref => ref.type === 'character')?.url,
+      startReferenceImageUrl: videoReferences?.start?.url,
+      endReferenceImageUrl: videoReferences?.end?.url,
+      metadata: {
+        reference_strength: referenceStrength,
+        enhanced
+      }
     };
 
     await generateContent(generationRequest);
