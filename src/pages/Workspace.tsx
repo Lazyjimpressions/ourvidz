@@ -1,30 +1,15 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
-import { Textarea } from "@/components/ui/textarea";
-import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
 import { ImageInputControls } from "@/components/ImageInputControls";
 import { VideoInputControls } from "@/components/VideoInputControls";
 import { MultiReferencePanel } from "@/components/workspace/MultiReferencePanel";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
-import { VirtualizedMediaGrid } from "@/components/VirtualizedMediaGrid";
+import { SimpleWorkspaceGrid } from "@/components/workspace/SimpleWorkspaceGrid";
 import { ReferenceImage, MediaTile } from "@/types/workspace";
 
 const defaultWorkspaceData = {
@@ -43,10 +28,10 @@ const Workspace = () => {
   const [enhanced, setEnhanced] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [mode, setMode] = useState<'image' | 'video'>('image');
-	const [referenceStrength, setReferenceStrength] = useState(0.8);
+  const [referenceStrength, setReferenceStrength] = useState(0.8);
   const [generationCount, setGenerationCount] = useState(0);
   const [workspaceData, setWorkspaceData] = useState(defaultWorkspaceData);
-	const isMobile = useIsMobile();
+  const isMobile = useIsMobile();
 
   // Ensure user is authenticated
   useEffect(() => {
@@ -55,12 +40,23 @@ const Workspace = () => {
     }
   }, [user, navigate]);
 
-  // Reset workspace data on unmount
+  // Load workspace data from session storage
   useEffect(() => {
-    return () => {
-      setWorkspaceData(defaultWorkspaceData);
-    };
+    const savedData = sessionStorage.getItem('workspaceData');
+    if (savedData) {
+      try {
+        const parsed = JSON.parse(savedData);
+        setWorkspaceData(parsed);
+      } catch (error) {
+        console.error('Failed to load workspace data:', error);
+      }
+    }
   }, []);
+
+  // Save workspace data to session storage
+  useEffect(() => {
+    sessionStorage.setItem('workspaceData', JSON.stringify(workspaceData));
+  }, [workspaceData]);
 
   const handleModeSwitch = (newMode: 'image' | 'video') => {
     setMode(newMode);
@@ -74,64 +70,43 @@ const Workspace = () => {
 
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/generation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt,
-          numImages: mode === 'image' ? numImages : 1,
-          quality,
-          enhanced,
-          mode,
-          referenceImage: workspaceData.references?.find(ref => ref.type === 'character'),
-					referenceStrength
-        }),
-      });
+      // Simulate generation for now - replace with actual API call
+      const mockAssets = Array.from({ length: mode === 'image' ? numImages : 1 }, (_, i) => ({
+        id: crypto.randomUUID(),
+        url: mode === 'image' 
+          ? `https://picsum.photos/512/512?random=${Date.now() + i}`
+          : `https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4`,
+      }));
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      const newMediaTiles = mockAssets.map((asset, index) => ({
+        id: crypto.randomUUID(),
+        originalAssetId: asset.id,
+        type: mode,
+        url: asset.url,
+        prompt,
+        timestamp: new Date(),
+        quality,
+        modelType: enhanced ? 'enhanced' : 'standard',
+        duration: mode === 'video' ? 30 : undefined,
+        isUrlLoaded: true,
+        isVisible: true,
+        virtualIndex: workspaceData.mediaTiles.length + index,
+      }));
 
-      const data = await response.json();
-
-      if (data && data.assets) {
-        const newMediaTiles = data.assets.map((asset: any) => ({
-          id: crypto.randomUUID(),
-          originalAssetId: asset.id,
-          type: mode,
-          url: asset.url,
-          prompt,
-          timestamp: new Date(),
-          quality,
-          modelType: enhanced ? 'enhanced' : 'standard',
-          duration: asset.duration || undefined,
-          thumbnailUrl: asset.thumbnailUrl || undefined,
-          isUrlLoaded: false,
-          isVisible: true,
-          virtualIndex: workspaceData.mediaTiles.length,
-          enhancedPrompt: data.enhancedPrompt,
-          seed: data.seed,
-          generationParams: data.generationParams
-        }));
-
-        setWorkspaceData(prev => ({
-          ...prev,
-          mediaTiles: [...prev.mediaTiles, ...newMediaTiles],
-        }));
-        setGenerationCount(count => count + 1);
-        toast.success(`${mode === 'image' ? numImages : 1} ${mode === 'image' ? 'image(s)' : 'video'} generated successfully!`);
-      } else {
-        toast.error('No assets were generated.');
-      }
+      setWorkspaceData(prev => ({
+        ...prev,
+        mediaTiles: [...prev.mediaTiles, ...newMediaTiles],
+      }));
+      
+      setGenerationCount(count => count + 1);
+      toast.success(`${mode === 'image' ? numImages : 1} ${mode === 'image' ? 'image(s)' : 'video'} generated successfully!`);
     } catch (error: any) {
       console.error('Generation failed:', error);
       toast.error(`Generation failed: ${error.message || 'Unknown error'}`);
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, numImages, quality, enhanced, mode, workspaceData.references, referenceStrength]);
+  }, [prompt, numImages, quality, enhanced, mode, workspaceData.mediaTiles.length]);
 
   const handleReferenceChange = (newReferences: ReferenceImage[]) => {
     setWorkspaceData(prev => ({
@@ -159,121 +134,140 @@ const Workspace = () => {
     }));
   };
 
+  const handleClearWorkspace = () => {
+    setWorkspaceData(defaultWorkspaceData);
+    setPrompt('');
+    sessionStorage.removeItem('workspaceData');
+    toast.success('Workspace cleared');
+  };
+
+  const handleRemoveTile = (tileId: string) => {
+    setWorkspaceData(prev => ({
+      ...prev,
+      mediaTiles: prev.mediaTiles.filter(tile => tile.id !== tileId),
+    }));
+    toast.success('Removed from workspace');
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <WorkspaceHeader 
-        onClearWorkspace={() => setWorkspaceData(defaultWorkspaceData)}
-      />
+    <div className="min-h-screen bg-background flex flex-col">
+      <WorkspaceHeader onClearWorkspace={handleClearWorkspace} />
 
-      <main className="pt-20">
+      {/* Main content area */}
+      <main className="flex-1 pt-20 pb-32">
         <div className="container mx-auto px-4 max-w-7xl">
-          <div className="mb-8">
-            {mode === 'image' ? (
-              <ImageInputControls
-                prompt={prompt}
-                setPrompt={setPrompt}
-                onGenerate={handleGenerate}
-                isGenerating={isGenerating}
-                onSwitchToVideo={() => handleModeSwitch('video')}
-                quality={quality}
-                setQuality={setQuality}
-                onLibraryClick={() => setShowLibrary(true)}
-                enhanced={enhanced}
-                setEnhanced={setEnhanced}
-                numImages={numImages}
-                setNumImages={setNumImages}
-                referenceImage={
-                  workspaceData.references?.find(ref => ref.type === 'character')?.file || null
-                }
-                referenceImageUrl={
-                  workspaceData.references?.find(ref => ref.type === 'character')?.url
-                }
-                onReferenceImageChange={(file, url) => {
-                  handleReferenceChange([{
-                    type: 'character' as const,
-                    file,
-                    url
-                  }]);
-                }}
-                onClearReference={() => {
-                  setWorkspaceData(prev => ({
-                    ...prev,
-                    references: prev.references?.filter(ref => ref.type !== 'character') || []
-                  }));
-                }}
-              />
-            ) : (
-              <VideoInputControls
-                prompt={prompt}
-                setPrompt={setPrompt}
-                onGenerate={handleGenerate}
-                isGenerating={isGenerating}
-                onSwitchToImage={() => handleModeSwitch('image')}
-                quality={quality}
-                setQuality={setQuality}
-                onLibraryClick={() => setShowLibrary(true)}
-                enhanced={enhanced}
-                setEnhanced={setEnhanced}
-                startReferenceImage={
-                  workspaceData.videoReferences?.start?.file || null
-                }
-                startReferenceImageUrl={
-                  workspaceData.videoReferences?.start?.url
-                }
-                endReferenceImage={
-                  workspaceData.videoReferences?.end?.file || null
-                }
-                endReferenceImageUrl={
-                  workspaceData.videoReferences?.end?.url
-                }
-                onStartReferenceChange={(file, url) => {
-                  handleVideoReferenceChange({
-                    ...workspaceData.videoReferences,
-                    start: { file, url }
-                  });
-                }}
-                onEndReferenceChange={(file, url) => {
-                  handleVideoReferenceChange({
-                    ...workspaceData.videoReferences,
-                    end: { file, url }
-                  });
-                }}
-                onClearStartReference={() => {
-                  handleVideoReferenceChange({
-                    ...workspaceData.videoReferences,
-                    start: undefined
-                  });
-                }}
-                onClearEndReference={() => {
-                  handleVideoReferenceChange({
-                    ...workspaceData.videoReferences,
-                    end: undefined
-                  });
-                }}
-              />
-            )}
-          </div>
-
           {/* Multi-Reference Panel */}
           {mode === 'image' && (
-            <MultiReferencePanel
-              mode={mode}
-              strength={referenceStrength}
-              onStrengthChange={setReferenceStrength}
-              onReferencesChange={handleReferenceChange}
-              onClear={handleClearReferences}
-            />
+            <div className="mb-6">
+              <MultiReferencePanel
+                mode={mode}
+                strength={referenceStrength}
+                onStrengthChange={setReferenceStrength}
+                onReferencesChange={handleReferenceChange}
+                onClear={handleClearReferences}
+              />
+            </div>
           )}
 
           {/* Workspace Content */}
           <div className="space-y-6">
-            <VirtualizedMediaGrid 
-              onClearWorkspace={workspaceData.mediaTiles.length > 0}
+            <SimpleWorkspaceGrid 
+              mediaTiles={workspaceData.mediaTiles}
+              onRemoveTile={handleRemoveTile}
             />
           </div>
         </div>
       </main>
 
+      {/* Fixed footer with input controls */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border z-40">
+        <div className="container mx-auto px-4 max-w-7xl py-4">
+          {mode === 'image' ? (
+            <ImageInputControls
+              prompt={prompt}
+              setPrompt={setPrompt}
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
+              onSwitchToVideo={() => handleModeSwitch('video')}
+              quality={quality}
+              setQuality={setQuality}
+              onLibraryClick={() => setShowLibrary(true)}
+              enhanced={enhanced}
+              setEnhanced={setEnhanced}
+              numImages={numImages}
+              setNumImages={setNumImages}
+              referenceImage={
+                workspaceData.references?.find(ref => ref.type === 'character')?.file || null
+              }
+              referenceImageUrl={
+                workspaceData.references?.find(ref => ref.type === 'character')?.url
+              }
+              onReferenceImageChange={(file, url) => {
+                handleReferenceChange([{
+                  type: 'character' as const,
+                  file,
+                  url
+                }]);
+              }}
+              onClearReference={() => {
+                setWorkspaceData(prev => ({
+                  ...prev,
+                  references: prev.references?.filter(ref => ref.type !== 'character') || []
+                }));
+              }}
+            />
+          ) : (
+            <VideoInputControls
+              prompt={prompt}
+              setPrompt={setPrompt}
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
+              onSwitchToImage={() => handleModeSwitch('image')}
+              quality={quality}
+              setQuality={setQuality}
+              onLibraryClick={() => setShowLibrary(true)}
+              enhanced={enhanced}
+              setEnhanced={setEnhanced}
+              startReferenceImage={
+                workspaceData.videoReferences?.start?.file || null
+              }
+              startReferenceImageUrl={
+                workspaceData.videoReferences?.start?.url
+              }
+              endReferenceImage={
+                workspaceData.videoReferences?.end?.file || null
+              }
+              endReferenceImageUrl={
+                workspaceData.videoReferences?.end?.url
+              }
+              onStartReferenceChange={(file, url) => {
+                handleVideoReferenceChange({
+                  ...workspaceData.videoReferences,
+                  start: { file, url }
+                });
+              }}
+              onEndReferenceChange={(file, url) => {
+                handleVideoReferenceChange({
+                  ...workspaceData.videoReferences,
+                  end: { file, url }
+                });
+              }}
+              onClearStartReference={() => {
+                handleVideoReferenceChange({
+                  ...workspaceData.videoReferences,
+                  start: undefined
+                });
+              }}
+              onClearEndReference={() => {
+                handleVideoReferenceChange({
+                  ...workspaceData.videoReferences,
+                  end: undefined
+                });
+              }}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

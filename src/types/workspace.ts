@@ -40,8 +40,8 @@ export interface MediaTile {
   setSize?: number;
   setImageUrls?: string[];
   selectedImageIndices?: number[];
-  // Enhanced workspace metadata for dragging - FIXED: Proper type handling for seed
+  // Enhanced workspace metadata
   enhancedPrompt?: string;
-  seed?: number; // FIXED: Changed from string | number to just number for consistency
+  seed?: number;
   generationParams?: Record<string, any>;
 }
