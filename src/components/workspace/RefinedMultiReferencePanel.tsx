@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Eye, Upload, X, Target, Clock, Image as ImageIcon, Copy, Palette, Layout, User } from "lucide-react";
 import { EnhancedReferenceImageButton } from './EnhancedReferenceImageButton';
+import { SmartDropZone } from './SmartDropZone';
 import { ReferencePreviewModal } from './ReferencePreviewModal';
 import { ExactReproductionPreset } from './ExactReproductionPreset';
 import { ReferenceHistoryPanel } from './ReferenceHistoryPanel';
+import { analyzeImage, getOptimalStrength, ImageAnalysisResult } from '@/lib/imageAnalysis';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -22,6 +24,7 @@ interface ReferenceItem {
   enabled: boolean;
   isWorkspaceAsset?: boolean;
   icon: React.ElementType;
+  analysis?: ImageAnalysisResult;
 }
 
 interface RefinedMultiReferencePanelProps {
@@ -47,6 +50,7 @@ export const RefinedMultiReferencePanel = ({
   const [selectedReferenceForPreview, setSelectedReferenceForPreview] = useState<string>('');
   const [referenceHistory, setReferenceHistory] = useState<any[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [draggedOverType, setDraggedOverType] = useState<'character' | 'style' | 'composition' | null>(null);
 
   if (mode === 'video') return null;
 
@@ -64,6 +68,40 @@ export const RefinedMultiReferencePanel = ({
   const hasActiveReferences = activeReferences.some(ref => ref.enabled && ref.url);
   const primaryReference = activeReferences.find(ref => ref.enabled && ref.url);
   const isExactReproduction = strength >= 0.95;
+
+  const handleSmartDrop = async (
+    referenceType: 'character' | 'style' | 'composition',
+    file: File | null,
+    url: string,
+    analysis?: ImageAnalysisResult
+  ) => {
+    // Auto-set optimal strength based on analysis or type
+    const optimalStrength = analysis ? analysis.recommendedStrength : getOptimalStrength(referenceType);
+    onStrengthChange(optimalStrength);
+
+    // Update references with analysis data
+    const updatedRefs = activeReferences.map(ref => 
+      ref.id === referenceType 
+        ? { ...ref, file, url, enabled: true, analysis }
+        : ref
+    );
+    
+    // Add to history
+    const historyItem = {
+      id: Date.now().toString(),
+      url,
+      timestamp: new Date(),
+      type: referenceType,
+      strength: optimalStrength,
+      analysis
+    };
+    setReferenceHistory(prev => [historyItem, ...prev.slice(0, 7)]);
+    
+    onReferencesChange(updatedRefs);
+    
+    // Show strength adjustment notification
+    toast.success(`${referenceTypes.find(t => t.id === referenceType)?.label} reference added with ${Math.round(optimalStrength * 100)}% strength`);
+  };
 
   const handleExactReproductionPreset = () => {
     onStrengthChange(1.0);
@@ -83,27 +121,19 @@ export const RefinedMultiReferencePanel = ({
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
         const url = URL.createObjectURL(file);
-        const updatedRefs = activeReferences.map(ref => 
-          ref.id === referenceId 
-            ? { ...ref, file, url, enabled: true }
-            : ref
-        );
         
-        const historyItem = {
-          id: Date.now().toString(),
-          url,
-          timestamp: new Date(),
-          type: referenceId,
-          strength
-        };
-        setReferenceHistory(prev => [historyItem, ...prev.slice(0, 7)]);
-        
-        onReferencesChange(updatedRefs);
-        toast.success(`${referenceTypes.find(t => t.id === referenceId)?.label} reference added`);
+        // Analyze the uploaded image
+        try {
+          const analysis = await analyzeImage(url);
+          await handleSmartDrop(referenceId, file, url, analysis);
+        } catch (error) {
+          console.error('Analysis failed:', error);
+          await handleSmartDrop(referenceId, file, url);
+        }
       }
     };
     input.click();
@@ -115,7 +145,7 @@ export const RefinedMultiReferencePanel = ({
         {/* Header Section */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold">Reference Images</h3>
+            <h3 className="text-lg font-semibold">Smart Reference System</h3>
             {hasActiveReferences && (
               <Badge variant="secondary" className="bg-primary/10 text-primary">
                 {activeReferences.filter(ref => ref.enabled).length} active
@@ -140,7 +170,7 @@ export const RefinedMultiReferencePanel = ({
           </div>
         </div>
 
-        {/* Primary Reference Display - Prominent when active */}
+        {/* Primary Reference Display - Enhanced with analysis */}
         {primaryReference && (
           <div className="bg-background/50 rounded-lg p-4 border border-border">
             <div className="flex items-start gap-4">
@@ -170,7 +200,14 @@ export const RefinedMultiReferencePanel = ({
               
               <div className="flex-1 space-y-3">
                 <div>
-                  <h4 className="font-medium text-foreground">Primary Reference</h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-medium text-foreground">Primary Reference</h4>
+                    {primaryReference.analysis && (
+                      <Badge variant="outline" className="text-xs">
+                        AI Analyzed
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     {referenceTypes.find(t => t.id === primaryReference.id)?.description}
                   </p>
@@ -179,7 +216,7 @@ export const RefinedMultiReferencePanel = ({
                   )}
                 </div>
                 
-                {/* Strength Control - Prominent */}
+                {/* Enhanced Strength Control with Analysis Info */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">Reference Strength</span>
@@ -203,15 +240,22 @@ export const RefinedMultiReferencePanel = ({
                     <span>Balanced</span>
                     <span>Exact Copy</span>
                   </div>
+                  
+                  {/* Analysis-based recommendations */}
+                  {primaryReference.analysis && (
+                    <div className="text-xs text-muted-foreground mt-2">
+                      <p>✨ AI recommends {Math.round(primaryReference.analysis.recommendedStrength * 100)}% for this image type</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Reference Type Grid - Compact when primary is active */}
+        {/* Smart Reference Type Grid */}
         <div className={cn(
-          "grid gap-3",
+          "grid gap-4",
           primaryReference ? "grid-cols-3" : "grid-cols-1 md:grid-cols-3"
         )}>
           {referenceTypes.map((type) => {
@@ -219,40 +263,62 @@ export const RefinedMultiReferencePanel = ({
             const hasReference = activeRef?.url;
             const isPrimary = primaryReference?.id === type.id;
 
-            if (isPrimary && primaryReference) return null; // Already shown above
+            if (isPrimary && primaryReference) return null;
 
             return (
               <div key={type.id} className="space-y-3">
+                {/* Type Header with Analysis */}
                 <div className="flex items-center gap-2">
                   <type.icon className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium">{type.label}</span>
                   {hasReference && !isPrimary && (
                     <Badge variant="outline">Active</Badge>
                   )}
+                  {activeRef?.analysis && (
+                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                      Smart
+                    </Badge>
+                  )}
                 </div>
 
-                <EnhancedReferenceImageButton
-                  referenceImage={activeRef?.file}
-                  referenceImageUrl={activeRef?.url}
-                  onReferenceChange={(file, url) => {
-                    const updatedRefs = activeReferences.map(ref => 
-                      ref.id === type.id 
-                        ? { ...ref, file, url, enabled: true }
-                        : ref
-                    );
-                    onReferencesChange(updatedRefs);
-                  }}
-                  onClear={() => {
-                    const updatedRefs = activeReferences.map(ref => 
-                      ref.id === type.id 
-                        ? { ...ref, url: '', file: null, enabled: false }
-                        : ref
-                    );
-                    onReferencesChange(updatedRefs);
-                  }}
-                  onPreview={hasReference ? () => handlePreviewReference(activeRef!.url!) : undefined}
-                  size={primaryReference ? "compact" : "standard"}
-                />
+                {/* Smart Drop Zone or Enhanced Button */}
+                {hasReference ? (
+                  <EnhancedReferenceImageButton
+                    referenceImage={activeRef?.file}
+                    referenceImageUrl={activeRef?.url}
+                    onReferenceChange={(file, url) => handleSmartDrop(type.id, file, url)}
+                    onClear={() => {
+                      const updatedRefs = activeReferences.map(ref => 
+                        ref.id === type.id 
+                          ? { ...ref, url: '', file: null, enabled: false }
+                          : ref
+                      );
+                      onReferencesChange(updatedRefs);
+                    }}
+                    onPreview={hasReference ? () => handlePreviewReference(activeRef!.url!) : undefined}
+                    size={primaryReference ? "compact" : "standard"}
+                  />
+                ) : (
+                  <SmartDropZone
+                    referenceType={type.id}
+                    onDrop={(file, url, analysis) => handleSmartDrop(type.id, file, url, analysis)}
+                    isDragging={draggedOverType === type.id}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDraggedOverType(type.id);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setDraggedOverType(null);
+                    }}
+                    onDragEnter={(e) => {
+                      e.preventDefault();
+                      setDraggedOverType(type.id);
+                    }}
+                    showCompatibility={true}
+                    className="min-h-[120px] cursor-pointer"
+                  />
+                )}
                 
                 <p className="text-xs text-muted-foreground">{type.description}</p>
               </div>
@@ -289,9 +355,9 @@ export const RefinedMultiReferencePanel = ({
           <div className="text-center py-8 space-y-3">
             <ImageIcon className="w-12 h-12 text-muted-foreground/50 mx-auto" />
             <div>
-              <h4 className="font-medium text-foreground">No reference images</h4>
+              <h4 className="font-medium text-foreground">Smart Reference System</h4>
               <p className="text-sm text-muted-foreground">
-                Upload reference images or drag from workspace to influence your generation
+                Drop images above for AI-powered analysis and optimal strength recommendations
               </p>
             </div>
           </div>
@@ -310,7 +376,7 @@ export const RefinedMultiReferencePanel = ({
             </Button>
             
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>Tip: Drag images from your workspace above</span>
+              <span>✨ AI analyzes images for optimal results</span>
             </div>
           </div>
         )}
