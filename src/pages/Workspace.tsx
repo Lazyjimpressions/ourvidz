@@ -18,6 +18,8 @@ import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Image, Dice6 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
+import { EnhancedMultiReferencePanel } from '@/components/workspace/EnhancedMultiReferencePanel';
+import { GenerationPreviewPanel } from '@/components/workspace/GenerationPreviewPanel';
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -180,6 +182,12 @@ const Workspace = () => {
     return optimizedPrompt;
   };
 
+  // New state for enhancements
+  const [showGenerationPreview, setShowGenerationPreview] = useState(false);
+  const [generationPreviewUrl, setGenerationPreviewUrl] = useState<string>('');
+  const [estimatedTime, setEstimatedTime] = useState<number>();
+  const [queuePosition, setQueuePosition] = useState<number>();
+
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       toast.error('Please enter a prompt');
@@ -189,6 +197,11 @@ const Workspace = () => {
     if (generationError) {
       clearError();
     }
+
+    // Show generation preview panel
+    setShowGenerationPreview(true);
+    setEstimatedTime(selectedMode.includes('high') ? 45 : 20);
+    setQueuePosition(1);
 
     try {
       // Build reference metadata from MultiReferencePanel
@@ -331,6 +344,13 @@ const Workspace = () => {
   // Multi-reference handlers for MultiReferencePanel
   const handleReferencesChange = useCallback((references: any[]) => {
     setActiveReferences(references);
+    
+    // Auto-sync with legacy system for backwards compatibility
+    const characterRef = references.find(ref => ref.id === 'character' && ref.enabled);
+    if (characterRef) {
+      setReferenceImage(characterRef.file || null);
+      setReferenceImageUrl(characterRef.url || '');
+    }
   }, []);
 
   const handleClearReferences = useCallback(() => {
@@ -543,12 +563,14 @@ const Workspace = () => {
         </div>
         
         {/* Multi-Reference Panel - Connected to Generation Pipeline */}
-        <MultiReferencePanel
+        <EnhancedMultiReferencePanel
           mode={isVideoMode ? 'video' : 'image'}
           strength={referenceStrength}
           onStrengthChange={setReferenceStrength}
           onReferencesChange={handleReferencesChange}
           onClear={handleClearReferences}
+          activeReferences={activeReferences}
+          generatedImageUrl={workspaceTiles.length > 0 ? workspaceTiles[0].url : undefined}
         />
       </div>
 
@@ -594,6 +616,23 @@ const Workspace = () => {
           />
         )}
       </div>
+
+      {/* Generation Preview Panel */}
+      <GenerationPreviewPanel
+        isGenerating={isGenerating}
+        progress={generationProgress}
+        estimatedTime={estimatedTime}
+        queuePosition={queuePosition}
+        previewUrl={generationPreviewUrl}
+        onCancel={() => {
+          setShowGenerationPreview(false);
+          // Add actual cancellation logic here if available
+        }}
+        onShowPreview={() => {
+          // Open preview modal or expand preview
+          toast.info('Full preview coming soon');
+        }}
+      />
 
       {/* Unified Modal System - WorkspaceContentModal handles everything */}
       {lightboxIndex !== null && workspaceTiles.length > 0 && (
