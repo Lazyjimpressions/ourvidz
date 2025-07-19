@@ -25,7 +25,7 @@ const Workspace = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   
-  console.log('🔍 Workspace component rendering:', { user: !!user, loading, timestamp: new Date().toISOString() });
+
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -70,6 +70,9 @@ const Workspace = () => {
   
   // Unified modal state - only one modal system
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  
+  // Reference button state
+  const [showReferencePanel, setShowReferencePanel] = useState(false);
   
   // Generation hooks
   const {
@@ -352,6 +355,11 @@ const Workspace = () => {
     }
   }, []);
 
+  // Reference button handler
+  const handleReferenceClick = useCallback(() => {
+    setShowReferencePanel(!showReferencePanel);
+  }, [showReferencePanel]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -525,13 +533,15 @@ const Workspace = () => {
         </div>
         
         {/* Multi-Reference Panel - Connected to Generation Pipeline */}
-        <MultiReferencePanel
-          mode={isVideoMode ? 'video' : 'image'}
-          strength={referenceStrength}
-          onStrengthChange={setReferenceStrength}
-          onReferencesChange={handleReferencesChange}
-          onClear={handleClearReferences}
-        />
+        {showReferencePanel && (
+          <MultiReferencePanel
+            mode={isVideoMode ? 'video' : 'image'}
+            strength={referenceStrength}
+            onStrengthChange={setReferenceStrength}
+            onReferencesChange={handleReferencesChange}
+            onClear={handleClearReferences}
+          />
+        )}
       </div>
 
       {/* Scroll Navigation */}
@@ -554,6 +564,8 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
+            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
+            onReferenceClick={handleReferenceClick}
           />
         ) : (
           <ImageInputControls
@@ -569,6 +581,8 @@ const Workspace = () => {
             setEnhanced={setEnhanced}
             numImages={numImages}
             setNumImages={setNumImages}
+            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
+            onReferenceClick={handleReferenceClick}
           />
         )}
       </div>

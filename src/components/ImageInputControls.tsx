@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -24,6 +24,9 @@ interface ImageInputControlsProps {
   setEnhanced: (enhanced: boolean) => void;
   numImages: number;
   setNumImages: (count: number) => void;
+  // Reference functionality
+  hasReference?: boolean;
+  onReferenceClick?: () => void;
 }
 
 export const ImageInputControls = ({
@@ -38,7 +41,9 @@ export const ImageInputControls = ({
   enhanced,
   setEnhanced,
   numImages,
-  setNumImages
+  setNumImages,
+  hasReference = false,
+  onReferenceClick
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -68,6 +73,29 @@ export const ImageInputControls = ({
               VIDEO
             </Button>
           </div>
+
+          {/* Reference Button */}
+          {onReferenceClick && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  onClick={onReferenceClick}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md text-sm font-medium ${
+                    hasReference 
+                      ? 'bg-green-600 hover:bg-green-700 text-white' 
+                      : 'bg-gray-800 hover:bg-gray-700 text-white'
+                  }`}
+                >
+                  <Link className="w-3.5 h-3.5" />
+                  {hasReference ? 'Ref Active' : 'Ref'}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{hasReference ? 'Reference image active - Click to manage' : 'Add reference image for character consistency'}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {/* Main Text Input */}
           <div className="flex-1">
