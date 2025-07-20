@@ -2,13 +2,14 @@ import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ModeToggle } from '@/components/ModeToggle';
-import { QualityToggle } from '@/components/QualityToggle';
-import { LibraryButton } from '@/components/LibraryButton';
-import { QuantitySelector } from '@/components/QuantitySelector';
+import { ModeToggleButtons } from '@/components/workspace/ModeToggleButtons';
+import { QualityToggleSection } from '@/components/workspace/QualityToggleSection';
+import { ImagesQuantityButton } from '@/components/workspace/ImagesQuantityButton';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
-import { CompelButton } from '@/components/CompelButton';
+import { CompelModal } from '@/components/workspace/CompelModal';
 import { EnhancedReferenceImageBox } from '@/components/workspace/EnhancedReferenceImageBox';
+import { Library, Sparkles } from 'lucide-react';
+import { GenerationFormat } from '@/types/generation';
 
 interface ImageInputControlsProps {
   prompt: string;
@@ -30,6 +31,8 @@ interface ImageInputControlsProps {
   setCompelEnabled: (enabled: boolean) => void;
   compelWeights: string;
   setCompelWeights: (weights: string) => void;
+  showCompelModal: boolean;
+  setShowCompelModal: (show: boolean) => void;
   references: Array<{
     id: string;
     label: string;
@@ -64,6 +67,8 @@ const ImageInputControls = ({
   setCompelEnabled,
   compelWeights,
   setCompelWeights,
+  showCompelModal,
+  setShowCompelModal,
   references,
   onReferencesChange,
   referenceStrength,
@@ -79,8 +84,22 @@ const ImageInputControls = ({
     <div className="space-y-4">
       {/* Top Controls */}
       <div className="flex items-center justify-between">
-        <ModeToggle onSwitchToImage={() => {}} onSwitchToVideo={onSwitchToVideo} />
-        <QualityToggle quality={quality} setQuality={setQuality} enhanced={enhanced} setEnhanced={setEnhanced} />
+        <ModeToggleButtons 
+          selectedMode={quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'} 
+          onModeChange={() => onSwitchToVideo()} 
+        />
+        <div className="flex items-center gap-2">
+          <QualityToggleSection quality={quality} onQualityChange={setQuality} />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEnhanced(!enhanced)}
+            className={enhanced ? 'bg-primary/20 text-primary' : ''}
+          >
+            <Sparkles className="w-4 h-4" />
+            Enhanced
+          </Button>
+        </div>
       </div>
 
       {/* Prompt Input */}
@@ -99,8 +118,16 @@ const ImageInputControls = ({
       <div className="flex items-center justify-between">
         {/* Left side controls */}
         <div className="flex items-center gap-4">
-          <LibraryButton onClick={onLibraryClick} />
-          <QuantitySelector numImages={numImages} setNumImages={setNumImages} />
+          <Button variant="ghost" size="sm" onClick={onLibraryClick}>
+            <Library className="w-4 h-4 mr-2" />
+            Library
+          </Button>
+          
+          <ImagesQuantityButton 
+            numImages={numImages} 
+            onQuantityChange={setNumImages}
+            layout="desktop"
+          />
 
           {/* Enhanced Reference Upload - Updated to use new component */}
           <EnhancedReferenceImageBox
@@ -115,13 +142,15 @@ const ImageInputControls = ({
           />
 
           <SeedDisplay />
-          <CompelButton
-            compelEnabled={compelEnabled}
-            setCompelEnabled={setCompelEnabled}
-            compelWeights={compelWeights}
-            setCompelWeights={setCompelWeights}
-            jobType={jobType}
-          />
+          
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setShowCompelModal(true)}
+            className={compelEnabled ? 'bg-primary/20 text-primary' : ''}
+          >
+            Compel
+          </Button>
         </div>
 
         {/* Right side controls */}
@@ -129,6 +158,18 @@ const ImageInputControls = ({
           {isGenerating ? 'Generating...' : 'Generate'}
         </Button>
       </div>
+
+      {/* Compel Modal */}
+      <CompelModal
+        isOpen={showCompelModal}
+        onClose={() => setShowCompelModal(false)}
+        compelEnabled={compelEnabled}
+        setCompelEnabled={setCompelEnabled}
+        compelWeights={compelWeights}
+        setCompelWeights={setCompelWeights}
+      />
     </div>
   );
 };
+
+export { ImageInputControls };

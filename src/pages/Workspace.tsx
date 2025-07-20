@@ -81,6 +81,7 @@ const WorkspaceContent = () => {
   const [compelWeights, setCompelWeights] = useState('');
   
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [showCompelModal, setShowCompelModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
   
   // Use the realtime workspace hook
@@ -750,6 +751,8 @@ const WorkspaceContent = () => {
             setCompelEnabled={setCompelEnabled}
             compelWeights={compelWeights}
             setCompelWeights={setCompelWeights}
+            showCompelModal={showCompelModal}
+            setShowCompelModal={setShowCompelModal}
             // Pass reference management props
             references={activeReferences.length > 0 ? activeReferences : defaultReferences}
             onReferencesChange={handleReferencesChange}
