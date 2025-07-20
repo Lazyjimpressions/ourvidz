@@ -98,20 +98,19 @@ export const ImageInputControls = ({
   return (
     <TooltipProvider>
       <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50 max-w-7xl mx-auto">
-        {/* Row 1: VIDEO button + prompt + sparkle buttons */}
+        {/* Row 1: IMAGE button (active) + prompt + sparkle buttons */}
         <div className="flex items-center gap-4 mb-2">
-          {/* VIDEO Mode Button - Fixed Position */}
+          {/* IMAGE Mode Button - Active State, Fixed Position */}
           <Button
             variant="ghost"
-            onClick={onSwitchToVideo}
-            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-medium text-xs min-w-[80px] justify-center"
+            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-white hover:bg-gray-100 text-gray-900 font-medium text-xs min-w-[80px] justify-center"
           >
-            <Play className="w-4 h-4" />
-            VIDEO
+            <Image className="w-4 h-4" />
+            IMAGE
           </Button>
 
           {/* Main Text Input - Extended Width */}
-          <div className="flex-1 max-w-3xl">
+          <div className="flex-1 max-w-4xl">
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
@@ -157,18 +156,19 @@ export const ImageInputControls = ({
           </div>
         </div>
 
-        {/* Row 2: IMAGE button + reference + right-justified controls */}
+        {/* Row 2: VIDEO button (inactive) + reference + right-justified controls */}
         <div className="flex items-center gap-4">
-          {/* IMAGE Mode Button - Active State, Fixed Position */}
+          {/* VIDEO Mode Button - Inactive State */}
           <Button
             variant="ghost"
-            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-white hover:bg-gray-100 text-gray-900 font-medium text-xs min-w-[80px] justify-center"
+            onClick={onSwitchToVideo}
+            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-medium text-xs min-w-[80px] justify-center"
           >
-            <Image className="w-4 h-4" />
-            IMAGE
+            <Play className="w-4 h-4" />
+            VIDEO
           </Button>
 
-          {/* Reference Upload Box - Matches IMAGE button height */}
+          {/* Reference Upload Box - Matches button height */}
           <div
             onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
             onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
