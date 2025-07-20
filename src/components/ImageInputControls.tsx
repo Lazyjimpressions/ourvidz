@@ -395,8 +395,6 @@ export const ImageInputControls = ({
         onReferencesChange={onReferencesChange || (() => {})}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={onReferenceStrengthChange || (() => {})}
-        optimizeForCharacter={optimizeForCharacter}
-        onOptimizeChange={onOptimizeChange || (() => {})}
         seed={seed}
         onSeedChange={onSeedChange}
       />

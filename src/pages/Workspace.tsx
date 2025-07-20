@@ -791,6 +791,8 @@ const Workspace = () => {
             onReferenceDragLeave={handleReferenceDragLeave}
             onReferenceDrop={handleReferenceDrop}
             isReferenceDragOver={isDragOverReference}
+            seed={seed}
+            onSeedChange={setSeed}
           />
         )}
       </div>

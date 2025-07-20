@@ -2,7 +2,6 @@ import React, { useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Upload, X, Image } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EnhancedSeedInput } from './EnhancedSeedInput';
@@ -22,8 +21,6 @@ interface ReferenceSettingsModalProps {
   onReferencesChange: (references: any[]) => void;
   referenceStrength: number;
   onReferenceStrengthChange: (value: number) => void;
-  optimizeForCharacter: boolean;
-  onOptimizeChange: (enabled: boolean) => void;
   seed?: number;
   onSeedChange?: (seed: number | undefined) => void;
 }
@@ -35,8 +32,6 @@ export const ReferenceSettingsModal = ({
   onReferencesChange,
   referenceStrength,
   onReferenceStrengthChange,
-  optimizeForCharacter,
-  onOptimizeChange,
   seed,
   onSeedChange
 }: ReferenceSettingsModalProps) => {
@@ -119,8 +114,6 @@ export const ReferenceSettingsModal = ({
     );
     onReferencesChange(updatedReferences);
   }, [references, onReferencesChange]);
-
-  const hasCharacterReference = references.find(ref => ref.id === 'character')?.enabled;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -253,20 +246,6 @@ export const ReferenceSettingsModal = ({
               </div>
             ))}
           </div>
-
-          {/* Character Optimization */}
-          {hasCharacterReference && (
-            <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-              <div>
-                <label className="text-sm font-medium">Character Optimization</label>
-                <p className="text-xs text-gray-400">Optimize prompt for character consistency</p>
-              </div>
-              <Switch
-                checked={optimizeForCharacter}
-                onCheckedChange={onOptimizeChange}
-              />
-            </div>
-          )}
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
