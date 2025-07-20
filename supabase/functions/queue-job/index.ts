@@ -7,11 +7,11 @@ interface SDXLJobConfig {
   seed?: number;
   compel_enabled?: boolean;
   compel_weights?: string;
-  size?: string;
-  sample_steps?: number;
-  sample_guide_scale?: number;
-  sample_solver?: string;
-  sample_shift?: number;
+  width?: number;
+  height?: number;
+  num_inference_steps?: number;
+  guidance_scale?: number;
+  scheduler?: string;
   frame_num?: number;
   enhance_prompt?: boolean;
   expected_time?: number;
@@ -21,10 +21,12 @@ interface SDXLJobConfig {
   reference_strength?: number;
   reference_type?: string;
 }
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -68,6 +70,7 @@ serve(async (req)=>{
       queue: metadata?.queue,
       timestamp: new Date().toISOString()
     });
+
     // ENHANCED: Negative prompt generation - ONLY for SDXL jobs with multi-party and anatomical accuracy
     function generateNegativePromptForSDXL(userPrompt = '') {
       console.log('🎨 Generating enhanced negative prompt for SDXL job only');
@@ -161,6 +164,7 @@ serve(async (req)=>{
       console.log('✅ Enhanced SDXL negative prompt generated:', result);
       return result;
     }
+
     // Enhanced job type validation
     const validJobTypes = [
       'sdxl_image_fast',
@@ -189,6 +193,7 @@ serve(async (req)=>{
         status: 400
       });
     }
+
     // Robust parsing function for all job type patterns
     function parseJobType(jobType) {
       const isSDXL = jobType.startsWith('sdxl_');
@@ -226,11 +231,13 @@ serve(async (req)=>{
         isEnhanced
       };
     }
+
     // Extract format and quality from job type
     const { format, quality, isSDXL, isEnhanced } = parseJobType(jobType);
     const modelVariant = isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b';
     // Determine queue routing - all enhanced jobs use wan_queue
     const queueName = isSDXL ? 'sdxl_queue' : 'wan_queue';
+
     // Enhanced logging with format and quality detection
     console.log('🎯 FIXED job routing determined:', {
       isSDXL,
@@ -243,6 +250,7 @@ serve(async (req)=>{
       negativePromptSupported: isSDXL,
       parsedCorrectly: true
     });
+
     // Validate Redis configuration
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL');
     const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN');
@@ -263,7 +271,7 @@ serve(async (req)=>{
         status: 500
       });
     }
-    
+
     // Get project details for the prompt (if projectId provided)
     let prompt = '';
     let characterId = null;
@@ -280,17 +288,17 @@ serve(async (req)=>{
         console.warn('⚠️ Could not retrieve project prompt:', projectError?.message);
       }
     }
-    
+
     // Use prompt from metadata if no project prompt available
     if (!prompt && metadata?.prompt) {
       prompt = metadata.prompt;
       console.log('📝 Using metadata prompt');
     }
-    
+
     // CRITICAL FIX: Generate negative prompt BEFORE creating job record
     let negativePrompt = '';
     let negativePromptError = null;
-    
+
     if (isSDXL) {
       try {
         negativePrompt = generateNegativePromptForSDXL(prompt);
@@ -304,7 +312,7 @@ serve(async (req)=>{
     } else {
       console.log('🚫 WAN job detected - NO negative prompt (not supported by WAN 2.1)');
     }
-    
+
     // Create comprehensive metadata structure
     const jobMetadata = {
       ...metadata,
@@ -344,7 +352,7 @@ serve(async (req)=>{
       image_id: imageId,
       character_id: characterId
     };
-    
+
     // Create job record with enhanced error handling - INCLUDING negative prompt in metadata
     const { data: job, error: jobError } = await supabase.from('jobs').insert({
       user_id: user.id,
@@ -380,19 +388,18 @@ serve(async (req)=>{
       });
     }
     console.log('✅ Job created successfully in database:', job.id);
-    
-    // Create config based on job type - FIXED: SDXL vs WAN config formats
+
+    // Create config based on job type - FIXED: SDXL vs WAN config formats with proper parameter names
     let config: any;
-    
+
     if (jobType.startsWith('sdxl_')) {
-      // ✅ SDXL format: width/height as separate integers
+      // ✅ SDXL format: Use SDXL-specific parameter names
       config = {
-        width: 1024,        // ✅ SDXL format
-        height: 1024,       // ✅ SDXL format
-        sample_steps: quality === 'high' ? 50 : 25,
-        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
-        sample_solver: 'unipc',
-        sample_shift: 5.0,
+        width: 1024,                                        // ✅ SDXL format
+        height: 1024,                                       // ✅ SDXL format
+        num_inference_steps: quality === 'high' ? 50 : 25, // ✅ SDXL parameter name
+        guidance_scale: quality === 'high' ? 7.5 : 6.5,   // ✅ SDXL parameter name
+        scheduler: 'unipc',                                 // ✅ SDXL parameter name
         frame_num: format === 'video' ? 83 : 1,
         enhance_prompt: isEnhanced,
         // SEED SUPPORT: Pass seed from metadata to worker config
@@ -414,13 +421,13 @@ serve(async (req)=>{
         num_images: metadata?.num_images || 1
       };
     } else {
-      // ✅ WAN format: size as string
+      // ✅ WAN format: Use WAN-specific parameter names
       config = {
-        size: '480*832',    // ✅ WAN format
-        sample_steps: quality === 'high' ? 50 : 25,
-        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
-        sample_solver: 'unipc',
-        sample_shift: 5.0,
+        size: '480*832',                                    // ✅ WAN format
+        sample_steps: quality === 'high' ? 50 : 25,        // ✅ WAN parameter name
+        sample_guide_scale: quality === 'high' ? 7.5 : 6.5, // ✅ WAN parameter name
+        sample_solver: 'unipc',                             // ✅ WAN parameter name
+        sample_shift: 5.0,                                  // ✅ WAN parameter name
         frame_num: format === 'video' ? 83 : 1,
         enhance_prompt: isEnhanced,
         // SEED SUPPORT: Pass seed from metadata to worker config
@@ -472,8 +479,8 @@ serve(async (req)=>{
       bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`),
       metadata: jobMetadata
     };
-    
-    console.log('📤 Pushing FIXED job to Redis queue with seed and Compel support:', {
+
+    console.log('📤 Pushing FIXED job to Redis queue with correct SDXL parameter names:', {
       jobId: job.id,
       jobType,
       queueName,
@@ -497,9 +504,12 @@ serve(async (req)=>{
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
       negativePromptError: negativePromptError,
-      payloadSize: JSON.stringify(jobPayload).length
+      payloadSize: JSON.stringify(jobPayload).length,
+      // ✅ PARAMETER MAPPING FIX: Log correct parameter names
+      sdxlParameterNames: isSDXL ? ['width', 'height', 'num_inference_steps', 'guidance_scale', 'scheduler'] : 'N/A',
+      wanParameterNames: !isSDXL ? ['size', 'sample_steps', 'sample_guide_scale', 'sample_solver', 'sample_shift'] : 'N/A'
     });
-    
+
     // Use LPUSH to add job to the appropriate queue (worker uses RPOP)
     const redisResponse = await fetch(`${redisUrl}/lpush/${queueName}`, {
       method: 'POST',
@@ -544,9 +554,10 @@ serve(async (req)=>{
       jobId: job.id,
       queueLength: redisResult.result || 0,
       queueName,
-      negativePromptIncluded: isSDXL
+      negativePromptIncluded: isSDXL,
+      parameterMappingFixed: true
     });
-    
+
     // Log usage with enhanced dual worker tracking
     const usageLogResult = await supabase.from('usage_logs').insert({
       user_id: user.id,
@@ -575,7 +586,7 @@ serve(async (req)=>{
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - ENHANCED: Comprehensive negative prompt system',
+      message: 'Job queued successfully - FIXED: SDXL parameter mapping corrected',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
@@ -583,12 +594,12 @@ serve(async (req)=>{
       isSDXL: isSDXL,
       negativePromptSupported: isSDXL,
       fixes_applied: [
-        'Fixed negative prompt generation timing',
-        'Enhanced multi-party scene detection',
-        'Added comprehensive error handling',
-        'Improved metadata consistency',
-        'Added performance tracking fields',
-        'Enhanced logging and debugging'
+        'Fixed SDXL parameter mapping (sample_steps -> num_inference_steps)',
+        'Fixed SDXL parameter mapping (sample_guide_scale -> guidance_scale)',
+        'Fixed SDXL parameter mapping (sample_solver -> scheduler)',
+        'Removed sample_shift from SDXL config (WAN-only parameter)',
+        'Maintained WAN parameter names for WAN jobs',
+        'Added parameter mapping validation and logging'
       ],
       debug: {
         userId: user.id,
@@ -601,6 +612,9 @@ serve(async (req)=>{
         negativePromptError: negativePromptError,
         redisConfigured: true,
         metadataFields: Object.keys(jobMetadata).length,
+        parameterMappingFixed: true,
+        sdxlParameterNames: isSDXL ? Object.keys(config).filter(k => ['width', 'height', 'num_inference_steps', 'guidance_scale', 'scheduler'].includes(k)) : [],
+        wanParameterNames: !isSDXL ? Object.keys(config).filter(k => ['size', 'sample_steps', 'sample_guide_scale', 'sample_solver', 'sample_shift'].includes(k)) : [],
         timestamp: new Date().toISOString()
       }
     }), {
