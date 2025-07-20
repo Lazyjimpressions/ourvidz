@@ -15,6 +15,8 @@ import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
 import { UnifiedReferencePanel } from '@/components/workspace/UnifiedReferencePanel';
+import { ImageReferenceControls } from '@/components/workspace/ImageReferenceControls';
+import { CompactReferenceUpload } from '@/components/workspace/CompactReferenceUpload';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Image, Dice6 } from 'lucide-react';
@@ -639,10 +641,11 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Unified Reference Settings Panel - Replaces both old warning and separate reference panel */}
-        {!isVideoMode && hasActiveReferences && (
-          <UnifiedReferencePanel
-            hasActiveReferences={hasActiveReferences}
+        {/* Image Reference Controls - Replaces the large UnifiedReferencePanel */}
+        {!isVideoMode && (
+          <ImageReferenceControls
+            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+            onReferencesChange={handleReferencesChange}
             referenceStrength={referenceStrength}
             onReferenceStrengthChange={setReferenceStrength}
             referenceType={referenceType}
@@ -657,6 +660,7 @@ const Workspace = () => {
             compelWeights={compelWeights}
             setCompelWeights={setCompelWeights}
             numImages={numImages}
+            showReferencePanel={showReferencePanel}
           />
         )}
         
@@ -687,7 +691,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Simplified (No Reference Upload) */}
+      {/* Bottom Input Controls - Updated to include compact reference upload */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -729,6 +733,13 @@ const Workspace = () => {
             setCompelEnabled={setCompelEnabled}
             compelWeights={compelWeights}
             setCompelWeights={setCompelWeights}
+            // Add reference upload component
+            referenceUpload={
+              <CompactReferenceUpload
+                references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+                onReferencesChange={handleReferencesChange}
+              />
+            }
           />
         )}
       </div>

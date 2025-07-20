@@ -35,6 +35,8 @@ interface ImageInputControlsProps {
   setCompelEnabled?: (enabled: boolean) => void;
   compelWeights?: string;
   setCompelWeights?: (weights: string) => void;
+  // Reference upload component
+  referenceUpload?: React.ReactNode;
 }
 
 export const ImageInputControls = ({
@@ -57,7 +59,8 @@ export const ImageInputControls = ({
   compelEnabled = false,
   setCompelEnabled,
   compelWeights = '',
-  setCompelWeights
+  setCompelWeights,
+  referenceUpload
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -88,6 +91,13 @@ export const ImageInputControls = ({
               VIDEO
             </Button>
           </div>
+
+          {/* Reference Upload - Compact drag-and-drop zones */}
+          {referenceUpload && (
+            <div className="flex items-center gap-1">
+              {referenceUpload}
+            </div>
+          )}
 
           {/* Reference Button */}
           {onReferenceClick && (
