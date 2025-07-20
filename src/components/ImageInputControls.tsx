@@ -325,8 +325,8 @@ export const ImageInputControls = ({
             </TooltipContent>
           </Tooltip>
 
-          {/* Compel Toggle */}
-          {setCompelEnabled && (
+          {/* Compel Toggle - Only for SDXL jobs */}
+          {jobType?.startsWith('sdxl_') && setCompelEnabled && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -348,8 +348,8 @@ export const ImageInputControls = ({
             </Tooltip>
           )}
 
-          {/* Compel Weights Input */}
-          {compelEnabled && setCompelWeights && (
+          {/* Compel Weights Input - Only for SDXL jobs */}
+          {jobType?.startsWith('sdxl_') && compelEnabled && setCompelWeights && (
             <div className="relative">
               <Input
                 value={compelWeights}
