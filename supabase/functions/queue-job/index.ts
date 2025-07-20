@@ -407,6 +407,9 @@ serve(async (req)=>{
           last_frame: metadata.end_reference_url
         })
       },
+      // ✅ COMPEL SUPPORT: Extract Compel configuration from metadata
+      compel_enabled: metadata?.compel_enabled || false,
+      compel_weights: metadata?.compel_weights || undefined,
       expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
       content_type: format,
       file_extension: format === 'video' ? 'mp4' : 'png',
@@ -449,6 +452,11 @@ serve(async (req)=>{
       ...isSDXL && {
         negative_prompt: negativePrompt
       },
+      // ✅ COMPEL SUPPORT: Include Compel configuration in worker payload
+      ...isSDXL && {
+        compel_enabled: metadata?.compel_enabled || false,
+        compel_weights: metadata?.compel_weights || undefined
+      },
       // Additional metadata - use same structure as database
       video_id: videoId,
       image_id: imageId,
@@ -458,7 +466,7 @@ serve(async (req)=>{
       metadata: jobMetadata
     };
     
-    console.log('📤 Pushing FIXED job to Redis queue with seed support:', {
+    console.log('📤 Pushing FIXED job to Redis queue with seed and Compel support:', {
       jobId: job.id,
       jobType,
       queueName,
@@ -474,6 +482,10 @@ serve(async (req)=>{
       hasVideoReferences: format === 'video' && (!!metadata?.start_reference_url || !!metadata?.end_reference_url),
       startReferenceUrl: metadata?.start_reference_url,
       endReferenceUrl: metadata?.end_reference_url,
+      // ✅ COMPEL SUPPORT: Log Compel configuration
+      hasCompel: isSDXL && !!metadata?.compel_enabled,
+      compelEnabled: metadata?.compel_enabled || false,
+      compelWeights: metadata?.compel_weights || 'none',
       negativePromptSupported: isSDXL,
       negativePromptLength: isSDXL ? negativePrompt.length : 0,
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
