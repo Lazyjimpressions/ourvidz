@@ -6,6 +6,10 @@ import { useGeneration } from '@/hooks/useGeneration';
 import { useRealtimeGenerationStatus } from '@/hooks/useRealtimeGenerationStatus';
 import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 
+import { DragProvider, useDrag } from '@/contexts/DragContext';
+import { EnhancedReferenceImageBox } from '@/components/workspace/EnhancedReferenceImageBox';
+import { EnhancedReferenceSettingsModal } from '@/components/workspace/EnhancedReferenceSettingsModal';
+
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
@@ -21,9 +25,10 @@ import { Button } from '@/components/ui/button';
 import { Image, Dice6 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
 
-const Workspace = () => {
+const WorkspaceContent = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const { setDragging } = useDrag();
   const [searchParams] = useSearchParams();
   
   // Get mode from URL params, default to image
@@ -94,8 +99,9 @@ const Workspace = () => {
   // Unified modal state - only one modal system
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   
-  // Reference button state
+  // Reference button and drag state
   const [showReferencePanel, setShowReferencePanel] = useState(false);
+  const [dragHoverModal, setDragHoverModal] = useState(false);
 
   // Generation hooks
   const {
@@ -499,10 +505,17 @@ const Workspace = () => {
     }
   }, []);
 
-  // Reference button handler
+  // Enhanced reference handlers
   const handleReferenceClick = useCallback(() => {
     setShowReferencePanel(!showReferencePanel);
   }, [showReferencePanel]);
+
+  const handleDragHover = useCallback((isHovering: boolean) => {
+    setDragHoverModal(isHovering);
+  }, []);
+
+  // Enhanced modal control - show if manually opened OR drag hover
+  const showEnhancedModal = showReferencePanel || dragHoverModal;
 
   if (loading) {
     return (
@@ -575,7 +588,9 @@ const Workspace = () => {
                         };
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                         e.dataTransfer.effectAllowed = 'copy';
+                        setDragging(true, assetData);
                       }}
+                      onDragEnd={() => setDragging(false)}
                       style={{ cursor: 'move' }}
                       title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
                     />
@@ -601,10 +616,9 @@ const Workspace = () => {
                         };
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                         e.dataTransfer.effectAllowed = 'copy';
+                        setDragging(true, assetData);
                       }}
-                      onDragEnd={(e) => {
-                        e.currentTarget.style.opacity = '1';
-                      }}
+                      onDragEnd={() => setDragging(false)}
                       style={{ cursor: 'move' }}
                       title={`${tile.prompt}${tile.generationParams?.seed ? ` | Seed: ${tile.generationParams.seed}` : ''}`}
                     />
@@ -694,7 +708,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Updated to pass reference props */}
+      {/* Bottom Input Controls - Updated to use EnhancedReferenceImageBox */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -746,6 +760,23 @@ const Workspace = () => {
           />
         )}
       </div>
+
+      {/* Enhanced Reference Settings Modal - Replace existing modal */}
+      {!isVideoMode && (
+        <EnhancedReferenceSettingsModal
+          isOpen={showEnhancedModal}
+          onClose={() => {
+            setShowReferencePanel(false);
+            setDragHoverModal(false);
+          }}
+          references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+          onReferencesChange={handleReferencesChange}
+          referenceStrength={referenceStrength}
+          onReferenceStrengthChange={setReferenceStrength}
+          optimizeForCharacter={optimizeForCharacter}
+          onOptimizeChange={setOptimizeForCharacter}
+        />
+      )}
 
       {/* Unified Modal System - WorkspaceContentModal handles everything */}
       {lightboxIndex !== null && workspaceTiles.length > 0 && (
@@ -801,6 +832,14 @@ const Workspace = () => {
         }}
       />
     </div>
+  );
+};
+
+const Workspace = () => {
+  return (
+    <DragProvider>
+      <WorkspaceContent />
+    </DragProvider>
   );
 };
 
