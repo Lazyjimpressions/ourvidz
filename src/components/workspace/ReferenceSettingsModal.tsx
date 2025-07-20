@@ -44,8 +44,27 @@ export const ReferenceSettingsModal = ({
     
     const files = Array.from(e.dataTransfer.files);
     const workspaceData = e.dataTransfer.getData('application/workspace-asset');
+    const referenceData = e.dataTransfer.getData('application/reference-asset');
     
-    if (workspaceData) {
+    if (referenceData) {
+      try {
+        const { sourceReferenceId, url, isWorkspaceAsset } = JSON.parse(referenceData);
+        if (sourceReferenceId !== referenceId) {
+          // Move the image from source to target
+          const updatedReferences = references.map(ref => {
+            if (ref.id === sourceReferenceId) {
+              return { ...ref, enabled: false, url: undefined, isWorkspaceAsset: false };
+            } else if (ref.id === referenceId) {
+              return { ...ref, enabled: true, url, isWorkspaceAsset };
+            }
+            return ref;
+          });
+          onReferencesChange(updatedReferences);
+        }
+      } catch (error) {
+        console.error('Error moving reference:', error);
+      }
+    } else if (workspaceData) {
       try {
         const assetData = JSON.parse(workspaceData);
         const updatedReferences = references.map(ref => 
@@ -141,7 +160,13 @@ export const ReferenceSettingsModal = ({
                   )}
                   onDragOver={(e) => {
                     e.preventDefault();
-                    setDraggedOver(reference.id);
+                    const hasWorkspaceData = e.dataTransfer.types.includes('application/workspace-asset');
+                    const hasReferenceData = e.dataTransfer.types.includes('application/reference-asset');
+                    const hasFiles = e.dataTransfer.files.length > 0;
+                    
+                    if (hasWorkspaceData || hasReferenceData || hasFiles) {
+                      setDraggedOver(reference.id);
+                    }
                   }}
                   onDragLeave={() => setDraggedOver(null)}
                   onDrop={(e) => handleDrop(e, reference.id)}
@@ -152,7 +177,49 @@ export const ReferenceSettingsModal = ({
                       <img
                         src={reference.url}
                         alt={reference.label}
-                        className="w-full h-24 object-cover rounded"
+                        className="w-full h-24 object-cover rounded cursor-move"
+                        draggable="true"
+                        onDragStart={(e) => {
+                          const dragData = {
+                            sourceReferenceId: reference.id,
+                            url: reference.url,
+                            isWorkspaceAsset: reference.isWorkspaceAsset
+                          };
+                          e.dataTransfer.setData('application/reference-asset', JSON.stringify(dragData));
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          if (e.dataTransfer.types.includes('application/reference-asset')) {
+                            setDraggedOver(reference.id);
+                          }
+                        }}
+                        onDragLeave={() => setDraggedOver(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDraggedOver(null);
+                          
+                          const dragData = e.dataTransfer.getData('application/reference-asset');
+                          if (dragData) {
+                            try {
+                              const { sourceReferenceId, url, isWorkspaceAsset } = JSON.parse(dragData);
+                              if (sourceReferenceId !== reference.id) {
+                                // Move the image from source to target
+                                const updatedReferences = references.map(ref => {
+                                  if (ref.id === sourceReferenceId) {
+                                    return { ...ref, enabled: false, url: undefined, isWorkspaceAsset: false };
+                                  } else if (ref.id === reference.id) {
+                                    return { ...ref, enabled: true, url, isWorkspaceAsset };
+                                  }
+                                  return ref;
+                                });
+                                onReferencesChange(updatedReferences);
+                              }
+                            } catch (error) {
+                              console.error('Error moving reference:', error);
+                            }
+                          }
+                        }}
                       />
                       <button
                         onClick={(e) => {

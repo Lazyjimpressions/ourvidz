@@ -509,27 +509,22 @@ const Workspace = () => {
 
   const handleReferenceDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    console.log('🎯 Drag over reference box');
     setIsDragOverReference(true);
   }, []);
 
   const handleReferenceDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    console.log('🎯 Drag leave reference box');
     setIsDragOverReference(false);
   }, []);
 
   const handleReferenceDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    console.log('🎯 Drop on reference box');
     setIsDragOverReference(false);
     
     const workspaceData = e.dataTransfer.getData('application/workspace-asset');
-    console.log('🎯 Workspace data:', workspaceData);
     if (workspaceData) {
       try {
         const assetData = JSON.parse(workspaceData);
-        console.log('🎯 Parsed asset data:', assetData);
         // Open reference modal and pre-populate with the dropped asset
         setShowReferencePanel(true);
         // The modal will handle the asset data
@@ -597,19 +592,16 @@ const Workspace = () => {
                       onDragStart={(e) => {
                         const assetData = {
                           url: tile.url,
-                          thumbnailUrl: tile.thumbnailUrl,
                           prompt: tile.prompt,
                           modelType: tile.modelType,
                           quality: tile.quality,
                           type: tile.type,
-                          duration: tile.duration,
                           generationParams: {
                             originalAssetId: tile.originalAssetId,
                             timestamp: tile.timestamp,
                             seed: tile.generationParams?.seed || tile.seed
                           }
                         };
-                        console.log('🎯 Starting drag with asset data:', assetData);
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}
@@ -636,7 +628,6 @@ const Workspace = () => {
                             seed: tile.generationParams?.seed || tile.seed
                           }
                         };
-                        console.log('🎯 Starting drag with asset data:', assetData);
                         e.dataTransfer.setData('application/workspace-asset', JSON.stringify(assetData));
                         e.dataTransfer.effectAllowed = 'copy';
                       }}

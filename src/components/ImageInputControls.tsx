@@ -105,13 +105,14 @@ export const ImageInputControls = ({
   return (
     <TooltipProvider>
       <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
-        {/* Main Row */}
-        <div className="flex items-center gap-2">
-          {/* Stacked IMAGE/VIDEO Toggle Buttons */}
-          <div className="flex flex-col gap-1">
+        {/* Main Input Row */}
+        <div className="flex items-start gap-3 max-w-4xl mx-auto">
+          {/* Mode Toggle */}
+          <div className="flex gap-1">
             <Button
-              variant="default"
-              className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+              variant="ghost"
+              onClick={onSwitchToVideo}
+              className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white hover:bg-gray-100 text-gray-900 text-sm font-medium"
             >
               <Image className="w-3.5 h-3.5" />
               IMAGE
@@ -128,9 +129,9 @@ export const ImageInputControls = ({
 
           {/* Single Reference Upload Box */}
           <div
-            onDragOver={onReferenceDragOver}
-            onDragLeave={onReferenceDragLeave}
-            onDrop={onReferenceDrop}
+            onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
+            onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
+            onDrop={showReferenceModal ? undefined : onReferenceDrop}
           >
             <Tooltip>
               <TooltipTrigger asChild>
@@ -138,7 +139,7 @@ export const ImageInputControls = ({
                   <ReferenceImageBox
                     references={references}
                     onClick={() => setShowReferenceModal(true)}
-                    isDragOver={isReferenceDragOver}
+                    isDragOver={showReferenceModal ? false : isReferenceDragOver}
                   />
                 </div>
               </TooltipTrigger>
@@ -149,12 +150,12 @@ export const ImageInputControls = ({
           </div>
 
           {/* Main Text Input */}
-          <div className="flex-1">
+          <div className="flex-1 max-w-2xl">
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A close-up of a woman talking on the phone..."
-              className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
+              className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px] w-full"
               rows={3}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -195,7 +196,7 @@ export const ImageInputControls = ({
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center justify-end gap-2 mt-2">
+        <div className="flex items-center justify-end gap-2 mt-2 max-w-4xl mx-auto">
           {/* Library Button */}
           <Button
             variant="ghost"
