@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2, Target } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -30,6 +31,11 @@ interface ImageInputControlsProps {
   onReferenceClick?: () => void;
   // Job type for enhancement
   jobType?: string;
+  // Compel functionality
+  compelEnabled?: boolean;
+  setCompelEnabled?: (enabled: boolean) => void;
+  compelWeights?: string;
+  setCompelWeights?: (weights: string) => void;
 }
 
 export const ImageInputControls = ({
@@ -47,13 +53,18 @@ export const ImageInputControls = ({
   setNumImages,
   hasReference = false,
   onReferenceClick,
-  jobType = 'sdxl_image_fast'
+  jobType = 'sdxl_image_fast',
+  compelEnabled = false,
+  setCompelEnabled,
+  compelWeights = '',
+  setCompelWeights
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
+  const [showCompelInput, setShowCompelInput] = useState(false);
 
   return (
     <TooltipProvider>
@@ -313,6 +324,50 @@ export const ImageInputControls = ({
               <p>{enhanced ? 'Enhanced model (premium features)' : 'Enable enhanced AI model'}</p>
             </TooltipContent>
           </Tooltip>
+
+          {/* Compel Toggle */}
+          {setCompelEnabled && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  onClick={() => setCompelEnabled(!compelEnabled)}
+                  className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                    compelEnabled 
+                      ? 'bg-orange-600 hover:bg-orange-700 text-white' 
+                      : 'bg-gray-800 hover:bg-gray-700 text-white'
+                  }`}
+                >
+                  <Target className="w-3 h-3" />
+                  {compelEnabled ? 'Compel' : 'Compel'}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{compelEnabled ? 'Compel weights active - Click to configure' : 'Enable Compel prompt weighting'}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Compel Weights Input */}
+          {compelEnabled && setCompelWeights && (
+            <div className="relative">
+              <Input
+                value={compelWeights}
+                onChange={(e) => setCompelWeights(e.target.value)}
+                placeholder="(beautiful:1.3), (woman:1.2)"
+                className="w-48 h-7 bg-gray-800 border-gray-600 text-white text-xs placeholder:text-gray-500 focus:border-orange-500"
+                onFocus={() => setShowCompelInput(true)}
+                onBlur={() => setTimeout(() => setShowCompelInput(false), 200)}
+              />
+              {showCompelInput && (
+                <div className="absolute bottom-full left-0 mb-1 p-2 bg-gray-900 border border-gray-700 rounded text-xs text-gray-300 max-w-xs">
+                  Format: (word:weight), (phrase:weight)<br/>
+                  Weight range: 0.1-2.0<br/>
+                  Example: (beautiful:1.3), (woman:1.2), (garden:1.1)
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

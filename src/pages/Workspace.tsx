@@ -73,6 +73,10 @@ const Workspace = () => {
   const [optimizeForCharacter, setOptimizeForCharacter] = useState(false);
   const [seed, setSeed] = useState<number | undefined>();
   
+  // Compel state
+  const [compelEnabled, setCompelEnabled] = useState(false);
+  const [compelWeights, setCompelWeights] = useState('');
+  
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [numImages, setNumImages] = useState<number>(1);
   
@@ -124,7 +128,7 @@ const Workspace = () => {
     }
   }, [user, loading, navigate]);
 
-  // State persistence for reference images
+  // State persistence for reference images and Compel settings
   useEffect(() => {
     const savedReferenceStrength = sessionStorage.getItem('workspace_reference_strength');
     if (savedReferenceStrength) {
@@ -134,6 +138,17 @@ const Workspace = () => {
     const savedReferenceType = sessionStorage.getItem('workspace_reference_type');
     if (savedReferenceType) {
       setReferenceType(savedReferenceType as 'style' | 'composition' | 'character');
+    }
+
+    // Load Compel settings
+    const savedCompelEnabled = sessionStorage.getItem('workspace_compel_enabled');
+    if (savedCompelEnabled) {
+      setCompelEnabled(savedCompelEnabled === 'true');
+    }
+
+    const savedCompelWeights = sessionStorage.getItem('workspace_compel_weights');
+    if (savedCompelWeights) {
+      setCompelWeights(savedCompelWeights);
     }
   }, []);
 
@@ -145,6 +160,15 @@ const Workspace = () => {
   useEffect(() => {
     sessionStorage.setItem('workspace_reference_type', referenceType);
   }, [referenceType]);
+
+  // Save Compel settings to session storage
+  useEffect(() => {
+    sessionStorage.setItem('workspace_compel_enabled', compelEnabled.toString());
+  }, [compelEnabled]);
+
+  useEffect(() => {
+    sessionStorage.setItem('workspace_compel_weights', compelWeights);
+  }, [compelWeights]);
 
   // Clear reference images when switching modes
   useEffect(() => {
@@ -299,6 +323,12 @@ const Workspace = () => {
         referenceMetadata.seed = seed;
       }
 
+      // Add Compel configuration if enabled
+      if (compelEnabled && compelWeights.trim()) {
+        referenceMetadata.compel_enabled = true;
+        referenceMetadata.compel_weights = compelWeights.trim();
+      }
+
       console.log('🚀 Starting generation with corrected settings:', {
         format: selectedMode,
         originalPrompt: prompt.trim(),
@@ -308,6 +338,8 @@ const Workspace = () => {
         referenceStrength: referenceStrength, // Log the actual value being used
         numImages,
         seed,
+        compelEnabled,
+        compelWeights: compelEnabled ? compelWeights : 'none',
         isVideoMode
       });
 
@@ -683,6 +715,10 @@ const Workspace = () => {
             hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
             onReferenceClick={handleReferenceClick}
             jobType={selectedMode}
+            compelEnabled={compelEnabled}
+            setCompelEnabled={setCompelEnabled}
+            compelWeights={compelWeights}
+            setCompelWeights={setCompelWeights}
           />
         )}
       </div>
