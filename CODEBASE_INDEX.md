@@ -1,9 +1,10 @@
 # OurVidz.com - Codebase Index
 
-**Last Updated:** July 7, 2025  
-**Status:** Production Ready - 9/10 Job Types Verified  
+**Last Updated:** July 20, 2025  
+**Status:** ✅ Production Ready - All 10 Job Types Operational + Multi-Reference System Live  
 **System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)  
-**Deployment:** Production on Lovable (https://ourvidz.lovable.app/)
+**Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
+**Backend:** Supabase Online (PostgreSQL + Edge Functions + Storage)
 
 ---
 
@@ -11,8 +12,11 @@
 
 OurVidz.com is an AI-powered platform for generating adult content videos and images. The system features:
 
-- **Ultra-Fast Images**: SDXL generation in 3-8 seconds (6-image batches)
+- **Ultra-Fast Images**: SDXL generation in 3-8 seconds (flexible 1,3,6 image batches)
 - **AI Video Generation**: WAN 2.1 with Qwen 7B enhancement
+- **Multi-Reference System**: Optional image-to-image with style, composition, and character references
+- **Seed Control**: Reproducible generation with user-controlled seeds
+- **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
 - **Mobile-First Design**: Optimized for modern usage patterns
@@ -31,17 +35,18 @@ Frontend:
   Routing: React Router DOM
   Deployment: Lovable (https://ourvidz.lovable.app/)
 
-Backend:
-  Database: Supabase (PostgreSQL)
-  Authentication: Supabase Auth
-  Storage: Supabase Storage (12 buckets)
-  Edge Functions: Deno runtime
+Backend (Supabase Online):
+  Database: Supabase PostgreSQL (Online)
+  Authentication: Supabase Auth (Online)
+  Storage: Supabase Storage (Online - 12 buckets)
+  Edge Functions: Deno runtime (Online)
   Queue: Upstash Redis (REST API)
 
-AI Workers:
+AI Workers (RunPod):
   Platform: RunPod RTX 6000 ADA (48GB VRAM)
   Models: SDXL + WAN 2.1 + Qwen 7B enhancement
   Architecture: Dual worker system
+  Location: Remote cloud deployment
 ```
 
 ### **Dual Worker System**
@@ -49,40 +54,38 @@ AI Workers:
 SDXL Worker:
   Queue: sdxl_queue (2s polling)
   Job Types: sdxl_image_fast, sdxl_image_high
-  Performance: 29.9s-42.4s (6-image batches)
+  Performance: 3-8s per image (flexible quantities: 1,3,6)
   VRAM Usage: 6.6GB loaded, 10.5GB peak
+  Features: Enhanced negative prompts, seed control, reference images
   Status: ✅ Fully operational
 
 WAN Worker:
   Queue: wan_queue (5s polling)
   Job Types: 8 types (4 standard + 4 enhanced)
-  Performance: 233s-370s (single files)
+  Performance: 25-370s (single files)
   VRAM Usage: 15-30GB peak
-  Enhancement: Qwen 7B (14.6s) - Currently disabled
-  Status: ✅ Operational (9/10 job types tested)
+  Enhancement: Qwen 7B (rule-based enhancement via edge function)
+  Features: Video generation, enhanced image processing
+  Status: ✅ Operational (all job types tested)
 ```
 
 ---
 
 ## 📊 Current Performance Status
 
-### **✅ Tested Job Types (9/10)**
-| Job Type | Status | Performance | Output | Quality |
-|----------|--------|-------------|--------|---------|
-| **sdxl_image_fast** | ✅ Tested | 29.9s (3.1s per image) | 6 images | Excellent |
-| **sdxl_image_high** | ✅ Tested | 42.4s (5.0s per image) | 6 images | Premium |
-| **video_fast** | ✅ Tested | 251.5s average | 1 video | Good |
-| **video_high** | ✅ Tested | 359.7s | 1 video | Better |
-| **video7b_fast_enhanced** | ✅ Tested | 263.9s average | 1 video | Enhanced |
-| **video7b_high_enhanced** | ✅ Tested | 370.0s average | 1 video | Enhanced |
-| **image7b_fast_enhanced** | ✅ Tested | 233.5s | 1 image | Enhanced |
-
-### **❌ Pending Testing (3/10)**
-| Job Type | Expected Time | Priority |
-|----------|---------------|----------|
-| **image_fast** | 73s | Medium |
-| **image_high** | 90s | Medium |
-| **image7b_high_enhanced** | 104s | Low |
+### **✅ All Job Types Operational (10/10)**
+| Job Type | Status | Performance | Output | Quality | Features |
+|----------|--------|-------------|--------|---------|----------|
+| **sdxl_image_fast** | ✅ Live | 3-8s per image | 1,3,6 images | Excellent | Negative prompts, seeds |
+| **sdxl_image_high** | ✅ Live | 5-12s per image | 1,3,6 images | Premium | Negative prompts, seeds |
+| **image_fast** | ✅ Live | 25-40s | 1 image | Good | Reference images |
+| **image_high** | ✅ Live | 40-100s | 1 image | Better | Reference images |
+| **video_fast** | ✅ Live | 135-180s | 1 video | Good | Reference frames |
+| **video_high** | ✅ Live | 180-240s | 1 video | Better | Reference frames |
+| **image7b_fast_enhanced** | ✅ Live | 85-100s | 1 image | Enhanced | Qwen enhancement |
+| **image7b_high_enhanced** | ✅ Live | 100-240s | 1 image | Enhanced | Qwen enhancement |
+| **video7b_fast_enhanced** | ✅ Live | 195-240s | 1 video | Enhanced | Qwen enhancement |
+| **video7b_high_enhanced** | ✅ Live | 240+ seconds | 1 video | Enhanced | Qwen enhancement |
 
 ---
 
@@ -93,7 +96,7 @@ WAN Worker:
 ourvidz-1/
 ├── docs/                    # Project documentation (consolidated structure)
 ├── src/                     # Frontend source code
-├── supabase/               # Backend configuration
+├── supabase/               # Backend configuration (Supabase Online)
 ├── public/                 # Static assets
 ├── package.json            # Dependencies and scripts
 ├── README.md              # Project overview
@@ -122,9 +125,10 @@ src/
 ### **Backend Structure (`supabase/`)**
 ```
 supabase/
-├── functions/             # Edge functions
+├── functions/             # Edge functions (Supabase Online)
 │   ├── queue-job/        # Job creation and routing
 │   ├── job-callback/     # Job completion handling
+│   ├── enhance-prompt/   # Prompt enhancement service
 │   └── generate-admin-image/ # Admin image generation
 ├── migrations/           # Database migrations
 └── config.toml          # Supabase configuration
@@ -134,29 +138,29 @@ supabase/
 
 ## 📚 Documentation Status
 
-### **Final Documentation Structure (Consolidated & Cleaned)**
+### **Current Documentation Structure (12 Files)**
 ```yaml
 docs/
-├── README.md               # Main project overview and entry point
-├── ARCHITECTURE.md         # Technical architecture and system design
-├── API.md                  # API reference (edge functions + worker API)
-├── PERFORMANCE.md          # Performance data, benchmarks, and quality improvements
-├── SERVICES.md             # Service configurations and setup
-├── CHANGELOG.md            # Version history, milestones, and dependency resolution
-├── DEPLOYMENT.md           # Deployment and operational guides
-├── WORKER_API.md           # Worker API reference (separate from API.md)
-├── EDGE_FUNCTIONS.md       # Supabase edge functions (separate from API.md)
-├── PROJECT.md              # Complete project context
-├── PROJECT_STATUS.md       # Current development status
-├── PROMPTING_REFERENCE_GUIDE.md # Comprehensive prompting best practices
-└── MASTER_PROMPTING_GUIDE.md # Expert-level master prompting system
+├── README.md                    # Main project overview & current status
+├── ARCHITECTURE.md              # Technical architecture & job standardization
+├── API.md                       # API particulars and endpoints
+├── EDGE_FUNCTIONS.md            # Full edge function implementations
+├── PROMPTS.md                   # NSFW prompting best practices & reference workflows
+├── TESTING.md                   # Standalone testing framework
+├── ADMIN.md                     # Admin portal functionality guide
+├── ourvidz-admin-prd.md         # Admin portal requirements & implementation tracking
+├── updated_implementation_guide.md # Current sprint: prompt enhancement features
+├── worker_api.md                # Shared worker API (cross-repo)
+├── DEPLOYMENT.md                # Deployment guides
+└── CHANGELOG.md                 # Version history
 ```
 
 ### **Documentation Consolidation Status**
-- ✅ **Core Documentation**: README.md, ARCHITECTURE.md, API.md, PERFORMANCE.md, SERVICES.md, CHANGELOG.md, DEPLOYMENT.md
-- ✅ **Specialized Docs**: EDGE_FUNCTIONS.md (current Supabase functions), WORKER_API.md (worker API reference)
-- ✅ **Project Context**: PROJECT.md, PROJECT_STATUS.md (kept for reference)
-- ✅ **Consolidation Complete**: All duplicative files removed
+- ✅ **Core Documentation**: README.md, ARCHITECTURE.md, API.md, ADMIN.md, CHANGELOG.md, DEPLOYMENT.md
+- ✅ **Specialized Docs**: EDGE_FUNCTIONS.md (Supabase Online functions), worker_api.md (RunPod worker API)
+- ✅ **Feature Docs**: PROMPTS.md (includes reference workflows), TESTING.md
+- ✅ **Implementation Docs**: ourvidz-admin-prd.md, updated_implementation_guide.md
+- ✅ **Consolidation Complete**: Reduced from 16 to 12 files, eliminated redundancy
 
 ---
 
@@ -166,7 +170,7 @@ docs/
 ```typescript
 // Main application routes
 - Index.tsx              # Landing page
-- Auth.tsx               # Authentication page
+- Auth.tsx               # Authentication page (Supabase Online)
 - Dashboard.tsx          # User dashboard
 - Workspace.tsx          # Main generation interface
 - Library.tsx            # Asset management
@@ -179,12 +183,13 @@ docs/
 ### **Generation Components**
 ```typescript
 // Image and video generation
-- FastImageGenerator.tsx     # SDXL fast generation (6-image batch)
-- HighImageGenerator.tsx     # SDXL high-quality generation (6-image batch)
+- FastImageGenerator.tsx     # SDXL fast generation (flexible quantities)
+- HighImageGenerator.tsx     # SDXL high-quality generation (flexible quantities)
 - FastVideoGenerator.tsx     # WAN fast video generation
 - HighVideoGenerator.tsx     # WAN high-quality video generation
 - GeneratedImageGallery.tsx  # Generated content display
 - GenerationProgressIndicator.tsx # Progress tracking
+- PromptEnhancementModal.tsx # AI prompt enhancement interface
 ```
 
 ### **Workspace Components**
@@ -196,6 +201,10 @@ docs/
 - ImageInputControls.tsx     # Image generation controls
 - VideoInputControls.tsx     # Video generation controls
 - AdvancedControlsSection.tsx # Advanced settings
+- MultiReferencePanel.tsx    # Multi-reference image management
+- CharacterReferenceWarning.tsx # Character reference warnings
+- EnhancedSeedInput.tsx      # Enhanced seed input
+- SeedDisplay.tsx            # Seed display
 ```
 
 ### **Asset Management**
@@ -319,39 +328,41 @@ projects (1) → (1) characters
 
 ## 🎯 Job Types (10 Total)
 
-### **SDXL Jobs (2) - Ultra-Fast Images (6-Image Batches)**
+### **SDXL Jobs (2) - Ultra-Fast Images (Flexible Quantities)**
 ```yaml
 sdxl_image_fast:
-  performance: 29.9s total (3.1s per image)
+  performance: 3-8s per image (flexible: 1,3,6 images)
   resolution: 1024x1024
   quality: excellent NSFW
-  storage: sdxl_image_fast bucket (5MB limit)
+  storage: sdxl_image_fast bucket
+  features: Enhanced negative prompts, seed control, reference images
   credits: 1
-  status: ✅ Tested
+  status: ✅ Live
 
 sdxl_image_high:
-  performance: 42.4s total (5.0s per image)
+  performance: 5-12s per image (flexible: 1,3,6 images)
   resolution: 1024x1024
   quality: premium NSFW
-  storage: sdxl_image_high bucket (10MB limit)
+  storage: sdxl_image_high bucket
+  features: Enhanced negative prompts, seed control, reference images
   credits: 2
-  status: ✅ Tested
+  status: ✅ Live
 ```
 
-### **WAN Standard Jobs (4) - Videos + Backup Images (Single Files)**
+### **WAN Standard Jobs (4) - Videos + Images (Single Files)**
 ```yaml
-image_fast: 73s, backup images, 1 credit, ❌ Not tested
-image_high: 90s, backup images, 2 credits, ❌ Not tested
-video_fast: 251.5s average, 5s videos, 3 credits, ✅ Tested
-video_high: 359.7s, 6s videos, 5 credits, ✅ Tested
+image_fast: 25-40s, 1 image, 1 credit, ✅ Live
+image_high: 40-100s, 1 image, 2 credits, ✅ Live
+video_fast: 135-180s, 1 video, 3 credits, ✅ Live
+video_high: 180-240s, 1 video, 5 credits, ✅ Live
 ```
 
 ### **WAN Enhanced Jobs (4) - AI-Enhanced with Qwen 7B**
 ```yaml
-image7b_fast_enhanced: 233.5s, 2 credits, ✅ Tested
-image7b_high_enhanced: 104s, 3 credits, ❌ Not tested
-video7b_fast_enhanced: 263.9s average, 4 credits, ✅ Tested
-video7b_high_enhanced: 370.0s average, 6 credits, ✅ Tested
+image7b_fast_enhanced: 85-100s, 1 image, 2 credits, ✅ Live
+image7b_high_enhanced: 100-240s, 1 image, 3 credits, ✅ Live
+video7b_fast_enhanced: 195-240s, 1 video, 4 credits, ✅ Live
+video7b_high_enhanced: 240+ seconds, 1 video, 6 credits, ✅ Live
 ```
 
 ---
@@ -387,25 +398,39 @@ has_role(_user_id: string, _role: app_role) → boolean
 
 ---
 
-## 🚀 Edge Functions
+## 🚀 Edge Functions (Supabase Online)
 
 ### **queue-job**
 ```typescript
 // supabase/functions/queue-job/index.ts
 - Validates job types (10 supported)
 - Routes to appropriate queue (sdxl_queue or wan_queue)
-- Generates negative prompts based on job type
+- Generates enhanced negative prompts for SDXL jobs
 - Creates database records and Redis queue entries
 - Handles authentication and error responses
+- Supports flexible SDXL quantities (1,3,6 images)
+- Manages reference images and seed control
 ```
 
 ### **job-callback**
 ```typescript
 // supabase/functions/job-callback/index.ts
-- Processes completed jobs
-- Updates database status
-- Handles file uploads to storage
-- Manages error states
+- Processes completed jobs with standardized parameters
+- Updates database status and metadata
+- Handles multi-asset callbacks for SDXL jobs
+- Manages error states and debugging
+- Preserves worker metadata (seeds, generation times)
+- Supports path consistency for video storage
+```
+
+### **enhance-prompt**
+```typescript
+// supabase/functions/enhance-prompt/index.ts
+- AI-powered prompt enhancement service
+- Rule-based enhancement for SDXL, WAN images, and videos
+- Quality-specific enhancement strategies
+- Returns enhanced prompts with metadata
+- Used by PromptEnhancementModal component
 ```
 
 ### **generate-admin-image**
@@ -414,6 +439,16 @@ has_role(_user_id: string, _role: app_role) → boolean
 - Admin-only image generation
 - Bypasses user authentication
 - Used for testing and admin operations
+- Returns mock image URLs for development
+```
+
+### **enhance-prompt**
+```typescript
+// supabase/functions/enhance-prompt/index.ts
+- Enhances negative prompts for SDXL generation
+- Detects multi-party scenes
+- Applies specific rules for enhanced generation
+- Returns enhanced prompt
 ```
 
 ---
@@ -609,14 +644,20 @@ console.log('📋 Creating job:', { jobType, userId });
 ### **Performance Monitoring**
 ```yaml
 Generation Times:
-  - SDXL: 29.9-42.4 seconds (measured)
-  - WAN Standard: 251-360 seconds (measured)
-  - WAN Enhanced: 233-370 seconds (measured)
+  - SDXL: 3-12 seconds per image (flexible quantities: 1,3,6)
+  - WAN Standard: 25-240 seconds (images and videos)
+  - WAN Enhanced: 85-240+ seconds (enhanced processing)
 
 VRAM Usage:
   - SDXL: 6.6GB loaded, 10.5GB peak
   - WAN: 15-30GB peak
   - Total: ~35GB (13GB headroom)
+
+System Status:
+  - All 10 job types operational
+  - Multi-reference system live
+  - Enhanced negative prompts active
+  - Seed control and reproducibility working
 ```
 
 ---
@@ -646,32 +687,32 @@ Testing: Component testing (to be implemented)
 
 ## 📚 Documentation
 
-### **Current Documentation Structure**
+### **Current Documentation Structure (Updated July 20, 2025)**
 ```markdown
 docs/
-├── PROJECT.md              # Complete project context
-├── ARCHITECTURE.md         # Technical architecture
-├── SERVICES.md             # Service configurations
-├── PROJECT_STATUS.md       # Current development status
-├── SERVERCODEBASE_OVERVIEW.md # Server-side overview
-├── EDGE_FUNCTIONS.md       # Supabase edge functions
-├── WORKER_API.md           # Worker API reference
-├── PERFORMANCE_BENCHMARKS.md # Detailed performance data
-├── PERFORMANCE_SUMMARY.md  # Quick performance reference
-├── NEGATIVE_PROMPT_IMPROVEMENTS.md # Prompt optimization
-└── ourvidz_status_update.md # Status updates
+├── README.md               # Main project overview and entry point
+├── ARCHITECTURE.md         # Technical architecture and system design
+├── API.md                  # API reference (edge functions + worker API)
+├── ADMIN.md                # Admin portal documentation
+├── CHANGELOG.md            # Version history and changes
+├── DEPLOYMENT.md           # Deployment and operational guides
+├── EDGE_FUNCTIONS.md       # Supabase edge functions (detailed)
+├── PROMPTS.md              # Prompting guide and best practices
+├── TESTING.md              # Testing framework and procedures
+├── worker_api.md           # Worker API reference
+├── ourvidz-admin-prd.md    # Admin portal requirements
+├── SDXL_WAN_Job_Standardization.md # Job standardization details
+├── REORGANIZATION_SUMMARY.md # Documentation consolidation summary
+└── ReferenceWorkflowGuide.md # Reference image workflows
 ```
 
-### **Planned Documentation Consolidation**
-```markdown
-docs/
-├── README.md               # Main project overview (consolidated)
-├── ARCHITECTURE.md         # Technical architecture (keep)
-├── API.md                  # API reference (consolidated)
-├── PERFORMANCE.md          # Performance data (consolidated)
-├── SERVICES.md             # Service configurations (keep)
-├── CHANGELOG.md            # Version history (new)
-└── DEPLOYMENT.md           # Deployment guides (new)
+### **Documentation Status**
+```yaml
+Consolidation: ✅ Complete (25+ files → 14 focused documents)
+Supabase Online: ✅ All references updated
+Current Status: ✅ All 10 job types documented
+Edge Functions: ✅ All 4 functions documented
+Worker API: ✅ Complete RunPod worker documentation
 ```
 
 ### **Code Documentation**
@@ -690,19 +731,22 @@ async function generateContent(request: GenerationRequest): Promise<void>
 ## 🎯 Current Status & Next Steps
 
 ### **✅ Completed Features**
-- Dual worker system operational
-- All 10 job types supported
-- Frontend UI components complete
-- Authentication system working
-- Asset management system
-- Real-time status updates
+- Dual worker system operational (SDXL + WAN on RTX 6000 ADA)
+- All 10 job types live and operational
+- Multi-reference system with style, composition, and character references
+- Enhanced negative prompts for SDXL with multi-party scene detection
+- Seed control and reproducible generation
+- Flexible SDXL quantities (1,3,6 images per batch)
+- Frontend UI components complete with PromptEnhancementModal
+- Authentication system working (Supabase Online)
+- Asset management system with real-time updates
 - Mobile-responsive design
-- Production deployment on Lovable
+- Production deployment on Lovable with Supabase Online backend
 
 ### **🚧 In Progress**
-- Complete testing of remaining job types (1/10 pending)
-- Performance optimization
-- Documentation consolidation
+- Performance optimization and monitoring
+- Enhanced analytics and reporting
+- Advanced reference workflows
 - User experience improvements
 
 ### **📋 Planned Features**

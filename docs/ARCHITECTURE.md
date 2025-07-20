@@ -672,4 +672,259 @@ await logQueueMetrics(queueMetrics);
 - **WAN Performance**: Images: 25-100s, Videos: 135-240s
 - **Enhanced WAN**: Images: 85-240s, Videos: 195-240s
 - **System Uptime**: 99.9% availability
-- **Error Rate**: <0.1% job failures 
+- **Error Rate**: <0.1% job failures
+
+---
+
+## **🔄 Job Standardization Architecture**
+
+### **SDXL & WAN Job Standardization: Design & Implementation**
+
+#### **Background**
+- **SDXL Jobs:** Generate multiple images per job (batch), previously handled with a placeholder record and array of image URLs.
+- **WAN Jobs:** Generate a single video or image per job, handled with a single record updated on completion.
+
+#### **Key Goals**
+- Consistency across all job types
+- Elimination of orphaned/placeholder records
+- Simpler, more reliable real-time updates for workspace and library
+- Maintainability and scalability
+
+### **Standardized Approach: Record-Per-Asset Pattern**
+
+#### **SDXL Jobs (Multi-Image)**
+- **At job submission**: Create N image records (one per image) with status `queued` and `image_index` (0, 1, 2, ...)
+- **On completion**: Update each record with its image URL and set status to `completed`
+- **Benefits**: Consistent event handling, no orphans, deterministic mapping
+
+#### **WAN Jobs (Single File)**
+- **Continue creating/updating**: A single record per job
+- **Consistent pattern**: Same UPDATE event handling as SDXL
+
+### **Implementation Details**
+
+#### **Phase 1: Add `image_index` Column**
+```sql
+-- Migration: Add nullable `image_index` to `images` table
+ALTER TABLE images ADD COLUMN image_index INTEGER;
+
+-- Used for deterministic mapping in SDXL jobs
+-- No impact on WAN jobs (remains NULL)
+```
+
+#### **Phase 2: Update GenerationService for N-Record Creation**
+```typescript
+// File: src/lib/services/GenerationService.ts
+// For SDXL jobs, create N image records with `image_index` 0..N-1
+for (let i = 0; i < numImages; i++) {
+  const image = await imageAPI.create({
+    user_id: user.id,
+    project_id: request.projectId,
+    prompt: request.prompt,
+    status: 'queued',
+    image_index: i,  // Key: Each image gets unique index
+    job_id: jobId,   // Key: Direct job_id assignment
+    metadata: {
+      model_type: 'sdxl',
+      is_sdxl: true,
+      bucket: config.bucket,
+      job_format: request.format
+    }
+  });
+}
+```
+
+#### **Phase 3: Update Job Callback for UPDATE Pattern**
+```typescript
+// File: supabase/functions/job-callback/index.ts
+// Simplified UPDATE strategy (no INSERTs)
+for (let i = 0; i < assets.length; i++) {
+  const imageUrl = assets[i];
+  
+  const { data: updatedImage, error: updateError } = await supabase
+    .from('images')
+    .update({
+      title: title,
+      image_url: imageUrl,      // Set the actual URL
+      status: 'completed',      // Mark as completed
+      metadata: {
+        ...jobMetadata,
+        image_index: i,
+        total_images: assets.length
+      }
+    })
+    .eq('job_id', job.id)      // Match by job_id
+    .eq('image_index', i)      // Match by image_index
+    .select()
+    .single();
+}
+```
+
+#### **Phase 4: Simplify Frontend Event Handling**
+```typescript
+// Files: useRealtimeWorkspace.ts, useWorkspace.ts, useAssets.ts
+// Remove INSERT event listeners for images
+// Listen only for UPDATE events (status = 'completed')
+// Workspace and library update in real time for both SDXL and WAN jobs
+
+// Batched update processor with debouncing
+const processBatchedUpdates = () => {
+  if (pendingBatchUpdatesRef.current.size > 0) {
+    const batchIds = Array.from(pendingBatchUpdatesRef.current);
+    
+    setWorkspaceFilter(prev => {
+      const newFilter = new Set(prev);
+      batchIds.forEach(id => newFilter.add(id));
+      return newFilter;
+    });
+    
+    // Single query invalidation for all batched items
+    queryClient.invalidateQueries(['workspace', 'assets']);
+  }
+};
+```
+
+### **Benefits of Standardized Approach**
+
+#### **Consistency**
+- **Predictable Event Handling**: UPDATE for all completions
+- **Deterministic Mapping**: Via `image_index` for SDXL jobs
+- **Unified Frontend Logic**: Same event handling for all job types
+
+#### **Reliability**
+- **No Orphaned Records**: Eliminates placeholder records
+- **No Race Conditions**: Deterministic asset mapping
+- **Simplified Debugging**: Clear relationship between jobs and assets
+
+#### **Performance**
+- **Efficient Updates**: Direct record updates instead of INSERT/DELETE cycles
+- **Reduced Database Load**: Fewer operations per job completion
+- **Better Caching**: Consistent record IDs for frontend caching
+
+### **Database Schema Updates**
+
+#### **Enhanced Images Table**
+```sql
+-- Enhanced images table with image_index support
+CREATE TABLE images (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    image_index INTEGER,  -- NEW: For SDXL multi-image jobs
+    title TEXT,
+    image_url TEXT,
+    status TEXT DEFAULT 'queued',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for efficient callback updates
+CREATE INDEX idx_images_job_index ON images(job_id, image_index);
+```
+
+#### **Migration Strategy**
+```sql
+-- Phase 1: Add image_index column
+ALTER TABLE images ADD COLUMN image_index INTEGER;
+
+-- Phase 2: Clean up orphaned records (if any)
+DELETE FROM images WHERE job_id IS NULL AND status = 'queued';
+
+-- Phase 3: Add index for performance
+CREATE INDEX idx_images_job_index ON images(job_id, image_index);
+```
+
+### **Frontend Integration**
+
+#### **Real-time Updates**
+```typescript
+// Simplified real-time subscription
+useEffect(() => {
+  const subscription = supabase
+    .channel('workspace-updates')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'images',
+      filter: `status=eq.completed`
+    }, handleImageUpdate)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'videos',
+      filter: `status=eq.completed`
+    }, handleVideoUpdate)
+    .subscribe();
+    
+  return () => subscription.unsubscribe();
+}, []);
+```
+
+#### **Workspace Auto-Population**
+```typescript
+// Batched update processor for SDXL multi-image jobs
+const handleImageUpdate = (payload: any) => {
+  const { new: image } = payload;
+  
+  // Add to pending batch updates
+  pendingBatchUpdatesRef.current.add(image.id);
+  
+  // Debounce batch processing
+  if (batchTimeoutRef.current) {
+    clearTimeout(batchTimeoutRef.current);
+  }
+  
+  batchTimeoutRef.current = setTimeout(() => {
+    processBatchedUpdates();
+  }, 100);
+};
+```
+
+### **Testing & Validation**
+
+#### **SDXL Multi-Image Testing**
+```typescript
+// Test SDXL job with 6 images
+const testSDXLJob = async () => {
+  const job = await submitJob({
+    type: 'sdxl_image_high',
+    prompt: 'test prompt',
+    num_images: 6
+  });
+  
+  // Verify 6 image records created
+  const images = await getImagesByJobId(job.id);
+  expect(images).toHaveLength(6);
+  expect(images[0].image_index).toBe(0);
+  expect(images[5].image_index).toBe(5);
+  
+  // Verify all records updated on completion
+  await simulateJobCompletion(job.id, 6);
+  const completedImages = await getImagesByJobId(job.id);
+  expect(completedImages.every(img => img.status === 'completed')).toBe(true);
+};
+```
+
+#### **WAN Single-File Testing**
+```typescript
+// Test WAN video job
+const testWANJob = async () => {
+  const job = await submitJob({
+    type: 'video_fast',
+    prompt: 'test video prompt'
+  });
+  
+  // Verify single video record created
+  const videos = await getVideosByJobId(job.id);
+  expect(videos).toHaveLength(1);
+  
+  // Verify record updated on completion
+  await simulateJobCompletion(job.id, 1);
+  const completedVideos = await getVideosByJobId(job.id);
+  expect(completedVideos[0].status).toBe('completed');
+};
+```
+
+This standardized approach ensures consistent, reliable, and maintainable job handling across all OurVidz job types while providing optimal performance and user experience. 
