@@ -369,8 +369,6 @@ export const VideoInputControls = ({
         onReferencesChange={onReferencesChange || (() => {})}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={onReferenceStrengthChange || (() => {})}
-        optimizeForCharacter={optimizeForCharacter}
-        onOptimizeChange={onOptimizeChange || (() => {})}
       />
     </TooltipProvider>
   );
