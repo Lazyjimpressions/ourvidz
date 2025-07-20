@@ -53,6 +53,11 @@ interface ImageInputControlsProps {
   onReferenceStrengthChange?: (value: number) => void;
   optimizeForCharacter?: boolean;
   onOptimizeChange?: (enabled: boolean) => void;
+  // Enhanced drag and drop props
+  onReferenceDragOver?: (e: React.DragEvent) => void;
+  onReferenceDragLeave?: (e: React.DragEvent) => void;
+  onReferenceDrop?: (e: React.DragEvent) => void;
+  isReferenceDragOver?: boolean;
 }
 
 export const ImageInputControls = ({
@@ -80,7 +85,11 @@ export const ImageInputControls = ({
   referenceStrength = 0.85,
   onReferenceStrengthChange,
   optimizeForCharacter = false,
-  onOptimizeChange
+  onOptimizeChange,
+  onReferenceDragOver,
+  onReferenceDragLeave,
+  onReferenceDrop,
+  isReferenceDragOver
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -124,6 +133,10 @@ export const ImageInputControls = ({
                 <ReferenceImageBox
                   references={references}
                   onClick={() => setShowReferenceModal(true)}
+                  onDragOver={onReferenceDragOver}
+                  onDragLeave={onReferenceDragLeave}
+                  onDrop={onReferenceDrop}
+                  isDragOver={isReferenceDragOver}
                 />
               </div>
             </TooltipTrigger>

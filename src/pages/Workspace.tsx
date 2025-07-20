@@ -504,6 +504,37 @@ const Workspace = () => {
     setShowReferencePanel(!showReferencePanel);
   }, [showReferencePanel]);
 
+  // Enhanced drag and drop handlers for reference box
+  const [isDragOverReference, setIsDragOverReference] = useState(false);
+
+  const handleReferenceDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverReference(true);
+  }, []);
+
+  const handleReferenceDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverReference(false);
+  }, []);
+
+  const handleReferenceDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOverReference(false);
+    
+    const workspaceData = e.dataTransfer.getData('application/workspace-asset');
+    if (workspaceData) {
+      try {
+        const assetData = JSON.parse(workspaceData);
+        // Open reference modal and pre-populate with the dropped asset
+        setShowReferencePanel(true);
+        // The modal will handle the asset data
+        toast.success('Drag the image to a reference slot in the modal');
+      } catch (error) {
+        console.error('Error parsing workspace asset data:', error);
+      }
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -654,6 +685,8 @@ const Workspace = () => {
                       <SeedDisplay 
                         seed={tile.generationParams?.seed || tile.seed}
                         className="text-xs"
+                        onUseSeed={handleUseSeed}
+                        showUseButton={true}
                       />
                     </div>
                   )}
@@ -743,6 +776,11 @@ const Workspace = () => {
             onReferenceStrengthChange={setReferenceStrength}
             optimizeForCharacter={optimizeForCharacter}
             onOptimizeChange={setOptimizeForCharacter}
+            // Enhanced drag and drop props
+            onReferenceDragOver={handleReferenceDragOver}
+            onReferenceDragLeave={handleReferenceDragLeave}
+            onReferenceDrop={handleReferenceDrop}
+            isReferenceDragOver={isDragOverReference}
           />
         )}
       </div>

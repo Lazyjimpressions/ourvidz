@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Upload, Image, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -12,17 +12,33 @@ interface ReferenceImageBoxProps {
   }>;
   onClick: () => void;
   className?: string;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  isDragOver?: boolean;
 }
 
-export const ReferenceImageBox = ({ references, onClick, className }: ReferenceImageBoxProps) => {
+export const ReferenceImageBox = ({ 
+  references, 
+  onClick, 
+  className,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  isDragOver = false
+}: ReferenceImageBoxProps) => {
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
   const hasReferences = activeReferences.length > 0;
 
   return (
     <button
       onClick={onClick}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       className={cn(
-        "flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed transition-colors hover:border-gray-500",
+        "flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed transition-all duration-200 hover:border-gray-500",
+        isDragOver && "border-blue-400 bg-blue-400/20 scale-110",
         hasReferences 
           ? "border-green-500 bg-green-500/10" 
           : "border-gray-600 bg-gray-800/50 hover:bg-gray-700/50",
@@ -37,7 +53,17 @@ export const ReferenceImageBox = ({ references, onClick, className }: ReferenceI
           </div>
         </div>
       ) : (
-        <Upload className="w-5 h-5 text-gray-400" />
+        <Upload className={cn(
+          "w-5 h-5 transition-colors",
+          isDragOver ? "text-blue-400" : "text-gray-400"
+        )} />
+      )}
+      
+      {/* Drag Over Indicator */}
+      {isDragOver && (
+        <div className="absolute inset-0 bg-blue-400/20 rounded-md flex items-center justify-center">
+          <div className="text-blue-400 text-xs font-medium">Drop to Add</div>
+        </div>
       )}
     </button>
   );
