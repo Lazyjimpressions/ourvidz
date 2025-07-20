@@ -28,12 +28,13 @@ export const ReferenceImageBox = ({
     <button
       onClick={onClick}
       className={cn(
-        "flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed transition-all duration-200 hover:border-gray-500",
+        "flex items-center justify-center rounded-md border-2 border-dashed transition-all duration-200 hover:border-gray-500",
         isDragOver && "border-blue-400 bg-blue-400/20 scale-110",
         hasReferences 
           ? "border-green-500 bg-green-500/10" 
           : "border-gray-600 bg-gray-800/50 hover:bg-gray-700/50",
-        className
+        // Default size if no className provided
+        className || "w-12 h-12"
       )}
     >
       {hasReferences ? (

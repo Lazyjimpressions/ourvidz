@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,28 +81,28 @@ export const VideoInputControls = ({
 
   return (
     <TooltipProvider>
-      <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50 max-w-6xl mx-auto">
+      <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50 max-w-7xl mx-auto">
         {/* Row 1: VIDEO button + frame selection + prompt + sparkle buttons */}
-        <div className="flex items-center gap-2 mb-2">
-          {/* VIDEO Mode Button */}
+        <div className="flex items-center gap-4 mb-2">
+          {/* VIDEO Mode Button - Active State, Fixed Position */}
           <Button
             variant="ghost"
-            className="flex items-center gap-1 px-3 py-2 h-12 rounded-md bg-white hover:bg-gray-100 text-gray-900 font-medium text-xs min-w-[70px] justify-center"
+            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-white hover:bg-gray-100 text-gray-900 font-medium text-xs min-w-[80px] justify-center"
           >
-            <Play className="w-3 h-3" />
+            <Play className="w-4 h-4" />
             VIDEO
           </Button>
 
-          {/* Frame Selection Boxes */}
-          <div className="flex gap-1">
+          {/* Frame Selection Boxes - Match VIDEO button height */}
+          <div className="flex gap-2">
             {/* Starting Frame */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
+                  className="flex items-center justify-center w-16 h-16 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
                 >
-                  <Upload className="w-3 h-3 text-gray-400" />
+                  <Upload className="w-4 h-4 text-gray-400" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -114,9 +115,9 @@ export const VideoInputControls = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
+                  className="flex items-center justify-center w-16 h-16 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
                 >
-                  <Upload className="w-3 h-3 text-gray-400" />
+                  <Upload className="w-4 h-4 text-gray-400" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -125,13 +126,13 @@ export const VideoInputControls = ({
             </Tooltip>
           </div>
 
-          {/* Main Text Input - Much wider */}
-          <div className="flex-1 max-w-2xl">
+          {/* Main Text Input - Extended Width */}
+          <div className="flex-1 max-w-3xl">
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A woman walking through a bustling city street..."
-              className="bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-12 w-full"
+              className="bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full"
               disabled={isGenerating}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -142,8 +143,8 @@ export const VideoInputControls = ({
             />
           </div>
 
-          {/* Sparkle Buttons - Uniform size */}
-          <div className="flex gap-2">
+          {/* Sparkle Buttons - Right Justified */}
+          <div className="flex gap-2 ml-auto">
             {/* Enhanced Prompt Button */}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -173,19 +174,19 @@ export const VideoInputControls = ({
         </div>
 
         {/* Row 2: IMAGE button + right-justified controls */}
-        <div className="flex items-center justify-between">
-          {/* IMAGE Mode Button */}
+        <div className="flex items-center gap-4">
+          {/* IMAGE Mode Button - Fixed Position */}
           <Button
             variant="ghost"
             onClick={onSwitchToImage}
-            className="flex items-center gap-1 px-3 py-2 h-12 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-medium text-xs min-w-[70px] justify-center"
+            className="flex items-center gap-1 px-3 py-2 h-16 rounded-md bg-gray-800 hover:bg-gray-700 text-white font-medium text-xs min-w-[80px] justify-center"
           >
-            <Image className="w-3 h-3" />
+            <Image className="w-4 h-4" />
             IMAGE
           </Button>
 
           {/* Control Buttons - Right Justified, All Uniform */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 ml-auto">
             {/* Library Button */}
             <Button
               variant="ghost"
