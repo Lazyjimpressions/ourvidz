@@ -10,6 +10,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PromptEnhancementModal } from './PromptEnhancementModal';
+import { ReferenceImageBox } from './workspace/ReferenceImageBox';
+import { ReferenceSettingsModal } from './workspace/ReferenceSettingsModal';
 
 interface VideoInputControlsProps {
   prompt: string;
@@ -27,6 +29,26 @@ interface VideoInputControlsProps {
   onReferenceClick?: () => void;
   // Job type for enhancement
   jobType?: string;
+  // Reference management props
+  references?: Array<{
+    id: string;
+    label: string;
+    description: string;
+    enabled: boolean;
+    url?: string;
+    file?: File;
+    isWorkspaceAsset?: boolean;
+  }>;
+  onReferencesChange?: (references: any[]) => void;
+  referenceStrength?: number;
+  onReferenceStrengthChange?: (value: number) => void;
+  optimizeForCharacter?: boolean;
+  onOptimizeChange?: (enabled: boolean) => void;
+  // Enhanced drag and drop props
+  onReferenceDragOver?: (e: React.DragEvent) => void;
+  onReferenceDragLeave?: (e: React.DragEvent) => void;
+  onReferenceDrop?: (e: React.DragEvent) => void;
+  isReferenceDragOver?: boolean;
 }
 
 export const VideoInputControls = ({
@@ -42,21 +64,32 @@ export const VideoInputControls = ({
   setEnhanced,
   hasReference = false,
   onReferenceClick,
-  jobType = 'video_fast'
+  jobType = 'video_fast',
+  references = [],
+  onReferencesChange,
+  referenceStrength = 0.85,
+  onReferenceStrengthChange,
+  optimizeForCharacter = false,
+  onOptimizeChange,
+  onReferenceDragOver,
+  onReferenceDragLeave,
+  onReferenceDrop,
+  isReferenceDragOver
 }: VideoInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
+  const [showReferenceModal, setShowReferenceModal] = useState(false);
 
   return (
     <TooltipProvider>
       <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50">
-        {/* Main Row */}
-        <div className="flex items-center gap-2">
-          {/* Stacked IMAGE/VIDEO Toggle Buttons */}
-          <div className="flex flex-col gap-1">
+        {/* Main Input Row */}
+        <div className="flex items-start gap-3 max-w-4xl mx-auto">
+          {/* Mode Toggle */}
+          <div className="flex gap-1">
             <Button
               variant="ghost"
               onClick={onSwitchToImage}
@@ -66,44 +99,54 @@ export const VideoInputControls = ({
               IMAGE
             </Button>
             <Button
-              variant="default"
-              className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white text-black hover:bg-gray-100 text-sm font-medium"
+              variant="ghost"
+              className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-white hover:bg-gray-100 text-gray-900 text-sm font-medium"
             >
               <Play className="w-3.5 h-3.5" />
               VIDEO
             </Button>
           </div>
 
-          {/* Reference Button */}
-          {onReferenceClick && (
+          {/* Frame Selection Boxes */}
+          <div className="flex gap-2">
+            {/* Starting Frame */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  onClick={onReferenceClick}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md text-sm font-medium ${
-                    hasReference 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-gray-800 hover:bg-gray-700 text-white'
-                  }`}
-              >
-                <Link className="w-3.5 h-3.5" />
-                {hasReference ? 'Ref Active' : 'Ref'}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{hasReference ? 'Reference image active - Click to manage' : 'Add reference image for character consistency'}</p>
-            </TooltipContent>
-          </Tooltip>
-          )}
+                  className="flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
+                >
+                  <Upload className="w-5 h-5 text-gray-400" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add starting frame</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Ending Frame */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed border-gray-600 bg-gray-800/50 hover:bg-gray-700/50 hover:border-gray-500"
+                >
+                  <Upload className="w-5 h-5 text-gray-400" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add ending frame</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
           {/* Main Text Input */}
-          <div className="flex-1">
+          <div className="flex-1 max-w-2xl">
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A woman walking through a bustling city street..."
-              className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px]"
+              className="bg-transparent border-none text-white placeholder:text-gray-400 text-base py-2 px-3 focus:outline-none focus:ring-0 resize-none min-h-[60px] w-full"
               rows={3}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -113,6 +156,28 @@ export const VideoInputControls = ({
                 }
               }}
             />
+          </div>
+
+          {/* Reference Button */}
+          <div
+            onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
+            onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
+            onDrop={showReferenceModal ? undefined : onReferenceDrop}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <ReferenceImageBox
+                    references={references}
+                    onClick={() => setShowReferenceModal(true)}
+                    isDragOver={showReferenceModal ? false : isReferenceDragOver}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add reference images for style, composition, or character</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           {/* Enhance Prompt Button */}
@@ -144,7 +209,7 @@ export const VideoInputControls = ({
         </div>
 
         {/* Controls Row */}
-        <div className="flex items-center justify-end gap-2 mt-2">
+        <div className="flex items-center justify-end gap-2 mt-2 max-w-4xl mx-auto">
           {/* Library Button */}
           <Button
             variant="ghost"
@@ -316,6 +381,18 @@ export const VideoInputControls = ({
         jobType={jobType}
         format="video"
         quality={quality}
+      />
+
+      {/* Reference Settings Modal */}
+      <ReferenceSettingsModal
+        isOpen={showReferenceModal}
+        onClose={() => setShowReferenceModal(false)}
+        references={references}
+        onReferencesChange={onReferencesChange || (() => {})}
+        referenceStrength={referenceStrength}
+        onReferenceStrengthChange={onReferenceStrengthChange || (() => {})}
+        optimizeForCharacter={optimizeForCharacter}
+        onOptimizeChange={onOptimizeChange || (() => {})}
       />
     </TooltipProvider>
   );

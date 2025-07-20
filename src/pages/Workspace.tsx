@@ -742,9 +742,21 @@ const Workspace = () => {
             onLibraryClick={() => setShowLibraryModal(true)}
             enhanced={enhanced}
             setEnhanced={setEnhanced}
-            hasReference={videoReferences.some(ref => ref.enabled && ref.url)}
+            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
             onReferenceClick={handleReferenceClick}
             jobType={selectedMode}
+            // Pass reference management props for consistency
+            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+            onReferencesChange={handleReferencesChange}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
+            // Enhanced drag and drop props
+            onReferenceDragOver={handleReferenceDragOver}
+            onReferenceDragLeave={handleReferenceDragLeave}
+            onReferenceDrop={handleReferenceDrop}
+            isReferenceDragOver={isDragOverReference}
           />
         ) : (
           <ImageInputControls
