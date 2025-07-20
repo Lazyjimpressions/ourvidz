@@ -243,7 +243,14 @@ export const CompelModal = ({
                       <Checkbox
                         id={boost.id}
                         checked={quickBoosts.includes(boost.id)}
-                        onCheckedChange={() => toggleQuickBoost(boost.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setQuickBoosts(prev => [...prev, boost.id]);
+                          } else {
+                            setQuickBoosts(prev => prev.filter(id => id !== boost.id));
+                          }
+                        }}
+                        className="data-[state=checked]:bg-purple-600"
                       />
                       <Label 
                         htmlFor={boost.id} 
@@ -274,7 +281,7 @@ export const CompelModal = ({
                     min={0.5}
                     max={1.5}
                     step={0.1}
-                    className="w-full"
+                    className="w-full h-2"
                   />
                   <div className="flex justify-between text-xs text-gray-500">
                     <span>Reduced</span>
@@ -297,7 +304,7 @@ export const CompelModal = ({
                     min={0.5}
                     max={1.5}
                     step={0.1}
-                    className="w-full"
+                    className="w-full h-2"
                   />
                 </div>
 
@@ -315,7 +322,7 @@ export const CompelModal = ({
                     min={0.0}
                     max={1.5}
                     step={0.1}
-                    className="w-full"
+                    className="w-full h-2"
                   />
                 </div>
 
@@ -333,7 +340,7 @@ export const CompelModal = ({
                     min={0.5}
                     max={1.5}
                     step={0.1}
-                    className="w-full"
+                    className="w-full h-2"
                   />
                 </div>
               </div>
