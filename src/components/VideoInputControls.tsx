@@ -122,9 +122,9 @@ export const VideoInputControls = ({
                 variant="ghost"
                 onClick={() => setShowEnhancementModal(true)}
                 disabled={isGenerating || !prompt.trim()}
-                className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium"
+                className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md bg-gray-800 hover:bg-gray-700 text-white text-sm font-medium border border-gray-600"
               >
-                <Wand2 className="w-3.5 h-3.5" />
+                <Wand2 className="w-3.5 h-3.5 text-purple-400" />
                 ✨
               </Button>
             </TooltipTrigger>
