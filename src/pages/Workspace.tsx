@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -15,7 +14,7 @@ import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
-import { CharacterReferenceWarning } from '@/components/workspace/CharacterReferenceWarning';
+import { UnifiedReferencePanel } from '@/components/workspace/UnifiedReferencePanel';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Image, Dice6 } from 'lucide-react';
@@ -25,8 +24,6 @@ const Workspace = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
-  
-
   
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
@@ -98,7 +95,7 @@ const Workspace = () => {
   
   // Reference button state
   const [showReferencePanel, setShowReferencePanel] = useState(false);
-  
+
   // Generation hooks
   const {
     generateContent,
@@ -500,6 +497,12 @@ const Workspace = () => {
     ref.enabled && ref.id === 'character' && ref.url
   );
 
+  // Check if any references are active for the unified panel
+  const hasActiveReferences = activeReferences.some(ref => ref.enabled && ref.url);
+
+  // Determine if Compel should be shown (SDXL or enhanced 7B models)
+  const shouldShowCompel = selectedMode.startsWith('sdxl_') || selectedMode.includes('image7b');
+
   return (
     <div className="min-h-screen bg-black text-white flex flex-col">
       {/* Fixed Header */}
@@ -507,21 +510,6 @@ const Workspace = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 pt-12">
-        {/* Character Reference Warning */}
-        {hasCharacterReference && (
-          <div className="p-6 pb-0">
-            <CharacterReferenceWarning
-              hasCharacterReference={hasCharacterReference}
-              referenceStrength={referenceStrength}
-              numImages={numImages}
-              onOptimizeChange={setOptimizeForCharacter}
-              optimizeEnabled={optimizeForCharacter}
-              seed={seed}
-              onSeedChange={setSeed}
-            />
-          </div>
-        )}
-
         {/* Current Workspace */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
@@ -651,26 +639,48 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Reference Panel - Connected to Generation Pipeline */}
-        {showReferencePanel && (
-          isVideoMode ? (
-            <VideoReferencePanel
-              strength={referenceStrength}
-              onStrengthChange={setReferenceStrength}
-              onReferencesChange={handleVideoReferencesChange}
-              onClear={handleClearVideoReferences}
-              references={videoReferences}
-            />
-          ) : (
-            <MultiReferencePanel
-              mode="image"
-              strength={referenceStrength}
-              onStrengthChange={setReferenceStrength}
-              onReferencesChange={handleReferencesChange}
-              onClear={handleClearReferences}
-              references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-            />
-          )
+        {/* Unified Reference Settings Panel - Replaces both old warning and separate reference panel */}
+        {!isVideoMode && hasActiveReferences && (
+          <UnifiedReferencePanel
+            hasActiveReferences={hasActiveReferences}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            referenceType={referenceType}
+            onReferenceTypeChange={setReferenceType}
+            seed={seed}
+            onSeedChange={setSeed}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
+            showCompel={shouldShowCompel}
+            compelEnabled={compelEnabled}
+            setCompelEnabled={setCompelEnabled}
+            compelWeights={compelWeights}
+            setCompelWeights={setCompelWeights}
+            numImages={numImages}
+          />
+        )}
+        
+        {/* Video Reference Panel - Only for video mode */}
+        {isVideoMode && showReferencePanel && (
+          <VideoReferencePanel
+            strength={referenceStrength}
+            onStrengthChange={setReferenceStrength}
+            onReferencesChange={handleVideoReferencesChange}
+            onClear={handleClearVideoReferences}
+            references={videoReferences}
+          />
+        )}
+
+        {/* Image Reference Panel - Only for image mode when unified panel is not shown */}
+        {!isVideoMode && showReferencePanel && !hasActiveReferences && (
+          <MultiReferencePanel
+            mode="image"
+            strength={referenceStrength}
+            onStrengthChange={setReferenceStrength}
+            onReferencesChange={handleReferencesChange}
+            onClear={handleClearReferences}
+            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+          />
         )}
       </div>
 
