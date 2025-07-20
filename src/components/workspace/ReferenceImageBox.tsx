@@ -12,9 +12,6 @@ interface ReferenceImageBoxProps {
   }>;
   onClick: () => void;
   className?: string;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDragLeave?: (e: React.DragEvent) => void;
-  onDrop?: (e: React.DragEvent) => void;
   isDragOver?: boolean;
 }
 
@@ -22,9 +19,6 @@ export const ReferenceImageBox = ({
   references, 
   onClick, 
   className,
-  onDragOver,
-  onDragLeave,
-  onDrop,
   isDragOver = false
 }: ReferenceImageBoxProps) => {
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
@@ -33,9 +27,6 @@ export const ReferenceImageBox = ({
   return (
     <button
       onClick={onClick}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
       className={cn(
         "flex items-center justify-center w-12 h-12 rounded-md border-2 border-dashed transition-all duration-200 hover:border-gray-500",
         isDragOver && "border-blue-400 bg-blue-400/20 scale-110",

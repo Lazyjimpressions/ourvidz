@@ -127,23 +127,26 @@ export const ImageInputControls = ({
           </div>
 
           {/* Single Reference Upload Box */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <ReferenceImageBox
-                  references={references}
-                  onClick={() => setShowReferenceModal(true)}
-                  onDragOver={onReferenceDragOver}
-                  onDragLeave={onReferenceDragLeave}
-                  onDrop={onReferenceDrop}
-                  isDragOver={isReferenceDragOver}
-                />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Add reference images for style, composition, or character</p>
-            </TooltipContent>
-          </Tooltip>
+          <div
+            onDragOver={onReferenceDragOver}
+            onDragLeave={onReferenceDragLeave}
+            onDrop={onReferenceDrop}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <ReferenceImageBox
+                    references={references}
+                    onClick={() => setShowReferenceModal(true)}
+                    isDragOver={isReferenceDragOver}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add reference images for style, composition, or character</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
           {/* Main Text Input */}
           <div className="flex-1">
