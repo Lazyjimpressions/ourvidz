@@ -455,7 +455,7 @@ const Workspace = () => {
     ]);
   }, []);
 
-  // Use as reference functionality - updated to work with new modal system
+  // Use as reference functionality - updated to preserve all reference types
   const handleUseAsReference = useCallback((tile: any) => {
     // Create character reference with proper structure
     const characterReference = {
@@ -472,14 +472,21 @@ const Workspace = () => {
       generationParams: tile.generationParams
     };
     
-    // Update references: replace character, keep others
+    // Update references: preserve all types, only update character slot
     setActiveReferences(prev => {
-      const otherRefs = prev.filter(ref => ref.id !== 'character');
-      return [...otherRefs, characterReference];
+      // Use existing references or default structure if empty
+      const baseRefs = prev.length > 0 ? prev : defaultReferences;
+      
+      // Update only the character reference, preserve style and composition
+      return baseRefs.map(ref => 
+        ref.id === 'character' 
+          ? characterReference
+          : ref
+      );
     });
     
     toast.success('Image set as character reference');
-  }, []);
+  }, [defaultReferences]);
 
   // NEW: Use seed from workspace asset
   const handleUseSeed = useCallback((tile: any) => {
