@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2 } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2, Settings } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -11,6 +11,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PromptEnhancementModal } from './PromptEnhancementModal';
+import { ReferenceImageBox } from './workspace/ReferenceImageBox';
+import { ReferenceSettingsModal } from './workspace/ReferenceSettingsModal';
+import { CompelModal } from './workspace/CompelModal';
 
 interface ImageInputControlsProps {
   prompt: string;
@@ -30,13 +33,26 @@ interface ImageInputControlsProps {
   onReferenceClick?: () => void;
   // Job type for enhancement
   jobType?: string;
-  // Compel functionality - kept for backwards compatibility but not displayed
+  // Compel functionality
   compelEnabled?: boolean;
   setCompelEnabled?: (enabled: boolean) => void;
   compelWeights?: string;
   setCompelWeights?: (weights: string) => void;
-  // Reference upload component
-  referenceUpload?: React.ReactNode;
+  // Reference management props
+  references?: Array<{
+    id: string;
+    label: string;
+    description: string;
+    enabled: boolean;
+    url?: string;
+    file?: File;
+    isWorkspaceAsset?: boolean;
+  }>;
+  onReferencesChange?: (references: any[]) => void;
+  referenceStrength?: number;
+  onReferenceStrengthChange?: (value: number) => void;
+  optimizeForCharacter?: boolean;
+  onOptimizeChange?: (enabled: boolean) => void;
 }
 
 export const ImageInputControls = ({
@@ -55,18 +71,27 @@ export const ImageInputControls = ({
   hasReference = false,
   onReferenceClick,
   jobType = 'sdxl_image_fast',
-  // Compel props kept for compatibility but not used in UI
   compelEnabled = false,
   setCompelEnabled,
   compelWeights = '',
   setCompelWeights,
-  referenceUpload
+  references = [],
+  onReferencesChange,
+  referenceStrength = 0.85,
+  onReferenceStrengthChange,
+  optimizeForCharacter = false,
+  onOptimizeChange
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
   const [angle, setAngle] = useState("");
   const [style, setStyle] = useState("");
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
+  const [showReferenceModal, setShowReferenceModal] = useState(false);
+  const [showCompelModal, setShowCompelModal] = useState(false);
+
+  // Determine if Compel should be shown (SDXL or enhanced 7B models)
+  const shouldShowCompel = jobType.startsWith('sdxl_') || jobType.includes('image7b');
 
   return (
     <TooltipProvider>
@@ -92,35 +117,20 @@ export const ImageInputControls = ({
             </Button>
           </div>
 
-          {/* Reference Upload - Compact drag-and-drop zones */}
-          {referenceUpload && (
-            <div className="flex items-center gap-1">
-              {referenceUpload}
-            </div>
-          )}
-
-          {/* Reference Button */}
-          {onReferenceClick && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={onReferenceClick}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-md text-sm font-medium ${
-                    hasReference 
-                      ? 'bg-green-600 hover:bg-green-700 text-white' 
-                      : 'bg-gray-800 hover:bg-gray-700 text-white'
-                  }`}
-                >
-                  <Link className="w-3.5 h-3.5" />
-                  {hasReference ? 'Ref Active' : 'Ref'}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{hasReference ? 'Reference image active - Click to manage' : 'Add reference image for character consistency'}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+          {/* Single Reference Upload Box */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <ReferenceImageBox
+                  references={references}
+                  onClick={() => setShowReferenceModal(true)}
+                />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Add reference images for style, composition, or character</p>
+            </TooltipContent>
+          </Tooltip>
 
           {/* Main Text Input */}
           <div className="flex-1">
@@ -179,6 +189,29 @@ export const ImageInputControls = ({
             <Archive className="w-3 h-3" />
             Library
           </Button>
+
+          {/* Compel Button */}
+          {shouldShowCompel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowCompelModal(true)}
+                  className={`flex items-center gap-1 px-2 py-1 h-7 rounded text-xs ${
+                    compelEnabled 
+                      ? 'bg-purple-600 hover:bg-purple-700 text-white' 
+                      : 'bg-gray-800 hover:bg-gray-700 text-white'
+                  }`}
+                >
+                  <Settings className="w-3 h-3" />
+                  Compel
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Advanced prompt weighting controls</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
           
           {/* Images Quantity Button */}
           <ImagesQuantityButton 
@@ -335,6 +368,30 @@ export const ImageInputControls = ({
           </Tooltip>
         </div>
       </div>
+
+      {/* Reference Settings Modal */}
+      <ReferenceSettingsModal
+        isOpen={showReferenceModal}
+        onClose={() => setShowReferenceModal(false)}
+        references={references}
+        onReferencesChange={onReferencesChange || (() => {})}
+        referenceStrength={referenceStrength}
+        onReferenceStrengthChange={onReferenceStrengthChange || (() => {})}
+        optimizeForCharacter={optimizeForCharacter}
+        onOptimizeChange={onOptimizeChange || (() => {})}
+      />
+
+      {/* Compel Modal */}
+      {shouldShowCompel && (
+        <CompelModal
+          isOpen={showCompelModal}
+          onClose={() => setShowCompelModal(false)}
+          compelEnabled={compelEnabled}
+          setCompelEnabled={setCompelEnabled || (() => {})}
+          compelWeights={compelWeights}
+          setCompelWeights={setCompelWeights || (() => {})}
+        />
+      )}
 
       {/* Prompt Enhancement Modal */}
       <PromptEnhancementModal

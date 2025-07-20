@@ -15,7 +15,6 @@ import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
 import { UnifiedReferencePanel } from '@/components/workspace/UnifiedReferencePanel';
-import { ImageReferenceControls } from '@/components/workspace/ImageReferenceControls';
 import { CompactReferenceUpload } from '@/components/workspace/CompactReferenceUpload';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
@@ -404,11 +403,35 @@ const Workspace = () => {
     setReferenceImageUrl('');
   }, []);
 
-  // Initialize default references structure
+  // Initialize default references structure with proper typing
   const defaultReferences = useMemo(() => [
-    { id: 'style', label: 'Style', description: 'Transfer artistic style and visual aesthetics', enabled: false },
-    { id: 'composition', label: 'Composition', description: 'Match layout, positioning, and structure', enabled: false },
-    { id: 'character', label: 'Character', description: 'Preserve character appearance and features', enabled: false }
+    { 
+      id: 'style', 
+      label: 'Style', 
+      description: 'Transfer artistic style and visual aesthetics', 
+      enabled: false,
+      url: undefined,
+      file: undefined,
+      isWorkspaceAsset: false
+    },
+    { 
+      id: 'composition', 
+      label: 'Composition', 
+      description: 'Match layout, positioning, and structure', 
+      enabled: false,
+      url: undefined,
+      file: undefined,
+      isWorkspaceAsset: false
+    },
+    { 
+      id: 'character', 
+      label: 'Character', 
+      description: 'Preserve character appearance and features', 
+      enabled: false,
+      url: undefined,
+      file: undefined,
+      isWorkspaceAsset: false
+    }
   ], []);
 
   // Multi-reference handlers for MultiReferencePanel
@@ -432,7 +455,7 @@ const Workspace = () => {
     ]);
   }, []);
 
-  // Use as reference functionality
+  // Use as reference functionality - updated to work with new modal system
   const handleUseAsReference = useCallback((tile: any) => {
     // Create character reference with proper structure
     const characterReference = {
@@ -442,6 +465,7 @@ const Workspace = () => {
       url: tile.url,
       enabled: true,
       isWorkspaceAsset: true,
+      file: undefined,
       originalPrompt: tile.prompt,
       modelType: tile.modelType,
       quality: tile.quality,
@@ -454,13 +478,8 @@ const Workspace = () => {
       return [...otherRefs, characterReference];
     });
     
-    // Show reference panel if not already visible
-    if (!showReferencePanel) {
-      setShowReferencePanel(true);
-    }
-    
     toast.success('Image set as character reference');
-  }, [showReferencePanel]);
+  }, []);
 
   // NEW: Use seed from workspace asset
   const handleUseSeed = useCallback((tile: any) => {
@@ -641,29 +660,6 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Image Reference Controls - Replaces the large UnifiedReferencePanel */}
-        {!isVideoMode && (
-          <ImageReferenceControls
-            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-            onReferencesChange={handleReferencesChange}
-            referenceStrength={referenceStrength}
-            onReferenceStrengthChange={setReferenceStrength}
-            referenceType={referenceType}
-            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'character' | 'composition')}
-            seed={seed}
-            onSeedChange={setSeed}
-            optimizeForCharacter={optimizeForCharacter}
-            onOptimizeChange={setOptimizeForCharacter}
-            showCompel={shouldShowCompel}
-            compelEnabled={compelEnabled}
-            setCompelEnabled={setCompelEnabled}
-            compelWeights={compelWeights}
-            setCompelWeights={setCompelWeights}
-            numImages={numImages}
-            showReferencePanel={showReferencePanel}
-          />
-        )}
-        
         {/* Video Reference Panel - Only for video mode */}
         {isVideoMode && showReferencePanel && (
           <VideoReferencePanel
@@ -691,7 +687,7 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Updated to include compact reference upload */}
+      {/* Bottom Input Controls - Updated to pass reference props */}
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
@@ -701,7 +697,7 @@ const Workspace = () => {
             isGenerating={isGenerating}
             onSwitchToImage={() => {
               setIsVideoMode(false);
-              setNumImages(1); // Reset to 1 for image mode
+              setNumImages(1);
             }}
             quality={quality}
             setQuality={setQuality}
@@ -733,13 +729,13 @@ const Workspace = () => {
             setCompelEnabled={setCompelEnabled}
             compelWeights={compelWeights}
             setCompelWeights={setCompelWeights}
-            // Add reference upload component
-            referenceUpload={
-              <CompactReferenceUpload
-                references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-                onReferencesChange={handleReferencesChange}
-              />
-            }
+            // Pass reference management props
+            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
+            onReferencesChange={handleReferencesChange}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
           />
         )}
       </div>
