@@ -646,7 +646,7 @@ const Workspace = () => {
             referenceStrength={referenceStrength}
             onReferenceStrengthChange={setReferenceStrength}
             referenceType={referenceType}
-            onReferenceTypeChange={setReferenceType}
+            onReferenceTypeChange={(type: string) => setReferenceType(type as 'style' | 'character' | 'composition')}
             seed={seed}
             onSeedChange={setSeed}
             optimizeForCharacter={optimizeForCharacter}
