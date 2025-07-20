@@ -1,5 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Add Compel configuration support to SDXL jobs
+interface SDXLJobConfig {
+  num_images?: number;
+  seed?: number;
+  compel_enabled?: boolean;
+  compel_weights?: string;
+  size?: string;
+  sample_steps?: number;
+  sample_guide_scale?: number;
+  sample_solver?: string;
+  sample_shift?: number;
+  frame_num?: number;
+  enhance_prompt?: boolean;
+  expected_time?: number;
+  content_type?: string;
+  file_extension?: string;
+  reference_image_url?: string;
+  reference_strength?: number;
+  reference_type?: string;
+}
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
@@ -360,41 +381,68 @@ serve(async (req)=>{
     }
     console.log('✅ Job created successfully in database:', job.id);
     
+    // In the job creation logic, add Compel support:
+    let config: any = {
+      size: '480*832',
+      sample_steps: quality === 'high' ? 50 : 25,
+      sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
+      sample_solver: 'unipc',
+      sample_shift: 5.0,
+      frame_num: format === 'video' ? 83 : 1,
+      enhance_prompt: isEnhanced,
+      // SEED SUPPORT: Pass seed from metadata to worker config
+      ...metadata?.seed && {
+        seed: metadata.seed
+      },
+      // REFERENCE IMAGE SUPPORT: Pass reference data to worker config
+      ...metadata?.reference_image && {
+        reference_image_url: metadata.reference_url,
+        reference_strength: metadata.reference_strength || 0.85,
+        reference_type: metadata.reference_type || 'character',
+        // VIDEO REFERENCE SUPPORT: Add start/end frame references for video generation
+        ...(format === 'video' && metadata?.start_reference_url && {
+          first_frame: metadata.start_reference_url
+        }),
+        ...(format === 'video' && metadata?.end_reference_url && {
+          last_frame: metadata.end_reference_url
+        })
+      },
+      expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
+      content_type: format,
+      file_extension: format === 'video' ? 'mp4' : 'png',
+      num_images: metadata?.num_images || 1
+    };
+
+    if (jobType.startsWith('sdxl_')) {
+      const sdxlConfig: SDXLJobConfig = {
+        num_images: config.num_images || 1,
+        seed: config.seed,
+        compel_enabled: config.compel_enabled || false,
+        compel_weights: config.compel_weights,
+        size: config.size,
+        sample_steps: config.sample_steps,
+        sample_guide_scale: config.sample_guide_scale,
+        sample_solver: config.sample_solver,
+        sample_shift: config.sample_shift,
+        frame_num: config.frame_num,
+        enhance_prompt: config.enhance_prompt,
+        expected_time: config.expected_time,
+        content_type: config.content_type,
+        file_extension: config.file_extension,
+        reference_image_url: config.reference_image_url,
+        reference_strength: config.reference_strength,
+        reference_type: config.reference_type
+      };
+      
+      config = sdxlConfig;
+    }
+
     // Format job payload for appropriate worker
     const jobPayload = {
       id: job.id,
       type: jobType,
       prompt: prompt,
-      config: {
-        size: '480*832',
-        sample_steps: quality === 'high' ? 50 : 25,
-        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
-        sample_solver: 'unipc',
-        sample_shift: 5.0,
-        frame_num: format === 'video' ? 83 : 1,
-        enhance_prompt: isEnhanced,
-        // SEED SUPPORT: Pass seed from metadata to worker config
-        ...metadata?.seed && {
-          seed: metadata.seed
-        },
-        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config
-        ...metadata?.reference_image && {
-          reference_image_url: metadata.reference_url,
-          reference_strength: metadata.reference_strength || 0.85,
-          reference_type: metadata.reference_type || 'character',
-          // VIDEO REFERENCE SUPPORT: Add start/end frame references for video generation
-          ...(format === 'video' && metadata?.start_reference_url && {
-            first_frame: metadata.start_reference_url
-          }),
-          ...(format === 'video' && metadata?.end_reference_url && {
-            last_frame: metadata.end_reference_url
-          })
-        },
-        expected_time: isEnhanced ? format === 'video' ? quality === 'high' ? 240 : 195 : quality === 'high' ? 100 : 85 : format === 'video' ? quality === 'high' ? 180 : 135 : quality === 'high' ? 40 : 25,
-        content_type: format,
-        file_extension: format === 'video' ? 'mp4' : 'png',
-        num_images: metadata?.num_images || 1
-      },
+      config,
       user_id: user.id,
       created_at: new Date().toISOString(),
       // CRITICAL FIX: Only include negative_prompt for SDXL jobs
