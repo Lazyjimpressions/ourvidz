@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -6,6 +5,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Upload, X, Image } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EnhancedSeedInput } from './EnhancedSeedInput';
 
 interface ReferenceSettingsModalProps {
   isOpen: boolean;
@@ -24,6 +24,8 @@ interface ReferenceSettingsModalProps {
   onReferenceStrengthChange: (value: number) => void;
   optimizeForCharacter: boolean;
   onOptimizeChange: (enabled: boolean) => void;
+  seed?: number;
+  onSeedChange?: (seed: number | undefined) => void;
 }
 
 export const ReferenceSettingsModal = ({
@@ -34,7 +36,9 @@ export const ReferenceSettingsModal = ({
   referenceStrength,
   onReferenceStrengthChange,
   optimizeForCharacter,
-  onOptimizeChange
+  onOptimizeChange,
+  seed,
+  onSeedChange
 }: ReferenceSettingsModalProps) => {
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
 
@@ -141,6 +145,14 @@ export const ReferenceSettingsModal = ({
               className="w-full"
             />
           </div>
+
+          {/* Seed Control */}
+          {onSeedChange && (
+            <EnhancedSeedInput 
+              seed={seed} 
+              onSeedChange={onSeedChange} 
+            />
+          )}
 
           {/* Reference Upload Areas */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

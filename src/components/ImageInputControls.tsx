@@ -52,6 +52,8 @@ interface ImageInputControlsProps {
   onReferenceDragLeave?: (e: React.DragEvent) => void;
   onReferenceDrop?: (e: React.DragEvent) => void;
   isReferenceDragOver?: boolean;
+  seed?: number;
+  onSeedChange?: (seed: number | undefined) => void;
 }
 
 export const ImageInputControls = ({
@@ -83,7 +85,9 @@ export const ImageInputControls = ({
   onReferenceDragOver,
   onReferenceDragLeave,
   onReferenceDrop,
-  isReferenceDragOver
+  isReferenceDragOver,
+  seed,
+  onSeedChange
 }: ImageInputControlsProps) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [shotType, setShotType] = useState("");
@@ -94,6 +98,10 @@ export const ImageInputControls = ({
   const [showCompelModal, setShowCompelModal] = useState(false);
 
   const shouldShowCompel = jobType.startsWith('sdxl_') || jobType.includes('image7b');
+
+  const handleAutoOpenReference = () => {
+    setShowReferenceModal(true);
+  };
 
   return (
     <TooltipProvider>
@@ -110,17 +118,14 @@ export const ImageInputControls = ({
           </Button>
 
           {/* Reference Upload Box - Between IMAGE button and prompt */}
-          <div
-            onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
-            onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
-            onDrop={showReferenceModal ? undefined : onReferenceDrop}
-          >
+          <div>
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
                   <ReferenceImageBox
                     references={references}
                     onClick={() => setShowReferenceModal(true)}
+                    onAutoOpen={handleAutoOpenReference}
                     isDragOver={showReferenceModal ? false : isReferenceDragOver}
                     className="w-16 h-16"
                   />
@@ -392,6 +397,8 @@ export const ImageInputControls = ({
         onReferenceStrengthChange={onReferenceStrengthChange || (() => {})}
         optimizeForCharacter={optimizeForCharacter}
         onOptimizeChange={onOptimizeChange || (() => {})}
+        seed={seed}
+        onSeedChange={onSeedChange}
       />
 
       {shouldShowCompel && (
