@@ -3,19 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, X, Zap, Info, Copy, GripVertical } from 'lucide-react';
+import { Zap, Info, Settings } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-
-interface CompelTerm {
-  id: string;
-  term: string;
-  weight: number;
-  category: 'positive' | 'negative';
-}
 
 interface CompelModalProps {
   isOpen: boolean;
@@ -26,11 +18,32 @@ interface CompelModalProps {
   setCompelWeights: (weights: string) => void;
 }
 
-const WEIGHT_PRESETS = [
-  { label: 'Weak', value: 0.5 },
-  { label: 'Soft', value: 0.8 },
-  { label: 'Strong', value: 1.2 },
-  { label: 'Heavy', value: 1.5 }
+// Quick boost presets that automatically add common quality terms
+const QUICK_BOOSTS = [
+  { 
+    id: 'more_detail', 
+    label: 'More Detail', 
+    terms: ['highly detailed', 'intricate', 'fine details'],
+    weights: [1.3, 1.2, 1.1]
+  },
+  { 
+    id: 'better_quality', 
+    label: 'Better Quality', 
+    terms: ['masterpiece', 'best quality', 'professional'],
+    weights: [1.2, 1.3, 1.1]
+  },
+  { 
+    id: 'nsfw_optimize', 
+    label: 'NSFW Optimize', 
+    terms: ['perfect anatomy', 'realistic', 'natural proportions'],
+    weights: [1.2, 1.3, 1.1]
+  },
+  { 
+    id: 'professional_style', 
+    label: 'Professional Style', 
+    terms: ['professional photography', 'studio lighting', 'cinematic'],
+    weights: [1.2, 1.1, 1.1]
+  }
 ];
 
 export const CompelModal = ({
@@ -41,108 +54,157 @@ export const CompelModal = ({
   compelWeights,
   setCompelWeights
 }: CompelModalProps) => {
-  const [terms, setTerms] = useState<CompelTerm[]>([]);
-  const [newTerm, setNewTerm] = useState('');
-  const [globalMultiplier, setGlobalMultiplier] = useState(1.0);
-  const [attentionLayer, setAttentionLayer] = useState('all');
-  const [enableBlending, setEnableBlending] = useState(false);
-  const [blendRatio, setBlendRatio] = useState(0.5);
+  // Visual control states
+  const [quickBoosts, setQuickBoosts] = useState<string[]>([]);
+  const [qualitySlider, setQualitySlider] = useState(1.0);
+  const [detailSlider, setDetailSlider] = useState(1.0);
+  const [nsfwSlider, setNsfwSlider] = useState(1.0);
+  const [styleSlider, setStyleSlider] = useState(1.0);
 
-  // Parse existing weights string on open
+  // Parse existing weights on open
   useEffect(() => {
     if (isOpen && compelWeights) {
       try {
-        const parsedTerms: CompelTerm[] = [];
+        // Parse existing Compel weights and set visual controls
         const regex = /\(([^:]+):([^)]+)\)/g;
         let match;
+        const parsedTerms: { term: string; weight: number }[] = [];
+        
         while ((match = regex.exec(compelWeights)) !== null) {
+          const term = match[1].trim();
           const weight = parseFloat(match[2]) || 1.0;
-          parsedTerms.push({
-            id: Math.random().toString(36).substr(2, 9),
-            term: match[1].trim(),
-            weight,
-            category: weight < 1.0 ? 'negative' : 'positive'
-          });
+          parsedTerms.push({ term, weight });
         }
-        setTerms(parsedTerms);
+
+        // Set quick boosts based on detected terms
+        const detectedBoosts: string[] = [];
+        QUICK_BOOSTS.forEach(boost => {
+          const hasBoost = boost.terms.some(term => 
+            parsedTerms.some(pt => pt.term.toLowerCase().includes(term.toLowerCase()))
+          );
+          if (hasBoost) {
+            detectedBoosts.push(boost.id);
+          }
+        });
+        setQuickBoosts(detectedBoosts);
+
+        // Set sliders based on detected weights
+        const qualityTerms = parsedTerms.filter(pt => 
+          ['masterpiece', 'best quality', 'professional', 'high quality'].some(qt => 
+            pt.term.toLowerCase().includes(qt.toLowerCase())
+          )
+        );
+        if (qualityTerms.length > 0) {
+          setQualitySlider(Math.max(...qualityTerms.map(t => t.weight)));
+        }
+
+        const detailTerms = parsedTerms.filter(pt => 
+          ['detailed', 'intricate', 'fine details', 'highly detailed'].some(dt => 
+            pt.term.toLowerCase().includes(dt.toLowerCase())
+          )
+        );
+        if (detailTerms.length > 0) {
+          setDetailSlider(Math.max(...detailTerms.map(t => t.weight)));
+        }
+
+        const nsfwTerms = parsedTerms.filter(pt => 
+          ['anatomy', 'realistic', 'proportions', 'natural'].some(nt => 
+            pt.term.toLowerCase().includes(nt.toLowerCase())
+          )
+        );
+        if (nsfwTerms.length > 0) {
+          setNsfwSlider(Math.max(...nsfwTerms.map(t => t.weight)));
+        }
+
+        const styleTerms = parsedTerms.filter(pt => 
+          ['photography', 'cinematic', 'studio', 'artistic'].some(st => 
+            pt.term.toLowerCase().includes(st.toLowerCase())
+          )
+        );
+        if (styleTerms.length > 0) {
+          setStyleSlider(Math.max(...styleTerms.map(t => t.weight)));
+        }
+
       } catch (error) {
         console.error('Error parsing compel weights:', error);
-        setTerms([]);
+        resetToDefaults();
       }
     } else if (isOpen) {
-      setTerms([]);
+      resetToDefaults();
     }
   }, [isOpen, compelWeights]);
 
-  // Update weights string when terms change
+  const resetToDefaults = () => {
+    setQuickBoosts([]);
+    setQualitySlider(1.0);
+    setDetailSlider(1.0);
+    setNsfwSlider(1.0);
+    setStyleSlider(1.0);
+  };
+
+  // Generate Compel weights from visual controls
   useEffect(() => {
-    if (terms.length > 0) {
-      let weightsString = terms
-        .map(term => `(${term.term}:${(term.weight * globalMultiplier).toFixed(1)})`)
-        .join(', ');
-      
-      if (enableBlending && terms.length >= 2) {
-        const positiveTerms = terms.filter(t => t.category === 'positive');
-        if (positiveTerms.length >= 2) {
-          const blendedTerms = positiveTerms.slice(0, 2)
-            .map(t => `(${t.term}:${(t.weight * globalMultiplier).toFixed(1)})`)
-            .join(` .blend(${blendRatio.toFixed(1)}) `);
-          weightsString = weightsString.replace(
-            positiveTerms.slice(0, 2).map(t => `(${t.term}:${(t.weight * globalMultiplier).toFixed(1)})`).join(', '),
-            blendedTerms
-          );
-        }
-      }
-
-      setCompelWeights(weightsString);
-    } else {
+    if (!compelEnabled) {
       setCompelWeights('');
+      return;
     }
-  }, [terms, globalMultiplier, enableBlending, blendRatio, setCompelWeights]);
 
-  const addTerm = (category: 'positive' | 'negative' = 'positive') => {
-    if (newTerm.trim() && !terms.find(t => t.term.toLowerCase() === newTerm.trim().toLowerCase())) {
-      const defaultWeight = category === 'negative' ? 0.8 : 1.2;
-      setTerms([...terms, { 
-        id: Math.random().toString(36).substr(2, 9),
-        term: newTerm.trim(), 
-        weight: defaultWeight,
-        category 
-      }]);
-      setNewTerm('');
+    const terms: string[] = [];
+
+    // Add quick boost terms
+    quickBoosts.forEach(boostId => {
+      const boost = QUICK_BOOSTS.find(b => b.id === boostId);
+      if (boost) {
+        boost.terms.forEach((term, index) => {
+          const weight = boost.weights[index];
+          terms.push(`(${term}:${weight.toFixed(1)})`);
+        });
+      }
+    });
+
+    // Add slider-based terms
+    if (qualitySlider !== 1.0) {
+      terms.push(`(high quality:${qualitySlider.toFixed(1)})`);
     }
-  };
-
-  const removeTerm = (id: string) => {
-    setTerms(terms.filter(t => t.id !== id));
-  };
-
-  const updateTerm = (id: string, updates: Partial<CompelTerm>) => {
-    setTerms(terms.map(term => 
-      term.id === id ? { ...term, ...updates } : term
-    ));
-  };
-
-  const applyPreset = (termId: string, weight: number) => {
-    updateTerm(termId, { weight });
-  };
-
-  const copyToClipboard = () => {
-    if (compelWeights) {
-      navigator.clipboard.writeText(compelWeights);
+    if (detailSlider !== 1.0) {
+      terms.push(`(detailed:${detailSlider.toFixed(1)})`);
     }
+    if (nsfwSlider !== 1.0) {
+      terms.push(`(perfect anatomy:${nsfwSlider.toFixed(1)})`);
+    }
+    if (styleSlider !== 1.0) {
+      terms.push(`(professional photography:${styleSlider.toFixed(1)})`);
+    }
+
+    setCompelWeights(terms.join(', '));
+  }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights]);
+
+  const toggleQuickBoost = (boostId: string) => {
+    setQuickBoosts(prev => 
+      prev.includes(boostId) 
+        ? prev.filter(id => id !== boostId)
+        : [...prev, boostId]
+    );
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      addTerm();
-    }
+  const getSliderColor = (value: number) => {
+    if (value < 0.8) return 'text-red-400';
+    if (value < 1.0) return 'text-yellow-400';
+    if (value < 1.3) return 'text-green-400';
+    return 'text-purple-400';
+  };
+
+  const getSliderBgColor = (value: number) => {
+    if (value < 0.8) return 'bg-red-500';
+    if (value < 1.0) return 'bg-yellow-500';
+    if (value < 1.3) return 'bg-green-500';
+    return 'bg-purple-500';
   };
 
   return (
     <TooltipProvider>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-3xl min-h-[600px] bg-gray-900 text-white border-gray-700">
+        <DialogContent className="max-w-2xl bg-gray-900 text-white border-gray-700">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -153,7 +215,7 @@ export const CompelModal = ({
                     <Info className="w-4 h-4 text-gray-400" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Advanced prompt weighting and blending controls</p>
+                    <p>Visual prompt weighting controls</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -171,226 +233,129 @@ export const CompelModal = ({
           </DialogHeader>
           
           {compelEnabled ? (
-            <div className="flex-1 space-y-6 overflow-y-auto">
-              {/* Add New Terms */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Add Prompt Terms</Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={newTerm}
-                    onChange={(e) => setNewTerm(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Enter term to weight"
-                    className="bg-gray-800 border-gray-600 text-white placeholder:text-gray-400 flex-1"
-                  />
-                  <Button 
-                    onClick={() => addTerm('positive')}
-                    disabled={!newTerm.trim()}
-                    size="sm"
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                  <Button 
-                    onClick={() => addTerm('negative')}
-                    disabled={!newTerm.trim()}
-                    size="sm"
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
+            <div className="space-y-6">
+              {/* Quick Boost Checkboxes */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium text-gray-300">Quick Adjustments</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  {QUICK_BOOSTS.map((boost) => (
+                    <div key={boost.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={boost.id}
+                        checked={quickBoosts.includes(boost.id)}
+                        onCheckedChange={() => toggleQuickBoost(boost.id)}
+                      />
+                      <Label 
+                        htmlFor={boost.id} 
+                        className="text-sm cursor-pointer"
+                      >
+                        {boost.label}
+                      </Label>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Terms List */}
-              <div className="max-h-48 overflow-y-auto space-y-2">
-                {terms.map((term) => (
-                  <div key={term.id} className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-                    <div className="flex items-center gap-2 mb-2">
-                      <GripVertical className="w-4 h-4 text-gray-500 cursor-move" />
-                      <Input
-                        value={term.term}
-                        onChange={(e) => updateTerm(term.id, { term: e.target.value })}
-                        className="bg-gray-700 border-gray-600 text-white text-sm flex-1"
-                      />
-                      <Badge 
-                        variant={term.category === 'positive' ? 'default' : 'destructive'}
-                        className="text-xs"
-                      >
-                        {term.category}
-                      </Badge>
-                      <Button
-                        onClick={() => removeTerm(term.id)}
-                        size="sm"
-                        variant="ghost"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-400">Weight</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {(term.weight * globalMultiplier).toFixed(1)}
-                        </Badge>
-                      </div>
-                      <Slider
-                        value={[term.weight]}
-                        onValueChange={(value) => updateTerm(term.id, { weight: value[0] })}
-                        min={0.1}
-                        max={2.0}
-                        step={0.1}
-                        className="w-full"
-                      />
-                      <div className="flex gap-1">
-                        {WEIGHT_PRESETS.map((preset) => (
-                          <Button
-                            key={preset.label}
-                            onClick={() => applyPreset(term.id, preset.value)}
-                            size="sm"
-                            variant="outline"
-                            className="text-xs h-6"
-                          >
-                            {preset.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Global Settings */}
-              <div className="space-y-4 p-4 bg-gray-800/50 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-300">Global Settings</h3>
+              {/* Fine Control Sliders */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium text-gray-300">Fine Control</Label>
                 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-gray-400">Global Multiplier</Label>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="w-3 h-3 text-gray-500" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Multiply all weights by this factor</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <Badge variant="secondary" className="text-xs">{globalMultiplier.toFixed(1)}x</Badge>
-                    </div>
-                    <Slider
-                      value={[globalMultiplier]}
-                      onValueChange={(value) => setGlobalMultiplier(value[0])}
-                      min={0.1}
-                      max={3.0}
-                      step={0.1}
-                      className="w-full"
-                    />
+                {/* Quality Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-gray-400">Quality</Label>
+                    <Badge variant="secondary" className={`text-xs ${getSliderColor(qualitySlider)}`}>
+                      {qualitySlider.toFixed(1)}x
+                    </Badge>
                   </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-gray-400">Attention Layer</Label>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          <Info className="w-3 h-3 text-gray-500" />
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Which attention layers to apply weighting to</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <RadioGroup
-                      value={attentionLayer}
-                      onValueChange={setAttentionLayer}
-                      className="flex gap-4"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <RadioGroupItem value="all" id="all" />
-                        <Label htmlFor="all" className="text-xs">All</Label>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <RadioGroupItem value="cross" id="cross" />
-                        <Label htmlFor="cross" className="text-xs">Cross</Label>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <RadioGroupItem value="self" id="self" />
-                        <Label htmlFor="self" className="text-xs">Self</Label>
-                      </div>
-                    </RadioGroup>
+                  <Slider
+                    value={[qualitySlider]}
+                    onValueChange={(value) => setQualitySlider(value[0])}
+                    min={0.5}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>Reduced</span>
+                    <span>Normal</span>
+                    <span>Enhanced</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Blending Settings */}
-              <div className="space-y-3 p-4 bg-gray-800/50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm text-gray-300">Enable Blending</Label>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <Info className="w-3 h-3 text-gray-500" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Smoothly blend the first two positive terms</p>
-                      </TooltipContent>
-                    </Tooltip>
+                {/* Detail Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-gray-400">Detail</Label>
+                    <Badge variant="secondary" className={`text-xs ${getSliderColor(detailSlider)}`}>
+                      {detailSlider.toFixed(1)}x
+                    </Badge>
                   </div>
-                  <Button
-                    onClick={() => setEnableBlending(!enableBlending)}
-                    size="sm"
-                    variant={enableBlending ? "default" : "outline"}
-                  >
-                    {enableBlending ? 'On' : 'Off'}
-                  </Button>
+                  <Slider
+                    value={[detailSlider]}
+                    onValueChange={(value) => setDetailSlider(value[0])}
+                    min={0.5}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
                 </div>
 
-                {enableBlending && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs text-gray-400">Blend Ratio</Label>
-                      <Badge variant="secondary" className="text-xs">{blendRatio.toFixed(1)}</Badge>
-                    </div>
-                    <Slider
-                      value={[blendRatio]}
-                      onValueChange={(value) => setBlendRatio(value[0])}
-                      min={0.1}
-                      max={0.9}
-                      step={0.1}
-                      className="w-full"
-                    />
+                {/* NSFW Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-gray-400">Anatomy</Label>
+                    <Badge variant="secondary" className={`text-xs ${getSliderColor(nsfwSlider)}`}>
+                      {nsfwSlider.toFixed(1)}x
+                    </Badge>
                   </div>
-                )}
+                  <Slider
+                    value={[nsfwSlider]}
+                    onValueChange={(value) => setNsfwSlider(value[0])}
+                    min={0.0}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Style Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-gray-400">Style</Label>
+                    <Badge variant="secondary" className={`text-xs ${getSliderColor(styleSlider)}`}>
+                      {styleSlider.toFixed(1)}x
+                    </Badge>
+                  </div>
+                  <Slider
+                    value={[styleSlider]}
+                    onValueChange={(value) => setStyleSlider(value[0])}
+                    min={0.5}
+                    max={1.5}
+                    step={0.1}
+                    className="w-full"
+                  />
+                </div>
               </div>
 
               {/* Preview */}
-              {terms.length > 0 && (
+              {compelWeights && (
                 <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm font-medium">Generated Compel String</Label>
-                    <Button
-                      onClick={copyToClipboard}
-                      size="sm"
-                      variant="outline"
-                      className="h-6"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </Button>
-                  </div>
+                  <Label className="text-sm font-medium text-gray-300 mb-2 block">
+                    Generated Weights
+                  </Label>
                   <div className="bg-gray-700 p-2 rounded text-sm font-mono text-green-400 max-h-20 overflow-y-auto">
-                    {compelWeights || 'No terms configured'}
+                    {compelWeights}
                   </div>
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
+            <div className="flex items-center justify-center text-gray-500 py-8">
               <div className="text-center">
                 <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p className="text-lg mb-2">Compel is disabled</p>
-                <p className="text-sm">Click "Enable Compel" above to access advanced prompt weighting</p>
+                <p className="text-sm">Click "Enable Compel" above to access visual prompt weighting</p>
               </div>
             </div>
           )}
