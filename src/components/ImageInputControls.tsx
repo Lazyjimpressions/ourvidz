@@ -98,7 +98,7 @@ export const ImageInputControls = ({
   return (
     <TooltipProvider>
       <div className="bg-gray-900/90 rounded-lg p-2 border border-gray-800/50 max-w-7xl mx-auto">
-        {/* Row 1: IMAGE button (active) + prompt + sparkle buttons */}
+        {/* Row 1: IMAGE button (active) + reference + prompt + sparkle buttons */}
         <div className="flex items-center gap-4 mb-2">
           {/* IMAGE Mode Button - Active State, Fixed Position */}
           <Button
@@ -108,6 +108,29 @@ export const ImageInputControls = ({
             <Image className="w-4 h-4" />
             IMAGE
           </Button>
+
+          {/* Reference Upload Box - Between IMAGE button and prompt */}
+          <div
+            onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
+            onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
+            onDrop={showReferenceModal ? undefined : onReferenceDrop}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <ReferenceImageBox
+                    references={references}
+                    onClick={() => setShowReferenceModal(true)}
+                    isDragOver={showReferenceModal ? false : isReferenceDragOver}
+                    className="w-16 h-16"
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Add reference images</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
           {/* Main Text Input - Extended Width */}
           <div className="flex-1 max-w-4xl">
@@ -156,7 +179,7 @@ export const ImageInputControls = ({
           </div>
         </div>
 
-        {/* Row 2: VIDEO button (inactive) + reference + right-justified controls */}
+        {/* Row 2: VIDEO button (inactive) + right-justified controls */}
         <div className="flex items-center gap-4">
           {/* VIDEO Mode Button - Inactive State */}
           <Button
@@ -167,29 +190,6 @@ export const ImageInputControls = ({
             <Play className="w-4 h-4" />
             VIDEO
           </Button>
-
-          {/* Reference Upload Box - Matches button height */}
-          <div
-            onDragOver={showReferenceModal ? undefined : onReferenceDragOver}
-            onDragLeave={showReferenceModal ? undefined : onReferenceDragLeave}
-            onDrop={showReferenceModal ? undefined : onReferenceDrop}
-          >
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div>
-                  <ReferenceImageBox
-                    references={references}
-                    onClick={() => setShowReferenceModal(true)}
-                    isDragOver={showReferenceModal ? false : isReferenceDragOver}
-                    className="w-16 h-16"
-                  />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="text-xs">Add reference images</p>
-              </TooltipContent>
-            </Tooltip>
-          </div>
 
           {/* Control Buttons - Right Justified, All Uniform */}
           <div className="flex items-center gap-1 ml-auto">
