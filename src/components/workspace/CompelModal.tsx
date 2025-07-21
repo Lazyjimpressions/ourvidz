@@ -24,25 +24,29 @@ const QUICK_BOOSTS = [
     id: 'more_detail', 
     label: 'More Detail', 
     terms: ['highly detailed', 'intricate', 'fine details'],
-    weights: [1.3, 1.2, 1.1]
+    weights: [1.3, 1.2, 1.1],
+    sliders: ['detailSlider']
   },
   { 
     id: 'better_quality', 
     label: 'Better Quality', 
     terms: ['masterpiece', 'best quality', 'professional'],
-    weights: [1.2, 1.3, 1.1]
+    weights: [1.2, 1.3, 1.1],
+    sliders: ['qualitySlider']
   },
   { 
     id: 'nsfw_optimize', 
     label: 'NSFW Optimize', 
     terms: ['perfect anatomy', 'realistic', 'natural proportions'],
-    weights: [1.2, 1.3, 1.1]
+    weights: [1.2, 1.3, 1.1],
+    sliders: ['nsfwSlider']
   },
   { 
     id: 'professional_style', 
     label: 'Professional Style', 
     terms: ['professional photography', 'studio lighting', 'cinematic'],
-    weights: [1.2, 1.1, 1.1]
+    weights: [1.2, 1.1, 1.1],
+    sliders: ['styleSlider']
   }
 ];
 
@@ -60,6 +64,9 @@ export const CompelModal = ({
   const [detailSlider, setDetailSlider] = useState(1.0);
   const [nsfwSlider, setNsfwSlider] = useState(1.0);
   const [styleSlider, setStyleSlider] = useState(1.0);
+
+  // Track which sliders have been manually adjusted
+  const [manualSliders, setManualSliders] = useState<{[key:string]: boolean}>({});
 
   // Parse existing weights on open
   useEffect(() => {
@@ -142,42 +149,80 @@ export const CompelModal = ({
     setStyleSlider(1.0);
   };
 
-  // Generate Compel weights from visual controls
+  // Helper to set slider and mark as manual if needed
+  const setSlider = (slider: string, value: number, manual = false) => {
+    switch (slider) {
+      case 'qualitySlider': setQualitySlider(value); break;
+      case 'detailSlider': setDetailSlider(value); break;
+      case 'nsfwSlider': setNsfwSlider(value); break;
+      case 'styleSlider': setStyleSlider(value); break;
+    }
+    if (manual) setManualSliders(prev => ({ ...prev, [slider]: true }));
+  };
+
+  // When a preset is checked, set its sliders unless they've been manually overridden
+  const handlePresetChange = (boostId: string, checked: boolean) => {
+    const boost = QUICK_BOOSTS.find(b => b.id === boostId);
+    if (!boost) return;
+    setQuickBoosts(prev => {
+      let newBoosts = checked ? [...prev, boostId] : prev.filter(id => id !== boostId);
+      // If checking, set sliders to preset values (unless manually overridden)
+      if (checked) {
+        boost.sliders.forEach((slider, idx) => {
+          if (!manualSliders[slider]) setSlider(slider, boost.weights[idx]);
+        });
+      } else {
+        // If unchecking, reset only if no other preset is using this slider and not manually overridden
+        boost.sliders.forEach((slider) => {
+          const stillActive = newBoosts.some(bid => {
+            const b = QUICK_BOOSTS.find(x => x.id === bid);
+            return b && b.sliders.includes(slider);
+          });
+          if (!stillActive && !manualSliders[slider]) setSlider(slider, 1.0);
+        });
+      }
+      return newBoosts;
+    });
+  };
+
+  // When a slider is changed manually, uncheck any preset that controls it
+  const handleSliderChange = (slider: string, value: number) => {
+    setSlider(slider, value, true);
+    setQuickBoosts(prev => prev.filter(boostId => {
+      const boost = QUICK_BOOSTS.find(b => b.id === boostId);
+      return boost ? !boost.sliders.includes(slider) : true;
+    }));
+  };
+
+  // Generate Compel weights from visual controls (deduplicate, slider > preset)
   useEffect(() => {
     if (!compelEnabled) {
       setCompelWeights('');
       return;
     }
-
-    const terms: string[] = [];
-
-    // Add quick boost terms
+    const termMap: {[term:string]: number} = {};
+    // Add quick boost terms (only if not overridden by slider)
     quickBoosts.forEach(boostId => {
       const boost = QUICK_BOOSTS.find(b => b.id === boostId);
       if (boost) {
-        boost.terms.forEach((term, index) => {
-          const weight = boost.weights[index];
-          terms.push(`(${term}:${weight.toFixed(1)})`);
+        boost.terms.forEach((term, idx) => {
+          const slider = boost.sliders[idx] || '';
+          // If slider is at 1.0 or not manually set, use preset
+          if (!manualSliders[slider] || eval(slider) === 1.0) {
+            termMap[term] = boost.weights[idx];
+          }
         });
       }
     });
-
-    // Add slider-based terms
-    if (qualitySlider !== 1.0) {
-      terms.push(`(high quality:${qualitySlider.toFixed(1)})`);
-    }
-    if (detailSlider !== 1.0) {
-      terms.push(`(detailed:${detailSlider.toFixed(1)})`);
-    }
-    if (nsfwSlider !== 1.0) {
-      terms.push(`(perfect anatomy:${nsfwSlider.toFixed(1)})`);
-    }
-    if (styleSlider !== 1.0) {
-      terms.push(`(professional photography:${styleSlider.toFixed(1)})`);
-    }
-
+    // Add slider-based terms (override preset if not 1.0)
+    if (qualitySlider !== 1.0) termMap['high quality'] = qualitySlider;
+    if (detailSlider !== 1.0) termMap['detailed'] = detailSlider;
+    if (nsfwSlider !== 1.0) termMap['perfect anatomy'] = nsfwSlider;
+    if (styleSlider !== 1.0) termMap['professional photography'] = styleSlider;
+    // Build string
+    const terms = Object.entries(termMap).map(([term, weight]) => `(${term}:${weight.toFixed(1)})`);
     setCompelWeights(terms.join(', '));
-  }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights]);
+  }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights, manualSliders]);
 
   const toggleQuickBoost = (boostId: string) => {
     setQuickBoosts(prev => 
@@ -243,13 +288,7 @@ export const CompelModal = ({
                       <Checkbox
                         id={boost.id}
                         checked={quickBoosts.includes(boost.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setQuickBoosts(prev => [...prev, boost.id]);
-                          } else {
-                            setQuickBoosts(prev => prev.filter(id => id !== boost.id));
-                          }
-                        }}
+                        onCheckedChange={(checked) => handlePresetChange(boost.id, !!checked)}
                         className="data-[state=checked]:bg-purple-600"
                       />
                       <Label 
@@ -277,7 +316,7 @@ export const CompelModal = ({
                   </div>
                   <Slider
                     value={[qualitySlider]}
-                    onValueChange={(value) => setQualitySlider(value[0])}
+                    onValueChange={(value) => handleSliderChange('qualitySlider', value[0])}
                     min={0.5}
                     max={1.5}
                     step={0.1}
@@ -300,7 +339,7 @@ export const CompelModal = ({
                   </div>
                   <Slider
                     value={[detailSlider]}
-                    onValueChange={(value) => setDetailSlider(value[0])}
+                    onValueChange={(value) => handleSliderChange('detailSlider', value[0])}
                     min={0.5}
                     max={1.5}
                     step={0.1}
@@ -318,7 +357,7 @@ export const CompelModal = ({
                   </div>
                   <Slider
                     value={[nsfwSlider]}
-                    onValueChange={(value) => setNsfwSlider(value[0])}
+                    onValueChange={(value) => handleSliderChange('nsfwSlider', value[0])}
                     min={0.0}
                     max={1.5}
                     step={0.1}
@@ -336,7 +375,7 @@ export const CompelModal = ({
                   </div>
                   <Slider
                     value={[styleSlider]}
-                    onValueChange={(value) => setStyleSlider(value[0])}
+                    onValueChange={(value) => handleSliderChange('styleSlider', value[0])}
                     min={0.5}
                     max={1.5}
                     step={0.1}

@@ -178,6 +178,7 @@ def process_compel_weights(self, prompt, weights_config=None):
 - Do not try to handle a single tensor or boolean for SDXL.
 - If you see `'bool' object is not iterable'`, you are not unpacking the tuple or Compel is misconfigured.
 - If you see `unexpected keyword argument`, you are using keyword args for encoders—switch to positional.
+- **If you see duplicate or conflicting weights in logs, check that your weights are normalized and deduplicated as above.**
 - Always check your Compel version (`import compel; print(compel.__version__)`).
 - For SDXL, always use positional arguments for encoders and `requires_pooled=True`.
 
@@ -1251,15 +1252,15 @@ curl -X POST http://localhost:8000/test-compel \
 ```
 🎯 Compel enhancement enabled: (masterpiece:1.3), (best quality:1.2)
 ✅ Compel weights applied with SDXL library integration (list API)
-📝 Original prompt: beautiful woman
-🎯 Compel weights: (masterpiece:1.3), (best quality:1.2)
+📝 Final combined prompt: (beautiful woman:1.1), (masterpiece:1.3), (best quality:1.2)
 🔧 Generated prompt_embeds: torch.Size([1, 77, 2048])
 🔧 Generated pooled_prompt_embeds: torch.Size([1, 1280])
+🔧 Generated negative_prompt_embeds: torch.Size([1, 77, 2048])
+🔧 Generated negative_pooled_prompt_embeds: torch.Size([1, 1280])
 ✅ Compel processing successful
 🎯 Using Compel conditioning tensors for SDXL generation
 ✅ Generated with Compel conditioning tensors (SDXL)
 ```
-
 **Fallback Behavior:**
 ```
 🎯 Compel enhancement enabled: (invalid:weights)
@@ -1270,16 +1271,12 @@ curl -X POST http://localhost:8000/test-compel \
 ✅ Generated with string prompt (no Compel)
 ```
 
-**Legacy Single Tensor Fallback:**
-```
-🎯 Compel enhancement enabled: (masterpiece:1.3), (best quality:1.2)
-✅ Compel weights applied with library integration (legacy)
-📝 Original prompt: beautiful woman
-🎯 Compel weights: (masterpiece:1.3), (best quality:1.2)
-✅ Compel processing successful
-🎯 Using single Compel conditioning tensor for generation
-✅ Generated with single Compel conditioning tensor (legacy)
-```
+#### **Deprecated/Incorrect Approaches**
+- String concatenation for SDXL+Compel
+- More than 6 enhancement weights
+- Duplicate weights
+- No negative conditioning for SDXL
+- Logging or metadata that dumps tensor values
 
 ### **Dependencies**
 
@@ -1313,133 +1310,4 @@ If issues occur, the worker can be rolled back by:
 2. Disabling Compel processing temporarily
 3. Using the original prompt without enhancement
 
-The fallback mechanisms ensure the worker continues to function even if Compel processing fails.
-
----
-
-## **✅ Production Status**
-
-### **Active Components**
-- **🎭 Dual Orchestrator**: Main production controller managing both workers
-- **🎨 SDXL Worker**: Fast image generation with batch support (1, 3, or 6 images) and Compel integration
-- **🎬 Enhanced WAN Worker**: Video generation with Qwen 7B enhancement and comprehensive reference frame support
-
-### **Testing Status**
-- **SDXL Jobs**: ✅ Both job types tested and working
-- **WAN Jobs**: ✅ All 8 job types tested and working
-- **Reference Frames**: ✅ All 5 reference modes tested and working
-- **Compel Integration**: ⚠️ **PARTIAL** - Working but with token limit issues
-- **Qwen 7B Enhancement**: ✅ Tested and working with timeout protection
-- **Performance Baselines**: ✅ Real data established for all jobs
-
-### **System Capabilities**
-- **✅ 10 Job Types**: All job types operational
-- **✅ 5 Reference Modes**: Complete reference frame support
-- **✅ Batch Processing**: SDXL supports 1, 3, or 6 images
-- **✅ AI Enhancement**: WAN enhanced variants with Qwen 7B
-- **⚠️ Compel Integration**: SDXL prompt enhancement working but needs optimization
-- **✅ Error Recovery**: Robust error handling and fallback mechanisms
-- **✅ Performance Monitoring**: Comprehensive metrics and logging
-- **✅ Centralized Management**: Dual orchestrator with monitoring and restart capabilities
-
-The OurVidz Worker system is **production-ready** with comprehensive reference frame support, AI-powered prompt enhancement, Compel integration (needing optimization), robust error handling, and optimized performance for high-quality AI content generation! 🎯 
-
----
-
-## **🎯 Compel Integration: Latest Fixes & Learnings (2025-07)**
-
-### **Critical Fix: SDXL Compel Integration**
-
-- **Old (INCORRECT):** Used string concatenation for prompt and weights, causing CLIP token limit violations and partial prompt processing.
-- **New (CORRECT):** Uses Compel library's native SDXL integration with `requires_pooled=[False, True]` for Compel 2.1.1+.
-- **Why:** SDXL requires two text encoders; the first does not need pooled embeddings, the second does. Passing a boolean to `requires_pooled` causes errors in Compel 2.1.1+.
-- **Result:** No more token limit violations, correct prompt embedding, and robust error handling.
-
-### **Correct SDXL Compel Usage Example**
-```python
-def process_compel_weights(self, prompt, weights_config=None):
-    """
-    Process prompt with proper Compel library integration for SDXL.
-    FIXED: Use requires_pooled=[False, True] for Compel 2.1.1 with SDXL.
-    """
-    if not weights_config:
-        return prompt, None
-    try:
-        if not self.model_loaded:
-            self.load_model()
-        logger.info(f"🔧 Initializing Compel 2.1.1 with SDXL encoders - FIXED SYNTAX")
-        compel_processor = Compel(
-            tokenizer=[self.pipeline.tokenizer, self.pipeline.tokenizer_2],
-            text_encoder=[self.pipeline.text_encoder, self.pipeline.text_encoder_2],
-            requires_pooled=[False, True]  # ✅ FIXED: List instead of boolean for Compel 2.1.1
-        )
-        logger.info(f"✅ Compel processor initialized successfully with FIXED SDXL syntax")
-        combined_prompt = f"{prompt} {weights_config}"
-        logger.info(f"📝 Combined prompt: {combined_prompt}")
-        # Always unpack as a tuple
-        prompt_embeds, pooled_prompt_embeds = compel_processor(combined_prompt)
-        logger.info(f"✅ Compel weights applied with proper SDXL library integration")
-        logger.info(f"📝 Original prompt: {prompt}")
-        logger.info(f"🎯 Compel weights: {weights_config}")
-        logger.info(f"🔧 Generated prompt_embeds: {prompt_embeds.shape}")
-        logger.info(f"🔧 Generated pooled_prompt_embeds: {pooled_prompt_embeds.shape}")
-        return (prompt_embeds, pooled_prompt_embeds), prompt
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        logger.info(f"🔄 Falling back to original prompt: {prompt}")
-        return prompt, None  # Fallback to original prompt
-```
-
-### **Key Learnings**
-- **Always use Compel library for SDXL prompt+weights, not string concatenation.**
-- **For Compel 2.1.1+ and SDXL:** `requires_pooled` must be `[False, True]` (not a boolean).
-- **Always unpack Compel output as a tuple:** `prompt_embeds, pooled_prompt_embeds = compel_processor(...)`
-- **If you see `'bool' object is not iterable'`, you are using the wrong `requires_pooled` value.**
-- **Fallback to original prompt if Compel fails, but log the error.**
-- **Set `PYTHONPATH` if using custom dependency paths:**
-  ```bash
-  export PYTHONPATH=/workspace/python_deps/lib/python3.11/site-packages:$PYTHONPATH
-  ```
-
-### **Deprecated Approach (Do NOT Use for SDXL)**
-```python
-# ❌ Deprecated: String concatenation causes token limit violations
-final_prompt = f"{prompt} {weights_config}"
-# This can result in >77 tokens and partial prompt processing!
-```
-
-### **Validation Checklist (2025-07)**
-- [x] Compel library imports successfully
-- [x] `process_compel_weights` uses `requires_pooled=[False, True]` for SDXL
-- [x] Always unpacks Compel output as a tuple for SDXL
-- [x] No fallback logic for single tensor/boolean for SDXL
-- [x] Generation function handles both prompt_embeds and pooled_prompt_embeds for SDXL
-- [x] Error handling includes fallback to original prompt
-- [x] Metadata includes Compel processing status and tensor types
-- [x] No more 'bool object is not iterable' or argument errors in logs
-- [x] Compel weights are properly applied without token limit violations
-- [x] Both conditioning tensors are generated and used correctly
-- [x] Legacy single tensor fallback works for backward compatibility (non-SDXL)
-
-### **Expected Log Output (2025-07)**
-**Successful Compel Processing:**
-```
-🎯 Compel enhancement enabled: (masterpiece:1.3), (best quality:1.2)
-✅ Compel weights applied with SDXL library integration (list API)
-📝 Original prompt: beautiful woman
-🎯 Compel weights: (masterpiece:1.3), (best quality:1.2)
-🔧 Generated prompt_embeds: torch.Size([1, 77, 2048])
-🔧 Generated pooled_prompt_embeds: torch.Size([1, 1280])
-✅ Compel processing successful
-🎯 Using Compel conditioning tensors for SDXL generation
-✅ Generated with Compel conditioning tensors (SDXL)
-```
-**Fallback Behavior:**
-```
-🎯 Compel enhancement enabled: (invalid:weights)
-❌ Compel processing failed: [error details]
-🔄 Falling back to original prompt: beautiful woman
-🔄 Using original prompt due to Compel failure: beautiful woman
-🎯 Using standard prompt (no Compel): beautiful woman
-✅ Generated with string prompt (no Compel)
-``` 
+The fallback mechanisms ensure the worker continues to function even if Compel processing fails. 
