@@ -154,29 +154,31 @@ export function PromptEnhancementModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-800 max-w-4xl w-full max-h-[80vh] overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-white" />
+      <div className="bg-gray-900/95 backdrop-blur-sm rounded-xl shadow-2xl border border-gray-800 max-w-4xl w-full max-h-[80vh] flex flex-col">
+        {/* Header (sticky) */}
+        <div className="flex-shrink-0 p-4 border-b border-gray-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                <Sparkles className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">Enhance Prompt</h2>
+                {enhancementMetadata && (
+                  <Badge variant="secondary" className="text-xs bg-green-600/20 text-green-400 border-green-600/30">
+                    {enhancementMetadata.enhancement_strategy}
+                  </Badge>
+                )}
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">Enhance Prompt</h2>
-              {enhancementMetadata && (
-                <Badge variant="secondary" className="text-xs bg-green-600/20 text-green-400 border-green-600/30">
-                  {enhancementMetadata.enhancement_strategy}
-                </Badge>
-              )}
-            </div>
+            <Button variant="ghost" size="sm" onClick={handleClose} className="text-gray-400 hover:text-white">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleClose} className="text-gray-400 hover:text-white">
-            <X className="h-4 w-4" />
-          </Button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
@@ -211,8 +213,8 @@ export function PromptEnhancementModal({
                 </div>
               </div>
 
-              {/* Preset Checkboxes */}
-              <div className="flex flex-wrap gap-4 items-center mb-2">
+              {/* Preset Checkboxes - responsive */}
+              <div className="flex flex-wrap gap-4 items-center mb-2 sm:flex-row flex-col">
                 {PRESET_OPTIONS.map(opt => (
                   <label key={opt.label} className="flex items-center text-xs text-gray-300 cursor-pointer select-none">
                     <input
@@ -249,10 +251,10 @@ export function PromptEnhancementModal({
                 />
               </div>
 
-              {/* Enhancement Stats */}
+              {/* Enhancement Stats - responsive */}
               {enhancementMetadata && (
                 <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-2 grid-cols-1">
                     <div className="flex justify-between">
                       <span className="text-gray-400">Expansion:</span>
                       <span className="text-purple-400 font-medium">{enhancementMetadata.expansion_percentage}%</span>
@@ -276,27 +278,29 @@ export function PromptEnhancementModal({
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-gray-800 bg-gray-900/50">
-          <p className="text-xs text-gray-400">
-            Edit the enhanced prompt to your liking, then apply to use it for generation.
-          </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleClose} className="text-gray-400 border-gray-600">
-              Cancel
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isLoading} className="text-gray-400 border-gray-600">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Regenerate
-            </Button>
-            <Button 
-              onClick={handleAccept} 
-              disabled={isLoading || !enhancedPrompt.trim() || tokenCount > 77}
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-            >
-              <Check className="h-4 w-4 mr-2" />
-              Apply Enhanced
-            </Button>
+        {/* Footer (sticky) */}
+        <div className="flex-shrink-0 p-4 border-t border-gray-800 bg-gray-900/50">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <p className="text-xs text-gray-400">
+              Edit the enhanced prompt to your liking, then apply to use it for generation.
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleClose} className="text-gray-400 border-gray-600">
+                Cancel
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleRegenerate} disabled={isLoading} className="text-gray-400 border-gray-600">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Regenerate
+              </Button>
+              <Button 
+                onClick={handleAccept} 
+                disabled={isLoading || !enhancedPrompt.trim() || tokenCount > 77}
+                className="bg-purple-600 hover:bg-purple-700 text-white"
+              >
+                <Check className="h-4 w-4 mr-2" />
+                Apply Enhanced
+              </Button>
+            </div>
           </div>
         </div>
       </div>
