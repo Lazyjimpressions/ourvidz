@@ -65,9 +65,6 @@ export const CompelModal = ({
   const [nsfwSlider, setNsfwSlider] = useState(1.0);
   const [styleSlider, setStyleSlider] = useState(1.0);
 
-  // Track which sliders have been manually adjusted
-  const [manualSliders, setManualSliders] = useState<{[key:string]: boolean}>({});
-
   // Helper function to get slider value by name
   const getSliderValue = (sliderName: string): number => {
     switch (sliderName) {
@@ -76,6 +73,26 @@ export const CompelModal = ({
       case 'nsfwSlider': return nsfwSlider;
       case 'styleSlider': return styleSlider;
       default: return 1.0;
+    }
+  };
+
+  // Helper function to set slider value by name
+  const setSliderValue = (sliderName: string, value: number) => {
+    console.log('🎛️ Setting slider value:', { sliderName, value });
+    
+    switch (sliderName) {
+      case 'qualitySlider': 
+        setQualitySlider(value);
+        break;
+      case 'detailSlider': 
+        setDetailSlider(value);
+        break;
+      case 'nsfwSlider': 
+        setNsfwSlider(value);
+        break;
+      case 'styleSlider': 
+        setStyleSlider(value);
+        break;
     }
   };
 
@@ -158,40 +175,9 @@ export const CompelModal = ({
     setDetailSlider(1.0);
     setNsfwSlider(1.0);
     setStyleSlider(1.0);
-    setManualSliders({});
   };
 
-  // Helper to set slider and mark as manual if needed
-  const setSlider = (slider: string, value: number, manual = false) => {
-    console.log('🎛️ Setting slider:', { slider, value, manual });
-    
-    switch (slider) {
-      case 'qualitySlider': setQualitySlider(value); break;
-      case 'detailSlider': setDetailSlider(value); break;
-      case 'nsfwSlider': setNsfwSlider(value); break;
-      case 'styleSlider': setStyleSlider(value); break;
-    }
-    
-    if (manual) {
-      setManualSliders(prev => {
-        const newManual = { ...prev, [slider]: true };
-        console.log('🔧 Manual sliders updated:', newManual);
-        return newManual;
-      });
-    }
-  };
-
-  // Helper to clear manual override for a slider
-  const clearManualSlider = (slider: string) => {
-    setManualSliders(prev => {
-      const newManual = { ...prev };
-      delete newManual[slider];
-      console.log('🧹 Cleared manual slider:', slider, 'remaining manual:', newManual);
-      return newManual;
-    });
-  };
-
-  // When a preset is checked, set its sliders (allow coexistence with manual adjustments)
+  // When a preset is checked/unchecked
   const handlePresetChange = (boostId: string, checked: boolean) => {
     console.log('🎚️ Preset change:', { boostId, checked });
     
@@ -205,9 +191,7 @@ export const CompelModal = ({
       if (checked) {
         // When checking a preset, set its sliders to preset values
         boost.sliders.forEach((slider, idx) => {
-          setSlider(slider, boost.weights[idx]);
-          // Clear manual flag when preset is applied
-          clearManualSlider(slider);
+          setSliderValue(slider, boost.weights[idx]);
         });
       } else {
         // When unchecking a preset, reset sliders only if no other preset controls them
@@ -219,8 +203,7 @@ export const CompelModal = ({
           
           if (!stillControlled) {
             console.log('🔄 Resetting slider:', slider, 'no longer controlled by presets');
-            setSlider(slider, 1.0);
-            clearManualSlider(slider);
+            setSliderValue(slider, 1.0);
           }
         });
       }
@@ -229,16 +212,13 @@ export const CompelModal = ({
     });
   };
 
-  // When a slider is changed manually, mark it as manual but don't uncheck presets
+  // When a slider is changed manually - simplified approach
   const handleSliderChange = (slider: string, value: number) => {
     console.log('🎚️ Manual slider change:', { slider, value });
-    setSlider(slider, value, true);
-    
-    // Don't automatically uncheck presets - allow coexistence
-    // Users can manually uncheck presets if they want different behavior
+    setSliderValue(slider, value);
   };
 
-  // Generate Compel weights from visual controls (fixed eval issue)
+  // Generate Compel weights from visual controls - simplified approach
   useEffect(() => {
     if (!compelEnabled) {
       setCompelWeights('');
@@ -247,24 +227,7 @@ export const CompelModal = ({
     
     const termMap: {[term:string]: number} = {};
     
-    // Add quick boost terms first (lower priority)
-    quickBoosts.forEach(boostId => {
-      const boost = QUICK_BOOSTS.find(b => b.id === boostId);
-      if (boost) {
-        boost.terms.forEach((term, idx) => {
-          // Only add preset terms if slider is not manually adjusted or is at 1.0
-          const sliderName = boost.sliders[idx] || '';
-          const sliderValue = getSliderValue(sliderName);
-          const isManual = manualSliders[sliderName];
-          
-          if (!isManual || sliderValue === 1.0) {
-            termMap[term] = boost.weights[idx];
-          }
-        });
-      }
-    });
-    
-    // Add slider-based terms (higher priority - override preset terms)
+    // Add slider-based terms directly (manual adjustments take priority)
     if (qualitySlider !== 1.0) termMap['high quality'] = qualitySlider;
     if (detailSlider !== 1.0) termMap['detailed'] = detailSlider;
     if (nsfwSlider !== 1.0) termMap['perfect anatomy'] = nsfwSlider;
@@ -278,7 +241,6 @@ export const CompelModal = ({
       termMap,
       finalString: newWeights,
       quickBoosts,
-      manualSliders,
       sliderValues: {
         quality: qualitySlider,
         detail: detailSlider,
@@ -288,7 +250,7 @@ export const CompelModal = ({
     });
     
     setCompelWeights(newWeights);
-  }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights, manualSliders]);
+  }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights]);
 
   const getSliderColor = (value: number) => {
     if (value < 0.8) return 'text-red-400';
@@ -300,7 +262,7 @@ export const CompelModal = ({
   return (
     <TooltipProvider>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-2xl bg-gray-900 text-white border-gray-700">
+        <DialogContent className="max-w-2xl min-h-[600px] bg-gray-900 text-white border-gray-700">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -328,136 +290,133 @@ export const CompelModal = ({
             </DialogTitle>
           </DialogHeader>
           
-          {compelEnabled ? (
-            <div className="space-y-6">
-              {/* Quick Boost Checkboxes */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium text-gray-300">Quick Adjustments</Label>
-                <div className="grid grid-cols-2 gap-3">
-                  {QUICK_BOOSTS.map((boost) => (
-                    <div key={boost.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={boost.id}
-                        checked={quickBoosts.includes(boost.id)}
-                        onCheckedChange={(checked) => handlePresetChange(boost.id, !!checked)}
-                        className="data-[state=checked]:bg-purple-600"
-                      />
-                      <Label 
-                        htmlFor={boost.id} 
-                        className="text-sm cursor-pointer"
-                      >
-                        {boost.label}
-                      </Label>
+          <div className="flex-1 flex flex-col">
+            {compelEnabled ? (
+              <div className="space-y-4 flex-1">
+                {/* Quick Boost Checkboxes */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-gray-300">Quick Adjustments</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {QUICK_BOOSTS.map((boost) => (
+                      <div key={boost.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={boost.id}
+                          checked={quickBoosts.includes(boost.id)}
+                          onCheckedChange={(checked) => handlePresetChange(boost.id, !!checked)}
+                          className="data-[state=checked]:bg-purple-600"
+                        />
+                        <Label 
+                          htmlFor={boost.id} 
+                          className="text-sm cursor-pointer"
+                        >
+                          {boost.label}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Fine Control Sliders */}
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-gray-300">Fine Control</Label>
+                  
+                  {/* Quality Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-gray-400">Quality</Label>
+                      <Badge variant="secondary" className={`text-xs ${getSliderColor(qualitySlider)}`}>
+                        {qualitySlider.toFixed(1)}x
+                      </Badge>
                     </div>
-                  ))}
+                    <Slider
+                      value={[qualitySlider]}
+                      onValueChange={(value) => handleSliderChange('qualitySlider', value[0])}
+                      min={0.5}
+                      max={1.5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Detail Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-gray-400">Detail</Label>
+                      <Badge variant="secondary" className={`text-xs ${getSliderColor(detailSlider)}`}>
+                        {detailSlider.toFixed(1)}x
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[detailSlider]}
+                      onValueChange={(value) => handleSliderChange('detailSlider', value[0])}
+                      min={0.5}
+                      max={1.5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Anatomy Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-gray-400">Anatomy</Label>
+                      <Badge variant="secondary" className={`text-xs ${getSliderColor(nsfwSlider)}`}>
+                        {nsfwSlider.toFixed(1)}x
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[nsfwSlider]}
+                      onValueChange={(value) => handleSliderChange('nsfwSlider', value[0])}
+                      min={0.0}
+                      max={1.5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* Style Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm text-gray-400">Style</Label>
+                      <Badge variant="secondary" className={`text-xs ${getSliderColor(styleSlider)}`}>
+                        {styleSlider.toFixed(1)}x
+                      </Badge>
+                    </div>
+                    <Slider
+                      value={[styleSlider]}
+                      onValueChange={(value) => handleSliderChange('styleSlider', value[0])}
+                      min={0.5}
+                      max={1.5}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Preview */}
+                {compelWeights && (
+                  <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
+                    <Label className="text-sm font-medium text-gray-300 mb-2 block">
+                      Generated Weights
+                    </Label>
+                    <div className="bg-gray-700 p-2 rounded text-sm font-mono text-green-400 max-h-16 overflow-y-auto">
+                      {compelWeights}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center text-gray-500 flex-1">
+                <div className="text-center">
+                  <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p className="text-lg mb-2">Compel is disabled</p>
+                  <p className="text-sm">Click "Enable Compel" above to access visual prompt weighting</p>
                 </div>
               </div>
+            )}
+          </div>
 
-              {/* Fine Control Sliders */}
-              <div className="space-y-4">
-                <Label className="text-sm font-medium text-gray-300">Fine Control</Label>
-                
-                {/* Quality Slider */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-gray-400">Quality</Label>
-                    <Badge variant="secondary" className={`text-xs ${getSliderColor(qualitySlider)}`}>
-                      {qualitySlider.toFixed(1)}x
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[qualitySlider]}
-                    onValueChange={(value) => handleSliderChange('qualitySlider', value[0])}
-                    min={0.5}
-                    max={1.5}
-                    step={0.1}
-                    className="w-full h-2"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>Reduced</span>
-                    <span>Normal</span>
-                    <span>Enhanced</span>
-                  </div>
-                </div>
-
-                {/* Detail Slider */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-gray-400">Detail</Label>
-                    <Badge variant="secondary" className={`text-xs ${getSliderColor(detailSlider)}`}>
-                      {detailSlider.toFixed(1)}x
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[detailSlider]}
-                    onValueChange={(value) => handleSliderChange('detailSlider', value[0])}
-                    min={0.5}
-                    max={1.5}
-                    step={0.1}
-                    className="w-full h-2"
-                  />
-                </div>
-
-                {/* Anatomy Slider (formerly NSFW) */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-gray-400">Anatomy</Label>
-                    <Badge variant="secondary" className={`text-xs ${getSliderColor(nsfwSlider)}`}>
-                      {nsfwSlider.toFixed(1)}x
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[nsfwSlider]}
-                    onValueChange={(value) => handleSliderChange('nsfwSlider', value[0])}
-                    min={0.0}
-                    max={1.5}
-                    step={0.1}
-                    className="w-full h-2"
-                  />
-                </div>
-
-                {/* Style Slider */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-gray-400">Style</Label>
-                    <Badge variant="secondary" className={`text-xs ${getSliderColor(styleSlider)}`}>
-                      {styleSlider.toFixed(1)}x
-                    </Badge>
-                  </div>
-                  <Slider
-                    value={[styleSlider]}
-                    onValueChange={(value) => handleSliderChange('styleSlider', value[0])}
-                    min={0.5}
-                    max={1.5}
-                    step={0.1}
-                    className="w-full h-2"
-                  />
-                </div>
-              </div>
-
-              {/* Preview */}
-              {compelWeights && (
-                <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-                  <Label className="text-sm font-medium text-gray-300 mb-2 block">
-                    Generated Weights
-                  </Label>
-                  <div className="bg-gray-700 p-2 rounded text-sm font-mono text-green-400 max-h-20 overflow-y-auto">
-                    {compelWeights}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center text-gray-500 py-8">
-              <div className="text-center">
-                <Zap className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p className="text-lg mb-2">Compel is disabled</p>
-                <p className="text-sm">Click "Enable Compel" above to access visual prompt weighting</p>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end pt-4 border-t border-gray-700">
+          <div className="flex justify-end pt-4 border-t border-gray-700 mt-4">
             <Button variant="outline" onClick={onClose}>
               Close
             </Button>
