@@ -675,3 +675,25 @@ const videoReferenceConfig = {
 
 **Problem**: Poor video quality
 - **Solution**: Use WAN High model, ensure reference image is high quality
+
+---
+
+## **Qwen-Only Prompt Enhancement (2025+)**
+
+- All prompt enhancement is now performed by Qwen (LLM) with user review and editing.
+- Compel weighting is deprecated and not supported for any model.
+- All prompt analytics, scoring, and A/B testing should use the following Supabase tables:
+  - model_test_results
+  - job_enhancement_analysis
+  - image_enhancement_analysis
+  - video_enhancement_analysis
+  - prompt_ab_tests
+- Use the following fields for Qwen analytics: original_prompt, enhanced_prompt, enhancement_strategy, qwen_expansion_percentage, quality_rating, notes, etc.
+
+### **Best Practices for NSFW, Positions, Multi-Party Prompts**
+- Use explicit, clear language in the base prompt (e.g., "three women and one man in group scene").
+- Let Qwen expand and professionalize the description.
+- For positions, use anatomical terms and clear action verbs (e.g., "woman straddling man").
+- For NSFW, use professional, explicit language; Qwen will refine and expand.
+- Always review the Qwen-enhanced prompt for token safety and clarity.
+- Rate and record anatomical accuracy, realism, and quality in Supabase.

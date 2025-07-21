@@ -780,3 +780,23 @@ model_test_results (
 5. Use analytics for optimization
 
 This comprehensive testing framework ensures systematic evaluation and baseline maintenance for all AI models in the system, providing reliable quality assessment and performance monitoring capabilities. 
+
+## **Qwen-Only Prompt Testing & Scoring**
+
+- All prompt testing, scoring, and analytics are now Qwen-based.
+- Use the following Supabase tables for all analytics and dashboards:
+  - model_test_results
+  - job_enhancement_analysis
+  - image_enhancement_analysis
+  - video_enhancement_analysis
+  - prompt_ab_tests
+- Use the following fields for Qwen analytics: prompt_text, enhanced_prompt, overall_quality, technical_quality, content_quality, consistency, notes, enhancement_strategy, qwen_expansion_percentage, etc.
+
+### **Best Practices for NSFW, Positions, Multi-Party Prompts**
+- Use explicit, clear language in the base prompt.
+- Let Qwen expand and professionalize the description.
+- For multi-party, specify all participants and desired interactions in the prompt.
+- For positions, use anatomical terms and clear action verbs.
+- For NSFW, use professional, explicit language; Qwen will refine and expand.
+- Always review the Qwen-enhanced prompt for token safety and clarity.
+- Rate and record anatomical accuracy, realism, and quality in Supabase. 

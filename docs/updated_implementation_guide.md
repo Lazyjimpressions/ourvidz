@@ -405,3 +405,24 @@ Success depends on maintaining the proven performance of existing systems while 
 **Distribution**: Development Team, Product Management, Executive Team  
 **Next Review**: Post-Phase 1 Completion  
 **Contact**: Technical Lead, Product Manager
+
+## **Current Status: Qwen-Only Prompt Enhancement**
+
+- Compel weighting is deprecated and not supported for any model.
+- All prompt enhancement is now performed by Qwen (LLM) with user review and editing.
+- All prompt analytics, scoring, and A/B testing should use the following Supabase tables:
+  - model_test_results
+  - job_enhancement_analysis
+  - image_enhancement_analysis
+  - video_enhancement_analysis
+  - prompt_ab_tests
+- Use the following fields for Qwen analytics: original_prompt, enhanced_prompt, enhancement_strategy, qwen_expansion_percentage, quality_rating, notes, etc.
+
+### **Best Practices for Qwen Prompt Enhancement**
+- Use explicit, clear language in the base prompt.
+- Let Qwen expand and professionalize the description.
+- For multi-party, specify all participants and desired interactions in the prompt.
+- For positions, use anatomical terms and clear action verbs.
+- For NSFW, use professional, explicit language; Qwen will refine and expand.
+- Always review the Qwen-enhanced prompt for token safety and clarity.
+- Rate and record anatomical accuracy, realism, and quality in Supabase.
