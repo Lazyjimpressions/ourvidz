@@ -46,6 +46,19 @@ export function PromptEnhancementModal({
   const [error, setError] = useState<string | null>(null)
   const [enhancementMetadata, setEnhancementMetadata] = useState<any>(null)
 
+  // Preset tags and state
+  const PRESET_OPTIONS = [
+    { label: 'Best Quality', tag: 'best quality' },
+    { label: 'Professional Photography', tag: 'professional photography' },
+    { label: 'Perfect Anatomy', tag: 'perfect anatomy' },
+    { label: 'Cinematic Lighting', tag: 'cinematic lighting' },
+  ];
+  const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
+
+  // Token count (word count as proxy)
+  const getTokenCount = (text: string) => text.trim().split(/\s+/).filter(Boolean).length;
+  const tokenCount = getTokenCount(enhancedPrompt);
+
   // Auto-enhance when modal opens
   useEffect(() => {
     if (isOpen && originalPrompt && !enhancedPrompt) {
@@ -53,12 +66,34 @@ export function PromptEnhancementModal({
     }
   }, [isOpen, originalPrompt])
 
+  // Update enhanced prompt when presets change
+  useEffect(() => {
+    if (!enhancedPrompt) return;
+    let prompt = enhancedPrompt;
+    // Remove all preset tags first
+    PRESET_OPTIONS.forEach(opt => {
+      const regex = new RegExp(`\\b${opt.tag}\\b`, 'gi');
+      prompt = prompt.replace(regex, '').replace(/,\s*,/g, ',').replace(/^,|,$/g, '').replace(/\s+,/g, ',').replace(/,\s+/g, ', ');
+    });
+    // Add selected preset tags at the start
+    const tagsToAdd = PRESET_OPTIONS.filter(opt => selectedPresets.includes(opt.label)).map(opt => opt.tag);
+    let newPrompt = tagsToAdd.length > 0 ? tagsToAdd.join(', ') + (prompt.trim() ? ', ' + prompt.trim() : '') : prompt.trim();
+    // Clean up extra commas/spaces
+    newPrompt = newPrompt.replace(/,\s*,/g, ',').replace(/^,|,$/g, '').replace(/\s+,/g, ',').replace(/,\s+/g, ', ');
+    setEnhancedPrompt(newPrompt);
+    // eslint-disable-next-line
+  }, [selectedPresets]);
+
+  const handlePresetChange = (label: string, checked: boolean) => {
+    setSelectedPresets(prev =>
+      checked ? [...prev, label] : prev.filter(l => l !== label)
+    );
+  };
+
   const enhancePrompt = async () => {
     if (!originalPrompt.trim()) return
-
     setIsLoading(true)
     setError(null)
-
     try {
       const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: {
@@ -68,26 +103,23 @@ export function PromptEnhancementModal({
           quality
         }
       })
-
       if (error) {
         throw new Error(error.message)
       }
-
       if (!data?.success) {
         throw new Error(data?.error || 'Failed to enhance prompt')
       }
-
       const result: EnhancementResult = data
       setEnhancedPrompt(result.enhanced_prompt)
       setEnhancementMetadata(result.enhancement_metadata)
-
+      // Reset presets on new enhancement
+      setSelectedPresets([]);
       console.log('✅ Prompt enhanced successfully:', {
         originalLength: result.enhancement_metadata.original_length,
         enhancedLength: result.enhancement_metadata.enhanced_length,
         expansion: result.enhancement_metadata.expansion_percentage + '%',
         strategy: result.enhancement_metadata.enhancement_strategy
       })
-
     } catch (err) {
       console.error('❌ Prompt enhancement failed:', err)
       setError(err instanceof Error ? err.message : 'Failed to enhance prompt')
@@ -97,7 +129,7 @@ export function PromptEnhancementModal({
   }
 
   const handleAccept = () => {
-    if (enhancedPrompt.trim()) {
+    if (enhancedPrompt.trim() && tokenCount <= 77) {
       onAccept(enhancedPrompt)
       onClose()
     }
@@ -106,6 +138,7 @@ export function PromptEnhancementModal({
   const handleRegenerate = () => {
     setEnhancedPrompt('')
     setEnhancementMetadata(null)
+    setSelectedPresets([]);
     enhancePrompt()
   }
 
@@ -113,6 +146,7 @@ export function PromptEnhancementModal({
     setEnhancedPrompt('')
     setEnhancementMetadata(null)
     setError(null)
+    setSelectedPresets([]);
     onClose()
   }
 
@@ -161,7 +195,7 @@ export function PromptEnhancementModal({
               </Button>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Original Prompt */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -177,24 +211,35 @@ export function PromptEnhancementModal({
                 </div>
               </div>
 
-              {/* Arrow */}
-              <div className="flex justify-center">
-                <ArrowRight className="h-5 w-5 text-purple-400" />
+              {/* Preset Checkboxes */}
+              <div className="flex flex-wrap gap-4 items-center mb-2">
+                {PRESET_OPTIONS.map(opt => (
+                  <label key={opt.label} className="flex items-center text-xs text-gray-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={selectedPresets.includes(opt.label)}
+                      onChange={e => handlePresetChange(opt.label, e.target.checked)}
+                      className="mr-1 accent-purple-600"
+                      style={{ width: 12, height: 12 }}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
               </div>
 
               {/* Enhanced Prompt */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-gray-300">Enhanced Version</h3>
-                  {enhancementMetadata && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{enhancementMetadata.enhanced_length} chars</span>
-                      <span>•</span>
-                      <span>{enhancementMetadata.expansion_percentage}% expansion</span>
-                      <span>•</span>
-                      <span>{enhancedPrompt.split(' ').length} words</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <span>{enhancedPrompt.length} chars</span>
+                    <span>•</span>
+                    <span>{enhancedPrompt.split(' ').length} words</span>
+                    <span>•</span>
+                    <span style={{ color: tokenCount > 77 ? '#f87171' : tokenCount > 65 ? '#facc15' : undefined }}>
+                      {tokenCount} tokens
+                    </span>
+                  </div>
                 </div>
                 <Textarea
                   value={enhancedPrompt}
@@ -246,7 +291,7 @@ export function PromptEnhancementModal({
             </Button>
             <Button 
               onClick={handleAccept} 
-              disabled={isLoading || !enhancedPrompt.trim()}
+              disabled={isLoading || !enhancedPrompt.trim() || tokenCount > 77}
               className="bg-purple-600 hover:bg-purple-700 text-white"
             >
               <Check className="h-4 w-4 mr-2" />
