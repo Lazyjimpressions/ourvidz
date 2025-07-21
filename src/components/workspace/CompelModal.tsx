@@ -68,6 +68,17 @@ export const CompelModal = ({
   // Track which sliders have been manually adjusted
   const [manualSliders, setManualSliders] = useState<{[key:string]: boolean}>({});
 
+  // Helper function to get slider value by name
+  const getSliderValue = (sliderName: string): number => {
+    switch (sliderName) {
+      case 'qualitySlider': return qualitySlider;
+      case 'detailSlider': return detailSlider;
+      case 'nsfwSlider': return nsfwSlider;
+      case 'styleSlider': return styleSlider;
+      default: return 1.0;
+    }
+  };
+
   // Parse existing weights on open
   useEffect(() => {
     if (isOpen && compelWeights) {
@@ -147,17 +158,27 @@ export const CompelModal = ({
     setDetailSlider(1.0);
     setNsfwSlider(1.0);
     setStyleSlider(1.0);
+    setManualSliders({});
   };
 
   // Helper to set slider and mark as manual if needed
   const setSlider = (slider: string, value: number, manual = false) => {
+    console.log('🎛️ Setting slider:', { slider, value, manual });
+    
     switch (slider) {
       case 'qualitySlider': setQualitySlider(value); break;
       case 'detailSlider': setDetailSlider(value); break;
       case 'nsfwSlider': setNsfwSlider(value); break;
       case 'styleSlider': setStyleSlider(value); break;
     }
-    if (manual) setManualSliders(prev => ({ ...prev, [slider]: true }));
+    
+    if (manual) {
+      setManualSliders(prev => {
+        const newManual = { ...prev, [slider]: true };
+        console.log('🔧 Manual sliders updated:', newManual);
+        return newManual;
+      });
+    }
   };
 
   // Helper to clear manual override for a slider
@@ -165,99 +186,115 @@ export const CompelModal = ({
     setManualSliders(prev => {
       const newManual = { ...prev };
       delete newManual[slider];
+      console.log('🧹 Cleared manual slider:', slider, 'remaining manual:', newManual);
       return newManual;
     });
   };
 
-  // When a preset is checked, set its sliders unless they've been manually overridden
+  // When a preset is checked, set its sliders (allow coexistence with manual adjustments)
   const handlePresetChange = (boostId: string, checked: boolean) => {
+    console.log('🎚️ Preset change:', { boostId, checked });
+    
     const boost = QUICK_BOOSTS.find(b => b.id === boostId);
     if (!boost) return;
+    
     setQuickBoosts(prev => {
-      let newBoosts = checked ? [...prev, boostId] : prev.filter(id => id !== boostId);
+      const newBoosts = checked ? [...prev, boostId] : prev.filter(id => id !== boostId);
+      console.log('📊 Quick boosts updated:', newBoosts);
+      
       if (checked) {
+        // When checking a preset, set its sliders to preset values
         boost.sliders.forEach((slider, idx) => {
-          if (!manualSliders[slider]) {
-            setSlider(slider, boost.weights[idx]);
-            clearManualSlider(slider); // Clear manual if preset is checked
-          }
+          setSlider(slider, boost.weights[idx]);
+          // Clear manual flag when preset is applied
+          clearManualSlider(slider);
         });
       } else {
-        // If unchecking, reset only if no other preset is using this slider
+        // When unchecking a preset, reset sliders only if no other preset controls them
         boost.sliders.forEach((slider) => {
-          const stillActive = newBoosts.some(bid => {
+          const stillControlled = newBoosts.some(bid => {
             const b = QUICK_BOOSTS.find(x => x.id === bid);
             return b && b.sliders.includes(slider);
           });
-          if (!stillActive) {
+          
+          if (!stillControlled) {
+            console.log('🔄 Resetting slider:', slider, 'no longer controlled by presets');
             setSlider(slider, 1.0);
-            clearManualSlider(slider); // Clear manual override when resetting
+            clearManualSlider(slider);
           }
         });
       }
+      
       return newBoosts;
     });
   };
 
-  // When a slider is changed manually, uncheck any preset that controls it
+  // When a slider is changed manually, mark it as manual but don't uncheck presets
   const handleSliderChange = (slider: string, value: number) => {
+    console.log('🎚️ Manual slider change:', { slider, value });
     setSlider(slider, value, true);
-    setQuickBoosts(prev => prev.filter(boostId => {
-      const boost = QUICK_BOOSTS.find(b => b.id === boostId);
-      return boost ? !boost.sliders.includes(slider) : true;
-    }));
+    
+    // Don't automatically uncheck presets - allow coexistence
+    // Users can manually uncheck presets if they want different behavior
   };
 
-  // Generate Compel weights from visual controls (deduplicate, slider > preset)
+  // Generate Compel weights from visual controls (fixed eval issue)
   useEffect(() => {
     if (!compelEnabled) {
       setCompelWeights('');
       return;
     }
+    
     const termMap: {[term:string]: number} = {};
-    // Add quick boost terms (only if not overridden by slider)
+    
+    // Add quick boost terms first (lower priority)
     quickBoosts.forEach(boostId => {
       const boost = QUICK_BOOSTS.find(b => b.id === boostId);
       if (boost) {
         boost.terms.forEach((term, idx) => {
-          const slider = boost.sliders[idx] || '';
-          // If slider is at 1.0 or not manually set, use preset
-          if (!manualSliders[slider] || eval(slider) === 1.0) {
+          // Only add preset terms if slider is not manually adjusted or is at 1.0
+          const sliderName = boost.sliders[idx] || '';
+          const sliderValue = getSliderValue(sliderName);
+          const isManual = manualSliders[sliderName];
+          
+          if (!isManual || sliderValue === 1.0) {
             termMap[term] = boost.weights[idx];
           }
         });
       }
     });
-    // Add slider-based terms (override preset if not 1.0)
+    
+    // Add slider-based terms (higher priority - override preset terms)
     if (qualitySlider !== 1.0) termMap['high quality'] = qualitySlider;
     if (detailSlider !== 1.0) termMap['detailed'] = detailSlider;
     if (nsfwSlider !== 1.0) termMap['perfect anatomy'] = nsfwSlider;
     if (styleSlider !== 1.0) termMap['professional photography'] = styleSlider;
+    
     // Build string
     const terms = Object.entries(termMap).map(([term, weight]) => `(${term}:${weight.toFixed(1)})`);
-    setCompelWeights(terms.join(', '));
+    const newWeights = terms.join(', ');
+    
+    console.log('🔮 Generated Compel weights:', {
+      termMap,
+      finalString: newWeights,
+      quickBoosts,
+      manualSliders,
+      sliderValues: {
+        quality: qualitySlider,
+        detail: detailSlider,
+        nsfw: nsfwSlider,
+        style: styleSlider
+      }
+    });
+    
+    setCompelWeights(newWeights);
   }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights, manualSliders]);
-
-  const toggleQuickBoost = (boostId: string) => {
-    setQuickBoosts(prev => 
-      prev.includes(boostId) 
-        ? prev.filter(id => id !== boostId)
-        : [...prev, boostId]
-    );
-  };
 
   const getSliderColor = (value: number) => {
     if (value < 0.8) return 'text-red-400';
     if (value < 1.0) return 'text-yellow-400';
     if (value < 1.3) return 'text-green-400';
     return 'text-purple-400';
-  };
-
-  const getSliderBgColor = (value: number) => {
-    if (value < 0.8) return 'bg-red-500';
-    if (value < 1.0) return 'bg-yellow-500';
-    if (value < 1.3) return 'bg-green-500';
-    return 'bg-purple-500';
   };
 
   return (
@@ -361,7 +398,7 @@ export const CompelModal = ({
                   />
                 </div>
 
-                {/* NSFW Slider */}
+                {/* Anatomy Slider (formerly NSFW) */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm text-gray-400">Anatomy</Label>
