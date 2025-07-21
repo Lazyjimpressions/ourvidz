@@ -27,6 +27,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
+// Token utility functions for preventing overflow
+function countTokens(text: string): number {
+  return text.trim().split(/\s+/).length;
+}
+
+function trimToMaxTokens(text: string, maxTokens = 75): string {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= maxTokens) {
+    return text;
+  }
+  return words.slice(0, maxTokens).join(" ");
+}
+
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -161,8 +174,26 @@ serve(async (req)=>{
       }
       
       const result = sdxlNegatives.join(", ");
-      console.log('✅ Enhanced SDXL negative prompt generated:', result);
-      return result;
+      const originalTokenCount = countTokens(result);
+      
+      // Apply token trimming to prevent overflow
+      const trimmed = trimToMaxTokens(result, 75);
+      const finalTokenCount = countTokens(trimmed);
+      const wasTrimmed = originalTokenCount !== finalTokenCount;
+      
+      console.log(`✂️ Negative prompt token management:`, {
+        originalTokens: originalTokenCount,
+        finalTokens: finalTokenCount,
+        wasTrimmed: wasTrimmed,
+        trimmedAmount: wasTrimmed ? originalTokenCount - finalTokenCount : 0
+      });
+      
+      if (wasTrimmed) {
+        console.warn(`⚠️ Negative prompt trimmed from ${originalTokenCount} to ${finalTokenCount} tokens to prevent overflow`);
+      }
+      
+      console.log('✅ Enhanced SDXL negative prompt generated:', trimmed);
+      return trimmed;
     }
 
     // Enhanced job type validation
@@ -487,6 +518,7 @@ serve(async (req)=>{
       isSDXL,
       hasPrompt: !!prompt,
       hasNegativePrompt: isSDXL && !!negativePrompt,
+      negativePromptTokens: isSDXL ? countTokens(negativePrompt) : 0,
       hasSeed: !!metadata?.seed,
       seedValue: metadata?.seed,
       hasReferenceImage: !!metadata?.reference_image,
@@ -555,6 +587,7 @@ serve(async (req)=>{
       queueLength: redisResult.result || 0,
       queueName,
       negativePromptIncluded: isSDXL,
+      negativePromptTokenCount: isSDXL ? countTokens(negativePrompt) : 0,
       parameterMappingFixed: true
     });
 
@@ -586,7 +619,7 @@ serve(async (req)=>{
     return new Response(JSON.stringify({
       success: true,
       job,
-      message: 'Job queued successfully - FIXED: SDXL parameter mapping corrected',
+      message: 'Job queued successfully - FIXED: Token overflow prevention implemented',
       queueLength: redisResult.result || 0,
       modelVariant: modelVariant,
       jobType: jobType,
@@ -594,12 +627,11 @@ serve(async (req)=>{
       isSDXL: isSDXL,
       negativePromptSupported: isSDXL,
       fixes_applied: [
-        'Fixed SDXL parameter mapping (sample_steps -> num_inference_steps)',
-        'Fixed SDXL parameter mapping (sample_guide_scale -> guidance_scale)',
-        'Fixed SDXL parameter mapping (sample_solver -> scheduler)',
-        'Removed sample_shift from SDXL config (WAN-only parameter)',
-        'Maintained WAN parameter names for WAN jobs',
-        'Added parameter mapping validation and logging'
+        'Added token counting utility functions',
+        'Implemented 75-token limit for negative prompts',
+        'Added comprehensive token overflow logging',
+        'Preserved priority-based negative prompt system',
+        'Maintained compatibility with Compel weights'
       ],
       debug: {
         userId: user.id,
@@ -609,12 +641,11 @@ serve(async (req)=>{
         hasNegativePrompt: isSDXL && !!negativePrompt,
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
         negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
+        negativePromptTokenCount: isSDXL ? countTokens(negativePrompt) : 0,
         negativePromptError: negativePromptError,
         redisConfigured: true,
         metadataFields: Object.keys(jobMetadata).length,
-        parameterMappingFixed: true,
-        sdxlParameterNames: isSDXL ? Object.keys(config).filter(k => ['width', 'height', 'num_inference_steps', 'guidance_scale', 'scheduler'].includes(k)) : [],
-        wanParameterNames: !isSDXL ? Object.keys(config).filter(k => ['size', 'sample_steps', 'sample_guide_scale', 'sample_solver', 'sample_shift'].includes(k)) : [],
+        tokenOverflowPrevention: true,
         timestamp: new Date().toISOString()
       }
     }), {

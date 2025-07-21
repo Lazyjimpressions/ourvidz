@@ -6,7 +6,7 @@ import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Zap, Info, Settings } from 'lucide-react';
+import { Zap, Info } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface CompelModalProps {
@@ -16,6 +16,11 @@ interface CompelModalProps {
   setCompelEnabled: (enabled: boolean) => void;
   compelWeights: string;
   setCompelWeights: (weights: string) => void;
+}
+
+// Utility function to estimate token count
+function countTokens(text: string): number {
+  return text.trim().split(/\s+/).filter(word => word.length > 0).length;
 }
 
 // Quick boost presets that automatically add common quality terms
@@ -65,42 +70,10 @@ export const CompelModal = ({
   const [nsfwSlider, setNsfwSlider] = useState(1.0);
   const [styleSlider, setStyleSlider] = useState(1.0);
 
-  // Helper function to get slider value by name
-  const getSliderValue = (sliderName: string): number => {
-    switch (sliderName) {
-      case 'qualitySlider': return qualitySlider;
-      case 'detailSlider': return detailSlider;
-      case 'nsfwSlider': return nsfwSlider;
-      case 'styleSlider': return styleSlider;
-      default: return 1.0;
-    }
-  };
-
-  // Helper function to set slider value by name
-  const setSliderValue = (sliderName: string, value: number) => {
-    console.log('🎛️ Setting slider value:', { sliderName, value });
-    
-    switch (sliderName) {
-      case 'qualitySlider': 
-        setQualitySlider(value);
-        break;
-      case 'detailSlider': 
-        setDetailSlider(value);
-        break;
-      case 'nsfwSlider': 
-        setNsfwSlider(value);
-        break;
-      case 'styleSlider': 
-        setStyleSlider(value);
-        break;
-    }
-  };
-
   // Parse existing weights on open
   useEffect(() => {
     if (isOpen && compelWeights) {
       try {
-        // Parse existing Compel weights and set visual controls
         const regex = /\(([^:]+):([^)]+)\)/g;
         let match;
         const parsedTerms: { term: string; weight: number }[] = [];
@@ -179,14 +152,11 @@ export const CompelModal = ({
 
   // When a preset is checked/unchecked
   const handlePresetChange = (boostId: string, checked: boolean) => {
-    console.log('🎚️ Preset change:', { boostId, checked });
-    
     const boost = QUICK_BOOSTS.find(b => b.id === boostId);
     if (!boost) return;
     
     setQuickBoosts(prev => {
       const newBoosts = checked ? [...prev, boostId] : prev.filter(id => id !== boostId);
-      console.log('📊 Quick boosts updated:', newBoosts);
       
       if (checked) {
         // When checking a preset, set its sliders to preset values
@@ -202,7 +172,6 @@ export const CompelModal = ({
           });
           
           if (!stillControlled) {
-            console.log('🔄 Resetting slider:', slider, 'no longer controlled by presets');
             setSliderValue(slider, 1.0);
           }
         });
@@ -212,13 +181,30 @@ export const CompelModal = ({
     });
   };
 
-  // When a slider is changed manually - simplified approach
+  // Helper function to set slider value by name
+  const setSliderValue = (sliderName: string, value: number) => {
+    switch (sliderName) {
+      case 'qualitySlider': 
+        setQualitySlider(value);
+        break;
+      case 'detailSlider': 
+        setDetailSlider(value);
+        break;
+      case 'nsfwSlider': 
+        setNsfwSlider(value);
+        break;
+      case 'styleSlider': 
+        setStyleSlider(value);
+        break;
+    }
+  };
+
+  // When a slider is changed manually
   const handleSliderChange = (slider: string, value: number) => {
-    console.log('🎚️ Manual slider change:', { slider, value });
     setSliderValue(slider, value);
   };
 
-  // Generate Compel weights from visual controls - simplified approach
+  // Generate Compel weights from visual controls
   useEffect(() => {
     if (!compelEnabled) {
       setCompelWeights('');
@@ -237,17 +223,13 @@ export const CompelModal = ({
     const terms = Object.entries(termMap).map(([term, weight]) => `(${term}:${weight.toFixed(1)})`);
     const newWeights = terms.join(', ');
     
-    console.log('🔮 Generated Compel weights:', {
-      termMap,
-      finalString: newWeights,
-      quickBoosts,
-      sliderValues: {
-        quality: qualitySlider,
-        detail: detailSlider,
-        nsfw: nsfwSlider,
-        style: styleSlider
-      }
-    });
+    // Token safety check
+    const totalTokens = countTokens(newWeights);
+    if (totalTokens > 75) {
+      console.warn(`⚠️ Compel weight string too long (${totalTokens} tokens). Clearing weights.`);
+      setCompelWeights(''); // Prevent broken generations
+      return;
+    }
     
     setCompelWeights(newWeights);
   }, [compelEnabled, quickBoosts, qualitySlider, detailSlider, nsfwSlider, styleSlider, setCompelWeights]);
@@ -392,6 +374,13 @@ export const CompelModal = ({
                     />
                   </div>
                 </div>
+
+                {/* Token limit warning */}
+                {compelWeights && countTokens(compelWeights) > 75 && (
+                  <div className="text-red-400 text-xs">
+                    ⚠️ Too many terms. Weights disabled to prevent generation errors.
+                  </div>
+                )}
 
                 {/* Preview */}
                 {compelWeights && (
