@@ -160,25 +160,39 @@ export const CompelModal = ({
     if (manual) setManualSliders(prev => ({ ...prev, [slider]: true }));
   };
 
+  // Helper to clear manual override for a slider
+  const clearManualSlider = (slider: string) => {
+    setManualSliders(prev => {
+      const newManual = { ...prev };
+      delete newManual[slider];
+      return newManual;
+    });
+  };
+
   // When a preset is checked, set its sliders unless they've been manually overridden
   const handlePresetChange = (boostId: string, checked: boolean) => {
     const boost = QUICK_BOOSTS.find(b => b.id === boostId);
     if (!boost) return;
     setQuickBoosts(prev => {
       let newBoosts = checked ? [...prev, boostId] : prev.filter(id => id !== boostId);
-      // If checking, set sliders to preset values (unless manually overridden)
       if (checked) {
         boost.sliders.forEach((slider, idx) => {
-          if (!manualSliders[slider]) setSlider(slider, boost.weights[idx]);
+          if (!manualSliders[slider]) {
+            setSlider(slider, boost.weights[idx]);
+            clearManualSlider(slider); // Clear manual if preset is checked
+          }
         });
       } else {
-        // If unchecking, reset only if no other preset is using this slider and not manually overridden
+        // If unchecking, reset only if no other preset is using this slider
         boost.sliders.forEach((slider) => {
           const stillActive = newBoosts.some(bid => {
             const b = QUICK_BOOSTS.find(x => x.id === bid);
             return b && b.sliders.includes(slider);
           });
-          if (!stillActive && !manualSliders[slider]) setSlider(slider, 1.0);
+          if (!stillActive) {
+            setSlider(slider, 1.0);
+            clearManualSlider(slider); // Clear manual override when resetting
+          }
         });
       }
       return newBoosts;
