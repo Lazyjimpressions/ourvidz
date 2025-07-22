@@ -2,12 +2,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
+import { Input } from "@/components/ui/input";
 import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw, RotateCcw, Sparkles, Image } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
 import { useImageRegeneration } from "@/hooks/useImageRegeneration";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { get_encoding } from "@dqbd/tiktoken";
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -37,9 +40,14 @@ export const WorkspaceContentModal = ({
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
   const [enhancementMetadata, setEnhancementMetadata] = useState<any>(null);
   const [promptText, setPromptText] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
   
   // Reference controls
   const [referenceStrength, setReferenceStrength] = useState(0.85);
+  
+  // Seed management
+  const [manualSeed, setManualSeed] = useState('');
+  const [seedMode, setSeedMode] = useState<'same' | 'new' | 'manual'>('same');
   
   // Initialize regeneration hook
   const regeneration = useImageRegeneration(currentTile, {
@@ -54,8 +62,11 @@ export const WorkspaceContentModal = ({
       reset();
       setLastTileId(currentTile?.id || "");
       setPromptText(currentTile?.prompt || '');
+      setNegativePrompt('');
       setEnhancedPrompt('');
       setEnhancementMetadata(null);
+      setManualSeed('');
+      setSeedMode('same');
     }
   }, [currentTile?.id, lastTileId, reset]);
   
@@ -140,30 +151,24 @@ export const WorkspaceContentModal = ({
 
     setIsEnhancing(true);
     try {
-      const response = await fetch('/api/enhance-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+        body: {
           prompt: promptText.trim(),
           jobType: currentTile.modelType || 'sdxl_image',
           quality: currentTile.quality || 'fast'
-        }),
+        }
       });
 
-      if (!response.ok) {
-        throw new Error(`Enhancement failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
+      if (error) throw error;
       
-      if (result.success) {
-        setEnhancedPrompt(result.enhanced_prompt);
-        setEnhancementMetadata(result.enhancement_metadata);
+      if (data?.success) {
+        setEnhancedPrompt(data.enhanced_prompt);
+        setEnhancementMetadata(data.enhancement_metadata);
+        // Auto-populate negative prompt
+        setNegativePrompt('blurry, distorted, low quality, worst quality, jpeg artifacts, watermark, signature');
         toast.success('Prompt enhanced successfully');
       } else {
-        throw new Error(result.error || 'Enhancement failed');
+        throw new Error(data?.error || 'Enhancement failed');
       }
     } catch (error) {
       console.error('Enhancement error:', error);
@@ -177,6 +182,7 @@ export const WorkspaceContentModal = ({
     if (onUseAsReference) {
       onUseAsReference(currentTile, referenceType);
       toast.success(`Set as ${referenceType} reference`);
+      // Keep modal open, don't close
     }
   };
 
@@ -184,8 +190,32 @@ export const WorkspaceContentModal = ({
     if (onUseAsReference) {
       onUseAsReference(currentTile, 'character');
       toast.success('Generating variation with character reference');
+      // Keep modal open for user to see the process
     }
   };
+
+  // Token counting functions
+  const getTokenCount = (text: string): number => {
+    try {
+      const encoding = get_encoding("cl100k_base");
+      const tokens = encoding.encode(text);
+      encoding.free();
+      return tokens.length;
+    } catch {
+      return Math.ceil(text.length / 3.5); // Rough fallback
+    }
+  };
+
+  const getTokenColor = (tokenCount: number, limit: number) => {
+    const ratio = tokenCount / limit;
+    if (ratio <= 0.7) return 'text-green-400';
+    if (ratio <= 0.9) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const promptTokens = getTokenCount(promptText);
+  const enhancedTokens = getTokenCount(enhancedPrompt);
+  const negativeTokens = getTokenCount(negativePrompt);
 
   // Skip rendering if current tile doesn't have URL
   if (!currentTile?.url) {
@@ -312,242 +342,172 @@ export const WorkspaceContentModal = ({
           }`}>
             <div className="p-4 h-full overflow-y-auto">
               {/* Header */}
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-white">Details & Edit</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowInfoPanel(false)}
-                  className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
+              <div className="flex items-center mb-4">
+                <h3 className="text-sm font-medium text-white">Details & Edit</h3>
               </div>
 
               {/* Image-to-Image Actions - Only for images */}
               {currentTile.type === 'image' && onUseAsReference && (
-                <div className="mb-6">
-                  <h4 className="text-sm font-medium text-white/70 mb-3">Use as Reference</h4>
-                  <div className="grid grid-cols-3 gap-2 mb-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
+                <div className="mb-4">
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Use as Reference</h4>
+                  <div className="grid grid-cols-3 gap-1 mb-2">
+                    <button
                       onClick={() => handleUseAsReferenceType('style')}
-                      className="text-xs border-white/20 text-white hover:bg-white/10"
+                      className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
                     >
                       Style
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    </button>
+                    <button
                       onClick={() => handleUseAsReferenceType('composition')}
-                      className="text-xs border-white/20 text-white hover:bg-white/10"
+                      className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
                     >
                       Comp
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    </button>
+                    <button
                       onClick={() => handleUseAsReferenceType('character')}
-                      className="text-xs border-white/20 text-white hover:bg-white/10"
+                      className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
                     >
                       Character
-                    </Button>
+                    </button>
                   </div>
                   
-                  {/* Reference Strength */}
-                  <div className="mb-3">
+                  {/* Reference Strength - Compact */}
+                  <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-white/60">Reference Strength</label>
-                      <span className="text-xs text-white/40">{referenceStrength.toFixed(2)}</span>
+                      <label className="text-xs text-white/60">Strength</label>
+                      <span className="text-xs text-white/60">{referenceStrength.toFixed(2)}</span>
                     </div>
-                    <Slider
-                      value={[referenceStrength]}
-                      onValueChange={(value) => setReferenceStrength(value[0])}
-                      min={0.5}
-                      max={0.95}
-                      step={0.05}
-                      className="w-full"
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="0.95"
+                      step="0.05"
+                      value={referenceStrength}
+                      onChange={(e) => setReferenceStrength(Number(e.target.value))}
+                      className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
                     />
                   </div>
 
-                  <Button
+                  <button
                     onClick={handleGenerateVariation}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                    className="w-full bg-blue-600/80 hover:bg-blue-600 text-white text-xs py-1.5 rounded"
                   >
-                    Generate Variation
-                  </Button>
+                    Generate Now
+                  </button>
                 </div>
               )}
 
               {/* Prompt Section - Only for images */}
               {currentTile.type === 'image' && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-white/70">Prompt</h4>
-                    {regeneration.state.isModified && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={regeneration.resetToOriginal}
-                        className="text-orange-400 hover:text-orange-300 hover:bg-white/10 p-1 text-xs h-6"
-                        title="Reset to original"
-                      >
-                        <RotateCcw className="w-3 h-3 mr-1" />
-                        Reset
-                      </Button>
-                    )}
-                  </div>
+                <div className="mb-4">
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Prompt</h4>
                   
-                  {/* Original/Current Prompt */}
-                  <div className="mb-3">
+                  {/* Current Prompt */}
+                  <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-white/60">Current</label>
+                      <label className="text-xs text-white/60">Current</label>
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-white/40">
-                          {promptText.length}/4000
+                        <span className={`text-xs ${getTokenColor(promptTokens, 77)}`}>
+                          {promptTokens}/77 tokens
                         </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                        <button
                           onClick={handleEnhancePrompt}
                           disabled={isEnhancing || !promptText.trim()}
-                          className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
+                          className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
                           title="Enhance with Qwen"
                         >
                           {isEnhancing ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
                           ) : (
-                            <Sparkles className="w-3 h-3" />
+                            <Sparkles className="w-2.5 h-2.5" />
                           )}
-                        </Button>
+                        </button>
                       </div>
                     </div>
                     <Textarea
                       value={promptText}
                       onChange={(e) => setPromptText(e.target.value)}
                       placeholder="Describe what you want to see..."
-                      className="min-h-[60px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
-                      maxLength={4000}
+                      className="min-h-[50px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
                     />
                   </div>
 
                   {/* Enhanced Prompt */}
                   {enhancedPrompt && (
-                    <div className="mb-3">
+                    <div className="mb-2">
                       <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-medium text-white/60">Enhanced by Qwen</label>
-                        {enhancementMetadata && (
-                          <span className="text-xs text-green-400">
-                            +{enhancementMetadata.expansion_percentage}%
-                          </span>
-                        )}
+                        <label className="text-xs text-white/60">Enhanced</label>
+                        <span className={`text-xs ${getTokenColor(enhancedTokens, 77)}`}>
+                          {enhancedTokens}/77 tokens
+                        </span>
                       </div>
                       <Textarea
                         value={enhancedPrompt}
-                        onChange={(e) => {
-                          setEnhancedPrompt(e.target.value);
-                          regeneration.updatePrompts({ positivePrompt: e.target.value });
-                        }}
-                        className="min-h-[80px] text-xs bg-green-500/5 border-green-500/20 text-white resize-none"
-                        maxLength={4000}
+                        onChange={(e) => setEnhancedPrompt(e.target.value)}
+                        className="min-h-[60px] text-xs bg-green-500/5 border-green-500/20 text-white resize-none"
                       />
                     </div>
                   )}
 
-                   {/* Negative Prompt */}
-                   <div className="mb-3">
-                     <div className="flex items-center justify-between mb-1">
-                       <label className="text-xs font-medium text-white/60">Negative</label>
-                       <span className="text-xs text-white/40">
-                         {regeneration.state.negativePrompt.length}/1000
-                       </span>
-                     </div>
-                     <Textarea
-                       value={regeneration.state.negativePrompt}
-                       onChange={(e) => regeneration.updatePrompts({ negativePrompt: e.target.value })}
-                       className="min-h-[40px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
-                       maxLength={1000}
-                     />
-                   </div>
-
-                   {/* Controls Row - Keep Seed Toggle + Regenerate Button */}
-                   <div className="flex items-center justify-between gap-2 mb-3">
-                     <div className="flex items-center gap-1.5">
-                       <span className="text-xs text-white/60">Keep Seed</span>
-                       <button
-                         onClick={() => regeneration.updateSettings({ keepSeed: !regeneration.state.keepSeed })}
-                         className={`h-3 w-5 rounded-full border transition-colors ${
-                           regeneration.state.keepSeed ? 'bg-white/90 border-white/90' : 'bg-white/10 border-white/30'
-                         }`}
-                       >
-                         <div className={`h-2 w-2 rounded-full bg-black transition-transform ${
-                           regeneration.state.keepSeed ? 'translate-x-2.5' : 'translate-x-0.5'
-                         }`} />
-                       </button>
-                     </div>
-
-                     <button
-                       onClick={regeneration.regenerateImage}
-                       disabled={!regeneration.canRegenerate || regeneration.isGenerating}
-                       className="bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 text-white text-xs px-2 py-1 rounded"
-                     >
-                       {regeneration.isGenerating ? (
-                         <>
-                           <Loader2 className="w-3 h-3 mr-1 inline animate-spin" />
-                           Gen...
-                         </>
-                       ) : (
-                         'Regenerate'
-                       )}
-                     </button>
-                   </div>
-
-                  {regeneration.state.isModified && (
-                    <p className="text-xs text-orange-400 mb-3 text-center">
-                      Modified • Ctrl+Enter to regenerate
-                    </p>
-                  )}
+                  {/* Negative Prompt */}
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-white/60">Negative</label>
+                      <span className={`text-xs ${getTokenColor(negativeTokens, 77)}`}>
+                        {negativeTokens}/77 tokens
+                      </span>
+                    </div>
+                    <Textarea
+                      value={negativePrompt}
+                      onChange={(e) => setNegativePrompt(e.target.value)}
+                      placeholder="blurry, distorted, low quality..."
+                      className="min-h-[35px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                    />
+                  </div>
                 </div>
               )}
 
-              {/* Seed Row */}
+              {/* Seed Management */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h4 className="text-xs font-medium text-white/70 mb-1">Seed</h4>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-white font-mono">
-                          {loading ? 'Loading...' : displaySeed}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleCopySeed}
-                          className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                          title="Copy seed"
-                        >
-                          <Copy className="w-3 h-3" />
-                        </Button>
-                        {canLoadDetails && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleLoadDetails}
-                            disabled={loading}
-                            className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                            title="Refresh seed"
-                          >
-                            {loading ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <RefreshCw className="w-3 h-3" />
-                            )}
-                          </Button>
-                        )}
-                      </div>
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Seed Control</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-white/60">Current:</span>
+                      <span className="text-white font-mono">{loading ? 'Loading...' : displaySeed}</span>
+                      <button
+                        onClick={handleCopySeed}
+                        className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
+                        title="Copy seed"
+                      >
+                        <Copy className="w-2.5 h-2.5" />
+                      </button>
                     </div>
+                    
+                    <div className="grid grid-cols-3 gap-1 text-xs">
+                      {['same', 'new', 'manual'].map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setSeedMode(mode as any)}
+                          className={`py-1 px-2 rounded capitalize ${
+                            seedMode === mode 
+                              ? 'bg-white/20 text-white' 
+                              : 'bg-white/5 text-white/60 hover:bg-white/10'
+                          }`}
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {seedMode === 'manual' && (
+                      <Input
+                        value={manualSeed}
+                        onChange={(e) => setManualSeed(e.target.value)}
+                        placeholder="Enter seed number..."
+                        className="text-xs bg-white/5 border-white/20 text-white h-7"
+                      />
+                    )}
                   </div>
                 </div>
               )}
@@ -594,18 +554,6 @@ export const WorkspaceContentModal = ({
                 )}
               </div>
 
-              {/* Keyboard Shortcuts */}
-              <div className="mt-6 pt-4 border-t border-white/10">
-                <p className="text-xs text-white/50 mb-2">Shortcuts</p>
-                <div className="text-xs text-white/40 space-y-1">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>'i' - Toggle panel</div>
-                    <div>'c' - Copy seed</div>
-                    <div>'←/→' - Navigate</div>
-                    <div>'Ctrl+Enter' - Regen</div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
