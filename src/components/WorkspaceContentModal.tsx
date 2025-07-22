@@ -10,7 +10,7 @@ import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
 import { useImageRegeneration } from "@/hooks/useImageRegeneration";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { get_encoding } from "@dqbd/tiktoken";
+
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -194,16 +194,13 @@ export const WorkspaceContentModal = ({
     }
   };
 
-  // Token counting functions
+  // Simple token counting approximation for SDXL (77 token limit)
   const getTokenCount = (text: string): number => {
-    try {
-      const encoding = get_encoding("cl100k_base");
-      const tokens = encoding.encode(text);
-      encoding.free();
-      return tokens.length;
-    } catch {
-      return Math.ceil(text.length / 3.5); // Rough fallback
-    }
+    if (!text) return 0;
+    // Rough approximation: average English word is ~1.3 tokens
+    // Split by spaces, punctuation, and common separators
+    const words = text.trim().split(/[\s,.\-_!?;:"'()\[\]{}]+/).filter(Boolean);
+    return Math.ceil(words.length * 1.3);
   };
 
   const getTokenColor = (tokenCount: number, limit: number) => {
