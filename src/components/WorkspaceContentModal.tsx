@@ -1,16 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw, RotateCcw, Sparkles, Image } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
-import { useImageRegeneration } from "@/hooks/useImageRegeneration";
+import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -35,25 +33,22 @@ export const WorkspaceContentModal = ({
   const [showInfoPanel, setShowInfoPanel] = useState(true);
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
   
-  // Qwen enhancement state
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [enhancedPrompt, setEnhancedPrompt] = useState('');
-  const [enhancementMetadata, setEnhancementMetadata] = useState<any>(null);
+  // Generation state
+  const { generateContent, isGenerating } = useGeneration();
+  
+  // Editing state
   const [promptText, setPromptText] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
+  const [autoNegativePrompt, setAutoNegativePrompt] = useState('');
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhancedPrompt, setEnhancedPrompt] = useState('');
   
-  // Reference controls
-  const [referenceStrength, setReferenceStrength] = useState(0.85);
+  // Reference state
+  const [referenceSet, setReferenceSet] = useState(false);
   
   // Seed management
   const [manualSeed, setManualSeed] = useState('');
   const [seedMode, setSeedMode] = useState<'same' | 'new' | 'manual'>('same');
-  
-  // Initialize regeneration hook
-  const regeneration = useImageRegeneration(currentTile, {
-    seed: details?.seed || currentTile.seed,
-    negativePrompt: details?.negativePrompt
-  });
   
   // Only reset details when switching to a completely different image
   const [lastTileId, setLastTileId] = useState<string>("");
@@ -64,9 +59,12 @@ export const WorkspaceContentModal = ({
       setPromptText(currentTile?.prompt || '');
       setNegativePrompt('');
       setEnhancedPrompt('');
-      setEnhancementMetadata(null);
       setManualSeed('');
       setSeedMode('same');
+      setReferenceSet(false);
+      
+      // Fetch auto-generated negative prompt
+      fetchAutoNegativePrompt();
     }
   }, [currentTile?.id, lastTileId, reset]);
   
@@ -84,22 +82,17 @@ export const WorkspaceContentModal = ({
       } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
         setShowInfoPanel(!showInfoPanel);
-      } else if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        if (details?.seed) {
-          handleCopySeed();
-        }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (regeneration.canRegenerate && !regeneration.isGenerating) {
-          regeneration.regenerateImage();
+        if (!isGenerating) {
+          handleGenerate();
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, tiles.length, showInfoPanel, details?.seed, regeneration]);
+  }, [currentIndex, tiles.length, showInfoPanel, isGenerating]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -137,10 +130,16 @@ export const WorkspaceContentModal = ({
     fetchDetails(currentTile.originalAssetId);
   };
 
-  const handleCopySeed = () => {
-    const seedValue = details?.seed || currentTile.seed || 0;
-    navigator.clipboard.writeText(seedValue.toString());
-    toast.success(`Seed ${seedValue} copied to clipboard`);
+  const fetchAutoNegativePrompt = async () => {
+    try {
+      // This would ideally fetch from the edge function's auto-generated negative prompt
+      // For now, using the standard comprehensive negative prompt
+      const standardNegative = 'blurry, distorted, low quality, worst quality, jpeg artifacts, watermark, signature, text, logo, deformed, ugly, mutated, extra limbs, bad anatomy, bad proportions, cropped, out of frame';
+      setAutoNegativePrompt(standardNegative);
+    } catch (error) {
+      console.error('Failed to fetch auto negative prompt:', error);
+      setAutoNegativePrompt('blurry, distorted, low quality, worst quality');
+    }
   };
 
   const handleEnhancePrompt = async () => {
@@ -163,9 +162,6 @@ export const WorkspaceContentModal = ({
       
       if (data?.success) {
         setEnhancedPrompt(data.enhanced_prompt);
-        setEnhancementMetadata(data.enhancement_metadata);
-        // Auto-populate negative prompt
-        setNegativePrompt('blurry, distorted, low quality, worst quality, jpeg artifacts, watermark, signature');
         toast.success('Prompt enhanced successfully');
       } else {
         throw new Error(data?.error || 'Enhancement failed');
@@ -179,18 +175,65 @@ export const WorkspaceContentModal = ({
   };
 
   const handleUseAsReferenceType = (referenceType: 'style' | 'composition' | 'character') => {
-    if (onUseAsReference) {
-      onUseAsReference(currentTile, referenceType);
-      toast.success(`Set as ${referenceType} reference`);
-      // Keep modal open, don't close
-    }
+    setReferenceSet(true);
+    toast.success(`Set as ${referenceType} reference - ready to generate`);
+    // Don't close modal - keep it open for generation
   };
 
-  const handleGenerateVariation = () => {
-    if (onUseAsReference) {
-      onUseAsReference(currentTile, 'character');
-      toast.success('Generating variation with character reference');
-      // Keep modal open for user to see the process
+  const handleGenerate = async () => {
+    if (!promptText.trim()) {
+      toast.error('Please enter a prompt');
+      return;
+    }
+
+    try {
+      // Get the actual seed value
+      const actualSeed = currentTile.generationParams?.seed || 
+                        currentTile.metadata?.seed || 
+                        currentTile.seed || 
+                        0;
+
+      // Determine final seed based on mode
+      let finalSeed;
+      if (seedMode === 'new') {
+        finalSeed = undefined; // Let system generate new seed
+      } else if (seedMode === 'manual' && manualSeed) {
+        finalSeed = parseInt(manualSeed);
+      } else {
+        finalSeed = actualSeed; // Use same seed
+      }
+
+      // Combine negative prompts
+      const combinedNegativePrompt = [autoNegativePrompt, negativePrompt]
+        .filter(Boolean)
+        .join(', ');
+
+      const referenceMetadata = {
+        model_variant: 'lustify_sdxl',
+        num_images: 1,
+        reference_image: referenceSet,
+        reference_url: referenceSet ? currentTile.url : undefined,
+        reference_type: 'character',
+        reference_strength: 0.85,
+        character_consistency: true,
+        seed: finalSeed,
+        negative_prompt: combinedNegativePrompt
+      };
+
+      const generationRequest = {
+        format: 'sdxl_image_fast' as const,
+        prompt: enhancedPrompt || promptText,
+        referenceImageUrl: referenceSet ? currentTile.url : undefined,
+        metadata: referenceMetadata
+      };
+
+      await generateContent(generationRequest);
+      toast.success('Generation started! New image will appear in workspace when complete.');
+      
+    } catch (error) {
+      console.error('❌ Generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Generation failed';
+      toast.error(errorMessage);
     }
   };
 
@@ -212,7 +255,9 @@ export const WorkspaceContentModal = ({
 
   const promptTokens = getTokenCount(promptText);
   const enhancedTokens = getTokenCount(enhancedPrompt);
-  const negativeTokens = getTokenCount(negativePrompt);
+  const autoNegativeTokens = getTokenCount(autoNegativePrompt);
+  const userNegativeTokens = getTokenCount(negativePrompt);
+  const totalNegativeTokens = autoNegativeTokens + userNegativeTokens;
 
   // Skip rendering if current tile doesn't have URL
   if (!currentTile?.url) {
@@ -220,12 +265,17 @@ export const WorkspaceContentModal = ({
   }
 
   const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
-  const displaySeed = details?.seed || currentTile.seed || 0;
+  
+  // Get actual seed from metadata first, then fallback
+  const displaySeed = currentTile.generationParams?.seed || 
+                     currentTile.metadata?.seed || 
+                     currentTile.seed || 
+                     'Unknown';
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full bg-black border-none text-white p-0 overflow-hidden">
-        {/* Main Content Area - Fixed dimensions */}
+        {/* Main Content Area */}
         <div className="relative w-full h-[95vh] flex">
           {/* Image/Video Area */}
           <div className={`relative flex items-center justify-center transition-all duration-300 ${
@@ -339,15 +389,30 @@ export const WorkspaceContentModal = ({
           }`}>
             <div className="p-4 h-full overflow-y-auto">
               {/* Header */}
-              <div className="flex items-center mb-4">
-                <h3 className="text-sm font-medium text-white">Details & Edit</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-medium text-white">Edit & Generate</h3>
+                {referenceSet && (
+                  <div className="bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
+                    Reference Set
+                  </div>
+                )}
               </div>
 
-              {/* Image-to-Image Actions - Only for images */}
-              {currentTile.type === 'image' && onUseAsReference && (
+              {/* Reference Actions */}
+              {currentTile.type === 'image' && (
                 <div className="mb-4">
                   <h4 className="text-xs font-medium text-white/70 mb-2">Use as Reference</h4>
-                  <div className="grid grid-cols-3 gap-1 mb-2">
+                  <div className="grid grid-cols-3 gap-1">
+                    <button
+                      onClick={() => handleUseAsReferenceType('character')}
+                      className={`text-xs border py-1 px-2 rounded transition ${
+                        referenceSet 
+                          ? 'border-green-500/50 bg-green-500/20 text-green-400'
+                          : 'border-white/20 text-white hover:bg-white/10'
+                      }`}
+                    >
+                      Character
+                    </button>
                     <button
                       onClick={() => handleUseAsReferenceType('style')}
                       className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
@@ -358,43 +423,13 @@ export const WorkspaceContentModal = ({
                       onClick={() => handleUseAsReferenceType('composition')}
                       className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
                     >
-                      Comp
-                    </button>
-                    <button
-                      onClick={() => handleUseAsReferenceType('character')}
-                      className="text-xs border border-white/20 text-white hover:bg-white/10 py-1 px-2 rounded"
-                    >
-                      Character
+                      Layout
                     </button>
                   </div>
-                  
-                  {/* Reference Strength - Compact */}
-                  <div className="mb-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-white/60">Strength</label>
-                      <span className="text-xs text-white/60">{referenceStrength.toFixed(2)}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="0.95"
-                      step="0.05"
-                      value={referenceStrength}
-                      onChange={(e) => setReferenceStrength(Number(e.target.value))}
-                      className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer slider-thumb"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleGenerateVariation}
-                    className="w-full bg-blue-600/80 hover:bg-blue-600 text-white text-xs py-1.5 rounded"
-                  >
-                    Generate Now
-                  </button>
                 </div>
               )}
 
-              {/* Prompt Section - Only for images */}
+              {/* Prompt Section */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
                   <h4 className="text-xs font-medium text-white/70 mb-2">Prompt</h4>
@@ -402,16 +437,16 @@ export const WorkspaceContentModal = ({
                   {/* Current Prompt */}
                   <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-white/60">Current</label>
+                      <label className="text-xs text-white/60">Edit Prompt</label>
                       <div className="flex items-center gap-1">
                         <span className={`text-xs ${getTokenColor(promptTokens, 77)}`}>
-                          {promptTokens}/77 tokens
+                          {promptTokens}/77
                         </span>
                         <button
                           onClick={handleEnhancePrompt}
                           disabled={isEnhancing || !promptText.trim()}
                           className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
-                          title="Enhance with Qwen"
+                          title="Enhance with AI"
                         >
                           {isEnhancing ? (
                             <Loader2 className="w-2.5 h-2.5 animate-spin" />
@@ -424,8 +459,8 @@ export const WorkspaceContentModal = ({
                     <Textarea
                       value={promptText}
                       onChange={(e) => setPromptText(e.target.value)}
-                      placeholder="Describe what you want to see..."
-                      className="min-h-[50px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                      placeholder="Describe the changes you want to make..."
+                      className="min-h-[60px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
                     />
                   </div>
 
@@ -435,13 +470,13 @@ export const WorkspaceContentModal = ({
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs text-white/60">Enhanced</label>
                         <span className={`text-xs ${getTokenColor(enhancedTokens, 77)}`}>
-                          {enhancedTokens}/77 tokens
+                          {enhancedTokens}/77
                         </span>
                       </div>
                       <Textarea
                         value={enhancedPrompt}
                         onChange={(e) => setEnhancedPrompt(e.target.value)}
-                        className="min-h-[60px] text-xs bg-green-500/5 border-green-500/20 text-white resize-none"
+                        className="min-h-[50px] text-xs bg-green-500/5 border-green-500/20 text-white resize-none"
                       />
                     </div>
                   )}
@@ -449,17 +484,22 @@ export const WorkspaceContentModal = ({
                   {/* Negative Prompt */}
                   <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-white/60">Negative</label>
-                      <span className={`text-xs ${getTokenColor(negativeTokens, 77)}`}>
-                        {negativeTokens}/77 tokens
+                      <label className="text-xs text-white/60">
+                        Additional Negative Prompt
+                      </label>
+                      <span className={`text-xs ${getTokenColor(totalNegativeTokens, 77)}`}>
+                        Auto: {autoNegativeTokens} + User: {userNegativeTokens} = {totalNegativeTokens}/77
                       </span>
                     </div>
                     <Textarea
                       value={negativePrompt}
                       onChange={(e) => setNegativePrompt(e.target.value)}
-                      placeholder="blurry, distorted, low quality..."
+                      placeholder="Additional things to avoid..."
                       className="min-h-[35px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
                     />
+                    <div className="text-xs text-white/40 mt-1">
+                      Auto-generated negatives are included automatically
+                    </div>
                   </div>
                 </div>
               )}
@@ -467,18 +507,11 @@ export const WorkspaceContentModal = ({
               {/* Seed Management */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
-                  <h4 className="text-xs font-medium text-white/70 mb-2">Seed Control</h4>
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Pose Control</h4>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-white/60">Current:</span>
-                      <span className="text-white font-mono">{loading ? 'Loading...' : displaySeed}</span>
-                      <button
-                        onClick={handleCopySeed}
-                        className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
-                        title="Copy seed"
-                      >
-                        <Copy className="w-2.5 h-2.5" />
-                      </button>
+                      <span className="text-white font-mono">{displaySeed}</span>
                     </div>
                     
                     <div className="grid grid-cols-3 gap-1 text-xs">
@@ -492,7 +525,7 @@ export const WorkspaceContentModal = ({
                               : 'bg-white/5 text-white/60 hover:bg-white/10'
                           }`}
                         >
-                          {mode}
+                          {mode === 'same' ? 'Same Pose' : mode === 'new' ? 'New Pose' : 'Custom'}
                         </button>
                       ))}
                     </div>
@@ -509,46 +542,61 @@ export const WorkspaceContentModal = ({
                 </div>
               )}
 
-              {/* Basic Info Grid - Simplified without badges */}
-              <div className="space-y-3">
-                {/* Quality and Model Row */}
-                {(currentTile.quality || details?.modelType || currentTile.modelType) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {currentTile.quality && (
-                      <div>
-                        <h4 className="text-xs font-medium text-white/70 mb-1">Quality</h4>
-                        <p className="text-xs text-white capitalize">{currentTile.quality}</p>
-                      </div>
-                    )}
-                    {(details?.modelType || currentTile.modelType) && (
-                      <div>
-                        <h4 className="text-xs font-medium text-white/70 mb-1">Model</h4>
-                        <p className="text-xs text-white">{details?.modelType || currentTile.modelType}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Type and Generation Time Row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <h4 className="text-xs font-medium text-white/70 mb-1">Type</h4>
-                    <p className="text-xs text-white capitalize">{currentTile.type}</p>
-                  </div>
-                  {details?.generationTime && (
-                    <div>
-                      <h4 className="text-xs font-medium text-white/70 mb-1">Gen Time</h4>
-                      <p className="text-xs text-white">{details.generationTime.toFixed(2)}s</p>
-                    </div>
+              {/* Generate Button */}
+              {currentTile.type === 'image' && (
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !promptText.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate New Version'
                   )}
-                </div>
+                </Button>
+              )}
 
-                {details?.referenceStrength && (
+              {/* Load Details Button */}
+              {canLoadDetails && (
+                <div className="mt-4">
+                  <Button
+                    onClick={handleLoadDetails}
+                    disabled={loading}
+                    variant="outline"
+                    size="sm"
+                    className="w-full bg-white/5 border-white/20 text-white hover:bg-white/10"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Info className="w-3 h-3 mr-2" />
+                        Load Technical Details
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Basic Info */}
+              <div className="mt-4 space-y-2 text-xs">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <h4 className="text-xs font-medium text-white/70 mb-1">Reference Strength</h4>
-                    <p className="text-xs text-white">{details.referenceStrength}</p>
+                    <span className="text-white/60">Quality:</span>
+                    <span className="text-white ml-1 capitalize">{currentTile.quality}</span>
                   </div>
-                )}
+                  <div>
+                    <span className="text-white/60">Model:</span>
+                    <span className="text-white ml-1">{currentTile.modelType}</span>
+                  </div>
+                </div>
               </div>
 
             </div>
