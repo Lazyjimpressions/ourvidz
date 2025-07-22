@@ -650,7 +650,7 @@ export const WorkspaceContentModal = ({
               {currentTile.type === 'image' && (
                 <Button
                   onClick={handleGenerate}
-                  disabled={isGenerating || !promptText.trim() || activeReferences.length === 0}
+                  disabled={isGenerating || !promptText.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white mb-4"
                 >
                   {isGenerating ? (
