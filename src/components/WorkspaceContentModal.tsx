@@ -1,7 +1,9 @@
+
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw, RotateCcw, Sparkles, Image, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
@@ -9,7 +11,6 @@ import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
 import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -19,6 +20,7 @@ interface WorkspaceContentModalProps {
   onRemoveFromWorkspace?: (tileId: string) => void;
   onDeleteFromLibrary?: (originalAssetId: string) => void;
   onUseAsReference?: (tile: MediaTile, referenceType: 'style' | 'composition' | 'character') => void;
+  onRefreshWorkspace?: () => void;
 }
 
 export const WorkspaceContentModal = ({ 
@@ -28,7 +30,8 @@ export const WorkspaceContentModal = ({
   onIndexChange, 
   onRemoveFromWorkspace, 
   onDeleteFromLibrary,
-  onUseAsReference 
+  onUseAsReference,
+  onRefreshWorkspace
 }: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
   const [showInfoPanel, setShowInfoPanel] = useState(true);
@@ -44,10 +47,11 @@ export const WorkspaceContentModal = ({
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
   
-  // Reference state - allow multiple active types
-  const [activeReferences, setActiveReferences] = useState<Set<'style' | 'composition' | 'character'>>(new Set());
+  // Reference state - simplified
+  const [preserveCharacter, setPreserveCharacter] = useState(false);
+  const [preserveComposition, setPreserveComposition] = useState(false);
+  const [preserveStyle, setPreserveStyle] = useState(false);
   const [referenceStrength, setReferenceStrength] = useState(0.85);
-  const [referenceType, setReferenceType] = useState<string>('character');
   
   // Seed management
   const [manualSeed, setManualSeed] = useState('');
@@ -67,10 +71,11 @@ export const WorkspaceContentModal = ({
       setEnhancedPrompt('');
       setManualSeed('');
       setSeedMode('same');
-      setActiveReferences(new Set());
+      setPreserveCharacter(false);
+      setPreserveComposition(false);
+      setPreserveStyle(false);
       setShowTechnicalDetails(false);
       setReferenceStrength(0.85);
-      setReferenceType('character');
       
       // Fetch auto-generated negative prompt
       fetchAutoNegativePrompt();
@@ -124,12 +129,22 @@ export const WorkspaceContentModal = ({
 
   // Listen for generation complete events to refresh modal
   useEffect(() => {
-    const handleGenerationComplete = (event: CustomEvent) => {
+    const handleGenerationComplete = async (event: CustomEvent) => {
       const { assetId, type } = event.detail || {};
       
       if (assetId && type === 'image') {
-        toast.success('New image generated! Refreshing workspace...');
-        // The workspace should handle the refresh, we just provide feedback
+        console.log('🎉 New image generated, refreshing workspace:', assetId);
+        
+        // Refresh the workspace to get new tiles
+        if (onRefreshWorkspace) {
+          onRefreshWorkspace();
+        }
+        
+        // Give it a moment for the workspace to update, then try to find the new image
+        setTimeout(() => {
+          // The workspace should handle finding and navigating to the new image
+          toast.success('New image generated successfully!');
+        }, 1000);
       }
     };
 
@@ -137,7 +152,7 @@ export const WorkspaceContentModal = ({
     return () => {
       window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
     };
-  }, []);
+  }, [onRefreshWorkspace]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -224,36 +239,19 @@ export const WorkspaceContentModal = ({
     }
   };
 
-  const handleToggleReference = (referenceType: 'style' | 'composition' | 'character') => {
-    setActiveReferences(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(referenceType)) {
-        newSet.delete(referenceType);
-        if (newSet.size === 0) {
-          toast.info(`${referenceType} reference removed`);
-        } else {
-          toast.info(`${referenceType} reference removed - ${Array.from(newSet).join(', ')} still active`);
-        }
-      } else {
-        newSet.add(referenceType);
-        toast.success(`${referenceType} reference added - combining with ${Array.from(newSet).join(', ')}`);
-      }
-      return newSet;
-    });
-  };
-
-  const handleReferenceTypeChange = (type: string) => {
-    setReferenceType(type);
-  };
-
   const handleGenerate = async () => {
     if (!promptText.trim()) {
       toast.error('Please enter a prompt');
       return;
     }
 
-    if (activeReferences.size === 0) {
-      toast.error('Please set at least one reference type');
+    const activeReferences = [];
+    if (preserveCharacter) activeReferences.push('character');
+    if (preserveComposition) activeReferences.push('composition');
+    if (preserveStyle) activeReferences.push('style');
+
+    if (activeReferences.length === 0) {
+      toast.error('Please select at least one reference type to preserve');
       return;
     }
 
@@ -279,18 +277,18 @@ export const WorkspaceContentModal = ({
         .join(', ');
 
       // Use the primary reference type (first one selected)
-      const primaryReferenceType = Array.from(activeReferences)[0];
+      const primaryReferenceType = activeReferences[0] as 'style' | 'composition' | 'character';
 
       const referenceMetadata = {
         model_variant: 'lustify_sdxl',
         num_images: 1,
         reference_image: true,
         reference_url: currentTile.url,
-        reference_type: primaryReferenceType as 'style' | 'composition' | 'character',
+        reference_type: primaryReferenceType,
         reference_strength: referenceStrength,
-        character_consistency: activeReferences.has('character'),
-        composition_consistency: activeReferences.has('composition'),
-        style_consistency: activeReferences.has('style'),
+        character_consistency: preserveCharacter,
+        composition_consistency: preserveComposition,
+        style_consistency: preserveStyle,
         seed: finalSeed,
         negative_prompt: combinedNegativePrompt
       };
@@ -304,7 +302,7 @@ export const WorkspaceContentModal = ({
 
       await generateContent(generationRequest);
       
-      const activeTypesText = Array.from(activeReferences).join(' + ');
+      const activeTypesText = activeReferences.join(' + ');
       toast.success(`Generation started with ${activeTypesText} reference! New image will appear in workspace when complete.`);
       
     } catch (error) {
@@ -345,6 +343,8 @@ export const WorkspaceContentModal = ({
   const displaySeed = currentTile.generationParams?.seed || 
                      currentTile.seed || 
                      'Unknown';
+
+  const hasActiveReferences = preserveCharacter || preserveComposition || preserveStyle;
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
@@ -465,9 +465,13 @@ export const WorkspaceContentModal = ({
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-medium text-white">Edit & Generate</h3>
-                {activeReferences.size > 0 && (
+                {hasActiveReferences && (
                   <div className="bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
-                    {Array.from(activeReferences).join(' + ')}
+                    {[
+                      preserveCharacter && 'Character',
+                      preserveComposition && 'Composition', 
+                      preserveStyle && 'Style'
+                    ].filter(Boolean).join(' + ')}
                   </div>
                 )}
               </div>
@@ -475,41 +479,71 @@ export const WorkspaceContentModal = ({
               {/* Reference Actions */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
-                  <h4 className="text-xs font-medium text-white/70 mb-2">Reference Types</h4>
-                  <div className="text-xs text-white/50 mb-2">
-                    Select multiple for better scene preservation
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Preserve From Reference</h4>
+                  <div className="text-xs text-white/50 mb-3">
+                    Select what to keep from the current image
                   </div>
-                  <div className="grid grid-cols-1 gap-2 mb-4">
-                    {[
-                      { type: 'character' as const, desc: 'Preserves person/subject' },
-                      { type: 'composition' as const, desc: 'Preserves layout/pose' },
-                      { type: 'style' as const, desc: 'Preserves artistic style' }
-                    ].map(({ type, desc }) => (
-                      <button
-                        key={type}
-                        onClick={() => handleToggleReference(type)}
-                        className={`text-xs border py-2 px-3 rounded transition text-left ${
-                          activeReferences.has(type)
-                            ? 'border-green-500/50 bg-green-500/20 text-green-400'
-                            : 'border-white/20 text-white hover:bg-white/10'
-                        }`}
-                      >
-                        <div className="font-medium capitalize">{type}</div>
-                        <div className="text-white/60">{desc}</div>
-                      </button>
-                    ))}
+                  <div className="space-y-2 mb-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveCharacter}
+                        onChange={(e) => setPreserveCharacter(e.target.checked)}
+                        className="rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white font-medium">Character</div>
+                        <div className="text-white/60 text-xs">Keep person/subject appearance</div>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveComposition}
+                        onChange={(e) => setPreserveComposition(e.target.checked)}
+                        className="rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white font-medium">Composition</div>
+                        <div className="text-white/60 text-xs">Keep layout and pose</div>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveStyle}
+                        onChange={(e) => setPreserveStyle(e.target.checked)}
+                        className="rounded border-white/20 bg-white/10 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white font-medium">Style</div>
+                        <div className="text-white/60 text-xs">Keep artistic style</div>
+                      </div>
+                    </label>
                   </div>
 
-                  {/* Reference Strength Slider */}
-                  {activeReferences.size > 0 && (
+                  {/* Simple Reference Strength Slider */}
+                  {hasActiveReferences && (
                     <div className="mb-4 p-3 border border-white/10 rounded-lg bg-white/5">
-                      <ReferenceStrengthSlider
-                        value={referenceStrength}
-                        onChange={setReferenceStrength}
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs text-white/70">Reference Strength</label>
+                        <span className="text-xs text-white/70 font-mono">{referenceStrength.toFixed(2)}</span>
+                      </div>
+                      <Slider
+                        value={[referenceStrength]}
+                        onValueChange={(values) => setReferenceStrength(values[0])}
+                        min={0.1}
+                        max={1.0}
+                        step={0.01}
                         disabled={isGenerating}
-                        referenceType={referenceType}
-                        onTypeChange={handleReferenceTypeChange}
+                        className="w-full"
                       />
+                      <div className="flex justify-between text-xs text-white/50 mt-1">
+                        <span>Low</span>
+                        <span>High</span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -632,7 +666,7 @@ export const WorkspaceContentModal = ({
               {currentTile.type === 'image' && (
                 <Button
                   onClick={handleGenerate}
-                  disabled={isGenerating || !promptText.trim() || activeReferences.size === 0}
+                  disabled={isGenerating || !promptText.trim() || !hasActiveReferences}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white mb-4"
                 >
                   {isGenerating ? (
