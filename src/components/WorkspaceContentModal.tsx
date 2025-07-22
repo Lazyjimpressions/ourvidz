@@ -189,7 +189,6 @@ export const WorkspaceContentModal = ({
     try {
       // Get the actual seed value
       const actualSeed = currentTile.generationParams?.seed || 
-                        currentTile.metadata?.seed || 
                         currentTile.seed || 
                         0;
 
@@ -213,7 +212,7 @@ export const WorkspaceContentModal = ({
         num_images: 1,
         reference_image: referenceSet,
         reference_url: referenceSet ? currentTile.url : undefined,
-        reference_type: 'character',
+        reference_type: 'character' as const,
         reference_strength: 0.85,
         character_consistency: true,
         seed: finalSeed,
@@ -266,9 +265,8 @@ export const WorkspaceContentModal = ({
 
   const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
   
-  // Get actual seed from metadata first, then fallback
+  // Get actual seed from generationParams or direct seed property
   const displaySeed = currentTile.generationParams?.seed || 
-                     currentTile.metadata?.seed || 
                      currentTile.seed || 
                      'Unknown';
 
