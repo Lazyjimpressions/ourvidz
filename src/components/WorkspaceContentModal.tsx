@@ -74,6 +74,25 @@ export const WorkspaceContentModal = ({
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const activeElement = document.activeElement;
+      const isTyping = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT' ||
+        activeElement.getAttribute('contenteditable') === 'true'
+      );
+
+      // Only allow ESC when typing, disable other shortcuts
+      if (isTyping) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        }
+        return;
+      }
+
+      // Normal shortcuts when not typing
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         handlePrevious();
@@ -97,6 +116,23 @@ export const WorkspaceContentModal = ({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [currentIndex, tiles.length, showInfoPanel, isGenerating]);
+
+  // Listen for generation complete events to refresh modal
+  useEffect(() => {
+    const handleGenerationComplete = (event: CustomEvent) => {
+      const { assetId, type } = event.detail || {};
+      
+      if (assetId && type === 'image') {
+        toast.success('New image generated! Refreshing workspace...');
+        // The workspace should handle the refresh, we just provide feedback
+      }
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, []);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
