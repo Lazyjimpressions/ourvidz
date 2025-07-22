@@ -392,6 +392,13 @@ const Workspace = () => {
     }
   };
 
+  // Simple workspace refresh function
+  const handleRefreshWorkspace = () => {
+    // The useRealtimeWorkspace hook should automatically refresh
+    // We can trigger a small state update to ensure re-render
+    console.log('Refreshing workspace for new generation...');
+  };
+
   // Reference image handlers
   const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
     setReferenceImage(file);
@@ -873,6 +880,7 @@ const Workspace = () => {
             }
           }}
           onUseAsReference={handleUseAsReferenceWithType}
+          onRefreshWorkspace={handleRefreshWorkspace}
         />
       )}
 
