@@ -1,93 +1,65 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { Plus, Upload, RefreshCw } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { RefreshCw } from 'lucide-react';
 
 import { MediaTile } from '@/types/workspace';
 import { useWorkspace } from '@/hooks/useWorkspace';
-import { useUpload } from '@/hooks/useUpload';
 import { useToast } from '@/hooks/use-toast';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
-import { MediaTileComponent } from '@/components/MediaTile';
-import { UploadButton } from '@/components/UploadButton';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AspectRatio } from "@/components/ui/aspect-ratio"
+import { AspectRatio } from '@/components/ui/aspect-ratio';
+
+// Simple MediaTile component for this page
+const MediaTileComponent = ({ tile, onClick }: { tile: MediaTile; onClick: () => void }) => {
+  return (
+    <div className="group relative cursor-pointer" onClick={onClick}>
+      <AspectRatio ratio={1}>
+        <div className="relative w-full h-full overflow-hidden rounded-lg border border-border">
+          {tile.type === 'image' ? (
+            <img
+              src={tile.url}
+              alt={tile.prompt}
+              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <video
+              src={tile.url}
+              poster={tile.thumbnailUrl}
+              className="w-full h-full object-cover transition-transform group-hover:scale-105"
+              muted
+            />
+          )}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+        </div>
+      </AspectRatio>
+    </div>
+  );
+};
 
 export default function Workspace() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTiles, setSelectedTiles] = useState<MediaTile[]>([]);
   const [currentTileIndex, setCurrentTileIndex] = useState(-1);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  // Fetch workspace tiles
-  const { 
-    data: tiles, 
-    isLoading, 
-    error, 
-    refetch 
-  } = useQuery({
-    queryKey: ['workspaceTiles', searchQuery],
-    queryFn: () => useWorkspace().getWorkspaceTiles(searchQuery),
-  });
+  const { tiles, isLoading, deletingTiles, clearWorkspace, deleteTile } = useWorkspace();
 
-  // Upload mutation
-  const { 
-    startUpload, 
-    isUploading 
-  } = useUpload();
-
-  // Delete mutation
-  const { 
-    mutate: deleteAsset, 
-    isLoading: isDeleting 
-  } = useMutation({
-    mutationFn: useWorkspace().deleteAsset,
-    onSuccess: () => {
-      toast({
-        title: "Deletion Successful",
-        description: "Asset deleted from library.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['workspaceTiles'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Deletion Failed",
-        description: error.message || "Failed to delete asset.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  // Remove from workspace mutation
-  const { 
-    mutate: removeFromWorkspace, 
-    isLoading: isRemoving 
-  } = useMutation({
-    mutationFn: useWorkspace().removeFromWorkspace,
-    onSuccess: () => {
-      toast({
-        title: "Asset Removed",
-        description: "Asset removed from workspace.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['workspaceTiles'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Removal Failed",
-        description: error.message || "Failed to remove asset.",
-        variant: "destructive",
-      });
-    },
-  });
+  // Filter tiles based on search query
+  const filteredTiles = useMemo(() => {
+    if (!searchQuery.trim()) return tiles;
+    
+    const query = searchQuery.toLowerCase();
+    return tiles.filter(tile => 
+      tile.prompt.toLowerCase().includes(query) ||
+      tile.type.toLowerCase().includes(query)
+    );
+  }, [tiles, searchQuery]);
 
   const handleTileClick = (tile: MediaTile) => {
-    setSelectedTiles(tiles || []);
-    const index = tiles?.findIndex((t) => t.id === tile.id) ?? -1;
+    setSelectedTiles(filteredTiles);
+    const index = filteredTiles.findIndex((t) => t.id === tile.id);
     setCurrentTileIndex(index);
   };
 
@@ -95,32 +67,21 @@ export default function Workspace() {
     setSearchQuery(e.target.value);
   };
 
-  const handleUpload = async (file: File) => {
-    try {
-      await startUpload(file);
-      // Invalidate the query to refresh the workspace tiles
-      queryClient.invalidateQueries({ queryKey: ['workspaceTiles'] });
-    } catch (error: any) {
-      toast({
-        title: "Upload Failed",
-        description: error.message || "Failed to upload asset.",
-        variant: "destructive",
-      });
+  const handleDeleteFromLibrary = async (tileId: string) => {
+    const tile = filteredTiles.find(t => t.id === tileId);
+    if (tile) {
+      try {
+        await deleteTile(tile);
+      } catch (error) {
+        console.error('Delete failed:', error);
+      }
     }
   };
 
-  const handleRemoveFromWorkspace = (tileId: string) => {
-    removeFromWorkspace(tileId);
-  };
-
-  const handleDeleteFromLibrary = (originalAssetId: string) => {
-    deleteAsset(originalAssetId);
-  };
-
   const handleRefreshWorkspace = useCallback(() => {
-    console.log('🔄 Refreshing workspace after generation...');
-    refetch();
-  }, [refetch]);
+    console.log('🔄 Refreshing workspace...');
+    // The useWorkspace hook handles automatic refreshing
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -133,8 +94,7 @@ export default function Workspace() {
             value={searchQuery}
             onChange={handleSearchChange}
           />
-          <UploadButton onUpload={handleUpload} isUploading={isUploading} />
-          <Button variant="ghost" onClick={() => refetch()} disabled={isLoading}>
+          <Button variant="ghost" onClick={() => window.location.reload()} disabled={isLoading}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -148,10 +108,8 @@ export default function Workspace() {
                 <Skeleton key={i} className="w-full aspect-square rounded-md" />
               ))}
             </>
-          ) : error ? (
-            <div className="text-red-500">Error: {error.message}</div>
-          ) : tiles && tiles.length > 0 ? (
-            tiles.map((tile) => (
+          ) : filteredTiles && filteredTiles.length > 0 ? (
+            filteredTiles.map((tile) => (
               <MediaTileComponent
                 key={tile.id}
                 tile={tile}
@@ -173,7 +131,6 @@ export default function Workspace() {
             setCurrentTileIndex(-1);
           }}
           onIndexChange={setCurrentTileIndex}
-          onRemoveFromWorkspace={handleRemoveFromWorkspace}
           onDeleteFromLibrary={handleDeleteFromLibrary}
           onRefreshWorkspace={handleRefreshWorkspace}
         />
