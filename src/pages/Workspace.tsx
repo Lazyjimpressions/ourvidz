@@ -488,6 +488,43 @@ const Workspace = () => {
     toast.success('Image set as character reference');
   }, [defaultReferences]);
 
+  // Enhanced use as reference with type specification
+  const handleUseAsReferenceWithType = useCallback((tile: any, referenceType: 'style' | 'composition' | 'character') => {
+    const newReference = {
+      id: referenceType,
+      label: referenceType.charAt(0).toUpperCase() + referenceType.slice(1),
+      description: 
+        referenceType === 'character' ? 'Preserve character appearance and features' :
+        referenceType === 'style' ? 'Transfer artistic style and visual aesthetics' :
+        'Match layout, positioning, and structure',
+      url: tile.url,
+      enabled: true,
+      isWorkspaceAsset: true,
+      file: undefined,
+      originalPrompt: tile.prompt,
+      modelType: tile.modelType,
+      quality: tile.quality,
+      generationParams: tile.generationParams
+    };
+    
+    // Update references: preserve all types, only update specified slot
+    setActiveReferences(prev => {
+      const baseRefs = prev.length > 0 ? prev : defaultReferences;
+      
+      return baseRefs.map(ref => 
+        ref.id === referenceType 
+          ? newReference
+          : ref
+      );
+    });
+    
+    // Close modal and show reference panel
+    setLightboxIndex(null);
+    setShowReferencePanel(true);
+    
+    toast.success(`Image set as ${referenceType} reference`);
+  }, [defaultReferences]);
+
   // NEW: Use seed from workspace asset
   const handleUseSeed = useCallback((tile: any) => {
     const tileSeed = tile.generationParams?.seed || tile.seed;
@@ -835,6 +872,7 @@ const Workspace = () => {
               toast.error('Failed to delete from library');
             }
           }}
+          onUseAsReference={handleUseAsReferenceWithType}
         />
       )}
 
