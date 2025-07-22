@@ -9,6 +9,7 @@ import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
 import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ReferenceStrengthSlider } from "@/components/workspace/ReferenceStrengthSlider";
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -45,6 +46,8 @@ export const WorkspaceContentModal = ({
   
   // Reference state - allow multiple active types
   const [activeReferences, setActiveReferences] = useState<Set<'style' | 'composition' | 'character'>>(new Set());
+  const [referenceStrength, setReferenceStrength] = useState(0.85);
+  const [referenceType, setReferenceType] = useState<string>('character');
   
   // Seed management
   const [manualSeed, setManualSeed] = useState('');
@@ -66,6 +69,8 @@ export const WorkspaceContentModal = ({
       setSeedMode('same');
       setActiveReferences(new Set());
       setShowTechnicalDetails(false);
+      setReferenceStrength(0.85);
+      setReferenceType('character');
       
       // Fetch auto-generated negative prompt
       fetchAutoNegativePrompt();
@@ -237,6 +242,10 @@ export const WorkspaceContentModal = ({
     });
   };
 
+  const handleReferenceTypeChange = (type: string) => {
+    setReferenceType(type);
+  };
+
   const handleGenerate = async () => {
     if (!promptText.trim()) {
       toast.error('Please enter a prompt');
@@ -278,7 +287,7 @@ export const WorkspaceContentModal = ({
         reference_image: true,
         reference_url: currentTile.url,
         reference_type: primaryReferenceType as 'style' | 'composition' | 'character',
-        reference_strength: 0.85,
+        reference_strength: referenceStrength,
         character_consistency: activeReferences.has('character'),
         composition_consistency: activeReferences.has('composition'),
         style_consistency: activeReferences.has('style'),
@@ -470,7 +479,7 @@ export const WorkspaceContentModal = ({
                   <div className="text-xs text-white/50 mb-2">
                     Select multiple for better scene preservation
                   </div>
-                  <div className="grid grid-cols-1 gap-2">
+                  <div className="grid grid-cols-1 gap-2 mb-4">
                     {[
                       { type: 'character' as const, desc: 'Preserves person/subject' },
                       { type: 'composition' as const, desc: 'Preserves layout/pose' },
@@ -490,6 +499,19 @@ export const WorkspaceContentModal = ({
                       </button>
                     ))}
                   </div>
+
+                  {/* Reference Strength Slider */}
+                  {activeReferences.size > 0 && (
+                    <div className="mb-4 p-3 border border-white/10 rounded-lg bg-white/5">
+                      <ReferenceStrengthSlider
+                        value={referenceStrength}
+                        onChange={setReferenceStrength}
+                        disabled={isGenerating}
+                        referenceType={referenceType}
+                        onTypeChange={handleReferenceTypeChange}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 
