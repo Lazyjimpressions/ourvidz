@@ -1,16 +1,16 @@
-
 import React, { useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Upload, X, Loader2, InfoIcon } from "lucide-react";
+import { Upload, X, Loader2, InfoIcon, FolderOpen } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { uploadReferenceImage } from '@/lib/storage';
 import { toast } from 'sonner';
 import { useReferenceUrls } from '@/hooks/useReferenceUrls';
 import { ReferenceTypeSelector } from './ReferenceTypeSelector';
+import { ReferenceImageBrowser } from './ReferenceImageBrowser';
 import { EnhancedDragDropHandler } from './EnhancedDragDropHandler';
 
 interface ReferenceType {
@@ -50,6 +50,7 @@ export const MultiReferencePanel = ({
   
   const [uploading, setUploading] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const [browserOpen, setBrowserOpen] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem('workspace-references-collapsed');
     return saved !== null ? JSON.parse(saved) : true;
@@ -221,6 +222,22 @@ export const MultiReferencePanel = ({
     }
   }, [references, onReferencesChange, refreshUrl]);
 
+  const handleBrowseSelect = useCallback((referenceId: string, url: string) => {
+    const updatedReferences = references.map(ref => 
+      ref.id === referenceId 
+        ? { 
+            ...ref, 
+            url,
+            enabled: true,
+            isWorkspaceAsset: false,
+            file: null
+          }
+        : ref
+    );
+    onReferencesChange(updatedReferences);
+    toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from library`);
+  }, [references, onReferencesChange]);
+
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
   const hasAnyReference = references.some(ref => ref.url);
 
@@ -356,7 +373,7 @@ export const MultiReferencePanel = ({
                                   ? 'bg-primary text-primary-foreground' 
                                   : 'bg-secondary text-secondary-foreground'
                               }`}>
-                                {ref.isWorkspaceAsset ? 'Workspace' : 'Uploaded'}
+                                {ref.isWorkspaceAsset ? 'Workspace' : 'Reference'}
                               </span>
                             </div>
                           </div>
@@ -369,32 +386,46 @@ export const MultiReferencePanel = ({
                           </button>
                         </div>
                       ) : (
-                        <div
-                          className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
-                            isDragging === ref.id
-                              ? 'border-primary bg-primary/10' 
-                              : ref.enabled 
-                                ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
-                                : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
-                          }`}
-                        >
-                          <Button
-                            variant="ghost"
-                            onClick={() => handleFileSelect(ref.id)}
-                            disabled={uploading.has(ref.id)}
-                            className="w-full h-full p-1 bg-transparent border-0 hover:bg-transparent"
-                            title={`Upload ${ref.label} reference - Click or drag image here`}
+                        <div className="space-y-1">
+                          <div
+                            className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
+                              isDragging === ref.id
+                                ? 'border-primary bg-primary/10' 
+                                : ref.enabled 
+                                  ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
+                                  : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
+                            }`}
                           >
-                            {uploading.has(ref.id) ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                            ) : (
-                              <div className="flex flex-col items-center gap-0.5">
-                                <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                                <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
-                                  Drag or Click
-                                </span>
-                              </div>
-                            )}
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleFileSelect(ref.id)}
+                              disabled={uploading.has(ref.id)}
+                              className="w-full h-full p-1 bg-transparent border-0 hover:bg-transparent"
+                              title={`Upload ${ref.label} reference - Click or drag image here`}
+                            >
+                              {uploading.has(ref.id) ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                              ) : (
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                                  <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
+                                    Drag or Click
+                                  </span>
+                                </div>
+                              )}
+                            </Button>
+                          </div>
+                          
+                          {/* Browse Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBrowserOpen(ref.id)}
+                            disabled={uploading.has(ref.id)}
+                            className="w-full h-6 text-xs"
+                          >
+                            <FolderOpen className="w-3 h-3 mr-1" />
+                            Browse
                           </Button>
                         </div>
                       )}
@@ -459,6 +490,13 @@ export const MultiReferencePanel = ({
           </AccordionItem>
         </Accordion>
       </div>
+
+      {/* Reference Image Browser */}
+      <ReferenceImageBrowser
+        isOpen={browserOpen !== null}
+        onClose={() => setBrowserOpen(null)}
+        onSelect={(url) => browserOpen && handleBrowseSelect(browserOpen, url)}
+      />
     </TooltipProvider>
   );
 };
