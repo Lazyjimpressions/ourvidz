@@ -1,6 +1,6 @@
 # OurVidz.com - Project Documentation
 
-**Last Updated:** July 20, 2025  
+**Last Updated:** July 23, 2025  
 **Current Status:** ✅ Production Ready - All 10 Job Types Operational + Multi-Reference System Live  
 **System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)  
 **Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
@@ -14,9 +14,12 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 - **Ultra-Fast Images**: SDXL generation in 3-8 seconds (flexible quantities: 1,3,6 images)
 - **WAN Video Generation**: 135-240+ seconds per video
-- **Multi-Reference System**: Optional image-to-image with style, composition, and character references
+- **Multi-Reference System (SDXL Only)**: Optional image-to-image with separate style, composition, and character references (see MultiReferencePanel)
+- **Reference Image Storage**: Dedicated Supabase bucket for user-uploaded/third-party reference images
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
+- **Prompt Enhancement**: Qwen 7B-powered enhancement for WAN jobs and instant enhancement in the frontend modal (PromptEnhancementModal)
+- **Compel Integration**: Present in code, but not used for SDXL due to model incompatibility; prompt library enhancement is in progress
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
 - **Mobile-First Design**: Optimized for modern usage patterns
@@ -28,20 +31,33 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 ### **✅ PRODUCTION READY**
 - **Dual Worker System**: SDXL + WAN workers operational on RTX 6000 ADA
 - **All 10 Job Types**: Live and operational with flexible SDXL quantities
-- **Multi-Reference System**: Style, composition, and character references
+- **Multi-Reference System (SDXL Only)**: Style, composition, and character references
+- **Reference Image Storage**: Dedicated bucket for user/third-party reference images
 - **Enhanced Negative Prompts**: Intelligent SDXL generation with multi-party scene detection
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Backend**: Supabase Online + Upstash Redis fully operational
 - **Frontend**: Deployed on Lovable production
 - **Edge Functions**: All 4 functions operational (queue-job, job-callback, enhance-prompt, generate-admin-image)
+- **Callback & Queue Standardization**: All edge functions and workers use standardized parameters
 
 ### **✅ ALL FEATURES OPERATIONAL**
 - **SDXL Jobs**: sdxl_image_fast, sdxl_image_high (flexible 1,3,6 images)
 - **WAN Standard Jobs**: image_fast, image_high, video_fast, video_high
 - **WAN Enhanced Jobs**: All 4 enhanced job types with Qwen enhancement
-- **Prompt Enhancement**: AI-powered prompt enhancement via edge function
+- **Prompt Enhancement**: Qwen 7B-powered enhancement for WAN and instant enhancement in frontend modal
 - **File Storage**: Proper bucket mapping and URL generation
 - **Real-time Updates**: WebSocket connections for live status updates
+
+---
+
+## **🆕 Notable Improvements in 1.1.0 (July 23, 2025)**
+- Multi-reference system for SDXL (style, composition, character)
+- Reference image storage bucket for user/third-party images
+- Compel integration present but not used for SDXL; prompt library enhancement in progress
+- Qwen 7B prompt enhancement for WAN and frontend modal
+- Enhance-prompt edge function live
+- Callback and queue standardization across all edge functions and workers
+- Improved error handling and metadata tracking
 
 ---
 

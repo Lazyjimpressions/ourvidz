@@ -13,7 +13,10 @@ OurVidz is a comprehensive AI content generation platform featuring:
 
 - **Dual Worker Architecture**: SDXL for high-quality images, WAN for videos
 - **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
-- **Multi-Reference System**: Optional image-to-image with style, composition, and character references
+- **Multi-Reference System (SDXL Only)**: Supports separate reference images for style, composition, and character. Reference images are stored in a dedicated Supabase bucket.
+- **Compel Integration (SDXL)**: Present in code, not used for SDXL due to model incompatibility. Prompt library enhancement is in progress.
+- **Qwen 7B Prompt Enhancement**: Used for WAN jobs and instant enhancement in frontend modal.
+- **Edge Functions**: All four (queue-job, job-callback, enhance-prompt, generate-admin-image) are live and use standardized parameters.
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
 - **Standardized Callbacks**: Consistent parameters across all workers

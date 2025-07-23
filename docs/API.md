@@ -153,10 +153,15 @@
 
 ## **🎨 Reference Image System**
 
-### **Reference Types**
+### **Reference Types (SDXL Only)**
 - **Style**: Influences artistic style and visual treatment
-- **Composition**: Guides layout, framing, and scene structure  
+- **Composition**: Guides layout, framing, and scene structure
 - **Character**: Maintains character appearance and features
+
+**Note:** Multi-reference (separate style, composition, character) is available for SDXL jobs only. WAN jobs support single reference images.
+
+### **Reference Image Storage**
+- User-uploaded and third-party reference images are stored in a dedicated Supabase storage bucket (`reference_images`).
 
 ### **Reference Parameters**
 ```json
@@ -443,3 +448,20 @@ Job callbacks include detailed processing information:
 - Comprehensive debugging information
 - Backward compatibility preservation
 - Clear error messages and status codes 
+
+## **📝 Compel Integration (SDXL)**
+
+- Compel integration is present in the codebase but is **not currently used** for SDXL jobs due to model incompatibility (Lustify SDXL).
+- SDXL jobs use standard prompt strings for now.
+- **Prompt library enhancement for SDXL is in progress.**
+
+## **Prompt Enhancement (Qwen 7B)**
+
+- WAN worker uses Qwen 7B for automatic prompt enhancement.
+- The frontend PromptEnhancementModal leverages Qwen logic for instant, user-selectable prompt enhancement.
+
+## **Edge Functions**
+
+- All four edge functions are live: `queue-job`, `job-callback`, `enhance-prompt`, `generate-admin-image`.
+- `enhance-prompt` provides rule-based and Qwen-style prompt enhancement for both backend and frontend use.
+- All edge functions and workers use standardized callback and job queue parameters. 

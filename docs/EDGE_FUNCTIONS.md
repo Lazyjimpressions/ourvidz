@@ -805,3 +805,20 @@ metadata JSONB {
 - Legacy metadata fields are preserved
 - Single-reference workflows continue to work
 - Non-reference generation unchanged 
+
+## **enhance-prompt Edge Function**
+- Provides rule-based and Qwen-style prompt enhancement for both backend and frontend use.
+- Used by the PromptEnhancementModal in the frontend for instant prompt enhancement.
+
+## **Multi-Reference System (SDXL Only)**
+- Supports separate reference images for style, composition, and character.
+- Reference images are stored in a dedicated Supabase bucket (`reference_images`).
+
+## **Compel Integration (SDXL)**
+- Present in code, not used for SDXL due to model incompatibility. Prompt library enhancement is in progress.
+
+## **Qwen 7B Prompt Enhancement**
+- Used for WAN jobs and instant enhancement in frontend modal.
+
+## **Callback & Queue Standardization**
+- All edge functions and workers use standardized callback and job queue parameters (job_id, assets array, compel metadata, etc.). 

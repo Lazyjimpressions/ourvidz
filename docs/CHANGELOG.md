@@ -291,4 +291,27 @@ python generate.py --task t2v-1.3B --ckpt_dir /workspace/models/wan2.1-t2v-1.3b 
 
 ---
 
+## [1.1.0] - 2025-07-23
+
+### 🚀 Major Improvements & New Features
+- **Multi-Reference System (SDXL Only)**: Now supports separate reference images for style, composition, and character. Fully live in the frontend (see MultiReferencePanel).
+- **Reference Image Storage Bucket**: Added dedicated Supabase storage bucket for user-uploaded/third-party reference images.
+- **Compel Integration (SDXL)**: Compel code is present but not actively used for SDXL due to model incompatibility. SDXL currently uses standard prompt strings. Prompt library for SDXL enhancement is in progress.
+- **Qwen 7B Prompt Enhancement**: WAN worker uses Qwen 7B for automatic prompt enhancement. Frontend PromptEnhancementModal leverages Qwen logic for instant, user-selectable prompt enhancement.
+- **Edge Functions**: All four edge functions (queue-job, job-callback, enhance-prompt, generate-admin-image) are live and up to date. Enhance-prompt edge function provides rule-based and Qwen-style prompt enhancement.
+- **Callback & Queue Standardization**: All edge functions and workers now use standardized callback and job queue parameters (job_id, assets array, compel metadata, etc.).
+- **Image-to-Image for SDXL**: SDXL jobs now support image-to-image generation with flexible reference types.
+
+### 🛠️ Other Improvements
+- Improved error handling and debugging in edge functions and workers.
+- Enhanced metadata tracking for jobs, images, and videos.
+- Documentation and codebase alignment for all new features.
+
+### ⚠️ Known Limitations
+- Compel is not used for SDXL due to Lustify model incompatibility; prompt library enhancement is planned.
+- Multi-reference system is only available for SDXL jobs (not WAN).
+- Enhanced prompt system for SDXL is in progress.
+
+---
+
 *This changelog tracks all significant changes and milestones in the OurVidz project development.* 
