@@ -1,17 +1,17 @@
-
 import React, { useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Upload, X, Loader2, InfoIcon } from "lucide-react";
+import { Upload, X, Loader2, InfoIcon, FolderOpen } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { uploadReferenceImage } from '@/lib/storage';
 import { toast } from 'sonner';
 import { useReferenceUrls } from '@/hooks/useReferenceUrls';
 import { ReferenceTypeSelector } from './ReferenceTypeSelector';
 import { EnhancedDragDropHandler } from './EnhancedDragDropHandler';
+import { ReferenceImageBrowser } from './ReferenceImageBrowser';
 
 interface ReferenceType {
   id: 'style' | 'composition' | 'character';
@@ -54,6 +54,8 @@ export const MultiReferencePanel = ({
     const saved = localStorage.getItem('workspace-references-collapsed');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [selectedReferenceId, setSelectedReferenceId] = useState<string | null>(null);
 
   const { getSignedUrl, refreshUrl, preloadUrls } = useReferenceUrls();
 
@@ -232,6 +234,25 @@ export const MultiReferencePanel = ({
     toggleReference(referenceId, enabled);
   }, [isCollapsed, toggleReference]);
 
+  const handleBrowseReferences = (referenceId: string) => {
+    setSelectedReferenceId(referenceId);
+    setBrowserOpen(true);
+  };
+
+  const handleBrowserSelect = (url: string) => {
+    if (selectedReferenceId) {
+      const updatedReferences = references.map(ref =>
+        ref.id === selectedReferenceId
+          ? { ...ref, enabled: true, url, isWorkspaceAsset: false }
+          : ref
+      );
+      onReferencesChange(updatedReferences);
+      toast.success(`${references.find(r => r.id === selectedReferenceId)?.label} reference set successfully`);
+    }
+    setBrowserOpen(false);
+    setSelectedReferenceId(null);
+  };
+
   // Get primary reference type for type selector
   const primaryType = activeReferences.length > 0 ? activeReferences[0].id : 'style';
 
@@ -399,6 +420,17 @@ export const MultiReferencePanel = ({
                         </div>
                       )}
                     </EnhancedDragDropHandler>
+
+                    {/* Browse References Button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleBrowseReferences(ref.id)}
+                      className="w-full text-xs h-6 bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <FolderOpen className="w-3 h-3 mr-1" />
+                      Browse
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -459,6 +491,16 @@ export const MultiReferencePanel = ({
           </AccordionItem>
         </Accordion>
       </div>
+
+      {/* Reference Image Browser */}
+      <ReferenceImageBrowser
+        isOpen={browserOpen}
+        onClose={() => {
+          setBrowserOpen(false);
+          setSelectedReferenceId(null);
+        }}
+        onSelect={handleBrowserSelect}
+      />
     </TooltipProvider>
   );
 };
