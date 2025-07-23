@@ -1,3 +1,4 @@
+
 import React, { useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -7,8 +8,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Upload, X, Loader2, InfoIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { uploadReferenceImage } from '@/lib/storage';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useReferenceUrls } from '@/hooks/useReferenceUrls';
+import { ReferenceTypeSelector } from './ReferenceTypeSelector';
+import { EnhancedDragDropHandler } from './EnhancedDragDropHandler';
 
 interface ReferenceType {
   id: 'style' | 'composition' | 'character';
@@ -33,7 +36,6 @@ interface MultiReferencePanelProps {
   onStrengthChange: (value: number) => void;
   onReferencesChange: (references: ReferenceType[]) => void;
   onClear: () => void;
-  // Controlled references
   references: ReferenceType[];
 }
 
@@ -50,8 +52,10 @@ export const MultiReferencePanel = ({
   const [isDragging, setIsDragging] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem('workspace-references-collapsed');
-    return saved !== null ? JSON.parse(saved) : true; // Default to collapsed for max workspace
+    return saved !== null ? JSON.parse(saved) : true;
   });
+
+  const { getSignedUrl, refreshUrl, preloadUrls } = useReferenceUrls();
 
   // Save collapse state to localStorage
   useEffect(() => {
@@ -65,23 +69,17 @@ export const MultiReferencePanel = ({
     }
   }, [isDragging, isCollapsed]);
 
-  const getSignedUrl = async (path: string): Promise<string | null> => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('reference_images')
-        .createSignedUrl(path, 3600); // 1 hour expiry
-
-      if (error) {
-        console.error('Error creating signed URL:', error);
-        return null;
-      }
-
-      return data.signedUrl;
-    } catch (error) {
-      console.error('Error getting signed URL:', error);
-      return null;
+  // Preload existing reference URLs
+  useEffect(() => {
+    const existingPaths = references
+      .filter(ref => ref.url && !ref.url.startsWith('blob:') && !ref.url.startsWith('http'))
+      .map(ref => ref.url!)
+      .filter(Boolean);
+    
+    if (existingPaths.length > 0) {
+      preloadUrls(existingPaths);
     }
-  };
+  }, [references, preloadUrls]);
 
   const validateFile = (file: File): string | null => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -123,7 +121,13 @@ export const MultiReferencePanel = ({
 
       const updatedReferences = references.map(ref => 
         ref.id === referenceId 
-          ? { ...ref, file, url: signedUrl, enabled: true }
+          ? { 
+              ...ref, 
+              file, 
+              url: signedUrl, 
+              enabled: true,
+              isWorkspaceAsset: false
+            }
           : ref
       );
       
@@ -155,64 +159,32 @@ export const MultiReferencePanel = ({
     input.click();
   }, [handleFileUpload]);
 
-  const handleDrop = useCallback((e: React.DragEvent, referenceId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(null);
-    
-    // Check for workspace asset data first
-    const workspaceData = e.dataTransfer.getData('application/workspace-asset');
-    if (workspaceData) {
-      try {
-        const assetData = JSON.parse(workspaceData);
-        
-        const updatedReferences = references.map(ref => 
-          ref.id === referenceId 
-            ? { 
-                ...ref, 
-                url: assetData.url,
-                enabled: true,
-                isWorkspaceAsset: true,
-                originalPrompt: assetData.prompt,
-                modelType: assetData.modelType,
-                quality: assetData.quality,
-                generationParams: assetData.generationParams,
-                file: null // No file for workspace assets
-              }
-            : ref
-        );
-        
-        onReferencesChange(updatedReferences);
-        toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from workspace`);
-        return;
-      } catch (error) {
-        console.error('Failed to parse workspace asset data:', error);
-      }
-    }
-    
-    // Fall back to file handling
-    const files = Array.from(e.dataTransfer.files);
-    const imageFile = files.find(file => {
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-      return validTypes.includes(file.type);
-    });
-    
-    if (imageFile) {
-      handleFileUpload(imageFile, referenceId);
-    } else {
-      toast.error('Please drag an image file or workspace asset');
+  const handleDrop = useCallback((referenceId: string, dropData: any) => {
+    if (dropData.type === 'workspace-asset') {
+      const assetData = dropData.data;
+      
+      const updatedReferences = references.map(ref => 
+        ref.id === referenceId 
+          ? { 
+              ...ref, 
+              url: assetData.url,
+              enabled: true,
+              isWorkspaceAsset: true,
+              originalPrompt: assetData.prompt,
+              modelType: assetData.modelType,
+              quality: assetData.quality,
+              generationParams: assetData.generationParams,
+              file: null
+            }
+          : ref
+      );
+      
+      onReferencesChange(updatedReferences);
+      toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from workspace`);
+    } else if (dropData.type === 'file') {
+      handleFileUpload(dropData.data, referenceId);
     }
   }, [handleFileUpload, references, onReferencesChange]);
-
-  const handleDragOver = useCallback((e: React.DragEvent, referenceId: string) => {
-    e.preventDefault();
-    setIsDragging(referenceId);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(null);
-  }, []);
 
   const toggleReference = useCallback((referenceId: string, enabled: boolean) => {
     const updatedReferences = references.map(ref => 
@@ -224,14 +196,33 @@ export const MultiReferencePanel = ({
   const clearReference = useCallback((referenceId: string) => {
     const updatedReferences = references.map(ref => 
       ref.id === referenceId 
-        ? { ...ref, file: null, url: undefined, enabled: false }
+        ? { ...ref, file: null, url: undefined, enabled: false, isWorkspaceAsset: false }
         : ref
     );
     onReferencesChange(updatedReferences);
   }, [references, onReferencesChange]);
 
-  const hasAnyReference = references.some(ref => ref.url);
+  const refreshReferenceUrl = useCallback(async (referenceId: string) => {
+    const reference = references.find(r => r.id === referenceId);
+    if (!reference?.url || reference.isWorkspaceAsset) return;
+
+    try {
+      const newUrl = await refreshUrl(reference.url);
+      if (newUrl) {
+        const updatedReferences = references.map(ref => 
+          ref.id === referenceId ? { ...ref, url: newUrl } : ref
+        );
+        onReferencesChange(updatedReferences);
+        toast.success('Reference URL refreshed');
+      }
+    } catch (error) {
+      console.error('Failed to refresh URL:', error);
+      toast.error('Failed to refresh reference URL');
+    }
+  }, [references, onReferencesChange, refreshUrl]);
+
   const activeReferences = references.filter(ref => ref.enabled && ref.url);
+  const hasAnyReference = references.some(ref => ref.url);
 
   // Auto-expand when references are first enabled
   const handleToggleReference = useCallback((referenceId: string, enabled: boolean) => {
@@ -240,6 +231,19 @@ export const MultiReferencePanel = ({
     }
     toggleReference(referenceId, enabled);
   }, [isCollapsed, toggleReference]);
+
+  // Get primary reference type for type selector
+  const primaryType = activeReferences.length > 0 ? activeReferences[0].id : 'style';
+
+  const handleTypeChange = useCallback((newType: string) => {
+    // This is for UI feedback - actual type switching would need more complex logic
+    console.log('Type change suggested:', newType);
+  }, []);
+
+  const handleStrengthSuggestion = useCallback((suggestedStrength: number) => {
+    onStrengthChange(suggestedStrength);
+    toast.success(`Strength adjusted to ${suggestedStrength.toFixed(2)} for optimal ${primaryType} reference`);
+  }, [onStrengthChange, primaryType]);
 
   return (
     <TooltipProvider>
@@ -296,6 +300,18 @@ export const MultiReferencePanel = ({
                 </Button>
               </div>
 
+              {/* Reference Type Intelligence */}
+              {activeReferences.length > 0 && (
+                <div className="mb-4">
+                  <ReferenceTypeSelector
+                    selectedType={primaryType}
+                    onTypeChange={handleTypeChange}
+                    currentStrength={strength}
+                    onStrengthSuggestion={handleStrengthSuggestion}
+                  />
+                </div>
+              )}
+
               {/* Reference Type Grid */}
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {references.map((ref) => (
@@ -318,8 +334,12 @@ export const MultiReferencePanel = ({
                       </Tooltip>
                     </div>
 
-                    {/* Upload Slot */}
-                    <div className="relative">
+                    {/* Enhanced Upload Slot */}
+                    <EnhancedDragDropHandler
+                      onDrop={(dropData) => handleDrop(ref.id, dropData)}
+                      onDragStateChange={(isDragging) => setIsDragging(isDragging ? ref.id : null)}
+                      className="relative"
+                    >
                       {ref.url ? (
                         <div className="relative group">
                           <div className="w-full h-16 rounded border border-border overflow-hidden bg-muted">
@@ -327,6 +347,7 @@ export const MultiReferencePanel = ({
                               src={ref.url} 
                               alt={ref.label} 
                               className="w-full h-full object-cover"
+                              onError={() => refreshReferenceUrl(ref.id)}
                             />
                             {/* Reference Type Badge */}
                             <div className="absolute bottom-1 left-1">
@@ -347,7 +368,7 @@ export const MultiReferencePanel = ({
                             <X className="w-2.5 h-2.5 text-destructive-foreground" />
                           </button>
                         </div>
-                       ) : (
+                      ) : (
                         <div
                           className={`w-full h-16 border-2 border-dashed rounded transition-all duration-200 cursor-pointer ${
                             isDragging === ref.id
@@ -356,9 +377,6 @@ export const MultiReferencePanel = ({
                                 ? 'border-primary/60 bg-primary/5 hover:border-primary hover:bg-primary/10'
                                 : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'
                           }`}
-                          onDrop={(e) => handleDrop(e, ref.id)}
-                          onDragOver={(e) => handleDragOver(e, ref.id)}
-                          onDragLeave={handleDragLeave}
                         >
                           <Button
                             variant="ghost"
@@ -370,17 +388,17 @@ export const MultiReferencePanel = ({
                             {uploading.has(ref.id) ? (
                               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                             ) : (
-                               <div className="flex flex-col items-center gap-0.5">
-                                 <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
-                                 <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
-                                   Drag or Click
-                                 </span>
-                               </div>
+                              <div className="flex flex-col items-center gap-0.5">
+                                <Upload className={`w-4 h-4 ${ref.enabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                                <span className={`text-xs ${ref.enabled ? 'text-primary/80' : 'text-muted-foreground/70'}`}>
+                                  Drag or Click
+                                </span>
+                              </div>
                             )}
                           </Button>
                         </div>
                       )}
-                    </div>
+                    </EnhancedDragDropHandler>
                   </div>
                 ))}
               </div>
