@@ -361,8 +361,8 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   if (error) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl h-[80vh] bg-gray-900 border-gray-800 flex flex-col">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="max-w-3xl h-[80vh] bg-gray-900 border-gray-800 flex flex-col">
+          <DialogHeader className="flex-shrink-0 pb-2">
             <DialogTitle className="text-white">Import from Library</DialogTitle>
           </DialogHeader>
           
@@ -371,7 +371,11 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
               <div className="text-red-400 text-xl mb-4">⚠️</div>
               <h3 className="text-lg font-semibold text-white mb-2">Failed to Load Library</h3>
               <p className="text-gray-400 mb-4">{error instanceof Error ? error.message : 'Unknown error'}</p>
-              <Button onClick={() => window.location.reload()}>
+              <Button 
+                onClick={() => window.location.reload()}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
+              >
                 Try Again
               </Button>
             </div>
@@ -383,50 +387,50 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[85vh] bg-gray-900 border-gray-800 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-white">Import from Library</DialogTitle>
+      <DialogContent className="max-w-4xl h-[85vh] bg-gray-900 border-gray-800 flex flex-col">
+        <DialogHeader className="flex-shrink-0 pb-2">
+          <DialogTitle className="text-white text-lg">Import from Library</DialogTitle>
         </DialogHeader>
         
         {/* Search and Controls */}
-        <div className="flex-shrink-0 space-y-4 p-4 border-b border-gray-800">
-          <div className="flex items-center gap-4">
+        <div className="flex-shrink-0 space-y-3 px-3 pb-3 border-b border-gray-800">
+          <div className="flex items-center gap-2">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder="Search your assets..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                className="pl-10 h-8 bg-gray-800 border-gray-700 text-white placeholder-gray-400 text-sm"
               />
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleSelectAll}
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                className="h-8 px-2 text-xs bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               >
                 Select All ({filteredAssets.length})
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleClearSelection}
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                className="h-8 px-2 text-xs bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               >
                 Clear
               </Button>
             </div>
           </div>
           
-          <div className="flex items-center justify-between text-sm text-gray-400">
+          <div className="flex items-center justify-between text-xs text-gray-300">
             <span>
-              {selectedAssets.size} of {filteredAssets.length} assets selected
+              {selectedAssets.size} of {filteredAssets.length} selected
             </span>
             <span>
-              {isLoading ? 'Loading...' : `${filteredAssets.length} assets found`}
+              {isLoading ? 'Loading...' : `${filteredAssets.length} assets`}
             </span>
           </div>
         </div>
@@ -437,7 +441,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
             <div className="flex items-center justify-center h-64">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-400">Loading your library...</p>
+                <p className="text-gray-300">Loading your library...</p>
               </div>
             </div>
           ) : filteredAssets.length === 0 ? (
@@ -445,12 +449,13 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
               <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Image className="w-8 h-8 text-gray-600" />
               </div>
-              <p className="text-gray-400">
+              <p className="text-gray-300">
                 {debouncedSearchTerm ? 'No assets match your search' : 'No assets in your library yet'}
               </p>
               {debouncedSearchTerm && (
                 <Button
                   variant="ghost"
+                  size="sm"
                   onClick={() => setSearchTerm('')}
                   className="mt-2 text-blue-400 hover:text-blue-300"
                 >
@@ -460,7 +465,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
             </div>
           ) : (
             <ScrollArea className="h-full">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 p-2">
                 {filteredAssets.map((asset) => {
                   const displayUrl = getAssetDisplayUrl(asset);
                   const assetCount = getAssetCount(asset);
@@ -473,7 +478,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                         "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
                         "hover:bg-primary/10",
                         isSelected 
-                          ? "ring-4 ring-primary scale-95 shadow-lg bg-primary/20" 
+                          ? "ring-2 ring-primary scale-95 shadow-lg bg-primary/20" 
                           : "hover:scale-105 hover:shadow-md"
                       )}
                       onClick={() => handleAssetToggle(asset.id)}
@@ -496,9 +501,9 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                             
                             {/* SDXL set indicator */}
                             {assetCount > 1 && (
-                              <div className="absolute top-2 left-2">
-                                <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/40 text-xs">
-                                  {assetCount} images
+                              <div className="absolute top-1 left-1">
+                                <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/40 text-xs px-1 py-0">
+                                  {assetCount}
                                 </Badge>
                               </div>
                             )}
@@ -506,8 +511,8 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                         ) : (
                           <div className="w-full h-full bg-gray-800 flex items-center justify-center">
                             <div className="text-center text-gray-400">
-                              <Image className="w-8 h-8 mx-auto mb-2" />
-                              <p className="text-xs">Image unavailable</p>
+                              <Image className="w-6 h-6 mx-auto mb-1" />
+                              <p className="text-xs">Unavailable</p>
                             </div>
                           </div>
                         )
@@ -521,12 +526,12 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <Video className="w-8 h-8 text-gray-600" />
+                              <Video className="w-6 h-6 text-gray-600" />
                             </div>
                           )}
                           <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="bg-black/70 rounded-full p-2">
-                              <Video className="w-4 h-4 text-white" />
+                            <div className="bg-black/70 rounded-full p-1">
+                              <Video className="w-3 h-3 text-white" />
                             </div>
                           </div>
                         </div>
@@ -534,18 +539,18 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
                       {/* Selection Indicator */}
                       {isSelected && (
-                        <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
-                          <Check className="w-3 h-3 text-primary-foreground" />
+                        <div className="absolute top-1 right-1 bg-primary rounded-full p-1">
+                          <Check className="w-2 h-2 text-primary-foreground" />
                         </div>
                       )}
 
                       {/* Model Type Badge */}
-                      {asset.type === 'image' && asset.modelType && (
-                        <div className="absolute top-2 right-2 mr-8">
+                      {asset.type === 'image' && asset.modelType && !isSelected && (
+                        <div className="absolute top-1 right-1">
                           <Badge 
                             variant="secondary" 
                             className={cn(
-                              "text-xs border",
+                              "text-xs px-1 py-0 border",
                               asset.modelType === 'SDXL' 
                                 ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
                                 : asset.modelType === 'Enhanced-7B'
@@ -559,9 +564,9 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                       )}
 
                       {/* Asset Info */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1">
                         <div className="flex items-center justify-between text-xs">
-                          <Badge variant="secondary" className="text-xs px-1 py-0.5">
+                          <Badge variant="secondary" className="text-xs px-1 py-0">
                             {asset.type === 'image' ? (
                               <Image className="h-2 w-2 mr-1" />
                             ) : (
@@ -582,22 +587,23 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                
                {/* Load More Button */}
                {hasMore && !isLoading && (
-                 <div className="p-4 text-center">
+                 <div className="p-2 text-center">
                    <Button
                      onClick={loadMoreAssets}
-                     variant="outline"
-                     className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                     variant="secondary"
+                     size="sm"
+                     className="bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
                    >
                      <ChevronDown className="w-4 h-4 mr-2" />
-                     Load More Assets
+                     Load More
                    </Button>
                  </div>
                )}
                
                {isLoading && currentPage > 0 && (
-                 <div className="p-4 text-center">
-                   <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-                   <p className="text-gray-400 text-sm mt-2">Loading more assets...</p>
+                 <div className="p-2 text-center">
+                   <Loader2 className="w-5 h-5 animate-spin mx-auto text-gray-400" />
+                   <p className="text-gray-300 text-xs mt-1">Loading more...</p>
                  </div>
                )}
              </ScrollArea>
@@ -605,22 +611,27 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between border-t border-gray-800 pt-4 flex-shrink-0">
-          <div className="text-sm text-gray-400">
-            <p>{selectedAssets.size} asset{selectedAssets.size !== 1 ? 's' : ''} selected</p>
-            <p>Page {currentPage + 1} • {filteredAssets.length} assets loaded{hasMore ? ' • More available' : ''}</p>
+        <div className="flex items-center justify-between border-t border-gray-800 pt-3 px-3 flex-shrink-0">
+          <div className="text-xs text-gray-300">
+            <p>{selectedAssets.size} selected • Page {currentPage + 1}</p>
           </div>
           
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={onClose}
+              className="h-8 px-3 bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
+            >
               Cancel
             </Button>
             <Button 
               onClick={handleImport}
               disabled={selectedAssets.size === 0}
-              className="bg-blue-600 hover:bg-blue-700"
+              size="sm"
+              className="h-8 px-3 bg-blue-600 hover:bg-blue-700 text-white"
             >
-              Import Selected
+              Import ({selectedAssets.size})
             </Button>
           </div>
         </div>
