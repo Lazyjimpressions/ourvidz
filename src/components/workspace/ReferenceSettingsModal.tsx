@@ -119,15 +119,15 @@ export const ReferenceSettingsModal = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl bg-gray-900 text-white border-gray-700">
         <DialogHeader>
-          <DialogTitle>Reference Images</DialogTitle>
+          <DialogTitle className="text-white">Reference Images</DialogTitle>
         </DialogHeader>
         
         <div className="space-y-6">
           {/* Reference Strength */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium">Reference Strength</label>
-              <span className="text-xs text-gray-400">{referenceStrength.toFixed(2)}</span>
+              <label className="text-sm font-medium text-white">Reference Strength</label>
+              <span className="text-xs text-gray-300">{referenceStrength.toFixed(2)}</span>
             </div>
             <Slider
               value={[referenceStrength]}
@@ -151,8 +151,8 @@ export const ReferenceSettingsModal = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {references.map((reference) => (
               <div key={reference.id} className="space-y-2">
-                <h3 className="text-sm font-medium">{reference.label}</h3>
-                <p className="text-xs text-gray-400 mb-2">{reference.description}</p>
+                <h3 className="text-sm font-medium text-white">{reference.label}</h3>
+                <p className="text-xs text-gray-300 mb-2">{reference.description}</p>
                 
                 <div
                   className={cn(
@@ -231,7 +231,7 @@ export const ReferenceSettingsModal = ({
                           e.stopPropagation();
                           handleClearReference(reference.id);
                         }}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -249,7 +249,11 @@ export const ReferenceSettingsModal = ({
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={onClose}>
+            <Button 
+              variant="secondary" 
+              onClick={onClose}
+              className="bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
+            >
               Close
             </Button>
           </div>
