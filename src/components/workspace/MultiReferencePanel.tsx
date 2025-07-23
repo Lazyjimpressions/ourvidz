@@ -7,6 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Upload, X, Loader2, InfoIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { uploadReferenceImage } from '@/lib/storage';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface ReferenceType {
@@ -64,6 +65,24 @@ export const MultiReferencePanel = ({
     }
   }, [isDragging, isCollapsed]);
 
+  const getSignedUrl = async (path: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('reference_images')
+        .createSignedUrl(path, 3600); // 1 hour expiry
+
+      if (error) {
+        console.error('Error creating signed URL:', error);
+        return null;
+      }
+
+      return data.signedUrl;
+    } catch (error) {
+      console.error('Error getting signed URL:', error);
+      return null;
+    }
+  };
+
   const validateFile = (file: File): string | null => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     const maxSize = 10 * 1024 * 1024; // 10MB
@@ -95,11 +114,16 @@ export const MultiReferencePanel = ({
         throw new Error(result.error.message);
       }
 
-      const url = URL.createObjectURL(file);
+      // Get the signed URL for display and generation
+      const signedUrl = await getSignedUrl(result.data.path);
       
+      if (!signedUrl) {
+        throw new Error('Failed to get signed URL for uploaded image');
+      }
+
       const updatedReferences = references.map(ref => 
         ref.id === referenceId 
-          ? { ...ref, file, url, enabled: true }
+          ? { ...ref, file, url: signedUrl, enabled: true }
           : ref
       );
       
@@ -116,7 +140,7 @@ export const MultiReferencePanel = ({
         return newSet;
       });
     }
-  }, [references, onReferencesChange]);
+  }, [references, onReferencesChange, getSignedUrl]);
 
   const handleFileSelect = useCallback((referenceId: string) => {
     const input = document.createElement('input');
