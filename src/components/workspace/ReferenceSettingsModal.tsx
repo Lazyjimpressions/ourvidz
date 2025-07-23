@@ -3,10 +3,9 @@ import React, { useState, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Upload, X, Loader2, FolderOpen } from 'lucide-react';
+import { Upload, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EnhancedSeedInput } from './EnhancedSeedInput';
-import { ReferenceImageBrowser } from './ReferenceImageBrowser';
 import { uploadReferenceImage } from '@/lib/storage';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -42,7 +41,6 @@ export const ReferenceSettingsModal = ({
 }: ReferenceSettingsModalProps) => {
   const [draggedOver, setDraggedOver] = useState<string | null>(null);
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
-  const [browserOpen, setBrowserOpen] = useState<string | null>(null);
 
   const getSignedUrl = async (path: string): Promise<string | null> => {
     try {
@@ -174,16 +172,6 @@ export const ReferenceSettingsModal = ({
     onReferencesChange(updatedReferences);
   }, [references, onReferencesChange]);
 
-  const handleBrowseSelect = useCallback((referenceId: string, url: string) => {
-    const updatedReferences = references.map(ref =>
-      ref.id === referenceId
-        ? { ...ref, enabled: true, url, isWorkspaceAsset: false }
-        : ref
-    );
-    onReferencesChange(updatedReferences);
-    toast.success(`${references.find(r => r.id === referenceId)?.label} reference set from library`);
-  }, [references, onReferencesChange]);
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl bg-gray-900 text-white border-gray-700">
@@ -292,19 +280,6 @@ export const ReferenceSettingsModal = ({
                       </div>
                     )}
                   </div>
-
-                  {/* Browse Button */}
-                  {!reference.url && !isUploading && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setBrowserOpen(reference.id)}
-                      className="w-full bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-                    >
-                      <FolderOpen className="w-4 h-4 mr-2" />
-                      Browse References
-                    </Button>
-                  )}
                 </div>
               );
             })}
@@ -322,13 +297,6 @@ export const ReferenceSettingsModal = ({
           </div>
         </div>
       </DialogContent>
-
-      {/* Reference Image Browser */}
-      <ReferenceImageBrowser
-        isOpen={browserOpen !== null}
-        onClose={() => setBrowserOpen(null)}
-        onSelect={(url) => browserOpen && handleBrowseSelect(browserOpen, url)}
-      />
     </Dialog>
   );
 };
