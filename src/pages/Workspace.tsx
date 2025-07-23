@@ -392,6 +392,13 @@ const Workspace = () => {
     }
   };
 
+  // Simple workspace refresh function
+  const handleRefreshWorkspace = () => {
+    // The useRealtimeWorkspace hook should automatically refresh
+    // We can trigger a small state update to ensure re-render
+    console.log('Refreshing workspace for new generation...');
+  };
+
   // Reference image handlers
   const handleReferenceImageChange = useCallback((file: File | null, url: string) => {
     setReferenceImage(file);
@@ -486,6 +493,43 @@ const Workspace = () => {
     });
     
     toast.success('Image set as character reference');
+  }, [defaultReferences]);
+
+  // Enhanced use as reference with type specification
+  const handleUseAsReferenceWithType = useCallback((tile: any, referenceType: 'style' | 'composition' | 'character') => {
+    const newReference = {
+      id: referenceType,
+      label: referenceType.charAt(0).toUpperCase() + referenceType.slice(1),
+      description: 
+        referenceType === 'character' ? 'Preserve character appearance and features' :
+        referenceType === 'style' ? 'Transfer artistic style and visual aesthetics' :
+        'Match layout, positioning, and structure',
+      url: tile.url,
+      enabled: true,
+      isWorkspaceAsset: true,
+      file: undefined,
+      originalPrompt: tile.prompt,
+      modelType: tile.modelType,
+      quality: tile.quality,
+      generationParams: tile.generationParams
+    };
+    
+    // Update references: preserve all types, only update specified slot
+    setActiveReferences(prev => {
+      const baseRefs = prev.length > 0 ? prev : defaultReferences;
+      
+      return baseRefs.map(ref => 
+        ref.id === referenceType 
+          ? newReference
+          : ref
+      );
+    });
+    
+    // Close modal and show reference panel
+    setLightboxIndex(null);
+    setShowReferencePanel(true);
+    
+    toast.success(`Image set as ${referenceType} reference`);
   }, [defaultReferences]);
 
   // NEW: Use seed from workspace asset
@@ -835,6 +879,8 @@ const Workspace = () => {
               toast.error('Failed to delete from library');
             }
           }}
+          onUseAsReference={handleUseAsReferenceWithType}
+          onRefreshWorkspace={handleRefreshWorkspace}
         />
       )}
 
@@ -843,11 +889,39 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
-          // Use the workspace hook to add imported assets
-          const assetIds = importedAssets.map(asset => asset.id);
-          addToWorkspace(assetIds);
+          console.log('📥 Processing library import:', importedAssets);
+          
+          // Separate reference images from database assets
+          const referenceImages = importedAssets.filter(asset => asset.id.startsWith('ref_'));
+          const databaseAssets = importedAssets.filter(asset => !asset.id.startsWith('ref_'));
+          
+          console.log('📊 Import breakdown:', {
+            total: importedAssets.length,
+            referenceImages: referenceImages.length,
+            databaseAssets: databaseAssets.length
+          });
+          
+          // Handle reference images
+          if (referenceImages.length > 0) {
+            toast.info(
+              `${referenceImages.length} reference image${referenceImages.length !== 1 ? 's' : ''} detected. Use the "Browse References" button in the reference modal to access them.`,
+              { duration: 5000 }
+            );
+          }
+          
+          // Handle database assets
+          if (databaseAssets.length > 0) {
+            const assetIds = databaseAssets.map(asset => asset.id);
+            addToWorkspace(assetIds);
+            toast.success(`Added ${databaseAssets.length} generated asset${databaseAssets.length !== 1 ? 's' : ''} to workspace`);
+          }
+          
+          // If no database assets to import
+          if (databaseAssets.length === 0 && referenceImages.length > 0) {
+            toast.info('Reference images cannot be added to workspace. Access them through the reference modal instead.');
+          }
+          
           setShowLibraryModal(false);
-          toast.success(`Added ${importedAssets.length} assets to workspace`);
         }}
       />
     </div>

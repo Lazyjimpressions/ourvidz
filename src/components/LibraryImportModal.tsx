@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { X, Calendar, Image, Video, Check, Search, Loader2, ChevronDown } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -43,15 +44,13 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   const [currentPage, setCurrentPage] = useState(0);
   const [allAssets, setAllAssets] = useState<UnifiedAsset[]>([]);
   const [hasMore, setHasMore] = useState(true);
+  const [activeTab, setActiveTab] = useState('generated');
   
   const ASSETS_PER_PAGE = 50;
-  
 
-  // Debounce search term
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
-      // Reset pagination when search changes
       setCurrentPage(0);
       setAllAssets([]);
       setHasMore(true);
@@ -59,7 +58,14 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Bucket inference from LibraryV2
+  useEffect(() => {
+    setCurrentPage(0);
+    setAllAssets([]);
+    setHasMore(true);
+    setSelectedAssets(new Set());
+    setSearchTerm('');
+  }, [activeTab]);
+
   const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast'): string => {
     if (metadata?.bucket) {
       return metadata.bucket;
@@ -80,7 +86,6 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     return quality === 'high' ? 'image_high' : 'image_fast';
   }, []);
 
-  // Signed URL generation from LibraryV2
   const generateSignedUrls = useCallback(async (paths: string[], bucket: string): Promise<string[]> => {
     const results: string[] = [];
     
@@ -88,7 +93,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       try {
         const { data, error } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(path, 3600); // 1 hour expiry
+          .createSignedUrl(path, 3600);
         
         if (data?.signedUrl) {
           results.push(data.signedUrl);
@@ -103,16 +108,70 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     return results;
   }, []);
 
-  // Direct asset fetching with pagination (LibraryV2 approach)
-  const { data: pageData, isLoading, error, refetch } = useQuery({
-    queryKey: ['library-import-assets', debouncedSearchTerm, currentPage],
+  const fetchReferenceImages = useCallback(async (): Promise<{ assets: UnifiedAsset[], hasMore: boolean }> => {
+    console.log('🔍 Fetching reference images from storage...');
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: files, error } = await supabase.storage
+      .from('reference_images')
+      .list(user.id, {
+        limit: ASSETS_PER_PAGE,
+        offset: currentPage * ASSETS_PER_PAGE,
+        sortBy: { column: 'created_at', order: 'desc' }
+      });
+
+    if (error) throw error;
+
+    if (!files || files.length === 0) {
+      return { assets: [], hasMore: false };
+    }
+
+    const filePaths = files.map(file => `${user.id}/${file.name}`);
+    const signedUrls = await generateSignedUrls(filePaths, 'reference_images');
+
+    const assets: UnifiedAsset[] = files.map((file, index) => ({
+      id: `ref_${file.id || file.name}`,
+      type: 'image' as const,
+      prompt: file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' '),
+      status: 'completed',
+      quality: 'reference',
+      format: file.name.split('.').pop() || 'jpg',
+      createdAt: new Date(file.created_at || Date.now()),
+      url: signedUrls[index],
+      thumbnailUrl: signedUrls[index],
+      modelType: 'Reference',
+      title: file.name,
+      metadata: {
+        bucket: 'reference_images',
+        size: file.metadata?.size,
+        originalName: file.name,
+        isReferenceImage: true
+      }
+    }));
+
+    const filteredAssets = debouncedSearchTerm 
+      ? assets.filter(asset => 
+          asset.prompt.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+          asset.title?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+        )
+      : assets;
+
+    return {
+      assets: filteredAssets,
+      hasMore: files.length === ASSETS_PER_PAGE
+    };
+  }, [currentPage, debouncedSearchTerm, generateSignedUrls]);
+
+  const { data: generatedPageData, isLoading: isLoadingGenerated, error: generatedError } = useQuery({
+    queryKey: ['library-import-generated-assets', debouncedSearchTerm, currentPage],
     queryFn: async () => {
-      console.log('🔍 LibraryImportModal: Fetching page', currentPage, 'with search:', debouncedSearchTerm);
+      console.log('🔍 LibraryImportModal: Fetching generated assets page', currentPage, 'with search:', debouncedSearchTerm);
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Direct query like LibraryV2
       const imageQuery = supabase
         .from('images')
         .select(`
@@ -141,9 +200,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
       const processedAssets: UnifiedAsset[] = [];
       
-      // Process like LibraryV2 with batch URL generation for performance
       if (images) {
-        // Collect all URLs that need signing for batch processing
         const urlBatches: { urls: string[], bucket: string, imageData: any }[] = [];
         
         for (const image of images) {
@@ -171,9 +228,6 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
           }
         }
         
-        // Generate signed URLs in parallel with error handling
-        console.log(`📸 Processing ${urlBatches.length} URL batches for ${images.length} images...`);
-        
         const urlResults = await Promise.allSettled(
           urlBatches.map(async ({ urls, bucket, imageData }) => {
             try {
@@ -186,14 +240,12 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
           })
         );
         
-        // Create processed assets from successful URL generations
         urlResults.forEach((result) => {
           if (result.status === 'fulfilled' && result.value.success) {
             const { signedUrls, imageData } = result.value;
             const isSDXL = imageData.isSDXL;
             
             if (isSDXL && signedUrls.length > 1) {
-              // Create individual assets for each SDXL image
               signedUrls.forEach((url, index) => {
                 processedAssets.push({
                   id: `${imageData.id}_${index}`,
@@ -215,7 +267,6 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                 });
               });
             } else if (signedUrls.length > 0) {
-              // Single image
               processedAssets.push({
                 id: imageData.id,
                 type: 'image',
@@ -236,21 +287,30 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
         });
       }
       
-        console.log(`✅ Successfully processed ${processedAssets.length} assets from ${images?.length || 0} database records`);
-        
-        return {
-          assets: processedAssets,
-          hasMore: images ? images.length === ASSETS_PER_PAGE : false
-        };
+      console.log(`✅ Successfully processed ${processedAssets.length} generated assets from ${images?.length || 0} database records`);
+      
+      return {
+        assets: processedAssets,
+        hasMore: images ? images.length === ASSETS_PER_PAGE : false
+      };
     },
-    enabled: open,
+    enabled: open && activeTab === 'generated',
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  // Update allAssets when new page data arrives
+  const { data: referencePageData, isLoading: isLoadingReference, error: referenceError } = useQuery({
+    queryKey: ['library-import-reference-images', debouncedSearchTerm, currentPage],
+    queryFn: fetchReferenceImages,
+    enabled: open && activeTab === 'reference',
+    staleTime: 2 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   useEffect(() => {
+    const pageData = activeTab === 'generated' ? generatedPageData : referencePageData;
     if (pageData) {
       if (currentPage === 0) {
         setAllAssets(pageData.assets);
@@ -259,11 +319,11 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       }
       setHasMore(pageData.hasMore);
     }
-  }, [pageData, currentPage]);
+  }, [generatedPageData, referencePageData, currentPage, activeTab]);
 
-  // Use processed assets from pagination
   const filteredAssets = allAssets;
-
+  const isLoading = activeTab === 'generated' ? isLoadingGenerated : isLoadingReference;
+  const error = activeTab === 'generated' ? generatedError : referenceError;
 
   const handleAssetToggle = (assetId: string) => {
     setSelectedAssets(prev => {
@@ -293,16 +353,14 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
     
     const assetsToImport = filteredAssets.filter(asset => selectedAssets.has(asset.id));
     
-    // Process SDXL images properly
     const processedAssets: UnifiedAsset[] = [];
     
     for (const asset of assetsToImport) {
       if (asset.isSDXLImage && asset.originalAssetId) {
-        // For SDXL individual images, create a proper asset with all original data
         const originalAsset: UnifiedAsset = {
           id: asset.originalAssetId,
           type: asset.type,
-          prompt: asset.prompt.replace(/ \(Image \d+\)$/, ''), // Remove image number suffix
+          prompt: asset.prompt.replace(/ \(Image \d+\)$/, ''),
           status: asset.status,
           quality: asset.quality,
           format: asset.format,
@@ -326,13 +384,15 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
       types: processedAssets.reduce((acc, a) => { 
         acc[a.type] = (acc[a.type] || 0) + 1; 
         return acc; 
-      }, {} as Record<string, number>)
+      }, {} as Record<string, number>),
+      tab: activeTab
     });
     
     onImport(processedAssets);
     setSelectedAssets(new Set());
     onClose();
-    toast.success(`Imported ${processedAssets.length} asset${processedAssets.length !== 1 ? 's' : ''} to workspace`);
+    const assetType = activeTab === 'reference' ? 'reference image' : 'asset';
+    toast.success(`Imported ${processedAssets.length} ${assetType}${processedAssets.length !== 1 ? 's' : ''} to workspace`);
   };
 
   const formatDate = (date: Date) => {
@@ -344,12 +404,11 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   };
 
   const getAssetDisplayUrl = (asset: UnifiedAsset): string | null => {
-    // Direct URL is now pre-generated during fetch
     return asset.url || asset.thumbnailUrl || null;
   };
 
   const getAssetCount = (asset: UnifiedAsset): number => {
-    return 1; // Each displayed asset is now individual
+    return 1;
   };
 
   const loadMoreAssets = () => {
@@ -361,8 +420,8 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
   if (error) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-4xl h-[80vh] bg-gray-900 border-gray-800 flex flex-col">
-          <DialogHeader className="flex-shrink-0">
+        <DialogContent className="max-w-4xl h-[85vh] bg-gray-900 border-gray-800 flex flex-col">
+          <DialogHeader className="flex-shrink-0 pb-2">
             <DialogTitle className="text-white">Import from Library</DialogTitle>
           </DialogHeader>
           
@@ -371,7 +430,11 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
               <div className="text-red-400 text-xl mb-4">⚠️</div>
               <h3 className="text-lg font-semibold text-white mb-2">Failed to Load Library</h3>
               <p className="text-gray-400 mb-4">{error instanceof Error ? error.message : 'Unknown error'}</p>
-              <Button onClick={() => window.location.reload()}>
+              <Button 
+                onClick={() => window.location.reload()}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700"
+              >
                 Try Again
               </Button>
             </div>
@@ -383,76 +446,96 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl h-[85vh] bg-gray-900 border-gray-800 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-white">Import from Library</DialogTitle>
+      <DialogContent className="max-w-6xl h-[90vh] bg-gray-900 border-gray-800 flex flex-col p-2">
+        <DialogHeader className="flex-shrink-0 pb-1">
+          <DialogTitle className="text-white text-base">Import from Library</DialogTitle>
         </DialogHeader>
         
-        {/* Search and Controls */}
-        <div className="flex-shrink-0 space-y-4 p-4 border-b border-gray-800">
-          <div className="flex items-center gap-4">
+        <div className="flex-shrink-0 px-1 pb-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2 bg-gray-800 h-8">
+              <TabsTrigger value="generated" className="text-white text-xs data-[state=active]:bg-blue-600">
+                Generated Assets
+              </TabsTrigger>
+              <TabsTrigger value="reference" className="text-white text-xs data-[state=active]:bg-blue-600">
+                Reference Images
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        
+        <div className="flex-shrink-0 space-y-1 px-1 pb-1 border-b border-gray-800">
+          <div className="flex items-center gap-1">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
               <Input
-                placeholder="Search your assets..."
+                placeholder={activeTab === 'reference' ? "Search reference images..." : "Search your assets..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                className="pl-8 h-7 bg-gray-800 border-gray-700 text-white placeholder-gray-400 text-xs"
               />
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleSelectAll}
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                className="h-7 px-2 text-xs bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               >
-                Select All ({filteredAssets.length})
+                All ({filteredAssets.length})
               </Button>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 onClick={handleClearSelection}
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                className="h-7 px-2 text-xs bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               >
                 Clear
               </Button>
             </div>
           </div>
           
-          <div className="flex items-center justify-between text-sm text-gray-400">
+          <div className="flex items-center justify-between text-xs text-gray-400">
             <span>
-              {selectedAssets.size} of {filteredAssets.length} assets selected
+              {selectedAssets.size} selected
             </span>
             <span>
-              {isLoading ? 'Loading...' : `${filteredAssets.length} assets found`}
+              {isLoading ? 'Loading...' : `${filteredAssets.length} ${activeTab === 'reference' ? 'reference images' : 'assets'}`}
             </span>
           </div>
         </div>
         
-        {/* Asset Grid */}
         <div className="flex-1 min-h-0">
           {isLoading ? (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex items-center justify-center h-32">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-400">Loading your library...</p>
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-gray-400" />
+                <p className="text-gray-300 text-sm">Loading your {activeTab === 'reference' ? 'reference images' : 'library'}...</p>
               </div>
             </div>
           ) : filteredAssets.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Image className="w-8 h-8 text-gray-600" />
+            <div className="text-center py-8">
+              <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Image className="w-6 h-6 text-gray-600" />
               </div>
-              <p className="text-gray-400">
-                {debouncedSearchTerm ? 'No assets match your search' : 'No assets in your library yet'}
+              <p className="text-gray-300 text-sm">
+                {debouncedSearchTerm 
+                  ? `No ${activeTab === 'reference' ? 'reference images' : 'assets'} match your search` 
+                  : `No ${activeTab === 'reference' ? 'reference images' : 'assets'} found`
+                }
               </p>
+              {activeTab === 'reference' && !debouncedSearchTerm && (
+                <p className="text-gray-500 text-xs mt-1">
+                  Upload reference images in the workspace to see them here
+                </p>
+              )}
               {debouncedSearchTerm && (
                 <Button
                   variant="ghost"
+                  size="sm"
                   onClick={() => setSearchTerm('')}
-                  className="mt-2 text-blue-400 hover:text-blue-300"
+                  className="mt-2 text-blue-400 hover:text-blue-300 text-xs"
                 >
                   Clear search
                 </Button>
@@ -460,7 +543,7 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
             </div>
           ) : (
             <ScrollArea className="h-full">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-1 p-1">
                 {filteredAssets.map((asset) => {
                   const displayUrl = getAssetDisplayUrl(asset);
                   const assetCount = getAssetCount(asset);
@@ -470,83 +553,51 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                     <div
                       key={asset.id}
                       className={cn(
-                        "relative cursor-pointer rounded-lg overflow-hidden aspect-square transition-all duration-200",
+                        "relative cursor-pointer rounded-md overflow-hidden aspect-square transition-all duration-200",
                         "hover:bg-primary/10",
                         isSelected 
-                          ? "ring-4 ring-primary scale-95 shadow-lg bg-primary/20" 
+                          ? "ring-2 ring-primary scale-95 shadow-lg bg-primary/20" 
                           : "hover:scale-105 hover:shadow-md"
                       )}
                       onClick={() => handleAssetToggle(asset.id)}
                     >
-                      {/* Asset Content */}
-                      {asset.type === 'image' ? (
-                        displayUrl ? (
-                          <div className="relative w-full h-full">
-                            <img
-                              src={displayUrl}
-                              alt={asset.prompt}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                console.log('❌ Image failed to load:', displayUrl, 'Asset ID:', asset.id);
-                                // Show placeholder instead of hiding
-                                e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik03NSA3NUgxMjVWMTI1SDc1Vjc1WiIgZmlsbD0iIzZCNzI4MCIvPgo8L3N2Zz4K';
-                                e.currentTarget.className = "w-full h-full object-cover opacity-50";
-                              }}
-                            />
-                            
-                            {/* SDXL set indicator */}
-                            {assetCount > 1 && (
-                              <div className="absolute top-2 left-2">
-                                <Badge variant="secondary" className="bg-purple-500/20 text-purple-300 border-purple-500/40 text-xs">
-                                  {assetCount} images
-                                </Badge>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                            <div className="text-center text-gray-400">
-                              <Image className="w-8 h-8 mx-auto mb-2" />
-                              <p className="text-xs">Image unavailable</p>
-                            </div>
-                          </div>
-                        )
+                      {displayUrl ? (
+                        <div className="relative w-full h-full">
+                          <img
+                            src={displayUrl}
+                            alt={asset.prompt}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.log('❌ Image failed to load:', displayUrl, 'Asset ID:', asset.id);
+                              e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik03NSA3NUgxMjVWMTI1SDc1Vjc1WiIgZmlsbD0iIzZCNzI4MCIvPgo8L3N2Zz4K';
+                              e.currentTarget.className = "w-full h-full object-cover opacity-50";
+                            }}
+                          />
+                        </div>
                       ) : (
-                        <div className="relative w-full h-full bg-gray-800">
-                          {displayUrl ? (
-                            <img
-                              src={displayUrl}
-                              alt="Video thumbnail"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Video className="w-8 h-8 text-gray-600" />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="bg-black/70 rounded-full p-2">
-                              <Video className="w-4 h-4 text-white" />
-                            </div>
+                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                          <div className="text-center text-gray-400">
+                            <Image className="w-4 h-4 mx-auto mb-1" />
+                            <p className="text-xs">Unavailable</p>
                           </div>
                         </div>
                       )}
 
-                      {/* Selection Indicator */}
                       {isSelected && (
-                        <div className="absolute top-2 right-2 bg-primary rounded-full p-1">
-                          <Check className="w-3 h-3 text-primary-foreground" />
+                        <div className="absolute top-0.5 right-0.5 bg-primary rounded-full p-0.5">
+                          <Check className="w-2 h-2 text-primary-foreground" />
                         </div>
                       )}
 
-                      {/* Model Type Badge */}
-                      {asset.type === 'image' && asset.modelType && (
-                        <div className="absolute top-2 right-2 mr-8">
+                      {asset.modelType && !isSelected && (
+                        <div className="absolute top-0.5 right-0.5">
                           <Badge 
                             variant="secondary" 
                             className={cn(
-                              "text-xs border",
-                              asset.modelType === 'SDXL' 
+                              "text-xs px-1 py-0 border h-4 text-xs",
+                              asset.modelType === 'Reference' 
+                                ? "bg-orange-500/20 text-orange-300 border-orange-500/40"
+                                : asset.modelType === 'SDXL' 
                                 ? "bg-purple-500/20 text-purple-300 border-purple-500/40" 
                                 : asset.modelType === 'Enhanced-7B'
                                 ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
@@ -558,20 +609,15 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                         </div>
                       )}
 
-                      {/* Asset Info */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-0.5">
                         <div className="flex items-center justify-between text-xs">
-                          <Badge variant="secondary" className="text-xs px-1 py-0.5">
-                            {asset.type === 'image' ? (
-                              <Image className="h-2 w-2 mr-1" />
-                            ) : (
-                              <Video className="h-2 w-2 mr-1" />
-                            )}
-                            {asset.type}
+                          <Badge variant="secondary" className="text-xs px-1 py-0 h-4">
+                            <Image className="h-2 w-2 mr-0.5" />
+                            {activeTab === 'reference' ? 'ref' : asset.type}
                           </Badge>
                           <div className="flex items-center text-gray-300">
-                            <Calendar className="h-2 w-2 mr-1" />
-                            {formatDate(asset.createdAt)}
+                            <Calendar className="h-2 w-2 mr-0.5" />
+                            <span className="text-xs">{formatDate(asset.createdAt)}</span>
                           </div>
                         </div>
                       </div>
@@ -580,47 +626,51 @@ export const LibraryImportModal = ({ open, onClose, onImport }: LibraryImportMod
                 })}
                </div>
                
-               {/* Load More Button */}
                {hasMore && !isLoading && (
-                 <div className="p-4 text-center">
+                 <div className="p-1 text-center">
                    <Button
                      onClick={loadMoreAssets}
-                     variant="outline"
-                     className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                     variant="secondary"
+                     size="sm"
+                     className="bg-gray-700 text-white hover:bg-gray-600 border-gray-600 h-7 text-xs"
                    >
-                     <ChevronDown className="w-4 h-4 mr-2" />
-                     Load More Assets
+                     <ChevronDown className="w-3 h-3 mr-1" />
+                     Load More
                    </Button>
                  </div>
                )}
                
                {isLoading && currentPage > 0 && (
-                 <div className="p-4 text-center">
-                   <Loader2 className="w-6 h-6 animate-spin mx-auto text-gray-400" />
-                   <p className="text-gray-400 text-sm mt-2">Loading more assets...</p>
+                 <div className="p-1 text-center">
+                   <Loader2 className="w-4 h-4 animate-spin mx-auto text-gray-400" />
+                   <p className="text-gray-300 text-xs mt-1">Loading more...</p>
                  </div>
                )}
              </ScrollArea>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-gray-800 pt-4 flex-shrink-0">
-          <div className="text-sm text-gray-400">
-            <p>{selectedAssets.size} asset{selectedAssets.size !== 1 ? 's' : ''} selected</p>
-            <p>Page {currentPage + 1} • {filteredAssets.length} assets loaded{hasMore ? ' • More available' : ''}</p>
+        <div className="flex items-center justify-between border-t border-gray-800 pt-1 px-1 flex-shrink-0">
+          <div className="text-xs text-gray-400">
+            <p>{selectedAssets.size} selected • Page {currentPage + 1} • {activeTab === 'reference' ? 'Reference Images' : 'Generated Assets'}</p>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={onClose}
+              className="h-7 px-2 text-xs bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
+            >
               Cancel
             </Button>
             <Button 
               onClick={handleImport}
               disabled={selectedAssets.size === 0}
-              className="bg-blue-600 hover:bg-blue-700"
+              size="sm"
+              className="h-7 px-2 text-xs bg-blue-600 hover:bg-blue-700 text-white"
             >
-              Import Selected
+              Import ({selectedAssets.size})
             </Button>
           </div>
         </div>

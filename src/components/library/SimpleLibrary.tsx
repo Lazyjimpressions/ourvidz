@@ -4,9 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { OurVidzDashboardLayout } from "@/components/OurVidzDashboardLayout";
 import { AssetCard } from "@/components/AssetCard";
 import { AssetListView } from "@/components/library/AssetListView";
+import { LibraryHeader } from "@/components/library/LibraryHeader";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { Button } from "@/components/ui/button";
-import { Image as ImageIcon, Video as VideoIcon, Grid3X3, List, RefreshCw } from "lucide-react";
+import { Image as ImageIcon, Video as VideoIcon, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { LibraryLightboxStatic } from "@/components/library/LibraryLightboxStatic";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
@@ -26,21 +27,35 @@ interface SimpleAsset {
 const SimpleLibrary = () => {
   const [typeFilter, setTypeFilter] = useState<'image' | 'video'>('image');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [lightboxAsset, setLightboxAsset] = useState<UnifiedAsset | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
   const [newAssetsBanner, setNewAssetsBanner] = useState(false);
-  const pageSize = 20;
+  
+  // Page size with localStorage persistence
+  const [pageSize, setPageSize] = useState(() => {
+    const saved = localStorage.getItem('library-page-size');
+    return saved ? parseInt(saved, 10) : 20;
+  });
+
   const queryClient = useQueryClient();
 
-  // Reset page and selection when switching types or view modes
+  // Reset page and selection when switching types, view modes, or search
   useEffect(() => {
     setCurrentPage(1);
     setSelectedAssets(new Set());
     setNewAssetsBanner(false);
-  }, [typeFilter, viewMode]);
+  }, [typeFilter, viewMode, searchTerm, pageSize]);
+
+  // Handle page size changes with localStorage persistence
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    localStorage.setItem('library-page-size', newPageSize.toString());
+    setCurrentPage(1); // Reset to first page when changing page size
+  };
 
   // Listen for generation completion events and update library
   useEffect(() => {
@@ -103,18 +118,15 @@ const SimpleLibrary = () => {
 
   // Simple bucket detection from metadata
   const inferBucketFromMetadata = useCallback((metadata: any, assetType: 'image' | 'video' = 'image'): string => {
-    // Use bucket from metadata if available (videos especially need this)
     if (metadata?.bucket) {
       return metadata.bucket;
     }
 
-    // Video-specific bucket detection
     if (assetType === 'video') {
       const quality = metadata?.quality || metadata?.generation_format?.includes('high') ? 'high' : 'fast';
       return `video_${quality}`;
     }
 
-    // Image bucket fallback logic
     const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
     const isEnhanced = metadata?.is_enhanced;
     const quality = metadata?.quality || 'fast';
@@ -147,11 +159,11 @@ const SimpleLibrary = () => {
     }
   }, []);
 
-  // Fetch assets - now simple since each record is one asset
+  // Fetch assets with search filtering
   const { data: assets = [], isLoading, error } = useQuery({
-    queryKey: ['simple-assets', typeFilter, currentPage],
+    queryKey: ['simple-assets', typeFilter, currentPage, searchTerm, pageSize],
     queryFn: async () => {
-      console.log(`🔍 Fetching ${typeFilter}s for page ${currentPage}`);
+      console.log(`🔍 Fetching ${typeFilter}s for page ${currentPage} with search: "${searchTerm}"`);
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
@@ -160,8 +172,7 @@ const SimpleLibrary = () => {
       const allAssets: SimpleAsset[] = [];
       
       if (typeFilter === 'image') {
-        // Query images with job_id for the new architecture
-        const { data, error } = await supabase
+        let query = supabase
           .from('images')
           .select(`
             id, 
@@ -177,20 +188,23 @@ const SimpleLibrary = () => {
             job_id
           `)
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + pageSize - 1);
+          .order('created_at', { ascending: false });
+
+        if (searchTerm.trim()) {
+          query = query.or(`prompt.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%`);
+        }
+
+        const { data, error } = await query.range(offset, offset + pageSize - 1);
           
         if (error) {
           console.error('❌ Error fetching images:', error);
           throw error;
         }
         
-        // Process each image - simple 1:1 mapping
         for (const image of data || []) {
           const metadata = image.metadata as any;
           const bucket = inferBucketFromMetadata(metadata, 'image');
           
-          // Generate signed URL for the single image
           let url: string | null = null;
           if (image.image_url) {
             url = await generateSignedUrl(image.image_url, bucket);
@@ -199,7 +213,6 @@ const SimpleLibrary = () => {
             }
           }
           
-          // Only add images with successful URL generation (images need URLs to display)
           if (url) {
             allAssets.push({
               id: image.id,
@@ -215,8 +228,7 @@ const SimpleLibrary = () => {
           }
         }
       } else {
-        // Video processing - unchanged
-        const { data, error } = await supabase
+        let query = supabase
           .from('videos')
           .select(`
             id, 
@@ -229,20 +241,23 @@ const SimpleLibrary = () => {
             metadata
           `)
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .range(offset, offset + pageSize - 1);
+          .order('created_at', { ascending: false });
+
+        if (searchTerm.trim()) {
+          query = query.or(`title.ilike.%${searchTerm}%`);
+        }
+
+        const { data, error } = await query.range(offset, offset + pageSize - 1);
           
         if (error) {
           console.error('❌ Error fetching videos:', error);
           throw error;
         }
         
-        // Process videos with signed URLs
         for (const video of data || []) {
           const metadata = video.metadata as any;
           const bucket = inferBucketFromMetadata(metadata, 'video');
           
-          // Generate signed URL for video
           let url: string | null = null;
           if (video.video_url) {
             url = await generateSignedUrl(video.video_url, bucket);
@@ -251,20 +266,15 @@ const SimpleLibrary = () => {
             }
           }
           
-          // Don't use system_assets thumbnails - they're just placeholders
-          // For videos, use the video URL for both playback and thumbnail display
           let thumbnailUrl = null;
           
-          // Check if thumbnail is a placeholder from system_assets
           const isPlaceholderThumbnail = video.thumbnail_url?.startsWith('system_assets/') || 
                                        (metadata && typeof metadata === 'object' && metadata.thumbnail_placeholder);
           
-          // If not a placeholder, use the actual thumbnail
           if (video.thumbnail_url && !isPlaceholderThumbnail) {
             thumbnailUrl = video.thumbnail_url;
           }
           
-          // Always add video, use video URL for display when thumbnail is placeholder
           allAssets.push({
             id: video.id,
             type: 'video',
@@ -287,26 +297,36 @@ const SimpleLibrary = () => {
     gcTime: 15 * 60 * 1000,   // 15 minutes
   });
 
-  // Simple counts query - no expansion needed
+  // Counts query with search filtering
   const { data: counts } = useQuery({
-    queryKey: ['asset-counts', typeFilter],
+    queryKey: ['asset-counts', typeFilter, searchTerm],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       if (typeFilter === 'image') {
-        const { count } = await supabase
+        let query = supabase
           .from('images')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id);
-        
+
+        if (searchTerm.trim()) {
+          query = query.or(`prompt.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%`);
+        }
+
+        const { count } = await query;
         return { images: count || 0, videos: 0 };
       } else {
-        const { count } = await supabase
+        let query = supabase
           .from('videos')
           .select('id', { count: 'exact', head: true })
           .eq('user_id', user.id);
-        
+
+        if (searchTerm.trim()) {
+          query = query.or(`title.ilike.%${searchTerm}%`);
+        }
+
+        const { count } = await query;
         return { images: 0, videos: count || 0 };
       }
     }
@@ -400,7 +420,6 @@ const SimpleLibrary = () => {
       if (!user) throw new Error('User not authenticated');
 
       if (asset.type === 'image') {
-        // Get image details including job_id
         const { data: imageData, error: fetchError } = await supabase
           .from('images')
           .select('id, image_url, metadata, job_id')
@@ -410,7 +429,6 @@ const SimpleLibrary = () => {
 
         if (fetchError) throw fetchError;
 
-        // Delete from storage if image_url exists
         if (imageData.image_url) {
           const bucket = inferBucketFromMetadata(imageData.metadata);
           const { error: storageError } = await supabase.storage
@@ -422,7 +440,6 @@ const SimpleLibrary = () => {
           }
         }
 
-        // Delete image record
         const { error: deleteError } = await supabase
           .from('images')
           .delete()
@@ -431,7 +448,6 @@ const SimpleLibrary = () => {
 
         if (deleteError) throw deleteError;
 
-        // Check if job should be deleted (if no other images remain for this job)
         if (imageData.job_id) {
           const { count } = await supabase
             .from('images')
@@ -447,7 +463,6 @@ const SimpleLibrary = () => {
           }
         }
       } else {
-        // Video deletion
         const { data: videoData, error: fetchError } = await supabase
           .from('videos')
           .select('id, video_url, metadata')
@@ -457,7 +472,6 @@ const SimpleLibrary = () => {
 
         if (fetchError) throw fetchError;
 
-        // Delete from storage if video_url exists
         if (videoData.video_url) {
           const metadata = videoData.metadata as any;
           const bucket = inferBucketFromMetadata(metadata, 'video');
@@ -470,7 +484,6 @@ const SimpleLibrary = () => {
           }
         }
 
-        // Delete video record
         const { error: deleteError } = await supabase
           .from('videos')
           .delete()
@@ -480,7 +493,6 @@ const SimpleLibrary = () => {
         if (deleteError) throw deleteError;
       }
 
-      // Refresh the data
       queryClient.invalidateQueries({ queryKey: ['simple-assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-counts'] });
 
@@ -518,7 +530,6 @@ const SimpleLibrary = () => {
 
         try {
           if (asset.type === 'image') {
-            // Get image details including job_id
             const { data: imageData, error: fetchError } = await supabase
               .from('images')
               .select('id, image_url, metadata, job_id')
@@ -528,7 +539,6 @@ const SimpleLibrary = () => {
 
             if (fetchError) throw fetchError;
 
-            // Delete from storage if image_url exists
             if (imageData.image_url) {
               const bucket = inferBucketFromMetadata(imageData.metadata);
               const { error: storageError } = await supabase.storage
@@ -540,7 +550,6 @@ const SimpleLibrary = () => {
               }
             }
 
-            // Delete image record
             const { error: deleteError } = await supabase
               .from('images')
               .delete()
@@ -549,7 +558,6 @@ const SimpleLibrary = () => {
 
             if (deleteError) throw deleteError;
 
-            // Check if job should be deleted (if no other images remain for this job)
             if (imageData.job_id) {
               const { count } = await supabase
                 .from('images')
@@ -565,7 +573,6 @@ const SimpleLibrary = () => {
               }
             }
           } else {
-            // Video deletion
             const { data: videoData, error: fetchError } = await supabase
               .from('videos')
               .select('id, video_url, metadata')
@@ -575,7 +582,6 @@ const SimpleLibrary = () => {
 
             if (fetchError) throw fetchError;
 
-            // Delete from storage if video_url exists
             if (videoData.video_url) {
               const metadata = videoData.metadata as any;
               const bucket = inferBucketFromMetadata(metadata, 'video');
@@ -588,7 +594,6 @@ const SimpleLibrary = () => {
               }
             }
 
-            // Delete video record
             const { error: deleteError } = await supabase
               .from('videos')
               .delete()
@@ -605,14 +610,11 @@ const SimpleLibrary = () => {
         }
       }
 
-      // Refresh the data
       queryClient.invalidateQueries({ queryKey: ['simple-assets'] });
       queryClient.invalidateQueries({ queryKey: ['asset-counts'] });
 
-      // Clear selection
       setSelectedAssets(new Set());
 
-      // Show result toast
       if (deletedCount > 0) {
         toast.success(`Successfully deleted ${deletedCount} asset${deletedCount !== 1 ? 's' : ''}`);
       }
@@ -654,15 +656,19 @@ const SimpleLibrary = () => {
   return (
     <OurVidzDashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Library</h1>
-          <p className="text-muted-foreground">
-            Showing {assets.length} of {typeFilter === 'image' ? (counts?.images || 0) : (counts?.videos || 0)} {typeFilter}s
-          </p>
-        </div>
+        <LibraryHeader
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          totalAssets={typeFilter === 'image' ? (counts?.images || 0) : (counts?.videos || 0)}
+          isLoading={isLoading}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+          currentPage={currentPage}
+          totalPages={totalPages}
+        />
 
-        {/* Filters and View Toggle */}
         <div className="flex items-center justify-between">
           <div className="flex gap-2">
             <Button
@@ -682,26 +688,8 @@ const SimpleLibrary = () => {
               Videos ({counts?.videos || 0})
             </Button>
           </div>
-          
-          <div className="flex gap-1">
-            <Button
-              variant={viewMode === 'grid' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid3X3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
 
-        {/* New Assets Banner */}
         {newAssetsBanner && currentPage === 1 && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 animate-fade-in">
             <div className="flex items-center justify-between">
@@ -726,11 +714,10 @@ const SimpleLibrary = () => {
           </div>
         )}
 
-        {/* Assets Display */}
         {assets.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
-              No {typeFilter}s found. Start creating some content!
+              {searchTerm.trim() ? `No ${typeFilter}s found matching "${searchTerm}"` : `No ${typeFilter}s found. Start creating some content!`}
             </p>
           </div>
         ) : viewMode === 'grid' ? (
@@ -762,7 +749,6 @@ const SimpleLibrary = () => {
           />
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex justify-center items-center gap-4 mt-8">
             <Button
@@ -786,7 +772,6 @@ const SimpleLibrary = () => {
         )}
       </div>
       
-      {/* Lightbox Modal */}
       {lightboxAsset && (
         <LibraryLightboxStatic
           assets={unifiedAssets}

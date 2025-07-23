@@ -49,22 +49,22 @@ export const EnhancedSeedInput = ({ seed, onSeedChange }: EnhancedSeedInputProps
 
   return (
     <div className="space-y-2">
-      <Label className="text-xs font-medium">Seed (optional)</Label>
+      <Label className="text-xs font-medium text-white">Seed (optional)</Label>
       <div className="flex items-center gap-2">
         <Input
           type="number"
           value={inputValue}
           onChange={handleInputChange}
           placeholder="Random"
-          className="h-7 text-xs flex-1"
+          className="h-7 text-xs flex-1 bg-gray-800 border-gray-600 text-white placeholder:text-gray-400"
           min="0"
           max="999999"
         />
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           onClick={generateRandomSeed}
-          className="h-7 px-2"
+          className="h-7 px-2 bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
           title="Generate random seed"
         >
           <Dice6 className="w-3 h-3" />
@@ -72,19 +72,19 @@ export const EnhancedSeedInput = ({ seed, onSeedChange }: EnhancedSeedInputProps
         {seed && (
           <>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={copySeed}
-              className="h-7 px-2"
+              className="h-7 px-2 bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               title="Copy seed"
             >
               <Copy className="w-3 h-3" />
             </Button>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               onClick={clearSeed}
-              className="h-7 px-2"
+              className="h-7 px-2 bg-gray-700 text-white hover:bg-gray-600 border-gray-600"
               title="Clear seed"
             >
               <X className="w-3 h-3" />
@@ -92,7 +92,7 @@ export const EnhancedSeedInput = ({ seed, onSeedChange }: EnhancedSeedInputProps
           </>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-gray-300">
         Use the same seed for reproducible results. Leave empty for random generation.
       </p>
     </div>

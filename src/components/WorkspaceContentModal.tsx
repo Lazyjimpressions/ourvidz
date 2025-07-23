@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Download, X, ChevronLeft, ChevronRight, Info, Trash2, Minus, Copy, Loader2, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Download, ChevronLeft, ChevronRight, Info, Trash2, Minus, Loader2, Sparkles, Image, ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MediaTile } from "@/types/workspace";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
-import { useImageRegeneration } from "@/hooks/useImageRegeneration";
+import { useGeneration } from "@/hooks/useGeneration";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface WorkspaceContentModalProps {
   tiles: MediaTile[];
@@ -15,18 +17,46 @@ interface WorkspaceContentModalProps {
   onIndexChange: (index: number) => void;
   onRemoveFromWorkspace?: (tileId: string) => void;
   onDeleteFromLibrary?: (originalAssetId: string) => void;
+  onUseAsReference?: (tile: MediaTile, referenceType: 'style' | 'composition' | 'character') => void;
+  onRefreshWorkspace?: () => void;
 }
 
-export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexChange, onRemoveFromWorkspace, onDeleteFromLibrary }: WorkspaceContentModalProps) => {
+export const WorkspaceContentModal = ({ 
+  tiles, 
+  currentIndex, 
+  onClose, 
+  onIndexChange, 
+  onRemoveFromWorkspace, 
+  onDeleteFromLibrary,
+  onUseAsReference,
+  onRefreshWorkspace
+}: WorkspaceContentModalProps) => {
   const currentTile = tiles[currentIndex];
   const [showInfoPanel, setShowInfoPanel] = useState(true);
   const { fetchDetails, loading, details, reset } = useFetchImageDetails();
   
-  // Initialize regeneration hook
-  const regeneration = useImageRegeneration(currentTile, {
-    seed: details?.seed || currentTile.seed,
-    negativePrompt: details?.negativePrompt
-  });
+  // Generation state
+  const { generateContent, isGenerating } = useGeneration();
+  
+  // Editing state
+  const [promptText, setPromptText] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [autoNegativePrompt, setAutoNegativePrompt] = useState('');
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhancedPrompt, setEnhancedPrompt] = useState('');
+  
+  // Reference state - simplified checkboxes for what to preserve
+  const [preserveCharacter, setPreserveCharacter] = useState(false);
+  const [preserveComposition, setPreserveComposition] = useState(false);
+  const [preserveStyle, setPreserveStyle] = useState(false);
+  const [referenceStrength, setReferenceStrength] = useState(0.85);
+  
+  // Seed management
+  const [manualSeed, setManualSeed] = useState('');
+  const [seedMode, setSeedMode] = useState<'same' | 'new' | 'manual'>('same');
+  
+  // Technical details display
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   
   // Only reset details when switching to a completely different image
   const [lastTileId, setLastTileId] = useState<string>("");
@@ -34,11 +64,43 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
     if (currentTile?.id !== lastTileId) {
       reset();
       setLastTileId(currentTile?.id || "");
+      setPromptText(currentTile?.prompt || '');
+      setNegativePrompt('');
+      setEnhancedPrompt('');
+      setManualSeed('');
+      setSeedMode('same');
+      setPreserveCharacter(false);
+      setPreserveComposition(false);
+      setPreserveStyle(false);
+      setShowTechnicalDetails(false);
+      setReferenceStrength(0.85);
+      
+      // Fetch auto-generated negative prompt
+      fetchAutoNegativePrompt();
     }
   }, [currentTile?.id, lastTileId, reset]);
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is typing in an input field
+      const activeElement = document.activeElement;
+      const isTyping = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT' ||
+        activeElement.getAttribute('contenteditable') === 'true'
+      );
+
+      // Only allow ESC when typing, disable other shortcuts
+      if (isTyping) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onClose();
+        }
+        return;
+      }
+
+      // Normal shortcuts when not typing
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
         handlePrevious();
@@ -51,22 +113,47 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
       } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
         setShowInfoPanel(!showInfoPanel);
-      } else if (e.key === 'c' || e.key === 'C') {
-        e.preventDefault();
-        if (details?.seed) {
-          handleCopySeed();
-        }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (regeneration.canRegenerate && !regeneration.isGenerating) {
-          regeneration.regenerateImage();
+        if (!isGenerating) {
+          handleGenerate();
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, tiles.length, showInfoPanel, details?.seed, regeneration]);
+  }, [currentIndex, tiles.length, showInfoPanel, isGenerating]);
+
+  // Listen for generation complete events and refresh workspace
+  useEffect(() => {
+    const handleGenerationComplete = (event: CustomEvent) => {
+      const { assetId, type } = event.detail || {};
+      
+      if (assetId && type === 'image') {
+        toast.success('New image generated! Refreshing workspace...');
+        
+        // Refresh the workspace to get the new image
+        if (onRefreshWorkspace) {
+          onRefreshWorkspace();
+          
+          // Small delay to ensure the new tile is loaded, then navigate to it
+          setTimeout(() => {
+            // Find the new tile and navigate to it
+            const newTileIndex = tiles.findIndex(tile => tile.originalAssetId === assetId);
+            if (newTileIndex !== -1) {
+              onIndexChange(newTileIndex);
+            }
+          }, 500);
+        }
+      }
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [onRefreshWorkspace, tiles, onIndexChange]);
 
   const handlePrevious = () => {
     const newIndex = currentIndex > 0 ? currentIndex - 1 : tiles.length - 1;
@@ -104,11 +191,147 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
     fetchDetails(currentTile.originalAssetId);
   };
 
-  const handleCopySeed = () => {
-    const seedValue = details?.seed || currentTile.seed || 0;
-    navigator.clipboard.writeText(seedValue.toString());
-    toast.success(`Seed ${seedValue} copied to clipboard`);
+  // Show technical details when they're loaded
+  useEffect(() => {
+    if (details) {
+      setShowTechnicalDetails(true);
+    }
+  }, [details]);
+
+  const fetchAutoNegativePrompt = async () => {
+    try {
+      const standardNegative = 'blurry, distorted, low quality, worst quality, jpeg artifacts, watermark, signature, text, logo, deformed, ugly, mutated, extra limbs, bad anatomy, bad proportions, cropped, out of frame';
+      setAutoNegativePrompt(standardNegative);
+    } catch (error) {
+      console.error('Failed to fetch auto negative prompt:', error);
+      setAutoNegativePrompt('blurry, distorted, low quality, worst quality');
+    }
   };
+
+  const handleEnhancePrompt = async () => {
+    if (!promptText.trim()) {
+      toast.error('Please enter a prompt to enhance');
+      return;
+    }
+
+    setIsEnhancing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+        body: {
+          prompt: promptText.trim(),
+          jobType: currentTile.modelType || 'sdxl_image',
+          quality: currentTile.quality || 'fast'
+        }
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        setEnhancedPrompt(data.enhanced_prompt);
+        toast.success('Prompt enhanced successfully');
+      } else {
+        throw new Error(data?.error || 'Enhancement failed');
+      }
+    } catch (error) {
+      console.error('Enhancement error:', error);
+      toast.error('Failed to enhance prompt');
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!promptText.trim()) {
+      toast.error('Please enter a prompt');
+      return;
+    }
+
+    const activeReferences = [];
+    if (preserveCharacter) activeReferences.push('character');
+    if (preserveComposition) activeReferences.push('composition');  
+    if (preserveStyle) activeReferences.push('style');
+
+    if (activeReferences.length === 0) {
+      toast.error('Please select at least one aspect to preserve');
+      return;
+    }
+
+    try {
+      // Get the actual seed value
+      const actualSeed = currentTile.generationParams?.seed || 
+                        currentTile.seed || 
+                        0;
+
+      // Determine final seed based on mode
+      let finalSeed;
+      if (seedMode === 'new') {
+        finalSeed = undefined; // Let system generate new seed
+      } else if (seedMode === 'manual' && manualSeed) {
+        finalSeed = parseInt(manualSeed);
+      } else {
+        finalSeed = actualSeed; // Use same seed
+      }
+
+      // Combine negative prompts
+      const combinedNegativePrompt = [autoNegativePrompt, negativePrompt]
+        .filter(Boolean)
+        .join(', ');
+
+      // Use the primary reference type (first one selected)
+      const primaryReferenceType = activeReferences[0];
+
+      const referenceMetadata = {
+        model_variant: 'lustify_sdxl',
+        num_images: 1,
+        reference_image: true,
+        reference_url: currentTile.url,
+        reference_type: primaryReferenceType as 'style' | 'composition' | 'character',
+        reference_strength: referenceStrength,
+        character_consistency: preserveCharacter,
+        composition_consistency: preserveComposition,
+        style_consistency: preserveStyle,
+        seed: finalSeed,
+        negative_prompt: combinedNegativePrompt
+      };
+
+      const generationRequest = {
+        format: 'sdxl_image_fast' as const,
+        prompt: enhancedPrompt || promptText,
+        referenceImageUrl: currentTile.url,
+        metadata: referenceMetadata
+      };
+
+      await generateContent(generationRequest);
+      
+      const activeTypesText = activeReferences.join(' + ');
+      toast.success(`Generation started with ${activeTypesText} preserved! New image will appear in workspace when complete.`);
+      
+    } catch (error) {
+      console.error('❌ Generation failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Generation failed';
+      toast.error(errorMessage);
+    }
+  };
+
+  // Simple token counting approximation for SDXL (77 token limit)
+  const getTokenCount = (text: string): number => {
+    if (!text) return 0;
+    const words = text.trim().split(/[\s,.\-_!?;:"'()\[\]{}]+/).filter(Boolean);
+    return Math.ceil(words.length * 1.3);
+  };
+
+  const getTokenColor = (tokenCount: number, limit: number) => {
+    const ratio = tokenCount / limit;
+    if (ratio <= 0.7) return 'text-green-400';
+    if (ratio <= 0.9) return 'text-yellow-400';
+    return 'text-red-400';
+  };
+
+  const promptTokens = getTokenCount(promptText);
+  const enhancedTokens = getTokenCount(enhancedPrompt);
+  const autoNegativeTokens = getTokenCount(autoNegativePrompt);
+  const userNegativeTokens = getTokenCount(negativePrompt);
+  const totalNegativeTokens = autoNegativeTokens + userNegativeTokens;
 
   // Skip rendering if current tile doesn't have URL
   if (!currentTile?.url) {
@@ -116,18 +339,25 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
   }
 
   const canLoadDetails = currentTile.originalAssetId && currentTile.type === 'image';
-  const displaySeed = details?.seed || currentTile.seed || 0;
+  
+  // Get actual seed from generationParams or direct seed property
+  const displaySeed = currentTile.generationParams?.seed || 
+                     currentTile.seed || 
+                     'Unknown';
+
+  // Count active preservation options
+  const activeCount = [preserveCharacter, preserveComposition, preserveStyle].filter(Boolean).length;
 
   return (
     <Dialog open={true} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] w-full h-full bg-black border-none text-white p-0 overflow-hidden">
-        {/* Main Content Area */}
-        <div className="relative w-full h-[95vh] flex">
+        {/* Main Content Area - Fixed height to prevent collapse */}
+        <div className="relative w-full h-[95vh] flex min-h-[600px]">
           {/* Image/Video Area */}
           <div className={`relative flex items-center justify-center transition-all duration-300 ${
-            showInfoPanel ? 'w-[70%]' : 'w-full'
+            showInfoPanel ? 'w-[70%] min-w-[400px]' : 'w-full'
           }`}>
-            {/* Overlay Controls */}
+            {/* Overlay Controls - Removed the X button */}
             <div className="absolute top-2 right-2 z-20 flex items-center gap-1 opacity-80 hover:opacity-100 transition-opacity duration-200">
               <Button
                 variant="ghost"
@@ -171,14 +401,6 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
                   <Trash2 className="w-3 h-3" />
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="bg-black/50 hover:bg-black/70 text-white p-1.5 backdrop-blur-sm h-8 w-8"
-              >
-                <X className="w-3 h-3" />
-              </Button>
             </div>
 
             {/* Position Indicator */}
@@ -229,211 +451,312 @@ export const WorkspaceContentModal = ({ tiles, currentIndex, onClose, onIndexCha
             )}
           </div>
 
-          {/* Info Panel */}
+          {/* Info Panel - Fixed width and height */}
           <div className={`absolute right-0 top-0 h-full bg-black/90 backdrop-blur-md border-l border-white/10 transition-all duration-300 ease-in-out ${
-            showInfoPanel ? 'w-[30%] translate-x-0' : 'w-[30%] translate-x-full'
+            showInfoPanel ? 'w-[30%] min-w-[350px] translate-x-0' : 'w-[30%] translate-x-full'
           }`}>
-            <div className="p-4 h-full overflow-y-auto">
+            <div className="p-4 h-full overflow-y-auto min-h-0">
               {/* Header */}
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-white">Details & Edit</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowInfoPanel(false)}
-                  className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                >
-                  <X className="w-3 h-3" />
-                </Button>
+                <h3 className="text-sm font-medium text-white">Edit & Generate</h3>
+                {activeCount > 0 && (
+                  <div className="bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
+                    {activeCount} preserved
+                  </div>
+                )}
               </div>
 
-              {/* Prompts Section - Only for images */}
+              {/* Preserve Options - Clear checkboxes */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium text-white/70">Prompts</h4>
-                    {regeneration.state.isModified && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={regeneration.resetToOriginal}
-                        className="text-orange-400 hover:text-orange-300 hover:bg-white/10 p-1 text-xs h-6"
-                        title="Reset to original"
-                      >
-                        <RotateCcw className="w-3 h-3 mr-1" />
-                        Reset
-                      </Button>
-                    )}
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Select What to Preserve</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveCharacter}
+                        onChange={(e) => setPreserveCharacter(e.target.checked)}
+                        className="w-4 h-4 text-green-500 rounded border-white/20 bg-white/10"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white">Character</div>
+                        <div className="text-white/60 text-xs">Preserve person/subject appearance</div>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveComposition}
+                        onChange={(e) => setPreserveComposition(e.target.checked)}
+                        className="w-4 h-4 text-green-500 rounded border-white/20 bg-white/10"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white">Composition</div>
+                        <div className="text-white/60 text-xs">Preserve layout and pose</div>
+                      </div>
+                    </label>
+                    
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={preserveStyle}
+                        onChange={(e) => setPreserveStyle(e.target.checked)}
+                        className="w-4 h-4 text-green-500 rounded border-white/20 bg-white/10"
+                      />
+                      <div className="text-sm">
+                        <div className="text-white">Style</div>
+                        <div className="text-white/60 text-xs">Preserve artistic style</div>
+                      </div>
+                    </label>
                   </div>
+
+                  {/* Simple Strength Slider - Replace complex component with basic HTML */}
+                  {activeCount > 0 && (
+                    <div className="mt-3 pt-3 border-t border-white/10">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-white/60">Strength</label>
+                        <span className="text-xs text-white">{Math.round(referenceStrength * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.3"
+                        max="1.0"
+                        step="0.05"
+                        value={referenceStrength}
+                        onChange={(e) => setReferenceStrength(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+                        disabled={isGenerating}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Prompt Section */}
+              {currentTile.type === 'image' && (
+                <div className="mb-4">
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Prompt</h4>
                   
-                  {/* Positive Prompt */}
-                  <div className="mb-3">
+                  {/* Current Prompt */}
+                  <div className="mb-2">
                     <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-medium text-white/60">Positive</label>
-                      <span className="text-xs text-white/40">
-                        {regeneration.state.positivePrompt.length}/4000
-                      </span>
+                      <label className="text-xs text-white/60">Edit Prompt</label>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-xs ${getTokenColor(promptTokens, 77)}`}>
+                          {promptTokens}/77
+                        </span>
+                        <button
+                          onClick={handleEnhancePrompt}
+                          disabled={isEnhancing || !promptText.trim()}
+                          className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-5 w-5 rounded"
+                          title="Enhance with AI"
+                        >
+                          {isEnhancing ? (
+                            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-2.5 h-2.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <Textarea
-                      value={regeneration.state.positivePrompt}
-                      onChange={(e) => regeneration.updatePrompts({ positivePrompt: e.target.value })}
-                      placeholder="Describe what you want to see..."
-                      className="min-h-[60px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
-                      maxLength={4000}
+                      value={promptText}
+                      onChange={(e) => setPromptText(e.target.value)}
+                      placeholder="Describe the changes you want to make..."
+                      className="min-h-[80px] max-h-[120px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
                     />
                   </div>
 
-                   {/* Negative Prompt */}
-                   <div className="mb-3">
-                     <div className="flex items-center justify-between mb-1">
-                       <label className="text-xs font-medium text-white/60">Negative</label>
-                       <span className="text-xs text-white/40">
-                         {regeneration.state.negativePrompt.length}/1000
-                       </span>
-                     </div>
-                     <Textarea
-                       value={regeneration.state.negativePrompt}
-                       onChange={(e) => regeneration.updatePrompts({ negativePrompt: e.target.value })}
-                       className="min-h-[40px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
-                       maxLength={1000}
-                     />
-                   </div>
-
-                   {/* Controls Row - Keep Seed Toggle + Regenerate Button */}
-                   <div className="flex items-center justify-between gap-2 mb-3">
-                     <div className="flex items-center gap-1.5">
-                       <span className="text-xs text-white/60">Keep Seed</span>
-                       <button
-                         onClick={() => regeneration.updateSettings({ keepSeed: !regeneration.state.keepSeed })}
-                         className={`h-3 w-5 rounded-full border transition-colors ${
-                           regeneration.state.keepSeed ? 'bg-white/90 border-white/90' : 'bg-white/10 border-white/30'
-                         }`}
-                       >
-                         <div className={`h-2 w-2 rounded-full bg-black transition-transform ${
-                           regeneration.state.keepSeed ? 'translate-x-2.5' : 'translate-x-0.5'
-                         }`} />
-                       </button>
-                     </div>
-
-                     <button
-                       onClick={regeneration.regenerateImage}
-                       disabled={!regeneration.canRegenerate || regeneration.isGenerating}
-                       className="bg-white/10 hover:bg-white/20 disabled:opacity-50 border border-white/20 text-white text-xs px-2 py-1 rounded"
-                     >
-                       {regeneration.isGenerating ? (
-                         <>
-                           <Loader2 className="w-3 h-3 mr-1 inline animate-spin" />
-                           Gen...
-                         </>
-                       ) : (
-                         'Regenerate'
-                       )}
-                     </button>
-                   </div>
-
-                  {regeneration.state.isModified && (
-                    <p className="text-xs text-orange-400 mb-3 text-center">
-                      Modified • Ctrl+Enter to regenerate
-                    </p>
+                  {/* Enhanced Prompt */}
+                  {enhancedPrompt && (
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-white/60">Enhanced</label>
+                        <span className={`text-xs ${getTokenColor(enhancedTokens, 77)}`}>
+                          {enhancedTokens}/77
+                        </span>
+                      </div>
+                      <Textarea
+                        value={enhancedPrompt}
+                        onChange={(e) => setEnhancedPrompt(e.target.value)}
+                        className="min-h-[60px] max-h-[100px] text-xs bg-green-500/5 border-green-500/20 text-white resize-none"
+                      />
+                    </div>
                   )}
+
+                  {/* Negative Prompt */}
+                  <div className="mb-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-white/60">
+                        Additional Negative Prompt
+                      </label>
+                      <span className={`text-xs ${getTokenColor(totalNegativeTokens, 77)}`}>
+                        Auto: {autoNegativeTokens} + User: {userNegativeTokens} = {totalNegativeTokens}/77
+                      </span>
+                    </div>
+                    <Textarea
+                      value={negativePrompt}
+                      onChange={(e) => setNegativePrompt(e.target.value)}
+                      placeholder="Additional things to avoid..."
+                      className="min-h-[40px] max-h-[80px] text-xs bg-white/5 border-white/20 text-white placeholder:text-white/40 resize-none"
+                    />
+                    <div className="text-xs text-white/40 mt-1">
+                      Auto-generated negatives are included automatically
+                    </div>
+                  </div>
                 </div>
               )}
 
-              {/* Seed Row */}
+              {/* Seed Management */}
               {currentTile.type === 'image' && (
                 <div className="mb-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h4 className="text-xs font-medium text-white/70 mb-1">Seed</h4>
-                      <p className="text-sm text-white font-mono">
-                        {loading ? 'Loading...' : displaySeed}
-                      </p>
+                  <h4 className="text-xs font-medium text-white/70 mb-2">Pose Control</h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-white/60">Current:</span>
+                      <span className="text-white font-mono">{displaySeed}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleCopySeed}
-                        className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                        title="Copy seed"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </Button>
-                      {canLoadDetails && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleLoadDetails}
-                          disabled={loading}
-                          className="text-white/70 hover:text-white hover:bg-white/10 p-1 h-6 w-6"
-                          title="Refresh seed"
+                    
+                    <div className="grid grid-cols-3 gap-1 text-xs">
+                      {['same', 'new', 'manual'].map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setSeedMode(mode as any)}
+                          className={`py-1 px-2 rounded capitalize ${
+                            seedMode === mode 
+                              ? 'bg-white/20 text-white' 
+                              : 'bg-white/5 text-white/60 hover:bg-white/10'
+                          }`}
                         >
-                          {loading ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-3 h-3" />
-                          )}
-                        </Button>
-                      )}
+                          {mode === 'same' ? 'Same Pose' : mode === 'new' ? 'New Pose' : 'Custom'}
+                        </button>
+                      ))}
                     </div>
+                    
+                    {seedMode === 'manual' && (
+                      <Input
+                        value={manualSeed}
+                        onChange={(e) => setManualSeed(e.target.value)}
+                        placeholder="Enter seed number..."
+                        className="text-xs bg-white/5 border-white/20 text-white h-7"
+                      />
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Basic Info Grid */}
-              <div className="space-y-3 mb-4">
-                {/* Quality and Model Row */}
-                {(currentTile.quality || details?.modelType || currentTile.modelType) && (
-                  <div className="grid grid-cols-2 gap-3">
-                    {currentTile.quality && (
-                      <div>
-                        <h4 className="text-xs font-medium text-white/70 mb-1">Quality</h4>
-                        <p className="text-xs text-white capitalize">{currentTile.quality}</p>
-                      </div>
+              {/* Generate Button */}
+              {currentTile.type === 'image' && (
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !promptText.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white mb-4"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate New Version'
+                  )}
+                </Button>
+              )}
+
+              {/* Technical Details Section */}
+              {details && (
+                <div className="mb-4 border-t border-white/10 pt-4">
+                  <button
+                    onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                    className="flex items-center justify-between w-full text-xs font-medium text-white/70 mb-2 hover:text-white"
+                  >
+                    <span>Technical Details</span>
+                    {showTechnicalDetails ? (
+                      <ChevronUp className="w-3 h-3" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3" />
                     )}
-                    {(details?.modelType || currentTile.modelType) && (
-                      <div>
-                        <h4 className="text-xs font-medium text-white/70 mb-1">Model</h4>
-                        <p className="text-xs text-white">{details?.modelType || currentTile.modelType}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {/* Type and Generation Time Row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <h4 className="text-xs font-medium text-white/70 mb-1">Type</h4>
-                    <p className="text-xs text-white capitalize">{currentTile.type}</p>
-                  </div>
-                  {details?.generationTime && (
-                    <div>
-                      <h4 className="text-xs font-medium text-white/70 mb-1">Gen Time</h4>
-                      <p className="text-xs text-white">{details.generationTime.toFixed(2)}s</p>
+                  </button>
+                  
+                  {showTechnicalDetails && (
+                    <div className="space-y-2 text-xs">
+                      {details.seed && (
+                        <div className="flex justify-between">
+                          <span className="text-white/60">Original Seed:</span>
+                          <span className="text-white font-mono">{details.seed}</span>
+                        </div>
+                      )}
+                      {details.negativePrompt && (
+                        <div>
+                          <span className="text-white/60">Original Negative:</span>
+                          <div className="text-white/80 mt-1 p-2 bg-white/5 rounded text-xs">
+                            {details.negativePrompt}
+                          </div>
+                        </div>
+                      )}
+                      {details.modelType && (
+                        <div className="flex justify-between">
+                          <span className="text-white/60">Model:</span>
+                          <span className="text-white">{details.modelType}</span>
+                        </div>
+                      )}
+                      {details.generationTime && (
+                        <div className="flex justify-between">
+                          <span className="text-white/60">Generation Time:</span>
+                          <span className="text-white">{details.generationTime}s</span>
+                        </div>
+                      )}
+                      {details.referenceStrength && (
+                        <div className="flex justify-between">
+                          <span className="text-white/60">Reference Strength:</span>
+                          <span className="text-white">{details.referenceStrength}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
+              )}
 
-                {details?.referenceStrength && (
+              {/* Load Details Button */}
+              {canLoadDetails && (
+                <div className="mb-4">
+                  <Button
+                    onClick={handleLoadDetails}
+                    disabled={loading}
+                    variant="outline"
+                    size="sm"
+                    className="w-full bg-white/5 border-white/20 text-white hover:bg-white/10"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <Info className="w-3 h-3 mr-2" />
+                        Load Technical Details
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {/* Basic Info */}
+              <div className="space-y-2 text-xs">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <h4 className="text-xs font-medium text-white/70 mb-1">Reference Strength</h4>
-                    <p className="text-xs text-white">{details.referenceStrength}</p>
+                    <span className="text-white/60">Quality:</span>
+                    <span className="text-white ml-1 capitalize">{currentTile.quality}</span>
                   </div>
-                )}
-              </div>
-
-              {/* Keyboard Shortcuts */}
-              <div className="mt-6 pt-4 border-t border-white/10">
-                <p className="text-xs text-white/50 mb-2">Shortcuts</p>
-                <div className="text-xs text-white/40 space-y-1">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>'i' - Toggle panel</div>
-                    <div>'c' - Copy seed</div>
-                    <div>'←/→' - Navigate</div>
-                    <div>'Ctrl+Enter' - Regen</div>
+                  <div>
+                    <span className="text-white/60">Model:</span>
+                    <span className="text-white ml-1">{currentTile.modelType}</span>
                   </div>
                 </div>
               </div>
+
             </div>
           </div>
         </div>
