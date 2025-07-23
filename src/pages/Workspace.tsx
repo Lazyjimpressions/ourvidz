@@ -683,6 +683,13 @@ const Workspace = () => {
                     />
                   )}
                   
+                  {/* Show "REF" badge for reference images */}
+                  {tile.isReferenceImage && (
+                    <div className="absolute top-2 right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                      REF
+                    </div>
+                  )}
+                  
                   {/* Action buttons */}
                   <div className="absolute top-2 left-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
                     {tile.type === 'image' && (
@@ -889,11 +896,9 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
-          // Use the workspace hook to add imported assets
-          const assetIds = importedAssets.map(asset => asset.id);
-          addToWorkspace(assetIds);
+          // Use the enhanced workspace hook to handle both database assets and reference images
+          importToWorkspace(importedAssets);
           setShowLibraryModal(false);
-          toast.success(`Added ${importedAssets.length} assets to workspace`);
         }}
       />
     </div>

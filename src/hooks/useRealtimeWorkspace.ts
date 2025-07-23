@@ -4,12 +4,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { MediaTile } from '@/types/workspace';
+import { MediaTile, WorkspaceReferenceImage } from '@/types/workspace';
 
 export const useRealtimeWorkspace = () => {
   const queryClient = useQueryClient();
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
+  const [referenceImages, setReferenceImages] = useState<WorkspaceReferenceImage[]>([]);
   const processedUpdatesRef = useRef<Set<string>>(new Set());
   
   // Batching state for rapid completions
@@ -27,13 +28,11 @@ export const useRealtimeWorkspace = () => {
       return AssetService.getAssetsByIds(Array.from(workspaceFilter));
     },
     enabled: workspaceFilter.size > 0,
-    // AGGRESSIVE OPTIMIZATION: Cache for 4 hours - assets don't change once completed
-    staleTime: 4 * 60 * 60 * 1000, // 4 hours
-    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
+    staleTime: 4 * 60 * 60 * 1000,
+    gcTime: 24 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnMount: false, // Don't refetch on mount, rely on cache
-    refetchInterval: false, // No polling - use realtime instead
-    // Retry strategy for failed requests
+    refetchOnMount: false,
+    refetchInterval: false,
     retry: (failureCount, error) => {
       if (failureCount < 2) return true;
       console.error('❌ Asset fetch failed after retries:', error);
@@ -51,7 +50,10 @@ export const useRealtimeWorkspace = () => {
       console.log('🔄 REALTIME: Restoring workspace from session storage for user:', user.id);
       
       const userScopedKey = `workspaceFilter_${user.id}`;
+      const referenceImagesKey = `workspaceReferenceImages_${user.id}`;
+      
       const storedFilter = sessionStorage.getItem(userScopedKey);
+      const storedReferenceImages = sessionStorage.getItem(referenceImagesKey);
       
       if (storedFilter) {
         try {
@@ -64,25 +66,43 @@ export const useRealtimeWorkspace = () => {
           console.warn('⚠️ Failed to parse stored workspace filter:', error);
         }
       }
+      
+      if (storedReferenceImages) {
+        try {
+          const referenceImagesArray = JSON.parse(storedReferenceImages);
+          if (Array.isArray(referenceImagesArray) && referenceImagesArray.length > 0) {
+            setReferenceImages(referenceImagesArray.map(img => ({
+              ...img,
+              timestamp: new Date(img.timestamp)
+            })));
+            console.log('✅ REALTIME: Restored', referenceImagesArray.length, 'reference images');
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to parse stored reference images:', error);
+        }
+      }
     };
     
     restoreWorkspace();
   }, []);
 
-  // Save workspace filter to session storage whenever it changes
+  // Save workspace filter and reference images to session storage whenever they change
   useEffect(() => {
     const saveWorkspace = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       
       const userScopedKey = `workspaceFilter_${user.id}`;
+      const referenceImagesKey = `workspaceReferenceImages_${user.id}`;
+      
       sessionStorage.setItem(userScopedKey, JSON.stringify(Array.from(workspaceFilter)));
+      sessionStorage.setItem(referenceImagesKey, JSON.stringify(referenceImages));
     };
     
-    if (workspaceFilter.size > 0) {
+    if (workspaceFilter.size > 0 || referenceImages.length > 0) {
       saveWorkspace();
     }
-  }, [workspaceFilter]);
+  }, [workspaceFilter, referenceImages]);
 
   // Batched realtime subscription with debouncing for rapid SDXL completions
   useEffect(() => {
@@ -274,7 +294,7 @@ export const useRealtimeWorkspace = () => {
   const convertSeedValue = (seedValue: any): number => {
     if (seedValue === null || seedValue === undefined) {
       console.log('🔍 SEED CONVERSION: Seed value is null/undefined:', seedValue);
-      return 0; // Return 0 as default for missing seeds
+      return 0;
     }
     
     if (typeof seedValue === 'number') {
@@ -283,16 +303,15 @@ export const useRealtimeWorkspace = () => {
     }
     
     if (typeof seedValue === 'string') {
-      // Handle scientific notation strings like "1.752888178e+09"
       const parsed = parseFloat(seedValue);
       if (!isNaN(parsed)) {
         console.log('🔍 SEED CONVERSION: Converted string to number:', seedValue, '->', parsed);
-        return Math.round(parsed); // Round to integer for display
+        return Math.round(parsed);
       }
     }
     
     console.warn('🔍 SEED CONVERSION: Could not convert seed value:', seedValue, typeof seedValue);
-    return 0; // Return 0 as fallback
+    return 0;
   };
 
   // Transform assets to tiles - FIXED: Proper seed extraction and conversion
@@ -309,9 +328,7 @@ export const useRealtimeWorkspace = () => {
     const tiles: MediaTile[] = [];
     
     if (asset.type === 'image') {
-      // Handle individual image records only
       if (asset.url) {
-        // FIXED: Proper seed extraction and conversion
         const extractedSeed = convertSeedValue(asset.metadata?.seed);
         
         console.log('🎯 SEED EXTRACTION FOR IMAGE:', {
@@ -322,7 +339,6 @@ export const useRealtimeWorkspace = () => {
           negativePrompt: asset.metadata?.negative_prompt
         });
 
-        // Handle single image
         tiles.push({
           id: asset.id,
           originalAssetId: asset.id,
@@ -331,12 +347,12 @@ export const useRealtimeWorkspace = () => {
           prompt: asset.prompt,
           timestamp: asset.createdAt,
           quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.metadata?.job_type || asset.modelType, // PHASE 1 FIX: Use job_type for accurate model detection
+          modelType: asset.metadata?.job_type || asset.modelType,
           enhancedPrompt: asset.enhancedPrompt,
-          seed: extractedSeed, // FIXED: Use converted seed value
+          seed: extractedSeed,
           generationParams: {
             ...asset.metadata,
-            seed: extractedSeed, // FIXED: Ensure seed is properly converted in generationParams too
+            seed: extractedSeed,
             generation_time: asset.metadata?.generation_time,
             negative_prompt: asset.metadata?.negative_prompt,
             reference_strength: asset.metadata?.reference_strength
@@ -363,15 +379,33 @@ export const useRealtimeWorkspace = () => {
         duration: asset.duration,
         thumbnailUrl: asset.thumbnailUrl,
         enhancedPrompt: asset.enhancedPrompt,
-        seed: extractedSeed, // FIXED: Use converted seed value
+        seed: extractedSeed,
         generationParams: {
           ...asset.metadata,
-          seed: extractedSeed // FIXED: Ensure seed is properly converted
+          seed: extractedSeed
         }
       });
     }
     
     return tiles;
+  }, []);
+
+  // Transform reference images to tiles
+  const transformReferenceImageToTiles = useCallback((refImage: WorkspaceReferenceImage): MediaTile => {
+    return {
+      id: refImage.id,
+      originalAssetId: refImage.id,
+      type: 'image',
+      url: refImage.url,
+      prompt: refImage.prompt,
+      timestamp: refImage.timestamp,
+      quality: refImage.quality,
+      modelType: refImage.modelType,
+      enhancedPrompt: refImage.enhancedPrompt,
+      seed: refImage.seed,
+      generationParams: refImage.generationParams,
+      isReferenceImage: true
+    };
   }, []);
 
   // Optimized workspace tiles with enhanced caching
@@ -381,32 +415,67 @@ export const useRealtimeWorkspace = () => {
     );
     
     const allTiles: MediaTile[] = [];
+    
+    // Add database assets
     completedAssets.forEach(asset => {
       const tiles = transformAssetToTiles(asset);
       allTiles.push(...tiles);
     });
     
+    // Add reference images
+    referenceImages.forEach(refImage => {
+      const tile = transformReferenceImageToTiles(refImage);
+      allTiles.push(tile);
+    });
+    
     // Sort by timestamp descending (newest first)
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }, [assets, transformAssetToTiles]);
+  }, [assets, referenceImages, transformAssetToTiles, transformReferenceImageToTiles]);
 
-  // Add to workspace
+  // Add to workspace - handles both database assets and reference images
   const addToWorkspace = useCallback((assetIds: string[]) => {
     console.log('➕ Adding assets to workspace:', assetIds);
-    setWorkspaceFilter(prev => {
-      const newFilter = new Set(prev);
-      assetIds.forEach(id => newFilter.add(id));
-      return newFilter;
-    });
+    const dbAssetIds = assetIds.filter(id => !id.startsWith('ref_'));
+    
+    if (dbAssetIds.length > 0) {
+      setWorkspaceFilter(prev => {
+        const newFilter = new Set(prev);
+        dbAssetIds.forEach(id => newFilter.add(id));
+        return newFilter;
+      });
+    }
   }, []);
 
-  // Import to workspace
+  // Import to workspace - handles both database assets and reference images
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
     console.log('🔄 Adding imported assets to workspace:', importedAssets.length);
     
-    const newFilterIds = importedAssets.map(asset => asset.id);
-    const newFilter = new Set([...workspaceFilter, ...newFilterIds]);
-    setWorkspaceFilter(newFilter);
+    const dbAssets = importedAssets.filter(asset => !asset.id.startsWith('ref_'));
+    const refImages = importedAssets.filter(asset => asset.id.startsWith('ref_'));
+    
+    // Add database assets to workspace filter
+    if (dbAssets.length > 0) {
+      const newFilterIds = dbAssets.map(asset => asset.id);
+      const newFilter = new Set([...workspaceFilter, ...newFilterIds]);
+      setWorkspaceFilter(newFilter);
+    }
+    
+    // Add reference images to reference images state
+    if (refImages.length > 0) {
+      const newReferenceImages = refImages.map(asset => ({
+        id: asset.id,
+        url: asset.url || '',
+        prompt: asset.prompt,
+        timestamp: asset.createdAt,
+        quality: (asset.quality as 'fast' | 'high') || 'fast',
+        modelType: asset.modelType,
+        enhancedPrompt: asset.enhancedPrompt,
+        seed: asset.metadata?.seed || 0,
+        generationParams: asset.metadata
+      }));
+      
+      setReferenceImages(prev => [...prev, ...newReferenceImages]);
+    }
     
     toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
   }, [workspaceFilter]);
@@ -416,11 +485,15 @@ export const useRealtimeWorkspace = () => {
     const { data: { user } } = await supabase.auth.getUser();
     
     setWorkspaceFilter(new Set());
+    setReferenceImages([]);
     
     if (user) {
       const userScopedKey = `workspaceFilter_${user.id}`;
+      const referenceImagesKey = `workspaceReferenceImages_${user.id}`;
       const sessionStartKey = `workspaceSessionStart_${user.id}`;
+      
       sessionStorage.removeItem(userScopedKey);
+      sessionStorage.removeItem(referenceImagesKey);
       sessionStorage.setItem(sessionStartKey, Date.now().toString());
       console.log('🔄 Cleared workspace and reset session for user:', user.id);
     }
@@ -428,7 +501,7 @@ export const useRealtimeWorkspace = () => {
     toast.success('Workspace cleared');
   }, []);
 
-  // Delete tile
+  // Delete tile - handles both database assets and reference images
   const deleteTile = useCallback(async (tile: MediaTile) => {
     if (deletingTiles.has(tile.id)) return;
     
@@ -437,23 +510,30 @@ export const useRealtimeWorkspace = () => {
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
-      // Remove from workspace filter first (optimistic update)
-      setWorkspaceFilter(prev => {
-        const newFilter = new Set(prev);
-        newFilter.delete(tile.originalAssetId);
-        return newFilter;
-      });
-      
-      // Actual deletion
-      await AssetService.deleteAsset(tile.originalAssetId, tile.type);
-      
-      toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
+      if (tile.isReferenceImage) {
+        // Remove reference image from state
+        setReferenceImages(prev => prev.filter(img => img.id !== tile.id));
+        toast.success('Reference image removed from workspace');
+      } else {
+        // Remove from workspace filter first (optimistic update)
+        setWorkspaceFilter(prev => {
+          const newFilter = new Set(prev);
+          newFilter.delete(tile.originalAssetId);
+          return newFilter;
+        });
+        
+        // Actual deletion from database
+        await AssetService.deleteAsset(tile.originalAssetId, tile.type);
+        toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
+      }
       
     } catch (error) {
       console.error('❌ Workspace deletion failed:', error);
       
-      // Restore to workspace filter on error
-      setWorkspaceFilter(prev => new Set([...prev, tile.originalAssetId]));
+      if (!tile.isReferenceImage) {
+        // Restore to workspace filter on error
+        setWorkspaceFilter(prev => new Set([...prev, tile.originalAssetId]));
+      }
       
       const errorMessage = error instanceof Error 
         ? error.message.includes('Failed to fetch') 

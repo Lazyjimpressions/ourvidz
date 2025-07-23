@@ -44,4 +44,19 @@ export interface MediaTile {
   enhancedPrompt?: string;
   seed?: number; // FIXED: Changed from string | number to just number for consistency
   generationParams?: Record<string, any>;
+  // Reference image support
+  isReferenceImage?: boolean;
+}
+
+// NEW: Interface for workspace reference images
+export interface WorkspaceReferenceImage {
+  id: string;
+  url: string;
+  prompt: string;
+  timestamp: Date;
+  quality: 'fast' | 'high';
+  modelType?: string;
+  enhancedPrompt?: string;
+  seed?: number;
+  generationParams?: Record<string, any>;
 }
