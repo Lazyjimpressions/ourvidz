@@ -889,11 +889,39 @@ const Workspace = () => {
         open={showLibraryModal}
         onClose={() => setShowLibraryModal(false)}
         onImport={(importedAssets) => {
-          // Use the workspace hook to add imported assets
-          const assetIds = importedAssets.map(asset => asset.id);
-          addToWorkspace(assetIds);
+          console.log('📥 Processing library import:', importedAssets);
+          
+          // Separate reference images from database assets
+          const referenceImages = importedAssets.filter(asset => asset.id.startsWith('ref_'));
+          const databaseAssets = importedAssets.filter(asset => !asset.id.startsWith('ref_'));
+          
+          console.log('📊 Import breakdown:', {
+            total: importedAssets.length,
+            referenceImages: referenceImages.length,
+            databaseAssets: databaseAssets.length
+          });
+          
+          // Handle reference images
+          if (referenceImages.length > 0) {
+            toast.info(
+              `${referenceImages.length} reference image${referenceImages.length !== 1 ? 's' : ''} detected. Use the "Browse References" button in the reference modal to access them.`,
+              { duration: 5000 }
+            );
+          }
+          
+          // Handle database assets
+          if (databaseAssets.length > 0) {
+            const assetIds = databaseAssets.map(asset => asset.id);
+            addToWorkspace(assetIds);
+            toast.success(`Added ${databaseAssets.length} generated asset${databaseAssets.length !== 1 ? 's' : ''} to workspace`);
+          }
+          
+          // If no database assets to import
+          if (databaseAssets.length === 0 && referenceImages.length > 0) {
+            toast.info('Reference images cannot be added to workspace. Access them through the reference modal instead.');
+          }
+          
           setShowLibraryModal(false);
-          toast.success(`Added ${importedAssets.length} assets to workspace`);
         }}
       />
     </div>
