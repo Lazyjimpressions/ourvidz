@@ -16,6 +16,9 @@ export const useRealtimeWorkspace = () => {
   const batchUpdateTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingBatchUpdatesRef = useRef<Set<string>>(new Set());
   
+  // PHASE 2: Job tracking ref moved to top level (HOOKS RULE COMPLIANCE)
+  const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
+  
   // Efficient workspace query with aggressive caching
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['realtime-workspace-assets', Array.from(workspaceFilter).sort()],
@@ -251,7 +254,6 @@ export const useRealtimeWorkspace = () => {
 
   // PHASE 2: Enhanced generation completion event system with job-level tracking
   useEffect(() => {
-    const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
     
     const handleGenerationComplete = (event: CustomEvent) => {
       const { assetId, assetIds, type, jobId } = event.detail;
