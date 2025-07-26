@@ -20,6 +20,7 @@ import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
 import { Image, Dice6 } from 'lucide-react';
 import { WorkspaceContentModal } from '@/components/WorkspaceContentModal';
+import { useEnhancedGenerationWorkspace } from '@/hooks/useEnhancedGenerationWorkspace';
 
 const Workspace = () => {
   const navigate = useNavigate();
@@ -88,6 +89,12 @@ const Workspace = () => {
     clearWorkspace, 
     deleteTile 
   } = useRealtimeWorkspace();
+
+  // PHASE 1-3: Enhanced auto-add completed generations to workspace
+  useEnhancedGenerationWorkspace({
+    addToWorkspace: addToWorkspace,
+    isEnabled: true // Enable by default for all workspace users
+  });
   
   const [isClearing, setIsClearing] = useState(false);
   

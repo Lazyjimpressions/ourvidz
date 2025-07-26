@@ -249,24 +249,120 @@ export const useRealtimeWorkspace = () => {
     setupRealtimeSubscriptions();
   }, [queryClient]);
 
-  // Enhanced generation completion event system with batch support
+  // PHASE 2: Enhanced generation completion event system with job-level tracking
   useEffect(() => {
+    const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
+    
     const handleGenerationComplete = (event: CustomEvent) => {
-      const { assetId, assetIds, type } = event.detail;
+      const { assetId, assetIds, type, jobId } = event.detail;
       
       if (type === 'batch' && assetIds) {
-        console.log('🎉 Batch generation completion event:', { assetIds, count: assetIds.length });
+        console.log('🎉 PHASE 2: Batch generation completion event:', { assetIds, count: assetIds.length, jobId });
         toast.success(`${assetIds.length} new images completed!`);
       } else if (assetId) {
-        console.log('🎉 Single generation completion event:', { assetId, type });
+        console.log('🎉 PHASE 2: Single generation completion event:', { assetId, type, jobId });
         toast.success(`New ${type} completed!`);
       }
     };
 
+    const handleBatchGenerationComplete = (event: CustomEvent) => {
+      const { assetIds, type, jobId, totalCompleted, totalExpected } = event.detail;
+      
+      console.log('🎉 PHASE 2: Enhanced batch completion event:', {
+        jobId,
+        assetIds,
+        totalCompleted,
+        totalExpected,
+        type
+      });
+      
+      if (assetIds && assetIds.length > 0) {
+        // Add all completed assets to workspace immediately
+        setWorkspaceFilter(prev => {
+          const newFilter = new Set(prev);
+          assetIds.forEach((id: string) => newFilter.add(id));
+          return newFilter;
+        });
+        
+        // Invalidate cache to force refresh
+        queryClient.invalidateQueries({ 
+          queryKey: ['realtime-workspace-assets'],
+          exact: false 
+        });
+        
+        // Enhanced toast notification
+        const message = totalCompleted === totalExpected 
+          ? `All ${totalCompleted} images completed!`
+          : `${totalCompleted}/${totalExpected} images completed!`;
+        
+        toast.success(message);
+      }
+    };
+
+    const handleJobStatusUpdate = (event: CustomEvent) => {
+      const { jobId, status, assetId, assetType } = event.detail;
+      
+      console.log('🔄 PHASE 2: Job status update received:', { jobId, status, assetId, assetType });
+      
+      if (status === 'completed' && assetId) {
+        // Track job completion for coordination
+        const tracking = jobTrackingRef.current.get(jobId) || { timer: null as any, assets: new Set() };
+        tracking.assets.add(assetId);
+        
+        // Clear existing timer and set new one
+        if (tracking.timer) {
+          clearTimeout(tracking.timer);
+        }
+        
+        // Wait a bit for all assets from this job to be processed
+        tracking.timer = setTimeout(() => {
+          const finalAssets = Array.from(tracking.assets);
+          console.log('🎯 PHASE 2: Job completion timeout triggered:', {
+            jobId,
+            assetsCollected: finalAssets,
+            assetCount: finalAssets.length
+          });
+          
+          // Add all assets from this job to workspace
+          if (finalAssets.length > 0) {
+            setWorkspaceFilter(prev => {
+              const newFilter = new Set(prev);
+              finalAssets.forEach(id => newFilter.add(id));
+              return newFilter;
+            });
+            
+            queryClient.invalidateQueries({ 
+              queryKey: ['realtime-workspace-assets'],
+              exact: false 
+            });
+          }
+          
+          // Cleanup tracking
+          jobTrackingRef.current.delete(jobId);
+        }, 2000); // Wait 2 seconds for job completion coordination
+        
+        jobTrackingRef.current.set(jobId, tracking);
+      }
+    };
+
+    // Set up all event listeners
     window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    window.addEventListener('generation-batch-completed', handleBatchGenerationComplete as EventListener);
+    window.addEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     
     return () => {
+      // Cleanup all timers
+      for (const [jobId, tracking] of jobTrackingRef.current) {
+        if (tracking.timer) {
+          clearTimeout(tracking.timer);
+        }
+      }
+      jobTrackingRef.current.clear();
+      
+      // Remove event listeners
       window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+      window.removeEventListener('generation-batch-completed', handleBatchGenerationComplete as EventListener);
+      window.removeEventListener('job-status-update', handleJobStatusUpdate as EventListener);
     };
   }, [queryClient]);
 

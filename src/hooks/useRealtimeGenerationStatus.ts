@@ -150,32 +150,77 @@ export const useRealtimeGenerationStatus = (
               detail: { assetId, type: assetType, jobId: completedJobId }
             }));
           }
-          // Handle multi-image case - emit for ALL images found immediately
+          // PHASE 1 FIX: Enhanced multi-image job handling with retry logic
           else if (jobData.job_type && jobData.job_type.includes('image')) {
-            console.log('🔍 Looking for ALL images linked to job:', completedJobId);
+            console.log('🔍 PHASE 1: Starting multi-image asset discovery for job:', completedJobId);
             
-            const { data: images, error: imagesError } = await supabase
-              .from('images')
-              .select('id')
-              .eq('job_id', completedJobId)
-              .eq('status', 'completed');
+            // Retry mechanism to handle race conditions with edge function callbacks
+            const maxRetries = 3;
+            const retryDelay = 1000; // Start with 1 second
             
-            if (!imagesError && images && images.length > 0) {
-              console.log(`🎉 Emitting generation completed events for ${images.length} images from job:`, completedJobId);
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              console.log(`🔄 PHASE 1: Asset discovery attempt ${attempt + 1}/${maxRetries} for job:`, completedJobId);
               
-              // Emit individual events for each image immediately
-              for (const image of images) {
-                window.dispatchEvent(new CustomEvent('generation-completed', {
-                  detail: { assetId: image.id, type: 'image', jobId: completedJobId }
-                }));
+              const { data: images, error: imagesError } = await supabase
+                .from('images')
+                .select('id, status')
+                .eq('job_id', completedJobId);
+              
+              if (!imagesError && images && images.length > 0) {
+                const completedImages = images.filter(img => img.status === 'completed');
+                const totalImages = images.length;
+                
+                console.log(`📊 PHASE 1: Found ${completedImages.length}/${totalImages} completed images (attempt ${attempt + 1}):`, {
+                  jobId: completedJobId,
+                  totalImages,
+                  completedImages: completedImages.length,
+                  allImages: images.map(img => ({ id: img.id, status: img.status }))
+                });
+                
+                // If we have completed images OR it's the final attempt, emit events
+                if (completedImages.length > 0 || attempt === maxRetries - 1) {
+                  if (completedImages.length > 0) {
+                    console.log(`🎉 PHASE 1: Emitting generation completed events for ${completedImages.length} images from job:`, completedJobId);
+                    
+                    // Emit individual events for each completed image
+                    for (const image of completedImages) {
+                      window.dispatchEvent(new CustomEvent('generation-completed', {
+                        detail: { assetId: image.id, type: 'image', jobId: completedJobId }
+                      }));
+                    }
+                    
+                    // Also emit a batch event for UI coordination
+                    window.dispatchEvent(new CustomEvent('generation-batch-completed', {
+                      detail: { 
+                        assetIds: completedImages.map(img => img.id),
+                        type: 'image-batch',
+                        jobId: completedJobId,
+                        totalCompleted: completedImages.length,
+                        totalExpected: totalImages
+                      }
+                    }));
+                  } else {
+                    console.warn(`⚠️ PHASE 1: No completed images found after ${maxRetries} attempts for job:`, completedJobId);
+                  }
+                  break; // Exit retry loop
+                }
+                
+                // Wait before next retry
+                if (attempt < maxRetries - 1) {
+                  console.log(`⏳ PHASE 1: Waiting ${retryDelay * (attempt + 1)}ms before retry...`);
+                  await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
+                }
+              } else {
+                console.error(`❌ PHASE 1: Error querying images (attempt ${attempt + 1}):`, imagesError);
+                if (attempt === maxRetries - 1) {
+                  console.error('❌ PHASE 1: Failed to find images after all retries for job:', completedJobId);
+                }
               }
-            } else {
-              console.warn('⚠️ No completed images found for job:', completedJobId);
             }
           }
         }
       } catch (error) {
-        console.error('❌ Error resolving asset ID:', error);
+        console.error('❌ PHASE 1: Error in enhanced asset resolution:', error);
       }
       
       // Cleanup
