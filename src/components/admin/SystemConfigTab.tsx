@@ -22,7 +22,9 @@ import {
   Shield,
   Zap,
   Database,
-  Users
+  Users,
+  Globe,
+  TestTube
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +41,10 @@ interface SystemConfig {
   defaultVideoModel: string;
   enableNSFWDetection: boolean;
   nsfwThreshold: number;
+  
+  // Worker Configuration
+  workerUrl: string;
+  workerUrlUpdatedAt: string;
   
   // Storage Settings
   maxFileSizeMB: number;
@@ -75,6 +81,8 @@ export const SystemConfigTab = () => {
     defaultVideoModel: 'wan',
     enableNSFWDetection: true,
     nsfwThreshold: 0.7,
+    workerUrl: '',
+    workerUrlUpdatedAt: '',
     maxFileSizeMB: 50,
     maxStoragePerUserGB: 10,
     enableCompression: true,
@@ -94,6 +102,12 @@ export const SystemConfigTab = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [originalConfig, setOriginalConfig] = useState<SystemConfig | null>(null);
+  const [workerStatus, setWorkerStatus] = useState<{
+    isHealthy: boolean;
+    lastChecked: string;
+    error?: string;
+  } | null>(null);
+  const [testingWorker, setTestingWorker] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -169,6 +183,95 @@ export const SystemConfigTab = () => {
 
   const updateConfig = (key: keyof SystemConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }));
+  };
+
+  const testWorkerConnection = async () => {
+    if (!config.workerUrl) {
+      toast({
+        title: "Error",
+        description: "Please enter a worker URL first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setTestingWorker(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('get-active-worker-url');
+      
+      if (error) throw error;
+
+      setWorkerStatus({
+        isHealthy: data.isHealthy,
+        lastChecked: new Date().toISOString(),
+        error: data.healthError
+      });
+
+      toast({
+        title: data.isHealthy ? "Success" : "Warning",
+        description: data.isHealthy 
+          ? "Worker is responding correctly" 
+          : `Worker is not responding: ${data.healthError}`,
+        variant: data.isHealthy ? "default" : "destructive"
+      });
+    } catch (error) {
+      console.error('Error testing worker:', error);
+      setWorkerStatus({
+        isHealthy: false,
+        lastChecked: new Date().toISOString(),
+        error: error.message
+      });
+      toast({
+        title: "Error",
+        description: "Failed to test worker connection",
+        variant: "destructive"
+      });
+    } finally {
+      setTestingWorker(false);
+    }
+  };
+
+  const updateWorkerUrl = async () => {
+    if (!config.workerUrl) {
+      toast({
+        title: "Error",
+        description: "Please enter a worker URL",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('update-worker-url', {
+        body: { workerUrl: config.workerUrl }
+      });
+      
+      if (error) throw error;
+
+      // Update the config with the new timestamp
+      setConfig(prev => ({ 
+        ...prev, 
+        workerUrlUpdatedAt: data.updatedAt 
+      }));
+
+      // Test the connection after updating
+      await testWorkerConnection();
+
+      toast({
+        title: "Success",
+        description: "Worker URL updated successfully",
+      });
+    } catch (error) {
+      console.error('Error updating worker URL:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update worker URL",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -321,6 +424,84 @@ export const SystemConfigTab = () => {
               />
               <p className="text-sm text-gray-500 mt-1">
                 Content with NSFW score above this threshold will be flagged (0.0 - 1.0)
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Worker Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            Worker Configuration
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label htmlFor="workerUrl">Worker URL</Label>
+            <div className="flex gap-2">
+              <Input
+                id="workerUrl"
+                type="url"
+                placeholder="https://your-runpod-worker-url.com"
+                value={config.workerUrl}
+                onChange={(e) => updateConfig('workerUrl', e.target.value)}
+                className="flex-1"
+              />
+              <Button 
+                variant="outline" 
+                onClick={updateWorkerUrl}
+                disabled={isLoading || !config.workerUrl}
+              >
+                Update URL
+              </Button>
+            </div>
+            <p className="text-sm text-gray-500 mt-1">
+              URL of the RunPod worker for prompt enhancement
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium">Worker Status</span>
+              {workerStatus && (
+                <p className="text-xs text-gray-500">
+                  Last checked: {new Date(workerStatus.lastChecked).toLocaleString()}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {workerStatus && (
+                <Badge variant={workerStatus.isHealthy ? "default" : "destructive"}>
+                  {workerStatus.isHealthy ? "Online" : "Offline"}
+                </Badge>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={testWorkerConnection}
+                disabled={testingWorker || !config.workerUrl}
+              >
+                <TestTube className="h-4 w-4 mr-2" />
+                {testingWorker ? "Testing..." : "Test Connection"}
+              </Button>
+            </div>
+          </div>
+
+          {workerStatus?.error && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3">
+              <p className="text-sm text-red-700">
+                <strong>Error:</strong> {workerStatus.error}
+              </p>
+            </div>
+          )}
+
+          {config.workerUrlUpdatedAt && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-sm text-blue-700">
+                Worker URL last updated: {new Date(config.workerUrlUpdatedAt).toLocaleString()}
               </p>
             </div>
           )}

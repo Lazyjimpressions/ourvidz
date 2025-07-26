@@ -134,7 +134,8 @@ async function generateEnhancedPrompt(originalPrompt: string, config: {
  * Enhance natural language using Qwen 7B base model via WAN worker
  */
 async function enhanceWithQwen(prompt: string): Promise<string> {
-  const workerUrl = Deno.env.get('WAN_WORKER_URL')
+  // Try to get worker URL from database first, fallback to environment
+  const workerUrl = await getActiveWorkerUrl()
   const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
   
   if (!workerUrl) {
@@ -251,6 +252,33 @@ function enhanceForWANImage(prompt: string, quality: string): string {
   const compositionTerms = 'elegant composition, balanced framing, tasteful presentation'
 
   return `${prompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
+}
+
+/**
+ * Get active worker URL from database with fallback to environment
+ */
+async function getActiveWorkerUrl(): Promise<string | null> {
+  try {
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Get current config
+    const { data: currentConfig, error: fetchError } = await supabase
+      .from('system_config')
+      .select('config')
+      .single()
+
+    if (currentConfig && !fetchError && currentConfig.config?.workerUrl) {
+      return currentConfig.config.workerUrl
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to fetch worker URL from database, using fallback:', error.message)
+  }
+
+  // Fallback to environment variable
+  return Deno.env.get('WAN_WORKER_URL')
 }
 
 /**
