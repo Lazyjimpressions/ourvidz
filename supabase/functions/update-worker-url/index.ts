@@ -13,7 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    const { workerUrl } = await req.json()
+    const body = await req.json()
+    const { workerUrl, autoRegistered, registrationMethod, detectionMethod } = body
 
     if (!workerUrl) {
       return new Response(JSON.stringify({
@@ -80,11 +81,15 @@ serve(async (req) => {
       config = currentConfig.config || {}
     }
 
-    // Update worker URL in config
+    // Update worker URL in config with auto-registration metadata
     const updatedConfig = {
       ...config,
       workerUrl: workerUrl,
-      workerUrlUpdatedAt: new Date().toISOString()
+      workerUrlUpdatedAt: new Date().toISOString(),
+      autoRegistered: autoRegistered || false,
+      registrationMethod: registrationMethod || 'manual',
+      detectionMethod: detectionMethod || 'manual',
+      lastRegistrationAttempt: new Date().toISOString()
     }
 
     // Save updated config
@@ -99,13 +104,18 @@ serve(async (req) => {
       throw updateError
     }
 
-    console.log('✅ Worker URL updated successfully')
+    const logMessage = autoRegistered 
+      ? `✅ Worker URL auto-registered successfully via ${registrationMethod}`
+      : '✅ Worker URL updated manually'
+    console.log(logMessage)
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Worker URL updated successfully',
+      message: autoRegistered ? 'Worker URL auto-registered successfully' : 'Worker URL updated successfully',
       workerUrl: workerUrl,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      autoRegistered: autoRegistered || false,
+      registrationMethod: registrationMethod || 'manual'
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

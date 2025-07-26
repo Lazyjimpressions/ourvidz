@@ -45,6 +45,10 @@ interface SystemConfig {
   // Worker Configuration
   workerUrl: string;
   workerUrlUpdatedAt: string;
+  autoRegistered?: boolean;
+  registrationMethod?: string;
+  detectionMethod?: string;
+  lastRegistrationAttempt?: string;
   
   // Storage Settings
   maxFileSizeMB: number;
@@ -106,6 +110,13 @@ export const SystemConfigTab = () => {
     isHealthy: boolean;
     lastChecked: string;
     error?: string;
+    registrationInfo?: {
+      autoRegistered: boolean;
+      registrationMethod: string;
+      detectionMethod: string;
+      lastUpdated?: string;
+      lastRegistrationAttempt?: string;
+    };
   } | null>(null);
   const [testingWorker, setTestingWorker] = useState(false);
 
@@ -204,7 +215,8 @@ export const SystemConfigTab = () => {
       setWorkerStatus({
         isHealthy: data.isHealthy,
         lastChecked: new Date().toISOString(),
-        error: data.healthError
+        error: data.healthError,
+        registrationInfo: data.registrationInfo
       });
 
       toast({
@@ -219,7 +231,8 @@ export const SystemConfigTab = () => {
       setWorkerStatus({
         isHealthy: false,
         lastChecked: new Date().toISOString(),
-        error: error.message
+        error: error.message,
+        registrationInfo: undefined
       });
       toast({
         title: "Error",
@@ -467,9 +480,23 @@ export const SystemConfigTab = () => {
             <div>
               <span className="text-sm font-medium">Worker Status</span>
               {workerStatus && (
-                <p className="text-xs text-gray-500">
-                  Last checked: {new Date(workerStatus.lastChecked).toLocaleString()}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500">
+                    Last checked: {new Date(workerStatus.lastChecked).toLocaleString()}
+                  </p>
+                  {workerStatus.registrationInfo && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={workerStatus.registrationInfo.autoRegistered ? "default" : "secondary"} className="text-xs">
+                        {workerStatus.registrationInfo.autoRegistered ? "Auto-Registered" : "Manual"}
+                      </Badge>
+                      {workerStatus.registrationInfo.autoRegistered && (
+                        <span className="text-xs text-gray-500">
+                          via {workerStatus.registrationInfo.registrationMethod}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -490,10 +517,26 @@ export const SystemConfigTab = () => {
             </div>
           </div>
 
+          {config.workerUrl && !config.autoRegistered && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
+              <p className="text-sm text-amber-700">
+                <strong>Manual Configuration:</strong> Worker URL was set manually. For automatic updates, restart your RunPod worker with auto-registration enabled.
+              </p>
+            </div>
+          )}
+
           {workerStatus?.error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3">
               <p className="text-sm text-red-700">
                 <strong>Error:</strong> {workerStatus.error}
+              </p>
+            </div>
+          )}
+
+          {!config.workerUrl && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-sm text-blue-700">
+                <strong>No Worker URL:</strong> Start your RunPod worker with auto-registration to automatically configure the worker URL, or set it manually above.
               </p>
             </div>
           )}

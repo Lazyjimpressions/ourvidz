@@ -27,16 +27,18 @@ serve(async (req) => {
       .single()
 
     let workerUrl = null
-    let fallbackUsed = false
+    let registrationInfo = null
 
     if (currentConfig && !fetchError && currentConfig.config?.workerUrl) {
       workerUrl = currentConfig.config.workerUrl
+      registrationInfo = {
+        autoRegistered: currentConfig.config.autoRegistered || false,
+        registrationMethod: currentConfig.config.registrationMethod || 'manual',
+        detectionMethod: currentConfig.config.detectionMethod || 'manual',
+        lastUpdated: currentConfig.config.workerUrlUpdatedAt,
+        lastRegistrationAttempt: currentConfig.config.lastRegistrationAttempt
+      }
       console.log('✅ Worker URL found in database:', workerUrl)
-    } else {
-      // Fallback to environment variable
-      workerUrl = Deno.env.get('WAN_WORKER_URL')
-      fallbackUsed = true
-      console.log('⚠️ Using fallback worker URL from environment:', workerUrl)
     }
 
     if (!workerUrl) {
@@ -71,8 +73,7 @@ serve(async (req) => {
       workerUrl: workerUrl,
       isHealthy: isHealthy,
       healthError: healthError,
-      fallbackUsed: fallbackUsed,
-      updatedAt: currentConfig?.config?.workerUrlUpdatedAt || null
+      registrationInfo: registrationInfo
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

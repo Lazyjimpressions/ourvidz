@@ -255,9 +255,9 @@ function enhanceForWANImage(prompt: string, quality: string): string {
 }
 
 /**
- * Get active worker URL from database with fallback to environment
+ * Get active worker URL from database only (no fallback)
  */
-async function getActiveWorkerUrl(): Promise<string | null> {
+async function getActiveWorkerUrl(): Promise<string> {
   try {
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -271,14 +271,17 @@ async function getActiveWorkerUrl(): Promise<string | null> {
       .single()
 
     if (currentConfig && !fetchError && currentConfig.config?.workerUrl) {
+      console.log('✅ Using worker URL from database:', currentConfig.config.workerUrl)
       return currentConfig.config.workerUrl
     }
-  } catch (error) {
-    console.warn('⚠️ Failed to fetch worker URL from database, using fallback:', error.message)
-  }
 
-  // Fallback to environment variable
-  return Deno.env.get('WAN_WORKER_URL')
+    // No fallback - force proper worker registration
+    console.error('❌ No active worker URL found in database')
+    throw new Error('Worker not available - auto-registration may have failed')
+  } catch (error) {
+    console.error('❌ Error getting worker URL:', error)
+    throw new Error('Worker not available - auto-registration may have failed')
+  }
 }
 
 /**
