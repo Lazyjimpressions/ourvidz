@@ -135,15 +135,21 @@ async function generateEnhancedPrompt(originalPrompt: string, config: {
  */
 async function enhanceWithQwen(prompt: string): Promise<string> {
   const workerUrl = Deno.env.get('WAN_WORKER_URL')
+  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
   
   if (!workerUrl) {
     throw new Error('WAN_WORKER_URL not configured')
+  }
+  
+  if (!apiKey) {
+    throw new Error('WAN_WORKER_API_KEY not configured')
   }
 
   const response = await fetch(`${workerUrl}/enhance`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       prompt: prompt,
