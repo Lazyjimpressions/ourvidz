@@ -85,8 +85,7 @@ serve(async (req) => {
 })
 
 /**
- * Generate enhanced prompt using Qwen-style logic
- * This replicates the enhancement logic from the WAN worker
+ * Generate enhanced prompt using Qwen 7B base model via WAN worker
  */
 async function generateEnhancedPrompt(originalPrompt: string, config: {
   isSDXL: boolean
@@ -96,28 +95,93 @@ async function generateEnhancedPrompt(originalPrompt: string, config: {
 }): Promise<string> {
   const { isSDXL, isVideo, isEnhanced, quality } = config
 
-  // For now, we'll use a rule-based enhancement system
-  // In the future, this could call the actual Qwen model
-  let enhancedPrompt = originalPrompt
+  try {
+    // First, enhance the natural language using Qwen 7B base model
+    const qwenEnhancedPrompt = await enhanceWithQwen(originalPrompt)
+    
+    // Then add quality tags based on job type
+    let finalPrompt = qwenEnhancedPrompt
 
-  // SDXL Enhancement Strategy
-  if (isSDXL) {
-    enhancedPrompt = enhanceForSDXL(originalPrompt, quality)
-  }
-  // WAN Video Enhancement Strategy
-  else if (isVideo) {
-    enhancedPrompt = enhanceForWANVideo(originalPrompt, quality)
-  }
-  // WAN Image Enhancement Strategy
-  else {
-    enhancedPrompt = enhanceForWANImage(originalPrompt, quality)
-  }
+    // SDXL Enhancement Strategy
+    if (isSDXL) {
+      finalPrompt = addSDXLQualityTags(qwenEnhancedPrompt, quality)
+    }
+    // WAN Video Enhancement Strategy
+    else if (isVideo) {
+      finalPrompt = addWANVideoQualityTags(qwenEnhancedPrompt, quality)
+    }
+    // WAN Image Enhancement Strategy
+    else {
+      finalPrompt = addWANImageQualityTags(qwenEnhancedPrompt, quality)
+    }
 
-  return enhancedPrompt
+    return finalPrompt
+  } catch (error) {
+    console.warn('⚠️ Qwen enhancement failed, falling back to rule-based:', error)
+    
+    // Fallback to rule-based enhancement
+    if (isSDXL) {
+      return enhanceForSDXL(originalPrompt, quality)
+    } else if (isVideo) {
+      return enhanceForWANVideo(originalPrompt, quality)
+    } else {
+      return enhanceForWANImage(originalPrompt, quality)
+    }
+  }
 }
 
 /**
- * SDXL Enhancement: Focus on quality tags, anatomy, photography
+ * Enhance natural language using Qwen 7B base model via WAN worker
+ */
+async function enhanceWithQwen(prompt: string): Promise<string> {
+  const workerUrl = Deno.env.get('WAN_WORKER_URL')
+  
+  if (!workerUrl) {
+    throw new Error('WAN_WORKER_URL not configured')
+  }
+
+  const response = await fetch(`${workerUrl}/enhance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt: prompt,
+      model: 'qwen_base',
+      enhance_type: 'natural_language'
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Worker response not ok: ${response.status}`)
+  }
+
+  const result = await response.json()
+  
+  if (!result.enhanced_prompt) {
+    throw new Error('No enhanced_prompt in worker response')
+  }
+
+  return result.enhanced_prompt
+}
+
+/**
+ * Add SDXL quality tags to Qwen-enhanced prompt
+ */
+function addSDXLQualityTags(enhancedPrompt: string, quality: string): string {
+  const qualityTags = quality === 'high' 
+    ? 'score_9, score_8_up, masterpiece, best quality, highly detailed, professional photography'
+    : 'score_8, best quality, detailed, professional photography'
+
+  const anatomicalTerms = 'perfect anatomy, natural proportions, balanced features'
+  const technicalTerms = 'shot on Canon EOS R5, f/1.8, shallow depth of field'
+  const styleTerms = 'warm atmosphere, natural lighting, elegant composition'
+
+  return `${qualityTags}, ${enhancedPrompt}, ${anatomicalTerms}, ${technicalTerms}, ${styleTerms}`
+}
+
+/**
+ * SDXL Enhancement: Focus on quality tags, anatomy, photography (fallback)
  */
 function enhanceForSDXL(prompt: string, quality: string): string {
   const qualityTags = quality === 'high' 
@@ -132,7 +196,20 @@ function enhanceForSDXL(prompt: string, quality: string): string {
 }
 
 /**
- * WAN Video Enhancement: Focus on motion, cinematography, temporal consistency
+ * Add WAN Video quality tags to Qwen-enhanced prompt
+ */
+function addWANVideoQualityTags(enhancedPrompt: string, quality: string): string {
+  const motionTerms = 'smooth motion, fluid movement, temporal consistency'
+  const cinematographyTerms = quality === 'high'
+    ? 'professional cinematography, high quality video, stable camera movement'
+    : 'cinematography, quality video, stable camera'
+  const technicalTerms = 'natural body movement, elegant gestures, tasteful composition'
+
+  return `${enhancedPrompt}, ${motionTerms}, ${cinematographyTerms}, ${technicalTerms}`
+}
+
+/**
+ * WAN Video Enhancement: Focus on motion, cinematography, temporal consistency (fallback)
  */
 function enhanceForWANVideo(prompt: string, quality: string): string {
   const motionTerms = 'smooth motion, fluid movement, temporal consistency'
@@ -145,7 +222,20 @@ function enhanceForWANVideo(prompt: string, quality: string): string {
 }
 
 /**
- * WAN Image Enhancement: Focus on detail, resolution, composition
+ * Add WAN Image quality tags to Qwen-enhanced prompt
+ */
+function addWANImageQualityTags(enhancedPrompt: string, quality: string): string {
+  const detailTerms = quality === 'high'
+    ? 'highly detailed, intricate details, maximum resolution'
+    : 'detailed, good resolution'
+  const qualityTerms = 'high quality, professional photography, natural lighting'
+  const compositionTerms = 'elegant composition, balanced framing, tasteful presentation'
+
+  return `${enhancedPrompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
+}
+
+/**
+ * WAN Image Enhancement: Focus on detail, resolution, composition (fallback)
  */
 function enhanceForWANImage(prompt: string, quality: string): string {
   const detailTerms = quality === 'high'
@@ -161,7 +251,7 @@ function enhanceForWANImage(prompt: string, quality: string): string {
  * Get enhancement strategy description
  */
 function getEnhancementStrategy(isSDXL: boolean, isVideo: boolean, isEnhanced: boolean): string {
-  if (isSDXL) return 'SDXL Quality & Anatomy Focus'
-  if (isVideo) return 'WAN Video Motion & Cinematography'
-  return 'WAN Image Detail & Composition'
-} 
+  if (isSDXL) return 'Qwen 7B Natural Language + SDXL Quality Tags'
+  if (isVideo) return 'Qwen 7B Natural Language + WAN Video Enhancement'
+  return 'Qwen 7B Natural Language + WAN Image Enhancement'
+}
