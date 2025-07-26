@@ -134,42 +134,103 @@ async function generateEnhancedPrompt(originalPrompt: string, config: {
  * Enhance natural language using Qwen 7B base model via WAN worker
  */
 async function enhanceWithQwen(prompt: string): Promise<string> {
+  console.log('🤖 Calling Qwen enhancement for prompt:', { prompt, length: prompt.length })
+  
   // Try to get worker URL from database first, fallback to environment
   const workerUrl = await getActiveWorkerUrl()
   const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
   
   if (!workerUrl) {
+    console.error('❌ WAN_WORKER_URL not configured')
     throw new Error('WAN_WORKER_URL not configured')
   }
   
   if (!apiKey) {
+    console.error('❌ WAN_WORKER_API_KEY not configured')
     throw new Error('WAN_WORKER_API_KEY not configured')
   }
 
-  const response = await fetch(`${workerUrl}/enhance`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      prompt: prompt,
-      model: 'qwen_base',
-      enhance_type: 'natural_language'
-    }),
+  console.log('📡 Making request to WAN worker:', { 
+    url: `${workerUrl}/enhance`,
+    prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+    model: 'qwen_base'
   })
 
-  if (!response.ok) {
-    throw new Error(`Worker response not ok: ${response.status}`)
-  }
+  try {
+    const response = await fetch(`${workerUrl}/enhance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        model: 'qwen_base',
+        enhance_type: 'natural_language'
+      }),
+    })
 
-  const result = await response.json()
-  
-  if (!result.enhanced_prompt) {
-    throw new Error('No enhanced_prompt in worker response')
-  }
+    console.log('🔄 WAN worker response status:', response.status)
 
-  return result.enhanced_prompt
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ Worker response not ok:', { 
+        status: response.status, 
+        statusText: response.statusText,
+        errorBody: errorText 
+      })
+      throw new Error(`Worker response not ok: ${response.status} - ${errorText}`)
+    }
+
+    const responseText = await response.text()
+    console.log('📥 Raw WAN worker response:', { 
+      responseLength: responseText.length,
+      responsePreview: responseText.substring(0, 200) + (responseText.length > 200 ? '...' : '')
+    })
+
+    let result
+    try {
+      result = JSON.parse(responseText)
+    } catch (parseError) {
+      console.error('❌ Failed to parse WAN worker JSON response:', { 
+        parseError: parseError.message,
+        responseText: responseText.substring(0, 500)
+      })
+      throw new Error(`Invalid JSON response from worker: ${parseError.message}`)
+    }
+    
+    console.log('🔍 Parsed WAN worker result:', { 
+      hasEnhancedPrompt: !!result.enhanced_prompt,
+      enhancedPromptLength: result.enhanced_prompt?.length || 0,
+      enhancedPromptPreview: result.enhanced_prompt?.substring(0, 100) + (result.enhanced_prompt?.length > 100 ? '...' : ''),
+      otherKeys: Object.keys(result).filter(k => k !== 'enhanced_prompt')
+    })
+    
+    if (!result.enhanced_prompt) {
+      console.error('❌ No enhanced_prompt in worker response:', result)
+      throw new Error('No enhanced_prompt in worker response')
+    }
+
+    if (result.enhanced_prompt.trim() === '') {
+      console.error('❌ Empty enhanced_prompt from worker:', result)
+      throw new Error('Empty enhanced_prompt from worker')
+    }
+
+    console.log('✅ Qwen enhancement successful:', {
+      originalLength: prompt.length,
+      enhancedLength: result.enhanced_prompt.length,
+      expansion: `${((result.enhanced_prompt.length / prompt.length) * 100).toFixed(1)}%`
+    })
+
+    return result.enhanced_prompt
+  } catch (fetchError) {
+    console.error('❌ Network error calling WAN worker:', {
+      error: fetchError.message,
+      stack: fetchError.stack,
+      workerUrl: `${workerUrl}/enhance`
+    })
+    throw new Error(`Network error calling WAN worker: ${fetchError.message}`)
+  }
 }
 
 /**
