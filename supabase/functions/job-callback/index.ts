@@ -86,6 +86,34 @@ serve(async (req)=>{
     if (workerMetadata.num_images) {
       updatedMetadata.num_images = workerMetadata.num_images;
     }
+    
+    // PHASE 1 FIX: Extract enhancement metadata from worker response
+    if (workerMetadata.original_prompt) {
+      updatedMetadata.original_prompt = workerMetadata.original_prompt;
+      console.log('📝 Storing original prompt from worker:', workerMetadata.original_prompt);
+    }
+    if (workerMetadata.final_prompt) {
+      updatedMetadata.enhanced_prompt = workerMetadata.final_prompt;
+      console.log('📝 Storing enhanced prompt from worker:', workerMetadata.final_prompt);
+    }
+    if (workerMetadata.enhancement_strategy) {
+      updatedMetadata.enhancement_strategy = workerMetadata.enhancement_strategy;
+      console.log('🔧 Storing enhancement strategy from worker:', workerMetadata.enhancement_strategy);
+    } else if (workerMetadata.final_prompt && workerMetadata.original_prompt && 
+               workerMetadata.final_prompt !== workerMetadata.original_prompt) {
+      // Detect enhancement if prompts differ but no strategy specified
+      updatedMetadata.enhancement_strategy = 'auto_detected';
+      console.log('🔧 Auto-detected enhancement strategy (prompts differ)');
+    }
+    if (workerMetadata.qwen_expansion_percentage) {
+      updatedMetadata.qwen_expansion_percentage = workerMetadata.qwen_expansion_percentage;
+      console.log('📊 Storing qwen expansion percentage:', workerMetadata.qwen_expansion_percentage);
+    }
+    if (workerMetadata.compel_weights) {
+      updatedMetadata.compel_weights = workerMetadata.compel_weights;
+      console.log('⚖️ Storing compel weights from worker:', workerMetadata.compel_weights);
+    }
+    
     // REFERENCE IMAGE SUPPORT: Store reference data from worker
     if (workerMetadata.reference_image_url) {
       updatedMetadata.reference_image_url = workerMetadata.reference_image_url;
@@ -139,10 +167,34 @@ serve(async (req)=>{
       };
     }
     updateData.metadata = updatedMetadata;
-    console.log('🔄 Updating job with standardized metadata:', {
+    
+    // PHASE 2 FIX: Update job table with enhancement fields
+    if (updatedMetadata.original_prompt) {
+      updateData.original_prompt = updatedMetadata.original_prompt;
+    }
+    if (updatedMetadata.enhanced_prompt) {
+      updateData.enhanced_prompt = updatedMetadata.enhanced_prompt;
+    }
+    if (updatedMetadata.enhancement_strategy) {
+      updateData.enhancement_strategy = updatedMetadata.enhancement_strategy;
+    }
+    if (updatedMetadata.qwen_expansion_percentage) {
+      updateData.qwen_expansion_percentage = updatedMetadata.qwen_expansion_percentage;
+    }
+    if (updatedMetadata.compel_weights) {
+      updateData.compel_weights = updatedMetadata.compel_weights;
+    }
+    
+    console.log('🔄 Updating job with standardized metadata and enhancement fields:', {
       job_id,
       updateData,
-      metadataKeys: Object.keys(updatedMetadata)
+      metadataKeys: Object.keys(updatedMetadata),
+      enhancementFields: {
+        original_prompt: !!updateData.original_prompt,
+        enhanced_prompt: !!updateData.enhanced_prompt,
+        enhancement_strategy: updateData.enhancement_strategy,
+        qwen_expansion_percentage: updateData.qwen_expansion_percentage
+      }
     });
     // Update job status
     const { data: job, error: updateError } = await supabase.from('jobs').update(updateData).eq('id', job_id).select().single();
@@ -344,15 +396,50 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
         }
       };
       
+      // PHASE 3 FIX: Update image table with enhancement fields
+      const imageUpdate: any = {
+        title: title,
+        image_url: imageUrl,
+        thumbnail_url: imageUrl,
+        status: 'completed',
+        metadata: imageMetadata
+      };
+      
+      // Add enhancement fields to image table columns
+      if (jobMetadata.original_prompt) {
+        imageUpdate.original_prompt = jobMetadata.original_prompt;
+      }
+      if (jobMetadata.enhanced_prompt) {
+        imageUpdate.enhanced_prompt = jobMetadata.enhanced_prompt;
+      }
+      if (jobMetadata.enhancement_strategy) {
+        imageUpdate.enhancement_strategy = jobMetadata.enhancement_strategy;
+      }
+      if (jobMetadata.qwen_expansion_percentage) {
+        imageUpdate.qwen_expansion_percentage = jobMetadata.qwen_expansion_percentage;
+      }
+      if (jobMetadata.compel_weights) {
+        imageUpdate.compel_weights = jobMetadata.compel_weights;
+      }
+      if (jobMetadata.seed) {
+        imageUpdate.seed = jobMetadata.seed;
+      }
+      
+      console.log('🔄 PHASE 3: Updating image with enhancement data:', {
+        jobId: job.id,
+        imageIndex: i,
+        enhancementFields: {
+          original_prompt: !!imageUpdate.original_prompt,
+          enhanced_prompt: !!imageUpdate.enhanced_prompt,
+          enhancement_strategy: imageUpdate.enhancement_strategy,
+          qwen_expansion: imageUpdate.qwen_expansion_percentage,
+          seed: imageUpdate.seed
+        }
+      });
+
       const { data: updatedImage, error: updateError } = await supabase
         .from('images')
-        .update({
-          title: title,
-          image_url: imageUrl,
-          thumbnail_url: imageUrl,
-          status: 'completed',
-          metadata: imageMetadata
-        })
+        .update(imageUpdate)
         .eq('job_id', job.id)
         .eq('image_index', i)
         .select()
@@ -373,13 +460,7 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
           
           const { data: fallbackImage, error: fallbackError } = await supabase
             .from('images')
-            .update({
-              title: title,
-              image_url: imageUrl,
-              thumbnail_url: imageUrl,
-              status: 'completed',
-              metadata: imageMetadata
-            })
+            .update(imageUpdate)
             .eq('job_id', job.id)
             .is('image_index', null)
             .select()
@@ -415,6 +496,9 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
       recordsUpdated: updatedImages.length,
       success: updatedImages.length === assets.length
     });
+    
+    // PHASE 4 FIX: Add enhancement analytics tracking
+    await trackEnhancementAnalytics(supabase, job, status, updatedImages.length > 0);
     
   } else if (status === 'failed' && job.image_id) {
     console.log('❌ Processing failed image job');
@@ -697,5 +781,107 @@ async function handlePromptTestCallback(supabase, job, status, assets, error_mes
     }
   } catch (error) {
     console.error('❌ Error in prompt test callback handler:', error);
+  }
+}
+
+// PHASE 4 FIX: Enhancement analytics tracking function
+async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
+  try {
+    // Only track completed jobs with enhancement data
+    if (status !== 'completed') return;
+    
+    const jobMetadata = job.metadata || {};
+    const hasEnhancement = jobMetadata.enhancement_strategy && jobMetadata.enhancement_strategy !== 'none';
+    
+    if (!hasEnhancement) {
+      console.log('📊 Skipping analytics tracking - no enhancement detected');
+      return;
+    }
+    
+    console.log('📊 PHASE 4: Tracking enhancement analytics:', {
+      jobId: job.id,
+      enhancement_strategy: jobMetadata.enhancement_strategy,
+      original_prompt: !!jobMetadata.original_prompt,
+      enhanced_prompt: !!jobMetadata.enhanced_prompt,
+      qwen_expansion: jobMetadata.qwen_expansion_percentage,
+      hasImages
+    });
+    
+    // Calculate token expansion if available
+    let tokenExpansion = null;
+    if (jobMetadata.original_prompt && jobMetadata.enhanced_prompt) {
+      const originalLength = jobMetadata.original_prompt.length;
+      const enhancedLength = jobMetadata.enhanced_prompt.length;
+      tokenExpansion = originalLength > 0 ? ((enhancedLength - originalLength) / originalLength) * 100 : 0;
+    }
+    
+    // Insert into job_enhancement_analysis table
+    const analyticsData = {
+      id: job.id, // Use job ID as primary key
+      user_id: job.user_id,
+      job_type: job.job_type,
+      model_type: jobMetadata.model_type || 'unknown',
+      status: job.status,
+      original_prompt: jobMetadata.original_prompt,
+      enhanced_prompt: jobMetadata.enhanced_prompt,
+      enhancement_strategy: jobMetadata.enhancement_strategy,
+      enhancement_time_ms: jobMetadata.enhancement_time_ms || null,
+      qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || null,
+      quality_improvement: jobMetadata.quality_improvement || null,
+      quality_rating: jobMetadata.quality_rating || null,
+      generation_time_seconds: jobMetadata.generation_time || null,
+      created_at: job.created_at,
+      completed_at: job.completed_at,
+      enhancement_display_name: `${jobMetadata.enhancement_strategy} (${job.job_type})`
+    };
+    
+    const { error: analyticsError } = await supabase
+      .from('job_enhancement_analysis')
+      .upsert(analyticsData, { onConflict: 'id' });
+    
+    if (analyticsError) {
+      console.error('❌ PHASE 4: Error inserting enhancement analytics:', analyticsError);
+    } else {
+      console.log('✅ PHASE 4: Enhancement analytics tracked successfully:', {
+        jobId: job.id,
+        strategy: jobMetadata.enhancement_strategy,
+        tokenExpansion,
+        generationTime: jobMetadata.generation_time
+      });
+    }
+    
+    // Also track in image-specific analytics if this is an image job
+    if (job.job_type.includes('image') && hasImages) {
+      const imageAnalyticsData = {
+        id: job.id, // Use job ID as primary key
+        user_id: job.user_id,
+        prompt: jobMetadata.original_prompt,
+        enhanced_prompt: jobMetadata.enhanced_prompt,
+        format: jobMetadata.format || 'png',
+        quality: job.quality || 'fast',
+        status: job.status,
+        enhancement_strategy: jobMetadata.enhancement_strategy,
+        enhancement_time_ms: jobMetadata.enhancement_time_ms || null,
+        qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || null,
+        compel_weights: jobMetadata.compel_weights || null,
+        quality_improvement: jobMetadata.quality_improvement || null,
+        quality_rating: jobMetadata.quality_rating || null,
+        created_at: job.created_at,
+        enhancement_display_name: `${jobMetadata.enhancement_strategy} (${job.job_type})`
+      };
+      
+      const { error: imageAnalyticsError } = await supabase
+        .from('image_enhancement_analysis')
+        .upsert(imageAnalyticsData, { onConflict: 'id' });
+      
+      if (imageAnalyticsError) {
+        console.error('❌ PHASE 4: Error inserting image enhancement analytics:', imageAnalyticsError);
+      } else {
+        console.log('✅ PHASE 4: Image enhancement analytics tracked successfully');
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ PHASE 4: Error in enhancement analytics tracking:', error);
   }
 }
