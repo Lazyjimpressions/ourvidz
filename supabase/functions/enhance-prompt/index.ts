@@ -309,6 +309,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     const template = this.getSystemPromptTemplate(context)
     const worker_target = this.selectOptimalWorker(context)
     
+    console.log('🔄 Starting enhancement with worker:', worker_target)
+    
     // Call worker with technical optimization context
     const worker_response = await this.callWorkerWithContext(
       worker_target,
@@ -320,10 +322,24 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       }
     )
 
+    console.log('📊 Worker response structure:', {
+      success: worker_response.success,
+      hasEnhancedPrompt: !!worker_response.enhancedPrompt,
+      hasEnhanced_prompt: !!worker_response.enhanced_prompt,
+      modelUsed: worker_response.modelUsed
+    })
+
     if (worker_response.success) {
+      // FIX: Handle both camelCase and snake_case property names with fallback
+      const enhancedPrompt = worker_response.enhancedPrompt || worker_response.enhanced_prompt || request.prompt
+      
+      if (!enhancedPrompt) {
+        console.warn('⚠️ No enhanced prompt found in worker response, using original')
+      }
+      
       // CRITICAL: Post-enhancement token management
       const processed = await this.postProcessEnhancement(
-        worker_response.enhanced_prompt,
+        enhancedPrompt,
         context
       )
 
@@ -811,6 +827,12 @@ async function discoverChatWorker(): Promise<string | null> {
  * Token estimation and limits
  */
 function estimateTokens(text: string): number {
+  // Add defensive programming - handle null/undefined text
+  if (!text || typeof text !== 'string') {
+    console.warn('⚠️ estimateTokens received invalid input:', typeof text)
+    return 0
+  }
+  
   return Math.ceil(text.length / 4) // Rough estimation: 4 chars ≈ 1 token
 }
 
