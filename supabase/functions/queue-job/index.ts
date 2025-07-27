@@ -337,8 +337,7 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    let originalPrompt = prompt;
-    let enhancedPrompt = prompt;
+    enhancedPrompt = enhancedPrompt || prompt;
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
     
