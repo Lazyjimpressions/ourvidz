@@ -116,10 +116,100 @@ export type Database = {
           },
         ]
       }
+      compel_configs: {
+        Row: {
+          avg_consistency: number | null
+          avg_quality: number | null
+          config_hash: string
+          config_name: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          total_tests: number | null
+          weights: Json
+        }
+        Insert: {
+          avg_consistency?: number | null
+          avg_quality?: number | null
+          config_hash: string
+          config_name: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          total_tests?: number | null
+          weights: Json
+        }
+        Update: {
+          avg_consistency?: number | null
+          avg_quality?: number | null
+          config_hash?: string
+          config_name?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          total_tests?: number | null
+          weights?: Json
+        }
+        Relationships: []
+      }
+      enhancement_presets: {
+        Row: {
+          auto_enhancement: boolean
+          avg_quality_with_preset: number | null
+          compel_weights: Json | null
+          created_at: string | null
+          created_by: string | null
+          enable_compel: boolean
+          enable_qwen: boolean
+          id: string
+          is_recommended: boolean | null
+          preset_description: string | null
+          preset_name: string
+          qwen_settings: Json | null
+          usage_count: number | null
+        }
+        Insert: {
+          auto_enhancement: boolean
+          avg_quality_with_preset?: number | null
+          compel_weights?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          enable_compel: boolean
+          enable_qwen: boolean
+          id?: string
+          is_recommended?: boolean | null
+          preset_description?: string | null
+          preset_name: string
+          qwen_settings?: Json | null
+          usage_count?: number | null
+        }
+        Update: {
+          auto_enhancement?: boolean
+          avg_quality_with_preset?: number | null
+          compel_weights?: Json | null
+          created_at?: string | null
+          created_by?: string | null
+          enable_compel?: boolean
+          enable_qwen?: boolean
+          id?: string
+          is_recommended?: boolean | null
+          preset_description?: string | null
+          preset_name?: string
+          qwen_settings?: Json | null
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       images: {
         Row: {
+          compel_weights: Json | null
           created_at: string
           enhanced_prompt: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
           file_size: number | null
           format: string | null
           generation_mode: string
@@ -131,13 +221,21 @@ export type Database = {
           metadata: Json | null
           moderation_status: string | null
           nsfw_score: number | null
+          original_prompt: string | null
           project_id: string | null
           prompt: string
           prompt_test_id: string | null
           quality: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          qwen_expansion_percentage: number | null
+          reference_image_url: string | null
+          reference_strength: number | null
+          reference_type: string | null
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          seed: number | null
           signed_url: string | null
           signed_url_expires_at: string | null
           status: string
@@ -148,8 +246,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          compel_weights?: Json | null
           created_at?: string
           enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           file_size?: number | null
           format?: string | null
           generation_mode?: string
@@ -161,13 +262,21 @@ export type Database = {
           metadata?: Json | null
           moderation_status?: string | null
           nsfw_score?: number | null
+          original_prompt?: string | null
           project_id?: string | null
           prompt: string
           prompt_test_id?: string | null
           quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          reference_image_url?: string | null
+          reference_strength?: number | null
+          reference_type?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          seed?: number | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
@@ -178,8 +287,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          compel_weights?: Json | null
           created_at?: string
           enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           file_size?: number | null
           format?: string | null
           generation_mode?: string
@@ -191,13 +303,21 @@ export type Database = {
           metadata?: Json | null
           moderation_status?: string | null
           nsfw_score?: number | null
+          original_prompt?: string | null
           project_id?: string | null
           prompt?: string
           prompt_test_id?: string | null
           quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          reference_image_url?: string | null
+          reference_strength?: number | null
+          reference_type?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          seed?: number | null
           signed_url?: string | null
           signed_url_expires_at?: string | null
           status?: string
@@ -208,6 +328,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "images_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_enhancement_analysis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "images_job_id_fkey"
             columns: ["job_id"]
@@ -248,8 +375,12 @@ export type Database = {
       jobs: {
         Row: {
           attempts: number | null
+          compel_weights: Json | null
           completed_at: string | null
           created_at: string | null
+          enhanced_prompt: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
           error_message: string | null
           format: string | null
           id: string
@@ -259,9 +390,13 @@ export type Database = {
           metadata: Json | null
           model_type: string | null
           moderation_status: string | null
+          original_prompt: string | null
           project_id: string | null
           prompt_test_id: string | null
           quality: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          qwen_expansion_percentage: number | null
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -273,8 +408,12 @@ export type Database = {
         }
         Insert: {
           attempts?: number | null
+          compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           error_message?: string | null
           format?: string | null
           id?: string
@@ -284,9 +423,13 @@ export type Database = {
           metadata?: Json | null
           model_type?: string | null
           moderation_status?: string | null
+          original_prompt?: string | null
           project_id?: string | null
           prompt_test_id?: string | null
           quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -298,8 +441,12 @@ export type Database = {
         }
         Update: {
           attempts?: number | null
+          compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           error_message?: string | null
           format?: string | null
           id?: string
@@ -309,9 +456,13 @@ export type Database = {
           metadata?: Json | null
           model_type?: string | null
           moderation_status?: string | null
+          original_prompt?: string | null
           project_id?: string | null
           prompt_test_id?: string | null
           quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -322,6 +473,13 @@ export type Database = {
           video_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "jobs_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
+            referencedRelation: "image_enhancement_analysis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "jobs_image_id_fkey"
             columns: ["image_id"]
@@ -377,6 +535,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "model_test_analytics"
             referencedColumns: ["video_id"]
+          },
+          {
+            foreignKeyName: "jobs_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "video_enhancement_analysis"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "jobs_video_id_fkey"
@@ -479,9 +644,14 @@ export type Database = {
       }
       model_test_results: {
         Row: {
+          baseline_quality: number | null
+          compel_weights: Json | null
           consistency: number | null
           content_quality: number | null
           created_at: string | null
+          enhanced_prompt: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
           file_size_bytes: number | null
           generation_time_ms: number | null
           id: string
@@ -490,8 +660,11 @@ export type Database = {
           model_type: string
           model_version: string | null
           notes: string | null
+          original_prompt: string | null
           overall_quality: number | null
           prompt_text: string
+          quality_improvement: number | null
+          qwen_expansion_percentage: number | null
           success: boolean
           technical_quality: number | null
           test_category: string | null
@@ -503,9 +676,14 @@ export type Database = {
           video_id: string | null
         }
         Insert: {
+          baseline_quality?: number | null
+          compel_weights?: Json | null
           consistency?: number | null
           content_quality?: number | null
           created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           file_size_bytes?: number | null
           generation_time_ms?: number | null
           id?: string
@@ -514,8 +692,11 @@ export type Database = {
           model_type: string
           model_version?: string | null
           notes?: string | null
+          original_prompt?: string | null
           overall_quality?: number | null
           prompt_text: string
+          quality_improvement?: number | null
+          qwen_expansion_percentage?: number | null
           success?: boolean
           technical_quality?: number | null
           test_category?: string | null
@@ -527,9 +708,14 @@ export type Database = {
           video_id?: string | null
         }
         Update: {
+          baseline_quality?: number | null
+          compel_weights?: Json | null
           consistency?: number | null
           content_quality?: number | null
           created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           file_size_bytes?: number | null
           generation_time_ms?: number | null
           id?: string
@@ -538,8 +724,11 @@ export type Database = {
           model_type?: string
           model_version?: string | null
           notes?: string | null
+          original_prompt?: string | null
           overall_quality?: number | null
           prompt_text?: string
+          quality_improvement?: number | null
+          qwen_expansion_percentage?: number | null
           success?: boolean
           technical_quality?: number | null
           test_category?: string | null
@@ -555,6 +744,13 @@ export type Database = {
             foreignKeyName: "model_test_results_image_id_fkey"
             columns: ["image_id"]
             isOneToOne: false
+            referencedRelation: "image_enhancement_analysis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "model_test_results_image_id_fkey"
+            columns: ["image_id"]
+            isOneToOne: false
             referencedRelation: "images"
             referencedColumns: ["id"]
           },
@@ -564,6 +760,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "model_test_analytics"
             referencedColumns: ["image_id"]
+          },
+          {
+            foreignKeyName: "model_test_results_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "job_enhancement_analysis"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "model_test_results_job_id_fkey"
@@ -585,6 +788,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "model_test_analytics"
             referencedColumns: ["video_id"]
+          },
+          {
+            foreignKeyName: "model_test_results_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "video_enhancement_analysis"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "model_test_results_video_id_fkey"
@@ -697,6 +907,54 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
+      }
+      prompt_ab_tests: {
+        Row: {
+          baseline_avg_quality: number | null
+          baseline_config: Json
+          completed_at: string | null
+          confidence_level: number | null
+          created_at: string | null
+          enhanced_avg_quality: number | null
+          enhanced_config: Json
+          id: string
+          is_complete: boolean | null
+          quality_improvement: number | null
+          test_name: string
+          test_series: string
+          total_participants: number | null
+        }
+        Insert: {
+          baseline_avg_quality?: number | null
+          baseline_config: Json
+          completed_at?: string | null
+          confidence_level?: number | null
+          created_at?: string | null
+          enhanced_avg_quality?: number | null
+          enhanced_config: Json
+          id?: string
+          is_complete?: boolean | null
+          quality_improvement?: number | null
+          test_name: string
+          test_series: string
+          total_participants?: number | null
+        }
+        Update: {
+          baseline_avg_quality?: number | null
+          baseline_config?: Json
+          completed_at?: string | null
+          confidence_level?: number | null
+          created_at?: string | null
+          enhanced_avg_quality?: number | null
+          enhanced_config?: Json
+          id?: string
+          is_complete?: boolean | null
+          quality_improvement?: number | null
+          test_name?: string
+          test_series?: string
+          total_participants?: number | null
+        }
+        Relationships: []
       }
       scenes: {
         Row: {
@@ -888,16 +1146,24 @@ export type Database = {
       }
       videos: {
         Row: {
+          compel_weights: Json | null
           completed_at: string | null
           created_at: string | null
           duration: number | null
+          enhanced_prompt: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
           error_message: string | null
           expires_at: string | null
           format: string | null
           id: string
           metadata: Json | null
+          original_prompt: string | null
           preview_url: string | null
           project_id: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          qwen_expansion_percentage: number | null
           reference_image_url: string | null
           resolution: string | null
           signed_url: string | null
@@ -910,16 +1176,24 @@ export type Database = {
           video_url: string | null
         }
         Insert: {
+          compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
           duration?: number | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           error_message?: string | null
           expires_at?: string | null
           format?: string | null
           id?: string
           metadata?: Json | null
+          original_prompt?: string | null
           preview_url?: string | null
           project_id?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
           reference_image_url?: string | null
           resolution?: string | null
           signed_url?: string | null
@@ -932,16 +1206,24 @@ export type Database = {
           video_url?: string | null
         }
         Update: {
+          compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
           duration?: number | null
+          enhanced_prompt?: string | null
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
           error_message?: string | null
           expires_at?: string | null
           format?: string | null
           id?: string
           metadata?: Json | null
+          original_prompt?: string | null
           preview_url?: string | null
           project_id?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
           reference_image_url?: string | null
           resolution?: string | null
           signed_url?: string | null
@@ -990,6 +1272,141 @@ export type Database = {
           moderation_status: string | null
         }
         Relationships: []
+      }
+      enhancement_effectiveness: {
+        Row: {
+          avg_enhancement_time: number | null
+          avg_improvement: number | null
+          avg_quality: number | null
+          enhancement_strategy: string | null
+          high_quality_rate: number | null
+          success_rate: number | null
+          total_jobs: number | null
+        }
+        Relationships: []
+      }
+      image_enhancement_analysis: {
+        Row: {
+          compel_weights: Json | null
+          created_at: string | null
+          enhanced_prompt: string | null
+          enhancement_display_name: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
+          format: string | null
+          id: string | null
+          prompt: string | null
+          quality: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          qwen_expansion_percentage: number | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          compel_weights?: Json | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          format?: string | null
+          id?: string | null
+          prompt?: string | null
+          quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          compel_weights?: Json | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          format?: string | null
+          id?: string | null
+          prompt?: string | null
+          quality?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      job_enhancement_analysis: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          enhanced_prompt: string | null
+          enhancement_display_name: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
+          generation_time_seconds: number | null
+          id: string | null
+          job_type: string | null
+          model_type: string | null
+          original_prompt: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          generation_time_seconds?: never
+          id?: string | null
+          job_type?: string | null
+          model_type?: string | null
+          original_prompt?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          generation_time_seconds?: never
+          id?: string | null
+          job_type?: string | null
+          model_type?: string | null
+          original_prompt?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       model_test_analytics: {
         Row: {
@@ -1057,6 +1474,78 @@ export type Database = {
           username: string | null
         }
         Relationships: []
+      }
+      video_enhancement_analysis: {
+        Row: {
+          compel_weights: Json | null
+          completed_at: string | null
+          created_at: string | null
+          duration: number | null
+          enhanced_prompt: string | null
+          enhancement_display_name: string | null
+          enhancement_strategy: string | null
+          enhancement_time_ms: number | null
+          id: string | null
+          original_prompt: string | null
+          quality_improvement: number | null
+          quality_rating: number | null
+          qwen_expansion_percentage: number | null
+          resolution: string | null
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          compel_weights?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          duration?: number | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          id?: string | null
+          original_prompt?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          resolution?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          compel_weights?: Json | null
+          completed_at?: string | null
+          created_at?: string | null
+          duration?: number | null
+          enhanced_prompt?: string | null
+          enhancement_display_name?: never
+          enhancement_strategy?: string | null
+          enhancement_time_ms?: number | null
+          id?: string | null
+          original_prompt?: string | null
+          quality_improvement?: number | null
+          quality_rating?: number | null
+          qwen_expansion_percentage?: number | null
+          resolution?: string | null
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "videos_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_analytics"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Functions: {

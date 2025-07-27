@@ -6,3 +6,6 @@ verify_jwt = true
 
 [functions.job-callback]
 verify_jwt = false
+
+[functions.register-chat-worker]
+verify_jwt = false

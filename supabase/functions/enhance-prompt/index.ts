@@ -467,11 +467,46 @@ async function getChatWorkerUrl(): Promise<string | null> {
     const { data: currentConfig, error: fetchError } = await supabase
       .from('system_config')
       .select('config')
+      .eq('id', 1)
       .single()
 
     if (currentConfig && !fetchError && currentConfig.config?.chatWorkerUrl) {
-      console.log('✅ Using chat worker URL from database:', currentConfig.config.chatWorkerUrl)
-      return currentConfig.config.chatWorkerUrl
+      // Test health and update cache
+      const chatWorkerUrl = currentConfig.config.chatWorkerUrl
+      const startTime = Date.now()
+      
+      try {
+        const healthResponse = await fetch(`${chatWorkerUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(3000)
+        })
+        const responseTime = Date.now() - startTime
+        const isHealthy = healthResponse.ok
+
+        // Update health cache
+        const updatedConfig = {
+          ...currentConfig.config,
+          workerHealthCache: {
+            ...currentConfig.config.workerHealthCache,
+            chatWorker: {
+              isHealthy,
+              lastChecked: new Date().toISOString(),
+              responseTimeMs: responseTime
+            }
+          }
+        }
+
+        await supabase
+          .from('system_config')
+          .update({ config: updatedConfig })
+          .eq('id', 1)
+
+        console.log('✅ Chat worker health check:', { isHealthy, responseTime })
+        return isHealthy ? chatWorkerUrl : null
+      } catch (healthError) {
+        console.error('❌ Chat worker health check failed:', healthError)
+        return null
+      }
     }
 
     console.log('ℹ️ No chat worker URL found in database')
