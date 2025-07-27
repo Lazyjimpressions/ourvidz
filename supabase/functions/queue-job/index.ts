@@ -337,7 +337,10 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    let workingPrompt = enhancedPrompt || prompt;
+    // Add safe fallbacks for undefined values
+    const safeOriginalPrompt = originalPrompt || prompt;
+    const safeEnhancedPrompt = enhancedPrompt || prompt;
+    let workingPrompt = safeEnhancedPrompt;
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
     
@@ -707,12 +710,12 @@ serve(async (req)=>{
       ],
       debug: {
         userId: user.id,
-        hasPrompt: !!originalPrompt,
-        originalPromptLength: originalPrompt.length,
-        enhancedPromptLength: workingPrompt.length,
+        hasPrompt: !!safeOriginalPrompt,
+        originalPromptLength: safeOriginalPrompt?.length || 0,
+        enhancedPromptLength: workingPrompt?.length || 0,
         enhancementStrategy: enhancementStrategy,
         enhancementTimeMs: enhancementTimeMs,
-        promptEnhanced: workingPrompt !== originalPrompt,
+        promptEnhanced: workingPrompt !== safeOriginalPrompt,
         promptWordCount: finalPrompt.split(' ').length,
         hasNegativePrompt: isSDXL && !!negativePrompt,
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
