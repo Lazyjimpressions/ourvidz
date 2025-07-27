@@ -96,6 +96,7 @@ export const ImageInputControls = ({
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
   const [showReferenceModal, setShowReferenceModal] = useState(false);
   const [showCompelModal, setShowCompelModal] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_base');
 
   const shouldShowCompel = jobType.startsWith('sdxl_') || jobType.includes('image7b');
 
@@ -162,8 +163,8 @@ export const ImageInputControls = ({
                 <Button
                   variant="ghost"
                   onClick={() => {
+                    setSelectedModel('qwen_instruct');
                     setShowEnhancementModal(true);
-                    // We'll pass selectedModel via a state or ref
                   }}
                   disabled={isGenerating || !prompt.trim()}
                   className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 rounded-md border border-gray-600"
@@ -181,7 +182,10 @@ export const ImageInputControls = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  onClick={() => setShowEnhancementModal(true)}
+                  onClick={() => {
+                    setSelectedModel('qwen_base');
+                    setShowEnhancementModal(true);
+                  }}
                   disabled={isGenerating || !prompt.trim()}
                   className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 rounded-md border border-gray-600"
                 >
@@ -441,6 +445,7 @@ export const ImageInputControls = ({
         jobType={jobType}
         format="image"
         quality={quality}
+        selectedModel={selectedModel}
       />
     </TooltipProvider>
   );

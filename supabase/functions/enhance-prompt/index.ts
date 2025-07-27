@@ -454,6 +454,60 @@ async function getActiveWorkerUrl(): Promise<string> {
 }
 
 /**
+ * Get chat worker URL from database (for qwen_instruct)
+ */
+async function getChatWorkerUrl(): Promise<string | null> {
+  try {
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Get current config
+    const { data: currentConfig, error: fetchError } = await supabase
+      .from('system_config')
+      .select('config')
+      .single()
+
+    if (currentConfig && !fetchError && currentConfig.config?.chatWorkerUrl) {
+      console.log('✅ Using chat worker URL from database:', currentConfig.config.chatWorkerUrl)
+      return currentConfig.config.chatWorkerUrl
+    }
+
+    console.log('ℹ️ No chat worker URL found in database')
+    return null
+  } catch (error) {
+    console.error('❌ Error getting chat worker URL:', error)
+    return null
+  }
+}
+
+/**
+ * Enhanced worker discovery with database and pod fallback
+ */
+async function discoverChatWorker(): Promise<string | null> {
+  console.log('🔍 Discovering chat worker...');
+  
+  // Try database first
+  const storedUrl = await getChatWorkerUrl();
+  if (storedUrl) {
+    console.log('📡 Using stored chat worker URL:', storedUrl);
+    return storedUrl;
+  }
+  
+  // Fallback to pod ID pattern
+  const podId = await getPodId();
+  if (podId) {
+    const chatWorkerUrl = `https://${podId}-7861.proxy.runpod.net`;
+    console.log('🔄 Using pod-based chat worker URL:', chatWorkerUrl);
+    return chatWorkerUrl;
+  }
+  
+  console.warn('⚠️ No chat worker URL discovered');
+  return null;
+}
+
+/**
  * Get enhancement strategy description
  */
 /**
@@ -519,25 +573,6 @@ function compressForSDXL(prompt: string): string {
   return finalPrompt
 }
 
-/**
- * Discover chat worker URL using pod ID pattern
- */
-async function discoverChatWorker(): Promise<string> {
-  try {
-    // Try to get chat worker URL from database first
-    const chatWorkerUrl = await getChatWorkerUrl()
-    if (chatWorkerUrl) {
-      return chatWorkerUrl
-    }
-    
-    // Fallback to pod ID pattern discovery
-    const podId = await getPodId()
-    return `https://${podId}-7861.proxy.runpod.net`
-  } catch (error) {
-    console.error('❌ Failed to discover chat worker:', error)
-    throw new Error('Chat worker discovery failed')
-  }
-}
 
 /**
  * Check chat worker availability and model load status
@@ -601,30 +636,6 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
   return result.enhanced_prompt
 }
 
-/**
- * Get chat worker URL from database (similar to WAN worker)
- */
-async function getChatWorkerUrl(): Promise<string | null> {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    const { data: currentConfig, error: fetchError } = await supabase
-      .from('system_config')
-      .select('config')
-      .single()
-
-    if (currentConfig && !fetchError && currentConfig.config?.chatWorkerUrl) {
-      return currentConfig.config.chatWorkerUrl
-    }
-
-    return null
-  } catch (error) {
-    console.warn('⚠️ Failed to get chat worker URL from database:', error)
-    return null
-  }
-}
 
 /**
  * Get pod ID for worker discovery
