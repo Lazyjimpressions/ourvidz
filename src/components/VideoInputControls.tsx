@@ -145,7 +145,24 @@ export const VideoInputControls = ({
 
           {/* Sparkle Buttons - Right Justified */}
           <div className="flex gap-2 ml-auto">
-            {/* Enhanced Prompt Button */}
+            {/* Chat Enhancement Button (Fast) */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowEnhancementModal(true)}
+                  disabled={isGenerating || !prompt.trim()}
+                  className="w-10 h-10 p-0 bg-gray-800 hover:bg-gray-700 rounded-md border border-gray-600"
+                >
+                  <Sparkles className="w-3 h-3 text-green-400" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">Fast enhance (~3s)</p>
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Standard Enhancement Button */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -158,7 +175,7 @@ export const VideoInputControls = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p className="text-xs">Enhance prompt</p>
+                <p className="text-xs">Standard enhance (~60s)</p>
               </TooltipContent>
             </Tooltip>
 

@@ -13,6 +13,7 @@ interface PromptEnhancementModalProps {
   jobType: string
   format: 'image' | 'video'
   quality: 'fast' | 'high'
+  selectedModel?: 'qwen_base' | 'qwen_instruct'
 }
 
 interface EnhancementResult {
@@ -29,6 +30,10 @@ interface EnhancementResult {
     is_sdxl: boolean
     is_video: boolean
     enhancement_strategy: string
+    model_used: string
+    token_count: number
+    compression_applied: boolean
+    fallback_reason?: string
   }
 }
 
@@ -39,7 +44,8 @@ export function PromptEnhancementModal({
   originalPrompt,
   jobType,
   format,
-  quality
+  quality,
+  selectedModel = 'qwen_base'
 }: PromptEnhancementModalProps) {
   const [enhancedPrompt, setEnhancedPrompt] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -100,7 +106,8 @@ export function PromptEnhancementModal({
           prompt: originalPrompt,
           jobType,
           format,
-          quality
+          quality,
+          selectedModel
         }
       })
       if (error) {
@@ -165,9 +172,16 @@ export function PromptEnhancementModal({
               <div>
                 <h2 className="text-lg font-semibold text-white">Enhance Prompt</h2>
                 {enhancementMetadata && (
-                  <Badge variant="secondary" className="text-xs bg-green-600/20 text-green-400 border-green-600/30">
-                    {enhancementMetadata.enhancement_strategy}
-                  </Badge>
+                  <div className="flex gap-2">
+                    <Badge variant="secondary" className="text-xs bg-green-600/20 text-green-400 border-green-600/30">
+                      {enhancementMetadata.model_used}
+                    </Badge>
+                    {enhancementMetadata.compression_applied && (
+                      <Badge variant="secondary" className="text-xs bg-yellow-600/20 text-yellow-400 border-yellow-600/30">
+                        Compressed
+                      </Badge>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -256,21 +270,35 @@ export function PromptEnhancementModal({
                 <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700">
                   <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-2 grid-cols-1">
                     <div className="flex justify-between">
+                      <span className="text-gray-400">Model Used:</span>
+                      <span className="text-green-400 font-medium">{enhancementMetadata.model_used}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Token Count:</span>
+                      <span className={`font-medium ${enhancementMetadata.token_count > 77 ? 'text-red-400' : enhancementMetadata.token_count > 65 ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {enhancementMetadata.token_count}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-400">Expansion:</span>
                       <span className="text-purple-400 font-medium">{enhancementMetadata.expansion_percentage}%</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Strategy:</span>
-                      <span className="text-green-400 font-medium">{enhancementMetadata.enhancement_strategy}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Job Type:</span>
-                      <span className="text-blue-400 font-medium">{enhancementMetadata.job_type}</span>
-                    </div>
-                    <div className="flex justify-between">
                       <span className="text-gray-400">Quality:</span>
-                      <span className="text-yellow-400 font-medium capitalize">{enhancementMetadata.quality}</span>
+                      <span className="text-blue-400 font-medium capitalize">{enhancementMetadata.quality}</span>
                     </div>
+                    {enhancementMetadata.compression_applied && (
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-gray-400">Compression:</span>
+                        <span className="text-yellow-400 font-medium">Applied for SDXL token limit</span>
+                      </div>
+                    )}
+                    {enhancementMetadata.fallback_reason && (
+                      <div className="flex justify-between col-span-2">
+                        <span className="text-gray-400">Fallback:</span>
+                        <span className="text-orange-400 font-medium">{enhancementMetadata.fallback_reason}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

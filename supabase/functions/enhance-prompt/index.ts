@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, jobType, format, quality } = await req.json()
+    const { prompt, jobType, format, quality, selectedModel = 'qwen_base' } = await req.json()
 
     if (!prompt) {
       return new Response(JSON.stringify({
@@ -30,42 +30,66 @@ serve(async (req) => {
       jobType,
       format,
       quality,
+      selectedModel,
       promptLength: prompt.length
     })
+
+    // Validate token limits first
+    const tokenCount = estimateTokens(prompt)
+    const tokenLimit = getTokenLimit(jobType, selectedModel)
+    
+    if (tokenCount > tokenLimit) {
+      return new Response(JSON.stringify({
+        error: `Prompt (${tokenCount} tokens) exceeds limit (${tokenLimit})`,
+        success: false,
+        token_limit_exceeded: true,
+        token_count: tokenCount,
+        token_limit: tokenLimit
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400
+      })
+    }
 
     // Determine enhancement strategy based on job type
     const isSDXL = jobType?.includes('sdxl')
     const isVideo = format === 'video'
     const isEnhanced = jobType?.includes('enhanced')
 
-    // Generate enhanced prompt using Qwen logic
-    const enhancedPrompt = await generateEnhancedPrompt(prompt, {
+    // Generate enhanced prompt using dual model routing
+    const enhancementResult = await generateEnhancedPrompt(prompt, {
       isSDXL,
       isVideo,
       isEnhanced,
-      quality
+      quality,
+      selectedModel
     })
 
     console.log('✅ Enhanced prompt generated:', {
       originalLength: prompt.length,
-      enhancedLength: enhancedPrompt.length,
-      expansion: `${((enhancedPrompt.length / prompt.length) * 100).toFixed(1)}%`
+      enhancedLength: enhancementResult.enhancedPrompt.length,
+      expansion: `${((enhancementResult.enhancedPrompt.length / prompt.length) * 100).toFixed(1)}%`,
+      modelUsed: enhancementResult.modelUsed
     })
 
     return new Response(JSON.stringify({
       success: true,
       original_prompt: prompt,
-      enhanced_prompt: enhancedPrompt,
+      enhanced_prompt: enhancementResult.enhancedPrompt,
       enhancement_metadata: {
         original_length: prompt.length,
-        enhanced_length: enhancedPrompt.length,
-        expansion_percentage: ((enhancedPrompt.length / prompt.length) * 100).toFixed(1),
+        enhanced_length: enhancementResult.enhancedPrompt.length,
+        expansion_percentage: ((enhancementResult.enhancedPrompt.length / prompt.length) * 100).toFixed(1),
         job_type: jobType,
         format,
         quality,
         is_sdxl: isSDXL,
         is_video: isVideo,
-        enhancement_strategy: getEnhancementStrategy(isSDXL, isVideo, isEnhanced)
+        enhancement_strategy: getEnhancementStrategy(isSDXL, isVideo, isEnhanced),
+        model_used: enhancementResult.modelUsed,
+        token_count: estimateTokens(enhancementResult.enhancedPrompt),
+        compression_applied: enhancementResult.compressionApplied,
+        fallback_reason: enhancementResult.fallbackReason
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -85,47 +109,131 @@ serve(async (req) => {
 })
 
 /**
- * Generate enhanced prompt using Qwen 7B base model via WAN worker
+ * Generate enhanced prompt using dual model routing
  */
 async function generateEnhancedPrompt(originalPrompt: string, config: {
   isSDXL: boolean
   isVideo: boolean
   isEnhanced: boolean
   quality: string
-}): Promise<string> {
-  const { isSDXL, isVideo, isEnhanced, quality } = config
+  selectedModel: string
+}): Promise<{
+  enhancedPrompt: string
+  modelUsed: string
+  compressionApplied: boolean
+  fallbackReason?: string
+}> {
+  const { isSDXL, isVideo, isEnhanced, quality, selectedModel } = config
 
+  // Handle SDXL token compression first
+  if (isSDXL) {
+    const tokenCount = estimateTokens(originalPrompt)
+    if (tokenCount > 77) {
+      const compressed = compressForSDXL(originalPrompt)
+      console.log('🔧 SDXL prompt compressed:', {
+        originalLength: tokenCount,
+        compressedLength: estimateTokens(compressed),
+        original: originalPrompt.substring(0, 100) + '...',
+        compressed: compressed.substring(0, 100) + '...'
+      })
+      
+      const enhancedPrompt = addSDXLQualityTags(compressed, quality)
+      return {
+        enhancedPrompt,
+        modelUsed: 'rule_based_with_compression',
+        compressionApplied: true,
+        fallbackReason: 'sdxl_token_limit_exceeded'
+      }
+    }
+  }
+
+  // Route based on selected model
+  if (selectedModel === 'qwen_instruct') {
+    return await tryInstructEnhancement(originalPrompt, config)
+  } else {
+    return await tryBaseEnhancement(originalPrompt, config)
+  }
+}
+
+/**
+ * Try Chat Worker (Qwen Instruct) enhancement with fallback
+ */
+async function tryInstructEnhancement(originalPrompt: string, config: any): Promise<{
+  enhancedPrompt: string
+  modelUsed: string
+  compressionApplied: boolean
+  fallbackReason?: string
+}> {
   try {
-    // First, enhance the natural language using Qwen 7B base model
+    // Check chat worker availability
+    const chatWorkerUrl = await discoverChatWorker()
+    const isAvailable = await checkChatWorkerAvailability(chatWorkerUrl)
+    
+    if (isAvailable) {
+      const enhancedPrompt = await enhanceWithChatWorker(originalPrompt, config)
+      return {
+        enhancedPrompt,
+        modelUsed: 'qwen_instruct',
+        compressionApplied: false
+      }
+    } else {
+      console.log('⚠️ Chat worker unavailable, falling back to WAN worker')
+      return await tryBaseEnhancement(originalPrompt, config)
+    }
+  } catch (error) {
+    console.warn('⚠️ Chat worker enhancement failed, falling back to WAN worker:', error)
+    return await tryBaseEnhancement(originalPrompt, config)
+  }
+}
+
+/**
+ * Try WAN Worker (Qwen Base) enhancement with fallback
+ */
+async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<{
+  enhancedPrompt: string
+  modelUsed: string
+  compressionApplied: boolean
+  fallbackReason?: string
+}> {
+  const { isSDXL, isVideo, quality } = config
+  
+  try {
+    // Use existing WAN worker enhancement
     const qwenEnhancedPrompt = await enhanceWithQwen(originalPrompt)
     
-    // Then add quality tags based on job type
+    // Add quality tags based on job type
     let finalPrompt = qwenEnhancedPrompt
-
-    // SDXL Enhancement Strategy
     if (isSDXL) {
       finalPrompt = addSDXLQualityTags(qwenEnhancedPrompt, quality)
-    }
-    // WAN Video Enhancement Strategy
-    else if (isVideo) {
+    } else if (isVideo) {
       finalPrompt = addWANVideoQualityTags(qwenEnhancedPrompt, quality)
-    }
-    // WAN Image Enhancement Strategy
-    else {
+    } else {
       finalPrompt = addWANImageQualityTags(qwenEnhancedPrompt, quality)
     }
 
-    return finalPrompt
+    return {
+      enhancedPrompt: finalPrompt,
+      modelUsed: 'qwen_base',
+      compressionApplied: false
+    }
   } catch (error) {
-    console.warn('⚠️ Qwen enhancement failed, falling back to rule-based:', error)
+    console.warn('⚠️ WAN worker enhancement failed, falling back to rule-based:', error)
     
-    // Fallback to rule-based enhancement
+    // Final fallback to rule-based enhancement
+    let fallbackPrompt: string
     if (isSDXL) {
-      return enhanceForSDXL(originalPrompt, quality)
+      fallbackPrompt = enhanceForSDXL(originalPrompt, quality)
     } else if (isVideo) {
-      return enhanceForWANVideo(originalPrompt, quality)
+      fallbackPrompt = enhanceForWANVideo(originalPrompt, quality)
     } else {
-      return enhanceForWANImage(originalPrompt, quality)
+      fallbackPrompt = enhanceForWANImage(originalPrompt, quality)
+    }
+
+    return {
+      enhancedPrompt: fallbackPrompt,
+      modelUsed: 'rule_based',
+      compressionApplied: false,
+      fallbackReason: 'wan_worker_unavailable'
     }
   }
 }
@@ -348,8 +456,202 @@ async function getActiveWorkerUrl(): Promise<string> {
 /**
  * Get enhancement strategy description
  */
+/**
+ * Token estimation and limits
+ */
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4) // Rough estimation: 4 chars ≈ 1 token
+}
+
+function getTokenLimit(jobType: string, selectedModel: string): number {
+  // SDXL has hard CLIP encoder limit
+  if (jobType?.includes('sdxl')) return 77
+  
+  // Qwen model limits
+  if (selectedModel === 'qwen_instruct') return 5000 // Chat template overhead
+  if (selectedModel === 'qwen_base') return 6000 // Conservative for expansion
+  
+  // Default fallback
+  return 6000
+}
+
+/**
+ * SDXL prompt compression to fit 77 token limit
+ */
+function compressForSDXL(prompt: string): string {
+  // Essential quality terms that should be preserved
+  const qualityTerms = ['masterpiece', 'best quality', 'highly detailed', 'professional', 'high resolution']
+  const anatomyTerms = ['perfect anatomy', 'natural proportions', 'balanced features']
+  
+  // Extract and preserve quality terms
+  let compressedPrompt = prompt
+  const preservedTerms: string[] = []
+  
+  qualityTerms.forEach(term => {
+    if (compressedPrompt.toLowerCase().includes(term.toLowerCase())) {
+      preservedTerms.push(term)
+      compressedPrompt = compressedPrompt.replace(new RegExp(term, 'gi'), '')
+    }
+  })
+  
+  // Clean up and compress the remaining text
+  compressedPrompt = compressedPrompt
+    .replace(/\s+/g, ' ') // Remove extra spaces
+    .replace(/,\s*,/g, ',') // Remove double commas
+    .replace(/^,|,$/g, '') // Remove leading/trailing commas
+    .trim()
+  
+  // Truncate if still too long, preserving essential terms
+  const availableTokens = 77 - preservedTerms.join(', ').length / 4
+  if (estimateTokens(compressedPrompt) > availableTokens) {
+    const maxChars = Math.floor(availableTokens * 3.5) // Conservative estimate
+    compressedPrompt = compressedPrompt.substring(0, maxChars).trim()
+    if (compressedPrompt.endsWith(',')) {
+      compressedPrompt = compressedPrompt.slice(0, -1)
+    }
+  }
+  
+  // Combine preserved terms with compressed description
+  const finalPrompt = preservedTerms.length > 0 
+    ? preservedTerms.join(', ') + (compressedPrompt ? ', ' + compressedPrompt : '')
+    : compressedPrompt
+  
+  return finalPrompt
+}
+
+/**
+ * Discover chat worker URL using pod ID pattern
+ */
+async function discoverChatWorker(): Promise<string> {
+  try {
+    // Try to get chat worker URL from database first
+    const chatWorkerUrl = await getChatWorkerUrl()
+    if (chatWorkerUrl) {
+      return chatWorkerUrl
+    }
+    
+    // Fallback to pod ID pattern discovery
+    const podId = await getPodId()
+    return `https://${podId}-7861.proxy.runpod.net`
+  } catch (error) {
+    console.error('❌ Failed to discover chat worker:', error)
+    throw new Error('Chat worker discovery failed')
+  }
+}
+
+/**
+ * Check chat worker availability and model load status
+ */
+async function checkChatWorkerAvailability(workerUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${workerUrl}/health`, { 
+      method: 'GET',
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    })
+    
+    if (!response.ok) {
+      return false
+    }
+    
+    const healthData = await response.json()
+    return healthData.model_loaded === true
+  } catch (error) {
+    console.log('⚠️ Chat worker health check failed:', error)
+    return false
+  }
+}
+
+/**
+ * Enhance prompt using chat worker (Qwen Instruct)
+ */
+async function enhanceWithChatWorker(prompt: string, config: any): Promise<string> {
+  console.log('🤖 Calling Chat worker enhancement for prompt:', { prompt: prompt.length })
+  
+  const chatWorkerUrl = await discoverChatWorker()
+  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
+  
+  if (!apiKey) {
+    throw new Error('WAN_WORKER_API_KEY not configured')
+  }
+
+  const response = await fetch(`${chatWorkerUrl}/enhance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      prompt: prompt,
+      model: 'qwen_instruct',
+      enhance_type: 'conversational'
+    }),
+    signal: AbortSignal.timeout(30000) // 30 second timeout
+  })
+
+  if (!response.ok) {
+    throw new Error(`Chat worker response not ok: ${response.status}`)
+  }
+
+  const result = await response.json()
+  
+  if (!result.enhanced_prompt) {
+    throw new Error('No enhanced_prompt in chat worker response')
+  }
+
+  return result.enhanced_prompt
+}
+
+/**
+ * Get chat worker URL from database (similar to WAN worker)
+ */
+async function getChatWorkerUrl(): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    const { data: currentConfig, error: fetchError } = await supabase
+      .from('system_config')
+      .select('config')
+      .single()
+
+    if (currentConfig && !fetchError && currentConfig.config?.chatWorkerUrl) {
+      return currentConfig.config.chatWorkerUrl
+    }
+
+    return null
+  } catch (error) {
+    console.warn('⚠️ Failed to get chat worker URL from database:', error)
+    return null
+  }
+}
+
+/**
+ * Get pod ID for worker discovery
+ */
+async function getPodId(): Promise<string> {
+  // Try environment variable first
+  const podId = Deno.env.get('RUNPOD_POD_ID')
+  if (podId) {
+    return podId
+  }
+  
+  // Extract from hostname as fallback
+  try {
+    const hostname = await Deno.hostname()
+    const podMatch = hostname.match(/([a-z0-9]+)-/)
+    if (podMatch) {
+      return podMatch[1]
+    }
+  } catch (error) {
+    console.warn('⚠️ Failed to get hostname:', error)
+  }
+  
+  throw new Error('Could not determine pod ID')
+}
+
 function getEnhancementStrategy(isSDXL: boolean, isVideo: boolean, isEnhanced: boolean): string {
-  if (isSDXL) return 'Qwen 7B Natural Language + SDXL Quality Tags'
-  if (isVideo) return 'Qwen 7B Natural Language + WAN Video Enhancement'
-  return 'Qwen 7B Natural Language + WAN Image Enhancement'
+  if (isSDXL) return 'Qwen Enhancement + SDXL Quality Tags'
+  if (isVideo) return 'Qwen Enhancement + WAN Video Enhancement'
+  return 'Qwen Enhancement + WAN Image Enhancement'
 }
