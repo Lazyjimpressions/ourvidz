@@ -227,7 +227,7 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     return 'chat' // Default to instruction model
   }
 
-  // TOKEN MANAGEMENT (CRITICAL BUG FIX)
+  // TOKEN MANAGEMENT (PHASE 1 FIX: Use token_target for compression)
   private async postProcessEnhancement(
     enhanced_prompt: string, 
     context: any
@@ -236,8 +236,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     const token_count = estimateTokens(enhanced_prompt)
     const template = this.getSystemPromptTemplate(context)
     
-    // FIX: Check enhanced prompt tokens, not original
-    if (token_count > template.max_tokens) {
+    // PHASE 1 FIX: Use token_target instead of max_tokens for compression threshold
+    if (token_count > template.token_target) {
       console.log(`🔧 Compressing ${token_count} tokens to ${template.token_target}`)
       
       const compressed = await this.intelligentCompress(
@@ -918,7 +918,7 @@ async function discoverChatWorker(): Promise<string | null> {
  * Get enhancement strategy description
  */
 /**
- * Token estimation and limits
+ * PHASE 3 FIX: Improved token estimation accuracy
  */
 function estimateTokens(text: string): number {
   // Add defensive programming - handle null/undefined text
@@ -927,19 +927,69 @@ function estimateTokens(text: string): number {
     return 0
   }
   
-  return Math.ceil(text.length / 4) // Rough estimation: 4 chars ≈ 1 token
+  // More accurate token estimation based on CLIP tokenizer patterns
+  // Account for subword tokenization, punctuation, and special tokens
+  const words = text.trim().split(/\s+/)
+  let tokenCount = 0
+  
+  for (const word of words) {
+    if (word.length === 0) continue
+    
+    // Short words (1-3 chars) usually = 1 token
+    if (word.length <= 3) {
+      tokenCount += 1
+    }
+    // Medium words (4-8 chars) often split into 1-2 tokens
+    else if (word.length <= 8) {
+      tokenCount += Math.ceil(word.length / 4)
+    }
+    // Long words get more complex subword splitting
+    else {
+      tokenCount += Math.ceil(word.length / 3.5)
+    }
+    
+    // Add extra tokens for punctuation and special characters
+    const punctuationCount = (word.match(/[.,!?;:()\-"']/g) || []).length
+    tokenCount += punctuationCount * 0.3
+  }
+  
+  return Math.ceil(tokenCount)
 }
 
-function getTokenLimit(jobType: string, selectedModel: string): number {
-  // SDXL has hard CLIP encoder limit
-  if (jobType?.includes('sdxl')) return 77
+function getTokenLimit(jobType: string, selectedModel: string, enhancementPresets?: string[]): number {
+  // Base limits by job type
+  let baseLimit = 77
+  if (jobType?.includes('sdxl')) baseLimit = 77
+  else if (jobType?.includes('wan')) baseLimit = 250
   
-  // Qwen model limits
-  if (selectedModel === 'qwen_instruct') return 5000 // Chat template overhead
-  if (selectedModel === 'qwen_base') return 6000 // Conservative for expansion
+  // PHASE 4 & 5: Adjust token budget based on enhancement presets
+  if (enhancementPresets && enhancementPresets.length > 0) {
+    const presetModifiers = {
+      'Best Quality': 0.85,    // Reduce tokens for quality focus
+      'Cinematic': 1.1,        // Allow more tokens for cinematic descriptions  
+      'Professional': 0.9,     // Slightly reduce for professional focus
+      'Photorealistic': 0.95,  // Balance between quality and detail
+      'Artistic': 1.05         // Allow slightly more for artistic descriptions
+    }
+    
+    let modifier = 1.0
+    for (const preset of enhancementPresets) {
+      const presetModifier = presetModifiers[preset as keyof typeof presetModifiers]
+      if (presetModifier) {
+        modifier *= presetModifier
+      }
+    }
+    
+    baseLimit = Math.round(baseLimit * modifier)
+    console.log(`🎯 Token limit adjusted for presets:`, {
+      originalLimit: 77,
+      presets: enhancementPresets,
+      modifier,
+      adjustedLimit: baseLimit
+    })
+  }
   
-  // Default fallback
-  return 6000
+  return baseLimit
 }
 
 /**
