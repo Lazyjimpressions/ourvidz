@@ -326,6 +326,59 @@ serve(async (req)=>{
       console.log('📝 Using metadata prompt');
     }
 
+    // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
+    let enhancementResult = null;
+    let originalPrompt = prompt;
+    let enhancedPrompt = prompt;
+    let enhancementStrategy = 'none';
+    let enhancementTimeMs = 0;
+    
+    // Only enhance if we have a prompt and it's not already enhanced
+    if (prompt && !metadata?.skip_enhancement) {
+      try {
+        console.log('🚀 Calling enhance-prompt function for job:', jobType);
+        const enhancementStartTime = Date.now();
+        
+        const { data: enhancementData, error: enhancementError } = await supabase.functions.invoke('enhance-prompt', {
+          body: {
+            prompt: prompt,
+            jobType: jobType,
+            format: format,
+            quality: quality,
+            selectedModel: 'qwen_instruct',
+            user_id: user.id
+          }
+        });
+        
+        enhancementTimeMs = Date.now() - enhancementStartTime;
+        
+        if (enhancementError) {
+          console.warn('⚠️ Enhancement failed, using original prompt:', enhancementError.message);
+          enhancementStrategy = 'failed';
+        } else if (enhancementData?.success && enhancementData?.enhanced_prompt) {
+          enhancementResult = enhancementData;
+          enhancedPrompt = enhancementData.enhanced_prompt;
+          enhancementStrategy = enhancementData.enhancement_metadata?.enhancement_strategy || 'enhanced';
+          
+          console.log('✅ Prompt enhanced successfully:', {
+            originalLength: originalPrompt.length,
+            enhancedLength: enhancedPrompt.length,
+            strategy: enhancementStrategy,
+            timeMs: enhancementTimeMs
+          });
+        } else {
+          console.warn('⚠️ Enhancement returned no result, using original prompt');
+          enhancementStrategy = 'no_result';
+        }
+      } catch (error) {
+        console.error('❌ Enhancement function call failed:', error);
+        enhancementStrategy = 'error';
+      }
+    }
+    
+    // Use enhanced prompt for job creation
+    const finalPrompt = enhancedPrompt;
+
     // CRITICAL FIX: Generate negative prompt BEFORE creating job record
     let negativePrompt = '';
     let negativePromptError = null;
@@ -356,9 +409,15 @@ serve(async (req)=>{
         negative_prompt: negativePrompt,
         negative_prompt_generation_error: negativePromptError
       },
+      // **PHASE 1**: Include enhancement data in job metadata
+      original_prompt: originalPrompt,
+      enhanced_prompt: enhancedPrompt,
+      enhancement_strategy: enhancementStrategy,
+      enhancement_time_ms: enhancementTimeMs,
+      enhanced_tracking: true,
       // Enhanced tracking fields
-      prompt_length: prompt.length,
-      prompt_word_count: prompt.split(' ').length,
+      prompt_length: finalPrompt.length,
+      prompt_word_count: finalPrompt.split(' ').length,
       generation_timestamp: new Date().toISOString(),
       edge_function_version: '2.1.0',
       // Performance tracking
@@ -395,7 +454,12 @@ serve(async (req)=>{
       project_id: projectId,
       video_id: videoId,
       image_id: imageId,
-      status: 'queued'
+      status: 'queued',
+      // **PHASE 1**: Store enhancement fields directly in jobs table
+      original_prompt: originalPrompt,
+      enhanced_prompt: enhancedPrompt,
+      enhancement_strategy: enhancementStrategy,
+      enhancement_time_ms: enhancementTimeMs
     }).select().single();
     if (jobError) {
       console.error('❌ Error creating job in database:', {
@@ -489,7 +553,7 @@ serve(async (req)=>{
     const jobPayload = {
       id: job.id,
       type: jobType,
-      prompt: prompt,
+      prompt: finalPrompt, // **PHASE 1**: Use enhanced prompt
       config,
       user_id: user.id,
       created_at: new Date().toISOString(),
@@ -635,9 +699,13 @@ serve(async (req)=>{
       ],
       debug: {
         userId: user.id,
-        hasPrompt: !!prompt,
-        promptLength: prompt.length,
-        promptWordCount: prompt.split(' ').length,
+        hasPrompt: !!originalPrompt,
+        originalPromptLength: originalPrompt.length,
+        enhancedPromptLength: enhancedPrompt.length,
+        enhancementStrategy: enhancementStrategy,
+        enhancementTimeMs: enhancementTimeMs,
+        promptEnhanced: enhancedPrompt !== originalPrompt,
+        promptWordCount: finalPrompt.split(' ').length,
         hasNegativePrompt: isSDXL && !!negativePrompt,
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
         negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,

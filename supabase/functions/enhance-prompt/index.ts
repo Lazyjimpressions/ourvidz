@@ -194,17 +194,27 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     return templates[key] || templates['SDXL_FAST']
   }
 
-  // CONTENT-NEUTRAL ENHANCEMENT STRATEGY
+  // **PHASE 2**: ENHANCED WORKER DISCOVERY AND ROUTING
   private selectOptimalWorker(context: any): 'chat' | 'wan' {
-    // Route based on technical requirements, not content type
+    console.log('🎯 Selecting optimal worker for context:', {
+      job_type: context.job_type,
+      quality_level: context.quality_level,
+      model_target: context.model_target,
+      enhancement_level: context.enhancement_level
+    });
+
+    // Route based on technical requirements and worker availability
     if (context.enhancement_type === 'manual' || context.job_type.includes('sdxl')) {
+      console.log('🤖 Selected chat worker for SDXL optimization');
       return 'chat' // Better instruction following for image optimization
     }
     
-    if (context.job_type.includes('video') && context.quality === 'fast') {
+    if (context.job_type.includes('video') && context.quality_level === 'fast') {
+      console.log('🎥 Selected WAN worker for fast video generation');
       return 'wan' // Optimized for video generation
     }
 
+    console.log('🤖 Default: Selected chat worker for instruction following');
     return 'chat' // Default to instruction model
   }
 
@@ -329,12 +339,28 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       modelUsed: worker_response.modelUsed
     })
 
-    if (worker_response.success) {
-      // FIX: Handle both camelCase and snake_case property names with fallback
+    if (worker_response.success !== false) {
+      // **PHASE 3**: Handle both camelCase and snake_case property names with fallback
       const enhancedPrompt = worker_response.enhancedPrompt || worker_response.enhanced_prompt || request.prompt
       
-      if (!enhancedPrompt) {
-        console.warn('⚠️ No enhanced prompt found in worker response, using original')
+      // **PHASE 3**: Determine actual strategy used based on worker response
+      let actualStrategy = template.id;
+      if (worker_response.fallbackReason) {
+        if (worker_response.fallbackReason.includes('chat_worker')) {
+          actualStrategy = worker_response.fallbackReason.includes('failed') ? 'chat_worker_failed' : 'chat_worker_unavailable';
+        } else if (worker_response.fallbackReason.includes('wan_worker')) {
+          actualStrategy = worker_response.fallbackReason.includes('failed') ? 'wan_worker_failed' : 'wan_worker_unavailable';
+        } else if (worker_response.fallbackReason === 'rule_based') {
+          actualStrategy = 'rule_based_fallback';
+        }
+      } else if (worker_response.modelUsed) {
+        // Success with actual model used
+        actualStrategy = `${template.id}_${worker_response.modelUsed}`;
+      }
+      
+      if (!enhancedPrompt || enhancedPrompt === request.prompt) {
+        console.warn('⚠️ No enhancement detected, marking as no_enhancement')
+        actualStrategy = 'none';
       }
       
       // CRITICAL: Post-enhancement token management
@@ -346,12 +372,18 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       // Technical performance tracking
       await this.trackEnhancementMetrics(request, processed, template)
 
+      console.log('📊 Enhancement metrics:', {
+        strategy: actualStrategy,
+        compression: processed.compression_applied,
+        token_efficiency: processed.final_tokens / template.token_target
+      })
+
       return {
         success: true,
         enhanced_prompt: processed.enhanced_prompt,
         optimization: {
-          strategy_used: template.id,
-          worker_used: worker_target,
+          strategy_used: actualStrategy,
+          worker_used: worker_response.workerUsed || worker_target,
           compression_applied: processed.compression_applied,
           token_optimization: {
             original: estimateTokens(request.prompt),
@@ -368,8 +400,28 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       }
     }
 
-    // Fallback to worker's built-in optimization
-    return worker_response
+    // **PHASE 3**: Handle failure case properly
+    console.warn('⚠️ Worker enhancement failed, using fallback strategy')
+    return {
+      success: true,
+      enhanced_prompt: request.prompt,
+      optimization: {
+        strategy_used: 'enhancement_failed',
+        worker_used: 'none',
+        compression_applied: false,
+        token_optimization: {
+          original: estimateTokens(request.prompt),
+          enhanced: estimateTokens(request.prompt),
+          final: estimateTokens(request.prompt),
+          target: template.token_target
+        }
+      },
+      metadata: {
+        version: template.version,
+        model_target: context.model_target,
+        quality_level: context.quality_level
+      }
+    }
   }
 
   private buildEnhancementContext(request: any): any {
@@ -387,10 +439,18 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     }
   }
 
+  // **PHASE 2 & 3**: Enhanced worker calls with proper response handling
   private async callWorkerWithContext(worker_target: 'chat' | 'wan', payload: any): Promise<any> {
+    console.log(`🚀 Calling ${worker_target} worker with context:`, {
+      model_target: payload.context.model_target,
+      quality_level: payload.context.quality_level,
+      hasSystemPrompt: !!payload.system_prompt
+    });
+
     try {
+      let result;
       if (worker_target === 'chat') {
-        return await tryInstructEnhancement(payload.prompt, {
+        result = await tryInstructEnhancement(payload.prompt, {
           isSDXL: payload.context.model_target === 'SDXL',
           isVideo: payload.context.job_type.includes('video'),
           isEnhanced: payload.context.enhancement_level === 'enhanced',
@@ -399,7 +459,7 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           system_prompt: payload.system_prompt
         })
       } else {
-        return await tryBaseEnhancement(payload.prompt, {
+        result = await tryBaseEnhancement(payload.prompt, {
           isSDXL: payload.context.model_target === 'SDXL',
           isVideo: payload.context.job_type.includes('video'),
           isEnhanced: payload.context.enhancement_level === 'enhanced',
@@ -408,12 +468,33 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           system_prompt: payload.system_prompt
         })
       }
+
+      // **PHASE 3**: Ensure proper response structure
+      if (result && result.success !== false) {
+        return {
+          success: true,
+          enhanced_prompt: result.enhancedPrompt || result.enhanced_prompt || payload.prompt,
+          enhancedPrompt: result.enhancedPrompt || result.enhanced_prompt || payload.prompt,
+          modelUsed: result.modelUsed || worker_target,
+          workerUsed: worker_target,
+          compressionApplied: result.compressionApplied || false,
+          fallbackReason: result.fallbackReason
+        }
+      } else {
+        console.warn(`⚠️ Worker ${worker_target} returned unsuccessful result, using fallback`)
+        return {
+          success: false,
+          enhanced_prompt: payload.prompt,
+          fallback_reason: result?.fallbackReason || `${worker_target}_worker_failed`
+        }
+      }
     } catch (error) {
-      console.warn(`❌ Worker ${worker_target} failed, using fallback`)
+      console.error(`❌ Worker ${worker_target} failed with error:`, error.message)
       return {
         success: false,
         enhanced_prompt: payload.prompt,
-        fallback_reason: `${worker_target}_worker_failed`
+        fallback_reason: `${worker_target}_worker_error`,
+        error: error.message
       }
     }
   }
