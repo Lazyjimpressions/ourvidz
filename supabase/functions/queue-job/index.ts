@@ -419,7 +419,7 @@ serve(async (req)=>{
       },
       // **PHASE 1**: Include enhancement data in job metadata
       original_prompt: originalPrompt,
-      enhanced_prompt: enhancedPrompt,
+      enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
       enhanced_tracking: true,
@@ -465,7 +465,7 @@ serve(async (req)=>{
       status: 'queued',
       // **PHASE 1**: Store enhancement fields directly in jobs table
       original_prompt: originalPrompt,
-      enhanced_prompt: enhancedPrompt,
+      enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs
     }).select().single();
@@ -709,10 +709,10 @@ serve(async (req)=>{
         userId: user.id,
         hasPrompt: !!originalPrompt,
         originalPromptLength: originalPrompt.length,
-        enhancedPromptLength: enhancedPrompt.length,
+        enhancedPromptLength: workingPrompt.length,
         enhancementStrategy: enhancementStrategy,
         enhancementTimeMs: enhancementTimeMs,
-        promptEnhanced: enhancedPrompt !== originalPrompt,
+        promptEnhanced: workingPrompt !== originalPrompt,
         promptWordCount: finalPrompt.split(' ').length,
         hasNegativePrompt: isSDXL && !!negativePrompt,
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
