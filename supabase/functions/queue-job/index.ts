@@ -81,7 +81,9 @@ serve(async (req)=>{
       imageId,
       originalPrompt,
       enhancedPrompt,
-      isPromptEnhanced
+      isPromptEnhanced,
+      enhancementMetadata,
+      selectedPresets
     } = await req.json();
     console.log('📋 Creating job with STANDARDIZED worker parameters:', {
       jobType,
@@ -483,6 +485,9 @@ serve(async (req)=>{
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
       enhanced_tracking: true,
+      // **NEW ARCHITECTURE**: Include enhancement metadata and presets
+      enhancement_metadata: enhancementMetadata,
+      selected_presets: selectedPresets,
       // PHASE 4 DEBUG: Additional tracking
       debug: {
         original_prompt_length: originalPrompt.length,

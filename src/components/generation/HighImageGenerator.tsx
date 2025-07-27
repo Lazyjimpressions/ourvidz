@@ -153,12 +153,16 @@ export const HighImageGenerator = ({
         <PromptEnhancementModal
           isOpen={showEnhancementModal}
           onClose={() => setShowEnhancementModal(false)}
-          onAccept={(enhancedPrompt) => setPrompt(enhancedPrompt)}
+          onGenerateWithEnhancement={(data) => {
+            setPrompt(data.enhancedPrompt);
+            setShowEnhancementModal(false);
+          }}
           originalPrompt={prompt}
           jobType="sdxl_image_high"
           format="image"
           quality="high"
           selectedModel="qwen_instruct"
+          generationFormat="sdxl_image_high"
         />
       </CardContent>
     </Card>

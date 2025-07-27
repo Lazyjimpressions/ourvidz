@@ -144,6 +144,8 @@ export interface GenerationRequest {
   originalPrompt?: string;
   enhancedPrompt?: string;
   isPromptEnhanced?: boolean;
+  enhancementMetadata?: any;
+  selectedPresets?: string[];
   projectId?: string;
   videoId?: string;
   imageId?: string;

@@ -176,10 +176,14 @@ export const HighVideoGenerator = ({
           isOpen={showEnhancementModal}
           onClose={() => setShowEnhancementModal(false)}
           originalPrompt={prompt}
-          onAccept={handleEnhancementComplete}
+          onGenerateWithEnhancement={(data) => {
+            setPrompt(data.enhancedPrompt);
+            setShowEnhancementModal(false);
+          }}
           jobType="video_high"
-          format="video_high"
+          format="video"
           quality="high"
+          generationFormat="video_high"
         />
       </CardContent>
     </Card>

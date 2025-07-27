@@ -153,12 +153,16 @@ export const FastImageGenerator = ({
         <PromptEnhancementModal
           isOpen={showEnhancementModal}
           onClose={() => setShowEnhancementModal(false)}
-          onAccept={(enhancedPrompt) => setPrompt(enhancedPrompt)}
+          onGenerateWithEnhancement={(data) => {
+            setPrompt(data.enhancedPrompt);
+            setShowEnhancementModal(false);
+          }}
           originalPrompt={prompt}
           jobType="sdxl_image_fast"
           format="image"
           quality="fast"
           selectedModel="qwen_instruct"
+          generationFormat="sdxl_image_fast"
         />
       </CardContent>
     </Card>

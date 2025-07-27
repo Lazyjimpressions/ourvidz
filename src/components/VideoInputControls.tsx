@@ -385,17 +385,18 @@ export const VideoInputControls = ({
       <PromptEnhancementModal
         isOpen={showEnhancementModal}
         onClose={() => setShowEnhancementModal(false)}
-        onAccept={(enhanced) => {
+        onGenerateWithEnhancement={(data) => {
           if (onEnhancementApply) {
-            onEnhancementApply(enhanced, prompt);
+            onEnhancementApply(data.enhancedPrompt, data.originalPrompt);
           } else {
-            setPrompt(enhanced);
+            setPrompt(data.enhancedPrompt);
           }
           setShowEnhancementModal(false);
         }}
         originalPrompt={prompt}
         jobType={jobType}
         format="video"
+        generationFormat={jobType as any}
         quality={quality}
         selectedModel={selectedModel}
       />

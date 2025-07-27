@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id, regeneration } = await req.json()
+    const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id, regeneration, selectedPresets = [] } = await req.json()
 
     if (!prompt) {
       return new Response(JSON.stringify({
@@ -31,6 +31,7 @@ serve(async (req) => {
       format,
       quality,
       selectedModel,
+      selectedPresets,
       promptLength: prompt.length
     })
 

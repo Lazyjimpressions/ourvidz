@@ -176,10 +176,14 @@ export const FastVideoGenerator = ({
           isOpen={showEnhancementModal}
           onClose={() => setShowEnhancementModal(false)}
           originalPrompt={prompt}
-          onAccept={handleEnhancementComplete}
+          onGenerateWithEnhancement={(data) => {
+            setPrompt(data.enhancedPrompt);
+            setShowEnhancementModal(false);
+          }}
           jobType="video_fast"
-          format="video_fast"
+          format="video"
           quality="fast"
+          generationFormat="video_fast"
         />
       </CardContent>
     </Card>

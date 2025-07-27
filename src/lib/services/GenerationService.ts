@@ -68,7 +68,9 @@ export class GenerationService {
           ...jobBody,
           originalPrompt: request.originalPrompt,
           enhancedPrompt: request.enhancedPrompt,
-          isPromptEnhanced: request.isPromptEnhanced
+          isPromptEnhanced: request.isPromptEnhanced,
+          enhancementMetadata: request.enhancementMetadata,
+          selectedPresets: request.selectedPresets
         }
       });
 
