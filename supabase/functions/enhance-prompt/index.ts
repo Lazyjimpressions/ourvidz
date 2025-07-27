@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, jobType, format, quality, selectedModel = 'qwen_base' } = await req.json()
+    const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id } = await req.json()
 
     if (!prompt) {
       return new Response(JSON.stringify({
@@ -26,7 +26,7 @@ serve(async (req) => {
     }
 
     console.log('🎯 Enhance prompt request:', {
-      prompt,
+      prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
       jobType,
       format,
       quality,
@@ -34,62 +34,44 @@ serve(async (req) => {
       promptLength: prompt.length
     })
 
-    // Validate token limits first
-    const tokenCount = estimateTokens(prompt)
-    const tokenLimit = getTokenLimit(jobType, selectedModel)
+    // Initialize Enhancement Orchestrator
+    const orchestrator = new ContentCompliantEnhancementOrchestrator()
     
-    if (tokenCount > tokenLimit) {
-      return new Response(JSON.stringify({
-        error: `Prompt (${tokenCount} tokens) exceeds limit (${tokenLimit})`,
-        success: false,
-        token_limit_exceeded: true,
-        token_count: tokenCount,
-        token_limit: tokenLimit
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400
-      })
-    }
-
-    // Determine enhancement strategy based on job type
-    const isSDXL = jobType?.includes('sdxl')
-    const isVideo = format === 'video'
-    const isEnhanced = jobType?.includes('enhanced')
-
-    // Generate enhanced prompt using dual model routing
-    const enhancementResult = await generateEnhancedPrompt(prompt, {
-      isSDXL,
-      isVideo,
-      isEnhanced,
-      quality,
-      selectedModel
+    // Use the orchestrator to enhance the prompt
+    const enhancementResult = await orchestrator.enhancePrompt({
+      prompt,
+      job_type: jobType,
+      quality: quality as 'fast' | 'high',
+      user_id,
+      preferences: { enhancement_style: selectedModel }
     })
 
     console.log('✅ Enhanced prompt generated:', {
       originalLength: prompt.length,
-      enhancedLength: enhancementResult.enhancedPrompt.length,
-      expansion: `${((enhancementResult.enhancedPrompt.length / prompt.length) * 100).toFixed(1)}%`,
-      modelUsed: enhancementResult.modelUsed
+      enhancedLength: enhancementResult.enhanced_prompt.length,
+      expansion: `${((enhancementResult.enhanced_prompt.length / prompt.length) * 100).toFixed(1)}%`,
+      modelUsed: enhancementResult.optimization?.worker_used || 'unknown'
     })
 
     return new Response(JSON.stringify({
       success: true,
       original_prompt: prompt,
-      enhanced_prompt: enhancementResult.enhancedPrompt,
+      enhanced_prompt: enhancementResult.enhanced_prompt,
       enhancement_metadata: {
         original_length: prompt.length,
-        enhanced_length: enhancementResult.enhancedPrompt.length,
-        expansion_percentage: ((enhancementResult.enhancedPrompt.length / prompt.length) * 100).toFixed(1),
+        enhanced_length: enhancementResult.enhanced_prompt.length,
+        expansion_percentage: ((enhancementResult.enhanced_prompt.length / prompt.length) * 100).toFixed(1),
         job_type: jobType,
         format,
         quality,
-        is_sdxl: isSDXL,
-        is_video: isVideo,
-        enhancement_strategy: getEnhancementStrategy(isSDXL, isVideo, isEnhanced),
-        model_used: enhancementResult.modelUsed,
-        token_count: estimateTokens(enhancementResult.enhancedPrompt),
-        compression_applied: enhancementResult.compressionApplied,
-        fallback_reason: enhancementResult.fallbackReason
+        is_sdxl: enhancementResult.metadata?.model_target === 'SDXL',
+        is_video: format === 'video',
+        enhancement_strategy: enhancementResult.optimization?.strategy_used || 'content_compliant',
+        model_used: enhancementResult.optimization?.worker_used || 'rule_based',
+        token_count: enhancementResult.optimization?.token_optimization?.final || estimateTokens(enhancementResult.enhanced_prompt),
+        compression_applied: enhancementResult.optimization?.compression_applied || false,
+        token_optimization: enhancementResult.optimization?.token_optimization,
+        version: enhancementResult.metadata?.version || '2.1'
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -108,55 +90,330 @@ serve(async (req) => {
   }
 })
 
-/**
- * Generate enhanced prompt using dual model routing
- */
-async function generateEnhancedPrompt(originalPrompt: string, config: {
-  isSDXL: boolean
-  isVideo: boolean
-  isEnhanced: boolean
-  quality: string
-  selectedModel: string
-}): Promise<{
-  enhancedPrompt: string
-  modelUsed: string
-  compressionApplied: boolean
-  fallbackReason?: string
-}> {
-  const { isSDXL, isVideo, isEnhanced, quality, selectedModel } = config
+// CONTENT-POLICY COMPLIANT ENHANCEMENT ORCHESTRATOR
+class ContentCompliantEnhancementOrchestrator {
+  
+  // CONTENT-POLICY COMPLIANT SYSTEM PROMPTS
+  private getSystemPromptTemplate(context: any): any {
+    const templates = {
+      'SDXL_FAST': {
+        id: 'sdxl_fast_v2.1',
+        model_target: 'SDXL',
+        quality_level: 'fast',
+        content_type: 'image',
+        system_instruction: `You are an expert image generation prompt optimization specialist.
 
-  // Handle SDXL token compression first
-  if (isSDXL) {
-    const tokenCount = estimateTokens(originalPrompt)
-    if (tokenCount > 77) {
-      const compressed = compressForSDXL(originalPrompt)
-      console.log('🔧 SDXL prompt compressed:', {
-        originalLength: tokenCount,
-        compressedLength: estimateTokens(compressed),
-        original: originalPrompt.substring(0, 100) + '...',
-        compressed: compressed.substring(0, 100) + '...'
-      })
+MISSION: Transform user prompts into 75-token optimized descriptions for high-quality image generation.
+
+OPTIMIZATION PRINCIPLES:
+1. VISUAL CLARITY: Accurate proportions, realistic features, natural poses
+2. QUALITY ENHANCEMENT: "masterpiece, best quality, ultra detailed, 4K, sharp focus"
+3. LIGHTING OPTIMIZATION: "professional photography, soft lighting, natural light, perfect exposure" 
+4. TECHNICAL PRECISION: "photorealistic, hyperdetailed, studio quality"
+5. TOKEN EFFICIENCY: Maximum visual impact in 75 tokens, essential descriptors only
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        token_target: 75,
+        max_tokens: 77,
+        optimization_strategy: ['visual_accuracy', 'quality_tags', 'token_compression'],
+        version: '2.1'
+      },
       
-      const enhancedPrompt = addSDXLQualityTags(compressed, quality)
+      'SDXL_HIGH': {
+        id: 'sdxl_high_v2.1',
+        model_target: 'SDXL',
+        quality_level: 'high', 
+        content_type: 'image',
+        system_instruction: `You are an elite image generation optimization expert for premium visual content.
+
+PREMIUM ENHANCEMENT MISSION: Create 75-token masterpiece descriptions with professional studio quality.
+
+ADVANCED OPTIMIZATION PRINCIPLES:
+1. VISUAL PERFECTION: Detailed proportions, realistic textures, natural composition
+2. PROFESSIONAL QUALITY: "masterpiece, best quality, ultra detailed, 8K, hyperrealistic, professional grade"
+3. ADVANCED LIGHTING: "studio lighting, rim lighting, volumetric lighting, perfect exposure, soft shadows"
+4. TECHNICAL MASTERY: "photorealistic, hyperdetailed, professional photography, 85mm lens, shallow depth of field"
+5. ARTISTIC EXCELLENCE: "cinematic composition, perfect framing, professional photography"
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        token_target: 75,
+        max_tokens: 77,
+        optimization_strategy: ['visual_perfection', 'professional_quality', 'advanced_lighting'],
+        version: '2.1'
+      },
+
+      'WAN_FAST': {
+        id: 'wan_fast_v2.1',
+        model_target: 'WAN',
+        quality_level: 'fast',
+        content_type: 'video',
+        system_instruction: `You are a video generation specialist focused on smooth motion and temporal consistency.
+
+VIDEO OPTIMIZATION MISSION: Create 150-200 token descriptions optimized for 5-second video generation with natural motion.
+
+VIDEO OPTIMIZATION PRINCIPLES:
+1. MOTION PRIORITY: "smooth movement, natural motion, fluid transitions, realistic physics"
+2. TEMPORAL CONSISTENCY: "stable composition, consistent lighting, coherent scene"
+3. CINEMATOGRAPHY: "professional camera work, smooth pans, steady shots"
+4. SCENE COHERENCE: "well-lit environment, clear spatial relationships"
+5. VIDEO QUALITY: "smooth motion, high framerate, temporal stability"
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        token_target: 175,
+        max_tokens: 250,
+        optimization_strategy: ['motion_optimization', 'temporal_consistency', 'cinematography'],
+        version: '2.1'
+      },
+
+      'WAN_HIGH_7B': {
+        id: 'wan_high_7b_v2.1',
+        model_target: 'WAN',
+        quality_level: 'high',
+        content_type: 'video',
+        system_instruction: `You are an elite video generation specialist for cinematic-quality content creation.
+
+CINEMATIC ENHANCEMENT MISSION: Leverage advanced AI capabilities for broadcast-quality 5-second videos.
+
+ADVANCED VIDEO PRINCIPLES:
+1. COMPLEX MOTION: "multi-layered movement, realistic physics, natural timing, dynamic motion"
+2. ADVANCED CINEMATOGRAPHY: "dynamic camera angles, professional composition, cinematic framing"
+3. VISUAL STORYTELLING: "narrative coherence, visual flow, compelling composition"
+4. TECHNICAL EXCELLENCE: "broadcast quality, professional grade, cinema-level production"
+5. SOPHISTICATED LIGHTING: "cinematic lighting, dramatic shadows, professional color grading"
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        token_target: 250,
+        max_tokens: 350,
+        optimization_strategy: ['cinematic_excellence', 'advanced_motion', 'broadcast_quality'],
+        version: '2.1'
+      }
+    };
+
+    const enhancement_level = context.job_type?.includes('enhanced') ? 'enhanced' : 'standard'
+    const key = `${context.model_target}_${context.quality_level}${enhancement_level === 'enhanced' ? '_7B' : ''}`
+    return templates[key] || templates['SDXL_FAST']
+  }
+
+  // CONTENT-NEUTRAL ENHANCEMENT STRATEGY
+  private selectOptimalWorker(context: any): 'chat' | 'wan' {
+    // Route based on technical requirements, not content type
+    if (context.enhancement_type === 'manual' || context.job_type.includes('sdxl')) {
+      return 'chat' // Better instruction following for image optimization
+    }
+    
+    if (context.job_type.includes('video') && context.quality === 'fast') {
+      return 'wan' // Optimized for video generation
+    }
+
+    return 'chat' // Default to instruction model
+  }
+
+  // TOKEN MANAGEMENT (CRITICAL BUG FIX)
+  private async postProcessEnhancement(
+    enhanced_prompt: string, 
+    context: any
+  ): Promise<any> {
+    
+    const token_count = estimateTokens(enhanced_prompt)
+    const template = this.getSystemPromptTemplate(context)
+    
+    // FIX: Check enhanced prompt tokens, not original
+    if (token_count > template.max_tokens) {
+      console.log(`🔧 Compressing ${token_count} tokens to ${template.token_target}`)
+      
+      const compressed = await this.intelligentCompress(
+        enhanced_prompt, 
+        template.token_target,
+        template.optimization_strategy
+      )
+      
       return {
-        enhancedPrompt,
-        modelUsed: 'rule_based_with_compression',
-        compressionApplied: true,
-        fallbackReason: 'sdxl_token_limit_exceeded'
+        enhanced_prompt: compressed,
+        original_tokens: token_count,
+        final_tokens: estimateTokens(compressed),
+        compression_applied: true,
+        optimization_strategy: template.optimization_strategy
+      }
+    }
+
+    return {
+      enhanced_prompt,
+      original_tokens: token_count,
+      final_tokens: token_count,
+      compression_applied: false,
+      optimization_strategy: template.optimization_strategy
+    }
+  }
+
+  // INTELLIGENT COMPRESSION PRESERVING VISUAL QUALITY
+  private async intelligentCompress(
+    prompt: string, 
+    target_tokens: number, 
+    strategies: string[]
+  ): Promise<string> {
+    
+    const words = prompt.split(' ')
+    
+    if (words.length <= target_tokens) {
+      return prompt
+    }
+
+    // Priority preservation based on visual importance
+    const high_priority_terms = [
+      'masterpiece', 'best quality', 'ultra detailed', '4K', '8K', 
+      'professional photography', 'photorealistic', 'detailed',
+      'lighting', 'composition', 'cinematic'
+    ]
+
+    const medium_priority_terms = [
+      'sharp focus', 'high resolution', 'studio', 'natural',
+      'professional', 'realistic', 'smooth', 'quality'
+    ]
+
+    let preserved_words: string[] = []
+    let remaining_words: string[] = []
+
+    // First pass: preserve high priority terms and their context
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i]
+      const isHighPriority = high_priority_terms.some(term => 
+        word.toLowerCase().includes(term.toLowerCase())
+      )
+      
+      if (isHighPriority) {
+        preserved_words.push(word)
+      } else {
+        remaining_words.push(word)
+      }
+    }
+
+    // Second pass: fill remaining slots intelligently
+    const available_slots = target_tokens - preserved_words.length
+    
+    if (available_slots > 0) {
+      // Prioritize subject and main descriptors
+      const subject_words = remaining_words.slice(0, Math.min(available_slots, 20))
+      preserved_words.push(...subject_words)
+    }
+
+    const compressed = preserved_words.slice(0, target_tokens).join(' ')
+    
+    console.log(`✂️ Intelligent compression: ${words.length} → ${preserved_words.length} tokens`)
+    
+    return compressed
+  }
+
+  // MAIN ORCHESTRATION - CONTENT NEUTRAL
+  async enhancePrompt(request: any): Promise<any> {
+    const context = this.buildEnhancementContext(request)
+    const template = this.getSystemPromptTemplate(context)
+    const worker_target = this.selectOptimalWorker(context)
+    
+    // Call worker with technical optimization context
+    const worker_response = await this.callWorkerWithContext(
+      worker_target,
+      {
+        prompt: request.prompt,
+        system_prompt: template.system_instruction,
+        context: context,
+        optimization_rules: template.optimization_strategy
+      }
+    )
+
+    if (worker_response.success) {
+      // CRITICAL: Post-enhancement token management
+      const processed = await this.postProcessEnhancement(
+        worker_response.enhanced_prompt,
+        context
+      )
+
+      // Technical performance tracking
+      await this.trackEnhancementMetrics(request, processed, template)
+
+      return {
+        success: true,
+        enhanced_prompt: processed.enhanced_prompt,
+        optimization: {
+          strategy_used: template.id,
+          worker_used: worker_target,
+          compression_applied: processed.compression_applied,
+          token_optimization: {
+            original: estimateTokens(request.prompt),
+            enhanced: processed.original_tokens,
+            final: processed.final_tokens,
+            target: template.token_target
+          }
+        },
+        metadata: {
+          version: template.version,
+          model_target: context.model_target,
+          quality_level: context.quality_level
+        }
+      }
+    }
+
+    // Fallback to worker's built-in optimization
+    return worker_response
+  }
+
+  private buildEnhancementContext(request: any): any {
+    // Determine model target based on job type
+    const model_target = request.job_type.includes('sdxl') ? 'SDXL' : 'WAN'
+    const enhancement_level = request.job_type.includes('7b') ? 'enhanced' : 'standard'
+    
+    return {
+      job_type: request.job_type,
+      quality_level: request.quality,
+      model_target: model_target,
+      enhancement_level: enhancement_level,
+      enhancement_type: 'technical_optimization',
+      user_preferences: request.preferences
+    }
+  }
+
+  private async callWorkerWithContext(worker_target: 'chat' | 'wan', payload: any): Promise<any> {
+    try {
+      if (worker_target === 'chat') {
+        return await tryInstructEnhancement(payload.prompt, {
+          isSDXL: payload.context.model_target === 'SDXL',
+          isVideo: payload.context.job_type.includes('video'),
+          isEnhanced: payload.context.enhancement_level === 'enhanced',
+          quality: payload.context.quality_level,
+          selectedModel: 'qwen_instruct',
+          system_prompt: payload.system_prompt
+        })
+      } else {
+        return await tryBaseEnhancement(payload.prompt, {
+          isSDXL: payload.context.model_target === 'SDXL',
+          isVideo: payload.context.job_type.includes('video'),
+          isEnhanced: payload.context.enhancement_level === 'enhanced',
+          quality: payload.context.quality_level,
+          selectedModel: 'qwen_base',
+          system_prompt: payload.system_prompt
+        })
+      }
+    } catch (error) {
+      console.warn(`❌ Worker ${worker_target} failed, using fallback`)
+      return {
+        success: false,
+        enhanced_prompt: payload.prompt,
+        fallback_reason: `${worker_target}_worker_failed`
       }
     }
   }
 
-  // Route based on selected model
-  if (selectedModel === 'qwen_instruct') {
-    return await tryInstructEnhancement(originalPrompt, config)
-  } else {
-    return await tryBaseEnhancement(originalPrompt, config)
+  private async trackEnhancementMetrics(request: any, processed: any, template: any): Promise<void> {
+    // TODO: Implement analytics tracking
+    console.log('📊 Enhancement metrics:', {
+      strategy: template.id,
+      compression: processed.compression_applied,
+      token_efficiency: processed.final_tokens / template.token_target
+    })
   }
 }
 
 /**
- * Try Chat Worker (Qwen Instruct) enhancement with fallback
+ * Try Chat Worker (Qwen Instruct) enhancement with system prompts
  */
 async function tryInstructEnhancement(originalPrompt: string, config: any): Promise<{
   enhancedPrompt: string
@@ -174,7 +431,8 @@ async function tryInstructEnhancement(originalPrompt: string, config: any): Prom
       return {
         enhancedPrompt,
         modelUsed: 'qwen_instruct',
-        compressionApplied: false
+        compressionApplied: false,
+        success: true
       }
     } else {
       console.log('⚠️ Chat worker unavailable, falling back to WAN worker')
@@ -187,7 +445,7 @@ async function tryInstructEnhancement(originalPrompt: string, config: any): Prom
 }
 
 /**
- * Try WAN Worker (Qwen Base) enhancement with fallback
+ * Try WAN Worker (Qwen Base) enhancement with system prompts
  */
 async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<{
   enhancedPrompt: string
@@ -195,11 +453,13 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
   compressionApplied: boolean
   fallbackReason?: string
 }> {
-  const { isSDXL, isVideo, quality } = config
+  const { isSDXL, isVideo, quality, system_prompt } = config
   
   try {
-    // Use existing WAN worker enhancement
-    const qwenEnhancedPrompt = await enhanceWithQwen(originalPrompt)
+    // Use WAN worker enhancement with system prompt if available
+    const qwenEnhancedPrompt = system_prompt 
+      ? await enhanceWithSystemPrompt(originalPrompt, system_prompt)
+      : await enhanceWithQwen(originalPrompt)
     
     // Add quality tags based on job type
     let finalPrompt = qwenEnhancedPrompt
@@ -214,7 +474,8 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
     return {
       enhancedPrompt: finalPrompt,
       modelUsed: 'qwen_base',
-      compressionApplied: false
+      compressionApplied: false,
+      success: true
     }
   } catch (error) {
     console.warn('⚠️ WAN worker enhancement failed, falling back to rule-based:', error)
@@ -233,7 +494,8 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
       enhancedPrompt: fallbackPrompt,
       modelUsed: 'rule_based',
       compressionApplied: false,
-      fallbackReason: 'wan_worker_unavailable'
+      fallbackReason: 'wan_worker_unavailable',
+      success: true
     }
   }
 }
@@ -644,17 +906,24 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
     throw new Error('WAN_WORKER_API_KEY not configured')
   }
 
+  const requestBody = {
+    prompt: prompt,
+    model: 'qwen_instruct',
+    enhance_type: 'conversational'
+  }
+
+  // Add system prompt if available
+  if (config.system_prompt) {
+    requestBody.system_prompt = config.system_prompt
+  }
+
   const response = await fetch(`${chatWorkerUrl}/enhance`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      prompt: prompt,
-      model: 'qwen_instruct',
-      enhance_type: 'conversational'
-    }),
+    body: JSON.stringify(requestBody),
     signal: AbortSignal.timeout(30000) // 30 second timeout
   })
 
@@ -666,6 +935,50 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
   
   if (!result.enhanced_prompt) {
     throw new Error('No enhanced_prompt in chat worker response')
+  }
+
+  return result.enhanced_prompt
+}
+
+/**
+ * Enhance prompt using WAN worker with system prompt
+ */
+async function enhanceWithSystemPrompt(prompt: string, systemPrompt: string): Promise<string> {
+  console.log('🤖 Calling WAN worker with system prompt:', { 
+    promptLength: prompt.length,
+    systemPromptLength: systemPrompt.length 
+  })
+  
+  const workerUrl = await getActiveWorkerUrl()
+  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
+  
+  if (!workerUrl || !apiKey) {
+    throw new Error('Worker configuration not available')
+  }
+
+  const response = await fetch(`${workerUrl}/enhance`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      prompt: prompt,
+      model: 'qwen_base',
+      enhance_type: 'natural_language',
+      system_prompt: systemPrompt
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Worker response not ok: ${response.status} - ${errorText}`)
+  }
+
+  const result = await response.json()
+  
+  if (!result.enhanced_prompt) {
+    throw new Error('No enhanced_prompt in worker response')
   }
 
   return result.enhanced_prompt

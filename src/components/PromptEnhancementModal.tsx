@@ -38,6 +38,13 @@ interface EnhancementResult {
     token_count: number;
     compression_applied: boolean;
     fallback_reason?: string;
+    token_optimization?: {
+      original: number;
+      enhanced: number;
+      final: number;
+      target: number;
+    };
+    version?: string;
   };
 }
 
@@ -267,25 +274,65 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
 
               {/* Enhancement Metadata */}
               {enhancementResult && (
-                <div className="bg-muted/50 p-3 rounded-lg">
+                <div className="bg-muted/50 p-3 rounded-lg space-y-3">
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">Model:</span>
                       <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.model_used}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Expansion:</span>
-                      <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.expansion_percentage}%</span>
-                    </div>
-                    <div>
                       <span className="text-muted-foreground">Strategy:</span>
                       <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.enhancement_strategy}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Tokens:</span>
-                      <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.token_count}</span>
+                      <span className="text-muted-foreground">Version:</span>
+                      <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.version || '2.1'}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Expansion:</span>
+                      <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.expansion_percentage}%</span>
                     </div>
                   </div>
+                  
+                  {/* Token Optimization Details */}
+                  {enhancementResult.enhancement_metadata.token_optimization && (
+                    <div className="border-t pt-2">
+                      <h5 className="text-xs font-medium text-muted-foreground mb-2">Token Optimization</h5>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Original:</span>
+                          <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.token_optimization.original}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Enhanced:</span>
+                          <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.token_optimization.enhanced}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Final:</span>
+                          <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.token_optimization.final}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Target:</span>
+                          <span className="ml-2 font-medium">{enhancementResult.enhancement_metadata.token_optimization.target}</span>
+                        </div>
+                      </div>
+                      {enhancementResult.enhancement_metadata.compression_applied && (
+                        <div className="mt-2">
+                          <Badge variant="secondary" className="text-xs">
+                            🔧 Compression Applied
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {enhancementResult.enhancement_metadata.fallback_reason && (
+                    <div className="border-t pt-2">
+                      <Badge variant="outline" className="text-xs">
+                        ⚠️ Fallback: {enhancementResult.enhancement_metadata.fallback_reason}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               )}
             </>

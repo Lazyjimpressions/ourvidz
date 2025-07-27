@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useGeneration } from "@/hooks/useGeneration";
 import { useGenerationStatus } from "@/hooks/useGenerationStatus";
+import { PromptEnhancementModal } from "@/components/PromptEnhancementModal";
 import { Image, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ export const HighImageGenerator = ({
 }: HighImageGeneratorProps) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
+  const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
   const { generateContent, isGenerating, currentJob, error } = useGeneration();
   const { data: generationData } = useGenerationStatus(generatedId, 'image_high');
@@ -80,7 +82,19 @@ export const HighImageGenerator = ({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="prompt">Prompt</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="prompt">Prompt</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowEnhancementModal(true)}
+              disabled={isGenerating || !prompt.trim()}
+              className="text-xs h-6 px-2"
+            >
+              <Sparkles className="h-3 w-3 mr-1" />
+              Enhance
+            </Button>
+          </div>
           <Textarea
             id="prompt"
             value={prompt}
@@ -135,6 +149,17 @@ export const HighImageGenerator = ({
             <p className="text-xs text-red-600">{error}</p>
           </div>
         )}
+
+        <PromptEnhancementModal
+          isOpen={showEnhancementModal}
+          onClose={() => setShowEnhancementModal(false)}
+          onAccept={(enhancedPrompt) => setPrompt(enhancedPrompt)}
+          originalPrompt={prompt}
+          jobType="sdxl_image_high"
+          format="image"
+          quality="high"
+          selectedModel="qwen_instruct"
+        />
       </CardContent>
     </Card>
   );
