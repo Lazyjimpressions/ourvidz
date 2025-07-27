@@ -371,8 +371,16 @@ serve(async (req)=>{
         } else if (enhancementData?.success && enhancementData?.enhanced_prompt) {
           enhancementResult = enhancementData;
           workingPrompt = enhancementData.enhanced_prompt;
-          // Fix: Extract enhancement strategy from correct field
-          enhancementStrategy = enhancementData.optimization?.strategy_used || enhancementData.enhancement_metadata?.enhancement_strategy || 'enhanced';
+          // PHASE 1 FIX: Extract enhancement strategy from correct field path
+          enhancementStrategy = enhancementData.enhancement_metadata?.enhancement_strategy || enhancementData.optimization?.strategy_used || 'enhanced';
+          
+          console.log('🎯 Enhancement strategy extracted:', {
+            strategy: enhancementStrategy,
+            hasEnhancementMetadata: !!enhancementData.enhancement_metadata,
+            hasOptimization: !!enhancementData.optimization,
+            enhancementMetadataKeys: enhancementData.enhancement_metadata ? Object.keys(enhancementData.enhancement_metadata) : null,
+            optimizationKeys: enhancementData.optimization ? Object.keys(enhancementData.optimization) : null
+          });
           
           console.log('✅ Prompt enhanced successfully:', {
             originalLength: prompt.length,
