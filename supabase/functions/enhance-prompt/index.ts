@@ -1065,6 +1065,15 @@ async function checkChatWorkerAvailability(workerUrl: string): Promise<boolean> 
 async function enhanceWithChatWorker(prompt: string, config: any): Promise<string> {
   console.log('🤖 Calling Chat worker enhancement for prompt:', { prompt: prompt.length })
   
+  // PHASE 1 FIX: Add comprehensive debug logging for worker request
+  console.log('🔍 Chat worker config received:', {
+    isSDXL: config.isSDXL,
+    isVideo: config.isVideo,
+    quality: config.quality,
+    selectedModel: config.selectedModel,
+    hasSystemPrompt: !!config.system_prompt
+  })
+  
   const chatWorkerUrl = await discoverChatWorker()
   const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
   
@@ -1072,10 +1081,20 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
     throw new Error('WAN_WORKER_API_KEY not configured')
   }
 
+  // PHASE 1 FIX: Construct proper request body with job type information
   const requestBody = {
     prompt: prompt,
     model: 'qwen_instruct',
     enhance_type: 'conversational',
+    // CRITICAL FIX: Pass job type information to worker
+    job_type: config.isSDXL 
+      ? `sdxl_image_${config.quality || 'fast'}` 
+      : config.isVideo 
+        ? `wan_video_${config.quality || 'fast'}`
+        : `wan_image_${config.quality || 'fast'}`,
+    quality: config.quality || 'fast',
+    format: config.isVideo ? 'video' : 'image',
+    model_target: config.isSDXL ? 'SDXL' : 'WAN',
     // Add cache-busting for regeneration
     cache_bust: config.regeneration ? Date.now().toString() : undefined
   }
@@ -1084,6 +1103,16 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
   if (config.system_prompt) {
     requestBody.system_prompt = config.system_prompt
   }
+  
+  // PHASE 3 FIX: Log the exact payload being sent to worker
+  console.log('📤 Sending request to chat worker:', {
+    url: `${chatWorkerUrl}/enhance`,
+    bodyKeys: Object.keys(requestBody),
+    jobType: requestBody.job_type,
+    quality: requestBody.quality,
+    modelTarget: requestBody.model_target,
+    hasSystemPrompt: !!requestBody.system_prompt
+  })
 
   const response = await fetch(`${chatWorkerUrl}/enhance`, {
     method: 'POST',

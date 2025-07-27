@@ -371,15 +371,33 @@ serve(async (req)=>{
         } else if (enhancementData?.success && enhancementData?.enhanced_prompt) {
           enhancementResult = enhancementData;
           workingPrompt = enhancementData.enhanced_prompt;
-          // PHASE 1 FIX: Extract enhancement strategy from correct field path
-          enhancementStrategy = enhancementData.enhancement_metadata?.enhancement_strategy || enhancementData.optimization?.strategy_used || 'enhanced';
+          
+          // PHASE 2 FIX: Comprehensive enhancement strategy extraction with debug logging
+          console.log('🔍 Raw enhancement data for strategy extraction:', {
+            hasSuccess: !!enhancementData.success,
+            hasEnhancedPrompt: !!enhancementData.enhanced_prompt,
+            hasEnhancementMetadata: !!enhancementData.enhancement_metadata,
+            enhancementMetadataKeys: enhancementData.enhancement_metadata ? Object.keys(enhancementData.enhancement_metadata) : null,
+            metadataStrategy: enhancementData.enhancement_metadata?.enhancement_strategy,
+            topLevelStrategy: enhancementData.enhancement_strategy,
+            hasOptimization: !!enhancementData.optimization,
+            optimizationStrategy: enhancementData.optimization?.strategy_used
+          });
+          
+          // Extract strategy from multiple possible locations
+          enhancementStrategy = 
+            enhancementData.enhancement_metadata?.enhancement_strategy || 
+            enhancementData.enhancement_strategy ||
+            enhancementData.optimization?.strategy_used || 
+            enhancementData.strategy ||
+            'enhanced_unknown';
           
           console.log('🎯 Enhancement strategy extracted:', {
-            strategy: enhancementStrategy,
-            hasEnhancementMetadata: !!enhancementData.enhancement_metadata,
-            hasOptimization: !!enhancementData.optimization,
-            enhancementMetadataKeys: enhancementData.enhancement_metadata ? Object.keys(enhancementData.enhancement_metadata) : null,
-            optimizationKeys: enhancementData.optimization ? Object.keys(enhancementData.optimization) : null
+            finalStrategy: enhancementStrategy,
+            extractionSource: enhancementData.enhancement_metadata?.enhancement_strategy ? 'enhancement_metadata' :
+                             enhancementData.enhancement_strategy ? 'top_level' :
+                             enhancementData.optimization?.strategy_used ? 'optimization' :
+                             enhancementData.strategy ? 'strategy_field' : 'fallback'
           });
           
           console.log('✅ Prompt enhanced successfully:', {
