@@ -9,6 +9,9 @@ interface QueueJobParams {
   metadata?: any;
   projectId?: string;
   videoId?: string;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  isPromptEnhanced?: boolean;
 }
 
 export const useJobQueue = () => {

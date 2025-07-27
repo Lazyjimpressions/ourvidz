@@ -64,7 +64,12 @@ export class GenerationService {
       };
 
       const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: jobBody
+        body: {
+          ...jobBody,
+          originalPrompt: request.originalPrompt,
+          enhancedPrompt: request.enhancedPrompt,
+          isPromptEnhanced: request.isPromptEnhanced
+        }
       });
 
       if (error) {

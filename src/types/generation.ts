@@ -141,6 +141,9 @@ export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
 export interface GenerationRequest {
   format: GenerationFormat;
   prompt: string;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  isPromptEnhanced?: boolean;
   projectId?: string;
   videoId?: string;
   imageId?: string;

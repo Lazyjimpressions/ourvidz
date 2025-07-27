@@ -16,6 +16,11 @@ import { ReferenceSettingsModal } from './workspace/ReferenceSettingsModal';
 interface VideoInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  isPromptEnhanced?: boolean;
+  onEnhancementApply?: (enhancedPrompt: string, originalPrompt: string) => void;
+  onRevertToOriginal?: () => void;
   onGenerate: () => void;
   isGenerating: boolean;
   onSwitchToImage?: () => void;
@@ -50,6 +55,11 @@ interface VideoInputControlsProps {
 export const VideoInputControls = ({
   prompt,
   setPrompt,
+  originalPrompt,
+  enhancedPrompt,
+  isPromptEnhanced = false,
+  onEnhancementApply,
+  onRevertToOriginal,
   onGenerate,
   isGenerating,
   onSwitchToImage,
@@ -375,8 +385,12 @@ export const VideoInputControls = ({
       <PromptEnhancementModal
         isOpen={showEnhancementModal}
         onClose={() => setShowEnhancementModal(false)}
-        onAccept={(enhancedPrompt) => {
-          setPrompt(enhancedPrompt);
+        onAccept={(enhanced) => {
+          if (onEnhancementApply) {
+            onEnhancementApply(enhanced, prompt);
+          } else {
+            setPrompt(enhanced);
+          }
           setShowEnhancementModal(false);
         }}
         originalPrompt={prompt}

@@ -73,7 +73,16 @@ serve(async (req)=>{
       });
     }
     console.log('✅ User authenticated:', user.id);
-    const { jobType, metadata, projectId, videoId, imageId } = await req.json();
+    const { 
+      jobType, 
+      metadata = {}, 
+      projectId,
+      videoId,
+      imageId,
+      originalPrompt,
+      enhancedPrompt,
+      isPromptEnhanced
+    } = await req.json();
     console.log('📋 Creating job with STANDARDIZED worker parameters:', {
       jobType,
       projectId,

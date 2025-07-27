@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2, Settings } from "lucide-react";
+import { Image, Upload, Sparkles, Play, Zap, Crown, Archive, Link, Wand2, Settings, RotateCcw } from "lucide-react";
 import { ImagesQuantityButton } from "@/components/workspace/ImagesQuantityButton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -17,6 +17,11 @@ import { CompelModal } from './workspace/CompelModal';
 interface ImageInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
+  originalPrompt?: string;
+  enhancedPrompt?: string;
+  isPromptEnhanced?: boolean;
+  onEnhancementApply?: (enhancedPrompt: string, originalPrompt: string) => void;
+  onRevertToOriginal?: () => void;
   onGenerate: () => void;
   isGenerating: boolean;
   onSwitchToVideo?: () => void;
@@ -59,6 +64,11 @@ interface ImageInputControlsProps {
 export const ImageInputControls = ({
   prompt,
   setPrompt,
+  originalPrompt,
+  enhancedPrompt,
+  isPromptEnhanced = false,
+  onEnhancementApply,
+  onRevertToOriginal,
   onGenerate,
   isGenerating,
   onSwitchToVideo,
@@ -139,12 +149,20 @@ export const ImageInputControls = ({
           </div>
 
           {/* Main Text Input - Extended Width */}
-          <div className="flex-1 max-w-4xl">
+          <div className="flex-1 max-w-4xl relative">
             <Textarea
               value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                // Reset enhancement state if user manually edits
+                if (isPromptEnhanced && e.target.value !== enhancedPrompt) {
+                  // Don't auto-reset here, let user decide
+                }
+              }}
               placeholder="A close-up of a woman talking on the phone..."
-              className="bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full"
+              className={`bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full ${
+                isPromptEnhanced ? 'border-l-2 border-l-purple-500' : ''
+              }`}
               disabled={isGenerating}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -153,6 +171,28 @@ export const ImageInputControls = ({
                 }
               }}
             />
+            {isPromptEnhanced && (
+              <div className="absolute top-1 right-1 flex gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onRevertToOriginal}
+                      className="h-6 w-6 p-0 bg-gray-800/80 hover:bg-gray-700 text-purple-300"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">Revert to original prompt</p>
+                  </TooltipContent>
+                </Tooltip>
+                <div className="bg-purple-600/20 text-purple-300 text-xs px-2 py-1 rounded">
+                  Enhanced
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sparkle Buttons - Right Justified */}
@@ -437,8 +477,12 @@ export const ImageInputControls = ({
       <PromptEnhancementModal
         isOpen={showEnhancementModal}
         onClose={() => setShowEnhancementModal(false)}
-        onAccept={(enhancedPrompt) => {
-          setPrompt(enhancedPrompt);
+        onAccept={(enhanced) => {
+          if (onEnhancementApply) {
+            onEnhancementApply(enhanced, prompt);
+          } else {
+            setPrompt(enhanced);
+          }
           setShowEnhancementModal(false);
         }}
         originalPrompt={prompt}

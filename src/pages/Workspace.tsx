@@ -38,6 +38,9 @@ const Workspace = () => {
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
   const [prompt, setPrompt] = useState('');
+  const [originalPrompt, setOriginalPrompt] = useState('');
+  const [enhancedPrompt, setEnhancedPrompt] = useState('');
+  const [isPromptEnhanced, setIsPromptEnhanced] = useState(false);
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
@@ -336,8 +339,11 @@ const Workspace = () => {
 
       console.log('🚀 Starting generation with corrected settings:', {
         format: selectedMode,
-        originalPrompt: prompt.trim(),
+        currentPrompt: prompt.trim(),
+        originalPrompt: isPromptEnhanced ? originalPrompt : prompt.trim(),
+        enhancedPrompt: isPromptEnhanced ? enhancedPrompt : null,
         finalPrompt,
+        isPromptEnhanced,
         optimizationEnabled: optimizeForCharacter,
         activeReferences: isVideoMode ? videoReferences : activeReferences,
         referenceStrength: referenceStrength, // Log the actual value being used
@@ -348,10 +354,13 @@ const Workspace = () => {
         isVideoMode
       });
 
-      // Build generation request
+      // Build generation request with enhanced prompt tracking
       const generationRequest = {
         format: selectedMode,
         prompt: finalPrompt,
+        originalPrompt: isPromptEnhanced ? originalPrompt : prompt.trim(),
+        enhancedPrompt: isPromptEnhanced ? enhancedPrompt : null,
+        isPromptEnhanced,
         referenceImageUrl: isVideoMode 
           ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
           : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
@@ -780,8 +789,24 @@ const Workspace = () => {
       <div className="p-6 bg-black">
         {isVideoMode ? (
           <VideoInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
+        prompt={prompt}
+        setPrompt={setPrompt}
+        originalPrompt={originalPrompt}
+        enhancedPrompt={enhancedPrompt}
+        isPromptEnhanced={isPromptEnhanced}
+        onEnhancementApply={(enhanced, original) => {
+          setEnhancedPrompt(enhanced);
+          setOriginalPrompt(original);
+          setPrompt(enhanced);
+          setIsPromptEnhanced(true);
+        }}
+        onRevertToOriginal={() => {
+          if (isPromptEnhanced && originalPrompt) {
+            setPrompt(originalPrompt);
+            setEnhancedPrompt('');
+            setIsPromptEnhanced(false);
+          }
+        }}
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
             onSwitchToImage={() => {
