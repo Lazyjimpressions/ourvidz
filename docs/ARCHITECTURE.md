@@ -1,9 +1,9 @@
 # OurVidz.com - Technical Architecture
 
-**Last Updated:** July 16, 2025  
-**System:** Dual Worker Architecture on RTX 6000 ADA (48GB VRAM)  
+**Last Updated:** July 27, 2025  
+**System:** Triple Worker Architecture on RTX 6000 ADA (48GB VRAM)  
 **Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
-**Status:** ✅ All 10 Job Types Available - Multi-Reference System Live
+**Status:** ✅ Hybrid Enhancement System Active - All 10 Job Types Available
 
 ---
 
@@ -11,12 +11,13 @@
 
 OurVidz is a comprehensive AI content generation platform featuring:
 
-- **Dual Worker Architecture**: SDXL for high-quality images, WAN for videos
+- **Triple Worker Architecture**: SDXL for high-quality images, Chat for prompt enhancement, WAN for videos
+- **Hybrid Enhancement System**: ContentCompliantEnhancementOrchestrator with AI-powered enhancement
 - **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
-- **Multi-Reference System (SDXL Only)**: Supports separate reference images for style, composition, and character. Reference images are stored in a dedicated Supabase bucket.
-- **Compel Integration (SDXL)**: Present in code, not used for SDXL due to model incompatibility. Prompt library enhancement is in progress.
-- **Qwen 7B Prompt Enhancement**: Used for WAN jobs and instant enhancement in frontend modal.
-- **Edge Functions**: All four (queue-job, job-callback, enhance-prompt, generate-admin-image) are live and use standardized parameters.
+- **Multi-Reference System (SDXL Only)**: Supports separate reference images for style, composition, and character
+- **AI-Powered Enhancement**: System prompts, intelligent worker selection, and comprehensive analytics
+- **Auto-Enhancement**: Intelligent triggers based on prompt quality analysis
+- **Edge Functions**: All functions operational including enhance-prompt with orchestrator
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
 - **Standardized Callbacks**: Consistent parameters across all workers
@@ -44,7 +45,10 @@ src/
 ├── hooks/
 │   ├── useGeneration.ts               # Generation management
 │   ├── useRealtimeWorkspace.ts        # Real-time workspace updates
-│   └── useRealtimeGenerationStatus.ts # Real-time status updates
+│   ├── useRealtimeGenerationStatus.ts # Real-time status updates
+│   ├── useEnhancementAnalytics.ts     # Enhancement analytics tracking
+│   ├── useEnhancementQuality.ts       # Quality validation
+│   └── useAutoEnhancement.ts          # Auto-enhancement triggers
 └── types/
     └── workspace.ts                   # Type definitions
 ```
@@ -54,7 +58,9 @@ src/
 supabase/
 ├── functions/
 │   ├── queue-job/             # Job submission and queue management
-│   └── job-callback/          # Worker callback processing
+│   ├── job-callback/          # Worker callback processing
+│   ├── enhance-prompt/        # AI-powered prompt enhancement
+│   └── register-chat-worker/  # Chat worker registration
 ├── migrations/                # Database schema updates
 └── config.toml               # Supabase configuration
 ```
@@ -63,12 +69,29 @@ supabase/
 ```
 workers/
 ├── sdxl_worker.py            # SDXL image generation
+├── chat_worker.py            # Chat worker for prompt enhancement
 └── wan_worker.py             # WAN video and enhanced image generation
 ```
 
 ---
 
 ## **🔄 Data Flow Architecture**
+
+### **Hybrid Enhancement Flow**
+```mermaid
+graph TD
+    A[User Prompt] --> B[Enhance Prompt Edge Function]
+    B --> C[ContentCompliantEnhancementOrchestrator]
+    C --> D[System Prompt Selection]
+    D --> E[Worker Selection]
+    E --> F[Chat Worker Enhancement]
+    E --> G[WAN Worker Enhancement]
+    F --> H[Token Compression]
+    G --> H
+    H --> I[Quality Validation]
+    I --> J[Enhanced Prompt Return]
+    J --> K[Generation Job]
+```
 
 ### **Job Submission Flow**
 ```mermaid

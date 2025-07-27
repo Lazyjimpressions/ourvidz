@@ -1,18 +1,124 @@
 # OurVidz Edge Functions - Complete Implementation Reference
 
-**Last Updated:** July 16, 2025  
-**Status:** ✅ Production Ready - All Functions Aligned with Worker Conventions, Multi-Reference System Live
+**Last Updated:** July 27, 2025  
+**Status:** ✅ Production Ready - Hybrid Enhancement System Active, ContentCompliantEnhancementOrchestrator Live
 
 ---
 
 ## **🚀 Edge Functions Overview**
 
-OurVidz uses two core edge functions for job management:
+OurVidz uses three core edge functions for job management and enhancement:
 
 1. **`queue-job`** - Job submission and queue management
 2. **`job-callback`** - Worker callback processing and status updates
+3. **`enhance-prompt`** - AI-powered prompt enhancement with ContentCompliantEnhancementOrchestrator
 
-Both functions have been updated with standardized parameters, enhanced error handling, and comprehensive metadata management.
+All functions have been updated with the hybrid enhancement system, standardized parameters, enhanced error handling, and comprehensive metadata management.
+
+---
+
+## **🎯 Enhanced Prompt Function (`/functions/v1/enhance-prompt`)**
+
+### **Purpose**
+AI-powered prompt enhancement using the ContentCompliantEnhancementOrchestrator with system prompts, intelligent worker selection, and comprehensive analytics.
+
+### **Key Features (July 27, 2025)**
+- **ContentCompliantEnhancementOrchestrator**: AI-powered enhancement with system prompts
+- **System Prompt Templates**: 4 specialized prompts for different model/quality combinations
+- **Intelligent Worker Selection**: Routes to chat vs WAN workers based on job type
+- **Critical Token Management**: Fixed SDXL compression (77-token CLIP encoder limit)
+- **Quality Preservation**: Intelligent compression preserving visual quality terms
+- **Comprehensive Analytics**: Full enhancement tracking and quality validation
+- **Multi-Tier Fallback**: Robust error handling with graceful degradation
+
+### **System Prompt Templates**
+
+#### **SDXL_FAST (75 tokens)**
+```typescript
+"Enhance this prompt for SDXL fast generation (15 steps). Focus on visual clarity, composition, and immediate visual impact. Keep the core concept but add cinematic lighting, professional photography terms, and visual appeal. Target: 75 tokens max."
+```
+
+#### **SDXL_HIGH (75 tokens)**
+```typescript
+"Enhance this prompt for SDXL high-quality generation (25 steps). Focus on professional quality, artistic excellence, and detailed visual elements. Add masterful composition, professional photography terms, and artistic direction. Target: 75 tokens max."
+```
+
+#### **WAN_FAST (175 tokens)**
+```typescript
+"Enhance this prompt for WAN fast video generation. Focus on motion, temporal consistency, and cinematic flow. Add dynamic movement, camera techniques, and visual storytelling elements. Emphasize smooth transitions and engaging visual sequences. Target: 175 tokens max."
+```
+
+#### **WAN_HIGH_7B (250 tokens)**
+```typescript
+"Enhance this prompt for WAN high-quality video generation with 7B enhancement. Focus on cinematic quality, artistic excellence, and sophisticated visual storytelling. Add masterful cinematography, professional film techniques, and artistic direction. Emphasize visual coherence and temporal consistency. Target: 250 tokens max."
+```
+
+### **Request Parameters**
+
+#### **Required Parameters**
+```typescript
+{
+  prompt: string,
+  jobType: 'sdxl_image_fast' | 'sdxl_image_high' | 'image_fast' | 'image_high' | 
+           'video_fast' | 'video_high' | 'image7b_fast_enhanced' | 'image7b_high_enhanced' | 
+           'video7b_fast_enhanced' | 'video7b_high_enhanced',
+  userId: string
+}
+```
+
+#### **Optional Parameters**
+```typescript
+{
+  sessionId?: string,  // For conversation tracking
+  quality?: 'fast' | 'high',  // Override quality detection
+  model?: 'sdxl' | 'wan' | 'auto'  // Override model selection
+}
+```
+
+### **Response Format**
+```typescript
+{
+  success: boolean,
+  enhancedPrompt: string,
+  originalPrompt: string,
+  compressionRatio: number,
+  qualityScore: number,
+  tokenCount: {
+    original: number,
+    enhanced: number,
+    compressed: number
+  },
+  analytics: {
+    enhancementMethod: 'chat_worker' | 'wan_worker' | 'system_prompt',
+    processingTime: number,
+    fallbackUsed: boolean,
+    qualityMetrics: {
+      coherence: number,
+      visualAppeal: number,
+      technicalQuality: number
+    }
+  }
+}
+```
+
+### **Orchestrator Architecture**
+
+#### **ContentCompliantEnhancementOrchestrator Class**
+```typescript
+class ContentCompliantEnhancementOrchestrator {
+  // Model-specific system prompts
+  private getSystemPromptTemplate(context) { /* 4 specialized prompts */ }
+  
+  // Intelligent worker selection
+  private selectOptimalWorker(context) { /* Chat vs WAN routing */ }
+  
+  // Critical token management
+  private postProcessEnhancement(enhanced, context) { /* Fixed compression */ }
+  
+  // Smart compression preserving quality
+  private intelligentCompress(prompt, target, strategies) { /* Visual quality preservation */ }
+}
+```
 
 ---
 

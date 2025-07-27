@@ -1,14 +1,68 @@
 # OurVidz API Reference
 
-**Last Updated:** July 16, 2025 at 5:05pm AM CST  
-**Status:** ✅ Production Ready - All 10 Job Types Supported, Multi-Reference System Live  
-**System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)
+**Last Updated:** July 27, 2025 at 12:00 PM CST  
+**Status:** ✅ Production Ready - Hybrid Enhancement System Active, All 10 Job Types Supported  
+**System:** Triple Worker (SDXL + Chat + WAN) on RTX 6000 ADA (48GB VRAM)
 
 ---
 
 ## **🎯 Core API Endpoints**
 
-### **1. Queue Job (`/functions/v1/queue-job`)**
+### **1. Enhance Prompt (`/functions/v1/enhance-prompt`)**
+
+**Purpose:** AI-powered prompt enhancement using ContentCompliantEnhancementOrchestrator
+
+**Method:** `POST`
+
+**Authentication:** Required (Bearer token)
+
+**Request Body:**
+```json
+{
+  "prompt": "string",
+  "jobType": "sdxl_image_fast" | "sdxl_image_high" | "image_fast" | "image_high" | "video_fast" | "video_high" | "image7b_fast_enhanced" | "image7b_high_enhanced" | "video7b_fast_enhanced" | "video7b_high_enhanced",
+  "userId": "string",
+  "sessionId": "string",  // Optional - for conversation tracking
+  "quality": "fast" | "high",  // Optional - override quality detection
+  "model": "sdxl" | "wan" | "auto"  // Optional - override model selection
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "enhancedPrompt": "string",
+  "originalPrompt": "string",
+  "compressionRatio": 0.85,
+  "qualityScore": 8.5,
+  "tokenCount": {
+    "original": 45,
+    "enhanced": 120,
+    "compressed": 75
+  },
+  "analytics": {
+    "enhancementMethod": "chat_worker",
+    "processingTime": 2.3,
+    "fallbackUsed": false,
+    "qualityMetrics": {
+      "coherence": 9.2,
+      "visualAppeal": 8.8,
+      "technicalQuality": 8.5
+    }
+  }
+}
+```
+
+**Key Features:**
+- **AI-Powered Enhancement**: ContentCompliantEnhancementOrchestrator with system prompts
+- **System Prompt Templates**: 4 specialized prompts for different model/quality combinations
+- **Intelligent Worker Selection**: Routes to chat vs WAN workers based on job type
+- **Critical Token Management**: Fixed SDXL compression (77-token CLIP encoder limit)
+- **Quality Preservation**: Intelligent compression preserving visual quality terms
+- **Comprehensive Analytics**: Full enhancement tracking and quality validation
+
+### **2. Queue Job (`/functions/v1/queue-job`)**
 
 **Purpose:** Submit generation jobs to the worker queue system
 
@@ -73,7 +127,7 @@
 - **Dual Worker Routing**: Automatic queue selection (SDXL vs WAN)
 - **Comprehensive Metadata**: Enhanced tracking and debugging information
 
-### **2. Job Callback (`/functions/v1/job-callback`)**
+### **3. Job Callback (`/functions/v1/job-callback`)**
 
 **Purpose:** Worker callback endpoint for job status updates
 

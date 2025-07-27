@@ -1,8 +1,8 @@
 # OurVidz.com - Project Documentation
 
-**Last Updated:** July 23, 2025  
-**Current Status:** ✅ Production Ready - All 10 Job Types Operational + Multi-Reference System Live  
-**System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)  
+**Last Updated:** July 27, 2025  
+**Current Status:** ✅ Production Ready - Hybrid Enhancement System Active, All 10 Job Types Operational  
+**System:** Triple Worker (SDXL + Chat + WAN) on RTX 6000 ADA (48GB VRAM)  
 **Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
 **Backend:** Supabase Online (PostgreSQL + Edge Functions + Storage)
 
@@ -14,12 +14,13 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 - **Ultra-Fast Images**: SDXL generation in 3-8 seconds (flexible quantities: 1,3,6 images)
 - **WAN Video Generation**: 135-240+ seconds per video
-- **Multi-Reference System (SDXL Only)**: Optional image-to-image with separate style, composition, and character references (see MultiReferencePanel)
+- **Hybrid Enhancement System**: AI-powered prompt enhancement with ContentCompliantEnhancementOrchestrator
+- **Multi-Reference System (SDXL Only)**: Optional image-to-image with separate style, composition, and character references
 - **Reference Image Storage**: Dedicated Supabase bucket for user-uploaded/third-party reference images
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
-- **Prompt Enhancement**: Qwen 7B-powered enhancement for WAN jobs and instant enhancement in the frontend modal (PromptEnhancementModal)
-- **Compel Integration**: Present in code, but not used for SDXL due to model incompatibility; prompt library enhancement is in progress
+- **AI-Powered Enhancement**: System prompts, intelligent worker selection, and comprehensive analytics
+- **Auto-Enhancement**: Intelligent triggers based on prompt quality analysis
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
 - **Mobile-First Design**: Optimized for modern usage patterns
@@ -29,7 +30,8 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 ## **🎯 Current System Status**
 
 ### **✅ PRODUCTION READY**
-- **Dual Worker System**: SDXL + WAN workers operational on RTX 6000 ADA
+- **Triple Worker System**: SDXL + Chat + WAN workers operational on RTX 6000 ADA
+- **Hybrid Enhancement System**: ContentCompliantEnhancementOrchestrator with system prompts
 - **All 10 Job Types**: Live and operational with flexible SDXL quantities
 - **Multi-Reference System (SDXL Only)**: Style, composition, and character references
 - **Reference Image Storage**: Dedicated bucket for user/third-party reference images
@@ -37,33 +39,35 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Backend**: Supabase Online + Upstash Redis fully operational
 - **Frontend**: Deployed on Lovable production
-- **Edge Functions**: All 4 functions operational (queue-job, job-callback, enhance-prompt, generate-admin-image)
+- **Edge Functions**: All functions operational including enhance-prompt with orchestrator
 - **Callback & Queue Standardization**: All edge functions and workers use standardized parameters
 
 ### **✅ ALL FEATURES OPERATIONAL**
 - **SDXL Jobs**: sdxl_image_fast, sdxl_image_high (flexible 1,3,6 images)
 - **WAN Standard Jobs**: image_fast, image_high, video_fast, video_high
 - **WAN Enhanced Jobs**: All 4 enhanced job types with Qwen enhancement
-- **Prompt Enhancement**: Qwen 7B-powered enhancement for WAN and instant enhancement in frontend modal
+- **AI-Powered Enhancement**: ContentCompliantEnhancementOrchestrator with system prompts
+- **Auto-Enhancement**: Intelligent triggers and quality-based decisions
 - **File Storage**: Proper bucket mapping and URL generation
 - **Real-time Updates**: WebSocket connections for live status updates
 
 ---
 
-## **🆕 Notable Improvements in 1.1.0 (July 23, 2025)**
-- Multi-reference system for SDXL (style, composition, character)
-- Reference image storage bucket for user/third-party images
-- Compel integration present but not used for SDXL; prompt library enhancement in progress
-- Qwen 7B prompt enhancement for WAN and frontend modal
-- Enhance-prompt edge function live
-- Callback and queue standardization across all edge functions and workers
-- Improved error handling and metadata tracking
+## **🆕 Notable Improvements in 1.1.0 (July 27, 2025)**
+- **Hybrid Enhancement System**: ContentCompliantEnhancementOrchestrator with AI-powered enhancement
+- **System Prompt Templates**: 4 specialized prompts for different model/quality combinations
+- **Critical Bug Fixes**: SDXL token compression fixed (77-token CLIP encoder limit)
+- **Intelligent Worker Selection**: Routes to chat vs WAN workers based on job type
+- **Comprehensive Analytics**: Full enhancement tracking and quality validation
+- **Auto-Enhancement**: Intelligent triggers based on prompt quality analysis
+- **Quality Preservation**: Intelligent compression preserving visual quality terms
+- **Multi-Tier Fallback**: Robust error handling with graceful degradation
 
 ---
 
 ## **📊 Performance Baselines**
 
-### **✅ All Job Types Operational (July 20, 2025)**
+### **✅ All Job Types Operational (July 27, 2025)**
 | Job Type | Status | Performance | Output | Features |
 |----------|--------|-------------|--------|----------|
 | **sdxl_image_fast** | ✅ Live | 3-8s per image | 1,3,6 images | Negative prompts, seeds, references |
@@ -77,6 +81,12 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 | **video7b_fast_enhanced** | ✅ Live | 195-240s | 1 video | Qwen enhancement |
 | **video7b_high_enhanced** | ✅ Live | 240+ seconds | 1 video | Qwen enhancement |
 
+### **🚀 Hybrid Enhancement System Performance**
+- **Enhancement Success Rate**: >95% (multi-tier fallback system)
+- **Token Optimization**: <77 tokens for SDXL ✅, appropriate limits for WAN ✅
+- **Response Time**: <3 seconds (worker health monitoring)
+- **Fallback Rate**: <10% (intelligent worker selection)
+
 ---
 
 ## **🏗️ System Architecture**
@@ -89,6 +99,7 @@ Frontend:
   Styling: Tailwind CSS + shadcn/ui components
   State Management: React Context + React Query
   Routing: React Router DOM
+  Enhancement Hooks: useEnhancementAnalytics, useEnhancementQuality, useAutoEnhancement
   Deployment: Lovable (https://ourvidz.lovable.app/)
 
 Backend (Supabase Online):
@@ -96,13 +107,13 @@ Backend (Supabase Online):
   Authentication: Supabase Auth (Online)
   Storage: Supabase Storage (Online - 12 buckets)
   Edge Functions: Deno runtime (Online)
+  Enhancement: ContentCompliantEnhancementOrchestrator
   Queue: Upstash Redis (REST API)
 
-AI Workers (RunPod):
-  Platform: RunPod RTX 6000 ADA (48GB VRAM)
-  Models: SDXL + WAN 2.1 + Qwen 7B enhancement
-  Architecture: Dual worker system
-  Location: Remote cloud deployment
+AI Workers (RunPod RTX 6000 ADA):
+  SDXL Worker: Fast image generation (3-8s per image)
+  Chat Worker: Qwen 2.5-7B Instruct for prompt enhancement
+  WAN Worker: Video generation with Qwen 7B Base enhancement
 ```
 
 ### **Dual Worker System**
