@@ -337,7 +337,7 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    enhancedPrompt = enhancedPrompt || prompt;
+    let workingPrompt = enhancedPrompt || prompt;
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
     
@@ -365,12 +365,12 @@ serve(async (req)=>{
           enhancementStrategy = 'failed';
         } else if (enhancementData?.success && enhancementData?.enhanced_prompt) {
           enhancementResult = enhancementData;
-          enhancedPrompt = enhancementData.enhanced_prompt;
+          workingPrompt = enhancementData.enhanced_prompt;
           enhancementStrategy = enhancementData.enhancement_metadata?.enhancement_strategy || 'enhanced';
           
           console.log('✅ Prompt enhanced successfully:', {
-            originalLength: originalPrompt.length,
-            enhancedLength: enhancedPrompt.length,
+            originalLength: prompt.length,
+            enhancedLength: workingPrompt.length,
             strategy: enhancementStrategy,
             timeMs: enhancementTimeMs
           });
@@ -385,7 +385,7 @@ serve(async (req)=>{
     }
     
     // Use enhanced prompt for job creation
-    const finalPrompt = enhancedPrompt;
+    const finalPrompt = workingPrompt;
 
     // CRITICAL FIX: Generate negative prompt BEFORE creating job record
     let negativePrompt = '';
