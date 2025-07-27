@@ -381,35 +381,62 @@ serve(async (req)=>{
             metadataStrategy: enhancementData.enhancement_metadata?.enhancement_strategy,
             topLevelStrategy: enhancementData.enhancement_strategy,
             hasOptimization: !!enhancementData.optimization,
-            optimizationStrategy: enhancementData.optimization?.strategy_used
+            optimizationStrategy: enhancementData.optimization?.strategy_used,
+            // PHASE 4 DEBUG: Complete response structure
+            fullResponseKeys: Object.keys(enhancementData)
           });
           
-          // Extract strategy from multiple possible locations
+          // PHASE 2 FIX: Extract strategy with proper priority order
           enhancementStrategy = 
+            enhancementData.enhancement_strategy ||                    // Top-level (new structure)
             enhancementData.enhancement_metadata?.enhancement_strategy || 
-            enhancementData.enhancement_strategy ||
             enhancementData.optimization?.strategy_used || 
             enhancementData.strategy ||
             'enhanced_unknown';
           
+          // PHASE 3 FIX: Ensure we use the enhanced prompt, not original
+          if (enhancementData.enhanced_prompt && enhancementData.enhanced_prompt !== prompt) {
+            workingPrompt = enhancementData.enhanced_prompt;
+            console.log('✅ Using enhanced prompt (length changed):', {
+              originalLength: prompt.length,
+              enhancedLength: enhancementData.enhanced_prompt.length,
+              isActuallyEnhanced: enhancementData.enhanced_prompt !== prompt
+            });
+          } else {
+            console.log('⚠️ Enhanced prompt same as original or missing:', {
+              originalLength: prompt.length,
+              enhancedLength: enhancementData.enhanced_prompt?.length || 0,
+              areSame: enhancementData.enhanced_prompt === prompt
+            });
+          }
+          
           console.log('🎯 Enhancement strategy extracted:', {
             finalStrategy: enhancementStrategy,
-            extractionSource: enhancementData.enhancement_metadata?.enhancement_strategy ? 'enhancement_metadata' :
-                             enhancementData.enhancement_strategy ? 'top_level' :
+            extractionSource: enhancementData.enhancement_strategy ? 'top_level' :
+                             enhancementData.enhancement_metadata?.enhancement_strategy ? 'enhancement_metadata' :
                              enhancementData.optimization?.strategy_used ? 'optimization' :
-                             enhancementData.strategy ? 'strategy_field' : 'fallback'
+                             enhancementData.strategy ? 'strategy_field' : 'fallback',
+            promptChanged: workingPrompt !== prompt,
+            // PHASE 4 DEBUG: Additional tracking
+            fullResponseKeys: Object.keys(enhancementData)
           });
           
-          console.log('✅ Prompt enhanced successfully:', {
-            originalLength: prompt.length,
-            enhancedLength: workingPrompt.length,
-            strategy: enhancementStrategy,
-            timeMs: enhancementTimeMs,
-            enhancementData: enhancementData
-          });
+      console.log('✅ Prompt enhanced successfully:', {
+        originalLength: prompt.length,
+        enhancedLength: workingPrompt.length,
+        expansion: `${((workingPrompt.length / prompt.length) * 100).toFixed(1)}%`,
+        strategy: enhancementStrategy,
+        enhancementTimeMs,
+        // PHASE 4 DEBUG: Validation
+        isActuallyDifferent: workingPrompt !== prompt,
+        hasValidStrategy: enhancementStrategy !== 'enhanced_unknown'
+      });
         } else {
-          console.warn('⚠️ Enhancement returned no result, using original prompt');
-          enhancementStrategy = 'no_result';
+          console.warn('⚠️ Enhancement returned no result, using original prompt:', {
+            enhancementData,
+            reason: !enhancementData ? 'no_data' : !enhancementData.success ? 'not_successful' : 'no_enhanced_prompt'
+          });
+          enhancementStrategy = 'enhancement_failed';
         }
       } catch (error) {
         console.error('❌ Enhancement function call failed:', error);
@@ -456,6 +483,13 @@ serve(async (req)=>{
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
       enhanced_tracking: true,
+      // PHASE 4 DEBUG: Additional tracking
+      debug: {
+        original_prompt_length: originalPrompt.length,
+        working_prompt_length: workingPrompt.length,
+        enhancement_strategy_source: enhancementStrategy,
+        created_at: new Date().toISOString()
+      },
       // Enhanced tracking fields
       prompt_length: finalPrompt.length,
       prompt_word_count: finalPrompt.split(' ').length,

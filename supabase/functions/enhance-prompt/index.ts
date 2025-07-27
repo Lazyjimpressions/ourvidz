@@ -54,10 +54,15 @@ serve(async (req) => {
       modelUsed: enhancementResult.optimization?.worker_used || 'unknown'
     })
 
-    return new Response(JSON.stringify({
+    // PHASE 1 FIX: Ensure consistent response structure with proper strategy
+    const responseData = {
       success: true,
       original_prompt: prompt,
       enhanced_prompt: enhancementResult.enhanced_prompt,
+      // CRITICAL: Put enhancement_strategy at top level for queue-job compatibility
+      enhancement_strategy: enhancementResult.enhancement_metadata?.enhancement_strategy || 
+                           enhancementResult.optimization?.strategy_used || 
+                           'content_compliant',
       enhancement_metadata: {
         original_length: prompt.length,
         enhanced_length: enhancementResult.enhanced_prompt.length,
@@ -67,14 +72,26 @@ serve(async (req) => {
         quality,
         is_sdxl: enhancementResult.metadata?.model_target === 'SDXL',
         is_video: format === 'video',
-        enhancement_strategy: enhancementResult.optimization?.strategy_used || 'content_compliant',
+        enhancement_strategy: enhancementResult.enhancement_metadata?.enhancement_strategy || 
+                             enhancementResult.optimization?.strategy_used || 
+                             'content_compliant',
         model_used: enhancementResult.optimization?.worker_used || 'rule_based',
         token_count: enhancementResult.optimization?.token_optimization?.final || estimateTokens(enhancementResult.enhanced_prompt),
         compression_applied: enhancementResult.optimization?.compression_applied || false,
         token_optimization: enhancementResult.optimization?.token_optimization,
         version: enhancementResult.metadata?.version || '2.1'
-      }
-    }), {
+      },
+      // PHASE 1 FIX: Also include optimization for backward compatibility
+      optimization: enhancementResult.optimization
+    }
+
+    console.log('📊 Enhancement metrics:', {
+      strategy: responseData.enhancement_strategy,
+      compression: responseData.enhancement_metadata.compression_applied,
+      token_efficiency: responseData.enhancement_metadata.token_optimization?.final / 75
+    })
+
+    return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
