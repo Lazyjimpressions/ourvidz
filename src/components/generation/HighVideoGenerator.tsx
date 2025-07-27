@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
+import { PromptEnhancementModal } from "@/components/PromptEnhancementModal";
 import { useGeneration } from "@/hooks/useGeneration";
 import { useGenerationStatus } from "@/hooks/useGenerationStatus";
-import { Play, Sparkles } from "lucide-react";
+import { Play, Sparkles, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface HighVideoGeneratorProps {
@@ -15,16 +16,19 @@ interface HighVideoGeneratorProps {
   projectId?: string;
   onVideoGenerated: (video: any) => void;
   buttonText?: string;
+  autoEnhance?: boolean;
 }
 
 export const HighVideoGenerator = ({ 
   prompt: initialPrompt = "",
   projectId,
   onVideoGenerated,
-  buttonText = "Generate High Quality Video"
+  buttonText = "Generate High Quality Video",
+  autoEnhance = false
 }: HighVideoGeneratorProps) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generatedId, setGeneratedId] = useState<string | null>(null);
+  const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
   const { generateContent, isGenerating, currentJob, error } = useGeneration();
   const { data: generationData } = useGenerationStatus(generatedId, 'video_high');
@@ -45,8 +49,10 @@ export const HighVideoGenerator = ({
     }
   }
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
+  const handleGenerate = async (finalPrompt?: string) => {
+    const promptToUse = finalPrompt || prompt.trim();
+    
+    if (!promptToUse) {
       toast.error("Please enter a prompt");
       return;
     }
@@ -54,10 +60,12 @@ export const HighVideoGenerator = ({
     try {
       await generateContent({
         format: 'video_high',
-        prompt: prompt.trim(),
+        prompt: promptToUse,
         projectId,
         metadata: {
-          source: 'high_video_generator'
+          source: 'high_video_generator',
+          enhanced: !!finalPrompt,
+          job_type: 'video_high'
         }
       });
       
@@ -67,6 +75,22 @@ export const HighVideoGenerator = ({
       }
     } catch (error) {
       toast.error(`High quality video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleEnhanceAndGenerate = () => {
+    if (!prompt.trim()) {
+      toast.error("Please enter a prompt");
+      return;
+    }
+    setShowEnhancementModal(true);
+  };
+
+  const handleEnhancementComplete = (enhancedPrompt: string) => {
+    setPrompt(enhancedPrompt);
+    setShowEnhancementModal(false);
+    if (autoEnhance) {
+      handleGenerate(enhancedPrompt);
     }
   };
 
@@ -91,30 +115,42 @@ export const HighVideoGenerator = ({
           />
         </div>
 
-        <div className="flex items-center justify-between text-sm text-gray-600">
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>Quality: <strong>High</strong></span>
           <span>Credits: <strong>5</strong></span>
           <span>Time: <strong>3-6 min</strong></span>
         </div>
 
-        <Button
-          onClick={handleGenerate}
-          disabled={isGenerating || !prompt.trim()}
-          className="w-full"
-          size="lg"
-        >
-          {isGenerating ? (
-            <>
-              <LoadingSpinner className="mr-2" size="sm" />
-              Generating High Quality Video...
-            </>
-          ) : (
-            <>
-              <Sparkles className="mr-2 h-4 w-4" />
-              {buttonText}
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleEnhanceAndGenerate}
+            disabled={isGenerating || !prompt.trim()}
+            className="flex-1"
+          >
+            <Wand2 className="mr-2 h-4 w-4" />
+            Enhance & Generate
+          </Button>
+          
+          <Button
+            onClick={() => handleGenerate()}
+            disabled={isGenerating || !prompt.trim()}
+            className="flex-1"
+            size="lg"
+          >
+            {isGenerating ? (
+              <>
+                <LoadingSpinner className="mr-2" size="sm" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate
+              </>
+            )}
+          </Button>
+        </div>
 
         {isGenerating && (
           <div className="p-4 bg-purple-50 rounded-lg border">
@@ -128,13 +164,23 @@ export const HighVideoGenerator = ({
         )}
 
         {error && (
-          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
-            <p className="text-sm text-red-800 font-medium mb-2">
+          <div className="p-4 bg-destructive/10 rounded-lg border border-destructive/20">
+            <p className="text-sm text-destructive font-medium mb-2">
               Generation Error
             </p>
-            <p className="text-xs text-red-600">{error}</p>
+            <p className="text-xs text-destructive/80">{error}</p>
           </div>
         )}
+
+        <PromptEnhancementModal
+          isOpen={showEnhancementModal}
+          onClose={() => setShowEnhancementModal(false)}
+          originalPrompt={prompt}
+          onAccept={handleEnhancementComplete}
+          jobType="video_high"
+          format="video_high"
+          quality="high"
+        />
       </CardContent>
     </Card>
   );
