@@ -357,7 +357,9 @@ serve(async (req)=>{
             format: format,
             quality: quality,
             selectedModel: 'qwen_instruct',
-            user_id: user.id
+            user_id: user.id,
+            // Pass regeneration flag for cache-busting
+            regeneration: metadata?.regeneration || false
           }
         });
         
@@ -369,13 +371,15 @@ serve(async (req)=>{
         } else if (enhancementData?.success && enhancementData?.enhanced_prompt) {
           enhancementResult = enhancementData;
           workingPrompt = enhancementData.enhanced_prompt;
-          enhancementStrategy = enhancementData.enhancement_metadata?.enhancement_strategy || 'enhanced';
+          // Fix: Extract enhancement strategy from correct field
+          enhancementStrategy = enhancementData.optimization?.strategy_used || enhancementData.enhancement_metadata?.enhancement_strategy || 'enhanced';
           
           console.log('✅ Prompt enhanced successfully:', {
             originalLength: prompt.length,
             enhancedLength: workingPrompt.length,
             strategy: enhancementStrategy,
-            timeMs: enhancementTimeMs
+            timeMs: enhancementTimeMs,
+            enhancementData: enhancementData
           });
         } else {
           console.warn('⚠️ Enhancement returned no result, using original prompt');

@@ -13,7 +13,7 @@ serve(async (req) => {
   }
 
   try {
-    const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id } = await req.json()
+    const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id, regeneration } = await req.json()
 
     if (!prompt) {
       return new Response(JSON.stringify({
@@ -43,7 +43,8 @@ serve(async (req) => {
       job_type: jobType,
       quality: quality as 'fast' | 'high',
       user_id,
-      preferences: { enhancement_style: selectedModel }
+      preferences: { enhancement_style: selectedModel },
+      regeneration: regeneration || false
     })
 
     console.log('✅ Enhanced prompt generated:', {
@@ -190,7 +191,15 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     };
 
     const enhancement_level = context.job_type?.includes('enhanced') ? 'enhanced' : 'standard'
-    const key = `${context.model_target}_${context.quality_level}${enhancement_level === 'enhanced' ? '_7B' : ''}`
+    const key = `${context.model_target}_${context.quality_level.toUpperCase()}${enhancement_level === 'enhanced' ? '_7B' : ''}`
+    
+    console.log('🎯 System prompt template selection:', {
+      context: context,
+      key: key,
+      available_templates: Object.keys(templates),
+      selected_template: templates[key]?.id || 'FALLBACK'
+    });
+    
     return templates[key] || templates['SDXL_FAST']
   }
 
@@ -328,7 +337,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         prompt: request.prompt,
         system_prompt: template.system_instruction,
         context: context,
-        optimization_rules: template.optimization_strategy
+        optimization_rules: template.optimization_strategy,
+        regeneration: request.regeneration || false
       }
     )
 
@@ -392,7 +402,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
             target: template.token_target
           }
         },
-        metadata: {
+        enhancement_metadata: {
+          enhancement_strategy: actualStrategy,
           version: template.version,
           model_target: context.model_target,
           quality_level: context.quality_level
@@ -456,7 +467,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           isEnhanced: payload.context.enhancement_level === 'enhanced',
           quality: payload.context.quality_level,
           selectedModel: 'qwen_instruct',
-          system_prompt: payload.system_prompt
+          system_prompt: payload.system_prompt,
+          regeneration: payload.regeneration || false
         })
       } else {
         result = await tryBaseEnhancement(payload.prompt, {
@@ -465,7 +477,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           isEnhanced: payload.context.enhancement_level === 'enhanced',
           quality: payload.context.quality_level,
           selectedModel: 'qwen_base',
-          system_prompt: payload.system_prompt
+          system_prompt: payload.system_prompt,
+          regeneration: payload.regeneration || false
         })
       }
 
@@ -1012,7 +1025,9 @@ async function enhanceWithChatWorker(prompt: string, config: any): Promise<strin
   const requestBody = {
     prompt: prompt,
     model: 'qwen_instruct',
-    enhance_type: 'conversational'
+    enhance_type: 'conversational',
+    // Add cache-busting for regeneration
+    cache_bust: config.regeneration ? Date.now().toString() : undefined
   }
 
   // Add system prompt if available

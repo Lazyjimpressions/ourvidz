@@ -13,11 +13,14 @@ interface RegenerationState {
   isModified: boolean;
 }
 
-export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: { seed?: number; negativePrompt?: string }) => {
+export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: { seed?: number; negativePrompt?: string; originalPrompt?: string }) => {
   const { generateContent, isGenerating } = useGeneration();
   
+  // Use original prompt for regeneration if available, otherwise fall back to current prompt
+  const basePrompt = originalDetails?.originalPrompt || currentTile.prompt;
+  
   const [state, setState] = useState<RegenerationState>({
-    positivePrompt: currentTile.prompt,
+    positivePrompt: basePrompt,
     negativePrompt: originalDetails?.negativePrompt || '',
     keepSeed: true,
     referenceStrength: 0.7,
@@ -28,11 +31,11 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
     setState(prev => ({
       ...prev,
       ...updates,
-      isModified: updates.positivePrompt !== currentTile.prompt || 
+      isModified: updates.positivePrompt !== basePrompt || 
                  updates.negativePrompt !== (originalDetails?.negativePrompt || '') ||
                  prev.isModified
     }));
-  }, [currentTile.prompt, originalDetails?.negativePrompt]);
+  }, [basePrompt, originalDetails?.negativePrompt]);
 
   const updateSettings = useCallback((updates: Partial<Pick<RegenerationState, 'keepSeed' | 'referenceStrength'>>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -40,13 +43,13 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
 
   const resetToOriginal = useCallback(() => {
     setState({
-      positivePrompt: currentTile.prompt,
+      positivePrompt: basePrompt,
       negativePrompt: originalDetails?.negativePrompt || '',
       keepSeed: true,
       referenceStrength: 0.7,
       isModified: false
     });
-  }, [currentTile.prompt, originalDetails?.negativePrompt]);
+  }, [basePrompt, originalDetails?.negativePrompt]);
 
   const regenerateImage = useCallback(async () => {
     if (!state.positivePrompt.trim()) {
@@ -73,7 +76,10 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
         negative_prompt: state.negativePrompt.trim() || undefined,
         ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),
         credits: currentTile.quality === 'high' ? 2 : 1,
-        num_images: 1
+        num_images: 1,
+        // Mark as regeneration to enable cache-busting and variations
+        regeneration: true,
+        cache_bust: Date.now().toString()
       }
     };
 
