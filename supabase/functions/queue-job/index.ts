@@ -345,6 +345,8 @@ serve(async (req)=>{
     let workingPrompt = safeEnhancedPrompt;
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
+    let qwenExpansionPercentage = null;
+    let qualityImprovement = null;
     
     // Only enhance if we have a prompt and it's not already enhanced
     if (prompt && !metadata?.skip_enhancement) {
@@ -388,13 +390,23 @@ serve(async (req)=>{
             fullResponseKeys: Object.keys(enhancementData)
           });
           
-          // PHASE 2 FIX: Extract strategy with proper priority order
+          // PHASE 1 FIX: Extract strategy with proper priority order and analytics data
           enhancementStrategy = 
             enhancementData.enhancement_strategy ||                    // Top-level (new structure)
             enhancementData.enhancement_metadata?.enhancement_strategy || 
             enhancementData.optimization?.strategy_used || 
             enhancementData.strategy ||
-            'enhanced_unknown';
+            'none';
+          
+          // PHASE 2 FIX: Extract analytics data from enhancement response
+          qwenExpansionPercentage = enhancementData.enhancement_metadata?.qwen_expansion_percentage ||
+                                  enhancementData.qwen_expansion_percentage ||
+                                  (enhancementData.enhanced_prompt && enhancementData.original_prompt ? 
+                                    ((enhancementData.enhanced_prompt.length / enhancementData.original_prompt.length) * 100) - 100 : null);
+          
+          qualityImprovement = enhancementData.enhancement_metadata?.quality_improvement ||
+                             enhancementData.quality_improvement ||
+                             enhancementData.optimization?.improvement_score;
           
           // PHASE 3 FIX: Ensure we use the enhanced prompt, not original
           if (enhancementData.enhanced_prompt && enhancementData.enhanced_prompt !== prompt) {
@@ -485,6 +497,9 @@ serve(async (req)=>{
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
       enhanced_tracking: true,
+      // **PHASE 2**: Include analytics data in job metadata
+      qwen_expansion_percentage: qwenExpansionPercentage,
+      quality_improvement: qualityImprovement,
       // **NEW ARCHITECTURE**: Include enhancement metadata and presets
       enhancement_metadata: enhancementMetadata,
       selected_presets: selectedPresets,
