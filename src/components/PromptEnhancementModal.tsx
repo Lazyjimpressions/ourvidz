@@ -76,6 +76,11 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
   const [selectedPresets, setSelectedPresets] = useState<string[]>([]);
   const [enhancementResult, setEnhancementResult] = useState<EnhancementResult | null>(null);
   const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
+
+  // Update original prompt when initialOriginalPrompt changes
+  React.useEffect(() => {
+    setOriginalPrompt(initialOriginalPrompt);
+  }, [initialOriginalPrompt]);
   const { toast } = useToast();
   const { chatWorker, wanWorker, isLoading: statusLoading } = useWorkerStatus();
 
@@ -87,7 +92,7 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
   ];
 
   const enhancePrompt = useCallback(async () => {
-    if (!originalPrompt.trim() || selectedPresets.length === 0) return;
+    if (!originalPrompt.trim()) return;
     
     setIsEnhancing(true);
     setError(null);
@@ -195,7 +200,7 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
     onClose();
   };
 
-  const canEnhance = originalPrompt.trim() && selectedPresets.length > 0 && !isEnhancing;
+  const canEnhance = originalPrompt.trim() && !isEnhancing;
   const canGenerate = enhancedPrompt.trim() && enhancementResult && !isGenerating;
 
   if (!isOpen) return null;
@@ -241,9 +246,9 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
             </p>
           </div>
 
-          {/* Preset Options - Required before enhancement */}
+          {/* Preset Options - Optional enhancements */}
           <div>
-            <h4 className="text-sm font-medium mb-2">Enhancement Presets (Required)</h4>
+            <h4 className="text-sm font-medium mb-2">Enhancement Presets (Optional)</h4>
             <div className="grid grid-cols-2 gap-2">
               {presetOptions.map(option => (
                 <div key={option.id} className="flex items-center space-x-2">
@@ -257,11 +262,9 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
                 </div>
               ))}
             </div>
-            {selectedPresets.length === 0 && (
-              <p className="text-xs text-amber-600 mt-1">
-                Select at least one preset to enhance the prompt
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Select presets to apply additional enhancements (optional)
+            </p>
           </div>
 
           {/* Enhancement Button */}

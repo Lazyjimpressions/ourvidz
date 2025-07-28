@@ -9,8 +9,7 @@ import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
-import { ImageInputControls } from '@/components/ImageInputControls';
-import { VideoInputControls } from '@/components/VideoInputControls';
+import { EnhancedTextInputSection } from '@/components/workspace/EnhancedTextInputSection';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
@@ -239,12 +238,7 @@ const Workspace = () => {
     return optimizedPrompt;
   };
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      toast.error('Please enter a prompt');
-      return;
-    }
-
+  const handleGenerateWithRequest = async (request: any) => {
     if (generationError) {
       clearError();
     }
@@ -256,8 +250,8 @@ const Workspace = () => {
         num_images: numImages
       };
 
-      // Apply optional prompt optimization ONLY when explicitly enabled
-      let finalPrompt = prompt.trim();
+      // Apply optional prompt optimization ONLY when explicitly enabled for character references
+      let finalPrompt = request.prompt;
       
       if (isVideoMode) {
         // VIDEO MODE: Handle video references (start/end frames)
@@ -337,16 +331,18 @@ const Workspace = () => {
         referenceMetadata.compel_weights = compelWeights.trim();
       }
 
-      console.log('🚀 Starting generation with corrected settings:', {
+      console.log('🚀 Starting generation with enhanced request:', {
         format: selectedMode,
-        currentPrompt: prompt.trim(),
-        originalPrompt: isPromptEnhanced ? originalPrompt : prompt.trim(),
-        enhancedPrompt: isPromptEnhanced ? enhancedPrompt : null,
+        prompt: request.prompt,
+        originalPrompt: request.originalPrompt,
+        enhancedPrompt: request.enhancedPrompt,
+        isPromptEnhanced: request.isPromptEnhanced,
+        enhancementMetadata: request.enhancementMetadata,
+        selectedPresets: request.selectedPresets,
         finalPrompt,
-        isPromptEnhanced,
         optimizationEnabled: optimizeForCharacter,
         activeReferences: isVideoMode ? videoReferences : activeReferences,
-        referenceStrength: referenceStrength, // Log the actual value being used
+        referenceStrength: referenceStrength,
         numImages,
         seed,
         compelEnabled,
@@ -356,11 +352,9 @@ const Workspace = () => {
 
       // Build generation request with enhanced prompt tracking
       const generationRequest = {
+        ...request,
         format: selectedMode,
         prompt: finalPrompt,
-        originalPrompt: isPromptEnhanced ? originalPrompt : prompt.trim(),
-        enhancedPrompt: isPromptEnhanced ? enhancedPrompt : null,
-        isPromptEnhanced,
         referenceImageUrl: isVideoMode 
           ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
           : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
@@ -376,6 +370,24 @@ const Workspace = () => {
       const errorMessage = error instanceof Error ? error.message : 'Generation failed';
       toast.error(errorMessage);
     }
+  };
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      toast.error('Please enter a prompt');
+      return;
+    }
+
+    // Create a basic generation request
+    const request = {
+      format: selectedMode,
+      prompt: prompt.trim(),
+      originalPrompt: prompt.trim(),
+      enhancedPrompt: prompt.trim(),
+      isPromptEnhanced: false
+    };
+
+    await handleGenerateWithRequest(request);
   };
 
   const handleRegenerate = () => {
@@ -785,92 +797,16 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - Updated to pass reference props */}
+      {/* Bottom Input Controls - New Enhanced Input Section */}
       <div className="p-6 bg-black">
-        {isVideoMode ? (
-          <VideoInputControls
-        prompt={prompt}
-        setPrompt={setPrompt}
-        originalPrompt={originalPrompt}
-        enhancedPrompt={enhancedPrompt}
-        isPromptEnhanced={isPromptEnhanced}
-        onEnhancementApply={(enhanced, original) => {
-          setEnhancedPrompt(enhanced);
-          setOriginalPrompt(original);
-          setPrompt(enhanced);
-          setIsPromptEnhanced(true);
-        }}
-        onRevertToOriginal={() => {
-          if (isPromptEnhanced && originalPrompt) {
-            setPrompt(originalPrompt);
-            setEnhancedPrompt('');
-            setIsPromptEnhanced(false);
-          }
-        }}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onSwitchToImage={() => {
-              setIsVideoMode(false);
-              setNumImages(1);
-            }}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
-            onReferenceClick={handleReferenceClick}
-            jobType={selectedMode}
-            // Pass reference management props for consistency
-            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-            onReferencesChange={handleReferencesChange}
-            referenceStrength={referenceStrength}
-            onReferenceStrengthChange={setReferenceStrength}
-            optimizeForCharacter={optimizeForCharacter}
-            onOptimizeChange={setOptimizeForCharacter}
-            // Enhanced drag and drop props
-            onReferenceDragOver={handleReferenceDragOver}
-            onReferenceDragLeave={handleReferenceDragLeave}
-            onReferenceDrop={handleReferenceDrop}
-            isReferenceDragOver={isDragOverReference}
-          />
-        ) : (
-          <ImageInputControls
-            prompt={prompt}
-            setPrompt={setPrompt}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
-            onSwitchToVideo={() => setIsVideoMode(true)}
-            quality={quality}
-            setQuality={setQuality}
-            onLibraryClick={() => setShowLibraryModal(true)}
-            enhanced={enhanced}
-            setEnhanced={setEnhanced}
-            numImages={numImages}
-            setNumImages={setNumImages}
-            hasReference={activeReferences.some(ref => ref.enabled && ref.url)}
-            onReferenceClick={handleReferenceClick}
-            jobType={selectedMode}
-            compelEnabled={compelEnabled}
-            setCompelEnabled={setCompelEnabled}
-            compelWeights={compelWeights}
-            setCompelWeights={setCompelWeights}
-            // Pass reference management props
-            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-            onReferencesChange={handleReferencesChange}
-            referenceStrength={referenceStrength}
-            onReferenceStrengthChange={setReferenceStrength}
-            optimizeForCharacter={optimizeForCharacter}
-            onOptimizeChange={setOptimizeForCharacter}
-            // Enhanced drag and drop props
-            onReferenceDragOver={handleReferenceDragOver}
-            onReferenceDragLeave={handleReferenceDragLeave}
-            onReferenceDrop={handleReferenceDrop}
-            isReferenceDragOver={isDragOverReference}
-            seed={seed}
-            onSeedChange={setSeed}
-          />
-        )}
+        <EnhancedTextInputSection
+          prompt={prompt}
+          setPrompt={setPrompt}
+          onGenerate={handleGenerateWithRequest}
+          isGenerating={isGenerating}
+          layout="desktop"
+          selectedMode={selectedMode}
+        />
       </div>
 
       {/* Unified Modal System - WorkspaceContentModal handles everything */}
