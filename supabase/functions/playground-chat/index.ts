@@ -57,19 +57,18 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     // Get the current user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header provided');
+    }
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(
+      authHeader.replace('Bearer ', '')
+    );
 
     if (userError || !user) {
       throw new Error('User not authenticated');
@@ -112,24 +111,59 @@ serve(async (req) => {
       .select('sender, content, created_at')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: true })
-      .limit(20); // Last 20 messages for context
+      .limit(20);
 
     if (historyError) {
       console.error('Error fetching message history:', historyError);
     }
 
-    // Build conversation context
-    let conversationContext = '';
-    if (messageHistory && messageHistory.length > 0) {
-      // Include last few messages for context (excluding the current user message)
-      const contextMessages = messageHistory.slice(-10, -1); // Last 10 messages excluding current
-      conversationContext = contextMessages
-        .map(msg => `${msg.sender === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
-        .join('\n');
+    // Get chat worker URL from system config
+    const { data: systemConfig, error: configError } = await supabaseClient
+      .from('system_config')
+      .select('config')
+      .single();
+
+    if (configError || !systemConfig?.config?.chatWorkerUrl) {
+      console.error('Failed to get chat worker URL:', configError);
+      throw new Error('Chat worker not configured');
     }
 
+    const chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+    console.log('Using chat worker URL:', chatWorkerUrl);
+
+    // Get API key for chat worker
+    const apiKey = Deno.env.get('WAN_WORKER_API_KEY');
+    if (!apiKey) {
+      throw new Error('WAN_WORKER_API_KEY not configured');
+    }
+
+    // Health check chat worker
+    try {
+      const healthResponse = await fetch(`${chatWorkerUrl}/chat/health`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!healthResponse.ok) {
+        throw new Error(`Chat worker health check failed: ${healthResponse.status}`);
+      }
+    } catch (error) {
+      console.error('Chat worker health check failed:', error);
+      throw new Error('Chat worker is not available');
+    }
+
+    // Prepare conversation history for chat worker
+    const conversationHistory = messageHistory ? messageHistory.map(msg => ({
+      sender: msg.sender,
+      content: msg.content,
+      created_at: msg.created_at
+    })) : [];
+
     // Get project context if linked
-    let projectContext = '';
+    let projectContext = null;
     if (conversation.project_id) {
       const { data: project } = await supabaseClient
         .from('projects')
@@ -138,36 +172,41 @@ serve(async (req) => {
         .single();
 
       if (project) {
-        projectContext = `\n\nProject Context:
-Title: ${project.title || 'Untitled Project'}
-Type: ${project.media_type}
-Original Prompt: ${project.original_prompt}
-Enhanced Prompt: ${project.enhanced_prompt || 'None'}
-Duration: ${project.duration || 5}s
-Scene Count: ${project.scene_count || 1}`;
+        projectContext = {
+          title: project.title || 'Untitled Project',
+          media_type: project.media_type,
+          original_prompt: project.original_prompt,
+          enhanced_prompt: project.enhanced_prompt,
+          duration: project.duration || 5,
+          scene_count: project.scene_count || 1
+        };
       }
     }
 
-    // Call the chat worker with conversation context
-    const chatWorkerUrl = 'http://host.docker.internal:7861/chat';
+    // Call the chat worker with correct payload format
     const chatPayload = {
-      prompt: message,
-      conversation_context: conversationContext,
-      project_context: projectContext,
-      conversation_type: conversation.conversation_type || 'general',
-      system_instruction: conversation.conversation_type === 'story_development' 
-        ? 'You are an expert storytelling AI assistant. Help develop engaging stories, characters, and scenes. Maintain consistency with previous story elements and provide creative, detailed responses.'
-        : 'You are a helpful AI assistant for OurVidz. Provide clear, concise, and helpful responses.'
+      message: message,
+      conversation_id: conversation_id,
+      project_id: project_id,
+      context_type: conversation.conversation_type === 'story_development' ? 'story_development' : 'general',
+      conversation_history: conversationHistory,
+      project_context: projectContext
     };
 
-    console.log('Calling chat worker with payload:', chatPayload);
+    console.log('Calling chat worker with payload:', {
+      ...chatPayload,
+      conversation_history: `${conversationHistory.length} messages`,
+      project_context: projectContext ? 'included' : 'none'
+    });
 
-    const chatResponse = await fetch(chatWorkerUrl, {
+    const chatResponse = await fetch(`${chatWorkerUrl}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(chatPayload),
+      signal: AbortSignal.timeout(45000), // 45 second timeout
     });
 
     if (!chatResponse.ok) {
@@ -177,7 +216,12 @@ Scene Count: ${project.scene_count || 1}`;
     }
 
     const chatData = await chatResponse.json();
-    const aiResponse = chatData.response || chatData.message || 'Sorry, I could not generate a response.';
+    
+    if (!chatData.success) {
+      throw new Error(chatData.error || 'Chat worker returned failure');
+    }
+
+    const aiResponse = chatData.response || 'Sorry, I could not generate a response.';
 
     // Save AI response to database
     const { error: aiMessageError } = await supabaseClient
