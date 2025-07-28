@@ -412,8 +412,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           are_different: enhancedPrompt.trim() !== request.prompt.trim()
         },
         final_vs_original: {
-          final_length: processed.final_prompt.length,
-          final_vs_original_different: processed.final_prompt !== request.prompt
+          final_length: processed.enhanced_prompt.length,
+          final_vs_original_different: processed.enhanced_prompt !== request.prompt
         }
       })
 
