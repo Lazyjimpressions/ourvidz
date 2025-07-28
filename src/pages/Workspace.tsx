@@ -9,7 +9,8 @@ import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { GenerationFormat } from '@/types/generation';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { ScrollNavigation } from '@/components/ScrollNavigation';
-import { EnhancedTextInputSection } from '@/components/workspace/EnhancedTextInputSection';
+import { ImageInputControls } from '@/components/ImageInputControls';
+import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
 import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
 import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
@@ -394,6 +395,10 @@ const Workspace = () => {
     if (currentJob && prompt) {
       handleGenerate();
     }
+  };
+
+  const handleLibraryClick = () => {
+    setShowLibraryModal(true);
   };
 
   const handleRemoveFromWorkspace = (tileId: string) => {
@@ -797,16 +802,59 @@ const Workspace = () => {
       {/* Scroll Navigation */}
       <ScrollNavigation />
 
-      {/* Bottom Input Controls - New Enhanced Input Section */}
-      <div className="p-6 bg-background border-t border-border">
-        <EnhancedTextInputSection
-          prompt={prompt}
-          setPrompt={setPrompt}
-          onGenerate={handleGenerateWithRequest}
-          isGenerating={isGenerating}
-          layout="desktop"
-          selectedMode={selectedMode}
-        />
+      {/* Bottom Input Controls */}
+      <div className="p-6 bg-black">
+        {mode === 'image' ? (
+          <ImageInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onSwitchToVideo={() => setIsVideoMode(true)}
+            quality={quality}
+            setQuality={setQuality}
+            onLibraryClick={handleLibraryClick}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
+            numImages={numImages}
+            setNumImages={setNumImages}
+            hasReference={activeReferences.length > 0}
+            jobType={selectedMode}
+            compelEnabled={compelEnabled}
+            setCompelEnabled={setCompelEnabled}
+            compelWeights={compelWeights}
+            setCompelWeights={setCompelWeights}
+            references={activeReferences}
+            onReferencesChange={setActiveReferences}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
+            seed={seed}
+            onSeedChange={setSeed}
+          />
+        ) : (
+          <VideoInputControls
+            prompt={prompt}
+            setPrompt={setPrompt}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+            onSwitchToImage={() => setIsVideoMode(false)}
+            quality={quality}
+            setQuality={setQuality}
+            onLibraryClick={handleLibraryClick}
+            enhanced={enhanced}
+            setEnhanced={setEnhanced}
+            hasReference={videoReferences.length > 0}
+            jobType={selectedMode}
+            references={activeReferences}
+            onReferencesChange={setActiveReferences}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
+          />
+        )}
       </div>
 
       {/* Unified Modal System - WorkspaceContentModal handles everything */}
