@@ -386,20 +386,18 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         actualStrategy = `${template.id}_${worker_response.modelUsed}`;
       }
       
+      // PHASE 1 FIX: Check for enhancement BEFORE post-processing
+      // Only mark as 'none' if truly no enhancement occurred from worker
+      if (!enhancedPrompt || enhancedPrompt.trim() === request.prompt.trim()) {
+        console.warn('⚠️ No enhancement detected from worker, marking as no_enhancement')
+        actualStrategy = 'none';
+      }
+      
       // CRITICAL: Post-enhancement token management
       const processed = await this.postProcessEnhancement(
         enhancedPrompt,
         context
       )
-      
-      // PHASE 1 FIX: Check for enhancement AFTER post-processing (compression)
-      if (!enhancedPrompt || enhancedPrompt === request.prompt) {
-        // Only check original vs enhanced, not final vs original
-        if (processed.final_prompt === request.prompt && !processed.compression_applied) {
-          console.warn('⚠️ No enhancement detected, marking as no_enhancement')
-          actualStrategy = 'none';
-        }
-      }
 
       // Technical performance tracking
       await this.trackEnhancementMetrics(request, processed, template)
@@ -407,12 +405,38 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       console.log('📊 Enhancement metrics:', {
         strategy: actualStrategy,
         compression: processed.compression_applied,
-        token_efficiency: processed.final_tokens / template.token_target
+        token_efficiency: processed.final_tokens / template.token_target,
+        original_vs_enhanced: {
+          original_length: request.prompt.length,
+          enhanced_length: enhancedPrompt.length,
+          are_different: enhancedPrompt.trim() !== request.prompt.trim()
+        },
+        final_vs_original: {
+          final_length: processed.final_prompt.length,
+          final_vs_original_different: processed.final_prompt !== request.prompt
+        }
       })
 
       return {
         success: true,
         enhanced_prompt: processed.enhanced_prompt,
+        enhancement_strategy: actualStrategy,
+        enhancement_metadata: {
+          original_length: request.prompt.length,
+          enhanced_length: enhancedPrompt.length,
+          expansion_percentage: enhancedPrompt.length > 0 ? ((enhancedPrompt.length / request.prompt.length) * 100) : 0,
+          job_type: context.job_type,
+          format: context.format,
+          quality: context.quality_level,
+          is_sdxl: context.model_target === 'SDXL',
+          is_video: context.format === 'video',
+          enhancement_strategy: actualStrategy,
+          model_used: worker_response.modelUsed || 'unknown',
+          token_count: processed.final_tokens,
+          compression_applied: processed.compression_applied,
+          token_optimization: processed.token_optimization || {},
+          version: '2.1.0'
+        },
         optimization: {
           strategy_used: actualStrategy,
           worker_used: worker_response.workerUsed || worker_target,
