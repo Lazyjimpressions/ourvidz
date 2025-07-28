@@ -809,6 +809,22 @@ const Workspace = () => {
             prompt={prompt}
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
+            onGenerateWithEnhancement={(data) => {
+              // Handle enhanced generation with metadata
+              setPrompt(data.enhancedPrompt);
+              handleGenerateWithRequest({
+                prompt: data.enhancedPrompt,
+                originalPrompt: data.originalPrompt,
+                enhancedPrompt: data.enhancedPrompt,
+                isPromptEnhanced: true,
+                enhancementStrategy: data.enhancementStrategy,
+                metadata: {
+                  ...data.metadata,
+                  selectedModel: data.selectedModel,
+                  isEnhanced: true
+                }
+              });
+            }}
             isGenerating={isGenerating}
             onSwitchToVideo={() => setIsVideoMode(true)}
             quality={quality}
@@ -838,6 +854,22 @@ const Workspace = () => {
             prompt={prompt}
             setPrompt={setPrompt}
             onGenerate={handleGenerate}
+            onGenerateWithEnhancement={(data) => {
+              // Handle enhanced generation with metadata
+              setPrompt(data.enhancedPrompt);
+              handleGenerateWithRequest({
+                prompt: data.enhancedPrompt,
+                originalPrompt: data.originalPrompt,
+                enhancedPrompt: data.enhancedPrompt,
+                isPromptEnhanced: true,
+                enhancementStrategy: data.enhancementStrategy,
+                metadata: {
+                  ...data.metadata,
+                  selectedModel: data.selectedModel,
+                  isEnhanced: true
+                }
+              });
+            }}
             isGenerating={isGenerating}
             onSwitchToImage={() => setIsVideoMode(false)}
             quality={quality}

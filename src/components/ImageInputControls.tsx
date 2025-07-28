@@ -23,6 +23,13 @@ interface ImageInputControlsProps {
   onEnhancementApply?: (enhancedPrompt: string, originalPrompt: string) => void;
   onRevertToOriginal?: () => void;
   onGenerate: () => void;
+  onGenerateWithEnhancement?: (data: {
+    enhancedPrompt: string;
+    originalPrompt: string;
+    enhancementStrategy: string;
+    selectedModel: string;
+    metadata?: any;
+  }) => void;
   isGenerating: boolean;
   onSwitchToVideo?: () => void;
   quality: 'fast' | 'high';
@@ -70,6 +77,7 @@ export const ImageInputControls = ({
   onEnhancementApply,
   onRevertToOriginal,
   onGenerate,
+  onGenerateWithEnhancement,
   isGenerating,
   onSwitchToVideo,
   quality,
@@ -478,9 +486,26 @@ export const ImageInputControls = ({
         isOpen={showEnhancementModal}
         onClose={() => setShowEnhancementModal(false)}
         onGenerateWithEnhancement={(data) => {
-          if (onEnhancementApply) {
+          if (onGenerateWithEnhancement) {
+            // Call the enhanced generation handler which triggers actual job creation
+            onGenerateWithEnhancement({
+              enhancedPrompt: data.enhancedPrompt,
+              originalPrompt: data.originalPrompt,
+              enhancementStrategy: data.enhancementMetadata?.enhancement_strategy || 'unknown',
+              selectedModel: selectedModel,
+              metadata: {
+                jobType,
+                quality,
+                format: 'image',
+                isEnhanced: true,
+                enhancementMetadata: data.enhancementMetadata
+              }
+            });
+          } else if (onEnhancementApply) {
+            // Fallback to legacy behavior
             onEnhancementApply(data.enhancedPrompt, data.originalPrompt);
           } else {
+            // Last resort - just set the prompt
             setPrompt(data.enhancedPrompt);
           }
           setShowEnhancementModal(false);
