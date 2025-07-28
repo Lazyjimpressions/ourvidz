@@ -798,7 +798,7 @@ const Workspace = () => {
       <ScrollNavigation />
 
       {/* Bottom Input Controls - New Enhanced Input Section */}
-      <div className="p-6 bg-black">
+      <div className="p-6 bg-background border-t border-border">
         <EnhancedTextInputSection
           prompt={prompt}
           setPrompt={setPrompt}

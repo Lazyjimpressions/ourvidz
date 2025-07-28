@@ -72,7 +72,7 @@ export const EnhancedTextInputSection = ({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder={getPlaceholderText()}
-            className="bg-transparent border-gray-600 text-white placeholder:text-gray-400 h-10 focus:border-gray-400"
+            className="bg-background border-border text-foreground placeholder:text-muted-foreground h-10 focus:border-ring"
             disabled={isGenerating}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -87,7 +87,7 @@ export const EnhancedTextInputSection = ({
           onClick={() => setShowEnhancementModal(true)}
           disabled={isGenerating || !prompt.trim()}
           variant="outline"
-          className="border-gray-600 text-white hover:bg-gray-800 h-10 px-3"
+          className="h-10 px-3"
         >
           <Wand2 className="h-3 w-3" />
         </Button>
@@ -95,11 +95,11 @@ export const EnhancedTextInputSection = ({
         <Button
           onClick={handleDirectGenerate}
           disabled={isGenerating || !prompt.trim()}
-          className="bg-white text-black hover:bg-gray-100 h-10 px-4 text-sm font-medium"
+          className="h-10 px-4 text-sm font-medium"
         >
           {isGenerating ? (
             <>
-              <div className="w-3 h-3 border border-black/30 border-t-black rounded-full animate-spin mr-1" />
+              <div className="w-3 h-3 border border-primary/30 border-t-primary rounded-full animate-spin mr-1" />
               Generating
             </>
           ) : (
