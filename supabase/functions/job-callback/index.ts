@@ -168,7 +168,7 @@ serve(async (req)=>{
     }
     updateData.metadata = updatedMetadata;
     
-    // PHASE 2 FIX: Update job table with enhancement fields
+    // PHASE 2 FIX: Update job table with enhancement fields - with numeric validation
     if (updatedMetadata.original_prompt) {
       updateData.original_prompt = updatedMetadata.original_prompt;
     }
@@ -179,10 +179,31 @@ serve(async (req)=>{
       updateData.enhancement_strategy = updatedMetadata.enhancement_strategy;
     }
     if (updatedMetadata.qwen_expansion_percentage) {
-      updateData.qwen_expansion_percentage = updatedMetadata.qwen_expansion_percentage;
+      // Validate and cap numeric values to prevent overflow
+      const qwenValue = parseFloat(updatedMetadata.qwen_expansion_percentage);
+      updateData.qwen_expansion_percentage = Math.min(qwenValue, 99999.99);
+      if (qwenValue > 99999.99) {
+        console.warn('⚠️ Capped qwen_expansion_percentage from', qwenValue, 'to 99999.99');
+      }
     }
     if (updatedMetadata.compel_weights) {
       updateData.compel_weights = updatedMetadata.compel_weights;
+    }
+    
+    // Add validation for other numeric fields that might overflow
+    if (updatedMetadata.quality_rating) {
+      const qualityValue = parseFloat(updatedMetadata.quality_rating);
+      updateData.quality_rating = Math.min(qualityValue, 99999.99);
+      if (qualityValue > 99999.99) {
+        console.warn('⚠️ Capped quality_rating from', qualityValue, 'to 99999.99');
+      }
+    }
+    if (updatedMetadata.quality_improvement) {
+      const improvementValue = parseFloat(updatedMetadata.quality_improvement);
+      updateData.quality_improvement = Math.min(improvementValue, 99999.99);
+      if (improvementValue > 99999.99) {
+        console.warn('⚠️ Capped quality_improvement from', improvementValue, 'to 99999.99');
+      }
     }
     
     console.log('🔄 Updating job with standardized metadata and enhancement fields:', {

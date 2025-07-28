@@ -107,13 +107,6 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "characters_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
         ]
       }
       compel_configs: {
@@ -373,22 +366,8 @@ export type Database = {
             foreignKeyName: "images_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
-            referencedRelation: "job_enhancement_analysis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "images_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
             referencedRelation: "jobs"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "images_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["job_id"]
           },
           {
             foreignKeyName: "images_project_id_fkey"
@@ -403,13 +382,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "images_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -518,22 +490,8 @@ export type Database = {
             foreignKeyName: "jobs_image_id_fkey"
             columns: ["image_id"]
             isOneToOne: false
-            referencedRelation: "image_enhancement_analysis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "jobs_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
             referencedRelation: "images"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "jobs_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["image_id"]
           },
           {
             foreignKeyName: "jobs_project_id_fkey"
@@ -550,38 +508,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "jobs_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
-          {
             foreignKeyName: "jobs_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "jobs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "jobs_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["video_id"]
-          },
-          {
-            foreignKeyName: "jobs_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "video_enhancement_analysis"
             referencedColumns: ["id"]
           },
           {
@@ -666,13 +596,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_config_history_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -820,28 +743,7 @@ export type Database = {
             foreignKeyName: "model_test_results_image_id_fkey"
             columns: ["image_id"]
             isOneToOne: false
-            referencedRelation: "image_enhancement_analysis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_test_results_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
             referencedRelation: "images"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_test_results_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["image_id"]
-          },
-          {
-            foreignKeyName: "model_test_results_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "job_enhancement_analysis"
             referencedColumns: ["id"]
           },
           {
@@ -849,27 +751,6 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_test_results_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["job_id"]
-          },
-          {
-            foreignKeyName: "model_test_results_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "model_test_analytics"
-            referencedColumns: ["video_id"]
-          },
-          {
-            foreignKeyName: "model_test_results_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "video_enhancement_analysis"
             referencedColumns: ["id"]
           },
           {
@@ -974,13 +855,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "projects_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -1139,13 +1013,6 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "usage_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
         ]
       }
       user_activity_log: {
@@ -1189,13 +1056,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_activity_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -1326,303 +1186,11 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "videos_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
         ]
       }
     }
     Views: {
-      content_moderation_analytics: {
-        Row: {
-          avg_nsfw_score: number | null
-          content_type: string | null
-          count: number | null
-          high_nsfw_count: number | null
-          low_nsfw_count: number | null
-          medium_nsfw_count: number | null
-          moderation_status: string | null
-        }
-        Relationships: []
-      }
-      enhancement_effectiveness: {
-        Row: {
-          avg_enhancement_time: number | null
-          avg_improvement: number | null
-          avg_quality: number | null
-          enhancement_strategy: string | null
-          high_quality_rate: number | null
-          success_rate: number | null
-          total_jobs: number | null
-        }
-        Relationships: []
-      }
-      image_enhancement_analysis: {
-        Row: {
-          compel_weights: Json | null
-          created_at: string | null
-          enhanced_prompt: string | null
-          enhancement_display_name: string | null
-          enhancement_strategy: string | null
-          enhancement_time_ms: number | null
-          format: string | null
-          id: string | null
-          prompt: string | null
-          quality: string | null
-          quality_improvement: number | null
-          quality_rating: number | null
-          qwen_expansion_percentage: number | null
-          status: string | null
-          user_id: string | null
-        }
-        Insert: {
-          compel_weights?: Json | null
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          format?: string | null
-          id?: string | null
-          prompt?: string | null
-          quality?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          compel_weights?: Json | null
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          format?: string | null
-          id?: string | null
-          prompt?: string | null
-          quality?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
-      job_enhancement_analysis: {
-        Row: {
-          completed_at: string | null
-          created_at: string | null
-          enhanced_prompt: string | null
-          enhancement_display_name: string | null
-          enhancement_strategy: string | null
-          enhancement_time_ms: number | null
-          generation_time_seconds: number | null
-          id: string | null
-          job_type: string | null
-          model_type: string | null
-          original_prompt: string | null
-          quality_improvement: number | null
-          quality_rating: number | null
-          status: string | null
-          user_id: string | null
-        }
-        Insert: {
-          completed_at?: string | null
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          generation_time_seconds?: never
-          id?: string | null
-          job_type?: string | null
-          model_type?: string | null
-          original_prompt?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          completed_at?: string | null
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          generation_time_seconds?: never
-          id?: string | null
-          job_type?: string | null
-          model_type?: string | null
-          original_prompt?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "jobs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "jobs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
-      model_test_analytics: {
-        Row: {
-          consistency: number | null
-          content_quality: number | null
-          file_size_bytes: number | null
-          generation_time_ms: number | null
-          image_id: string | null
-          image_metadata: Json | null
-          image_url: string | null
-          job_completed_at: string | null
-          job_created_at: string | null
-          job_id: string | null
-          job_status: string | null
-          job_type: string | null
-          model_type: string | null
-          model_version: string | null
-          notes: string | null
-          overall_quality: number | null
-          prompt_text: string | null
-          success: boolean | null
-          technical_quality: number | null
-          test_category: string | null
-          test_created_at: string | null
-          test_id: string | null
-          test_metadata: Json | null
-          test_series: string | null
-          test_tier: string | null
-          user_id: string | null
-          video_id: string | null
-          video_metadata: Json | null
-          video_url: string | null
-        }
-        Relationships: []
-      }
-      model_test_summary: {
-        Row: {
-          avg_consistency: number | null
-          avg_content_quality: number | null
-          avg_file_size_bytes: number | null
-          avg_generation_time_ms: number | null
-          avg_overall_quality: number | null
-          avg_technical_quality: number | null
-          first_test: string | null
-          last_test: string | null
-          model_type: string | null
-          successful_tests: number | null
-          test_series: string | null
-          test_tier: string | null
-          total_tests: number | null
-        }
-        Relationships: []
-      }
-      user_analytics: {
-        Row: {
-          avg_job_time_minutes: number | null
-          completed_jobs: number | null
-          failed_jobs: number | null
-          storage_used_bytes: number | null
-          total_images: number | null
-          total_jobs: number | null
-          total_videos: number | null
-          user_created_at: string | null
-          user_id: string | null
-          username: string | null
-        }
-        Relationships: []
-      }
-      video_enhancement_analysis: {
-        Row: {
-          compel_weights: Json | null
-          completed_at: string | null
-          created_at: string | null
-          duration: number | null
-          enhanced_prompt: string | null
-          enhancement_display_name: string | null
-          enhancement_strategy: string | null
-          enhancement_time_ms: number | null
-          id: string | null
-          original_prompt: string | null
-          quality_improvement: number | null
-          quality_rating: number | null
-          qwen_expansion_percentage: number | null
-          resolution: string | null
-          status: string | null
-          user_id: string | null
-        }
-        Insert: {
-          compel_weights?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          duration?: number | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          id?: string | null
-          original_prompt?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          resolution?: string | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          compel_weights?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          duration?: number | null
-          enhanced_prompt?: string | null
-          enhancement_display_name?: never
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          id?: string | null
-          original_prompt?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          resolution?: string | null
-          status?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "videos_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "videos_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_analytics"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       clean_orphaned_jobs: {

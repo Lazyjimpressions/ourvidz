@@ -105,10 +105,10 @@ export const useEnhancementQuality = () => {
       if (!user) return;
 
       const { error } = await supabase
-        .from('job_enhancement_analysis')
+        .from('jobs')
         .update({
-          quality_rating: userRating,
-          quality_improvement: qualityMetrics.overallScore / 100
+          quality_rating: Math.min(userRating, 99999.99),
+          quality_improvement: Math.min(qualityMetrics.overallScore / 100, 99999.99)
         })
         .eq('id', jobId);
 
