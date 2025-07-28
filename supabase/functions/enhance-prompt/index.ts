@@ -386,16 +386,20 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         actualStrategy = `${template.id}_${worker_response.modelUsed}`;
       }
       
-      if (!enhancedPrompt || enhancedPrompt === request.prompt) {
-        console.warn('⚠️ No enhancement detected, marking as no_enhancement')
-        actualStrategy = 'none';
-      }
-      
       // CRITICAL: Post-enhancement token management
       const processed = await this.postProcessEnhancement(
         enhancedPrompt,
         context
       )
+      
+      // PHASE 1 FIX: Check for enhancement AFTER post-processing (compression)
+      if (!enhancedPrompt || enhancedPrompt === request.prompt) {
+        // Only check original vs enhanced, not final vs original
+        if (processed.final_prompt === request.prompt && !processed.compression_applied) {
+          console.warn('⚠️ No enhancement detected, marking as no_enhancement')
+          actualStrategy = 'none';
+        }
+      }
 
       // Technical performance tracking
       await this.trackEnhancementMetrics(request, processed, template)
