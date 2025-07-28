@@ -34,16 +34,16 @@ export const ConversationList = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-gray-800">
-        <div className="flex items-center justify-between mb-4">
+      <div className="p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-white">Playground</h2>
           <Button
             onClick={handleCreateConversation}
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-gray-800"
           >
-            <Plus className="h-4 w-4 mr-1" />
-            New
+            <Plus className="h-4 w-4" />
           </Button>
         </div>
         
