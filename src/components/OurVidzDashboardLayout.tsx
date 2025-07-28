@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, User, LogOut } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import LibraryVersionToggle from "@/components/LibraryVersionToggle";
@@ -54,6 +54,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       label: "Generate Images",
       onClick: () => navigate("/workspace?mode=image"),
       active: isActiveRoute("/workspace", "image")
+    },
+    { 
+      icon: Brain, 
+      label: "🧠 Playground",
+      onClick: () => navigate("/playground"),
+      active: isActiveRoute("/playground")
     }
   ];
 

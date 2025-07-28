@@ -17,6 +17,7 @@ import Admin from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
 import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
+import Playground from "@/pages/Playground";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ function App() {
               <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
