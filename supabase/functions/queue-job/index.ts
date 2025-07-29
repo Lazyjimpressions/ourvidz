@@ -348,8 +348,8 @@ serve(async (req)=>{
     let qwenExpansionPercentage = null;
     let qualityImprovement = null;
     
-    // Only enhance if we have a prompt and it's not already enhanced
-    if (prompt && !metadata?.skip_enhancement) {
+    // Only enhance if user explicitly requested enhancement
+    if (prompt && metadata?.user_requested_enhancement === true) {
       try {
         console.log('🚀 Calling enhance-prompt function for job:', jobType);
         const enhancementStartTime = Date.now();

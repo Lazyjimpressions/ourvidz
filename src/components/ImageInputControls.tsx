@@ -498,7 +498,10 @@ export const ImageInputControls = ({
                 quality,
                 format: 'image',
                 isEnhanced: true,
-                enhancementMetadata: data.enhancementMetadata
+                enhancementMetadata: data.enhancementMetadata,
+                // Mark that user explicitly requested enhancement
+                user_requested_enhancement: true,
+                skip_enhancement: false
               }
             });
           } else if (onEnhancementApply) {

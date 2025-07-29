@@ -359,7 +359,12 @@ const Workspace = () => {
         referenceImageUrl: isVideoMode 
           ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
           : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
-        metadata: referenceMetadata
+        metadata: {
+          ...referenceMetadata,
+          // Control enhancement based on user intent - skip enhancement by default
+          skip_enhancement: true,
+          user_requested_enhancement: false
+        }
       };
 
       await generateContent(generationRequest);
@@ -379,7 +384,7 @@ const Workspace = () => {
       return;
     }
 
-    // Create a basic generation request
+    // Create a basic generation request - explicitly skip enhancement for direct generation
     const request = {
       format: selectedMode,
       prompt: prompt.trim(),
