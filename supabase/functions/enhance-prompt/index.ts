@@ -301,21 +301,34 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
       job_type: context.job_type,
       quality_level: context.quality_level,
       model_target: context.model_target,
-      enhancement_level: context.enhancement_level
+      enhancement_level: context.enhancement_level,
+      user_preferences: context.user_preferences
     });
 
-    // Route based on technical requirements and worker availability
+    // **FIXED**: Respect user's model selection from UI buttons
+    if (context.user_preferences?.enhancement_style) {
+      const selectedModel = context.user_preferences.enhancement_style;
+      if (selectedModel === 'qwen_instruct') {
+        console.log('🤖 User selected Qwen Instruct - using chat worker');
+        return 'chat';
+      } else if (selectedModel === 'qwen_base') {
+        console.log('🔧 User selected Qwen Base - using wan worker');
+        return 'wan';
+      }
+    }
+
+    // Fallback to technical requirements if no user preference
     if (context.enhancement_type === 'manual' || context.job_type.includes('sdxl')) {
-      console.log('🤖 Selected chat worker for SDXL optimization');
+      console.log('🤖 Fallback: Selected chat worker for SDXL optimization');
       return 'chat' // Better instruction following for image optimization
     }
     
     if (context.job_type.includes('video') && context.quality_level === 'fast') {
-      console.log('🎥 Selected WAN worker for fast video generation');
+      console.log('🎥 Fallback: Selected WAN worker for fast video generation');
       return 'wan' // Optimized for video generation
     }
 
-    console.log('🤖 Default: Selected chat worker for instruction following');
+    console.log('🤖 Fallback: Default chat worker for instruction following');
     return 'chat' // Default to instruction model
   }
 
