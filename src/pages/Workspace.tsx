@@ -30,6 +30,11 @@ const Workspace = () => {
   // Get mode from URL params, default to image
   const mode = searchParams.get('mode') || 'image';
   const [isVideoMode, setIsVideoMode] = useState(mode === 'video');
+
+  // Sync isVideoMode with URL changes
+  useEffect(() => {
+    setIsVideoMode(mode === 'video');
+  }, [mode]);
   
   // Generation state
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
@@ -831,7 +836,10 @@ const Workspace = () => {
               });
             }}
             isGenerating={isGenerating}
-            onSwitchToVideo={() => setIsVideoMode(true)}
+            onSwitchToVideo={() => {
+              setIsVideoMode(true);
+              navigate('/workspace?mode=video', { replace: true });
+            }}
             quality={quality}
             setQuality={setQuality}
             onLibraryClick={handleLibraryClick}
@@ -876,7 +884,10 @@ const Workspace = () => {
               });
             }}
             isGenerating={isGenerating}
-            onSwitchToImage={() => setIsVideoMode(false)}
+            onSwitchToImage={() => {
+              setIsVideoMode(false);
+              navigate('/workspace?mode=image', { replace: true });
+            }}
             quality={quality}
             setQuality={setQuality}
             onLibraryClick={handleLibraryClick}
