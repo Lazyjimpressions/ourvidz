@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { WandSparkles, FileText, Upload, ArrowRight } from "lucide-react";
+import { WandSparkles, FileText, Upload, ArrowRight, RotateCcw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 
 interface StoryboardConceptSectionProps {
@@ -101,10 +101,16 @@ export const StoryboardConceptSection = ({
             
             {/* Bottom Controls */}
             <div className="flex justify-between items-center">
-              <Button variant="outline" size="sm" className="gap-2 text-xs h-8">
-                <Upload className="w-3 h-3" />
-                Upload Text
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="gap-2 text-xs h-8">
+                  <Upload className="w-3 h-3" />
+                  Upload Text
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2 text-xs h-8">
+                  <RotateCcw className="w-3 h-3" />
+                  Refresh
+                </Button>
+              </div>
               
               <div className="text-xs text-muted-foreground">
                 {concept.length} / 12000
@@ -215,7 +221,7 @@ export const StoryboardConceptSection = ({
                   <CardContent className="p-3">
                     <div className="mb-2">
                       <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">
-                        {index === 0 ? 'LOGLINE' : index === 1 ? 'STORYLINE' : 'CONCEPT'}
+                        EXAMPLE
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">

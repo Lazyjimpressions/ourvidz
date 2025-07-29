@@ -64,7 +64,7 @@ const Storyboard = () => {
     <StoryboardLayout>
       <div className="max-w-7xl mx-auto p-6">
         {/* Progress Steps */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-8 pt-4">
           <span className={activeStep === 'concept' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('concept')}>CONCEPT</span>
           <span className="text-muted-foreground/50">{'>'}</span>
           <span className={activeStep === 'storyline' ? 'text-primary font-medium' : 'cursor-pointer hover:text-foreground'} onClick={() => setActiveStep('storyline')}>STORYLINE</span>
