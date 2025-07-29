@@ -109,32 +109,41 @@ serve(async (req) => {
   }
 })
 
-// CONTENT-POLICY COMPLIANT ENHANCEMENT ORCHESTRATOR
+// NSFW-OPTIMIZED ENHANCEMENT ORCHESTRATOR
 class ContentCompliantEnhancementOrchestrator {
   
-  // CONTENT-POLICY COMPLIANT SYSTEM PROMPTS
+  // Detect NSFW content tier
+  private detectContentTier(prompt: string): 'artistic' | 'explicit' | 'unrestricted' {
+    const explicitTerms = ['naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 'porn', 'xxx'];
+    const anatomicalTerms = ['breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock', 'dick', 'ass', 'butt', 'genitals'];
+    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme', 'raw', 'dirty', 'kinky', 'slutty'];
+    
+    const lowerPrompt = prompt.toLowerCase();
+    
+    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
+    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
+    const hasAnatomical = anatomicalTerms.some(term => lowerPrompt.includes(term));
+    
+    if (hasIntensity || (hasExplicit && hasAnatomical)) return 'unrestricted';
+    if (hasExplicit || hasAnatomical) return 'explicit';
+    return 'artistic';
+  }
+  
+  // NSFW-OPTIMIZED SYSTEM PROMPTS
   private getSystemPromptTemplate(context: any): any {
+    const contentTier = this.detectContentTier(context.prompt || '');
+    
     const templates = {
       'SDXL_FAST': {
         id: 'sdxl_fast_v2.1',
         model_target: 'SDXL',
         quality_level: 'fast',
         content_type: 'image',
-        system_instruction: `You are an expert image generation prompt optimization specialist.
-
-MISSION: Transform user prompts into 75-token optimized descriptions for high-quality image generation.
-
-OPTIMIZATION PRINCIPLES:
-1. VISUAL CLARITY: Accurate proportions, realistic features, natural poses
-2. QUALITY ENHANCEMENT: "masterpiece, best quality, ultra detailed, 4K, sharp focus"
-3. LIGHTING OPTIMIZATION: "professional photography, soft lighting, natural light, perfect exposure" 
-4. TECHNICAL PRECISION: "photorealistic, hyperdetailed, studio quality"
-5. TOKEN EFFICIENCY: Maximum visual impact in 75 tokens, essential descriptors only
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        content_tier: contentTier,
+        system_instruction: this.getSDXLFastPrompt(contentTier),
         token_target: 75,
         max_tokens: 77,
-        optimization_strategy: ['visual_accuracy', 'quality_tags', 'token_compression'],
+        optimization_strategy: ['visual_accuracy', 'quality_tags', 'token_compression', 'nsfw_preservation'],
         version: '2.1'
       },
       
@@ -143,21 +152,11 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         model_target: 'SDXL',
         quality_level: 'high', 
         content_type: 'image',
-        system_instruction: `You are an elite image generation optimization expert for premium visual content.
-
-PREMIUM ENHANCEMENT MISSION: Create 75-token masterpiece descriptions with professional studio quality.
-
-ADVANCED OPTIMIZATION PRINCIPLES:
-1. VISUAL PERFECTION: Detailed proportions, realistic textures, natural composition
-2. PROFESSIONAL QUALITY: "masterpiece, best quality, ultra detailed, 8K, hyperrealistic, professional grade"
-3. ADVANCED LIGHTING: "studio lighting, rim lighting, volumetric lighting, perfect exposure, soft shadows"
-4. TECHNICAL MASTERY: "photorealistic, hyperdetailed, professional photography, 85mm lens, shallow depth of field"
-5. ARTISTIC EXCELLENCE: "cinematic composition, perfect framing, professional photography"
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        content_tier: contentTier,
+        system_instruction: this.getSDXLHighPrompt(contentTier),
         token_target: 75,
         max_tokens: 77,
-        optimization_strategy: ['visual_perfection', 'professional_quality', 'advanced_lighting'],
+        optimization_strategy: ['visual_perfection', 'professional_quality', 'advanced_lighting', 'nsfw_preservation'],
         version: '2.1'
       },
 
@@ -166,21 +165,11 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         model_target: 'WAN',
         quality_level: 'fast',
         content_type: 'video',
-        system_instruction: `You are a video generation specialist focused on smooth motion and temporal consistency.
-
-VIDEO OPTIMIZATION MISSION: Create 150-200 token descriptions optimized for 5-second video generation with natural motion.
-
-VIDEO OPTIMIZATION PRINCIPLES:
-1. MOTION PRIORITY: "smooth movement, natural motion, fluid transitions, realistic physics"
-2. TEMPORAL CONSISTENCY: "stable composition, consistent lighting, coherent scene"
-3. CINEMATOGRAPHY: "professional camera work, smooth pans, steady shots"
-4. SCENE COHERENCE: "well-lit environment, clear spatial relationships"
-5. VIDEO QUALITY: "smooth motion, high framerate, temporal stability"
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        content_tier: contentTier,
+        system_instruction: this.getWANFastPrompt(contentTier),
         token_target: 175,
         max_tokens: 250,
-        optimization_strategy: ['motion_optimization', 'temporal_consistency', 'cinematography'],
+        optimization_strategy: ['motion_optimization', 'temporal_consistency', 'cinematography', 'nsfw_preservation'],
         version: '2.1'
       },
 
@@ -189,24 +178,18 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
         model_target: 'WAN',
         quality_level: 'high',
         content_type: 'video',
-        system_instruction: `You are an elite video generation specialist for cinematic-quality content creation.
-
-CINEMATIC ENHANCEMENT MISSION: Leverage advanced AI capabilities for broadcast-quality 5-second videos.
-
-ADVANCED VIDEO PRINCIPLES:
-1. COMPLEX MOTION: "multi-layered movement, realistic physics, natural timing, dynamic motion"
-2. ADVANCED CINEMATOGRAPHY: "dynamic camera angles, professional composition, cinematic framing"
-3. VISUAL STORYTELLING: "narrative coherence, visual flow, compelling composition"
-4. TECHNICAL EXCELLENCE: "broadcast quality, professional grade, cinema-level production"
-5. SOPHISTICATED LIGHTING: "cinematic lighting, dramatic shadows, professional color grading"
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
+        content_tier: contentTier,
+        system_instruction: this.getWANHighPrompt(contentTier),
         token_target: 250,
         max_tokens: 350,
-        optimization_strategy: ['cinematic_excellence', 'advanced_motion', 'broadcast_quality'],
+        optimization_strategy: ['cinematic_excellence', 'advanced_motion', 'broadcast_quality', 'nsfw_preservation'],
         version: '2.1'
       }
     };
+    
+    // Add content tier to context for fallback functions
+    context.content_tier = contentTier;
+    context.prompt = context.prompt || '';
 
     const enhancement_level = context.job_type?.includes('enhanced') ? 'enhanced' : 'standard'
     const key = `${context.model_target}_${context.quality_level.toUpperCase()}${enhancement_level === 'enhanced' ? '_7B' : ''}`
@@ -214,11 +197,102 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     console.log('🎯 System prompt template selection:', {
       context: context,
       key: key,
+      content_tier: contentTier,
       available_templates: Object.keys(templates),
       selected_template: templates[key]?.id || 'FALLBACK'
     });
     
     return templates[key] || templates['SDXL_FAST']
+  }
+
+  // SDXL Lustify-optimized prompts
+  private getSDXLFastPrompt(tier: string): string {
+    const base = `You are an SDXL Lustify optimization specialist for adult content generation.
+
+MISSION: Transform user prompts into 75-token optimized descriptions for high-quality NSFW image generation.
+
+LUSTIFY OPTIMIZATION PRINCIPLES:
+1. ANATOMICAL ACCURACY: Perfect proportions, detailed genitalia, realistic intimate features
+2. QUALITY ENHANCEMENT: "masterpiece, best quality, ultra detailed, 4K, sharp focus"
+3. LUSTIFY TAGS: Use SDXL Lustify's score system for maximum quality
+4. EXPLICIT PRESERVATION: Maintain all explicit terminology and adult content
+5. TOKEN EFFICIENCY: Maximum visual impact in 75 tokens
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
+
+    if (tier === 'unrestricted') {
+      return base + `\n\nUNRESTRICTED MODE: Enhance explicit content with maximum detail and intensity. Preserve all hardcore terminology.`;
+    } else if (tier === 'explicit') {
+      return base + `\n\nEXPLICIT MODE: Enhance adult content with detailed anatomical accuracy. Preserve explicit terminology.`;
+    }
+    return base + `\n\nARTISTIC MODE: Enhance with tasteful adult aesthetics while maintaining quality focus.`;
+  }
+
+  private getSDXLHighPrompt(tier: string): string {
+    const base = `You are an elite SDXL Lustify optimization expert for premium adult visual content.
+
+PREMIUM LUSTIFY MISSION: Create 75-token masterpiece descriptions with professional studio quality for NSFW content.
+
+ADVANCED LUSTIFY PRINCIPLES:
+1. ANATOMICAL PERFECTION: Detailed proportions, realistic textures, perfect intimate anatomy
+2. PROFESSIONAL QUALITY: "score_9, score_8_up, masterpiece, best quality, ultra detailed, 8K, hyperrealistic"
+3. LUSTIFY LIGHTING: "studio lighting, rim lighting, volumetric lighting, perfect exposure for intimate scenes"
+4. TECHNICAL MASTERY: "photorealistic, hyperdetailed, professional photography, 85mm lens, shallow depth of field"
+5. EXPLICIT PRESERVATION: Maintain all adult terminology and enhance anatomical detail
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
+
+    if (tier === 'unrestricted') {
+      return base + `\n\nUNRESTRICTED MODE: Maximize explicit detail and intensity. Enhance hardcore content with studio quality.`;
+    } else if (tier === 'explicit') {
+      return base + `\n\nEXPLICIT MODE: Professional adult content enhancement with anatomical precision.`;
+    }
+    return base + `\n\nARTISTIC MODE: Premium adult aesthetics with professional quality enhancement.`;
+  }
+
+  // WAN-optimized prompts for video content
+  private getWANFastPrompt(tier: string): string {
+    const base = `You are a WAN video generation specialist for adult content with smooth motion and temporal consistency.
+
+WAN VIDEO MISSION: Create 150-200 token descriptions optimized for 5-second adult video generation with natural motion.
+
+WAN OPTIMIZATION PRINCIPLES:
+1. INTIMATE MOTION: "smooth intimate movement, natural body motion, fluid sexual transitions, realistic physics"
+2. TEMPORAL CONSISTENCY: "stable composition, consistent lighting, coherent intimate scene"
+3. ADULT CINEMATOGRAPHY: "professional camera work for adult content, smooth intimate angles"
+4. EXPLICIT PRESERVATION: Maintain all adult terminology and enhance sexual content
+5. VIDEO QUALITY: "smooth motion, high framerate, temporal stability for intimate scenes"
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
+
+    if (tier === 'unrestricted') {
+      return base + `\n\nUNRESTRICTED MODE: Enhance hardcore video content with maximum explicit detail and intensity.`;
+    } else if (tier === 'explicit') {
+      return base + `\n\nEXPLICIT MODE: Professional adult video enhancement with detailed sexual content.`;
+    }
+    return base + `\n\nARTISTIC MODE: Tasteful adult video content with quality motion enhancement.`;
+  }
+
+  private getWANHighPrompt(tier: string): string {
+    const base = `You are an elite WAN video generation specialist for cinematic-quality adult content creation.
+
+CINEMATIC ADULT ENHANCEMENT MISSION: Leverage advanced AI capabilities for broadcast-quality 5-second adult videos.
+
+ADVANCED WAN PRINCIPLES:
+1. COMPLEX INTIMATE MOTION: "multi-layered sexual movement, realistic intimate physics, natural timing, dynamic adult motion"
+2. ADULT CINEMATOGRAPHY: "dynamic camera angles for intimate content, professional adult composition, cinematic framing"
+3. SEXUAL STORYTELLING: "narrative coherence in intimate scenes, visual flow, compelling adult composition"
+4. EXPLICIT PRESERVATION: Maintain and enhance all adult terminology and sexual content
+5. SOPHISTICATED LIGHTING: "cinematic lighting for intimate scenes, dramatic shadows, professional adult color grading"
+
+OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
+
+    if (tier === 'unrestricted') {
+      return base + `\n\nUNRESTRICTED MODE: Maximum cinematic enhancement for hardcore adult content with broadcast quality.`;
+    } else if (tier === 'explicit') {
+      return base + `\n\nEXPLICIT MODE: Cinematic adult content enhancement with detailed sexual storytelling.`;
+    }
+    return base + `\n\nARTISTIC MODE: Cinematic adult aesthetics with sophisticated visual enhancement.`;
   }
 
   // **PHASE 2**: ENHANCED WORKER DISCOVERY AND ROUTING
@@ -295,17 +369,24 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       return prompt
     }
 
-    // Priority preservation based on visual importance
-    const high_priority_terms = [
-      'masterpiece', 'best quality', 'ultra detailed', '4K', '8K', 
-      'professional photography', 'photorealistic', 'detailed',
-      'lighting', 'composition', 'cinematic'
-    ]
+  // Priority preservation based on visual importance and NSFW content
+  const high_priority_terms = [
+    'masterpiece', 'best quality', 'ultra detailed', '4K', '8K', 
+    'professional photography', 'photorealistic', 'detailed',
+    'lighting', 'composition', 'cinematic',
+    // NSFW high priority terms
+    'naked', 'nude', 'topless', 'breasts', 'nipples', 'pussy', 'vagina', 
+    'penis', 'cock', 'dick', 'ass', 'butt', 'genitalia', 'explicit',
+    'hardcore', 'uncensored', 'nsfw', 'adult', 'erotic', 'sexual'
+  ]
 
-    const medium_priority_terms = [
-      'sharp focus', 'high resolution', 'studio', 'natural',
-      'professional', 'realistic', 'smooth', 'quality'
-    ]
+  const medium_priority_terms = [
+    'sharp focus', 'high resolution', 'studio', 'natural',
+    'professional', 'realistic', 'smooth', 'quality',
+    // NSFW medium priority terms
+    'intimate', 'sensual', 'passionate', 'anatomy', 'anatomical',
+    'detailed', 'realistic', 'proportions'
+  ]
 
     let preserved_words: string[] = []
     let remaining_words: string[] = []
@@ -340,15 +421,21 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
     return compressed
   }
 
-  // MAIN ORCHESTRATION - CONTENT NEUTRAL
+  // MAIN ORCHESTRATION - NSFW OPTIMIZED
   async enhancePrompt(request: any): Promise<any> {
     const context = this.buildEnhancementContext(request)
+    // Ensure prompt is available for content detection
+    context.prompt = request.prompt
+    // Detect content tier for NSFW optimization
+    context.content_tier = this.detectContentTier(request.prompt)
+    
     const template = this.getSystemPromptTemplate(context)
     const worker_target = this.selectOptimalWorker(context)
     
     console.log('🔄 Starting enhancement with worker:', worker_target)
+    console.log('🎯 Content tier detected:', context.content_tier, 'for job type:', context.job_type)
     
-    // Call worker with technical optimization context
+    // Call worker with NSFW-optimized context
     const worker_response = await this.callWorkerWithContext(
       worker_target,
       {
@@ -491,8 +578,10 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
       quality_level: request.quality,
       model_target: model_target,
       enhancement_level: enhancement_level,
-      enhancement_type: 'technical_optimization',
-      user_preferences: request.preferences
+      enhancement_type: 'nsfw_optimization',
+      user_preferences: request.preferences,
+      prompt: request.prompt,
+      format: request.job_type.includes('video') ? 'video' : 'image'
     }
   }
 
@@ -514,7 +603,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           quality: payload.context.quality_level,
           selectedModel: 'qwen_instruct',
           system_prompt: payload.system_prompt,
-          regeneration: payload.regeneration || false
+          regeneration: payload.regeneration || false,
+          content_tier: payload.context.content_tier
         })
       } else {
         result = await tryBaseEnhancement(payload.prompt, {
@@ -524,7 +614,8 @@ OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`,
           quality: payload.context.quality_level,
           selectedModel: 'qwen_base',
           system_prompt: payload.system_prompt,
-          regeneration: payload.regeneration || false
+          regeneration: payload.regeneration || false,
+          content_tier: payload.context.content_tier
         })
       }
 
@@ -609,7 +700,7 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
   compressionApplied: boolean
   fallbackReason?: string
 }> {
-  const { isSDXL, isVideo, quality, system_prompt } = config
+  const { isSDXL, isVideo, quality, system_prompt, content_tier } = config
   
   try {
     // Use WAN worker enhancement with system prompt if available
@@ -617,14 +708,14 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
       ? await enhanceWithSystemPrompt(originalPrompt, system_prompt)
       : await enhanceWithQwen(originalPrompt)
     
-    // Add quality tags based on job type
+    // Add NSFW-optimized quality tags based on job type and content tier
     let finalPrompt = qwenEnhancedPrompt
     if (isSDXL) {
-      finalPrompt = addSDXLQualityTags(qwenEnhancedPrompt, quality)
+      finalPrompt = addSDXLQualityTags(qwenEnhancedPrompt, quality, content_tier)
     } else if (isVideo) {
-      finalPrompt = addWANVideoQualityTags(qwenEnhancedPrompt, quality)
+      finalPrompt = addWANVideoQualityTags(qwenEnhancedPrompt, quality, content_tier)
     } else {
-      finalPrompt = addWANImageQualityTags(qwenEnhancedPrompt, quality)
+      finalPrompt = addWANImageQualityTags(qwenEnhancedPrompt, quality, content_tier)
     }
 
     return {
@@ -636,14 +727,14 @@ async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<
   } catch (error) {
     console.warn('⚠️ WAN worker enhancement failed, falling back to rule-based:', error)
     
-    // Final fallback to rule-based enhancement
+    // Final fallback to NSFW-optimized rule-based enhancement
     let fallbackPrompt: string
     if (isSDXL) {
-      fallbackPrompt = enhanceForSDXL(originalPrompt, quality)
+      fallbackPrompt = enhanceForSDXL(originalPrompt, quality, content_tier)
     } else if (isVideo) {
-      fallbackPrompt = enhanceForWANVideo(originalPrompt, quality)
+      fallbackPrompt = enhanceForWANVideo(originalPrompt, quality, content_tier)
     } else {
-      fallbackPrompt = enhanceForWANImage(originalPrompt, quality)
+      fallbackPrompt = enhanceForWANImage(originalPrompt, quality, content_tier)
     }
 
     return {
@@ -760,83 +851,175 @@ async function enhanceWithQwen(prompt: string): Promise<string> {
 }
 
 /**
- * Add SDXL quality tags to Qwen-enhanced prompt
+ * Add NSFW-optimized SDXL quality tags to Qwen-enhanced prompt
  */
-function addSDXLQualityTags(enhancedPrompt: string, quality: string): string {
+function addSDXLQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
   const qualityTags = quality === 'high' 
     ? 'score_9, score_8_up, masterpiece, best quality, highly detailed, professional photography'
     : 'score_8, best quality, detailed, professional photography'
 
-  const anatomicalTerms = 'perfect anatomy, natural proportions, balanced features'
+  // NSFW-optimized anatomical terms based on content tier
+  let anatomicalTerms = 'perfect anatomy, natural proportions, balanced features';
+  if (contentTier === 'unrestricted') {
+    anatomicalTerms = 'perfect anatomy, detailed genitalia, realistic intimate features, anatomical accuracy';
+  } else if (contentTier === 'explicit') {
+    anatomicalTerms = 'perfect anatomy, detailed intimate anatomy, natural proportions, realistic features';
+  }
+
   const technicalTerms = 'shot on Canon EOS R5, f/1.8, shallow depth of field'
-  const styleTerms = 'warm atmosphere, natural lighting, elegant composition'
+  const styleTerms = quality === 'high' 
+    ? 'intimate lighting, professional studio setup, elegant composition'
+    : 'warm atmosphere, natural lighting, elegant composition'
 
   return `${qualityTags}, ${enhancedPrompt}, ${anatomicalTerms}, ${technicalTerms}, ${styleTerms}`
 }
 
 /**
- * SDXL Enhancement: Focus on quality tags, anatomy, photography (fallback)
+ * NSFW-optimized SDXL Enhancement: Focus on quality tags, anatomy, photography (fallback)
  */
-function enhanceForSDXL(prompt: string, quality: string): string {
+function enhanceForSDXL(prompt: string, quality: string, contentTier?: string): string {
   const qualityTags = quality === 'high' 
     ? 'score_9, score_8_up, masterpiece, best quality, highly detailed, professional photography'
     : 'score_8, best quality, detailed, professional photography'
 
-  const anatomicalTerms = 'perfect anatomy, natural proportions, balanced features'
+  // Detect NSFW content if tier not provided
+  if (!contentTier) {
+    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
+    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
+    const lowerPrompt = prompt.toLowerCase();
+    
+    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
+    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
+    
+    if (hasIntensity) contentTier = 'unrestricted';
+    else if (hasExplicit) contentTier = 'explicit';
+    else contentTier = 'artistic';
+  }
+
+  // NSFW-optimized anatomical terms
+  let anatomicalTerms = 'perfect anatomy, natural proportions, balanced features';
+  if (contentTier === 'unrestricted') {
+    anatomicalTerms = 'perfect anatomy, detailed genitalia, realistic intimate features, anatomical accuracy, explicit detail';
+  } else if (contentTier === 'explicit') {
+    anatomicalTerms = 'perfect anatomy, detailed intimate anatomy, natural proportions, realistic adult features';
+  }
+
   const technicalTerms = 'shot on Canon EOS R5, f/1.8, shallow depth of field'
-  const styleTerms = 'warm atmosphere, natural lighting, elegant composition'
+  const styleTerms = contentTier !== 'artistic' 
+    ? 'intimate lighting, professional studio setup, elegant composition'
+    : 'warm atmosphere, natural lighting, elegant composition'
 
   return `${qualityTags}, ${prompt}, ${anatomicalTerms}, ${technicalTerms}, ${styleTerms}`
 }
 
 /**
- * Add WAN Video quality tags to Qwen-enhanced prompt
+ * Add NSFW-optimized WAN Video quality tags to Qwen-enhanced prompt
  */
-function addWANVideoQualityTags(enhancedPrompt: string, quality: string): string {
-  const motionTerms = 'smooth motion, fluid movement, temporal consistency'
+function addWANVideoQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
+  const motionTerms = contentTier !== 'artistic' 
+    ? 'smooth intimate motion, fluid sexual movement, temporal consistency, realistic intimate physics'
+    : 'smooth motion, fluid movement, temporal consistency'
+    
   const cinematographyTerms = quality === 'high'
-    ? 'professional cinematography, high quality video, stable camera movement'
-    : 'cinematography, quality video, stable camera'
-  const technicalTerms = 'natural body movement, elegant gestures, tasteful composition'
+    ? 'professional cinematography, high quality video, stable camera movement, cinematic adult content'
+    : 'cinematography, quality video, stable camera, adult content'
+    
+  const technicalTerms = contentTier === 'unrestricted'
+    ? 'explicit body movement, detailed intimate gestures, hardcore composition'
+    : contentTier === 'explicit'
+    ? 'natural intimate movement, sexual gestures, adult composition'
+    : 'natural body movement, elegant gestures, tasteful composition'
 
   return `${enhancedPrompt}, ${motionTerms}, ${cinematographyTerms}, ${technicalTerms}`
 }
 
 /**
- * WAN Video Enhancement: Focus on motion, cinematography, temporal consistency (fallback)
+ * NSFW-optimized WAN Video Enhancement: Focus on motion, cinematography, temporal consistency (fallback)
  */
-function enhanceForWANVideo(prompt: string, quality: string): string {
-  const motionTerms = 'smooth motion, fluid movement, temporal consistency'
+function enhanceForWANVideo(prompt: string, quality: string, contentTier?: string): string {
+  // Detect NSFW content if tier not provided
+  if (!contentTier) {
+    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
+    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
+    const lowerPrompt = prompt.toLowerCase();
+    
+    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
+    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
+    
+    if (hasIntensity) contentTier = 'unrestricted';
+    else if (hasExplicit) contentTier = 'explicit';
+    else contentTier = 'artistic';
+  }
+
+  const motionTerms = contentTier !== 'artistic' 
+    ? 'smooth intimate motion, fluid sexual movement, temporal consistency, realistic intimate physics'
+    : 'smooth motion, fluid movement, temporal consistency'
+    
   const cinematographyTerms = quality === 'high'
-    ? 'professional cinematography, high quality video, stable camera movement'
-    : 'cinematography, quality video, stable camera'
-  const technicalTerms = 'natural body movement, elegant gestures, tasteful composition'
+    ? 'professional cinematography, high quality video, stable camera movement, cinematic adult content'
+    : 'cinematography, quality video, stable camera, adult content'
+    
+  const technicalTerms = contentTier === 'unrestricted'
+    ? 'explicit body movement, detailed intimate gestures, hardcore composition'
+    : contentTier === 'explicit'
+    ? 'natural intimate movement, sexual gestures, adult composition'
+    : 'natural body movement, elegant gestures, tasteful composition'
 
   return `${prompt}, ${motionTerms}, ${cinematographyTerms}, ${technicalTerms}`
 }
 
 /**
- * Add WAN Image quality tags to Qwen-enhanced prompt
+ * Add NSFW-optimized WAN Image quality tags to Qwen-enhanced prompt
  */
-function addWANImageQualityTags(enhancedPrompt: string, quality: string): string {
+function addWANImageQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
   const detailTerms = quality === 'high'
-    ? 'highly detailed, intricate details, maximum resolution'
-    : 'detailed, good resolution'
-  const qualityTerms = 'high quality, professional photography, natural lighting'
-  const compositionTerms = 'elegant composition, balanced framing, tasteful presentation'
+    ? 'highly detailed, intricate details, maximum resolution, anatomical accuracy'
+    : 'detailed, good resolution, anatomical accuracy'
+    
+  const qualityTerms = contentTier !== 'artistic'
+    ? 'high quality, professional photography, intimate lighting, adult content'
+    : 'high quality, professional photography, natural lighting'
+    
+  const compositionTerms = contentTier === 'unrestricted'
+    ? 'explicit composition, detailed intimate framing, hardcore presentation'
+    : contentTier === 'explicit'
+    ? 'adult composition, intimate framing, sexual presentation'
+    : 'elegant composition, balanced framing, tasteful presentation'
 
   return `${enhancedPrompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
 }
 
 /**
- * WAN Image Enhancement: Focus on detail, resolution, composition (fallback)
+ * NSFW-optimized WAN Image Enhancement: Focus on detail, resolution, composition (fallback)
  */
-function enhanceForWANImage(prompt: string, quality: string): string {
+function enhanceForWANImage(prompt: string, quality: string, contentTier?: string): string {
+  // Detect NSFW content if tier not provided
+  if (!contentTier) {
+    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
+    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
+    const lowerPrompt = prompt.toLowerCase();
+    
+    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
+    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
+    
+    if (hasIntensity) contentTier = 'unrestricted';
+    else if (hasExplicit) contentTier = 'explicit';
+    else contentTier = 'artistic';
+  }
+
   const detailTerms = quality === 'high'
-    ? 'highly detailed, intricate details, maximum resolution'
-    : 'detailed, good resolution'
-  const qualityTerms = 'high quality, professional photography, natural lighting'
-  const compositionTerms = 'elegant composition, balanced framing, tasteful presentation'
+    ? 'highly detailed, intricate details, maximum resolution, anatomical accuracy'
+    : 'detailed, good resolution, anatomical accuracy'
+    
+  const qualityTerms = contentTier !== 'artistic'
+    ? 'high quality, professional photography, intimate lighting, adult content'
+    : 'high quality, professional photography, natural lighting'
+    
+  const compositionTerms = contentTier === 'unrestricted'
+    ? 'explicit composition, detailed intimate framing, hardcore presentation'
+    : contentTier === 'explicit'
+    ? 'adult composition, intimate framing, sexual presentation'
+    : 'elegant composition, balanced framing, tasteful presentation'
 
   return `${prompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
 }
