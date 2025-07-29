@@ -1,6 +1,5 @@
 import React from 'react';
-import { Button } from "@/components/ui/button";
-import { AuthHeader } from "@/components/AuthHeader";
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 
 interface StoryboardLayoutProps {
   children: React.ReactNode;
@@ -9,24 +8,7 @@ interface StoryboardLayoutProps {
 export const StoryboardLayout = ({ children }: StoryboardLayoutProps) => {
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">OV</span>
-            </div>
-            <span className="font-semibold text-foreground">OurVidz</span>
-          </div>
-
-          {/* Right side - User Menu */}
-          <div className="flex items-center gap-4">
-            {/* This will be replaced with proper auth components later */}
-            <span className="text-sm text-muted-foreground">User Menu</span>
-          </div>
-        </div>
-      </header>
+      <WorkspaceHeader />
 
       {/* Main Content */}
       <main className="flex-1">
