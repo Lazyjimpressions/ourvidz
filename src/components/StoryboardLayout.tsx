@@ -20,8 +20,11 @@ export const StoryboardLayout = ({ children }: StoryboardLayoutProps) => {
             <span className="font-semibold text-foreground">OurVidz</span>
           </div>
 
-          {/* Right side - Auth Header components */}
-          <AuthHeader />
+          {/* Right side - User Menu */}
+          <div className="flex items-center gap-4">
+            {/* This will be replaced with proper auth components later */}
+            <span className="text-sm text-muted-foreground">User Menu</span>
+          </div>
         </div>
       </header>
 
