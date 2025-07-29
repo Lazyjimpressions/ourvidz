@@ -17,6 +17,7 @@ const Storyboard = () => {
   const [aspectRatio, setAspectRatio] = useState('16:9');
   const [videoStyle, setVideoStyle] = useState('Cinematic');
   const [cinematicInspiration, setCinematicInspiration] = useState('');
+  const [selectedMethod, setSelectedMethod] = useState('ai'); // Default to AI development
 
   const wordCount = concept.split(' ').filter(word => word.length > 0).length;
 
@@ -39,14 +40,16 @@ const Storyboard = () => {
           
           <h1 className="text-3xl font-bold text-white mb-2">Storyboard</h1>
           
-          {/* Workflow Progress */}
-          <div className="flex items-center gap-4 text-sm text-gray-400 mb-6">
-            <span className={activeTab === 'concept' ? 'text-blue-400 font-medium' : ''}>CONCEPT</span>
-            <span className="text-gray-600">{'>'}</span>
-            <span className={activeTab === 'settings' ? 'text-blue-400 font-medium' : ''}>SETTINGS & CAST</span>
-            <span className="text-gray-600">{'>'}</span>
-            <span className={activeTab === 'breakdown' ? 'text-blue-400 font-medium' : ''}>BREAKDOWN</span>
-          </div>
+            {/* Workflow Progress */}
+            <div className="flex items-center gap-4 text-sm text-gray-400 mb-6">
+              <span className={activeTab === 'concept' ? 'text-blue-400 font-medium' : ''}>CONCEPT</span>
+              <span className="text-gray-600">{'>'}</span>
+              <span className={activeTab === 'settings' ? 'text-blue-400 font-medium' : ''}>STORYLINE</span>
+              <span className="text-gray-600">{'>'}</span>
+              <span>SETTINGS & CAST</span>
+              <span className="text-gray-600">{'>'}</span>
+              <span className={activeTab === 'breakdown' ? 'text-blue-400 font-medium' : ''}>BREAKDOWN</span>
+            </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -63,17 +66,35 @@ const Storyboard = () => {
               
               {/* Workflow Selection */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto mb-8">
-                <Card className="bg-gray-800 border-gray-700 cursor-pointer hover:bg-gray-750 transition-colors">
+                <Card 
+                  className={`cursor-pointer transition-colors ${
+                    selectedMethod === 'ai' 
+                      ? 'bg-blue-900/30 border-blue-500' 
+                      : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                  }`}
+                  onClick={() => setSelectedMethod('ai')}
+                >
                   <CardContent className="p-6 text-center">
-                    <WandSparkles className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                    <WandSparkles className={`w-8 h-8 mx-auto mb-3 ${
+                      selectedMethod === 'ai' ? 'text-blue-400' : 'text-gray-400'
+                    }`} />
                     <h3 className="text-white font-medium mb-2">Develop concept with AI</h3>
                     <p className="text-gray-400 text-sm">Let AI help you develop your story</p>
                   </CardContent>
                 </Card>
                 
-                <Card className="bg-blue-900/30 border-blue-500 cursor-pointer">
+                <Card 
+                  className={`cursor-pointer transition-colors ${
+                    selectedMethod === 'script' 
+                      ? 'bg-blue-900/30 border-blue-500' 
+                      : 'bg-gray-800 border-gray-700 hover:bg-gray-750'
+                  }`}
+                  onClick={() => setSelectedMethod('script')}
+                >
                   <CardContent className="p-6 text-center">
-                    <FileText className="w-8 h-8 text-blue-400 mx-auto mb-3" />
+                    <FileText className={`w-8 h-8 mx-auto mb-3 ${
+                      selectedMethod === 'script' ? 'text-blue-400' : 'text-gray-400'
+                    }`} />
                     <h3 className="text-white font-medium mb-2">Stick to the script</h3>
                     <p className="text-gray-400 text-sm">Use your own script or story</p>
                   </CardContent>
@@ -105,7 +126,12 @@ const Storyboard = () => {
               <div className="text-center mt-6">
                 <Button 
                   onClick={() => setActiveTab('settings')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2"
+                  disabled={!concept.trim()}
+                  className={`px-8 py-2 transition-all ${
+                    concept.trim() 
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
                   Next
                   <ArrowRight className="w-4 h-4 ml-2" />
