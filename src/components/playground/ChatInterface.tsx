@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { usePlayground } from '@/contexts/PlaygroundContext';
 import { MessageBubble } from './MessageBubble';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { ConversationList } from './ConversationList';
 
 export const ChatInterface = () => {
   const {
@@ -75,20 +77,50 @@ export const ChatInterface = () => {
   // Empty state when no conversation is selected
   if (!state.activeConversationId) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-center p-8">
-        <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-8 rounded-2xl border border-gray-700 max-w-md">
-          <Sparkles className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-white mb-2">Welcome to Playground</h2>
-          <p className="text-gray-300 mb-6">
-            Start a conversation with AI to develop your stories, brainstorm ideas, or get creative assistance.
-          </p>
-          <Button
-            onClick={() => createConversation()}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Start New Conversation
-          </Button>
+      <div className="h-full flex flex-col">
+        {/* Header for consistency */}
+        <div className="border-b border-gray-800 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Bot className="h-6 w-6 text-blue-400" />
+            <h1 className="text-lg font-semibold text-white">AI Chat</h1>
+          </div>
+          
+          {/* Conversation History Panel */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="text-gray-400 hover:text-white hover:bg-gray-800"
+              >
+                <MessageSquare className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80 bg-[#111111] border-gray-800 p-0">
+              <SheetHeader className="p-4 border-b border-gray-800">
+                <SheetTitle className="text-white text-left">Conversation History</SheetTitle>
+              </SheetHeader>
+              <ConversationList />
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        {/* Empty state content */}
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-8 rounded-2xl border border-gray-700 max-w-md">
+            <Sparkles className="h-12 w-12 text-blue-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-white mb-2">Welcome to Playground</h2>
+            <p className="text-gray-300 mb-6">
+              Start a conversation with AI to develop your stories, brainstorm ideas, or get creative assistance.
+            </p>
+            <Button
+              onClick={() => createConversation()}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Start New Conversation
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -96,6 +128,33 @@ export const ChatInterface = () => {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Chat Header */}
+      <div className="border-b border-gray-800 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Bot className="h-6 w-6 text-blue-400" />
+          <h1 className="text-lg font-semibold text-white">AI Chat</h1>
+        </div>
+        
+        {/* Conversation History Panel */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="text-gray-400 hover:text-white hover:bg-gray-800"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-80 bg-[#111111] border-gray-800 p-0">
+            <SheetHeader className="p-4 border-b border-gray-800">
+              <SheetTitle className="text-white text-left">Conversation History</SheetTitle>
+            </SheetHeader>
+            <ConversationList />
+          </SheetContent>
+        </Sheet>
+      </div>
+
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {isLoadingMessages ? (
