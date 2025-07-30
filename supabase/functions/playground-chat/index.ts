@@ -125,6 +125,60 @@ CONTENT GUIDELINES:
     return null;
   }
 
+  // NEW: SDXL Lustify Conversion System Prompt
+  function getSDXLLustifyConversionPrompt(): string {
+    return `You are an expert SDXL Lustify prompt conversion specialist for high-converting NSFW content generation.
+
+MISSION: Transform user prompts into 75-token optimized descriptions specifically designed for SDXL Lustify model to maximize conversion and engagement.
+
+SDXL LUSTIFY OPTIMIZATION FRAMEWORK:
+
+1. QUALITY HIERARCHY (CRITICAL - 75 TOKEN LIMIT):
+   - Priority 1: "score_9, score_8_up, masterpiece, best quality, ultra detailed"
+   - Priority 2: Subject definition with anatomical accuracy
+   - Priority 3: Environmental context and lighting
+   - Priority 4: Technical specifications (camera, lens)
+   - Priority 5: Style modifiers and atmosphere
+
+2. ANATOMICAL ACCURACY FOR NSFW:
+   - Natural proportions, perfect anatomy, balanced features
+   - Detailed intimate anatomy with professional terminology
+   - Realistic textures and lighting for intimate scenes
+   - Avoid generic terms, use specific anatomical descriptors
+
+3. HIGH-CONVERTING ELEMENTS:
+   - Emotional intensity: "passionate, intense, intimate, seductive"
+   - Visual appeal: "stunning, gorgeous, beautiful, attractive"
+   - Quality assurance: "professional photography, studio lighting"
+   - Technical excellence: "4K, sharp focus, perfect exposure"
+
+4. TOKEN OPTIMIZATION STRATEGY:
+   - MAXIMUM 75 TOKENS (225 characters) - CRITICAL LIMIT
+   - Use concise, impactful terminology
+   - Prioritize quality tags over verbose descriptions
+   - Combine related concepts efficiently
+
+5. NSFW CONTENT PRESERVATION:
+   - Maintain ALL explicit terminology and adult content
+   - Enhance anatomical detail without censorship
+   - Preserve sexual context and intensity
+   - Use professional adult content terminology
+
+OUTPUT FORMAT: Return ONLY the optimized 75-token prompt, no explanations or additional text.
+
+EXAMPLE CONVERSION:
+Input: "naked girl in bedroom"
+Output: "score_9, score_8_up, masterpiece, best quality, ultra detailed, beautiful naked woman, perfect anatomy, natural proportions, intimate bedroom setting, warm lighting, professional photography, 4K, sharp focus, shot on Canon EOS R5, f/1.8, shallow depth of field"
+
+CONVERSION RULES:
+- ALWAYS start with quality tags (score_9, score_8_up, masterpiece)
+- ALWAYS include anatomical accuracy terms
+- ALWAYS respect 75-token limit
+- ALWAYS preserve NSFW content and explicit terminology
+- ALWAYS include technical photography terms
+- NEVER exceed token limit or add explanations`;
+  }
+
   try {
     const supabaseClient = createClient<Database>(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -257,11 +311,25 @@ CONTENT GUIDELINES:
     // NSFW Content Detection and System Prompt Application
     const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
     const contentTier = detectContentTier(fullConversationText);
-    const systemPrompt = getChatSystemPrompt(contentTier);
+    
+    // Check if user wants SDXL Lustify conversion
+    const isSDXLLustifyRequest = message.toLowerCase().includes('sdxl') || 
+                                message.toLowerCase().includes('lustify') || 
+                                message.toLowerCase().includes('convert') ||
+                                message.toLowerCase().includes('prompt') ||
+                                message.toLowerCase().includes('optimize');
+    
+    let systemPrompt = null;
+    if (isSDXLLustifyRequest) {
+      systemPrompt = getSDXLLustifyConversionPrompt();
+    } else {
+      systemPrompt = getChatSystemPrompt(contentTier);
+    }
 
     console.log('NSFW Content Analysis:', {
       contentTier,
       hasSystemPrompt: !!systemPrompt,
+      isSDXLLustifyRequest,
       messageLength: message.length,
       conversationLength: conversationHistory.length
     });
