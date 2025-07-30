@@ -92,7 +92,67 @@
 
 ---
 
-### **3. generate-admin-image** (`/functions/generate-admin-image/index.ts`)
+### **3. enhance-prompt** (`/functions/enhance-prompt/index.ts`)
+**Purpose**: AI-powered prompt enhancement with NSFW optimization
+
+**Authentication**: ❌ Not required (internal service)
+
+**Features**:
+- **ContentCompliantEnhancementOrchestrator**: Multi-tier enhancement system
+- **NSFW Content Detection**: Automatic tier classification (artistic/explicit/unrestricted)
+- **Worker Selection**: Intelligent routing between chat and WAN workers
+- **Token Optimization**: SDXL (77 tokens), WAN (175-250 tokens)
+- **System Prompts**: Specialized prompts for each model/quality combination
+
+**Supported Models**:
+- **SDXL Fast/High**: 75-token optimization with Lustify tags
+- **WAN Fast**: 175-token motion and temporal consistency
+- **WAN High 7B**: 250-token cinematic quality enhancement
+
+**Request Body**:
+```typescript
+{
+  prompt: string,
+  jobType: string,
+  format: string,
+  quality: 'fast' | 'high',
+  selectedModel?: 'qwen_instruct' | 'qwen_base',
+  user_id?: string,
+  regeneration?: boolean,
+  selectedPresets?: string[]
+}
+```
+
+**Response**:
+```typescript
+{
+  success: boolean,
+  original_prompt: string,
+  enhanced_prompt: string,
+  enhancement_strategy: string,
+  enhancement_metadata: {
+    original_length: number,
+    enhanced_length: number,
+    expansion_percentage: string,
+    job_type: string,
+    format: string,
+    quality: string,
+    is_sdxl: boolean,
+    is_video: boolean,
+    enhancement_strategy: string,
+    model_used: string,
+    token_count: number,
+    compression_applied: boolean,
+    token_optimization: object,
+    version: string
+  },
+  optimization: object
+}
+```
+
+---
+
+### **4. generate-admin-image** (`/functions/generate-admin-image/index.ts`)
 **Purpose**: Admin-only image generation for testing and admin operations
 
 **Authentication**: ❌ Not required (admin bypass)
@@ -130,6 +190,103 @@
 
 ---
 
+### **5. get-active-worker-url** (`/functions/get-active-worker-url/index.ts`)
+**Purpose**: Retrieve and validate active worker URL from database
+
+**Authentication**: ❌ Not required (internal service)
+
+**Features**:
+- Fetches worker URL from system_config table
+- Performs health check on worker endpoint
+- Returns registration information and health status
+- Handles worker availability validation
+
+**Response**:
+```typescript
+{
+  success: boolean,
+  workerUrl: string,
+  isHealthy: boolean,
+  healthError?: string,
+  registrationInfo?: {
+    autoRegistered: boolean,
+    registrationMethod: string,
+    detectionMethod: string,
+    lastUpdated: string,
+    lastRegistrationAttempt: string
+  }
+}
+```
+
+---
+
+### **6. register-chat-worker** (`/functions/register-chat-worker/index.ts`)
+**Purpose**: Register chat worker URL in system configuration
+
+**Authentication**: ❌ Not required (worker self-registration)
+
+**Features**:
+- Updates system_config with chat worker URL
+- Handles worker health validation
+- Manages worker registration metadata
+- Supports auto-registration workflow
+
+---
+
+### **7. update-worker-url** (`/functions/update-worker-url/index.ts`)
+**Purpose**: Update worker URL in system configuration
+
+**Authentication**: ❌ Not required (worker management)
+
+**Features**:
+- Updates system_config with new worker URL
+- Validates worker connectivity
+- Manages worker URL rotation
+- Handles worker failover scenarios
+
+---
+
+### **8. playground-chat** (`/functions/playground-chat/index.ts`)
+**Purpose**: Chat playground functionality with NSFW content handling
+
+**Authentication**: ✅ Required (JWT verification enabled)
+
+**Features**:
+- **Content Tier Detection**: Automatic NSFW content classification
+- **System Prompt Selection**: Context-aware prompt generation
+- **SDXL Lustify Conversion**: Specialized prompts for adult content
+- **Conversation Management**: Real-time chat with AI models
+
+**Content Tiers**:
+- **Artistic**: Tasteful adult aesthetics
+- **Explicit**: Detailed adult content
+- **Unrestricted**: Maximum explicit detail
+
+**Request Body**:
+```typescript
+{
+  message: string,
+  conversation_id?: string,
+  project_id?: string,
+  content_tier?: 'artistic' | 'explicit' | 'unrestricted'
+}
+```
+
+---
+
+### **9. validate-enhancement-fix** (`/functions/validate-enhancement-fix/index.ts`)
+**Purpose**: Validate and test enhancement system fixes
+
+**Authentication**: ❌ Not required (testing/debugging)
+
+**Features**:
+- Validates enhancement system functionality
+- Tests prompt enhancement quality
+- Debugs enhancement pipeline issues
+- Provides enhancement system diagnostics
+
+---
+
 ## 🔧 **Configuration**
 
 ### **Environment Variables Required**:
@@ -142,6 +299,10 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 # Redis Configuration (Upstash)
 UPSTASH_REDIS_REST_URL=your_redis_url
 UPSTASH_REDIS_REST_TOKEN=your_redis_token
+
+# Worker Configuration
+WAN_WORKER_API_KEY=your_worker_api_key
+CHAT_WORKER_URL=your_chat_worker_url
 ```
 
 ### **Function Configuration** (`config.toml`):
@@ -150,6 +311,27 @@ UPSTASH_REDIS_REST_TOKEN=your_redis_token
 verify_jwt = true
 
 [functions.job-callback]
+verify_jwt = false
+
+[functions.enhance-prompt]
+verify_jwt = false
+
+[functions.generate-admin-image]
+verify_jwt = false
+
+[functions.get-active-worker-url]
+verify_jwt = false
+
+[functions.register-chat-worker]
+verify_jwt = false
+
+[functions.update-worker-url]
+verify_jwt = false
+
+[functions.playground-chat]
+verify_jwt = true
+
+[functions.validate-enhancement-fix]
 verify_jwt = false
 ```
 
@@ -165,17 +347,34 @@ verify_jwt = false
 5. **Database updated** → Asset records created
 6. **Frontend notified** → Real-time updates via Supabase subscriptions
 
+### **Enhancement Workflow**:
+1. **User requests enhancement** → `enhance-prompt`
+2. **Content tier detected** → NSFW classification
+3. **Worker selected** → Chat or WAN worker routing
+4. **System prompt applied** → Model-specific optimization
+5. **Token optimization** → Compression if needed
+6. **Enhanced prompt returned** → Ready for generation
+
+### **Worker Management**:
+1. **Worker startup** → `register-chat-worker` or `update-worker-url`
+2. **Health monitoring** → `get-active-worker-url`
+3. **URL validation** → Health checks and connectivity tests
+4. **Configuration update** → Database system_config updates
+
 ### **Error Handling**:
 - Comprehensive error logging throughout
 - Graceful fallbacks for missing data
 - Detailed debugging information in metadata
 - Automatic retry mechanisms in workers
+- Multi-tier enhancement fallback system
 
 ### **Performance Optimizations**:
 - Intelligent negative prompt generation
 - Efficient job type parsing
 - Optimized database queries
 - Proper indexing for fast lookups
+- Token compression for SDXL compatibility
+- Worker health caching
 
 ---
 
@@ -186,6 +385,7 @@ verify_jwt = false
 - Detailed error tracking with timestamps
 - Performance metrics in metadata
 - Debug information for troubleshooting
+- Enhancement quality tracking
 
 ### **Key Metrics Tracked**:
 - Job creation and completion times
@@ -193,6 +393,16 @@ verify_jwt = false
 - Error rates and types
 - Storage bucket usage
 - User activity patterns
+- Enhancement success rates
+- Worker health and response times
+- Token optimization efficiency
+
+### **Health Monitoring**:
+- Worker availability checks
+- Response time monitoring
+- Error rate tracking
+- Enhancement quality validation
+- System configuration validation
 
 ---
 
@@ -202,14 +412,23 @@ verify_jwt = false
 - JWT verification for user-facing functions
 - Service role access for internal operations
 - Proper RLS policy enforcement
+- Admin bypass for testing functions
 
 ### **Data Validation**:
 - Input sanitization and validation
 - Job type whitelisting
 - File path security
 - User ownership verification
+- Content tier validation
 
 ### **Error Handling**:
 - No sensitive information in error messages
 - Proper HTTP status codes
-- Graceful degradation 
+- Graceful degradation
+- Fallback mechanisms for all critical functions
+
+### **NSFW Content Handling**:
+- Automatic content tier detection
+- Appropriate system prompt selection
+- Token optimization for adult content
+- Quality preservation for explicit content 
