@@ -237,7 +237,7 @@ export const ChatInterface = () => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
+      <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-32">
             <LoadingSpinner />
@@ -284,7 +284,7 @@ export const ChatInterface = () => {
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-              className="min-h-[36px] max-h-24 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm"
+              className="min-h-[40px] max-h-60 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm overflow-y-auto"
               disabled={isSubmitting || state.isLoadingMessage}
             />
           </div>
