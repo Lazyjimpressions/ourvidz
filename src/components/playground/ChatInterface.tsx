@@ -8,7 +8,7 @@ import { MessageBubble } from './MessageBubble';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ConversationList } from './ConversationList';
 import { PlaygroundModeSelector, type PlaygroundMode } from './PlaygroundModeSelector';
-import { RoleplaySetup } from './RoleplaySetup';
+import { RoleplaySetup, type RoleplayTemplate } from './RoleplaySetup';
 import { AdminTools } from './AdminTools';
 import { CreativeTools } from './CreativeTools';
 
@@ -72,14 +72,19 @@ export const ChatInterface = () => {
   };
 
   // Handle roleplay setup
-  const handleStartRoleplay = async (template: any) => {
+  const handleStartRoleplay = async (template: RoleplayTemplate) => {
     let conversationId = state.activeConversationId;
     
     if (!conversationId) {
       conversationId = await createConversation(`Roleplay: ${template.name}`);
     }
 
-    const systemPrompt = `${template.systemPrompt}\n\nSCENARIO: ${template.scenario}\nUSER CHARACTER: ${template.userCharacter}\nAI CHARACTER/ROLE: ${template.aiCharacter}\n\nBegin the roleplay scenario. Set the scene and wait for the user's first action.`;
+    // Build character descriptions
+    const characterDescriptions = template.characters
+      .map(char => `${char.name} (${char.role}): ${char.personality}`)
+      .join('\n');
+
+    const systemPrompt = `${template.systemPrompt}\n\nSCENARIO: ${template.scenario}\n\nCHARACTERS:\n${characterDescriptions}\n\nBegin the roleplay scenario. Set the scene and wait for the user's first action.`;
     
     await sendMessage(`[System: Starting roleplay session]\n\n${systemPrompt}`);
   };
