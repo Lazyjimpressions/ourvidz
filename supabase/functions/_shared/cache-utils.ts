@@ -5,14 +5,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export interface CacheData {
-  prompt_templates: Record<string, any>;
-  negative_prompts: Record<string, any>;
-  nsfw_terms: string[];
+  templateCache: {
+    chat: {
+      sfw: Record<string, string>;
+      nsfw: Record<string, string>;
+    };
+    enhancement: Record<string, Record<string, any>>;
+  };
+  negativeCache: Record<string, Record<string, string[]>>;
+  nsfwTerms: string[];
   metadata: {
     refreshed_at: string;
     template_count: number;
     negative_prompt_count: number;
-    hash: string;
+    cache_version: string;
+    integrity_hash: string;
   };
 }
 
@@ -39,7 +46,7 @@ export async function getCachedData(): Promise<CacheData | null> {
 
     // Validate cache structure
     const cache = data.config as CacheData;
-    if (!cache.prompt_templates || !cache.negative_prompts || !cache.metadata) {
+    if (!cache.templateCache || !cache.negativeCache || !cache.metadata) {
       console.warn('⚠️ Invalid cache structure');
       return null;
     }
@@ -53,9 +60,9 @@ export async function getCachedData(): Promise<CacheData | null> {
     }
 
     console.log('✅ Cache loaded:', {
-      templateCount: Object.keys(cache.prompt_templates).length,
-      negativePromptCount: Object.keys(cache.negative_prompts).length,
-      nsfwTermCount: cache.nsfw_terms?.length || 0,
+      templateCount: cache.metadata.template_count,
+      negativePromptCount: cache.metadata.negative_prompt_count,
+      nsfwTermCount: cache.nsfwTerms?.length || 0,
       ageHours: ageHours.toFixed(1)
     });
 
@@ -77,16 +84,30 @@ export function getTemplateFromCache(
 ): any {
   if (!cache) return null;
 
-  const templateKey = `${modelType}_${useCase}_${contentMode}`;
-  const template = cache.prompt_templates[templateKey];
+  // Handle chat templates with new structure
+  if (useCase.startsWith('chat_')) {
+    const chatType = useCase.replace('chat_', '');
+    const chatTemplate = cache.templateCache.chat?.[contentMode]?.[chatType];
+    
+    if (!chatTemplate) {
+      console.warn(`⚠️ Chat template not found in cache: chat.${contentMode}.${chatType}`);
+      return null;
+    }
+    
+    console.log(`✅ Chat template found in cache: chat.${contentMode}.${chatType}`);
+    return { system_prompt: chatTemplate };
+  }
+
+  // Handle enhancement templates (existing logic with new structure)
+  const enhancementTemplate = cache.templateCache.enhancement?.[modelType]?.[contentMode];
   
-  if (!template) {
-    console.warn(`⚠️ Template not found in cache: ${templateKey}`);
+  if (!enhancementTemplate) {
+    console.warn(`⚠️ Enhancement template not found in cache: enhancement.${modelType}.${contentMode}`);
     return null;
   }
 
-  console.log(`✅ Template found in cache: ${templateKey}`);
-  return template;
+  console.log(`✅ Enhancement template found in cache: enhancement.${modelType}.${contentMode}`);
+  return enhancementTemplate;
 }
 
 /**
@@ -103,27 +124,28 @@ export function getNegativePromptsFromCache(
     return userNegativePrompt || '';
   }
 
-  // Try specific negative prompt first
-  const specificKey = `${modelType}_${contentMode}`;
-  let negativePrompt = cache.negative_prompts[specificKey];
+  // Get negative prompts using new cache structure
+  let negativePrompts: string[] = [];
   
-  // Fallback to model-specific or general
-  if (!negativePrompt) {
-    negativePrompt = cache.negative_prompts[modelType] || cache.negative_prompts['general'] || '';
+  if (cache.negativeCache?.[modelType]?.[contentMode]) {
+    negativePrompts = cache.negativeCache[modelType][contentMode];
   }
+
+  const negativePrompt = negativePrompts.join(', ');
 
   // Merge with user negative prompt
+  let finalPrompt = negativePrompt;
   if (userNegativePrompt && userNegativePrompt.trim()) {
-    negativePrompt = userNegativePrompt + (negativePrompt ? `, ${negativePrompt}` : '');
+    finalPrompt = userNegativePrompt + (negativePrompt ? `, ${negativePrompt}` : '');
   }
 
-  console.log(`✅ Negative prompt generated for ${specificKey}:`, {
-    hasSystemPrompt: !!cache.negative_prompts[specificKey],
+  console.log(`✅ Negative prompt generated for ${modelType}_${contentMode}:`, {
+    hasSystemPrompts: negativePrompts.length > 0,
     hasUserPrompt: !!userNegativePrompt,
-    finalLength: negativePrompt.length
+    finalLength: finalPrompt.length
   });
 
-  return negativePrompt;
+  return finalPrompt;
 }
 
 /**
@@ -133,7 +155,7 @@ export function detectContentTier(prompt: string, cache: CacheData | null): 'sfw
   const lowerPrompt = prompt.toLowerCase();
   
   // Use cached NSFW terms if available
-  let nsfwTerms = cache?.nsfw_terms || [];
+  let nsfwTerms = cache?.nsfwTerms || [];
   
   // Fallback to hardcoded terms if cache is empty
   if (nsfwTerms.length === 0) {
@@ -154,6 +176,58 @@ export function detectContentTier(prompt: string, cache: CacheData | null): 'sfw
   });
   
   return result;
+}
+
+/**
+ * Get chat template from cache with context detection
+ */
+export function getChatTemplateFromCache(
+  cache: CacheData | null,
+  contextType: string,
+  contentTier: 'sfw' | 'nsfw'
+): string | null {
+  if (!cache?.templateCache?.chat?.[contentTier]) {
+    console.warn(`⚠️ No chat templates available for ${contentTier} content`);
+    return null;
+  }
+
+  // Map context types to chat template types
+  let chatType: string;
+  
+  // Check for SDXL conversion request first
+  if (contextType.includes('sdxl') || contextType.includes('conversion')) {
+    chatType = 'sdxl_conversion';
+  }
+  // Map context types to template types
+  else if (contextType === 'story_development' || contextType === 'creative') {
+    chatType = 'creative';
+  }
+  else if (contextType === 'roleplay') {
+    chatType = 'roleplay'; 
+  }
+  else if (contextType === 'admin') {
+    chatType = 'admin';
+  }
+  else {
+    chatType = 'general'; // Default fallback
+  }
+
+  const template = cache.templateCache.chat[contentTier][chatType];
+  
+  if (!template) {
+    // Fallback to general template if specific one not found
+    const fallbackTemplate = cache.templateCache.chat[contentTier]['general'];
+    if (fallbackTemplate) {
+      console.log(`✅ Using fallback general chat template for ${contextType} (${contentTier})`);
+      return fallbackTemplate;
+    }
+    
+    console.warn(`⚠️ No chat template found for ${contextType} (${contentTier})`);
+    return null;
+  }
+
+  console.log(`✅ Chat template found: ${chatType} (${contentTier})`);
+  return template;
 }
 
 /**

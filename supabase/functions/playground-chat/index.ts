@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { 
+  getCachedData, 
+  detectContentTier, 
+  getChatTemplateFromCache,
+  getDatabaseTemplate 
+} from '../_shared/cache-utils.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,114 +60,64 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Dynamic content detection using cached database templates
-  async function detectContentTier(prompt: string, supabaseClient: any): Promise<'sfw' | 'nsfw'> {
-    try {
-      // Get cached content detection terms from system_config
-      const { data: systemConfig } = await supabaseClient
-        .from('system_config')
-        .select('config')
-        .single();
-
-      if (systemConfig?.config?.nsfwTerms && Array.isArray(systemConfig.config.nsfwTerms)) {
-        const nsfwTerms = systemConfig.config.nsfwTerms;
-        const lowerPrompt = prompt.toLowerCase();
-        return nsfwTerms.some(term => lowerPrompt.includes(term.toLowerCase())) ? 'nsfw' : 'sfw';
-      }
-    } catch (error) {
-      console.warn('⚠️ Failed to load NSFW terms from cache, using fallback:', error);
-    }
-
-    // Fallback content detection terms
-    const fallbackNsfwTerms = [
-      'naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 'porn', 'xxx',
-      'seductive', 'intimate', 'passionate', 'explicit', 'hardcore', 'extreme', 'rough', 'bdsm', 
-      'fetish', 'kink', 'taboo', 'forbidden', 'unrestricted', 'roleplay', 'fantasy', 'scenario'
-    ];
+  // Dynamic system prompt helper using cached templates
+  async function getSystemPromptForChat(
+    message: string,
+    conversationHistory: any[],
+    contextType: string,
+    cache: any
+  ): Promise<string | null> {
+    // Detect content tier from full conversation context
+    const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
+    const contentTier = detectContentTier(fullConversationText, cache);
     
-    const lowerPrompt = prompt.toLowerCase();
-    return fallbackNsfwTerms.some(term => lowerPrompt.includes(term)) ? 'nsfw' : 'sfw';
-  }
-
-  // Dynamic chat system prompts using cached database templates
-  async function getChatSystemPrompt(contentTier: 'sfw' | 'nsfw', supabaseClient: any): Promise<string | null> {
-    if (contentTier === 'sfw') {
-      return null; // No system prompt for SFW conversations
+    // Check if user wants SDXL Lustify conversion
+    const isSDXLLustifyRequest = message.toLowerCase().includes('sdxl') || 
+                                message.toLowerCase().includes('lustify') || 
+                                message.toLowerCase().includes('convert') ||
+                                message.toLowerCase().includes('prompt') ||
+                                message.toLowerCase().includes('optimize');
+    
+    let templateContext = contextType;
+    if (isSDXLLustifyRequest) {
+      templateContext = 'sdxl_conversion';
     }
 
-    try {
-      // Get cached chat prompts from system_config
-      const { data: systemConfig } = await supabaseClient
-        .from('system_config')
-        .select('config')
-        .single();
-
-      if (systemConfig?.config?.templateCache?.chat?.[contentTier]) {
-        const cachedPrompt = systemConfig.config.templateCache.chat[contentTier];
-        console.log('✅ Using cached chat system prompt:', { contentTier, length: cachedPrompt.length });
-        return cachedPrompt;
+    // Get system prompt from cache
+    const systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
+    
+    // Fallback to database if cache fails
+    if (!systemPrompt && contentTier === 'nsfw') {
+      try {
+        console.log('🔄 Falling back to database for chat template');
+        let useCase = 'chat_general';
+        if (isSDXLLustifyRequest) {
+          useCase = 'chat_sdxl_conversion';
+        } else if (templateContext === 'story_development') {
+          useCase = 'chat_creative';
+        } else if (templateContext === 'roleplay') {
+          useCase = 'chat_roleplay';
+        } else if (templateContext === 'admin') {
+          useCase = 'chat_admin';
+        }
+        
+        const dbTemplate = await getDatabaseTemplate('qwen_instruct', useCase, contentTier);
+        return dbTemplate?.system_prompt || null;
+      } catch (error) {
+        console.warn('⚠️ Database fallback failed:', error);
       }
-    } catch (error) {
-      console.warn('⚠️ Failed to load chat prompt from cache, using fallback:', error);
     }
 
-    // Fallback chat system prompt for NSFW content
-    const fallbackPrompt = `You are an adult-content AI assistant that can discuss mature themes naturally.
+    console.log('Dynamic System Prompt Selection:', {
+      contentTier,
+      templateContext,
+      isSDXLLustifyRequest,
+      hasSystemPrompt: !!systemPrompt,
+      messageLength: message.length,
+      conversationLength: conversationHistory.length
+    });
 
-GUIDELINES:
-1. Handle adult and intimate topics with maturity and respect
-2. Provide thoughtful responses to questions about relationships and intimacy
-3. Use appropriate terminology for adult discussions
-4. Maintain conversational flow while respecting content boundaries
-5. Focus on helpful, informative responses for mature audiences
-
-NSFW MODE: Engage with adult content requests while maintaining helpful and respectful communication.`;
-
-    console.log('🔄 Using fallback chat system prompt for NSFW content');
-    return fallbackPrompt;
-  }
-
-  // Dynamic SDXL Lustify conversion prompt using cached database templates
-  async function getSDXLLustifyConversionPrompt(supabaseClient: any): Promise<string> {
-    try {
-      // Get cached SDXL conversion prompt from system_config
-      const { data: systemConfig } = await supabaseClient
-        .from('system_config')
-        .select('config')
-        .single();
-
-      if (systemConfig?.config?.templateCache?.sdxl_conversion) {
-        const cachedPrompt = systemConfig.config.templateCache.sdxl_conversion;
-        console.log('✅ Using cached SDXL conversion prompt:', { length: cachedPrompt.length });
-        return cachedPrompt;
-      }
-    } catch (error) {
-      console.warn('⚠️ Failed to load SDXL conversion prompt from cache, using fallback:', error);
-    }
-
-    // Fallback SDXL conversion prompt
-    const fallbackPrompt = `You are an expert SDXL prompt optimization specialist.
-
-Transform user prompts into optimized descriptions for SDXL image generation with these guidelines:
-
-1. QUALITY TAGS: Start with "score_9, score_8_up, masterpiece, best quality, ultra detailed"
-2. SUBJECT: Define the main subject with accurate anatomical terms
-3. ENVIRONMENT: Include setting, lighting, and atmosphere
-4. TECHNICAL: Add photography terms like "4K, sharp focus, professional lighting"
-5. TOKEN LIMIT: Maximum 75 tokens
-
-RULES:
-- Preserve all content including NSFW terminology
-- Enhance anatomical accuracy and detail
-- Include technical photography specifications
-- Return ONLY the optimized prompt, no explanations
-
-EXAMPLE:
-Input: "woman in bedroom"
-Output: "score_9, score_8_up, masterpiece, best quality, ultra detailed, beautiful woman, perfect anatomy, intimate bedroom setting, warm lighting, professional photography, 4K, sharp focus"`;
-
-    console.log('🔄 Using fallback SDXL conversion prompt');
-    return fallbackPrompt;
+    return systemPrompt;
   }
 
   try {
@@ -293,32 +249,16 @@ Output: "score_9, score_8_up, masterpiece, best quality, ultra detailed, beautif
       }
     }
 
-    // Dynamic content detection and system prompt application
-    const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
-    const contentTier = await detectContentTier(fullConversationText, supabaseClient);
+    // Load cached data for template processing
+    const cache = await getCachedData();
     
-    // Check if user wants SDXL Lustify conversion
-    const isSDXLLustifyRequest = message.toLowerCase().includes('sdxl') || 
-                                message.toLowerCase().includes('lustify') || 
-                                message.toLowerCase().includes('convert') ||
-                                message.toLowerCase().includes('prompt') ||
-                                message.toLowerCase().includes('optimize');
-    
-    let systemPrompt = null;
-    if (isSDXLLustifyRequest) {
-      systemPrompt = await getSDXLLustifyConversionPrompt(supabaseClient);
-    } else {
-      systemPrompt = await getChatSystemPrompt(contentTier, supabaseClient);
-    }
-
-    console.log('Dynamic Content Analysis:', {
-      contentTier,
-      hasSystemPrompt: !!systemPrompt,
-      isSDXLLustifyRequest,
-      messageLength: message.length,
-      conversationLength: conversationHistory.length,
-      systemPromptSource: systemPrompt ? 'database_cache' : 'none'
-    });
+    // Get system prompt using cached templates
+    const systemPrompt = await getSystemPromptForChat(
+      message,
+      conversationHistory,
+      conversation.conversation_type === 'story_development' ? 'story_development' : 'general',
+      cache
+    );
 
     // Call the chat worker with correct payload format
     const chatPayload = {

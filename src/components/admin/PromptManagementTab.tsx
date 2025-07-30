@@ -7,6 +7,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { PromptTemplatesTable } from './PromptTemplatesTable';
 import { NegativePromptsTable } from './NegativePromptsTable';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Plus } from 'lucide-react';
 
 interface PromptTemplate {
   id: string;
@@ -302,6 +305,25 @@ export function PromptManagementTab() {
     });
   };
 
+  const getChatTemplates = () => {
+    return promptTemplates.filter(template => template.use_case.startsWith('chat_'));
+  };
+
+  const getEnhancementTemplates = () => {
+    return promptTemplates.filter(template => !template.use_case.startsWith('chat_'));
+  };
+
+  const getFilteredChatTemplates = () => {
+    return getChatTemplates().filter(template => {
+      const matchesSearch = template.template_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           template.use_case.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           template.system_prompt.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesModel = filterModel === 'all' || template.model_type === filterModel;
+      const matchesContent = filterContentMode === 'all' || template.content_mode === filterContentMode;
+      return matchesSearch && matchesModel && matchesContent;
+    });
+  };
+
   // Test prompt functionality
   const testPrompt = async (template: PromptTemplate) => {
     try {
@@ -398,28 +420,79 @@ export function PromptManagementTab() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-3">
-        <TabsList className="grid w-full grid-cols-2 h-8 text-xs">
-          <TabsTrigger value="templates" className="text-xs">Templates</TabsTrigger>
-          <TabsTrigger value="negatives" className="text-xs">Negative Prompts</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-4 h-8 text-xs">
+          <TabsTrigger value="templates" className="text-xs">Enhancement</TabsTrigger>
+          <TabsTrigger value="chat" className="text-xs">Chat</TabsTrigger>
+          <TabsTrigger value="negatives" className="text-xs">Negative</TabsTrigger>
+          <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
         </TabsList>
 
-        {/* Prompt Templates Tab */}
+        {/* Enhancement Templates Tab */}
         <TabsContent value="templates" className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">
-              Templates ({getFilteredTemplates().length})
+              Enhancement Templates ({getFilteredTemplates().filter(t => !t.use_case.startsWith('chat_')).length})
             </span>
             <button
               onClick={createTemplate}
               disabled={isCreatingTemplate}
               className="text-xs text-blue-600 hover:text-blue-800 underline"
             >
-              {isCreatingTemplate ? 'Creating...' : '+ Add Template'}
+              {isCreatingTemplate ? 'Creating...' : '+ Add Enhancement Template'}
             </button>
           </div>
 
           <PromptTemplatesTable
-            templates={getFilteredTemplates()}
+            templates={getFilteredTemplates().filter(t => !t.use_case.startsWith('chat_'))}
+            onUpdate={updateTemplate}
+            onDelete={deleteTemplate}
+            onTest={testPrompt}
+            estimateTokens={estimateTokens}
+          />
+        </TabsContent>
+
+        {/* Chat Templates Tab */}
+        <TabsContent value="chat" className="space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-medium">
+              Chat Templates ({getFilteredChatTemplates().length})
+            </span>
+            <button
+              onClick={() => {
+                createTemplate();
+                // Will need to modify the create function to set appropriate defaults for chat
+              }}
+              disabled={isCreatingTemplate}
+              className="text-xs text-blue-600 hover:text-blue-800 underline"
+            >
+              {isCreatingTemplate ? 'Creating...' : '+ Add Chat Template'}
+            </button>
+          </div>
+
+          <div className="bg-muted/50 p-3 rounded-lg mb-3 text-xs">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <strong>SFW Chat Templates:</strong>
+                <ul className="list-disc list-inside ml-4 text-muted-foreground mt-1">
+                  <li>General conversation</li>
+                  <li>Admin assistance</li>
+                  <li>Creative writing</li>
+                </ul>
+              </div>
+              <div>
+                <strong>NSFW Chat Templates:</strong>
+                <ul className="list-disc list-inside ml-4 text-muted-foreground mt-1">
+                  <li>General adult conversation</li>
+                  <li>Roleplay scenarios</li>
+                  <li>Creative adult content</li>
+                  <li>SDXL conversion</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <PromptTemplatesTable
+            templates={getFilteredChatTemplates()}
             onUpdate={updateTemplate}
             onDelete={deleteTemplate}
             onTest={testPrompt}
@@ -448,6 +521,84 @@ export function PromptManagementTab() {
             onDelete={deleteNegativePrompt}
             estimateTokens={estimateTokens}
           />
+        </TabsContent>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Enhancement Templates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{getEnhancementTemplates().length}</div>
+                <p className="text-xs text-muted-foreground">Active enhancement templates</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Chat Templates</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{getChatTemplates().length}</div>
+                <p className="text-xs text-muted-foreground">Active chat templates</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Negative Prompts</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{negativePrompts.length}</div>
+                <p className="text-xs text-muted-foreground">Active negative prompts</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Chat Template Distribution</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {['chat_general', 'chat_roleplay', 'chat_creative', 'chat_admin', 'chat_sdxl_conversion'].map(useCase => {
+                  const count = getChatTemplates().filter(t => t.use_case === useCase).length;
+                  const displayName = useCase.replace('chat_', '').replace('_', ' ');
+                  return (
+                    <div key={useCase} className="flex justify-between">
+                      <span className="capitalize text-xs">{displayName}</span>
+                      <Badge variant="secondary" className="text-xs">{count}</Badge>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Content Mode Distribution</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {['sfw', 'nsfw'].map(mode => {
+                  const enhancementCount = getEnhancementTemplates().filter(t => t.content_mode === mode).length;
+                  const chatCount = getChatTemplates().filter(t => t.content_mode === mode).length;
+                  return (
+                    <div key={mode} className="space-y-1">
+                      <div className="flex justify-between">
+                        <span className="uppercase font-medium text-xs">{mode}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground ml-4">
+                        <span>Enhancement: {enhancementCount}</span>
+                        <span>Chat: {chatCount}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
       </Tabs>

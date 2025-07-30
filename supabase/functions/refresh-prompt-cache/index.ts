@@ -72,8 +72,19 @@ serve(async (req) => {
 
     // 3. Organize templates by model and use case
     const templateCache = {
-      chat: { sfw: null, nsfw: null },
-      sdxl_conversion: null,
+      chat: { 
+        sfw: {
+          general: null,
+          admin: null,
+          creative: null
+        }, 
+        nsfw: {
+          general: null,
+          roleplay: null,
+          creative: null,
+          sdxl_conversion: null
+        }
+      },
       enhancement: {
         sdxl: { sfw: null, nsfw: null },
         wan: { sfw: null, nsfw: null },
@@ -86,18 +97,16 @@ serve(async (req) => {
 
     // Populate template cache
     templates.forEach(template => {
-      // Chat templates
-      if (template.use_case === 'chat' && ['sfw', 'nsfw'].includes(template.content_mode)) {
-        templateCache.chat[template.content_mode] = template.system_prompt;
+      // Chat templates - new structure with specific use cases
+      if (template.use_case.startsWith('chat_')) {
+        const chatType = template.use_case.replace('chat_', ''); // Remove 'chat_' prefix
+        if (templateCache.chat[template.content_mode] && templateCache.chat[template.content_mode][chatType] !== undefined) {
+          templateCache.chat[template.content_mode][chatType] = template.system_prompt;
+        }
       }
       
-      // SDXL conversion template
-      if (template.use_case === 'sdxl_conversion') {
-        templateCache.sdxl_conversion = template.system_prompt;
-      }
-      
-      // Enhancement templates by model
-      if (template.use_case === 'enhancement' && templateCache.enhancement[template.model_type]) {
+      // Enhancement templates by model  
+      else if (template.use_case === 'enhancement' && templateCache.enhancement[template.model_type]) {
         templateCache.enhancement[template.model_type][template.content_mode] = template.system_prompt;
       }
 
