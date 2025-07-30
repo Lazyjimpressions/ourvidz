@@ -1,11 +1,69 @@
 
 project_id = "ulmdmzhcdwfadbvfpckt"
 
-[functions.queue-job]
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+port = 54324
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+email_double_confirm_changes = true
+enable_confirmations = false
+
+[db]
+port = 54322
+
+[realtime]
+enabled = true
+ip_version = "ipv4"
+
+[storage]
+enabled = true
+port = 54323
+file_size_limit = "50MiB"
+image_transformation = true
+
+[edge_functions]
+enabled = true
+inspector_port = 54324
+
+[functions.enhance-prompt]
+verify_jwt = true
+
+[functions.enhance-prompt-old]
+verify_jwt = true
+
+[functions.generate-admin-image]
+verify_jwt = true
+
+[functions.get-active-worker-url]
 verify_jwt = true
 
 [functions.job-callback]
 verify_jwt = false
 
+[functions.playground-chat]
+verify_jwt = true
+
+[functions.queue-job]
+verify_jwt = true
+
+[functions.refresh-prompt-cache]
+verify_jwt = true
+
 [functions.register-chat-worker]
 verify_jwt = false
+
+[functions.update-worker-url]
+verify_jwt = false
+
+[functions.validate-enhancement-fix]
+verify_jwt = true

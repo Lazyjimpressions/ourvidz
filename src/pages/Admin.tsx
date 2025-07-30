@@ -2,7 +2,7 @@ import { AdminRoute } from "@/components/AdminRoute";
 import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
 import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { HealthCheckJobCleaner } from "@/components/admin/HealthCheckJobCleaner";
-import { PromptTestingTab } from "@/components/admin/PromptTestingTab";
+import { PromptManagementTab } from "@/components/admin/PromptManagementTab";
 import { UserManagementTab } from "@/components/admin/UserManagementTab";
 import { ContentModerationTab } from "@/components/admin/ContentModerationTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
@@ -135,7 +135,7 @@ const Admin = () => {
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
               <TabsTrigger value="moderation">Moderation</TabsTrigger>
-              <TabsTrigger value="prompt-testing">Prompt Testing</TabsTrigger>
+              <TabsTrigger value="prompt-management">Prompt Management</TabsTrigger>
               <TabsTrigger value="database">Database</TabsTrigger>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="config">Config</TabsTrigger>
@@ -305,16 +305,16 @@ const Admin = () => {
               </Card>
             </TabsContent>
 
-            <TabsContent value="prompt-testing" className="space-y-6">
+            <TabsContent value="prompt-management" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Prompt Testing & Validation</CardTitle>
+                  <CardTitle>Prompt Management & Testing</CardTitle>
                   <CardDescription>
-                    Test and optimize prompts for SDXL and WAN models with quality rating system
+                    Manage prompt templates, negative prompts, and test optimization for all models
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <PromptTestingTab />
+                  <PromptManagementTab />
                 </CardContent>
               </Card>
             </TabsContent>
