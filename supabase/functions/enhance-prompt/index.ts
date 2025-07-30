@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { EdgeFunctionMonitor, performanceTest, testContentDetection } from '../_shared/monitoring.ts'
+import { getCachedData, getTemplateFromCache, detectContentTier, getDatabaseTemplate } from '../_shared/cache-utils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,12 +9,18 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
+  const monitor = new EdgeFunctionMonitor('enhance-prompt')
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
+    // Run content detection tests on startup (development only)
+    if (Deno.env.get('ENVIRONMENT') === 'development') {
+      testContentDetection()
+    }
     const { prompt, jobType, format, quality, selectedModel = 'qwen_instruct', user_id, regeneration, selectedPresets = [] } = await req.json()
 
     if (!prompt) {
@@ -54,6 +62,9 @@ serve(async (req) => {
       contentMode: enhancementResult.content_mode
     })
 
+    // Finalize monitoring
+    const metrics = monitor.finalize()
+    
     return new Response(JSON.stringify({
       success: true,
       original_prompt: prompt,
@@ -71,18 +82,22 @@ serve(async (req) => {
         model_used: enhancementResult.model_used,
         token_count: enhancementResult.token_count,
         compression_applied: enhancementResult.compressed,
-        fallback_level: enhancementResult.fallback_level
+        fallback_level: enhancementResult.fallback_level,
+        execution_time_ms: metrics.executionTime,
+        cache_hit: metrics.cacheHit
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
+    monitor.recordError(error, { prompt: prompt?.substring(0, 100) })
     console.error('❌ Dynamic enhance prompt error:', error)
     return new Response(JSON.stringify({
       error: 'Failed to enhance prompt',
       success: false,
-      details: error.message
+      details: error.message,
+      execution_time_ms: monitor.finalize().executionTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
@@ -103,7 +118,7 @@ class DynamicEnhancementOrchestrator {
     
     try {
       // Detect content mode (simplified from 3-tier to SFW/NSFW)
-      const contentMode = this.detectContentMode(request.prompt)
+      const contentMode = await this.detectContentMode(request.prompt)
       console.log('🔍 Content mode detected:', contentMode)
 
       // Get model type from job type
@@ -160,19 +175,11 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Simplified content detection: SFW vs NSFW only
+   * Simplified content detection using cached terms
    */
-  private detectContentMode(prompt: string): 'sfw' | 'nsfw' {
-    const nsfwKeywords = [
-      'nude', 'naked', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 
-      'porn', 'xxx', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock', 
-      'dick', 'ass', 'butt', 'hardcore', 'explicit', 'uncensored', 'intimate'
-    ]
-    
-    const lowerPrompt = prompt.toLowerCase()
-    const hasNsfwContent = nsfwKeywords.some(keyword => lowerPrompt.includes(keyword))
-    
-    return hasNsfwContent ? 'nsfw' : 'sfw'
+  private async detectContentMode(prompt: string): Promise<'sfw' | 'nsfw'> {
+    const cache = await getCachedData()
+    return detectContentTier(prompt, cache)
   }
 
   /**
