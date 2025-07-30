@@ -36,34 +36,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
   };
 
   return (
-    <div className={`flex items-start gap-3 group ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-start gap-2 group ${isUser ? 'flex-row-reverse' : ''}`}>
       {/* Avatar */}
-      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
         isUser 
           ? 'bg-green-600' 
           : 'bg-blue-600'
       }`}>
         {isUser ? (
-          <User className="h-4 w-4 text-white" />
+          <User className="h-3 w-3 text-white" />
         ) : (
-          <Bot className="h-4 w-4 text-white" />
+          <Bot className="h-3 w-3 text-white" />
         )}
       </div>
 
       {/* Message Content */}
       <div className={`flex-1 max-w-[70%] ${isUser ? 'flex flex-col items-end' : ''}`}>
-        <div className={`rounded-2xl p-4 ${
+        <div className={`rounded-lg p-3 ${
           isUser 
             ? 'bg-green-600 text-white rounded-tr-md'
             : 'bg-gray-800 text-white rounded-tl-md'
         }`}>
-          <div className="whitespace-pre-wrap break-words">
+          <div className="whitespace-pre-wrap break-words text-sm">
             {message.content}
           </div>
         </div>
 
         {/* Message Actions */}
-        <div className={`flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity ${
+        <div className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${
           isUser ? 'flex-row-reverse' : ''
         }`}>
           <span className="text-xs text-gray-500 mr-2">{timeAgo}</span>
@@ -72,7 +72,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             variant="ghost"
             size="sm"
             onClick={handleCopy}
-            className="h-6 w-6 p-0 text-gray-400 hover:text-white"
+            className="h-5 w-5 p-0 text-gray-400 hover:text-white"
           >
             <Copy className="h-3 w-3" />
           </Button>
@@ -82,7 +82,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
               variant="ghost"
               size="sm"
               onClick={handleRegenerate}
-              className="h-6 w-6 p-0 text-gray-400 hover:text-white"
+              className="h-5 w-5 p-0 text-gray-400 hover:text-white"
             >
               <RotateCw className="h-3 w-3" />
             </Button>

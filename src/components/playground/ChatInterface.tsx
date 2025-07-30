@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
+import { Send, Bot, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -7,6 +7,10 @@ import { usePlayground } from '@/contexts/PlaygroundContext';
 import { MessageBubble } from './MessageBubble';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ConversationList } from './ConversationList';
+import { PlaygroundModeSelector, type PlaygroundMode } from './PlaygroundModeSelector';
+import { RoleplaySetup } from './RoleplaySetup';
+import { AdminTools } from './AdminTools';
+import { CreativeTools } from './CreativeTools';
 
 export const ChatInterface = () => {
   const {
@@ -19,6 +23,7 @@ export const ChatInterface = () => {
 
   const [inputMessage, setInputMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentMode, setCurrentMode] = useState<PlaygroundMode>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -66,6 +71,45 @@ export const ChatInterface = () => {
     }
   };
 
+  // Handle roleplay setup
+  const handleStartRoleplay = async (template: any) => {
+    let conversationId = state.activeConversationId;
+    
+    if (!conversationId) {
+      conversationId = await createConversation(`Roleplay: ${template.name}`);
+    }
+
+    const systemPrompt = `${template.systemPrompt}\n\nSCENARIO: ${template.scenario}\nUSER CHARACTER: ${template.userCharacter}\nAI CHARACTER/ROLE: ${template.aiCharacter}\n\nBegin the roleplay scenario. Set the scene and wait for the user's first action.`;
+    
+    await sendMessage(`[System: Starting roleplay session]\n\n${systemPrompt}`);
+  };
+
+  // Handle admin tool start
+  const handleStartAdminTool = async (tool: any, context: any) => {
+    let conversationId = state.activeConversationId;
+    
+    if (!conversationId) {
+      conversationId = await createConversation(`Admin: ${tool.name}`);
+    }
+
+    const systemPrompt = `${tool.systemPrompt}\n\nCONTEXT: Target Model: ${context.targetModel}, Purpose: ${context.purpose}\n\nI need help with ${tool.name.toLowerCase()}. Please start by asking me what specific assistance I need.`;
+    
+    await sendMessage(`[System: Starting ${tool.name}]\n\n${systemPrompt}`);
+  };
+
+  // Handle creative tool start
+  const handleStartCreativeTool = async (tool: any, context: any) => {
+    let conversationId = state.activeConversationId;
+    
+    if (!conversationId) {
+      conversationId = await createConversation(`Creative: ${tool.name}`);
+    }
+
+    const systemPrompt = `${tool.systemPrompt}\n\nPROJECT: ${context.projectType}, GOAL: ${context.goal}\n\nI need help with ${tool.name.toLowerCase()}. Please start by understanding my project and goals.`;
+    
+    await sendMessage(`[System: Starting ${tool.name}]\n\n${systemPrompt}`);
+  };
+
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
@@ -78,11 +122,11 @@ export const ChatInterface = () => {
   if (!state.activeConversationId) {
     return (
       <div className="h-full flex flex-col">
-        {/* Header for consistency */}
-        <div className="border-b border-gray-800 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Bot className="h-6 w-6 text-blue-400" />
-            <h1 className="text-lg font-semibold text-white">AI Chat</h1>
+        {/* Header */}
+        <div className="border-b border-gray-800 p-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-blue-400" />
+            <h1 className="text-sm font-medium text-white">AI Playground</h1>
           </div>
           
           {/* Conversation History Panel */}
@@ -90,35 +134,51 @@ export const ChatInterface = () => {
             <SheetTrigger asChild>
               <Button 
                 variant="ghost" 
-                size="icon"
-                className="text-gray-400 hover:text-white hover:bg-gray-800"
+                size="sm"
+                className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
               >
-                <MessageSquare className="h-5 w-5" />
+                <MessageSquare className="h-3 w-3" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 bg-[#111111] border-gray-800 p-0">
-              <SheetHeader className="p-4 border-b border-gray-800">
-                <SheetTitle className="text-white text-left">Conversation History</SheetTitle>
+            <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
+              <SheetHeader className="p-3 border-b border-gray-800">
+                <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
               </SheetHeader>
               <ConversationList />
             </SheetContent>
           </Sheet>
         </div>
 
+        {/* Mode Selector */}
+        <PlaygroundModeSelector currentMode={currentMode} onModeChange={setCurrentMode} />
+
+        {/* Mode-specific Setup Panels */}
+        <div className="p-3 space-y-2">
+          {currentMode === 'roleplay' && (
+            <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
+          )}
+          {currentMode === 'admin' && (
+            <AdminTools onStartTool={handleStartAdminTool} />
+          )}
+          {currentMode === 'creative' && (
+            <CreativeTools onStartTool={handleStartCreativeTool} />
+          )}
+        </div>
+
         {/* Empty state content */}
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-8 rounded-2xl border border-gray-700 max-w-md">
-            <Sparkles className="h-12 w-12 text-blue-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-white mb-2">Welcome to Playground</h2>
-            <p className="text-gray-300 mb-6">
-              Start a conversation with AI to develop your stories, brainstorm ideas, or get creative assistance.
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-6 rounded-lg border border-gray-700 max-w-sm">
+            <Bot className="h-8 w-8 text-blue-400 mx-auto mb-3" />
+            <h2 className="text-lg font-medium text-white mb-2">Welcome to Playground</h2>
+            <p className="text-gray-300 mb-4 text-sm">
+              Select a mode above and configure your session, or start a general conversation.
             </p>
             <Button
               onClick={() => createConversation()}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-8"
             >
-              <Sparkles className="h-4 w-4 mr-2" />
-              Start New Conversation
+              Start Conversation
             </Button>
           </div>
         </div>
@@ -129,10 +189,10 @@ export const ChatInterface = () => {
   return (
     <div className="h-full flex flex-col">
       {/* Chat Header */}
-      <div className="border-b border-gray-800 p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Bot className="h-6 w-6 text-blue-400" />
-          <h1 className="text-lg font-semibold text-white">AI Chat</h1>
+      <div className="border-b border-gray-800 p-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bot className="h-4 w-4 text-blue-400" />
+          <h1 className="text-sm font-medium text-white">AI Playground</h1>
         </div>
         
         {/* Conversation History Panel */}
@@ -140,32 +200,48 @@ export const ChatInterface = () => {
           <SheetTrigger asChild>
             <Button 
               variant="ghost" 
-              size="icon"
-              className="text-gray-400 hover:text-white hover:bg-gray-800"
+              size="sm"
+              className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
             >
-              <MessageSquare className="h-5 w-5" />
+              <MessageSquare className="h-3 w-3" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-80 bg-[#111111] border-gray-800 p-0">
-            <SheetHeader className="p-4 border-b border-gray-800">
-              <SheetTitle className="text-white text-left">Conversation History</SheetTitle>
+          <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
+            <SheetHeader className="p-3 border-b border-gray-800">
+              <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
             </SheetHeader>
             <ConversationList />
           </SheetContent>
         </Sheet>
       </div>
 
+      {/* Mode Selector */}
+      <PlaygroundModeSelector currentMode={currentMode} onModeChange={setCurrentMode} />
+
+      {/* Mode-specific Setup Panels */}
+      <div className="p-3 space-y-2">
+        {currentMode === 'roleplay' && (
+          <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
+        )}
+        {currentMode === 'admin' && (
+          <AdminTools onStartTool={handleStartAdminTool} />
+        )}
+        {currentMode === 'creative' && (
+          <CreativeTools onStartTool={handleStartCreativeTool} />
+        )}
+      </div>
+
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 pb-32 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 pb-20 space-y-2">
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-32">
             <LoadingSpinner />
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-12 w-12 text-blue-400 mb-4" />
-            <p className="text-gray-300 text-lg mb-2">Ready to chat!</p>
-            <p className="text-gray-500 text-sm">Send a message to start the conversation.</p>
+            <Bot className="h-8 w-8 text-blue-400 mb-3" />
+            <p className="text-gray-300 text-sm mb-1">Ready to chat!</p>
+            <p className="text-gray-500 text-xs">Send a message to start the conversation.</p>
           </div>
         ) : (
           <>
@@ -175,14 +251,14 @@ export const ChatInterface = () => {
             
             {/* Loading indicator for AI response */}
             {state.isLoadingMessage && (
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-4 w-4 text-white" />
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="h-3 w-3 text-white" />
                 </div>
-                <div className="bg-gray-800 rounded-2xl rounded-tl-md p-4 max-w-xs">
+                <div className="bg-gray-800 rounded-lg rounded-tl-md p-3 max-w-xs">
                   <div className="flex items-center gap-2 text-gray-400">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-                    <span className="text-sm">AI is thinking...</span>
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-500 border-t-transparent"></div>
+                    <span className="text-xs">AI is thinking...</span>
                   </div>
                 </div>
               </div>
@@ -194,34 +270,35 @@ export const ChatInterface = () => {
       </div>
 
       {/* Floating Message Input */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-gray-800 p-6 z-50">
-        <form onSubmit={handleSubmit} className="flex items-end gap-3 max-w-4xl mx-auto">
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-gray-800 p-3 z-50">
+        <form onSubmit={handleSubmit} className="flex items-end gap-2 max-w-4xl mx-auto">
           <div className="flex-1">
             <Textarea
               ref={textareaRef}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
-              className="min-h-[44px] max-h-32 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500"
+              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+              className="min-h-[36px] max-h-24 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm"
               disabled={isSubmitting || state.isLoadingMessage}
             />
           </div>
           <Button
             type="submit"
             disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2"
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0"
           >
             {isSubmitting ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-3 w-3" />
             )}
           </Button>
         </form>
         
         {state.error && (
-          <div className="mt-2 text-sm text-red-400 bg-red-900/20 p-2 rounded max-w-4xl mx-auto">
+          <div className="mt-2 text-xs text-red-400 bg-red-900/20 p-2 rounded max-w-4xl mx-auto">
             {state.error}
           </div>
         )}
