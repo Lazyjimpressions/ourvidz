@@ -72,46 +72,52 @@ serve(async (req) => {
 
     // 3. Organize templates by model and use case
     const templateCache = {
-      sdxl: {
-        enhancement: { sfw: null, nsfw: null },
-        chat: { sfw: null, nsfw: null },
-        conversion: { sfw: null, nsfw: null },
-        optimization: { sfw: null, nsfw: null }
-      },
-      wan: {
-        enhancement: { sfw: null, nsfw: null },
-        chat: { sfw: null, nsfw: null },
-        conversion: { sfw: null, nsfw: null },
-        optimization: { sfw: null, nsfw: null }
-      },
-      qwen_base: {
-        enhancement: { sfw: null, nsfw: null },
-        chat: { sfw: null, nsfw: null },
-        conversion: { sfw: null, nsfw: null },
-        optimization: { sfw: null, nsfw: null }
-      },
-      qwen_instruct: {
-        enhancement: { sfw: null, nsfw: null },
-        chat: { sfw: null, nsfw: null },
-        conversion: { sfw: null, nsfw: null },
-        optimization: { sfw: null, nsfw: null }
+      chat: { sfw: null, nsfw: null },
+      sdxl_conversion: null,
+      enhancement: {
+        sdxl: { sfw: null, nsfw: null },
+        wan: { sfw: null, nsfw: null },
+        qwen_base: { sfw: null, nsfw: null },
+        qwen_instruct: { sfw: null, nsfw: null }
       }
     };
 
+    const nsfwTerms = [];
+
     // Populate template cache
     templates.forEach(template => {
-      if (templateCache[template.model_type] && templateCache[template.model_type][template.use_case]) {
-        templateCache[template.model_type][template.use_case][template.content_mode] = {
-          id: template.id,
-          template_name: template.template_name,
-          system_prompt: template.system_prompt,
-          token_limit: template.token_limit,
-          version: template.version,
-          metadata: template.metadata,
-          updated_at: template.updated_at
-        };
+      // Chat templates
+      if (template.use_case === 'chat' && ['sfw', 'nsfw'].includes(template.content_mode)) {
+        templateCache.chat[template.content_mode] = template.system_prompt;
+      }
+      
+      // SDXL conversion template
+      if (template.use_case === 'sdxl_conversion') {
+        templateCache.sdxl_conversion = template.system_prompt;
+      }
+      
+      // Enhancement templates by model
+      if (template.use_case === 'enhancement' && templateCache.enhancement[template.model_type]) {
+        templateCache.enhancement[template.model_type][template.content_mode] = template.system_prompt;
+      }
+
+      // Extract NSFW terms from content detection templates
+      if (template.content_mode === 'nsfw' && template.use_case === 'content_detection') {
+        const terms = template.system_prompt.toLowerCase().match(/\b[\w']+\b/g) || [];
+        nsfwTerms.push(...terms.filter(term => 
+          term.length > 3 && 
+          !['this', 'that', 'with', 'from', 'they', 'them', 'your', 'their'].includes(term)
+        ));
       }
     });
+
+    // Add fallback NSFW terms if none found
+    if (nsfwTerms.length === 0) {
+      nsfwTerms.push(
+        'naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 'porn', 'xxx',
+        'seductive', 'intimate', 'passionate', 'explicit', 'hardcore', 'extreme', 'roleplay', 'fantasy'
+      );
+    }
 
     // 4. Organize negative prompts by model and content mode
     const negativeCache = {
@@ -121,32 +127,22 @@ serve(async (req) => {
 
     negativePrompts.forEach(negative => {
       if (negativeCache[negative.model_type]) {
-        negativeCache[negative.model_type][negative.content_mode].push({
-          id: negative.id,
-          negative_prompt: negative.negative_prompt,
-          description: negative.description,
-          priority: negative.priority,
-          updated_at: negative.updated_at
-        });
+        negativeCache[negative.model_type][negative.content_mode].push(negative.negative_prompt);
       }
     });
 
     // 5. Create cache data structure
     const cacheData = {
-      templates: templateCache,
-      negatives: negativeCache,
+      templateCache,
+      negativeCache,
+      nsfwTerms: [...new Set(nsfwTerms)], // Remove duplicates
       metadata: {
-        last_updated: new Date().toISOString(),
+        refreshed_at: new Date().toISOString(),
         template_count: templates.length,
-        negative_count: negativePrompts.length,
-        force_refresh: force_refresh,
-        version: '1.0'
-      },
-      // Add cache validation for integrity checking
-      cache_integrity: {
-        template_hash: generateHash(JSON.stringify(templateCache)),
-        negative_hash: generateHash(JSON.stringify(negativeCache)),
-        combined_hash: generateHash(JSON.stringify({ templateCache, negativeCache }))
+        negative_prompt_count: negativePrompts.length,
+        nsfw_terms_count: nsfwTerms.length,
+        cache_version: '2.0',
+        integrity_hash: generateHash(JSON.stringify({ templateCache, negativeCache, nsfwTerms }))
       }
     };
 
@@ -155,11 +151,7 @@ serve(async (req) => {
       .from('system_config')
       .upsert({
         id: 1, // Single row for system config
-        config: {
-          ...cacheData,
-          prompt_cache_enabled: true,
-          cache_ttl_hours: 24
-        },
+        config: cacheData,
         updated_at: new Date().toISOString()
       });
 

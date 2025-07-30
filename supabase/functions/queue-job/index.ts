@@ -95,31 +95,76 @@ serve(async (req)=>{
       timestamp: new Date().toISOString()
     });
 
-    // Dynamic content tier detection using database terms
-    function detectContentTier(prompt: string): 'sfw' | 'nsfw' {
-      const nsfwTerms = [
+    // Dynamic content tier detection using cached database templates
+    async function detectContentTier(prompt: string): Promise<'sfw' | 'nsfw'> {
+      try {
+        // Get cached NSFW detection terms from system_config
+        const { data: systemConfig } = await supabase
+          .from('system_config')
+          .select('config')
+          .single();
+
+        if (systemConfig?.config?.nsfwTerms && Array.isArray(systemConfig.config.nsfwTerms)) {
+          const nsfwTerms = systemConfig.config.nsfwTerms;
+          const lowerPrompt = prompt.toLowerCase();
+          return nsfwTerms.some(term => lowerPrompt.includes(term.toLowerCase())) ? 'nsfw' : 'sfw';
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to load NSFW terms from cache, using fallback:', error);
+      }
+
+      // Fallback NSFW detection terms
+      const fallbackNsfwTerms = [
         'naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 
-        'porn', 'xxx', 'seductive', 'flirtatious', 'romantic', 'intimate', 'passionate', 
-        'desire', 'lust', 'pleasure', 'kiss', 'touch', 'caress', 'embrace', 'foreplay', 
-        'arousal', 'excitement', 'sensation', 'hardcore', 'extreme', 'rough', 'bdsm', 
-        'fetish', 'kink', 'taboo', 'forbidden', 'unrestricted', 'explicit', 'detailed', 
-        'graphic', 'vulgar', 'crude', 'lewd', 'obscene', 'profane', 'penetration', 'oral', 
-        'anal', 'vaginal', 'climax', 'orgasm', 'ejaculation', 'cum', 'cock', 'dick', 
-        'penis', 'pussy', 'vagina', 'breasts', 'tits', 'ass', 'butt', 'dominant', 
-        'submissive', 'master', 'slave', 'bondage', 'restraint', 'spanking', 'roleplay', 
-        'fantasy', 'scenario'
+        'porn', 'xxx', 'seductive', 'intimate', 'passionate', 'explicit', 'hardcore'
       ];
       
       const lowerPrompt = prompt.toLowerCase();
-      return nsfwTerms.some(term => lowerPrompt.includes(term)) ? 'nsfw' : 'sfw';
+      return fallbackNsfwTerms.some(term => lowerPrompt.includes(term)) ? 'nsfw' : 'sfw';
     }
 
-    // Dynamic negative prompt generation using database
+    // Dynamic negative prompt generation using cached templates
     async function generateNegativePromptForSDXL(userPrompt = '', contentTier: 'sfw' | 'nsfw' = 'sfw') {
-      console.log('🎨 Generating negative prompt for SDXL using database templates');
+      console.log('🎨 Generating negative prompt for SDXL using cached templates');
       
       try {
-        // Get negative prompts from database
+        // First try to get from cache
+        const { data: systemConfig } = await supabase
+          .from('system_config')
+          .select('config')
+          .single();
+
+        if (systemConfig?.config?.negativeCache?.sdxl?.[contentTier]) {
+          const cachedNegatives = systemConfig.config.negativeCache.sdxl[contentTier];
+          const combinedNegatives = cachedNegatives.join(', ');
+          const trimmed = trimToMaxTokens(combinedNegatives, 75);
+          
+          console.log('✅ Cache negative prompt used:', {
+            source: 'cache',
+            count: cachedNegatives.length,
+            finalTokens: countTokens(trimmed),
+            contentTier
+          });
+          
+          // Merge with user negative prompt if provided
+          if (userPrompt && userPrompt.trim()) {
+            const userNegatives = userPrompt.split(',').map(t => t.trim()).filter(Boolean);
+            const mergedNegatives = [...cachedNegatives, ...userNegatives];
+            const mergedTrimmed = trimToMaxTokens(mergedNegatives.join(', '), 75);
+            
+            console.log('🔄 Merged user negative prompts:', {
+              userPromptsCount: userNegatives.length,
+              finalTokens: countTokens(mergedTrimmed)
+            });
+            
+            return mergedTrimmed;
+          }
+          
+          return trimmed;
+        }
+
+        // Fallback to direct database query if cache miss
+        console.warn('⚠️ Cache miss, querying database directly');
         const { data: negativePrompts, error } = await supabase
           .from('negative_prompts')
           .select('negative_prompt, priority')
@@ -133,25 +178,22 @@ serve(async (req)=>{
           return getFallbackNegativePrompt(contentTier);
         }
 
-        // Combine database negative prompts
         const combinedNegatives = negativePrompts
           .map(np => np.negative_prompt)
           .join(', ');
 
-        // Apply token trimming to prevent overflow
         const trimmed = trimToMaxTokens(combinedNegatives, 75);
-        const finalTokenCount = countTokens(trimmed);
         
         console.log('✅ Database negative prompt generated:', {
-          source: 'database',
+          source: 'database_fallback',
           count: negativePrompts.length,
-          finalTokens: finalTokenCount,
+          finalTokens: countTokens(trimmed),
           contentTier
         });
         
         return trimmed;
       } catch (error) {
-        console.error('❌ Error loading negative prompts from database:', error);
+        console.error('❌ Error loading negative prompts:', error);
         return getFallbackNegativePrompt(contentTier);
       }
     }
@@ -300,7 +342,7 @@ serve(async (req)=>{
     }
 
     // Detect content tier for dynamic negative prompt selection
-    const contentTier = detectContentTier(prompt);
+    const contentTier = await detectContentTier(prompt);
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
@@ -437,7 +479,7 @@ serve(async (req)=>{
 
     if (isSDXL) {
       try {
-        negativePrompt = generateNegativePromptForSDXL(prompt);
+        negativePrompt = await generateNegativePromptForSDXL(metadata?.userNegativePrompt || '', contentTier);
         console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
       } catch (error) {
         negativePromptError = error.message;
