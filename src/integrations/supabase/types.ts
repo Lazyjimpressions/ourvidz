@@ -762,6 +762,45 @@ export type Database = {
           },
         ]
       }
+      negative_prompts: {
+        Row: {
+          content_mode: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          model_type: string
+          negative_prompt: string
+          priority: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          content_mode?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_type?: string
+          negative_prompt: string
+          priority?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          content_mode?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          model_type?: string
+          negative_prompt?: string
+          priority?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           age_verified: boolean | null
@@ -903,6 +942,54 @@ export type Database = {
           test_name?: string
           test_series?: string
           total_participants?: number | null
+        }
+        Relationships: []
+      }
+      prompt_templates: {
+        Row: {
+          content_mode: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          model_type: string
+          system_prompt: string
+          template_name: string
+          token_limit: number | null
+          updated_at: string | null
+          use_case: string
+          version: number | null
+        }
+        Insert: {
+          content_mode?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          model_type: string
+          system_prompt: string
+          template_name: string
+          token_limit?: number | null
+          updated_at?: string | null
+          use_case: string
+          version?: number | null
+        }
+        Update: {
+          content_mode?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          model_type?: string
+          system_prompt?: string
+          template_name?: string
+          token_limit?: number | null
+          updated_at?: string | null
+          use_case?: string
+          version?: number | null
         }
         Relationships: []
       }

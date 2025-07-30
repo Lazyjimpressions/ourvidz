@@ -25,18 +25,17 @@ serve(async (req) => {
       })
     }
 
-    console.log('🎯 Enhance prompt request:', {
+    console.log('🎯 Dynamic enhance prompt request:', {
       prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
       jobType,
       format,
       quality,
       selectedModel,
-      selectedPresets,
       promptLength: prompt.length
     })
 
-    // Initialize Enhancement Orchestrator
-    const orchestrator = new ContentCompliantEnhancementOrchestrator()
+    // Initialize Dynamic Enhancement Orchestrator
+    const orchestrator = new DynamicEnhancementOrchestrator()
     
     // Use the orchestrator to enhance the prompt
     const enhancementResult = await orchestrator.enhancePrompt({
@@ -48,22 +47,18 @@ serve(async (req) => {
       regeneration: regeneration || false
     })
 
-    console.log('✅ Enhanced prompt generated:', {
+    console.log('✅ Dynamic enhanced prompt generated:', {
       originalLength: prompt.length,
       enhancedLength: enhancementResult.enhanced_prompt.length,
-      expansion: `${((enhancementResult.enhanced_prompt.length / prompt.length) * 100).toFixed(1)}%`,
-      modelUsed: enhancementResult.optimization?.worker_used || 'unknown'
+      strategy: enhancementResult.strategy,
+      contentMode: enhancementResult.content_mode
     })
 
-    // PHASE 1 FIX: Ensure consistent response structure with proper strategy
-    const responseData = {
+    return new Response(JSON.stringify({
       success: true,
       original_prompt: prompt,
       enhanced_prompt: enhancementResult.enhanced_prompt,
-      // CRITICAL: Put enhancement_strategy at top level for queue-job compatibility
-      enhancement_strategy: enhancementResult.enhancement_metadata?.enhancement_strategy || 
-                           enhancementResult.optimization?.strategy_used || 
-                           'content_compliant',
+      enhancement_strategy: enhancementResult.strategy,
       enhancement_metadata: {
         original_length: prompt.length,
         enhanced_length: enhancementResult.enhanced_prompt.length,
@@ -71,33 +66,19 @@ serve(async (req) => {
         job_type: jobType,
         format,
         quality,
-        is_sdxl: enhancementResult.metadata?.model_target === 'SDXL',
-        is_video: format === 'video',
-        enhancement_strategy: enhancementResult.enhancement_metadata?.enhancement_strategy || 
-                             enhancementResult.optimization?.strategy_used || 
-                             'content_compliant',
-        model_used: enhancementResult.optimization?.worker_used || 'rule_based',
-        token_count: enhancementResult.optimization?.token_optimization?.final || estimateTokens(enhancementResult.enhanced_prompt),
-        compression_applied: enhancementResult.optimization?.compression_applied || false,
-        token_optimization: enhancementResult.optimization?.token_optimization,
-        version: enhancementResult.metadata?.version || '2.1'
-      },
-      // PHASE 1 FIX: Also include optimization for backward compatibility
-      optimization: enhancementResult.optimization
-    }
-
-    console.log('📊 Enhancement metrics:', {
-      strategy: responseData.enhancement_strategy,
-      compression: responseData.enhancement_metadata.compression_applied,
-      token_efficiency: responseData.enhancement_metadata.token_optimization?.final / 75
-    })
-
-    return new Response(JSON.stringify(responseData), {
+        content_mode: enhancementResult.content_mode,
+        template_used: enhancementResult.template_name,
+        model_used: enhancementResult.model_used,
+        token_count: enhancementResult.token_count,
+        compression_applied: enhancementResult.compressed,
+        fallback_level: enhancementResult.fallback_level
+      }
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
   } catch (error) {
-    console.error('❌ Enhance prompt error:', error)
+    console.error('❌ Dynamic enhance prompt error:', error)
     return new Response(JSON.stringify({
       error: 'Failed to enhance prompt',
       success: false,
@@ -109,1347 +90,464 @@ serve(async (req) => {
   }
 })
 
-// NSFW-OPTIMIZED ENHANCEMENT ORCHESTRATOR
-class ContentCompliantEnhancementOrchestrator {
+/**
+ * Dynamic Enhancement Orchestrator using database-driven prompts
+ */
+class DynamicEnhancementOrchestrator {
   
-  // Detect NSFW content tier
-  private detectContentTier(prompt: string): 'artistic' | 'explicit' | 'unrestricted' {
-    const explicitTerms = ['naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 'porn', 'xxx'];
-    const anatomicalTerms = ['breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock', 'dick', 'ass', 'butt', 'genitals'];
-    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme', 'raw', 'dirty', 'kinky', 'slutty'];
+  /**
+   * Main enhancement method with SFW/NSFW detection and fallback system
+   */
+  async enhancePrompt(request: any) {
+    const startTime = Date.now()
     
-    const lowerPrompt = prompt.toLowerCase();
-    
-    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
-    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
-    const hasAnatomical = anatomicalTerms.some(term => lowerPrompt.includes(term));
-    
-    if (hasIntensity || (hasExplicit && hasAnatomical)) return 'unrestricted';
-    if (hasExplicit || hasAnatomical) return 'explicit';
-    return 'artistic';
-  }
-  
-  // NSFW-OPTIMIZED SYSTEM PROMPTS
-  private getSystemPromptTemplate(context: any): any {
-    const contentTier = this.detectContentTier(context.prompt || '');
-    
-    const templates = {
-      'SDXL_FAST': {
-        id: 'sdxl_fast_v2.1',
-        model_target: 'SDXL',
-        quality_level: 'fast',
-        content_type: 'image',
-        content_tier: contentTier,
-        system_instruction: this.getSDXLFastPrompt(contentTier),
-        token_target: 75,
-        max_tokens: 77,
-        optimization_strategy: ['visual_accuracy', 'quality_tags', 'token_compression', 'nsfw_preservation'],
-        version: '2.1'
-      },
-      
-      'SDXL_HIGH': {
-        id: 'sdxl_high_v2.1',
-        model_target: 'SDXL',
-        quality_level: 'high', 
-        content_type: 'image',
-        content_tier: contentTier,
-        system_instruction: this.getSDXLHighPrompt(contentTier),
-        token_target: 75,
-        max_tokens: 77,
-        optimization_strategy: ['visual_perfection', 'professional_quality', 'advanced_lighting', 'nsfw_preservation'],
-        version: '2.1'
-      },
+    try {
+      // Detect content mode (simplified from 3-tier to SFW/NSFW)
+      const contentMode = this.detectContentMode(request.prompt)
+      console.log('🔍 Content mode detected:', contentMode)
 
-      'WAN_FAST': {
-        id: 'wan_fast_v2.1',
-        model_target: 'WAN',
-        quality_level: 'fast',
-        content_type: 'video',
-        content_tier: contentTier,
-        system_instruction: this.getWANFastPrompt(contentTier),
-        token_target: 175,
-        max_tokens: 250,
-        optimization_strategy: ['motion_optimization', 'temporal_consistency', 'cinematography', 'nsfw_preservation'],
-        version: '2.1'
-      },
+      // Get model type from job type
+      const modelType = this.getModelTypeFromJobType(request.job_type)
+      console.log('🤖 Model type selected:', modelType)
 
-      'WAN_HIGH_7B': {
-        id: 'wan_high_7b_v2.1',
-        model_target: 'WAN',
-        quality_level: 'high',
-        content_type: 'video',
-        content_tier: contentTier,
-        system_instruction: this.getWANHighPrompt(contentTier),
-        token_target: 250,
-        max_tokens: 350,
-        optimization_strategy: ['cinematic_excellence', 'advanced_motion', 'broadcast_quality', 'nsfw_preservation'],
-        version: '2.1'
+      // Try to get dynamic template from database
+      let enhancementResult
+      try {
+        const template = await this.getDynamicTemplate(modelType, 'enhancement', contentMode)
+        enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
+        enhancementResult.fallback_level = 0
+      } catch (dbError) {
+        console.log('⚠️ Database template failed, trying cache:', dbError.message)
+        
+        try {
+          const cachedTemplate = await this.getCachedTemplate(modelType, 'enhancement', contentMode)
+          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
+          enhancementResult.fallback_level = 1
+        } catch (cacheError) {
+          console.log('⚠️ Cache failed, using hardcoded fallback:', cacheError.message)
+          
+          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
+          enhancementResult.fallback_level = 2
+        }
       }
-    };
-    
-    // Add content tier to context for fallback functions
-    context.content_tier = contentTier;
-    context.prompt = context.prompt || '';
 
-    const enhancement_level = context.job_type?.includes('enhanced') ? 'enhanced' : 'standard'
-    const key = `${context.model_target}_${context.quality_level.toUpperCase()}${enhancement_level === 'enhanced' ? '_7B' : ''}`
-    
-    console.log('🎯 System prompt template selection:', {
-      context: context,
-      key: key,
-      content_tier: contentTier,
-      available_templates: Object.keys(templates),
-      selected_template: templates[key]?.id || 'FALLBACK'
-    });
-    
-    return templates[key] || templates['SDXL_FAST']
-  }
-
-  // SDXL Lustify-optimized prompts
-  private getSDXLFastPrompt(tier: string): string {
-    const base = `You are an SDXL Lustify optimization specialist for adult content generation.
-
-MISSION: Transform user prompts into 75-token optimized descriptions for high-quality NSFW image generation.
-
-LUSTIFY OPTIMIZATION PRINCIPLES:
-1. ANATOMICAL ACCURACY: Perfect proportions, detailed genitalia, realistic intimate features
-2. QUALITY ENHANCEMENT: "masterpiece, best quality, ultra detailed, 4K, sharp focus"
-3. LUSTIFY TAGS: Use SDXL Lustify's score system for maximum quality
-4. EXPLICIT PRESERVATION: Maintain all explicit terminology and adult content
-5. TOKEN EFFICIENCY: Maximum visual impact in 75 tokens
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
-
-    if (tier === 'unrestricted') {
-      return base + `\n\nUNRESTRICTED MODE: Enhance explicit content with maximum detail and intensity. Preserve all hardcore terminology.`;
-    } else if (tier === 'explicit') {
-      return base + `\n\nEXPLICIT MODE: Enhance adult content with detailed anatomical accuracy. Preserve explicit terminology.`;
-    }
-    return base + `\n\nARTISTIC MODE: Enhance with tasteful adult aesthetics while maintaining quality focus.`;
-  }
-
-  private getSDXLHighPrompt(tier: string): string {
-    const base = `You are an elite SDXL Lustify optimization expert for premium adult visual content.
-
-PREMIUM LUSTIFY MISSION: Create 75-token masterpiece descriptions with professional studio quality for NSFW content.
-
-ADVANCED LUSTIFY PRINCIPLES:
-1. ANATOMICAL PERFECTION: Detailed proportions, realistic textures, perfect intimate anatomy
-2. PROFESSIONAL QUALITY: "score_9, score_8_up, masterpiece, best quality, ultra detailed, 8K, hyperrealistic"
-3. LUSTIFY LIGHTING: "studio lighting, rim lighting, volumetric lighting, perfect exposure for intimate scenes"
-4. TECHNICAL MASTERY: "photorealistic, hyperdetailed, professional photography, 85mm lens, shallow depth of field"
-5. EXPLICIT PRESERVATION: Maintain all adult terminology and enhance anatomical detail
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
-
-    if (tier === 'unrestricted') {
-      return base + `\n\nUNRESTRICTED MODE: Maximize explicit detail and intensity. Enhance hardcore content with studio quality.`;
-    } else if (tier === 'explicit') {
-      return base + `\n\nEXPLICIT MODE: Professional adult content enhancement with anatomical precision.`;
-    }
-    return base + `\n\nARTISTIC MODE: Premium adult aesthetics with professional quality enhancement.`;
-  }
-
-  // WAN-optimized prompts for video content
-  private getWANFastPrompt(tier: string): string {
-    const base = `You are a WAN video generation specialist for adult content with smooth motion and temporal consistency.
-
-WAN VIDEO MISSION: Create 150-200 token descriptions optimized for 5-second adult video generation with natural motion.
-
-WAN OPTIMIZATION PRINCIPLES:
-1. INTIMATE MOTION: "smooth intimate movement, natural body motion, fluid sexual transitions, realistic physics"
-2. TEMPORAL CONSISTENCY: "stable composition, consistent lighting, coherent intimate scene"
-3. ADULT CINEMATOGRAPHY: "professional camera work for adult content, smooth intimate angles"
-4. EXPLICIT PRESERVATION: Maintain all adult terminology and enhance sexual content
-5. VIDEO QUALITY: "smooth motion, high framerate, temporal stability for intimate scenes"
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
-
-    if (tier === 'unrestricted') {
-      return base + `\n\nUNRESTRICTED MODE: Enhance hardcore video content with maximum explicit detail and intensity.`;
-    } else if (tier === 'explicit') {
-      return base + `\n\nEXPLICIT MODE: Professional adult video enhancement with detailed sexual content.`;
-    }
-    return base + `\n\nARTISTIC MODE: Tasteful adult video content with quality motion enhancement.`;
-  }
-
-  private getWANHighPrompt(tier: string): string {
-    const base = `You are an elite WAN video generation specialist for cinematic-quality adult content creation.
-
-CINEMATIC ADULT ENHANCEMENT MISSION: Leverage advanced AI capabilities for broadcast-quality 5-second adult videos.
-
-ADVANCED WAN PRINCIPLES:
-1. COMPLEX INTIMATE MOTION: "multi-layered sexual movement, realistic intimate physics, natural timing, dynamic adult motion"
-2. ADULT CINEMATOGRAPHY: "dynamic camera angles for intimate content, professional adult composition, cinematic framing"
-3. SEXUAL STORYTELLING: "narrative coherence in intimate scenes, visual flow, compelling adult composition"
-4. EXPLICIT PRESERVATION: Maintain and enhance all adult terminology and sexual content
-5. SOPHISTICATED LIGHTING: "cinematic lighting for intimate scenes, dramatic shadows, professional adult color grading"
-
-OUTPUT FORMAT: Return only the enhanced prompt, no explanations.`;
-
-    if (tier === 'unrestricted') {
-      return base + `\n\nUNRESTRICTED MODE: Maximum cinematic enhancement for hardcore adult content with broadcast quality.`;
-    } else if (tier === 'explicit') {
-      return base + `\n\nEXPLICIT MODE: Cinematic adult content enhancement with detailed sexual storytelling.`;
-    }
-    return base + `\n\nARTISTIC MODE: Cinematic adult aesthetics with sophisticated visual enhancement.`;
-  }
-
-  // **PHASE 2**: ENHANCED WORKER DISCOVERY AND ROUTING
-  private selectOptimalWorker(context: any): 'chat' | 'wan' {
-    console.log('🎯 Selecting optimal worker for context:', {
-      job_type: context.job_type,
-      quality_level: context.quality_level,
-      model_target: context.model_target,
-      enhancement_level: context.enhancement_level,
-      user_preferences: context.user_preferences
-    });
-
-    // **FIXED**: Respect user's model selection from UI buttons
-    if (context.user_preferences?.enhancement_style) {
-      const selectedModel = context.user_preferences.enhancement_style;
-      if (selectedModel === 'qwen_instruct') {
-        console.log('🤖 User selected Qwen Instruct - using chat worker');
-        return 'chat';
-      } else if (selectedModel === 'qwen_base') {
-        console.log('🔧 User selected Qwen Base - using wan worker');
-        return 'wan';
-      }
-    }
-
-    // Fallback to technical requirements if no user preference
-    if (context.enhancement_type === 'manual' || context.job_type.includes('sdxl')) {
-      console.log('🤖 Fallback: Selected chat worker for SDXL optimization');
-      return 'chat' // Better instruction following for image optimization
-    }
-    
-    if (context.job_type.includes('video') && context.quality_level === 'fast') {
-      console.log('🎥 Fallback: Selected WAN worker for fast video generation');
-      return 'wan' // Optimized for video generation
-    }
-
-    console.log('🤖 Fallback: Default chat worker for instruction following');
-    return 'chat' // Default to instruction model
-  }
-
-  // TOKEN MANAGEMENT (PHASE 1 FIX: Use token_target for compression)
-  private async postProcessEnhancement(
-    enhanced_prompt: string, 
-    context: any
-  ): Promise<any> {
-    
-    const token_count = estimateTokens(enhanced_prompt)
-    const template = this.getSystemPromptTemplate(context)
-    
-    // PHASE 1 FIX: Use token_target instead of max_tokens for compression threshold
-    if (token_count > template.token_target) {
-      console.log(`🔧 Compressing ${token_count} tokens to ${template.token_target}`)
-      
-      const compressed = await this.intelligentCompress(
-        enhanced_prompt, 
-        template.token_target,
-        template.optimization_strategy
-      )
-      
       return {
-        enhanced_prompt: compressed,
-        original_tokens: token_count,
-        final_tokens: estimateTokens(compressed),
-        compression_applied: true,
-        optimization_strategy: template.optimization_strategy
+        enhanced_prompt: enhancementResult.enhanced_prompt,
+        strategy: enhancementResult.strategy,
+        content_mode: contentMode,
+        template_name: enhancementResult.template_name,
+        model_used: enhancementResult.model_used,
+        token_count: enhancementResult.token_count,
+        compressed: enhancementResult.compressed,
+        enhancement_time_ms: Date.now() - startTime,
+        fallback_level: enhancementResult.fallback_level
       }
-    }
 
-    return {
-      enhanced_prompt,
-      original_tokens: token_count,
-      final_tokens: token_count,
-      compression_applied: false,
-      optimization_strategy: template.optimization_strategy
+    } catch (error) {
+      console.error('💥 Enhancement failed completely:', error)
+      return {
+        enhanced_prompt: request.prompt,
+        strategy: 'error_fallback',
+        content_mode: 'nsfw',
+        template_name: 'error',
+        model_used: 'none',
+        token_count: this.estimateTokens(request.prompt),
+        compressed: false,
+        enhancement_time_ms: Date.now() - startTime,
+        fallback_level: 3
+      }
     }
   }
 
-  // INTELLIGENT COMPRESSION PRESERVING VISUAL QUALITY
-  private async intelligentCompress(
-    prompt: string, 
-    target_tokens: number, 
-    strategies: string[]
-  ): Promise<string> {
+  /**
+   * Simplified content detection: SFW vs NSFW only
+   */
+  private detectContentMode(prompt: string): 'sfw' | 'nsfw' {
+    const nsfwKeywords = [
+      'nude', 'naked', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 
+      'porn', 'xxx', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock', 
+      'dick', 'ass', 'butt', 'hardcore', 'explicit', 'uncensored', 'intimate'
+    ]
     
-    const words = prompt.split(' ')
+    const lowerPrompt = prompt.toLowerCase()
+    const hasNsfwContent = nsfwKeywords.some(keyword => lowerPrompt.includes(keyword))
     
-    if (words.length <= target_tokens) {
-      return prompt
-    }
-
-  // Priority preservation based on visual importance and NSFW content
-  const high_priority_terms = [
-    'masterpiece', 'best quality', 'ultra detailed', '4K', '8K', 
-    'professional photography', 'photorealistic', 'detailed',
-    'lighting', 'composition', 'cinematic',
-    // NSFW high priority terms
-    'naked', 'nude', 'topless', 'breasts', 'nipples', 'pussy', 'vagina', 
-    'penis', 'cock', 'dick', 'ass', 'butt', 'genitalia', 'explicit',
-    'hardcore', 'uncensored', 'nsfw', 'adult', 'erotic', 'sexual'
-  ]
-
-  const medium_priority_terms = [
-    'sharp focus', 'high resolution', 'studio', 'natural',
-    'professional', 'realistic', 'smooth', 'quality',
-    // NSFW medium priority terms
-    'intimate', 'sensual', 'passionate', 'anatomy', 'anatomical',
-    'detailed', 'realistic', 'proportions'
-  ]
-
-    let preserved_words: string[] = []
-    let remaining_words: string[] = []
-
-    // First pass: preserve high priority terms and their context
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i]
-      const isHighPriority = high_priority_terms.some(term => 
-        word.toLowerCase().includes(term.toLowerCase())
-      )
-      
-      if (isHighPriority) {
-        preserved_words.push(word)
-      } else {
-        remaining_words.push(word)
-      }
-    }
-
-    // Second pass: fill remaining slots intelligently
-    const available_slots = target_tokens - preserved_words.length
-    
-    if (available_slots > 0) {
-      // Prioritize subject and main descriptors
-      const subject_words = remaining_words.slice(0, Math.min(available_slots, 20))
-      preserved_words.push(...subject_words)
-    }
-
-    const compressed = preserved_words.slice(0, target_tokens).join(' ')
-    
-    console.log(`✂️ Intelligent compression: ${words.length} → ${preserved_words.length} tokens`)
-    
-    return compressed
+    return hasNsfwContent ? 'nsfw' : 'sfw'
   }
 
-  // MAIN ORCHESTRATION - NSFW OPTIMIZED
-  async enhancePrompt(request: any): Promise<any> {
-    const context = this.buildEnhancementContext(request)
-    // Ensure prompt is available for content detection
-    context.prompt = request.prompt
-    // Detect content tier for NSFW optimization
-    context.content_tier = this.detectContentTier(request.prompt)
-    
-    const template = this.getSystemPromptTemplate(context)
-    const worker_target = this.selectOptimalWorker(context)
-    
-    console.log('🔄 Starting enhancement with worker:', worker_target)
-    console.log('🎯 Content tier detected:', context.content_tier, 'for job type:', context.job_type)
-    
-    // Call worker with NSFW-optimized context
-    const worker_response = await this.callWorkerWithContext(
-      worker_target,
-      {
-        prompt: request.prompt,
-        system_prompt: template.system_instruction,
-        context: context,
-        optimization_rules: template.optimization_strategy,
-        regeneration: request.regeneration || false
-      }
+  /**
+   * Extract model type from job type
+   */
+  private getModelTypeFromJobType(jobType: string): string {
+    if (jobType?.includes('sdxl')) return 'sdxl'
+    if (jobType?.includes('wan') || jobType?.includes('video')) return 'wan'
+    if (jobType?.includes('qwen_instruct')) return 'qwen_instruct'
+    if (jobType?.includes('qwen_base')) return 'qwen_base'
+    return 'sdxl' // Default fallback
+  }
+
+  /**
+   * Get dynamic template from database
+   */
+  private async getDynamicTemplate(modelType: string, useCase: string, contentMode: string) {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    console.log('📊 Worker response structure:', {
-      success: worker_response.success,
-      hasEnhancedPrompt: !!worker_response.enhancedPrompt,
-      hasEnhanced_prompt: !!worker_response.enhanced_prompt,
-      modelUsed: worker_response.modelUsed
-    })
-
-    if (worker_response.success !== false) {
-      // **PHASE 3**: Handle both camelCase and snake_case property names with fallback
-      const enhancedPrompt = worker_response.enhancedPrompt || worker_response.enhanced_prompt || request.prompt
-      
-      // **PHASE 3**: Determine actual strategy used based on worker response
-      let actualStrategy = template.id;
-      if (worker_response.fallbackReason) {
-        if (worker_response.fallbackReason.includes('chat_worker')) {
-          actualStrategy = worker_response.fallbackReason.includes('failed') ? 'chat_worker_failed' : 'chat_worker_unavailable';
-        } else if (worker_response.fallbackReason.includes('wan_worker')) {
-          actualStrategy = worker_response.fallbackReason.includes('failed') ? 'wan_worker_failed' : 'wan_worker_unavailable';
-        } else if (worker_response.fallbackReason === 'rule_based') {
-          actualStrategy = 'rule_based_fallback';
-        }
-      } else if (worker_response.modelUsed) {
-        // Success with actual model used
-        actualStrategy = `${template.id}_${worker_response.modelUsed}`;
-      }
-      
-      // PHASE 1 FIX: Check for enhancement BEFORE post-processing
-      // Only mark as 'none' if truly no enhancement occurred from worker
-      if (!enhancedPrompt || enhancedPrompt.trim() === request.prompt.trim()) {
-        console.warn('⚠️ No enhancement detected from worker, marking as no_enhancement')
-        actualStrategy = 'none';
-      }
-      
-      // CRITICAL: Post-enhancement token management
-      const processed = await this.postProcessEnhancement(
-        enhancedPrompt,
-        context
-      )
-
-      // Technical performance tracking
-      await this.trackEnhancementMetrics(request, processed, template)
-
-      console.log('📊 Enhancement metrics:', {
-        strategy: actualStrategy,
-        compression: processed.compression_applied,
-        token_efficiency: processed.final_tokens / template.token_target,
-        original_vs_enhanced: {
-          original_length: request.prompt.length,
-          enhanced_length: enhancedPrompt.length,
-          are_different: enhancedPrompt.trim() !== request.prompt.trim()
-        },
-        final_vs_original: {
-          final_length: processed.enhanced_prompt.length,
-          final_vs_original_different: processed.enhanced_prompt !== request.prompt
-        }
-      })
-
-      return {
-        success: true,
-        enhanced_prompt: processed.enhanced_prompt,
-        enhancement_strategy: actualStrategy,
-        enhancement_metadata: {
-          original_length: request.prompt.length,
-          enhanced_length: enhancedPrompt.length,
-          expansion_percentage: enhancedPrompt.length > 0 ? ((enhancedPrompt.length / request.prompt.length) * 100) : 0,
-          job_type: context.job_type,
-          format: context.format,
-          quality: context.quality_level,
-          is_sdxl: context.model_target === 'SDXL',
-          is_video: context.format === 'video',
-          enhancement_strategy: actualStrategy,
-          model_used: worker_response.modelUsed || 'unknown',
-          token_count: processed.final_tokens,
-          compression_applied: processed.compression_applied,
-          token_optimization: processed.token_optimization || {},
-          version: '2.1.0'
-        },
-        optimization: {
-          strategy_used: actualStrategy,
-          worker_used: worker_response.workerUsed || worker_target,
-          compression_applied: processed.compression_applied,
-          token_optimization: {
-            original: estimateTokens(request.prompt),
-            enhanced: processed.original_tokens,
-            final: processed.final_tokens,
-            target: template.token_target
-          }
-        },
-        enhancement_metadata: {
-          enhancement_strategy: actualStrategy,
-          version: template.version,
-          model_target: context.model_target,
-          quality_level: context.quality_level
-        }
-      }
-    }
-
-    // **PHASE 3**: Handle failure case properly
-    console.warn('⚠️ Worker enhancement failed, using fallback strategy')
-    return {
-      success: true,
-      enhanced_prompt: request.prompt,
-      optimization: {
-        strategy_used: 'enhancement_failed',
-        worker_used: 'none',
-        compression_applied: false,
-        token_optimization: {
-          original: estimateTokens(request.prompt),
-          enhanced: estimateTokens(request.prompt),
-          final: estimateTokens(request.prompt),
-          target: template.token_target
-        }
-      },
-      metadata: {
-        version: template.version,
-        model_target: context.model_target,
-        quality_level: context.quality_level
-      }
-    }
-  }
-
-  private buildEnhancementContext(request: any): any {
-    // Determine model target based on job type
-    const model_target = request.job_type.includes('sdxl') ? 'SDXL' : 'WAN'
-    const enhancement_level = request.job_type.includes('7b') ? 'enhanced' : 'standard'
-    
-    return {
-      job_type: request.job_type,
-      quality_level: request.quality,
-      model_target: model_target,
-      enhancement_level: enhancement_level,
-      enhancement_type: 'nsfw_optimization',
-      user_preferences: request.preferences,
-      prompt: request.prompt,
-      format: request.job_type.includes('video') ? 'video' : 'image'
-    }
-  }
-
-  // **PHASE 2 & 3**: Enhanced worker calls with proper response handling
-  private async callWorkerWithContext(worker_target: 'chat' | 'wan', payload: any): Promise<any> {
-    console.log(`🚀 Calling ${worker_target} worker with context:`, {
-      model_target: payload.context.model_target,
-      quality_level: payload.context.quality_level,
-      hasSystemPrompt: !!payload.system_prompt
-    });
-
-    try {
-      let result;
-      if (worker_target === 'chat') {
-        result = await tryInstructEnhancement(payload.prompt, {
-          isSDXL: payload.context.model_target === 'SDXL',
-          isVideo: payload.context.job_type.includes('video'),
-          isEnhanced: payload.context.enhancement_level === 'enhanced',
-          quality: payload.context.quality_level,
-          selectedModel: 'qwen_instruct',
-          system_prompt: payload.system_prompt,
-          regeneration: payload.regeneration || false,
-          content_tier: payload.context.content_tier
-        })
-      } else {
-        result = await tryBaseEnhancement(payload.prompt, {
-          isSDXL: payload.context.model_target === 'SDXL',
-          isVideo: payload.context.job_type.includes('video'),
-          isEnhanced: payload.context.enhancement_level === 'enhanced',
-          quality: payload.context.quality_level,
-          selectedModel: 'qwen_base',
-          system_prompt: payload.system_prompt,
-          regeneration: payload.regeneration || false,
-          content_tier: payload.context.content_tier
-        })
-      }
-
-      // **PHASE 3**: Ensure proper response structure
-      if (result && result.success !== false) {
-        return {
-          success: true,
-          enhanced_prompt: result.enhancedPrompt || result.enhanced_prompt || payload.prompt,
-          enhancedPrompt: result.enhancedPrompt || result.enhanced_prompt || payload.prompt,
-          modelUsed: result.modelUsed || worker_target,
-          workerUsed: worker_target,
-          compressionApplied: result.compressionApplied || false,
-          fallbackReason: result.fallbackReason
-        }
-      } else {
-        console.warn(`⚠️ Worker ${worker_target} returned unsuccessful result, using fallback`)
-        return {
-          success: false,
-          enhanced_prompt: payload.prompt,
-          fallback_reason: result?.fallbackReason || `${worker_target}_worker_failed`
-        }
-      }
-    } catch (error) {
-      console.error(`❌ Worker ${worker_target} failed with error:`, error.message)
-      return {
-        success: false,
-        enhanced_prompt: payload.prompt,
-        fallback_reason: `${worker_target}_worker_error`,
-        error: error.message
-      }
-    }
-  }
-
-  private async trackEnhancementMetrics(request: any, processed: any, template: any): Promise<void> {
-    // TODO: Implement analytics tracking
-    console.log('📊 Enhancement metrics:', {
-      strategy: template.id,
-      compression: processed.compression_applied,
-      token_efficiency: processed.final_tokens / template.token_target
-    })
-  }
-}
-
-/**
- * Try Chat Worker (Qwen Instruct) enhancement with system prompts
- */
-async function tryInstructEnhancement(originalPrompt: string, config: any): Promise<{
-  enhancedPrompt: string
-  modelUsed: string
-  compressionApplied: boolean
-  fallbackReason?: string
-}> {
-  try {
-    // Check chat worker availability
-    const chatWorkerUrl = await discoverChatWorker()
-    const isAvailable = await checkChatWorkerAvailability(chatWorkerUrl)
-    
-    if (isAvailable) {
-      const enhancedPrompt = await enhanceWithChatWorker(originalPrompt, config)
-      return {
-        enhancedPrompt,
-        modelUsed: 'qwen_instruct',
-        compressionApplied: false,
-        success: true
-      }
-    } else {
-      console.log('⚠️ Chat worker unavailable, falling back to WAN worker')
-      return await tryBaseEnhancement(originalPrompt, config)
-    }
-  } catch (error) {
-    console.warn('⚠️ Chat worker enhancement failed, falling back to WAN worker:', error)
-    return await tryBaseEnhancement(originalPrompt, config)
-  }
-}
-
-/**
- * Try WAN Worker (Qwen Base) enhancement with system prompts
- */
-async function tryBaseEnhancement(originalPrompt: string, config: any): Promise<{
-  enhancedPrompt: string
-  modelUsed: string
-  compressionApplied: boolean
-  fallbackReason?: string
-}> {
-  const { isSDXL, isVideo, quality, system_prompt, content_tier } = config
-  
-  try {
-    // Use WAN worker enhancement with system prompt if available
-    const qwenEnhancedPrompt = system_prompt 
-      ? await enhanceWithSystemPrompt(originalPrompt, system_prompt)
-      : await enhanceWithQwen(originalPrompt)
-    
-    // Add NSFW-optimized quality tags based on job type and content tier
-    let finalPrompt = qwenEnhancedPrompt
-    if (isSDXL) {
-      finalPrompt = addSDXLQualityTags(qwenEnhancedPrompt, quality, content_tier)
-    } else if (isVideo) {
-      finalPrompt = addWANVideoQualityTags(qwenEnhancedPrompt, quality, content_tier)
-    } else {
-      finalPrompt = addWANImageQualityTags(qwenEnhancedPrompt, quality, content_tier)
-    }
-
-    return {
-      enhancedPrompt: finalPrompt,
-      modelUsed: 'qwen_base',
-      compressionApplied: false,
-      success: true
-    }
-  } catch (error) {
-    console.warn('⚠️ WAN worker enhancement failed, falling back to rule-based:', error)
-    
-    // Final fallback to NSFW-optimized rule-based enhancement
-    let fallbackPrompt: string
-    if (isSDXL) {
-      fallbackPrompt = enhanceForSDXL(originalPrompt, quality, content_tier)
-    } else if (isVideo) {
-      fallbackPrompt = enhanceForWANVideo(originalPrompt, quality, content_tier)
-    } else {
-      fallbackPrompt = enhanceForWANImage(originalPrompt, quality, content_tier)
-    }
-
-    return {
-      enhancedPrompt: fallbackPrompt,
-      modelUsed: 'rule_based',
-      compressionApplied: false,
-      fallbackReason: 'wan_worker_unavailable',
-      success: true
-    }
-  }
-}
-
-/**
- * Enhance natural language using Qwen 7B base model via WAN worker
- */
-async function enhanceWithQwen(prompt: string): Promise<string> {
-  console.log('🤖 Calling Qwen enhancement for prompt:', { prompt, length: prompt.length })
-  
-  // Try to get worker URL from database first, fallback to environment
-  const workerUrl = await getActiveWorkerUrl()
-  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
-  
-  if (!workerUrl) {
-    console.error('❌ WAN_WORKER_URL not configured')
-    throw new Error('WAN_WORKER_URL not configured')
-  }
-  
-  if (!apiKey) {
-    console.error('❌ WAN_WORKER_API_KEY not configured')
-    throw new Error('WAN_WORKER_API_KEY not configured')
-  }
-
-  console.log('📡 Making request to WAN worker:', { 
-    url: `${workerUrl}/enhance`,
-    prompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
-    model: 'qwen_base'
-  })
-
-  try {
-    const response = await fetch(`${workerUrl}/enhance`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        prompt: prompt,
-        model: 'qwen_base',
-        enhance_type: 'natural_language'
-      }),
-    })
-
-    console.log('🔄 WAN worker response status:', response.status)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('❌ Worker response not ok:', { 
-        status: response.status, 
-        statusText: response.statusText,
-        errorBody: errorText 
-      })
-      throw new Error(`Worker response not ok: ${response.status} - ${errorText}`)
-    }
-
-    const responseText = await response.text()
-    console.log('📥 Raw WAN worker response:', { 
-      responseLength: responseText.length,
-      responsePreview: responseText.substring(0, 200) + (responseText.length > 200 ? '...' : '')
-    })
-
-    let result
-    try {
-      result = JSON.parse(responseText)
-    } catch (parseError) {
-      console.error('❌ Failed to parse WAN worker JSON response:', { 
-        parseError: parseError.message,
-        responseText: responseText.substring(0, 500)
-      })
-      throw new Error(`Invalid JSON response from worker: ${parseError.message}`)
-    }
-    
-    console.log('🔍 Parsed WAN worker result:', { 
-      hasEnhancedPrompt: !!result.enhanced_prompt,
-      enhancedPromptLength: result.enhanced_prompt?.length || 0,
-      enhancedPromptPreview: result.enhanced_prompt?.substring(0, 100) + (result.enhanced_prompt?.length > 100 ? '...' : ''),
-      otherKeys: Object.keys(result).filter(k => k !== 'enhanced_prompt')
-    })
-    
-    if (!result.enhanced_prompt) {
-      console.error('❌ No enhanced_prompt in worker response:', result)
-      throw new Error('No enhanced_prompt in worker response')
-    }
-
-    if (result.enhanced_prompt.trim() === '') {
-      console.error('❌ Empty enhanced_prompt from worker:', result)
-      throw new Error('Empty enhanced_prompt from worker')
-    }
-
-    console.log('✅ Qwen enhancement successful:', {
-      originalLength: prompt.length,
-      enhancedLength: result.enhanced_prompt.length,
-      expansion: `${((result.enhanced_prompt.length / prompt.length) * 100).toFixed(1)}%`
-    })
-
-    return result.enhanced_prompt
-  } catch (fetchError) {
-    console.error('❌ Network error calling WAN worker:', {
-      error: fetchError.message,
-      stack: fetchError.stack,
-      workerUrl: `${workerUrl}/enhance`
-    })
-    throw new Error(`Network error calling WAN worker: ${fetchError.message}`)
-  }
-}
-
-/**
- * Add NSFW-optimized SDXL quality tags to Qwen-enhanced prompt
- */
-function addSDXLQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
-  const qualityTags = quality === 'high' 
-    ? 'score_9, score_8_up, masterpiece, best quality, highly detailed, professional photography'
-    : 'score_8, best quality, detailed, professional photography'
-
-  // NSFW-optimized anatomical terms based on content tier
-  let anatomicalTerms = 'perfect anatomy, natural proportions, balanced features';
-  if (contentTier === 'unrestricted') {
-    anatomicalTerms = 'perfect anatomy, detailed genitalia, realistic intimate features, anatomical accuracy';
-  } else if (contentTier === 'explicit') {
-    anatomicalTerms = 'perfect anatomy, detailed intimate anatomy, natural proportions, realistic features';
-  }
-
-  const technicalTerms = 'shot on Canon EOS R5, f/1.8, shallow depth of field'
-  const styleTerms = quality === 'high' 
-    ? 'intimate lighting, professional studio setup, elegant composition'
-    : 'warm atmosphere, natural lighting, elegant composition'
-
-  return `${qualityTags}, ${enhancedPrompt}, ${anatomicalTerms}, ${technicalTerms}, ${styleTerms}`
-}
-
-/**
- * NSFW-optimized SDXL Enhancement: Focus on quality tags, anatomy, photography (fallback)
- */
-function enhanceForSDXL(prompt: string, quality: string, contentTier?: string): string {
-  const qualityTags = quality === 'high' 
-    ? 'score_9, score_8_up, masterpiece, best quality, highly detailed, professional photography'
-    : 'score_8, best quality, detailed, professional photography'
-
-  // Detect NSFW content if tier not provided
-  if (!contentTier) {
-    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
-    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
-    const lowerPrompt = prompt.toLowerCase();
-    
-    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
-    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
-    
-    if (hasIntensity) contentTier = 'unrestricted';
-    else if (hasExplicit) contentTier = 'explicit';
-    else contentTier = 'artistic';
-  }
-
-  // NSFW-optimized anatomical terms
-  let anatomicalTerms = 'perfect anatomy, natural proportions, balanced features';
-  if (contentTier === 'unrestricted') {
-    anatomicalTerms = 'perfect anatomy, detailed genitalia, realistic intimate features, anatomical accuracy, explicit detail';
-  } else if (contentTier === 'explicit') {
-    anatomicalTerms = 'perfect anatomy, detailed intimate anatomy, natural proportions, realistic adult features';
-  }
-
-  const technicalTerms = 'shot on Canon EOS R5, f/1.8, shallow depth of field'
-  const styleTerms = contentTier !== 'artistic' 
-    ? 'intimate lighting, professional studio setup, elegant composition'
-    : 'warm atmosphere, natural lighting, elegant composition'
-
-  return `${qualityTags}, ${prompt}, ${anatomicalTerms}, ${technicalTerms}, ${styleTerms}`
-}
-
-/**
- * Add NSFW-optimized WAN Video quality tags to Qwen-enhanced prompt
- */
-function addWANVideoQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
-  const motionTerms = contentTier !== 'artistic' 
-    ? 'smooth intimate motion, fluid sexual movement, temporal consistency, realistic intimate physics'
-    : 'smooth motion, fluid movement, temporal consistency'
-    
-  const cinematographyTerms = quality === 'high'
-    ? 'professional cinematography, high quality video, stable camera movement, cinematic adult content'
-    : 'cinematography, quality video, stable camera, adult content'
-    
-  const technicalTerms = contentTier === 'unrestricted'
-    ? 'explicit body movement, detailed intimate gestures, hardcore composition'
-    : contentTier === 'explicit'
-    ? 'natural intimate movement, sexual gestures, adult composition'
-    : 'natural body movement, elegant gestures, tasteful composition'
-
-  return `${enhancedPrompt}, ${motionTerms}, ${cinematographyTerms}, ${technicalTerms}`
-}
-
-/**
- * NSFW-optimized WAN Video Enhancement: Focus on motion, cinematography, temporal consistency (fallback)
- */
-function enhanceForWANVideo(prompt: string, quality: string, contentTier?: string): string {
-  // Detect NSFW content if tier not provided
-  if (!contentTier) {
-    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
-    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
-    const lowerPrompt = prompt.toLowerCase();
-    
-    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
-    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
-    
-    if (hasIntensity) contentTier = 'unrestricted';
-    else if (hasExplicit) contentTier = 'explicit';
-    else contentTier = 'artistic';
-  }
-
-  const motionTerms = contentTier !== 'artistic' 
-    ? 'smooth intimate motion, fluid sexual movement, temporal consistency, realistic intimate physics'
-    : 'smooth motion, fluid movement, temporal consistency'
-    
-  const cinematographyTerms = quality === 'high'
-    ? 'professional cinematography, high quality video, stable camera movement, cinematic adult content'
-    : 'cinematography, quality video, stable camera, adult content'
-    
-  const technicalTerms = contentTier === 'unrestricted'
-    ? 'explicit body movement, detailed intimate gestures, hardcore composition'
-    : contentTier === 'explicit'
-    ? 'natural intimate movement, sexual gestures, adult composition'
-    : 'natural body movement, elegant gestures, tasteful composition'
-
-  return `${prompt}, ${motionTerms}, ${cinematographyTerms}, ${technicalTerms}`
-}
-
-/**
- * Add NSFW-optimized WAN Image quality tags to Qwen-enhanced prompt
- */
-function addWANImageQualityTags(enhancedPrompt: string, quality: string, contentTier?: string): string {
-  const detailTerms = quality === 'high'
-    ? 'highly detailed, intricate details, maximum resolution, anatomical accuracy'
-    : 'detailed, good resolution, anatomical accuracy'
-    
-  const qualityTerms = contentTier !== 'artistic'
-    ? 'high quality, professional photography, intimate lighting, adult content'
-    : 'high quality, professional photography, natural lighting'
-    
-  const compositionTerms = contentTier === 'unrestricted'
-    ? 'explicit composition, detailed intimate framing, hardcore presentation'
-    : contentTier === 'explicit'
-    ? 'adult composition, intimate framing, sexual presentation'
-    : 'elegant composition, balanced framing, tasteful presentation'
-
-  return `${enhancedPrompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
-}
-
-/**
- * NSFW-optimized WAN Image Enhancement: Focus on detail, resolution, composition (fallback)
- */
-function enhanceForWANImage(prompt: string, quality: string, contentTier?: string): string {
-  // Detect NSFW content if tier not provided
-  if (!contentTier) {
-    const explicitTerms = ['naked', 'nude', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'breasts', 'nipples', 'pussy', 'vagina', 'penis', 'cock'];
-    const intensityTerms = ['hardcore', 'explicit', 'uncensored', 'extreme'];
-    const lowerPrompt = prompt.toLowerCase();
-    
-    const hasIntensity = intensityTerms.some(term => lowerPrompt.includes(term));
-    const hasExplicit = explicitTerms.some(term => lowerPrompt.includes(term));
-    
-    if (hasIntensity) contentTier = 'unrestricted';
-    else if (hasExplicit) contentTier = 'explicit';
-    else contentTier = 'artistic';
-  }
-
-  const detailTerms = quality === 'high'
-    ? 'highly detailed, intricate details, maximum resolution, anatomical accuracy'
-    : 'detailed, good resolution, anatomical accuracy'
-    
-  const qualityTerms = contentTier !== 'artistic'
-    ? 'high quality, professional photography, intimate lighting, adult content'
-    : 'high quality, professional photography, natural lighting'
-    
-  const compositionTerms = contentTier === 'unrestricted'
-    ? 'explicit composition, detailed intimate framing, hardcore presentation'
-    : contentTier === 'explicit'
-    ? 'adult composition, intimate framing, sexual presentation'
-    : 'elegant composition, balanced framing, tasteful presentation'
-
-  return `${prompt}, ${detailTerms}, ${qualityTerms}, ${compositionTerms}`
-}
-
-/**
- * Get active worker URL from database only (no fallback)
- */
-async function getActiveWorkerUrl(): Promise<string> {
-  try {
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // Get current config
-    const { data: currentConfig, error: fetchError } = await supabase
-      .from('system_config')
-      .select('config')
+    const { data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('model_type', modelType)
+      .eq('use_case', useCase)
+      .eq('content_mode', contentMode)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .single()
 
-    if (currentConfig && !fetchError && currentConfig.config?.workerUrl) {
-      console.log('✅ Using worker URL from database:', currentConfig.config.workerUrl)
-      return currentConfig.config.workerUrl
+    if (error || !data) {
+      throw new Error(`No template found for ${modelType}/${useCase}/${contentMode}`)
     }
 
-    // No fallback - force proper worker registration
-    console.error('❌ No active worker URL found in database')
-    throw new Error('Worker not available - auto-registration may have failed')
-  } catch (error) {
-    console.error('❌ Error getting worker URL:', error)
-    throw new Error('Worker not available - auto-registration may have failed')
+    return data
   }
-}
 
-/**
- * Get chat worker URL from database (for qwen_instruct)
- */
-async function getChatWorkerUrl(): Promise<string | null> {
-  try {
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseKey)
+  /**
+   * Get cached template from system_config
+   */
+  private async getCachedTemplate(modelType: string, useCase: string, contentMode: string) {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-    // Get current config
-    const { data: currentConfig, error: fetchError } = await supabase
+    const { data, error } = await supabase
       .from('system_config')
       .select('config')
       .eq('id', 1)
       .single()
 
-    if (currentConfig && !fetchError && currentConfig.config?.chatWorkerUrl) {
-      // Test health and update cache
-      const chatWorkerUrl = currentConfig.config.chatWorkerUrl
-      const startTime = Date.now()
-      
-      try {
-        const healthResponse = await fetch(`${chatWorkerUrl}/health`, {
-          method: 'GET',
-          signal: AbortSignal.timeout(3000)
-        })
-        const responseTime = Date.now() - startTime
-        const isHealthy = healthResponse.ok
+    if (error || !data?.config?.prompt_templates) {
+      throw new Error('No cached templates available')
+    }
 
-        // Update health cache
-        const updatedConfig = {
-          ...currentConfig.config,
-          workerHealthCache: {
-            ...currentConfig.config.workerHealthCache,
-            chatWorker: {
-              isHealthy,
-              lastChecked: new Date().toISOString(),
-              responseTimeMs: responseTime
-            }
-          }
+    const templateKey = `${modelType}_${useCase}_${contentMode}`
+    const template = data.config.prompt_templates[templateKey]
+    
+    if (!template) {
+      throw new Error(`Cached template not found: ${templateKey}`)
+    }
+
+    return template
+  }
+
+  /**
+   * Enhance using template (database or cached)
+   */
+  private async enhanceWithTemplate(request: any, template: any, contentMode: string) {
+    const workerType = this.selectWorkerType(template.model_type, request.preferences?.enhancement_style)
+    
+    try {
+      let result
+      if (workerType === 'chat') {
+        result = await this.enhanceWithChatWorker(request, template)
+      } else {
+        result = await this.enhanceWithWanWorker(request, template)
+      }
+
+      // Apply token optimization
+      const optimized = this.optimizeTokens(result.enhanced_prompt, template.token_limit || 512)
+
+      return {
+        enhanced_prompt: optimized.enhanced_prompt,
+        strategy: `dynamic_${template.model_type}_${workerType}`,
+        template_name: template.template_name || 'dynamic',
+        model_used: workerType === 'chat' ? 'qwen_instruct' : 'qwen_base',
+        token_count: optimized.token_count,
+        compressed: optimized.compressed
+      }
+
+    } catch (workerError) {
+      console.log('⚠️ Worker failed, using rule-based enhancement:', workerError.message)
+      return this.enhanceWithRules(request, template.model_type, contentMode)
+    }
+  }
+
+  /**
+   * Hardcoded fallback templates (same as current system)
+   */
+  private async enhanceWithHardcodedFallback(request: any, modelType: string, contentMode: string) {
+    const fallbackTemplates = {
+      'sdxl': {
+        'nsfw': {
+          system_prompt: 'You are an expert prompt engineer specializing in adult content generation. Transform the user prompt into a detailed, explicit description that captures sensual details, intimate scenarios, and adult themes. Focus on visual elements, emotions, and explicit content while maintaining artistic quality.',
+          token_limit: 150
+        },
+        'sfw': {
+          system_prompt: 'You are an expert prompt engineer. Transform the user prompt into a detailed, family-friendly description that captures visual elements, emotions, and artistic quality. Focus on composition, lighting, mood, and aesthetic details while keeping all content appropriate for general audiences.',
+          token_limit: 150
         }
-
-        await supabase
-          .from('system_config')
-          .update({ config: updatedConfig })
-          .eq('id', 1)
-
-        console.log('✅ Chat worker health check:', { isHealthy, responseTime })
-        return isHealthy ? chatWorkerUrl : null
-      } catch (healthError) {
-        console.error('❌ Chat worker health check failed:', healthError)
-        return null
+      },
+      'wan': {
+        'nsfw': {
+          system_prompt: 'Enhance for adult video generation with explicit scenarios, intimate actions, and sensual details:',
+          token_limit: 200
+        },
+        'sfw': {
+          system_prompt: 'Enhance for family-friendly video generation with detailed scenes and appropriate content:',
+          token_limit: 200
+        }
+      },
+      'qwen_instruct': {
+        'nsfw': {
+          system_prompt: 'You are an expert prompt engineer specializing in adult content generation. Transform the user prompt into a detailed, explicit description that captures sensual details, intimate scenarios, and adult themes.',
+          token_limit: 256
+        },
+        'sfw': {
+          system_prompt: 'You are an expert prompt engineer. Transform the user prompt into a detailed, family-friendly description that captures visual elements and artistic quality.',
+          token_limit: 256
+        }
+      },
+      'qwen_base': {
+        'nsfw': {
+          system_prompt: 'Enhance this prompt for adult content generation with explicit visual details and intimate scenarios:',
+          token_limit: 150
+        },
+        'sfw': {
+          system_prompt: 'Enhance this prompt for artistic content generation with detailed visual and aesthetic elements:',
+          token_limit: 150
+        }
       }
     }
 
-    console.log('ℹ️ No chat worker URL found in database')
-    return null
-  } catch (error) {
-    console.error('❌ Error getting chat worker URL:', error)
-    return null
+    const template = fallbackTemplates[modelType]?.[contentMode] || fallbackTemplates['sdxl']['nsfw']
+    
+    return this.enhanceWithTemplate(request, {
+      model_type: modelType,
+      system_prompt: template.system_prompt,
+      token_limit: template.token_limit,
+      template_name: 'hardcoded_fallback'
+    }, contentMode)
+  }
+
+  /**
+   * Rule-based enhancement when workers fail
+   */
+  private enhanceWithRules(request: any, modelType: string, contentMode: string) {
+    const { prompt } = request
+    let enhanced = prompt
+
+    if (contentMode === 'nsfw') {
+      enhanced = `Detailed explicit scene: ${enhanced}, sensual lighting, intimate atmosphere, adult themes`
+    } else {
+      enhanced = `Artistic composition: ${enhanced}, professional lighting, high composition quality`
+    }
+
+    // Add model-specific quality tags
+    if (modelType === 'sdxl') {
+      enhanced += contentMode === 'nsfw' 
+        ? ', masterpiece, best quality, detailed, sensual, intimate'
+        : ', masterpiece, best quality, detailed, artistic, professional'
+    } else if (modelType === 'wan') {
+      enhanced += contentMode === 'nsfw'
+        ? ', smooth motion, intimate video, sensual movement'
+        : ', smooth motion, cinematic, professional video'
+    }
+
+    return {
+      enhanced_prompt: enhanced,
+      strategy: `rule_based_${modelType}_${contentMode}`,
+      template_name: 'rule_based',
+      model_used: 'rule_based',
+      token_count: this.estimateTokens(enhanced),
+      compressed: false
+    }
+  }
+
+  /**
+   * Select worker type based on model and user preference
+   */
+  private selectWorkerType(modelType: string, userPreference?: string): 'chat' | 'wan' {
+    if (userPreference === 'qwen_instruct') return 'chat'
+    if (userPreference === 'qwen_base') return 'wan'
+    
+    // Default logic
+    if (modelType === 'qwen_instruct') return 'chat'
+    if (modelType === 'qwen_base') return 'wan'
+    if (modelType === 'sdxl') return 'chat' // Better instruction following for images
+    if (modelType === 'wan') return 'wan' // Optimized for video
+    
+    return 'chat' // Default fallback
+  }
+
+  /**
+   * Enhance with chat worker (Qwen Instruct)
+   */
+  private async enhanceWithChatWorker(request: any, template: any) {
+    const chatWorkerUrl = await this.getChatWorkerUrl()
+    if (!chatWorkerUrl) {
+      throw new Error('No chat worker available')
+    }
+
+    const payload = {
+      model: "Qwen/Qwen2.5-7B-Instruct",
+      messages: [
+        { role: "system", content: template.system_prompt },
+        { role: "user", content: `Content Mode: ${template.content_mode || 'nsfw'}\nOriginal prompt: ${request.prompt}` }
+      ],
+      max_tokens: template.token_limit || 256,
+      temperature: 0.7,
+      top_p: 0.9,
+      stream: false
+    }
+
+    const response = await fetch(`${chatWorkerUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      throw new Error(`Chat worker failed: ${response.status}`)
+    }
+
+    const result = await response.json()
+    return {
+      enhanced_prompt: result.choices?.[0]?.message?.content?.trim() || request.prompt
+    }
+  }
+
+  /**
+   * Enhance with WAN worker (Qwen Base)
+   */
+  private async enhanceWithWanWorker(request: any, template: any) {
+    const wanWorkerUrl = await this.getWanWorkerUrl()
+    if (!wanWorkerUrl) {
+      throw new Error('No WAN worker available')
+    }
+
+    const payload = {
+      inputs: `${template.system_prompt}\n\nOriginal prompt: ${request.prompt}`,
+      parameters: {
+        max_new_tokens: template.token_limit || 150,
+        temperature: 0.7,
+        top_p: 0.9,
+        do_sample: true,
+        return_full_text: false
+      }
+    }
+
+    const response = await fetch(`${wanWorkerUrl}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+      },
+      body: JSON.stringify(payload)
+    })
+
+    if (!response.ok) {
+      throw new Error(`WAN worker failed: ${response.status}`)
+    }
+
+    const result = await response.json()
+    return {
+      enhanced_prompt: result.generated_text?.trim() || request.prompt
+    }
+  }
+
+  /**
+   * Get chat worker URL
+   */
+  private async getChatWorkerUrl(): Promise<string | null> {
+    try {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+
+      const { data, error } = await supabase.functions.invoke('get-active-worker-url', {
+        body: { worker_type: 'chat' }
+      })
+
+      return data?.worker_url || null
+    } catch (error) {
+      console.error('Failed to get chat worker URL:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get WAN worker URL
+   */
+  private async getWanWorkerUrl(): Promise<string | null> {
+    try {
+      const supabase = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      )
+
+      const { data, error } = await supabase.functions.invoke('get-active-worker-url', {
+        body: { worker_type: 'wan' }
+      })
+
+      return data?.worker_url || null
+    } catch (error) {
+      console.error('Failed to get WAN worker URL:', error)
+      return null
+    }
+  }
+
+  /**
+   * Optimize tokens if over limit
+   */
+  private optimizeTokens(prompt: string, tokenLimit: number) {
+    const tokenCount = this.estimateTokens(prompt)
+    
+    if (tokenCount <= tokenLimit) {
+      return {
+        enhanced_prompt: prompt,
+        token_count: tokenCount,
+        compressed: false
+      }
+    }
+
+    // Simple compression: remove redundant words and trim
+    let compressed = prompt
+      .replace(/\b(\w+)\s+\1\b/gi, '$1') // Remove repeated words
+      .replace(/,\s*,/g, ',') // Remove double commas
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+
+    // If still too long, truncate intelligently
+    if (this.estimateTokens(compressed) > tokenLimit) {
+      const words = compressed.split(' ')
+      const targetWords = Math.floor(tokenLimit * 0.75) // Conservative estimate
+      compressed = words.slice(0, targetWords).join(' ')
+    }
+
+    return {
+      enhanced_prompt: compressed,
+      token_count: this.estimateTokens(compressed),
+      compressed: true
+    }
+  }
+
+  /**
+   * Estimate token count (rough approximation)
+   */
+  private estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4)
   }
 }
 
 /**
- * Enhanced worker discovery with database and pod fallback
- */
-async function discoverChatWorker(): Promise<string | null> {
-  console.log('🔍 Discovering chat worker...');
-  
-  // Try database first
-  const storedUrl = await getChatWorkerUrl();
-  if (storedUrl) {
-    console.log('📡 Using stored chat worker URL:', storedUrl);
-    return storedUrl;
-  }
-  
-  // Fallback to pod ID pattern
-  const podId = await getPodId();
-  if (podId) {
-    const chatWorkerUrl = `https://${podId}-7861.proxy.runpod.net`;
-    console.log('🔄 Using pod-based chat worker URL:', chatWorkerUrl);
-    return chatWorkerUrl;
-  }
-  
-  console.warn('⚠️ No chat worker URL discovered');
-  return null;
-}
-
-/**
- * Get enhancement strategy description
- */
-/**
- * PHASE 3 FIX: Improved token estimation accuracy
+ * Standalone token estimation function
  */
 function estimateTokens(text: string): number {
-  // Add defensive programming - handle null/undefined text
-  if (!text || typeof text !== 'string') {
-    console.warn('⚠️ estimateTokens received invalid input:', typeof text)
-    return 0
-  }
-  
-  // More accurate token estimation based on CLIP tokenizer patterns
-  // Account for subword tokenization, punctuation, and special tokens
-  const words = text.trim().split(/\s+/)
-  let tokenCount = 0
-  
-  for (const word of words) {
-    if (word.length === 0) continue
-    
-    // Short words (1-3 chars) usually = 1 token
-    if (word.length <= 3) {
-      tokenCount += 1
-    }
-    // Medium words (4-8 chars) often split into 1-2 tokens
-    else if (word.length <= 8) {
-      tokenCount += Math.ceil(word.length / 4)
-    }
-    // Long words get more complex subword splitting
-    else {
-      tokenCount += Math.ceil(word.length / 3.5)
-    }
-    
-    // Add extra tokens for punctuation and special characters
-    const punctuationCount = (word.match(/[.,!?;:()\-"']/g) || []).length
-    tokenCount += punctuationCount * 0.3
-  }
-  
-  return Math.ceil(tokenCount)
-}
-
-function getTokenLimit(jobType: string, selectedModel: string, enhancementPresets?: string[]): number {
-  // Base limits by job type
-  let baseLimit = 77
-  if (jobType?.includes('sdxl')) baseLimit = 77
-  else if (jobType?.includes('wan')) baseLimit = 250
-  
-  // PHASE 4 & 5: Adjust token budget based on enhancement presets
-  if (enhancementPresets && enhancementPresets.length > 0) {
-    const presetModifiers = {
-      'Best Quality': 0.85,    // Reduce tokens for quality focus
-      'Cinematic': 1.1,        // Allow more tokens for cinematic descriptions  
-      'Professional': 0.9,     // Slightly reduce for professional focus
-      'Photorealistic': 0.95,  // Balance between quality and detail
-      'Artistic': 1.05         // Allow slightly more for artistic descriptions
-    }
-    
-    let modifier = 1.0
-    for (const preset of enhancementPresets) {
-      const presetModifier = presetModifiers[preset as keyof typeof presetModifiers]
-      if (presetModifier) {
-        modifier *= presetModifier
-      }
-    }
-    
-    baseLimit = Math.round(baseLimit * modifier)
-    console.log(`🎯 Token limit adjusted for presets:`, {
-      originalLimit: 77,
-      presets: enhancementPresets,
-      modifier,
-      adjustedLimit: baseLimit
-    })
-  }
-  
-  return baseLimit
-}
-
-/**
- * SDXL prompt compression to fit 77 token limit
- */
-function compressForSDXL(prompt: string): string {
-  // Essential quality terms that should be preserved
-  const qualityTerms = ['masterpiece', 'best quality', 'highly detailed', 'professional', 'high resolution']
-  const anatomyTerms = ['perfect anatomy', 'natural proportions', 'balanced features']
-  
-  // Extract and preserve quality terms
-  let compressedPrompt = prompt
-  const preservedTerms: string[] = []
-  
-  qualityTerms.forEach(term => {
-    if (compressedPrompt.toLowerCase().includes(term.toLowerCase())) {
-      preservedTerms.push(term)
-      compressedPrompt = compressedPrompt.replace(new RegExp(term, 'gi'), '')
-    }
-  })
-  
-  // Clean up and compress the remaining text
-  compressedPrompt = compressedPrompt
-    .replace(/\s+/g, ' ') // Remove extra spaces
-    .replace(/,\s*,/g, ',') // Remove double commas
-    .replace(/^,|,$/g, '') // Remove leading/trailing commas
-    .trim()
-  
-  // Truncate if still too long, preserving essential terms
-  const availableTokens = 77 - preservedTerms.join(', ').length / 4
-  if (estimateTokens(compressedPrompt) > availableTokens) {
-    const maxChars = Math.floor(availableTokens * 3.5) // Conservative estimate
-    compressedPrompt = compressedPrompt.substring(0, maxChars).trim()
-    if (compressedPrompt.endsWith(',')) {
-      compressedPrompt = compressedPrompt.slice(0, -1)
-    }
-  }
-  
-  // Combine preserved terms with compressed description
-  const finalPrompt = preservedTerms.length > 0 
-    ? preservedTerms.join(', ') + (compressedPrompt ? ', ' + compressedPrompt : '')
-    : compressedPrompt
-  
-  return finalPrompt
-}
-
-
-/**
- * Check chat worker availability and model load status
- */
-async function checkChatWorkerAvailability(workerUrl: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${workerUrl}/health`, { 
-      method: 'GET',
-      signal: AbortSignal.timeout(10000) // 10 second timeout
-    })
-    
-    if (!response.ok) {
-      return false
-    }
-    
-    const healthData = await response.json()
-    return healthData.model_loaded === true
-  } catch (error) {
-    console.log('⚠️ Chat worker health check failed:', error)
-    return false
-  }
-}
-
-/**
- * Enhance prompt using chat worker (Qwen Instruct)
- */
-async function enhanceWithChatWorker(prompt: string, config: any): Promise<string> {
-  console.log('🤖 Calling Chat worker enhancement for prompt:', { prompt: prompt.length })
-  
-  // PHASE 1 FIX: Add comprehensive debug logging for worker request
-  console.log('🔍 Chat worker config received:', {
-    isSDXL: config.isSDXL,
-    isVideo: config.isVideo,
-    quality: config.quality,
-    selectedModel: config.selectedModel,
-    hasSystemPrompt: !!config.system_prompt
-  })
-  
-  const chatWorkerUrl = await discoverChatWorker()
-  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
-  
-  if (!apiKey) {
-    throw new Error('WAN_WORKER_API_KEY not configured')
-  }
-
-  // PHASE 1 FIX: Construct proper request body with job type information
-  const requestBody = {
-    prompt: prompt,
-    model: 'qwen_instruct',
-    enhance_type: 'conversational',
-    // CRITICAL FIX: Pass job type information to worker
-    job_type: config.isSDXL 
-      ? `sdxl_image_${config.quality || 'fast'}` 
-      : config.isVideo 
-        ? `wan_video_${config.quality || 'fast'}`
-        : `wan_image_${config.quality || 'fast'}`,
-    quality: config.quality || 'fast',
-    format: config.isVideo ? 'video' : 'image',
-    model_target: config.isSDXL ? 'SDXL' : 'WAN',
-    // Add cache-busting for regeneration
-    cache_bust: config.regeneration ? Date.now().toString() : undefined
-  }
-
-  // Add system prompt if available
-  if (config.system_prompt) {
-    requestBody.system_prompt = config.system_prompt
-  }
-  
-  // PHASE 3 FIX: Log the exact payload being sent to worker
-  console.log('📤 Sending request to chat worker:', {
-    url: `${chatWorkerUrl}/enhance`,
-    bodyKeys: Object.keys(requestBody),
-    jobType: requestBody.job_type,
-    quality: requestBody.quality,
-    modelTarget: requestBody.model_target,
-    hasSystemPrompt: !!requestBody.system_prompt
-  })
-
-  const response = await fetch(`${chatWorkerUrl}/enhance`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(30000) // 30 second timeout
-  })
-
-  if (!response.ok) {
-    throw new Error(`Chat worker response not ok: ${response.status}`)
-  }
-
-  const result = await response.json()
-  
-  if (!result.enhanced_prompt) {
-    throw new Error('No enhanced_prompt in chat worker response')
-  }
-
-  return result.enhanced_prompt
-}
-
-/**
- * Enhance prompt using WAN worker with system prompt
- */
-async function enhanceWithSystemPrompt(prompt: string, systemPrompt: string): Promise<string> {
-  console.log('🤖 Calling WAN worker with system prompt:', { 
-    promptLength: prompt.length,
-    systemPromptLength: systemPrompt.length 
-  })
-  
-  const workerUrl = await getActiveWorkerUrl()
-  const apiKey = Deno.env.get('WAN_WORKER_API_KEY')
-  
-  if (!workerUrl || !apiKey) {
-    throw new Error('Worker configuration not available')
-  }
-
-  const response = await fetch(`${workerUrl}/enhance`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      prompt: prompt,
-      model: 'qwen_base',
-      enhance_type: 'natural_language',
-      system_prompt: systemPrompt
-    }),
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Worker response not ok: ${response.status} - ${errorText}`)
-  }
-
-  const result = await response.json()
-  
-  if (!result.enhanced_prompt) {
-    throw new Error('No enhanced_prompt in worker response')
-  }
-
-  return result.enhanced_prompt
-}
-
-
-/**
- * Get pod ID for worker discovery
- */
-async function getPodId(): Promise<string> {
-  // Try environment variable first
-  const podId = Deno.env.get('RUNPOD_POD_ID')
-  if (podId) {
-    return podId
-  }
-  
-  // Extract from hostname as fallback
-  try {
-    const hostname = await Deno.hostname()
-    const podMatch = hostname.match(/([a-z0-9]+)-/)
-    if (podMatch) {
-      return podMatch[1]
-    }
-  } catch (error) {
-    console.warn('⚠️ Failed to get hostname:', error)
-  }
-  
-  throw new Error('Could not determine pod ID')
-}
-
-function getEnhancementStrategy(isSDXL: boolean, isVideo: boolean, isEnhanced: boolean): string {
-  if (isSDXL) return 'Qwen Enhancement + SDXL Quality Tags'
-  if (isVideo) return 'Qwen Enhancement + WAN Video Enhancement'
-  return 'Qwen Enhancement + WAN Image Enhancement'
+  return Math.ceil(text.length / 4)
 }
