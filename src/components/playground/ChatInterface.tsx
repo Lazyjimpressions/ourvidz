@@ -156,7 +156,7 @@ export const ChatInterface = () => {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 pb-32 space-y-4">
         {isLoadingMessages ? (
           <div className="flex items-center justify-center h-32">
             <LoadingSpinner />
@@ -193,9 +193,9 @@ export const ChatInterface = () => {
         )}
       </div>
 
-      {/* Message Input */}
-      <div className="border-t border-gray-800 p-6">
-        <form onSubmit={handleSubmit} className="flex items-end gap-3">
+      {/* Floating Message Input */}
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-gray-800 p-6 z-50">
+        <form onSubmit={handleSubmit} className="flex items-end gap-3 max-w-4xl mx-auto">
           <div className="flex-1">
             <Textarea
               ref={textareaRef}
@@ -221,7 +221,7 @@ export const ChatInterface = () => {
         </form>
         
         {state.error && (
-          <div className="mt-2 text-sm text-red-400 bg-red-900/20 p-2 rounded">
+          <div className="mt-2 text-sm text-red-400 bg-red-900/20 p-2 rounded max-w-4xl mx-auto">
             {state.error}
           </div>
         )}
