@@ -14,23 +14,23 @@ export const PromptCounter: React.FC<PromptCounterProps> = ({
 }) => {
   const charCount = text.length;
   
-  // Get limits based on mode
+  // Get limits based on mode - Much higher limits for unrestricted content
   const getLimits = () => {
     switch (mode) {
       case 'roleplay':
-        return { optimal: 300, warning: 500, max: 1000 };
+        return { optimal: 1000, warning: 2000, max: 5000 }; // Much higher for detailed roleplay
       case 'creative':
-        return { optimal: 200, warning: 300, max: 500 };
+        return { optimal: 500, warning: 1000, max: 2000 }; // Higher for creative content
       case 'admin':
-        return { optimal: 400, warning: 600, max: 1000 };
+        return { optimal: 800, warning: 1500, max: 3000 }; // Higher for admin tools
       default: // chat
-        return { optimal: 250, warning: 400, max: 750 };
+        return { optimal: 500, warning: 1000, max: 2000 }; // Higher for general chat
     }
   };
 
   const limits = getLimits();
   
-  // Get color based on character count
+  // Get color based on character count - More permissive
   const getColor = () => {
     if (charCount <= limits.optimal) return 'text-green-400';
     if (charCount <= limits.warning) return 'text-yellow-400';
@@ -38,12 +38,12 @@ export const PromptCounter: React.FC<PromptCounterProps> = ({
     return 'text-red-400';
   };
 
-  // Get message based on character count and mode
+  // Get message based on character count and mode - More encouraging
   const getMessage = () => {
     if (charCount <= limits.optimal) return '';
-    if (charCount <= limits.warning) return 'Getting long';
-    if (charCount <= limits.max) return 'Very long prompt';
-    return 'Extremely long - consider breaking up';
+    if (charCount <= limits.warning) return 'Detailed prompt';
+    if (charCount <= limits.max) return 'Very detailed - good for complex scenarios';
+    return 'Extremely detailed - perfect for immersive roleplay';
   };
 
   const message = getMessage();

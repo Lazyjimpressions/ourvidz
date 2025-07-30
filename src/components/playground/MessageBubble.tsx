@@ -57,7 +57,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             ? 'bg-green-600 text-white rounded-tr-md'
             : 'bg-gray-800 text-white rounded-tl-md'
         }`}>
-          <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere text-sm leading-relaxed">
+          <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere text-sm leading-relaxed max-w-none">
             {message.content}
           </div>
         </div>
