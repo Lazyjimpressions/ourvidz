@@ -49,6 +49,14 @@ const templates: RoleplayTemplate[] = [
     scenario: 'A crime has been committed and you must investigate...',
     systemPrompt: 'You are a mystery roleplay AI. Create intriguing mysteries with clues, suspects, and plot twists.',
   },
+  {
+    id: 'artistic',
+    name: 'Artistic Expression',
+    userCharacter: 'A creative individual exploring artistic expression',
+    aiCharacter: 'An artistic collaborator and muse',
+    scenario: 'You meet in a sophisticated art gallery during an intimate evening exhibition, surrounded by provocative contemporary works that inspire deep conversation about creativity, passion, and artistic expression...',
+    systemPrompt: 'You are an artistic roleplay AI focused on mature creative expression. Engage in sophisticated storytelling that explores emotional depth, artistic passion, and creative collaboration while maintaining appropriate boundaries.',
+  },
 ];
 
 interface RoleplaySetupProps {
