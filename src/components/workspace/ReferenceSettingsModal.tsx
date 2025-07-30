@@ -257,7 +257,7 @@ export const ReferenceSettingsModal = ({
                       }}
                       onDragLeave={() => setDraggedOver(null)}
                       onDrop={(e) => handleDrop(e, reference.id)}
-                      onClick={() => !reference.url && !isUploading && handleFileSelect(reference.id)}
+                      onClick={() => !isUploading && handleFileSelect(reference.id)}
                     >
                       {reference.enabled && reference.url && !isUploading ? (
                         <div className="relative">
@@ -294,25 +294,37 @@ export const ReferenceSettingsModal = ({
                               <p className="text-xs text-center">Uploading...</p>
                             </>
                           ) : (
-                            <>
-                              <Upload className="w-6 h-6 mb-1" />
-                              <p className="text-xs text-center">Drop image or click</p>
-                            </>
+                             <>
+                               <Upload className="w-6 h-6 mb-1" />
+                               <p className="text-xs text-center">Drop image or click to upload</p>
+                             </>
                           )}
                         </div>
                       )}
                     </div>
 
-                    {/* Browse References Button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleBrowseReferences(reference.id)}
-                      className="w-full text-xs h-8 bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
-                    >
-                      <FolderOpen className="w-3 h-3 mr-1" />
-                      Browse References
-                    </Button>
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFileSelect(reference.id)}
+                        disabled={isUploading}
+                        className="flex-1 text-xs h-8 bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                      >
+                        <Upload className="w-3 h-3 mr-1" />
+                        Upload New
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleBrowseReferences(reference.id)}
+                        className="flex-1 text-xs h-8 bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                      >
+                        <FolderOpen className="w-3 h-3 mr-1" />
+                        Browse
+                      </Button>
+                    </div>
                   </div>
                 );
               })}
