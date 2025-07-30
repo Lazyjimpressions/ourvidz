@@ -11,6 +11,7 @@ import { PlaygroundModeSelector, type PlaygroundMode } from './PlaygroundModeSel
 import { RoleplaySetup, type RoleplayTemplate } from './RoleplaySetup';
 import { AdminTools } from './AdminTools';
 import { CreativeTools } from './CreativeTools';
+import { PromptCounter } from './PromptCounter';
 
 export const ChatInterface = () => {
   const {
@@ -115,11 +116,18 @@ export const ChatInterface = () => {
     await sendMessage(`[System: Starting ${tool.name}]\n\n${systemPrompt}`);
   };
 
-  // Auto-resize textarea
+  // Auto-resize textarea with max-height constraint
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+      const textarea = textareaRef.current;
+      const maxHeight = window.innerWidth < 768 ? 200 : 240; // 200px mobile, 240px desktop
+      
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${newHeight}px`;
+      
+      // Enable scrolling if content exceeds max height
+      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
   }, [inputMessage]);
 
@@ -276,30 +284,41 @@ export const ChatInterface = () => {
 
       {/* Floating Message Input */}
       <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-gray-800 p-3 z-50">
-        <form onSubmit={handleSubmit} className="flex items-end gap-2 max-w-4xl mx-auto">
-          <div className="flex-1">
-            <Textarea
-              ref={textareaRef}
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-              className="min-h-[40px] max-h-60 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm overflow-y-auto"
-              disabled={isSubmitting || state.isLoadingMessage}
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage}
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0"
-          >
-            {isSubmitting ? (
-              <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
-            ) : (
-              <Send className="h-3 w-3" />
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <Textarea
+                  ref={textareaRef}
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                  className="min-h-[40px] max-h-60 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm"
+                  disabled={isSubmitting || state.isLoadingMessage}
+                />
+              </div>
+              <Button
+                type="submit"
+                disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0"
+              >
+                {isSubmitting ? (
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
+              </Button>
+            </div>
+            {inputMessage && (
+              <PromptCounter 
+                text={inputMessage} 
+                mode={currentMode} 
+                className="px-1"
+              />
             )}
-          </Button>
+          </div>
         </form>
         
         {state.error && (
