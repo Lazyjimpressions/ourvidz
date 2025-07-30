@@ -51,7 +51,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
       </div>
 
       {/* Message Content */}
-      <div className={`flex-1 w-full sm:max-w-[85%] md:max-w-[80%] ${isUser ? 'flex flex-col items-end' : ''}`}>
+      <div className={`flex-1 w-full ${isUser ? 'flex flex-col items-end' : ''}`}>
         <div className={`rounded-lg p-3 ${
           isUser 
             ? 'bg-green-600 text-white rounded-tr-md'
