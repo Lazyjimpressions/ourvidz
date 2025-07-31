@@ -149,12 +149,43 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
     loadCharacters();
   }, [getUserCharacters]);
 
-  const handleTemplateSelect = (templateId: string) => {
+  const handleTemplateSelect = async (templateId: string) => {
     const template = baseTemplates.find(t => t.id === templateId);
     if (template) {
       setSelectedTemplate(templateId);
-      setCustomCharacters([...template.characters]);
       setScenario(template.scenario);
+      
+      // Try to load characters from database first, fall back to template characters
+      const enhancedCharacters = await Promise.all(
+        template.characters.map(async (templateChar) => {
+          // Look for database character with matching name
+          const dbChar = dbCharacters.find(db => db.name.toLowerCase() === templateChar.name.toLowerCase());
+          
+          if (dbChar) {
+            // Load full character data from database
+            const fullDbChar = await loadCharacterFromDatabase(dbChar.id);
+            if (fullDbChar) {
+              return {
+                id: `template_${templateChar.id}`,
+                name: fullDbChar.name,
+                role: fullDbChar.role || templateChar.role,
+                personality: fullDbChar.personality || templateChar.personality,
+                background: fullDbChar.background || templateChar.background,
+                speakingStyle: fullDbChar.speakingStyle || templateChar.speakingStyle,
+                visualDescription: fullDbChar.visualDescription || templateChar.visualDescription,
+                relationships: fullDbChar.relationships || templateChar.relationships,
+                goals: fullDbChar.goals || templateChar.goals,
+                quirks: fullDbChar.quirks || templateChar.quirks
+              };
+            }
+          }
+          
+          // Fall back to template character if no database match
+          return { ...templateChar, id: `template_${templateChar.id}` };
+        })
+      );
+      
+      setCustomCharacters(enhancedCharacters);
     }
   };
 
