@@ -473,7 +473,12 @@ class DynamicEnhancementOrchestrator {
         body: { worker_type: 'chat' }
       })
 
-      return data?.worker_url || null
+      if (error) {
+        console.error('❌ Failed to get chat worker URL:', error)
+        return null
+      }
+
+      return data?.worker_url || data?.workerUrl || null
     } catch (error) {
       console.error('Failed to get chat worker URL:', error)
       return null
@@ -494,7 +499,12 @@ class DynamicEnhancementOrchestrator {
         body: { worker_type: 'wan' }
       })
 
-      return data?.worker_url || null
+      if (error) {
+        console.error('❌ Failed to get WAN worker URL:', error)
+        return null
+      }
+
+      return data?.worker_url || data?.workerUrl || null
     } catch (error) {
       console.error('Failed to get WAN worker URL:', error)
       return null

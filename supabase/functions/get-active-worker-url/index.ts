@@ -13,7 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    console.log('🔍 Fetching active worker URL...')
+    const { worker_type } = await req.json().catch(() => ({ worker_type: 'wan' }))
+    console.log('🔍 Fetching active worker URL for type:', worker_type)
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -29,16 +30,38 @@ serve(async (req) => {
     let workerUrl = null
     let registrationInfo = null
 
-    if (currentConfig && !fetchError && currentConfig.config?.workerUrl) {
-      workerUrl = currentConfig.config.workerUrl
-      registrationInfo = {
-        autoRegistered: currentConfig.config.autoRegistered || false,
-        registrationMethod: currentConfig.config.registrationMethod || 'manual',
-        detectionMethod: currentConfig.config.detectionMethod || 'manual',
-        lastUpdated: currentConfig.config.workerUrlUpdatedAt,
-        lastRegistrationAttempt: currentConfig.config.lastRegistrationAttempt
+    if (currentConfig && !fetchError && currentConfig.config) {
+      // Get appropriate worker URL based on worker_type
+      if (worker_type === 'chat' && currentConfig.config.chatWorkerUrl) {
+        workerUrl = currentConfig.config.chatWorkerUrl
+        registrationInfo = {
+          workerType: 'chat',
+          autoRegistered: currentConfig.config.chatWorkerAutoRegistered || false,
+          registrationMethod: currentConfig.config.chatWorkerRegistrationMethod || 'manual',
+          lastUpdated: currentConfig.config.chatWorkerUrlUpdatedAt
+        }
+      } else if (worker_type === 'wan' && currentConfig.config.wanWorkerUrl) {
+        workerUrl = currentConfig.config.wanWorkerUrl
+        registrationInfo = {
+          workerType: 'wan',
+          autoRegistered: currentConfig.config.wanWorkerAutoRegistered || false,
+          registrationMethod: currentConfig.config.wanWorkerRegistrationMethod || 'manual',
+          lastUpdated: currentConfig.config.wanWorkerUrlUpdatedAt
+        }
+      } else if (currentConfig.config.workerUrl) {
+        // Fallback to legacy single worker URL
+        workerUrl = currentConfig.config.workerUrl
+        registrationInfo = {
+          workerType: 'legacy',
+          autoRegistered: currentConfig.config.autoRegistered || false,
+          registrationMethod: currentConfig.config.registrationMethod || 'manual',
+          lastUpdated: currentConfig.config.workerUrlUpdatedAt
+        }
       }
-      console.log('✅ Worker URL found in database:', workerUrl)
+      
+      if (workerUrl) {
+        console.log(`✅ ${worker_type.toUpperCase()} worker URL found in database:`, workerUrl)
+      }
     }
 
     if (!workerUrl) {
@@ -80,6 +103,7 @@ serve(async (req) => {
 
     // Update health cache in system_config
     try {
+      const healthCacheKey = worker_type === 'chat' ? 'chatWorker' : 'wanWorker'
       await supabase
         .from('system_config')
         .upsert({
@@ -87,7 +111,8 @@ serve(async (req) => {
           config: {
             ...currentConfig.config,
             workerHealthCache: {
-              wanWorker: {
+              ...currentConfig.config.workerHealthCache,
+              [healthCacheKey]: {
                 isHealthy,
                 lastChecked: new Date().toISOString(),
                 responseTimeMs,
@@ -102,10 +127,12 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      workerUrl: workerUrl,
+      worker_url: workerUrl,
+      workerUrl: workerUrl, // Legacy compatibility
       isHealthy: isHealthy,
       healthError: healthError,
-      registrationInfo: registrationInfo
+      registrationInfo: registrationInfo,
+      worker_type: worker_type
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
