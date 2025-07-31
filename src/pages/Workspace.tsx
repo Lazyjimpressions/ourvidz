@@ -356,21 +356,21 @@ const Workspace = () => {
         isVideoMode
       });
 
-      // Build generation request with enhanced prompt tracking
-      const generationRequest = {
-        ...request,
-        format: selectedMode,
-        prompt: finalPrompt,
-        referenceImageUrl: isVideoMode 
-          ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
-          : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
-        metadata: {
-          ...referenceMetadata,
-          // Control enhancement based on user intent - skip enhancement by default
-          skip_enhancement: true,
-          user_requested_enhancement: false
-        }
-      };
+        // Build generation request with enhanced prompt tracking
+        const generationRequest = {
+          ...request,
+          format: selectedMode,
+          prompt: finalPrompt,
+          referenceImageUrl: isVideoMode 
+            ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
+            : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
+          metadata: {
+            ...referenceMetadata,
+            // Use enhanced prompt when available, skip server enhancement
+            skip_enhancement: request.isPromptEnhanced || false,
+            user_requested_enhancement: request.isPromptEnhanced || false
+          }
+        };
 
       await generateContent(generationRequest);
 
@@ -818,10 +818,29 @@ const Workspace = () => {
           <ImageInputControls
             prompt={prompt}
             setPrompt={setPrompt}
+            originalPrompt={originalPrompt}
+            enhancedPrompt={enhancedPrompt}
+            isPromptEnhanced={isPromptEnhanced}
+            onEnhancementApply={() => {
+              if (enhancedPrompt) {
+                setPrompt(enhancedPrompt);
+                setIsPromptEnhanced(true);
+              }
+            }}
+            onRevertToOriginal={() => {
+              if (originalPrompt) {
+                setPrompt(originalPrompt);
+                setIsPromptEnhanced(false);
+                setEnhancedPrompt('');
+              }
+            }}
             onGenerate={handleGenerate}
             onGenerateWithEnhancement={(data) => {
-              // Handle enhanced generation with metadata
-              setPrompt(data.enhancedPrompt);
+              // Track enhancement state without overwriting prompt
+              setIsPromptEnhanced(true);
+              setOriginalPrompt(data.originalPrompt);
+              setEnhancedPrompt(data.enhancedPrompt);
+              
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
                 originalPrompt: data.originalPrompt,
@@ -866,10 +885,29 @@ const Workspace = () => {
           <VideoInputControls
             prompt={prompt}
             setPrompt={setPrompt}
+            originalPrompt={originalPrompt}
+            enhancedPrompt={enhancedPrompt}
+            isPromptEnhanced={isPromptEnhanced}
+            onEnhancementApply={() => {
+              if (enhancedPrompt) {
+                setPrompt(enhancedPrompt);
+                setIsPromptEnhanced(true);
+              }
+            }}
+            onRevertToOriginal={() => {
+              if (originalPrompt) {
+                setPrompt(originalPrompt);
+                setIsPromptEnhanced(false);
+                setEnhancedPrompt('');
+              }
+            }}
             onGenerate={handleGenerate}
             onGenerateWithEnhancement={(data) => {
-              // Handle enhanced generation with metadata
-              setPrompt(data.enhancedPrompt);
+              // Track enhancement state without overwriting prompt
+              setIsPromptEnhanced(true);
+              setOriginalPrompt(data.originalPrompt);
+              setEnhancedPrompt(data.enhancedPrompt);
+              
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
                 originalPrompt: data.originalPrompt,
