@@ -866,24 +866,10 @@ const Workspace = () => {
           <ImageInputControls
             prompt={prompt}
             setPrompt={setPrompt}
-            isUsingEnhancement={isUsingEnhancement}
-            onClearEnhancement={() => {
-              setIsUsingEnhancement(false);
-              setLastEnhancedPrompt('');
-            }}
+            isEnhanced={isEnhanced}
+            onClearEnhancement={handleClearEnhancement}
             onGenerate={handleGenerate}
-            onGenerateWithEnhancement={(data) => {
-              // Store enhanced prompt for generation without overwriting main input
-              setLastEnhancedPrompt(data.enhancedPrompt);
-              setIsUsingEnhancement(true);
-              
-              handleGenerateWithRequest({
-                prompt: data.enhancedPrompt,
-                originalPrompt: prompt, // Use current prompt as original
-                isPromptEnhanced: true,
-                enhancementMetadata: data.metadata
-              });
-            }}
+            onGenerateWithEnhancement={handleEnhancedPromptUse}
             isGenerating={isGenerating}
             onSwitchToVideo={() => {
               setIsVideoMode(true);
@@ -911,28 +897,28 @@ const Workspace = () => {
             seed={seed}
             onSeedChange={setSeed}
           />
+            jobType={selectedMode}
+            compelEnabled={compelEnabled}
+            setCompelEnabled={setCompelEnabled}
+            compelWeights={compelWeights}
+            setCompelWeights={setCompelWeights}
+            references={activeReferences}
+            onReferencesChange={setActiveReferences}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            optimizeForCharacter={optimizeForCharacter}
+            onOptimizeChange={setOptimizeForCharacter}
+            seed={seed}
+            onSeedChange={setSeed}
+          />
         ) : (
           <VideoInputControls
             prompt={prompt}
             setPrompt={setPrompt}
-            isUsingEnhancement={isUsingEnhancement}
-            onClearEnhancement={() => {
-              setIsUsingEnhancement(false);
-              setLastEnhancedPrompt('');
-            }}
+            isEnhanced={isEnhanced}
+            onClearEnhancement={handleClearEnhancement}
             onGenerate={handleGenerate}
-            onGenerateWithEnhancement={(data) => {
-              // Store enhanced prompt for generation without overwriting main input
-              setLastEnhancedPrompt(data.enhancedPrompt);
-              setIsUsingEnhancement(true);
-              
-              handleGenerateWithRequest({
-                prompt: data.enhancedPrompt,
-                originalPrompt: prompt, // Use current prompt as original
-                isPromptEnhanced: true,
-                enhancementMetadata: data.metadata
-              });
-            }}
+            onGenerateWithEnhancement={handleEnhancedPromptUse}
             isGenerating={isGenerating}
             onSwitchToImage={() => {
               setIsVideoMode(false);
