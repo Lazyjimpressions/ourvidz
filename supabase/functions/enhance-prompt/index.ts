@@ -378,12 +378,12 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Select worker type based on model and user preference - FIXED
+   * Select worker type based on model and user preference - FIXED LOGIC
    */
   private selectWorkerType(modelType: string, userPreference?: string): 'chat' | 'wan' {
     console.log('🔧 Worker selection:', { modelType, userPreference })
     
-    // Priority 1: User preference overrides everything
+    // Priority 1: User preference is the definitive source
     if (userPreference === 'qwen_instruct') {
       console.log('👤 User selected qwen_instruct -> chat worker')
       return 'chat'
@@ -393,25 +393,18 @@ class DynamicEnhancementOrchestrator {
       return 'wan'
     }
     
-    // Priority 2: Model type logic
-    if (modelType === 'qwen_instruct') {
-      console.log('🤖 Model qwen_instruct -> chat worker')
-      return 'chat'
-    }
-    if (modelType === 'qwen_base') {
-      console.log('🤖 Model qwen_base -> wan worker')
-      return 'wan'
-    }
+    // Priority 2: Model type fallback (when no explicit user preference)
     if (modelType === 'sdxl') {
-      console.log('🤖 Model sdxl -> chat worker (better instruction following)')
+      console.log('🤖 Model sdxl -> default qwen_instruct -> chat worker')
       return 'chat'
     }
-    if (modelType === 'wan') {
-      console.log('🤖 Model wan -> wan worker (video optimized)')
+    if (modelType === 'wan' || modelType === 'video') {
+      console.log('🤖 Model wan/video -> default qwen_base -> wan worker')
       return 'wan'
     }
     
-    console.log('🔄 Default fallback -> chat worker')
+    // Priority 3: Final fallback based on efficiency
+    console.log('🔄 Default fallback -> chat worker (qwen_instruct)')
     return 'chat'
   }
 

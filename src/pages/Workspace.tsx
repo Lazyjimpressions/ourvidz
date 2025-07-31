@@ -36,15 +36,17 @@ const Workspace = () => {
     setIsVideoMode(mode === 'video');
   }, [mode]);
   
-  // Generation state - Simplified prompt management
+  // Generation state - NEW SIMPLIFIED PROMPT MANAGEMENT
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   const [enhanced, setEnhanced] = useState<boolean>(false);
   const [selectedMode, setSelectedMode] = useState<GenerationFormat>(
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
-  const [prompt, setPrompt] = useState(''); // Main input - never overwritten
-  const [lastEnhancedPrompt, setLastEnhancedPrompt] = useState(''); // For generation
-  const [isUsingEnhancement, setIsUsingEnhancement] = useState(false); // Visual indicator
+  
+  // Single prompt system with enhancement tracking
+  const [prompt, setPrompt] = useState(''); // Working prompt (always what user sees)
+  const [originalPrompt, setOriginalPrompt] = useState(''); // Preserved original for modal
+  const [isEnhanced, setIsEnhanced] = useState(false); // Enhancement state flag
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
@@ -355,24 +357,19 @@ const Workspace = () => {
         isVideoMode
       });
 
-    // Determine which prompt to use for generation
-    const promptForGeneration = isUsingEnhancement && lastEnhancedPrompt 
-      ? lastEnhancedPrompt 
-      : finalPrompt;
-
     // Build generation request with simplified enhancement tracking
     const generationRequest = {
       ...request,
       format: selectedMode,
-      prompt: promptForGeneration,
+      prompt: finalPrompt, // Always use the working prompt (which contains enhanced version if applied)
       referenceImageUrl: isVideoMode 
         ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
         : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
       metadata: {
         ...referenceMetadata,
-        // Skip server enhancement if we're using client-enhanced prompt
-        skip_enhancement: isUsingEnhancement,
-        user_requested_enhancement: isUsingEnhancement
+        // Skip server enhancement if prompt was already enhanced on client
+        skip_enhancement: isEnhanced,
+        user_requested_enhancement: isEnhanced
       }
     };
 
@@ -393,16 +390,61 @@ const Workspace = () => {
       return;
     }
 
-    // Create a basic generation request - explicitly skip enhancement for direct generation
+    // Create a basic generation request
     const request = {
       format: selectedMode,
       prompt: prompt.trim(),
-      originalPrompt: prompt.trim(),
+      originalPrompt: originalPrompt || prompt.trim(), // Use preserved original if available
       enhancedPrompt: prompt.trim(),
-      isPromptEnhanced: false
+      isPromptEnhanced: isEnhanced
     };
 
     await handleGenerateWithRequest(request);
+  };
+
+  // NEW: Handle enhanced prompt replacement
+  const handleEnhancedPromptUse = (data: {
+    originalPrompt: string;
+    enhancedPrompt: string;
+    enhancementMetadata: any;
+    selectedPresets: string[];
+  }) => {
+    console.log('🎨 Using enhanced prompt:', {
+      original: data.originalPrompt,
+      enhanced: data.enhancedPrompt.substring(0, 100) + '...',
+      wasPreserved: originalPrompt
+    });
+
+    // Preserve original if not already preserved
+    if (!originalPrompt) {
+      setOriginalPrompt(data.originalPrompt);
+    }
+    
+    // Replace working prompt with enhanced version
+    setPrompt(data.enhancedPrompt);
+    setIsEnhanced(true);
+
+    // Auto-generate with enhanced prompt
+    const request = {
+      format: selectedMode,
+      prompt: data.enhancedPrompt,
+      originalPrompt: data.originalPrompt,
+      enhancedPrompt: data.enhancedPrompt,
+      isPromptEnhanced: true,
+      enhancementMetadata: data.enhancementMetadata,
+      selectedPresets: data.selectedPresets
+    };
+
+    handleGenerateWithRequest(request);
+  };
+
+  // NEW: Clear enhancement and revert to original
+  const handleClearEnhancement = () => {
+    if (originalPrompt) {
+      setPrompt(originalPrompt);
+      setIsEnhanced(false);
+      console.log('🔄 Reverted to original prompt:', originalPrompt);
+    }
   };
 
   const handleRegenerate = () => {

@@ -17,7 +17,7 @@ import { CompelModal } from './workspace/CompelModal';
 interface ImageInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
-  isUsingEnhancement?: boolean;
+  isEnhanced?: boolean;
   onClearEnhancement?: () => void;
   onGenerate: () => void;
   onGenerateWithEnhancement?: (data: {
@@ -68,7 +68,7 @@ interface ImageInputControlsProps {
 export const ImageInputControls = ({
   prompt,
   setPrompt,
-  isUsingEnhancement = false,
+  isEnhanced = false,
   onClearEnhancement,
   onGenerate,
   onGenerateWithEnhancement,
@@ -157,7 +157,7 @@ export const ImageInputControls = ({
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A close-up of a woman talking on the phone..."
               className={`bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full ${
-                isUsingEnhancement ? 'border-l-2 border-l-purple-500' : ''
+                isEnhanced ? 'border-l-2 border-l-purple-500' : ''
               }`}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -167,7 +167,7 @@ export const ImageInputControls = ({
                 }
               }}
             />
-            {isUsingEnhancement && (
+            {isEnhanced && (
               <div className="absolute top-1 right-1 flex gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -181,7 +181,7 @@ export const ImageInputControls = ({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="text-xs">Clear enhancement</p>
+                    <p className="text-xs">Revert to original</p>
                   </TooltipContent>
                 </Tooltip>
                 <div className="bg-purple-600/20 text-purple-300 text-xs px-2 py-1 rounded">
