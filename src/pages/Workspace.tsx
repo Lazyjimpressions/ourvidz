@@ -36,16 +36,15 @@ const Workspace = () => {
     setIsVideoMode(mode === 'video');
   }, [mode]);
   
-  // Generation state
+  // Generation state - Simplified prompt management
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   const [enhanced, setEnhanced] = useState<boolean>(false);
   const [selectedMode, setSelectedMode] = useState<GenerationFormat>(
     isVideoMode ? 'video_fast' : 'sdxl_image_fast'
   );
-  const [prompt, setPrompt] = useState('');
-  const [originalPrompt, setOriginalPrompt] = useState('');
-  const [enhancedPrompt, setEnhancedPrompt] = useState('');
-  const [isPromptEnhanced, setIsPromptEnhanced] = useState(false);
+  const [prompt, setPrompt] = useState(''); // Main input - never overwritten
+  const [lastEnhancedPrompt, setLastEnhancedPrompt] = useState(''); // For generation
+  const [isUsingEnhancement, setIsUsingEnhancement] = useState(false); // Visual indicator
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
@@ -356,21 +355,26 @@ const Workspace = () => {
         isVideoMode
       });
 
-        // Build generation request with enhanced prompt tracking
-        const generationRequest = {
-          ...request,
-          format: selectedMode,
-          prompt: finalPrompt,
-          referenceImageUrl: isVideoMode 
-            ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
-            : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
-          metadata: {
-            ...referenceMetadata,
-            // Use enhanced prompt when available, skip server enhancement
-            skip_enhancement: request.isPromptEnhanced || false,
-            user_requested_enhancement: request.isPromptEnhanced || false
-          }
-        };
+    // Determine which prompt to use for generation
+    const promptForGeneration = isUsingEnhancement && lastEnhancedPrompt 
+      ? lastEnhancedPrompt 
+      : finalPrompt;
+
+    // Build generation request with simplified enhancement tracking
+    const generationRequest = {
+      ...request,
+      format: selectedMode,
+      prompt: promptForGeneration,
+      referenceImageUrl: isVideoMode 
+        ? (videoReferences.find(ref => ref.enabled && ref.url)?.url || undefined)
+        : (activeReferences.find(ref => ref.enabled && ref.url)?.url || undefined),
+      metadata: {
+        ...referenceMetadata,
+        // Skip server enhancement if we're using client-enhanced prompt
+        skip_enhancement: isUsingEnhancement,
+        user_requested_enhancement: isUsingEnhancement
+      }
+    };
 
       await generateContent(generationRequest);
 
@@ -818,40 +822,22 @@ const Workspace = () => {
           <ImageInputControls
             prompt={prompt}
             setPrompt={setPrompt}
-            originalPrompt={originalPrompt}
-            enhancedPrompt={enhancedPrompt}
-            isPromptEnhanced={isPromptEnhanced}
-            onEnhancementApply={() => {
-              if (enhancedPrompt) {
-                setPrompt(enhancedPrompt);
-                setIsPromptEnhanced(true);
-              }
-            }}
-            onRevertToOriginal={() => {
-              if (originalPrompt) {
-                setPrompt(originalPrompt);
-                setIsPromptEnhanced(false);
-                setEnhancedPrompt('');
-              }
+            isUsingEnhancement={isUsingEnhancement}
+            onClearEnhancement={() => {
+              setIsUsingEnhancement(false);
+              setLastEnhancedPrompt('');
             }}
             onGenerate={handleGenerate}
             onGenerateWithEnhancement={(data) => {
-              // Track enhancement state without overwriting prompt
-              setIsPromptEnhanced(true);
-              setOriginalPrompt(data.originalPrompt);
-              setEnhancedPrompt(data.enhancedPrompt);
+              // Store enhanced prompt for generation without overwriting main input
+              setLastEnhancedPrompt(data.enhancedPrompt);
+              setIsUsingEnhancement(true);
               
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
                 originalPrompt: data.originalPrompt,
-                enhancedPrompt: data.enhancedPrompt,
                 isPromptEnhanced: true,
-                enhancementStrategy: data.enhancementStrategy,
-                metadata: {
-                  ...data.metadata,
-                  selectedModel: data.selectedModel,
-                  isEnhanced: true
-                }
+                enhancementMetadata: data.metadata
               });
             }}
             isGenerating={isGenerating}
@@ -885,40 +871,22 @@ const Workspace = () => {
           <VideoInputControls
             prompt={prompt}
             setPrompt={setPrompt}
-            originalPrompt={originalPrompt}
-            enhancedPrompt={enhancedPrompt}
-            isPromptEnhanced={isPromptEnhanced}
-            onEnhancementApply={() => {
-              if (enhancedPrompt) {
-                setPrompt(enhancedPrompt);
-                setIsPromptEnhanced(true);
-              }
-            }}
-            onRevertToOriginal={() => {
-              if (originalPrompt) {
-                setPrompt(originalPrompt);
-                setIsPromptEnhanced(false);
-                setEnhancedPrompt('');
-              }
+            isUsingEnhancement={isUsingEnhancement}
+            onClearEnhancement={() => {
+              setIsUsingEnhancement(false);
+              setLastEnhancedPrompt('');
             }}
             onGenerate={handleGenerate}
             onGenerateWithEnhancement={(data) => {
-              // Track enhancement state without overwriting prompt
-              setIsPromptEnhanced(true);
-              setOriginalPrompt(data.originalPrompt);
-              setEnhancedPrompt(data.enhancedPrompt);
+              // Store enhanced prompt for generation without overwriting main input
+              setLastEnhancedPrompt(data.enhancedPrompt);
+              setIsUsingEnhancement(true);
               
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
                 originalPrompt: data.originalPrompt,
-                enhancedPrompt: data.enhancedPrompt,
                 isPromptEnhanced: true,
-                enhancementStrategy: data.enhancementStrategy,
-                metadata: {
-                  ...data.metadata,
-                  selectedModel: data.selectedModel,
-                  isEnhanced: true
-                }
+                enhancementMetadata: data.metadata
               });
             }}
             isGenerating={isGenerating}

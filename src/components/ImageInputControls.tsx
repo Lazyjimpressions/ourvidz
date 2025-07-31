@@ -17,11 +17,8 @@ import { CompelModal } from './workspace/CompelModal';
 interface ImageInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
-  originalPrompt?: string;
-  enhancedPrompt?: string;
-  isPromptEnhanced?: boolean;
-  onEnhancementApply?: (enhancedPrompt: string, originalPrompt: string) => void;
-  onRevertToOriginal?: () => void;
+  isUsingEnhancement?: boolean;
+  onClearEnhancement?: () => void;
   onGenerate: () => void;
   onGenerateWithEnhancement?: (data: {
     enhancedPrompt: string;
@@ -71,11 +68,8 @@ interface ImageInputControlsProps {
 export const ImageInputControls = ({
   prompt,
   setPrompt,
-  originalPrompt,
-  enhancedPrompt,
-  isPromptEnhanced = false,
-  onEnhancementApply,
-  onRevertToOriginal,
+  isUsingEnhancement = false,
+  onClearEnhancement,
   onGenerate,
   onGenerateWithEnhancement,
   isGenerating,
@@ -160,16 +154,10 @@ export const ImageInputControls = ({
           <div className="flex-1 max-w-4xl relative">
             <Textarea
               value={prompt}
-              onChange={(e) => {
-                setPrompt(e.target.value);
-                // Reset enhancement state if user manually edits
-                if (isPromptEnhanced && e.target.value !== enhancedPrompt) {
-                  // Don't auto-reset here, let user decide
-                }
-              }}
+              onChange={(e) => setPrompt(e.target.value)}
               placeholder="A close-up of a woman talking on the phone..."
               className={`bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full ${
-                isPromptEnhanced ? 'border-l-2 border-l-purple-500' : ''
+                isUsingEnhancement ? 'border-l-2 border-l-purple-500' : ''
               }`}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -179,25 +167,25 @@ export const ImageInputControls = ({
                 }
               }}
             />
-            {isPromptEnhanced && (
+            {isUsingEnhancement && (
               <div className="absolute top-1 right-1 flex gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={onRevertToOriginal}
+                      onClick={onClearEnhancement}
                       className="h-6 w-6 p-0 bg-gray-800/80 hover:bg-gray-700 text-purple-300"
                     >
                       <RotateCcw className="w-3 h-3" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="text-xs">Revert to original prompt</p>
+                    <p className="text-xs">Clear enhancement</p>
                   </TooltipContent>
                 </Tooltip>
                 <div className="bg-purple-600/20 text-purple-300 text-xs px-2 py-1 rounded">
-                  Enhanced
+                  ✨ Enhanced
                 </div>
               </div>
             )}
@@ -504,14 +492,8 @@ export const ImageInputControls = ({
                 skip_enhancement: false
               }
             });
-          } else if (onEnhancementApply) {
-            // Fallback to legacy behavior
-            onEnhancementApply(data.enhancedPrompt, data.originalPrompt);
-          } else {
-            // Last resort - just set the prompt
-            setPrompt(data.enhancedPrompt);
-          }
           setShowEnhancementModal(false);
+          }
         }}
         originalPrompt={prompt}
         jobType={jobType}
