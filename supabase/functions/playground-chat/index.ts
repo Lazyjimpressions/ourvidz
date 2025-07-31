@@ -256,7 +256,7 @@ serve(async (req) => {
     const systemPrompt = await getSystemPromptForChat(
       message,
       conversationHistory,
-      conversation.conversation_type === 'story_development' ? 'story_development' : 'general',
+      conversation.conversation_type || 'general',
       cache
     );
 
@@ -265,7 +265,7 @@ serve(async (req) => {
       message: message,
       conversation_id: conversation_id,
       project_id: project_id,
-      context_type: conversation.conversation_type === 'story_development' ? 'story_development' : 'general',
+      context_type: conversation.conversation_type || 'general',
       conversation_history: conversationHistory,
       project_context: projectContext,
       ...(systemPrompt && { system_prompt: systemPrompt }) // Add system prompt for NSFW content

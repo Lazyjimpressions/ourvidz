@@ -61,7 +61,7 @@ interface PlaygroundContextType {
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
   setActiveConversation: (id: string | null) => void;
-  createConversation: (title?: string, projectId?: string) => Promise<string>;
+  createConversation: (title?: string, projectId?: string, conversationType?: string) => Promise<string>;
   sendMessage: (content: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
@@ -116,14 +116,14 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
-    mutationFn: async ({ title, projectId }: { title?: string; projectId?: string }) => {
+    mutationFn: async ({ title, projectId, conversationType }: { title?: string; projectId?: string; conversationType?: string }) => {
       const { data, error } = await supabase
         .from('conversations')
         .insert({
           user_id: user?.id!,
           title: title || 'New Conversation',
           project_id: projectId || null,
-          conversation_type: projectId ? 'story_development' : 'general',
+          conversation_type: conversationType || (projectId ? 'story_development' : 'general'),
         })
         .select()
         .single();
@@ -217,8 +217,8 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     dispatch({ type: 'SET_ERROR', payload: null });
   }, []);
 
-  const createConversation = useCallback(async (title?: string, projectId?: string): Promise<string> => {
-    const result = await createConversationMutation.mutateAsync({ title, projectId });
+  const createConversation = useCallback(async (title?: string, projectId?: string, conversationType?: string): Promise<string> => {
+    const result = await createConversationMutation.mutateAsync({ title, projectId, conversationType });
     return result.id;
   }, [createConversationMutation]);
 

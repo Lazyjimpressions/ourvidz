@@ -77,7 +77,7 @@ export const ChatInterface = () => {
     let conversationId = state.activeConversationId;
     
     if (!conversationId) {
-      conversationId = await createConversation(`Roleplay: ${template.name}`);
+      conversationId = await createConversation(`Roleplay: ${template.name}`, undefined, 'roleplay');
     }
 
     // Build character descriptions
