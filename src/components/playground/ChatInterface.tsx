@@ -80,15 +80,22 @@ export const ChatInterface = () => {
       conversationId = await createConversation(`Roleplay: ${template.name}`, undefined, 'roleplay');
     }
 
-    // Build character descriptions
+    // Build character descriptions with response length controls
     const characterDescriptions = template.characters
-      .map(char => `${char.name} (${char.role}): ${char.personality}`)
+      .map(char => `${char.name} (${char.role}): ${char.personality}. Keep responses to 1-3 sentences max for natural conversation flow.`)
       .join('\n');
 
-    // Simple system prompt - let the database template handle all directives
-    const systemPrompt = `${template.systemPrompt}\n\nSCENARIO: ${template.scenario}\n\nCHARACTERS:\n${characterDescriptions}`;
+    // Pass only character data and scenario - let database template handle all roleplay rules
+    const message = `[System: Starting roleplay session]
+
+SCENARIO: ${template.scenario}
+
+CHARACTERS:
+${characterDescriptions}
+
+Remember: Keep responses conversational (1-3 sentences) for natural turn-based dialogue.`;
     
-    await sendMessage(`[System: Starting roleplay session]\n\n${systemPrompt}`);
+    await sendMessage(message);
   };
 
   // Handle admin tool start
