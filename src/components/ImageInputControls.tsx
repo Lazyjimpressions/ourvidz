@@ -18,6 +18,7 @@ interface ImageInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
   isEnhanced?: boolean;
+  isUsingEnhancement?: boolean;
   onClearEnhancement?: () => void;
   onGenerate: () => void;
   onGenerateWithEnhancement?: (data: {

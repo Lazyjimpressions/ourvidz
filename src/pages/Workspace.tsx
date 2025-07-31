@@ -47,6 +47,8 @@ const Workspace = () => {
   const [prompt, setPrompt] = useState(''); // Working prompt (always what user sees)
   const [originalPrompt, setOriginalPrompt] = useState(''); // Preserved original for modal
   const [isEnhanced, setIsEnhanced] = useState(false); // Enhancement state flag
+  const [isUsingEnhancement, setIsUsingEnhancement] = useState(false); // Track if using enhancement
+  const [lastEnhancedPrompt, setLastEnhancedPrompt] = useState(''); // Store last enhanced prompt
   
   // Multi-reference state (connected to MultiReferencePanel)
   const [activeReferences, setActiveReferences] = useState<any[]>([]);
