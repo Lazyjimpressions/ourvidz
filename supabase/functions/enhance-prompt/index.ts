@@ -417,34 +417,39 @@ class DynamicEnhancementOrchestrator {
       throw new Error('No chat worker available')
     }
 
+    // Use the chat worker's expected payload format
     const payload = {
+      prompt: request.prompt,
+      job_type: request.job_type,
+      system_prompt: template.system_prompt,
       model: "Qwen/Qwen2.5-7B-Instruct",
-      messages: [
-        { role: "system", content: template.system_prompt },
-        { role: "user", content: `Content Mode: ${template.content_mode || 'nsfw'}\nOriginal prompt: ${request.prompt}` }
-      ],
       max_tokens: template.token_limit || 256,
-      temperature: 0.7,
-      top_p: 0.9,
-      stream: false
+      temperature: 0.7
     }
 
-    const response = await fetch(`${chatWorkerUrl}/v1/chat/completions`, {
+    console.log('🔧 Chat worker payload:', JSON.stringify(payload, null, 2))
+
+    // Use the correct /enhance endpoint without authentication
+    const response = await fetch(`${chatWorkerUrl}/enhance`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     })
 
     if (!response.ok) {
-      throw new Error(`Chat worker failed: ${response.status}`)
+      const errorText = await response.text()
+      console.log(`⚠️ Chat worker error (${response.status}): ${errorText}`)
+      throw new Error(`Chat worker failed: ${response.status} - ${errorText}`)
     }
 
     const result = await response.json()
+    console.log('✅ Chat worker response:', JSON.stringify(result, null, 2))
+    
+    // Handle the chat worker's response format
     return {
-      enhanced_prompt: result.choices?.[0]?.message?.content?.trim() || request.prompt
+      enhanced_prompt: result.enhanced_prompt || result.result || result.response || request.prompt
     }
   }
 
