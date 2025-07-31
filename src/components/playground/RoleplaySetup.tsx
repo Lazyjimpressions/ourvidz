@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, Plus, Trash2, Settings, User, Bot } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { useCharacterDatabase } from '@/hooks/useCharacterDatabase';
 
 export interface Character {
   id: string;
@@ -134,6 +135,19 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
   const [scenario, setScenario] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [multiCharacterMode, setMultiCharacterMode] = useState(false);
+  
+  const { getUserCharacters, loadCharacterFromDatabase } = useCharacterDatabase();
+  const [dbCharacters, setDbCharacters] = useState<any[]>([]);
+  const [selectedDbCharacter, setSelectedDbCharacter] = useState<string>('');
+  
+  // Load database characters on mount
+  useEffect(() => {
+    const loadCharacters = async () => {
+      const characters = await getUserCharacters();
+      setDbCharacters(characters);
+    };
+    loadCharacters();
+  }, [getUserCharacters]);
 
   const handleTemplateSelect = (templateId: string) => {
     const template = baseTemplates.find(t => t.id === templateId);
@@ -170,6 +184,27 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
 
   const removeCharacter = (id: string) => {
     setCustomCharacters(prev => prev.filter(char => char.id !== id));
+  };
+
+  const loadDbCharacter = async (characterId: string) => {
+    if (!characterId) return;
+    
+    const dbCharacter = await loadCharacterFromDatabase(characterId);
+    if (dbCharacter) {
+      const newCharacter: Character = {
+        id: `loaded_${Date.now()}`,
+        name: dbCharacter.name,
+        role: dbCharacter.role,
+        personality: dbCharacter.personality,
+        background: dbCharacter.background,
+        speakingStyle: dbCharacter.speakingStyle,
+        visualDescription: dbCharacter.visualDescription,
+        relationships: dbCharacter.relationships,
+        goals: dbCharacter.goals,
+        quirks: dbCharacter.quirks
+      };
+      setCustomCharacters(prev => [...prev, newCharacter]);
+    }
   };
 
   const handleStart = () => {
@@ -226,6 +261,38 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Database Character Selection */}
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Load Saved Character</label>
+              <div className="flex gap-2">
+                <Select value={selectedDbCharacter} onValueChange={setSelectedDbCharacter}>
+                  <SelectTrigger className="h-8 text-xs flex-1">
+                    <SelectValue placeholder="Choose a saved character..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dbCharacters.map((character) => (
+                      <SelectItem 
+                        key={character.id} 
+                        value={character.id} 
+                        className="text-xs"
+                      >
+                        {character.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  onClick={() => loadDbCharacter(selectedDbCharacter)}
+                  disabled={!selectedDbCharacter}
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs px-3"
+                >
+                  Load
+                </Button>
+              </div>
             </div>
 
             {/* Advanced Options */}
