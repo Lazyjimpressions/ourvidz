@@ -835,7 +835,7 @@ const Workspace = () => {
               
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
-                originalPrompt: data.originalPrompt,
+                originalPrompt: prompt, // Use current prompt as original
                 isPromptEnhanced: true,
                 enhancementMetadata: data.metadata
               });
@@ -884,7 +884,7 @@ const Workspace = () => {
               
               handleGenerateWithRequest({
                 prompt: data.enhancedPrompt,
-                originalPrompt: data.originalPrompt,
+                originalPrompt: prompt, // Use current prompt as original
                 isPromptEnhanced: true,
                 enhancementMetadata: data.metadata
               });
