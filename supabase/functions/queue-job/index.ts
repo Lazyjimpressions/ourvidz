@@ -446,27 +446,11 @@ serve(async (req)=>{
             // PHASE 4 DEBUG: Additional tracking
             fullResponseKeys: Object.keys(enhancementData)
           });
-          
-      console.log('✅ Prompt enhanced successfully:', {
-        originalLength: prompt.length,
-        enhancedLength: workingPrompt.length,
-        expansion: `${((workingPrompt.length / prompt.length) * 100).toFixed(1)}%`,
-        strategy: enhancementStrategy,
-        enhancementTimeMs,
-        // PHASE 4 DEBUG: Validation
-        isActuallyDifferent: workingPrompt !== prompt,
-        hasValidStrategy: enhancementStrategy !== 'enhanced_unknown'
-      });
-        } else {
-          console.warn('⚠️ Enhancement returned no result, using original prompt:', {
-            enhancementData,
-            reason: !enhancementData ? 'no_data' : !enhancementData.success ? 'not_successful' : 'no_enhanced_prompt'
-          });
-          enhancementStrategy = 'enhancement_failed';
         }
       } catch (error) {
-        console.error('❌ Enhancement function call failed:', error);
-        enhancementStrategy = 'error';
+        console.error('❌ Enhancement failed:', error);
+        enhancementStrategy = 'failed';
+        enhancementTimeMs = Date.now() - enhancementStartTime;
       }
     }
     
