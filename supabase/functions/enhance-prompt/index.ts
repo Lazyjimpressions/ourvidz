@@ -125,7 +125,7 @@ class DynamicEnhancementOrchestrator {
       const modelType = this.getModelTypeFromJobType(request.job_type)
       console.log('🤖 Model type selected:', modelType)
 
-      // Try to get dynamic template from database
+      // Try to get dynamic template from database first
       let enhancementResult
       try {
         const template = await this.getDynamicTemplate(modelType, 'enhancement', contentMode)
@@ -139,10 +139,18 @@ class DynamicEnhancementOrchestrator {
           enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
           enhancementResult.fallback_level = 1
         } catch (cacheError) {
-          console.log('⚠️ Cache failed, using hardcoded fallback:', cacheError.message)
+          console.log('⚠️ Cache failed, using database-driven template fallback:', cacheError.message)
           
-          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
-          enhancementResult.fallback_level = 2
+          // Use database templates even without workers
+          try {
+            const dbTemplate = await this.getDynamicTemplate(modelType, 'enhancement', contentMode)
+            enhancementResult = await this.enhanceWithRules(request, modelType, contentMode, dbTemplate)
+            enhancementResult.fallback_level = 2
+          } catch (dbTemplateError) {
+            console.log('⚠️ Database template fallback failed, using hardcoded:', dbTemplateError.message)
+            enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
+            enhancementResult.fallback_level = 3
+          }
         }
       }
 
@@ -194,56 +202,25 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Get dynamic template from database
+   * Get dynamic template from database with better fallback logic
    */
   private async getDynamicTemplate(modelType: string, useCase: string, contentMode: string) {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    const { data, error } = await supabase
-      .from('prompt_templates')
-      .select('*')
-      .eq('model_type', modelType)
-      .eq('use_case', useCase)
-      .eq('content_mode', contentMode)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-
-    if (error || !data) {
+    const template = await getDatabaseTemplate(modelType, useCase, contentMode)
+    if (!template) {
       throw new Error(`No template found for ${modelType}/${useCase}/${contentMode}`)
     }
-
-    return data
+    return template
   }
 
   /**
-   * Get cached template from system_config
+   * Get cached template from system_config using shared utilities
    */
   private async getCachedTemplate(modelType: string, useCase: string, contentMode: string) {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    const { data, error } = await supabase
-      .from('system_config')
-      .select('config')
-      .eq('id', 1)
-      .single()
-
-    if (error || !data?.config?.prompt_templates) {
-      throw new Error('No cached templates available')
-    }
-
-    const templateKey = `${modelType}_${useCase}_${contentMode}`
-    const template = data.config.prompt_templates[templateKey]
+    const cache = await getCachedData()
+    const template = getTemplateFromCache(cache, modelType, useCase, contentMode)
     
     if (!template) {
-      throw new Error(`Cached template not found: ${templateKey}`)
+      throw new Error(`Cached template not found: ${modelType}/${useCase}/${contentMode}`)
     }
 
     return template
@@ -339,16 +316,31 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Rule-based enhancement when workers fail
+   * Rule-based enhancement when workers fail - now uses database templates when available
    */
-  private enhanceWithRules(request: any, modelType: string, contentMode: string) {
+  private enhanceWithRules(request: any, modelType: string, contentMode: string, template?: any) {
     const { prompt } = request
     let enhanced = prompt
 
-    if (contentMode === 'nsfw') {
-      enhanced = `Detailed explicit scene: ${enhanced}, sensual lighting, intimate atmosphere, adult themes`
+    if (template?.system_prompt) {
+      // Use the database template's system prompt as guidance for rule-based enhancement
+      const systemPrompt = template.system_prompt.toLowerCase()
+      
+      if (systemPrompt.includes('explicit') || systemPrompt.includes('adult') || systemPrompt.includes('sensual')) {
+        enhanced = `${template.system_prompt.split('.')[0]}: ${enhanced}`
+      } else if (systemPrompt.includes('artistic') || systemPrompt.includes('professional') || systemPrompt.includes('detailed')) {
+        enhanced = `${template.system_prompt.split('.')[0]}: ${enhanced}`
+      } else {
+        // Generic template enhancement
+        enhanced = `Enhanced prompt following template guidelines: ${enhanced}`
+      }
     } else {
-      enhanced = `Artistic composition: ${enhanced}, professional lighting, high composition quality`
+      // Original fallback logic
+      if (contentMode === 'nsfw') {
+        enhanced = `Detailed explicit scene: ${enhanced}, sensual lighting, intimate atmosphere, adult themes`
+      } else {
+        enhanced = `Artistic composition: ${enhanced}, professional lighting, high composition quality`
+      }
     }
 
     // Add model-specific quality tags
@@ -364,8 +356,8 @@ class DynamicEnhancementOrchestrator {
 
     return {
       enhanced_prompt: enhanced,
-      strategy: `rule_based_${modelType}_${contentMode}`,
-      template_name: 'rule_based',
+      strategy: template ? `template_rule_based_${modelType}_${contentMode}` : `rule_based_${modelType}_${contentMode}`,
+      template_name: template?.template_name || 'rule_based',
       model_used: 'rule_based',
       token_count: this.estimateTokens(enhanced),
       compressed: false

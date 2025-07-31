@@ -51,21 +51,53 @@ serve(async (req) => {
       })
     }
 
-    // Test worker health
+    // Test worker health with detailed check
     let isHealthy = false
     let healthError = null
+    let responseTimeMs = null
     
     try {
+      const startTime = Date.now()
       const healthResponse = await fetch(`${workerUrl}/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(3000) // 3 second timeout
+        signal: AbortSignal.timeout(5000) // 5 second timeout
       })
-      isHealthy = healthResponse.ok
-      if (!isHealthy) {
-        healthError = `Health check failed: ${healthResponse.status}`
+      responseTimeMs = Date.now() - startTime
+      
+      if (healthResponse.ok) {
+        // Additional validation - check response content
+        const healthData = await healthResponse.text()
+        isHealthy = healthData.includes('status') || healthData.includes('healthy') || healthData.length > 0
+        if (!isHealthy) {
+          healthError = `Health endpoint returned empty/invalid response: ${healthData.substring(0, 100)}`
+        }
+      } else {
+        healthError = `Health check failed: ${healthResponse.status} ${healthResponse.statusText}`
       }
     } catch (error) {
-      healthError = error.message
+      healthError = `Health check error: ${error.message}`
+    }
+
+    // Update health cache in system_config
+    try {
+      await supabase
+        .from('system_config')
+        .upsert({
+          id: 1,
+          config: {
+            ...currentConfig.config,
+            workerHealthCache: {
+              wanWorker: {
+                isHealthy,
+                lastChecked: new Date().toISOString(),
+                responseTimeMs,
+                healthError: healthError || null
+              }
+            }
+          }
+        })
+    } catch (cacheError) {
+      console.warn('Failed to update health cache:', cacheError)
     }
 
     return new Response(JSON.stringify({
