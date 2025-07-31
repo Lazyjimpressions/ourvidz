@@ -51,6 +51,7 @@ serve(async (req) => {
       job_type: jobType,
       quality: quality as 'fast' | 'high',
       user_id,
+      selectedModel: selectedModel, // Pass selectedModel directly
       preferences: { enhancement_style: selectedModel },
       regeneration: regeneration || false
     })
@@ -227,16 +228,28 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Enhance using template (database or cached)
+   * Enhance using template (database or cached) - FIXED worker selection
    */
   private async enhanceWithTemplate(request: any, template: any, contentMode: string) {
-    const workerType = this.selectWorkerType(template.model_type, request.preferences?.enhancement_style)
+    // Use selectedModel directly from request, fallback to preferences
+    const selectedModel = request.selectedModel || request.preferences?.enhancement_style
+    const workerType = this.selectWorkerType(template.model_type, selectedModel)
+    
+    console.log('🚀 Enhancing with template:', {
+      template: template.template_name,
+      modelType: template.model_type,
+      selectedModel,
+      workerType,
+      contentMode
+    })
     
     try {
       let result
       if (workerType === 'chat') {
+        console.log('💬 Using chat worker for enhancement')
         result = await this.enhanceWithChatWorker(request, template)
       } else {
+        console.log('🎬 Using WAN worker for enhancement')
         result = await this.enhanceWithWanWorker(request, template)
       }
 
@@ -245,7 +258,7 @@ class DynamicEnhancementOrchestrator {
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,
-        strategy: `dynamic_${template.model_type}_${workerType}`,
+        strategy: `dynamic_${template.model_type}_${workerType}_${contentMode}`,
         template_name: template.template_name || 'dynamic',
         model_used: workerType === 'chat' ? 'qwen_instruct' : 'qwen_base',
         token_count: optimized.token_count,
@@ -254,7 +267,7 @@ class DynamicEnhancementOrchestrator {
 
     } catch (workerError) {
       console.log('⚠️ Worker failed, using rule-based enhancement:', workerError.message)
-      return this.enhanceWithRules(request, template.model_type, contentMode)
+      return this.enhanceWithRules(request, template.model_type, contentMode, template)
     }
   }
 
@@ -365,19 +378,41 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Select worker type based on model and user preference
+   * Select worker type based on model and user preference - FIXED
    */
   private selectWorkerType(modelType: string, userPreference?: string): 'chat' | 'wan' {
-    if (userPreference === 'qwen_instruct') return 'chat'
-    if (userPreference === 'qwen_base') return 'wan'
+    console.log('🔧 Worker selection:', { modelType, userPreference })
     
-    // Default logic
-    if (modelType === 'qwen_instruct') return 'chat'
-    if (modelType === 'qwen_base') return 'wan'
-    if (modelType === 'sdxl') return 'chat' // Better instruction following for images
-    if (modelType === 'wan') return 'wan' // Optimized for video
+    // Priority 1: User preference overrides everything
+    if (userPreference === 'qwen_instruct') {
+      console.log('👤 User selected qwen_instruct -> chat worker')
+      return 'chat'
+    }
+    if (userPreference === 'qwen_base') {
+      console.log('👤 User selected qwen_base -> wan worker')  
+      return 'wan'
+    }
     
-    return 'chat' // Default fallback
+    // Priority 2: Model type logic
+    if (modelType === 'qwen_instruct') {
+      console.log('🤖 Model qwen_instruct -> chat worker')
+      return 'chat'
+    }
+    if (modelType === 'qwen_base') {
+      console.log('🤖 Model qwen_base -> wan worker')
+      return 'wan'
+    }
+    if (modelType === 'sdxl') {
+      console.log('🤖 Model sdxl -> chat worker (better instruction following)')
+      return 'chat'
+    }
+    if (modelType === 'wan') {
+      console.log('🤖 Model wan -> wan worker (video optimized)')
+      return 'wan'
+    }
+    
+    console.log('🔄 Default fallback -> chat worker')
+    return 'chat'
   }
 
   /**
