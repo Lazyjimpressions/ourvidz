@@ -75,7 +75,7 @@ export type Database = {
           name: string
           traits: string | null
           updated_at: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           appearance_tags?: string[] | null
@@ -86,7 +86,7 @@ export type Database = {
           name: string
           traits?: string | null
           updated_at?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           appearance_tags?: string[] | null
@@ -97,7 +97,7 @@ export type Database = {
           name?: string
           traits?: string | null
           updated_at?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
