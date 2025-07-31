@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, MessageSquare } from 'lucide-react';
+import { Send, Bot, MessageSquare, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -100,28 +100,83 @@ Remember: Keep responses conversational (1-3 sentences) for natural turn-based d
 
   // Handle admin tool start
   const handleStartAdminTool = async (tool: any, context: any) => {
-    let conversationId = state.activeConversationId;
-    
-    if (!conversationId) {
-      conversationId = await createConversation(`Admin: ${tool.name}`);
-    }
+    try {
+      await createConversation(`Admin: ${tool.name}`, undefined, 'admin');
 
-    const systemPrompt = `${tool.systemPrompt}\n\nCONTEXT: Target Model: ${context.targetModel}, Purpose: ${context.purpose}\n\nI need help with ${tool.name.toLowerCase()}. Please start by asking me what specific assistance I need.`;
-    
-    await sendMessage(`[System: Starting ${tool.name}]\n\n${systemPrompt}`);
+      const userMessage = `I want to use the ${tool.name} tool.
+Target Model: ${context.targetModel || 'Not specified'}
+Purpose: ${context.purpose || 'Not specified'}
+
+Please help me with this admin task.`;
+
+      await sendMessage(userMessage);
+    } catch (error) {
+      console.error('Error starting admin tool:', error);
+    }
   };
 
   // Handle creative tool start
   const handleStartCreativeTool = async (tool: any, context: any) => {
-    let conversationId = state.activeConversationId;
-    
-    if (!conversationId) {
-      conversationId = await createConversation(`Creative: ${tool.name}`);
-    }
+    try {
+      await createConversation(`Creative: ${tool.name}`, undefined, 'creative');
 
-    const systemPrompt = `${tool.systemPrompt}\n\nPROJECT: ${context.projectType}, GOAL: ${context.goal}\n\nI need help with ${tool.name.toLowerCase()}. Please start by understanding my project and goals.`;
+      const userMessage = `I want to use the ${tool.name} tool for creative development.
+Project Type: ${context.projectType || 'Not specified'}
+Goal: ${context.goal || 'Not specified'}
+
+Please help me with this creative project.`;
+
+      await sendMessage(userMessage);
+    } catch (error) {
+      console.error('Error starting creative tool:', error);
+    }
+  };
+
+  // Handle mode switching - create new conversation
+  const handleModeChange = async (newMode: PlaygroundMode) => {
+    setCurrentMode(newMode);
     
-    await sendMessage(`[System: Starting ${tool.name}]\n\n${systemPrompt}`);
+    // Only create new conversation if we're switching from a different mode
+    if (state.activeConversationId && newMode !== currentMode) {
+      try {
+        const conversationTypes = {
+          chat: 'general',
+          roleplay: 'roleplay',
+          admin: 'admin',
+          creative: 'creative'
+        };
+        
+        await createConversation(
+          `${newMode.charAt(0).toUpperCase() + newMode.slice(1)} Chat`,
+          undefined,
+          conversationTypes[newMode]
+        );
+      } catch (error) {
+        console.error('Error creating new conversation:', error);
+      }
+    }
+  };
+
+  // Clear current chat
+  const handleClearChat = async () => {
+    if (state.activeConversationId) {
+      try {
+        const conversationTypes = {
+          chat: 'general',
+          roleplay: 'roleplay', 
+          admin: 'admin',
+          creative: 'creative'
+        };
+        
+        await createConversation(
+          `${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)} Chat`,
+          undefined,
+          conversationTypes[currentMode]
+        );
+      } catch (error) {
+        console.error('Error clearing chat:', error);
+      }
+    }
   };
 
   // Auto-resize textarea with max-height constraint
@@ -171,9 +226,10 @@ Remember: Keep responses conversational (1-3 sentences) for natural turn-based d
         </div>
 
         {/* Mode Selector */}
-        <PlaygroundModeSelector currentMode={currentMode} onModeChange={setCurrentMode} />
+        <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
 
-        {/* Mode-specific Setup Panels */}
+      {/* Mode-specific Setup Panels - Only show when not in an active conversation */}
+      {!state.activeConversationId && (
         <div className="p-3 space-y-2">
           {currentMode === 'roleplay' && (
             <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
@@ -185,6 +241,7 @@ Remember: Keep responses conversational (1-3 sentences) for natural turn-based d
             <CreativeTools onStartTool={handleStartCreativeTool} />
           )}
         </div>
+      )}
 
         {/* Empty state content */}
         <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
@@ -214,43 +271,62 @@ Remember: Keep responses conversational (1-3 sentences) for natural turn-based d
         <div className="flex items-center gap-2">
           <Bot className="h-4 w-4 text-blue-400" />
           <h1 className="text-sm font-medium text-white">AI Playground</h1>
+          <span className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
+            {currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}
+          </span>
         </div>
         
-        {/* Conversation History Panel */}
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
-            >
-              <MessageSquare className="h-3 w-3" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
-            <SheetHeader className="p-3 border-b border-gray-800">
-              <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
-            </SheetHeader>
-            <ConversationList />
-          </SheetContent>
-        </Sheet>
+        <div className="flex items-center gap-1">
+          {/* Clear Chat Button */}
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={handleClearChat}
+            className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
+            title="Clear chat"
+          >
+            <RotateCcw className="h-3 w-3" />
+          </Button>
+          
+          {/* Conversation History Panel */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
+                title="Conversation history"
+              >
+                <MessageSquare className="h-3 w-3" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
+              <SheetHeader className="p-3 border-b border-gray-800">
+                <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
+              </SheetHeader>
+              <ConversationList />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* Mode Selector */}
-      <PlaygroundModeSelector currentMode={currentMode} onModeChange={setCurrentMode} />
+      <PlaygroundModeSelector currentMode={currentMode} onModeChange={handleModeChange} />
 
-      {/* Mode-specific Setup Panels */}
-      <div className="p-3 space-y-2">
-        {currentMode === 'roleplay' && (
-          <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
-        )}
-        {currentMode === 'admin' && (
-          <AdminTools onStartTool={handleStartAdminTool} />
-        )}
-        {currentMode === 'creative' && (
-          <CreativeTools onStartTool={handleStartCreativeTool} />
-        )}
-      </div>
+      {/* Mode-specific Setup Panels - Hide when actively chatting */}
+      {messages.length === 0 && (
+        <div className="p-3 space-y-2 border-b border-gray-800">
+          {currentMode === 'roleplay' && (
+            <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
+          )}
+          {currentMode === 'admin' && (
+            <AdminTools onStartTool={handleStartAdminTool} />
+          )}
+          {currentMode === 'creative' && (
+            <CreativeTools onStartTool={handleStartCreativeTool} />
+          )}
+        </div>
+      )}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
@@ -301,7 +377,7 @@ Remember: Keep responses conversational (1-3 sentences) for natural turn-based d
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                  placeholder={`Type your ${currentMode} message... (Enter to send, Shift+Enter for new line)`}
                   className="min-h-[40px] max-h-60 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm"
                   disabled={isSubmitting || state.isLoadingMessage}
                 />

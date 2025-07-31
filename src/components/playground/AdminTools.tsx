@@ -12,7 +12,6 @@ interface AdminTool {
   name: string;
   icon: React.ElementType;
   description: string;
-  systemPrompt: string;
 }
 
 const adminTools: AdminTool[] = [
@@ -21,28 +20,24 @@ const adminTools: AdminTool[] = [
     name: 'Prompt Builder',
     icon: Wrench,
     description: 'AI assistant for creating optimized prompts',
-    systemPrompt: 'You are an expert AI prompt engineer. Help create and optimize prompts for various AI models. Provide specific, actionable improvements and explain prompt engineering principles.',
   },
   {
     id: 'prompt-tester',
     name: 'Prompt Tester',
     icon: TestTube,
     description: 'Test and analyze prompt effectiveness',
-    systemPrompt: 'You are a prompt testing specialist. Analyze prompts for effectiveness, suggest improvements, and simulate potential results. Provide detailed feedback on structure and optimization.',
   },
   {
     id: 'system-monitor',
     name: 'System Monitor',
     icon: Monitor,
     description: 'Monitor system performance and health',
-    systemPrompt: 'You are a system administrator AI. Help monitor system status, diagnose issues, and provide technical insights. Focus on performance optimization and troubleshooting.',
   },
   {
     id: 'model-config',
     name: 'Model Config',
     icon: Settings,
     description: 'Configure AI model parameters',
-    systemPrompt: 'You are an AI model configuration expert. Help optimize model parameters, explain settings, and suggest configurations for different use cases.',
   },
 ];
 

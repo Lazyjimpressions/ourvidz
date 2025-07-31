@@ -11,7 +11,6 @@ interface CreativeTool {
   name: string;
   icon: React.ElementType;
   description: string;
-  systemPrompt: string;
 }
 
 const creativeTools: CreativeTool[] = [
@@ -20,28 +19,24 @@ const creativeTools: CreativeTool[] = [
     name: 'Story Dev',
     icon: BookOpen,
     description: 'Develop stories, plots, and narratives',
-    systemPrompt: 'You are a story development assistant. Help create compelling narratives, develop plot structures, and refine storytelling elements. Focus on character arcs, pacing, and narrative coherence.',
   },
   {
     id: 'character-creation',
     name: 'Characters',
     icon: Users,
     description: 'Create and develop characters',
-    systemPrompt: 'You are a character development expert. Help create detailed, compelling characters with depth, motivations, and realistic personalities. Focus on character consistency and development.',
   },
   {
     id: 'world-building',
     name: 'World Build',
     icon: Map,
     description: 'Build fictional worlds and settings',
-    systemPrompt: 'You are a world-building specialist. Help create immersive fictional worlds with consistent rules, geography, cultures, and histories. Focus on logical world systems and rich detail.',
   },
   {
     id: 'idea-generator',
     name: 'Ideas',
     icon: Lightbulb,
     description: 'Generate creative ideas and concepts',
-    systemPrompt: 'You are a creative idea generator. Help brainstorm unique concepts, plot twists, character ideas, and creative solutions. Focus on originality and creative inspiration.',
   },
 ];
 
