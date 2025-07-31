@@ -897,20 +897,6 @@ const Workspace = () => {
             seed={seed}
             onSeedChange={setSeed}
           />
-            jobType={selectedMode}
-            compelEnabled={compelEnabled}
-            setCompelEnabled={setCompelEnabled}
-            compelWeights={compelWeights}
-            setCompelWeights={setCompelWeights}
-            references={activeReferences}
-            onReferencesChange={setActiveReferences}
-            referenceStrength={referenceStrength}
-            onReferenceStrengthChange={setReferenceStrength}
-            optimizeForCharacter={optimizeForCharacter}
-            onOptimizeChange={setOptimizeForCharacter}
-            seed={seed}
-            onSeedChange={setSeed}
-          />
         ) : (
           <VideoInputControls
             prompt={prompt}

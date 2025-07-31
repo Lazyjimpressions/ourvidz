@@ -18,15 +18,13 @@ interface ImageInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
   isEnhanced?: boolean;
-  isUsingEnhancement?: boolean;
   onClearEnhancement?: () => void;
   onGenerate: () => void;
   onGenerateWithEnhancement?: (data: {
-    enhancedPrompt: string;
     originalPrompt: string;
-    enhancementStrategy: string;
-    selectedModel: string;
-    metadata?: any;
+    enhancedPrompt: string;
+    enhancementMetadata: any;
+    selectedPresets: string[];
   }) => void;
   isGenerating: boolean;
   onSwitchToVideo?: () => void;
@@ -478,20 +476,10 @@ export const ImageInputControls = ({
           if (onGenerateWithEnhancement) {
             // Call the enhanced generation handler which triggers actual job creation
             onGenerateWithEnhancement({
-              enhancedPrompt: data.enhancedPrompt,
               originalPrompt: data.originalPrompt,
-              enhancementStrategy: data.enhancementMetadata?.enhancement_strategy || 'unknown',
-              selectedModel: selectedModel,
-              metadata: {
-                jobType,
-                quality,
-                format: 'image',
-                isEnhanced: true,
-                enhancementMetadata: data.enhancementMetadata,
-                // Mark that user explicitly requested enhancement
-                user_requested_enhancement: true,
-                skip_enhancement: false
-              }
+              enhancedPrompt: data.enhancedPrompt,
+              enhancementMetadata: data.enhancementMetadata,
+              selectedPresets: data.selectedPresets
             });
           setShowEnhancementModal(false);
           }

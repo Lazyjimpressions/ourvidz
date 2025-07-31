@@ -16,15 +16,14 @@ import { ReferenceSettingsModal } from './workspace/ReferenceSettingsModal';
 interface VideoInputControlsProps {
   prompt: string;
   setPrompt: (prompt: string) => void;
-  isUsingEnhancement?: boolean;
+  isEnhanced?: boolean;
   onClearEnhancement?: () => void;
   onGenerate: () => void;
   onGenerateWithEnhancement?: (data: {
-    enhancedPrompt: string;
     originalPrompt: string;
-    enhancementStrategy: string;
-    selectedModel: string;
-    metadata?: any;
+    enhancedPrompt: string;
+    enhancementMetadata: any;
+    selectedPresets: string[];
   }) => void;
   isGenerating: boolean;
   onSwitchToImage?: () => void;
@@ -59,7 +58,7 @@ interface VideoInputControlsProps {
 export const VideoInputControls = ({
   prompt,
   setPrompt,
-  isUsingEnhancement = false,
+  isEnhanced = false,
   onClearEnhancement,
   onGenerate,
   onGenerateWithEnhancement,
@@ -146,7 +145,7 @@ export const VideoInputControls = ({
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="A woman walking through a bustling city street..."
               className={`bg-transparent border-none text-white placeholder:text-gray-400 text-sm py-2 px-3 focus:outline-none focus:ring-0 resize-none h-16 w-full ${
-                isUsingEnhancement ? 'border-l-2 border-l-purple-500' : ''
+                isEnhanced ? 'border-l-2 border-l-purple-500' : ''
               }`}
               disabled={isGenerating}
               onKeyDown={(e) => {
@@ -156,7 +155,7 @@ export const VideoInputControls = ({
                 }
               }}
             />
-            {isUsingEnhancement && (
+            {isEnhanced && (
               <div className="absolute top-1 right-1 flex gap-1">
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -415,20 +414,10 @@ export const VideoInputControls = ({
           if (onGenerateWithEnhancement) {
             // Call the enhanced generation handler which triggers actual job creation
             onGenerateWithEnhancement({
-              enhancedPrompt: data.enhancedPrompt,
               originalPrompt: data.originalPrompt,
-              enhancementStrategy: data.enhancementMetadata?.enhancement_strategy || 'unknown',
-              selectedModel: selectedModel,
-              metadata: {
-                jobType,
-                quality,
-                format: 'video',
-                isEnhanced: true,
-                enhancementMetadata: data.enhancementMetadata,
-                // Mark that user explicitly requested enhancement
-                user_requested_enhancement: true,
-                skip_enhancement: false
-              }
+              enhancedPrompt: data.enhancedPrompt,
+              enhancementMetadata: data.enhancementMetadata,
+              selectedPresets: data.selectedPresets
             });
           setShowEnhancementModal(false);
           }
