@@ -3,6 +3,7 @@ import { SystemHealthMonitor } from "@/components/admin/SystemHealthMonitor";
 import { AdminDatabaseManager } from "@/components/admin/AdminDatabaseManager";
 import { HealthCheckJobCleaner } from "@/components/admin/HealthCheckJobCleaner";
 import { PromptManagementTab } from "@/components/admin/PromptManagementTab";
+import { PromptTestingTab } from "@/components/admin/PromptTestingTab";
 import { UserManagementTab } from "@/components/admin/UserManagementTab";
 import { ContentModerationTab } from "@/components/admin/ContentModerationTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
@@ -130,12 +131,13 @@ const Admin = () => {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
               <TabsTrigger value="moderation">Moderation</TabsTrigger>
-              <TabsTrigger value="prompt-management">Prompt Management</TabsTrigger>
+              <TabsTrigger value="prompt-management">Prompts</TabsTrigger>
+              <TabsTrigger value="testing">Testing</TabsTrigger>
               <TabsTrigger value="database">Database</TabsTrigger>
               <TabsTrigger value="jobs">Jobs</TabsTrigger>
               <TabsTrigger value="config">Config</TabsTrigger>
@@ -308,13 +310,27 @@ const Admin = () => {
             <TabsContent value="prompt-management" className="space-y-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Prompt Management & Testing</CardTitle>
+                  <CardTitle>Prompt Management</CardTitle>
                   <CardDescription>
-                    Manage prompt templates, negative prompts, and test optimization for all models
+                    Manage prompt templates and negative prompts for all models
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <PromptManagementTab />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="testing" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Prompt Testing</CardTitle>
+                  <CardDescription>
+                    Test prompt optimization and model performance across different scenarios
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PromptTestingTab />
                 </CardContent>
               </Card>
             </TabsContent>
