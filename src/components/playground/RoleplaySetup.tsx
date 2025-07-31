@@ -9,7 +9,7 @@ import { ChevronDown, Plus, Trash2, Settings, User, Bot } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 
-interface Character {
+export interface Character {
   id: string;
   name: string;
   role: 'ai' | 'narrator' | 'user';

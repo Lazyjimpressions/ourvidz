@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, MessageSquare, RotateCcw, Trash2 } from 'lucide-react';
+import { Send, Bot, MessageSquare, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -12,6 +12,7 @@ import { RoleplaySetup, type RoleplayTemplate } from './RoleplaySetup';
 import { AdminTools } from './AdminTools';
 import { CreativeTools } from './CreativeTools';
 import { PromptCounter } from './PromptCounter';
+import { CharacterDetailsPanel } from './CharacterDetailsPanel';
 
 export const ChatInterface = () => {
   const {
@@ -25,6 +26,7 @@ export const ChatInterface = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentMode, setCurrentMode] = useState<PlaygroundMode>('chat');
+  const [currentRoleplayTemplate, setCurrentRoleplayTemplate] = useState<RoleplayTemplate | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -80,12 +82,26 @@ export const ChatInterface = () => {
       conversationId = await createConversation(`Roleplay: ${template.name}`, undefined, 'roleplay');
     }
 
-    // Build character descriptions with response length controls
-    const characterDescriptions = template.characters
-      .map(char => `${char.name} (${char.role}): ${char.personality}. Keep responses to 1-3 sentences max for natural conversation flow.`)
-      .join('\n');
+    setCurrentRoleplayTemplate(template);
 
-    // Pass only character data and scenario - let database template handle all roleplay rules
+    // Build comprehensive character descriptions using ALL character data
+    const characterDescriptions = template.characters
+      .map(char => {
+        const parts = [
+          `${char.name} (${char.role})`,
+          `Personality: ${char.personality}`,
+          char.background && `Background: ${char.background}`,
+          char.speakingStyle && `Speaking Style: ${char.speakingStyle}`,
+          char.visualDescription && `Appearance: ${char.visualDescription}`,
+          char.relationships && `Relationships: ${char.relationships}`,
+          char.goals && `Goals: ${char.goals}`,
+          char.quirks && `Quirks: ${char.quirks}`,
+        ].filter(Boolean);
+        return parts.join('\n');
+      })
+      .join('\n\n');
+
+    // Pass comprehensive character data and scenario
     const message = `[System: Starting roleplay session]
 
 SCENARIO: ${template.scenario}
@@ -93,7 +109,7 @@ SCENARIO: ${template.scenario}
 CHARACTERS:
 ${characterDescriptions}
 
-Remember: Keep responses conversational (1-3 sentences) for natural turn-based dialogue.`;
+Begin the roleplay naturally, embodying the character fully with all their traits, speaking style, and background.`;
     
     await sendMessage(message);
   };
@@ -199,10 +215,9 @@ Please help me with this creative project.`;
     return (
       <div className="h-full flex flex-col">
         {/* Header */}
-        <div className="border-b border-gray-800 p-2 flex items-center justify-between">
+        <div className="border-b border-border p-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Bot className="h-4 w-4 text-blue-400" />
-            <h1 className="text-sm font-medium text-white">AI Playground</h1>
+            <h1 className="text-sm font-medium">AI Playground</h1>
           </div>
           
           {/* Conversation History Panel */}
@@ -211,14 +226,14 @@ Please help me with this creative project.`;
               <Button 
                 variant="ghost" 
                 size="sm"
-                className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
+                className="h-7 w-7 p-0"
               >
                 <MessageSquare className="h-3 w-3" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
-              <SheetHeader className="p-3 border-b border-gray-800">
-                <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
+            <SheetContent side="left" className="w-64 bg-background border-border p-0">
+              <SheetHeader className="p-3 border-b border-border">
+                <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
               </SheetHeader>
               <ConversationList />
             </SheetContent>
@@ -245,16 +260,15 @@ Please help me with this creative project.`;
 
         {/* Empty state content */}
         <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
-          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 p-6 rounded-lg border border-gray-700 max-w-sm">
-            <Bot className="h-8 w-8 text-blue-400 mx-auto mb-3" />
-            <h2 className="text-lg font-medium text-white mb-2">Welcome to Playground</h2>
-            <p className="text-gray-300 mb-4 text-sm">
+          <div className="bg-gradient-to-br from-primary/20 to-secondary/20 p-6 rounded-lg border border-border max-w-sm">
+            <h2 className="text-lg font-medium mb-2">Welcome to Playground</h2>
+            <p className="text-muted-foreground mb-4 text-sm">
               Select a mode above and configure your session, or start a general conversation.
             </p>
             <Button
               onClick={() => createConversation()}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white h-8"
+              className="h-8"
             >
               Start Conversation
             </Button>
@@ -267,22 +281,29 @@ Please help me with this creative project.`;
   return (
     <div className="h-full flex flex-col">
       {/* Chat Header */}
-      <div className="border-b border-gray-800 p-2 flex items-center justify-between">
+      <div className="border-b border-border p-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bot className="h-4 w-4 text-blue-400" />
-          <h1 className="text-sm font-medium text-white">AI Playground</h1>
-          <span className="text-xs bg-gray-800 px-2 py-1 rounded text-gray-300">
+          <h1 className="text-sm font-medium">AI Playground</h1>
+          <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
             {currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}
           </span>
         </div>
         
         <div className="flex items-center gap-1">
+          {/* Character Details Button - only show in roleplay mode with active template */}
+          {currentMode === 'roleplay' && currentRoleplayTemplate && (
+            <CharacterDetailsPanel 
+              template={currentRoleplayTemplate}
+              onUpdateTemplate={setCurrentRoleplayTemplate}
+            />
+          )}
+          
           {/* Clear Chat Button */}
           <Button 
             variant="ghost" 
             size="sm"
             onClick={handleClearChat}
-            className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
+            className="h-7 w-7 p-0"
             title="Clear chat"
           >
             <RotateCcw className="h-3 w-3" />
@@ -294,15 +315,15 @@ Please help me with this creative project.`;
               <Button 
                 variant="ghost" 
                 size="sm"
-                className="text-gray-400 hover:text-white hover:bg-gray-800 h-8 w-8 p-0"
+                className="h-7 w-7 p-0"
                 title="Conversation history"
               >
                 <MessageSquare className="h-3 w-3" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-[#111111] border-gray-800 p-0">
-              <SheetHeader className="p-3 border-b border-gray-800">
-                <SheetTitle className="text-white text-left text-sm">Conversations</SheetTitle>
+            <SheetContent side="left" className="w-64 bg-background border-border p-0">
+              <SheetHeader className="p-3 border-b border-border">
+                <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
               </SheetHeader>
               <ConversationList />
             </SheetContent>
@@ -315,7 +336,7 @@ Please help me with this creative project.`;
 
       {/* Mode-specific Setup Panels - Hide when actively chatting */}
       {messages.length === 0 && (
-        <div className="p-3 space-y-2 border-b border-gray-800">
+        <div className="p-3 space-y-2 border-b border-border">
           {currentMode === 'roleplay' && (
             <RoleplaySetup onStartRoleplay={handleStartRoleplay} />
           )}
@@ -336,9 +357,8 @@ Please help me with this creative project.`;
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-8 w-8 text-blue-400 mb-3" />
-            <p className="text-gray-300 text-sm mb-1">Ready to chat!</p>
-            <p className="text-gray-500 text-xs">Send a message to start the conversation.</p>
+            <p className="text-sm mb-1">Ready to chat!</p>
+            <p className="text-muted-foreground text-xs">Send a message to start the conversation.</p>
           </div>
         ) : (
           <>
@@ -349,12 +369,12 @@ Please help me with this creative project.`;
             {/* Loading indicator for AI response */}
             {state.isLoadingMessage && (
               <div className="flex items-start gap-2">
-                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-3 w-3 text-white" />
+                <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
+                  <Bot className="h-3 w-3 text-primary-foreground" />
                 </div>
-                <div className="bg-gray-800 rounded-lg rounded-tl-md p-3 max-w-xs">
-                  <div className="flex items-center gap-2 text-gray-400">
-                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-500 border-t-transparent"></div>
+                <div className="bg-muted rounded-lg rounded-tl-md p-3 max-w-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary border-t-transparent"></div>
                     <span className="text-xs">AI is thinking...</span>
                   </div>
                 </div>
@@ -367,7 +387,7 @@ Please help me with this creative project.`;
       </div>
 
       {/* Floating Message Input */}
-      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-gray-800 p-3 z-50">
+      <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border p-3 z-50">
         <form onSubmit={handleSubmit} className="max-w-4xl mx-auto">
           <div className="flex flex-col gap-2">
             <div className="flex items-end gap-2">
@@ -378,7 +398,7 @@ Please help me with this creative project.`;
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder={`Type your ${currentMode} message... (Enter to send, Shift+Enter for new line)`}
-                  className="min-h-[40px] max-h-60 resize-none bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500 text-sm"
+                  className="min-h-[40px] max-h-60 resize-none text-sm"
                   disabled={isSubmitting || state.isLoadingMessage}
                 />
               </div>
@@ -386,10 +406,10 @@ Please help me with this creative project.`;
                 type="submit"
                 disabled={!inputMessage.trim() || isSubmitting || state.isLoadingMessage}
                 size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0"
+                className="h-8 w-8 p-0"
               >
                 {isSubmitting ? (
-                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-primary-foreground border-t-transparent" />
                 ) : (
                   <Send className="h-3 w-3" />
                 )}
@@ -406,7 +426,7 @@ Please help me with this creative project.`;
         </form>
         
         {state.error && (
-          <div className="mt-2 text-xs text-red-400 bg-red-900/20 p-2 rounded max-w-4xl mx-auto">
+          <div className="mt-2 text-xs text-destructive bg-destructive/10 p-2 rounded max-w-4xl mx-auto">
             {state.error}
           </div>
         )}
