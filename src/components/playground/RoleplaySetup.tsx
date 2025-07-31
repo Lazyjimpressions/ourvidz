@@ -52,6 +52,18 @@ const baseTemplates: RoleplayTemplate[] = [
         relationships: 'Respected mentor figure',
         goals: 'To help and guide others',
         quirks: 'Speaks in metaphors'
+      },
+      {
+        id: 'fantasy-narrator',
+        name: 'Narrator',
+        role: 'narrator',
+        personality: 'Descriptive and immersive',
+        background: 'Storyteller who sets magical scenes',
+        speakingStyle: 'Rich narrative descriptions',
+        visualDescription: 'Observant presence',
+        relationships: 'Guides the narrative flow',
+        goals: 'Create immersive fantasy world',
+        quirks: 'Focuses on magical atmosphere and environmental details'
       }
     ],
     scenario: 'A magical encounter begins...'
@@ -74,6 +86,18 @@ const baseTemplates: RoleplayTemplate[] = [
         relationships: 'Values genuine connections',
         goals: 'To have meaningful interactions',
         quirks: 'Values honesty and directness'
+      },
+      {
+        id: 'adult-narrator',
+        name: 'Narrator',
+        role: 'narrator',
+        personality: 'Atmospheric and sensual',
+        background: 'Expert at setting intimate scenes',
+        speakingStyle: 'Rich sensory descriptions',
+        visualDescription: 'Observant presence',
+        relationships: 'Creates intimate atmosphere',
+        goals: 'Enhance emotional and physical tension',
+        quirks: 'Focuses on mood, lighting, emotions, and sensory details'
       }
     ],
     scenario: 'An adult conversation begins...'
@@ -96,6 +120,18 @@ const baseTemplates: RoleplayTemplate[] = [
         relationships: 'Values deep connections',
         goals: 'To build meaningful relationships',
         quirks: 'Enjoys meaningful conversations'
+      },
+      {
+        id: 'romance-narrator',
+        name: 'Narrator',
+        role: 'narrator',
+        personality: 'Romantic and heartwarming',
+        background: 'Creates romantic atmospheres',
+        speakingStyle: 'Emotional and tender descriptions',
+        visualDescription: 'Observant presence',
+        relationships: 'Enhances romantic tension',
+        goals: 'Build emotional connection and romantic atmosphere',
+        quirks: 'Focuses on emotional undertones and romantic details'
       }
     ],
     scenario: 'A romantic encounter begins...'
@@ -118,6 +154,18 @@ const baseTemplates: RoleplayTemplate[] = [
         relationships: 'Respected leader',
         goals: 'To explore and protect',
         quirks: 'Collects alien artifacts'
+      },
+      {
+        id: 'scifi-narrator',
+        name: 'Narrator',
+        role: 'narrator',
+        personality: 'Technical and futuristic',
+        background: 'Expert in sci-fi environments',
+        speakingStyle: 'Technical and atmospheric descriptions',
+        visualDescription: 'Observant presence',
+        relationships: 'Sets futuristic scenes',
+        goals: 'Create immersive sci-fi world',
+        quirks: 'Focuses on technology, space environments, and futuristic details'
       }
     ],
     scenario: 'A space exploration mission begins...'
@@ -155,7 +203,7 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
       setSelectedTemplate(templateId);
       setScenario(template.scenario);
       
-      // Try to load characters from database first, fall back to template characters
+      // Load both AI character and narrator from database, fall back to template
       const enhancedCharacters = await Promise.all(
         template.characters.map(async (templateChar) => {
           // Look for database character with matching name
@@ -168,7 +216,7 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
               return {
                 id: `template_${templateChar.id}`,
                 name: fullDbChar.name,
-                role: fullDbChar.role || templateChar.role,
+                role: templateChar.role, // Keep template role (fixed)
                 personality: fullDbChar.personality || templateChar.personality,
                 background: fullDbChar.background || templateChar.background,
                 speakingStyle: fullDbChar.speakingStyle || templateChar.speakingStyle,
@@ -186,6 +234,7 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
       );
       
       setCustomCharacters(enhancedCharacters);
+      setMultiCharacterMode(true); // Auto-enable multi-character mode for templates
     }
   };
 
@@ -381,22 +430,33 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
                           />
                         </div>
                         <div className="flex items-center gap-2">
-                          <Select
-                            value={character.role}
-                            onValueChange={(value: 'ai' | 'narrator' | 'user') => 
-                              updateCharacter(character.id, 'role', value)
-                            }
-                          >
-                            <SelectTrigger className="h-6 text-xs w-20">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="ai" className="text-xs">AI</SelectItem>
-                              <SelectItem value="narrator" className="text-xs">Narrator</SelectItem>
-                              <SelectItem value="user" className="text-xs">User</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {customCharacters.length > 1 && (
+                          {/* Show role as badge instead of dropdown for template characters */}
+                          {character.id.startsWith('template_') ? (
+                            <div className={`px-2 py-1 rounded text-xs font-medium ${
+                              character.role === 'ai' ? 'bg-blue-900/30 text-blue-300 border border-blue-800' :
+                              character.role === 'narrator' ? 'bg-purple-900/30 text-purple-300 border border-purple-800' :
+                              'bg-green-900/30 text-green-300 border border-green-800'
+                            }`}>
+                              {character.role.toUpperCase()}
+                            </div>
+                          ) : (
+                            <Select
+                              value={character.role}
+                              onValueChange={(value: 'ai' | 'narrator' | 'user') => 
+                                updateCharacter(character.id, 'role', value)
+                              }
+                            >
+                              <SelectTrigger className="h-6 text-xs w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="ai" className="text-xs">AI</SelectItem>
+                                <SelectItem value="narrator" className="text-xs">Narrator</SelectItem>
+                                <SelectItem value="user" className="text-xs">User</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {customCharacters.length > 1 && !character.id.startsWith('template_') && (
                             <Button
                               onClick={() => removeCharacter(character.id)}
                               size="sm"
