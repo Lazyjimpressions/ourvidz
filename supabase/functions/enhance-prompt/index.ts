@@ -454,7 +454,7 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Enhance with WAN worker (Qwen Base)
+   * Enhance with WAN worker (Qwen Base) - FIXED: Preserve original prompt
    */
   private async enhanceWithWanWorker(request: any, template: any) {
     const wanWorkerUrl = await this.getWanWorkerUrl()
@@ -462,8 +462,9 @@ class DynamicEnhancementOrchestrator {
       throw new Error('No WAN worker available')
     }
 
+    // CRITICAL FIX: Structure payload to separate original prompt from system context
     const payload = {
-      inputs: `${template.system_prompt}\n\nOriginal prompt: ${request.prompt}`,
+      inputs: `${template.system_prompt}\n\nEnhance this prompt: "${request.prompt}"\n\nEnhanced version:`,
       parameters: {
         max_new_tokens: template.token_limit || 150,
         temperature: 0.7,
@@ -472,6 +473,13 @@ class DynamicEnhancementOrchestrator {
         return_full_text: false
       }
     }
+
+    console.log('🔧 WAN worker payload:', {
+      originalPrompt: request.prompt,
+      systemPrompt: template.system_prompt,
+      inputStructure: 'separated_context',
+      tokenLimit: template.token_limit || 150
+    })
 
     const response = await fetch(`${wanWorkerUrl}/generate`, {
       method: 'POST',
@@ -483,12 +491,40 @@ class DynamicEnhancementOrchestrator {
     })
 
     if (!response.ok) {
-      throw new Error(`WAN worker failed: ${response.status}`)
+      const errorText = await response.text()
+      console.log(`⚠️ WAN worker error (${response.status}): ${errorText}`)
+      throw new Error(`WAN worker failed: ${response.status} - ${errorText}`)
     }
 
     const result = await response.json()
+    
+    // CRITICAL FIX: Clean and validate the response to ensure we only get the enhanced portion
+    let enhancedText = result.generated_text?.trim() || request.prompt
+    
+    // Remove any residual system prompt or original prompt from the response
+    if (enhancedText.includes('Enhanced version:')) {
+      enhancedText = enhancedText.split('Enhanced version:').pop()?.trim() || enhancedText
+    }
+    
+    // Remove quotes if the model wrapped the response
+    if (enhancedText.startsWith('"') && enhancedText.endsWith('"')) {
+      enhancedText = enhancedText.slice(1, -1)
+    }
+    
+    // Fallback to original if enhancement is empty or too similar
+    if (!enhancedText || enhancedText.length < 10 || enhancedText === request.prompt) {
+      enhancedText = request.prompt
+    }
+
+    console.log('✅ WAN worker response processed:', {
+      originalPrompt: request.prompt,
+      enhancedPrompt: enhancedText,
+      responseLength: enhancedText.length,
+      expansionRatio: (enhancedText.length / request.prompt.length).toFixed(2)
+    })
+    
     return {
-      enhanced_prompt: result.generated_text?.trim() || request.prompt
+      enhanced_prompt: enhancedText
     }
   }
 
