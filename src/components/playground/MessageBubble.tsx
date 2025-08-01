@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bot, User, Copy, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
+import { ResponseTruncation } from './ResponseTruncation';
+import { SceneImageGenerator } from './SceneImageGenerator';
+import { InlineImageDisplay } from './InlineImageDisplay';
+import { ImageLightbox } from './ImageLightbox';
 
 interface Message {
   id: string;
@@ -15,11 +19,15 @@ interface Message {
 
 interface MessageBubbleProps {
   message: Message;
+  mode?: string;
+  roleplayTemplate?: any;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'chat', roleplayTemplate }) => {
   const isUser = message.sender === 'user';
   const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
+  const [generatedImageId, setGeneratedImageId] = useState<string | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const handleCopy = async () => {
     try {
@@ -57,9 +65,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             ? 'bg-green-600 text-white rounded-tr-md'
             : 'bg-gray-800 text-white rounded-tl-md'
         }`}>
-          <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere text-sm leading-relaxed max-w-none">
-            {message.content}
-          </div>
+          {isUser ? (
+            <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere text-sm leading-relaxed max-w-none">
+              {message.content}
+            </div>
+          ) : (
+            <ResponseTruncation 
+              content={message.content} 
+              mode={mode}
+            />
+          )}
         </div>
 
         {/* Message Actions */}
@@ -88,6 +103,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message }) => {
             </Button>
           )}
         </div>
+
+        {/* Scene Image Generator - Only for AI messages in roleplay mode */}
+        {!isUser && mode === 'roleplay' && (
+          <SceneImageGenerator
+            messageContent={message.content}
+            roleplayTemplate={roleplayTemplate}
+            onImageGenerated={(assetId) => {
+              console.log('🖼️ MessageBubble received generated image ID:', assetId);
+              setGeneratedImageId(assetId);
+              toast.success('Scene image generated!');
+            }}
+          />
+        )}
+
+        {/* Inline Image Display */}
+        {generatedImageId && (
+          <div className="mt-2">
+            <InlineImageDisplay
+              assetId={generatedImageId}
+              onExpand={setLightboxImageUrl}
+            />
+          </div>
+        )}
+
+        {/* Image Lightbox */}
+        <ImageLightbox
+          imageUrl={lightboxImageUrl}
+          onClose={() => setLightboxImageUrl(null)}
+        />
       </div>
     </div>
   );
