@@ -1,1313 +1,456 @@
-# OurVidz Worker API Reference
+# Worker API Documentation
 
-**Last Updated:** July 20, 2025 at 11:45 PM CST  
-**Status:** ✅ Production Ready - All 10 Job Types Operational + Compel Integration + Multi-Reference System Live  
-**System:** Dual Worker (SDXL + WAN) on RTX 6000 ADA (48GB VRAM)
+**Last Updated:** July 30, 2025
 
----
+## System Overview
 
-## **🎯 Worker System Overview**
+The `ourvidz-worker` repository manages a comprehensive AI content generation system with three specialized workers orchestrated by a central memory management system. This document provides the frontend AI with complete context of all active workers, Python files, APIs, and system architecture.
 
-OurVidz operates with a dual-worker architecture managed by a centralized orchestrator:
+### Architecture Components
 
-1. **SDXL Worker** - High-quality image generation with flexible quantities and Compel integration
-2. **WAN Worker** - Video generation and enhanced image processing with Qwen 7B enhancement
-3. **Dual Orchestrator** - Centralized management and monitoring of both workers
+#### Core Workers
+1. **SDXL Worker** (`sdxl_worker.py`) - High-quality image generation using Stable Diffusion XL
+2. **Enhanced Chat Worker** (`chat_worker.py`) - AI conversation and intelligent prompt enhancement using Qwen Instruct
+3. **WAN Worker** (`wan_worker.py`) - Video generation and enhanced image processing using WAN 2.1
 
-All workers use standardized callback parameters and comprehensive metadata management.
+#### System Management
+- **Dual Orchestrator** (`dual_orchestrator.py`) - Central job distribution and worker coordination
+- **Memory Manager** (`memory_manager.py`) - Intelligent VRAM management and worker coordination
+- **Worker Registration** (`worker_registration.py`) - Dynamic worker discovery and registration
 
----
+#### Infrastructure
+- **Redis Job Queues** - `sdxl_queue`, `chat_queue`, `wan_queue` for job distribution
+- **Flask HTTP APIs** - RESTful endpoints for each worker and system management
+- **Callback System** - Standardized job status reporting via `POST /functions/v1/job-callback`
 
-## **📤 Job Queue System**
+### File Structure
 
-### **Queue Structure**
-- **`sdxl_queue`** - SDXL image generation jobs
-- **`wan_queue`** - WAN video and enhanced image jobs
+```
+ourvidz-worker/
+├── Core Workers/
+│   ├── sdxl_worker.py          # SDXL image generation worker
+│   ├── chat_worker.py          # Enhanced chat and prompt enhancement
+│   └── wan_worker.py           # WAN video and image processing
+├── System Management/
+│   ├── dual_orchestrator.py    # Central job orchestrator
+│   ├── memory_manager.py       # VRAM and worker management
+│   └── worker_registration.py  # Dynamic worker registration
+├── Infrastructure/
+│   ├── startup.sh              # System startup script
+│   └── requirements.txt        # Python dependencies
+├── Testing/
+│   ├── chat_worker_validator.py
+│   ├── comprehensive_test.sh
+│   └── quick_health_check.sh
+└── Documentation/
+    ├── README.md
+    ├── WORKER_API.md           # This file
+    ├── CODEBASE_INDEX.md
+    └── CHAT_WORKER_CONSOLIDATED.md
+```
 
-### **Job Payload Format (Standardized)**
+## Enhanced Chat Worker
 
-#### **SDXL Job Payload**
+### Overview
+The Enhanced Chat Worker provides AI conversation capabilities and intelligent prompt enhancement with NSFW optimization, dynamic system prompts, and performance optimization.
+
+### API Endpoints
+
+#### Primary Chat Endpoints
+
+**POST /chat** - Chat Conversation
 ```json
 {
-  "id": "uuid",
-  "type": "sdxl_image_fast" | "sdxl_image_high",
-  "prompt": "string",
-  "user_id": "uuid",
-  "compel_enabled": true | false,
-  "compel_weights": "(beautiful:1.3), (woman:1.2), (garden:1.1)",
+  "prompt": "User message",
   "config": {
-    "num_images": 1 | 3 | 6,
-    "seed": 123456789
+    "system_prompt": "Optional custom system prompt",
+    "job_type": "chat_conversation",
+    "quality": "high"
   },
   "metadata": {
-    "reference_image_url": "string",
-    "reference_type": "style" | "composition" | "character",
-    "reference_strength": 0.1-1.0
+    "unrestricted_mode": false,
+    "nsfw_optimization": true
   }
 }
 ```
 
-#### **WAN Job Payload**
+**POST /chat/unrestricted** - Unrestricted Mode Chat
 ```json
 {
-  "id": "uuid",
-  "type": "image_fast" | "image_high" | "video_fast" | "video_high" | "image7b_fast_enhanced" | "image7b_high_enhanced" | "video7b_fast_enhanced" | "video7b_high_enhanced",
-  "prompt": "string",
-  "user_id": "uuid",
+  "prompt": "Adult content request",
   "config": {
-    "first_frame": "string",
-    "last_frame": "string"
+    "system_prompt": "NSFW-optimized system prompt",
+    "job_type": "chat_unrestricted",
+    "quality": "high"
   },
   "metadata": {
-    "start_reference_url": "string",
-    "end_reference_url": "string",
-    "reference_strength": 0.1-1.0
+    "unrestricted_mode": true,
+    "nsfw_optimization": true
   }
 }
 ```
 
----
+#### Enhancement Endpoints
 
-## **📥 Callback System (Standardized)**
-
-### **Callback Endpoint**
-```
-POST /functions/v1/job-callback
-```
-
-### **Callback Payload Format (Standardized)**
+**POST /enhance** - Simple Prompt Enhancement
 ```json
 {
-  "job_id": "uuid",
-  "status": "processing" | "completed" | "failed",
-  "assets": ["url1", "url2", "url3"],
-  "error_message": "string",
+  "prompt": "Original prompt",
+  "config": {
+    "job_type": "sdxl_lustify|wan_2.1_video",
+    "quality": "high|medium|low"
+  },
   "metadata": {
-    "seed": 123456789,
-    "generation_time": 15.5,
-    "num_images": 3,
-    "compel_enabled": true,
-    "compel_weights": "(beautiful:1.3), (woman:1.2)",
-    "enhancement_strategy": "compel" | "fallback" | "none"
+    "nsfw_optimization": true,
+    "anatomical_accuracy": true
   }
 }
 ```
 
----
-
-## **🎨 SDXL Worker Specifications**
-
-### **Model Configuration**
-- **Model Path**: `/workspace/models/sdxl-lustify/lustifySDXLNSFWSFW_v20.safetensors`
-- **Pipeline**: StableDiffusionXLPipeline
-- **VRAM**: 48GB RTX 6000 ADA
-
-### **Job Types Supported**
-| Job Type | Quality | Steps | Guidance | Time | Quantity |
-|----------|---------|-------|----------|------|----------|
-| `sdxl_image_fast` | Fast | 15 | 6.0 | 3-8s | 1,3,6 |
-| `sdxl_image_high` | High | 25 | 7.5 | 9-24s | 1,3,6 |
-
-### **Performance Metrics**
-- **1 Image**: 3-8 seconds
-- **3 Images**: 9-24 seconds
-- **6 Images**: 18-48 seconds
-
-### **Key Features**
-- **Flexible Quantities**: User-selectable 1, 3, or 6 images per batch
-- **Image-to-Image**: Support for style, composition, and character references
-- **Seed Control**: Reproducible generation with user-controlled seeds
-- **🎯 Compel Integration**: Prompt enhancement with weighted attention
-- **Batch Processing**: Efficient multi-image generation
-
-### **🎯 Compel Integration (CURRENT STATUS)**
-
-#### **Current Compel Processing (Compel 2.x+)**
-```python
-def process_compel_weights(self, prompt, weights_config=None):
-    """
-    Process prompt with proper Compel library integration for SDXL.
-    FIXED: Use requires_pooled=[False, True] for Compel 2.1.1 with SDXL.
-    """
-    if not weights_config:
-        return prompt, None
-    try:
-        if not self.model_loaded:
-            self.load_model()
-        logger.info(f"🔧 Initializing Compel 2.1.1 with SDXL encoders - FIXED SYNTAX")
-        compel_processor = Compel(
-            tokenizer=[self.pipeline.tokenizer, self.pipeline.tokenizer_2],
-            text_encoder=[self.pipeline.text_encoder, self.pipeline.text_encoder_2],
-            requires_pooled=[False, True]  # ✅ FIXED: List instead of boolean for Compel 2.1.1
-        )
-        logger.info(f"✅ Compel processor initialized successfully with FIXED SDXL syntax")
-        combined_prompt = f"{prompt} {weights_config}"
-        logger.info(f"📝 Combined prompt: {combined_prompt}")
-        # Always unpack as a tuple
-        prompt_embeds, pooled_prompt_embeds = compel_processor(combined_prompt)
-        logger.info(f"✅ Compel weights applied with proper SDXL library integration")
-        logger.info(f"📝 Original prompt: {prompt}")
-        logger.info(f"🎯 Compel weights: {weights_config}")
-        logger.info(f"🔧 Generated prompt_embeds: {prompt_embeds.shape}")
-        logger.info(f"🔧 Generated pooled_prompt_embeds: {pooled_prompt_embeds.shape}")
-        return (prompt_embeds, pooled_prompt_embeds), prompt
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        logger.info(f"🔄 Falling back to original prompt: {prompt}")
-        return prompt, None  # Fallback to original prompt
+**GET /enhancement/info** - Enhancement System Info
+```json
+{
+  "enhancement_system": "Direct Qwen Instruct Enhancement",
+  "supported_job_types": ["sdxl_image_fast", "sdxl_image_high", "video_fast", "video_high"],
+  "model_info": {
+    "model_name": "Qwen2.5-7B-Instruct",
+    "model_loaded": true,
+    "enhancement_method": "Direct Qwen Instruct with dynamic prompts"
+  }
+}
 ```
 
-#### **Critical Note:**
-- **For SDXL with Compel 2.x, always unpack the result of `compel_processor(...)` as a tuple:**
-  ```python
-  prompt_embeds, pooled_prompt_embeds = compel_processor(combined_prompt)
-  ```
-- **Do NOT check for or handle a single tensor or boolean for SDXL.**
-- **Remove any fallback logic for single tensor/boolean for SDXL.**
-- If you get `'bool' object is not iterable'`, Compel did not return a tuple—this is a sign of a misconfiguration, version mismatch, or a Compel bug.
-- This is required for SDXL with `requires_pooled=True`.
-
-#### **Summary Table: Compel 2.x SDXL API**
-| Symptom/Error                  | Cause                                 | Fix                                 |
-|--------------------------------|---------------------------------------|-------------------------------------|
-| `'bool' object is not iterable'` | Not unpacking Compel output as tuple  | Always unpack: `a, b = compel(...)` |
-| `unexpected keyword argument`    | Using keyword args for encoders       | Use positional args                 |
-
-#### **Troubleshooting & Learnings**
-- For SDXL, always expect a tuple and unpack it directly.
-- Do not try to handle a single tensor or boolean for SDXL.
-- If you see `'bool' object is not iterable'`, you are not unpacking the tuple or Compel is misconfigured.
-- If you see `unexpected keyword argument`, you are using keyword args for encoders—switch to positional.
-- **If you see duplicate or conflicting weights in logs, check that your weights are normalized and deduplicated as above.**
-- Always check your Compel version (`import compel; print(compel.__version__)`).
-- For SDXL, always use positional arguments for encoders and `requires_pooled=True`.
-
-#### **Validation Checklist**
-- [x] Compel library imports successfully
-- [x] `process_compel_weights` uses `requires_pooled=[False, True]` for SDXL
-- [x] Always unpacks Compel output as a tuple for SDXL
-- [x] No fallback logic for single tensor/boolean for SDXL
-- [x] Generation function handles both prompt_embeds and pooled_prompt_embeds for SDXL
-- [x] Error handling includes fallback to original prompt
-- [x] Metadata includes Compel processing status and tensor types
-- [x] No more 'bool object is not iterable' or argument errors in logs
-- [x] Compel weights are properly applied without token limit violations
-- [x] Both conditioning tensors are generated and used correctly
-- [x] Legacy single tensor fallback works for backward compatibility (non-SDXL)
-
-### **Reference Image Support**
-```python
-# Reference image parameters
-reference_image_url = "https://storage.example.com/reference.jpg"
-reference_type = "style" | "composition" | "character"
-reference_strength = 0.1-1.0
-
-# Image-to-image generation
-if reference_image_url:
-    # Load and process reference image
-    reference_image = load_reference_image(reference_image_url)
-    # Apply reference influence based on type and strength
-    result = generate_with_reference(prompt, reference_image, reference_type, reference_strength)
+### Enhanced Chat Job Payload
+```json
+{
+  "worker_id": "chat_worker_001",
+  "job_id": "chat_job_123",
+  "prompt": "User input",
+  "config": {
+    "system_prompt": "Custom system prompt",
+    "job_type": "chat_conversation|chat_enhance|chat_unrestricted",
+    "quality": "high|medium|low"
+  },
+  "metadata": {
+    "unrestricted_mode": false,
+    "nsfw_optimization": true,
+    "user_id": "user_123",
+    "session_id": "session_456"
+  }
+}
 ```
 
----
+## SDXL Worker
 
-## **🎬 WAN Worker Specifications**
+### Overview
+High-quality image generation using Stable Diffusion XL with NSFW optimization and anatomical accuracy focus.
 
-### **Model Configuration**
-- **Model**: WAN 2.1.1.3B
-- **Pipeline**: Video generation and enhanced image processing
-- **VRAM**: 48GB RTX 6000 ADA
-- **Enhancement**: Qwen 7B model for prompt enhancement
+### API Endpoints
 
-### **Job Types Supported**
-| Job Type | Quality | Steps | Guidance | Time | Quantity | Enhancement |
-|----------|---------|-------|----------|------|----------|-------------|
-| `image_fast` | Fast | 25 | 6.5 | 25-40s | 1 | No |
-| `image_high` | High | 50 | 7.5 | 40-100s | 1 | No |
-| `video_fast` | Fast | 25 | 6.5 | 135-180s | 1 | No |
-| `video_high` | High | 50 | 7.5 | 180-240s | 1 | No |
-| `image7b_fast_enhanced` | Fast Enhanced | 25 | 6.5 | 85-100s | 1 | Yes |
-| `image7b_high_enhanced` | High Enhanced | 50 | 7.5 | 100-240s | 1 | Yes |
-| `video7b_fast_enhanced` | Fast Enhanced | 25 | 6.5 | 195-240s | 1 | Yes |
-| `video7b_high_enhanced` | High Enhanced | 50 | 7.5 | 240+s | 1 | Yes |
-
-### **Key Features**
-- **Video Generation**: High-quality video output with temporal consistency
-- **Enhanced Processing**: 7B model variants for improved quality
-- **Reference Support**: Image-to-image for video start/end frames
-- **Seed Control**: Reproducible generation (no negative prompts)
-- **Path Consistency**: Fixed video path handling
-- **🤖 Qwen 7B Enhancement**: AI-powered prompt enhancement
-
-### **Video Generation with Reference Frames (WAN 1.3B Model)**
-
-#### **Reference Strength Control Implementation**
-The WAN 1.3B model uses `--first_frame` parameter for reference frames, with reference strength control through guidance scale adjustment:
-
-```python
-def adjust_guidance_for_reference_strength(self, base_guide_scale, reference_strength):
-    """
-    Adjust sample_guide_scale based on reference strength to control reference influence
-    
-    Args:
-        base_guide_scale (float): Base guidance scale from job config
-        reference_strength (float): Reference strength (0.1-1.0)
-        
-    Returns:
-        float: Adjusted guidance scale
-    """
-    if reference_strength is None:
-        return base_guide_scale
-        
-    # Reference strength affects how much the reference frame influences generation
-    # Higher reference strength = higher guidance scale = stronger reference influence
-    # Base range: 6.5-7.5, adjusted range: 5.0-9.0
-    
-    # Calculate adjustment factor
-    # 0.1 strength = minimal influence (5.0 guidance)
-    # 1.0 strength = maximum influence (9.0 guidance)
-    min_guidance = 5.0
-    max_guidance = 9.0
-    
-    # Linear interpolation between min and max guidance
-    adjusted_guidance = min_guidance + (max_guidance - min_guidance) * reference_strength
-    
-    return adjusted_guidance
+**POST /sdxl/generate** - Image Generation
+```json
+{
+  "prompt": "Enhanced prompt",
+  "config": {
+    "width": 1024,
+    "height": 1024,
+    "steps": 30,
+    "guidance_scale": 7.5,
+    "seed": 42
+  },
+  "metadata": {
+    "nsfw_optimization": true,
+    "anatomical_accuracy": true
+  }
+}
 ```
 
-#### **Reference Strength Mapping**
-- **0.1 strength** → **5.0 guidance** (minimal reference influence)
-- **0.5 strength** → **7.0 guidance** (moderate reference influence)  
-- **0.9 strength** → **8.6 guidance** (strong reference influence)
-- **1.0 strength** → **9.0 guidance** (maximum reference influence)
-
-#### **Video Generation Process**
-```python
-# Video generation parameters
-frame_num = 83  # Number of frames
-sample_solver = "unipc"  # Temporal consistency
-sample_shift = 5.0  # Motion control
-
-# Extract reference frame parameters from job config and metadata
-start_reference_url = config.get('first_frame') or metadata.get('start_reference_url')
-end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
-reference_strength = metadata.get('reference_strength', 0.85)
-
-# Adjust guidance scale based on reference strength
-base_guide_scale = config.get('sample_guide_scale', 6.5)
-adjusted_guide_scale = adjust_guidance_for_reference_strength(base_guide_scale, reference_strength)
-config['sample_guide_scale'] = adjusted_guide_scale
-
-# Determine task type based on reference availability (1.3B Model)
-if start_reference_url:
-    # Use T2V task with --first_frame parameter for start reference
-    task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with start frame reference
-    print(f"🎬 Using T2V task with start frame reference (1.3B model)")
-    print(f"🎯 Reference strength: {reference_strength} → Guidance scale: {adjusted_guide_scale}")
-else:
-    # Use T2V task for standard video generation
-    task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
-    print(f"🎬 Using T2V task for standard video generation")
+### SDXL Job Payload
+```json
+{
+  "worker_id": "sdxl_worker_001",
+  "job_id": "sdxl_job_123",
+  "prompt": "Enhanced prompt",
+  "config": {
+    "width": 1024,
+    "height": 1024,
+    "steps": 30,
+    "guidance_scale": 7.5,
+    "seed": 42,
+    "negative_prompt": "Optional negative prompt"
+  },
+  "metadata": {
+    "nsfw_optimization": true,
+    "anatomical_accuracy": true,
+    "user_id": "user_123"
+  }
+}
 ```
 
-### **🤖 Qwen 7B Prompt Enhancement**
-The WAN worker includes AI-powered prompt enhancement using Qwen 7B model:
+## WAN Worker
 
-```python
-def enhance_prompt_with_timeout(self, original_prompt):
-    """Enhanced NSFW-optimized prompt generation with Base model - no chat template needed"""
-    enhancement_start = time.time()
-    print(f"🤖 Enhancing NSFW prompt with Base model ({self.enhancement_timeout}s timeout): {original_prompt[:50]}...")
-    
-    try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(self.enhancement_timeout)
-        
-        self.load_qwen_model()
-        
-        if self.qwen_model is None:
-            signal.alarm(0)
-            print("⚠️ Qwen base model not available, using original prompt")
-            return original_prompt
-        
-        # NSFW-optimized base model prompting - enhanced for adult content quality
-        enhancement_prompt = f"""Create a detailed, cinematic prompt for AI video generation optimized for adult content. Focus on:
+### Overview
+Video generation and enhanced image processing using WAN 2.1 with reference frame support and NSFW optimization.
 
-VISUAL DETAILS: High-quality anatomical accuracy, realistic proportions, natural skin textures, detailed facial features, expressive eyes, natural hair flow, realistic body language.
+### API Endpoints
 
-LIGHTING & ATMOSPHERE: Cinematic lighting, soft shadows, warm tones, intimate atmosphere, professional photography style, natural skin tones, flattering angles.
-
-CAMERA WORK: Close-up shots, intimate framing, smooth camera movements, professional cinematography, dynamic angles that enhance the scene.
-
-ARTISTIC STYLE: Photorealistic quality, high resolution details, natural poses, authentic expressions, realistic interactions, professional adult content standards.
-
-TECHNICAL QUALITY: 4K quality, sharp focus, no artifacts, smooth motion, consistent lighting, professional color grading.
-
-Be specific about poses, expressions, clothing, scene composition, and intimate details. Create vivid, unrestricted descriptions that will produce high-quality adult content with realistic anatomy and smooth motion.
-
-Original prompt: {original_prompt}
-
-Enhanced detailed prompt:"""
-
-        # Generate with base model
-        inputs = self.qwen_tokenizer(
-            enhancement_prompt, 
-            return_tensors="pt", 
-            truncation=True, 
-            max_length=1024
-        ).to(self.qwen_model.device)
-        
-        with torch.no_grad():
-            outputs = self.qwen_model.generate(
-                **inputs,
-                max_new_tokens=512,  # Allow longer enhancement
-                temperature=0.7,     # Controlled creativity
-                do_sample=True,
-                pad_token_id=self.qwen_tokenizer.eos_token_id,
-                eos_token_id=self.qwen_tokenizer.eos_token_id
-            )
-        
-        # Decode only the new tokens (enhancement)
-        enhanced_text = self.qwen_tokenizer.decode(
-            outputs[0][inputs['input_ids'].shape[1]:], 
-            skip_special_tokens=True
-        ).strip()
-        
-        signal.alarm(0)
-        
-        # Clean up the response
-        if enhanced_text:
-            # Remove any leftover prompt fragments
-            enhanced_text = enhanced_text.replace("Enhanced detailed prompt:", "").strip()
-            enhancement_time = time.time() - enhancement_start
-            print(f"✅ Qwen Base Enhancement: {enhanced_text[:100]}...")
-            print(f"✅ Prompt enhanced in {enhancement_time:.1f}s")
-            return enhanced_text
-        else:
-            print("⚠️ Qwen enhancement empty, using original prompt")
-            return original_prompt
-            
-    except TimeoutException:
-        signal.alarm(0)
-        print(f"⚠️ Enhancement timed out after {self.enhancement_timeout}s, using original prompt")
-        return original_prompt
-    except Exception as e:
-        signal.alarm(0)
-        print(f"❌ Prompt enhancement failed: {e}")
-        return original_prompt
-    finally:
-        self.unload_qwen_model()
+**POST /wan/generate** - Video/Image Generation
+```json
+{
+  "prompt": "Enhanced prompt",
+  "config": {
+    "job_type": "video|image",
+    "width": 1024,
+    "height": 1024,
+    "frames": 24,
+    "reference_mode": "none|single|start|end|both",
+    "reference_image": "base64_encoded_image"
+  },
+  "metadata": {
+    "nsfw_optimization": true,
+    "anatomical_accuracy": true
+  }
+}
 ```
 
----
+### WAN Job Payload
+```json
+{
+  "worker_id": "wan_worker_001",
+  "job_id": "wan_job_123",
+  "prompt": "Enhanced prompt",
+  "config": {
+    "job_type": "video|image",
+    "width": 1024,
+    "height": 1024,
+    "frames": 24,
+    "reference_mode": "none|single|start|end|both",
+    "reference_image": "base64_encoded_image",
+    "fps": 24
+  },
+  "metadata": {
+    "nsfw_optimization": true,
+    "anatomical_accuracy": true,
+    "user_id": "user_123"
+  }
+}
+```
 
-## **🎭 Dual Worker Orchestrator**
+## Memory Manager
 
-### **Overview**
-The Dual Worker Orchestrator manages both SDXL and WAN workers concurrently, providing centralized monitoring, restart capabilities, and resource management.
+### Overview
+Intelligent VRAM management with pressure detection, emergency unloading, and predictive loading.
 
-### **Key Features**
-- **Concurrent Management**: Runs both workers simultaneously
-- **Automatic Restart**: Handles worker failures with exponential backoff
-- **Resource Monitoring**: Tracks GPU memory and worker performance
-- **Graceful Validation**: Validates environment before starting workers
-- **Status Monitoring**: Real-time worker status and job tracking
+### API Endpoints
 
-### **Worker Configurations**
-```python
-self.workers = {
-    'sdxl': {
-        'script': 'sdxl_worker.py',
-        'name': 'LUSTIFY SDXL Worker',
-        'queue': 'sdxl_queue',
-        'job_types': ['sdxl_image_fast', 'sdxl_image_high'],
-        'expected_vram': '10-15GB',
-        'restart_delay': 10,
-        'generation_time': '3-8s',
-        'status': 'Working ✅'
-    },
-    'wan': {
-        'script': 'wan_worker.py', 
-        'name': 'Enhanced WAN Worker (Qwen 7B + FLF2V/T2V)',
-        'queue': 'wan_queue',
-        'job_types': ['image_fast', 'image_high', 'video_fast', 'video_high',
-                     'image7b_fast_enhanced', 'image7b_high_enhanced', 
-                     'video7b_fast_enhanced', 'video7b_high_enhanced'],
-        'expected_vram': '15-30GB',
-        'restart_delay': 15,
-        'generation_time': '67-294s',
-        'status': 'Qwen 7B Enhancement + FLF2V/T2V Tasks ✅'
+**GET /memory/status** - Memory Status
+```json
+{
+  "vram_usage": {
+    "total": 24576,
+    "used": 18432,
+    "free": 6144,
+    "pressure": "medium"
+  },
+  "workers": {
+    "sdxl_worker": "loaded",
+    "chat_worker": "loaded",
+    "wan_worker": "unloaded"
+  }
+}
+```
+
+**POST /memory/unload** - Unload Worker
+```json
+{
+  "worker_id": "sdxl_worker_001",
+  "force": false
+}
+```
+
+**POST /memory/load** - Load Worker
+```json
+{
+  "worker_id": "sdxl_worker_001",
+  "priority": "high"
+}
+```
+
+## Dual Orchestrator
+
+### Overview
+Central job distribution system that routes jobs to appropriate workers based on job type and current system load.
+
+### Job Types
+
+| Job Type | Worker | Description |
+|----------|--------|-------------|
+| `sdxl_generate` | SDXL | Image generation |
+| `chat_conversation` | Chat | AI conversation |
+| `chat_enhance` | Chat | Prompt enhancement |
+| `chat_unrestricted` | Chat | NSFW chat |
+| `wan_video` | WAN | Video generation |
+| `wan_image` | WAN | Enhanced image generation |
+
+## Callback Payload Format
+
+All workers use a standardized callback format for job status updates:
+
+```json
+{
+  "job_id": "job_123",
+  "worker_id": "worker_001",
+  "status": "completed|failed|processing",
+  "assets": [
+    {
+      "type": "image|video|text",
+      "url": "https://cdn.example.com/asset.jpg",
+      "metadata": {
+        "width": 1024,
+        "height": 1024,
+        "format": "png"
+      }
     }
+  ],
+  "metadata": {
+    "enhancement_source": "qwen_instruct",
+    "unrestricted_mode": false,
+    "system_prompt_used": "Custom system prompt",
+    "nsfw_optimization": true,
+    "processing_time": 15.2,
+    "vram_used": 8192
+  },
+  "error": {
+    "code": "OOM_ERROR",
+    "message": "Out of memory",
+    "retryable": true
+  }
 }
 ```
 
-### **Environment Validation**
-```python
-def validate_environment(self):
-    """Validate environment for dual worker operation"""
-    logger.info("🔍 Validating dual worker environment...")
-    
-    # CRITICAL: Check PyTorch version first (prevent cascade failures)
-    try:
-        import torch
-        current_version = torch.__version__
-        current_cuda = torch.version.cuda
-        
-        logger.info(f"🔧 PyTorch: {current_version}")
-        logger.info(f"🔧 CUDA: {current_cuda}")
-        
-        # Verify we have the stable working versions
-        if not current_version.startswith('2.4.1'):
-            logger.error(f"❌ WRONG PyTorch version: {current_version} (need 2.4.1+cu124)")
-            logger.error("❌ DO NOT PROCEED - version cascade detected!")
-            return False
-            
-        if current_cuda != '12.4':
-            logger.error(f"❌ WRONG CUDA version: {current_cuda} (need 12.4)")
-            logger.error("❌ DO NOT PROCEED - CUDA version mismatch!")
-            return False
-            
-        logger.info("✅ PyTorch/CUDA versions confirmed stable")
-        
-    except ImportError:
-        logger.error("❌ PyTorch not available")
-        return False
-    
-    # Check Python files exist
-    missing_files = []
-    for worker_id, config in self.workers.items():
-        script_path = Path(config['script'])
-        if not script_path.exists():
-            missing_files.append(config['script'])
-            logger.error(f"❌ Missing worker script: {config['script']}")
-    
-    if missing_files:
-        logger.error(f"❌ Missing worker scripts: {missing_files}")
-        return False
-    else:
-        logger.info("✅ All worker scripts found")
-        
-    # Check GPU
-    try:
-        if torch.cuda.is_available():
-            device_name = torch.cuda.get_device_name(0)
-            total_vram = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            logger.info(f"✅ GPU: {device_name} ({total_vram:.1f}GB)")
-            
-            if total_vram < 40:
-                logger.warning(f"⚠️ GPU has {total_vram:.1f}GB, dual workers need 45GB+ for concurrent operation")
-            else:
-                logger.info(f"✅ GPU capacity sufficient for dual workers")
-                
-        else:
-            logger.error("❌ CUDA not available")
-            return False
-            
-    except Exception as e:
-        logger.error(f"❌ GPU check failed: {e}")
-        return False
-        
-    # Check SDXL imports (graceful handling - let workers manage their own imports)
-    try:
-        from diffusers import StableDiffusionXLPipeline
-        logger.info("✅ SDXL imports confirmed working")
-    except ImportError as e:
-        logger.warning(f"⚠️ SDXL imports failed in orchestrator: {e}")
-        logger.info("📝 Will let SDXL worker handle its own imports")
-        # Don't fail here - let workers handle their own dependencies
-        
-    # Check environment variables
-    required_vars = [
-        'SUPABASE_URL', 
-        'SUPABASE_SERVICE_KEY', 
-        'UPSTASH_REDIS_REST_URL', 
-        'UPSTASH_REDIS_REST_TOKEN'
-    ]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    if missing_vars:
-        logger.error(f"❌ Missing environment variables: {missing_vars}")
-        return False
-    else:
-        logger.info("✅ All environment variables configured")
-        
-    # Validate parameter consistency in worker files
-    logger.info("🔧 Validating parameter consistency across workers...")
-    wan_script_path = Path('wan_worker.py')
-    sdxl_script_path = Path('sdxl_worker.py')
-    
-    consistency_issues = []
-    
-    if wan_script_path.exists():
-        with open(wan_script_path, 'r') as f:
-            wan_content = f.read()
-            # Check for consistent parameter naming
-            if "'job_id':" in wan_content and "'assets':" in wan_content:
-                logger.info("✅ WAN worker uses consistent parameter naming (job_id, assets)")
-            else:
-                consistency_issues.append("WAN worker parameter naming inconsistent")
-            
-            # Check for FLF2V/T2V task support
-            if "flf2v-14B" in wan_content and "t2v-14B" in wan_content:
-                logger.info("✅ WAN worker supports FLF2V/T2V tasks")
-            else:
-                consistency_issues.append("WAN worker missing FLF2V/T2V task support")
-            
-            # Check for correct parameter names
-            if "--first_frame" in wan_content and "--last_frame" in wan_content:
-                logger.info("✅ WAN worker uses correct FLF2V parameter names (--first_frame, --last_frame)")
-            else:
-                consistency_issues.append("WAN worker missing correct FLF2V parameter names")
-    
-    if sdxl_script_path.exists():
-        with open(sdxl_script_path, 'r') as f:
-            sdxl_content = f.read()
-            # Check for consistent parameter naming
-            if "'job_id':" in sdxl_content and "'assets':" in sdxl_content:
-                logger.info("✅ SDXL worker uses consistent parameter naming (job_id, assets)")
-            else:
-                consistency_issues.append("SDXL worker parameter naming inconsistent")
-    
-    if consistency_issues:
-        logger.error(f"❌ Parameter consistency issues: {consistency_issues}")
-        return False
-    else:
-        logger.info("✅ Parameter naming consistency validated")
-        
-    logger.info("✅ Environment validation passed")
-    return True
+## Performance Metrics
+
+### Chat Enhancement
+- **Direct Enhancement:** 1-3 seconds
+- **New Requests:** 5-15 seconds
+
+### Chat Conversation
+- **Standard Mode:** 2-5 seconds
+- **Unrestricted Mode:** 3-7 seconds
+
+### SDXL Generation
+- **1024x1024:** 15-30 seconds
+- **512x512:** 8-15 seconds
+
+### WAN Generation
+- **Video (24 frames):** 60-120 seconds
+- **Image:** 20-40 seconds
+
+## System Configuration
+
+### Environment Variables
+```bash
+REDIS_URL=redis://localhost:6379
+WORKER_PORT=8000
+MEMORY_MANAGER_PORT=8001
+ORCHESTRATOR_PORT=8002
+MODEL_CACHE_DIR=/models
+ASSET_CACHE_DIR=/assets
 ```
 
-### **Status Monitoring**
-```python
-def status_monitor(self):
-    """Background thread to monitor system status"""
-    logger.info("📊 Starting status monitor...")
-    
-    while not self.shutdown_event.is_set():
-        try:
-            # Check worker processes
-            active_workers = []
-            total_jobs = 0
-            
-            for worker_id, worker_info in self.processes.items():
-                if worker_info['process'].poll() is None:
-                    uptime = time.time() - worker_info['start_time']
-                    job_count = worker_info['job_count']
-                    total_jobs += job_count
-                    active_workers.append(f"{worker_id}({uptime:.0f}s/{job_count}j)")
-            
-            if active_workers:
-                logger.info(f"💚 Active workers: {', '.join(active_workers)} | Total jobs: {total_jobs}")
-            else:
-                logger.warning("⚠️ No active workers")
-            
-            # Check GPU memory
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    allocated = torch.cuda.memory_allocated() / (1024**3)
-                    total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                    utilization = (allocated / total) * 100
-                    logger.info(f"🔥 GPU Memory: {allocated:.1f}GB / {total:.0f}GB ({utilization:.1f}% used)")
-            except:
-                pass
-                
-            # Wait before next check
-            time.sleep(60)  # Status check every minute
-            
-        except Exception as e:
-            logger.error(f"❌ Status monitor error: {e}")
-            time.sleep(30)
-```
-
----
-
-## **🔄 Job Processing Flow**
-
-### **1. Job Retrieval**
-```python
-# Worker retrieves job from queue
-job = redis_client.rpop(queue_name)
-job_data = json.loads(job)
-
-# Extract job parameters
-job_id = job_data["id"]
-job_type = job_data["type"]
-prompt = job_data["prompt"]
-config = job_data["config"]
-user_id = job_data["user_id"]
-```
-
-### **2. Reference Frame Detection (WAN Worker)**
-```python
-# Extract reference frame parameters from config and metadata
-metadata = job_data.get('metadata', {})
-single_reference_url = config.get('image') or metadata.get('reference_image_url')
-start_reference_url = config.get('first_frame') or metadata.get('start_reference_url')
-end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
-
-# Determine reference mode
-reference_mode = determine_reference_mode(single_reference_url, start_reference_url, end_reference_url)
-```
-
-### **3. Model Loading**
-```python
-# Load appropriate model based on job type
-if job_type.startswith("sdxl_"):
-    model = load_sdxl_model()
-elif job_type.startswith("video"):
-    model = load_wan_video_model()
-else:
-    model = load_wan_image_model()
-```
-
-### **4. Generation Execution**
-
-#### **SDXL Generation with Compel**
-```python
-if job_type.startswith("sdxl_"):
-    # Extract Compel parameters
-    compel_enabled = job_data.get("compel_enabled", False)
-    compel_weights = job_data.get("compel_weights", "")
-    
-    # Process Compel enhancement
-    if compel_enabled and compel_weights:
-        logger.info(f"🎯 Compel enhancement enabled: {compel_weights}")
-        
-        try:
-            # Apply Compel weights to the prompt (proper library integration)
-            final_prompt, original_prompt = self.process_compel_weights(prompt, compel_weights)
-            compel_success = True
-            logger.info(f"✅ Compel processing successful")
-            
-        except Exception as e:
-            logger.error(f"❌ Compel processing failed: {e}")
-            final_prompt = prompt  # Fallback to original prompt
-            original_prompt = None
-            compel_success = False
-            logger.info(f"🔄 Using original prompt due to Compel failure: {prompt}")
-        
-        # Log the final prompt being used
-        if isinstance(final_prompt, torch.Tensor):
-            logger.info(f"🎯 Using Compel conditioning tensor for generation")
-        else:
-            logger.info(f"🎯 Using Compel-enhanced prompt: {final_prompt}")
-    else:
-        final_prompt = prompt
-        original_prompt = None
-        compel_success = False
-        logger.info(f"🎯 Using standard prompt (no Compel): {prompt}")
-    
-    # SDXL generation with flexible quantities
-    num_images = config.get("num_images", 1)
-    results = []
-    
-    for i in range(num_images):
-        # Generate with seed for consistency
-        seed = config.get("seed", random.randint(1, 999999999))
-        result = generate_sdxl_image(final_prompt, config, seed)
-        results.append(result)
-    
-    assets = results
-```
-
-#### **WAN Generation**
-```python
-else:
-    # WAN generation with reference frame support
-    if config.get('content_type') == 'video':
-        # Check for video reference frames
-        start_reference_url = config.get('first_frame') or metadata.get('start_reference_url')
-        end_reference_url = config.get('last_frame') or metadata.get('end_reference_url')
-        
-        if start_reference_url or end_reference_url:
-            # Use T2V task with --first_frame and/or --last_frame parameters (1.3B Model)
-            task_type = "t2v-1.3B"  # ✅ CORRECT: T2V with frame references
-            result = generate_t2v_video_with_references(prompt, start_reference_url, end_reference_url, config.get('frame_num', 83), task_type)
-        else:
-            # Use T2V task for standard video generation
-            task_type = "t2v-1.3B"  # ✅ CORRECT: Text-to-Video standard
-            result = generate_t2v_video(prompt, config.get('frame_num', 83), task_type)
-    else:
-        # Standard image generation
-        result = generate_wan_content(prompt, config)
-    
-    assets = [result]
-```
-
-### **5. Asset Upload**
-```python
-# Upload generated assets to storage
-uploaded_assets = []
-for asset in assets:
-    # Upload to appropriate bucket
-    bucket = determine_bucket(job_type)
-    asset_url = upload_to_storage(asset, bucket, user_id, job_id)
-    uploaded_assets.append(asset_url)
-```
-
-### **6. Callback Execution**
-```python
-# Send standardized callback
-callback_data = {
-    "job_id": job_id,
-    "status": "completed",
-    "assets": uploaded_assets,
-    "metadata": {
-        "seed": config.get("seed"),
-        "generation_time": generation_time,
-        "num_images": len(uploaded_assets),
-        "compel_enabled": compel_enabled,
-        "compel_weights": compel_weights if compel_enabled else None,
-        "compel_success": compel_success if compel_enabled else False,
-        "enhancement_strategy": "compel" if compel_success else "fallback" if compel_enabled else "none",
-        "original_prompt": original_prompt,
-        "final_prompt_type": "conditioning_tensor" if isinstance(final_prompt, torch.Tensor) else "string"
-    }
-}
-
-response = requests.post(callback_url, json=callback_data)
-```
-
----
-
-## **📊 Performance Monitoring**
-
-### **Generation Time Tracking**
-```python
-# Track actual generation time
-start_time = time.time()
-result = generate_content(prompt, config)
-generation_time = time.time() - start_time
-
-# Include in callback metadata
-callback_metadata = {
-    "generation_time": generation_time,
-    "expected_time": config.get("expected_time"),
-    "performance_ratio": generation_time / config.get("expected_time")
+### Worker Configuration
+```json
+{
+  "sdxl_worker": {
+    "model_path": "/models/sdxl",
+    "max_batch_size": 1,
+    "enable_xformers": true,
+    "attention_slicing": "auto"
+  },
+  "chat_worker": {
+    "primary_model": "/models/qwen-instruct",
+    "max_tokens": 2048
+  },
+  "wan_worker": {
+    "model_path": "/models/wan-2.1",
+    "max_frames": 48,
+    "reference_modes": ["none", "single", "start", "end", "both"]
+  }
 }
 ```
 
-### **Resource Utilization**
+## Error Handling
+
+### Common Error Codes
+- `OOM_ERROR` - Out of memory, retryable
+- `MODEL_LOAD_ERROR` - Model loading failed
+- `INVALID_PROMPT` - Prompt validation failed
+- `WORKER_UNAVAILABLE` - Worker not loaded
+- `TIMEOUT_ERROR` - Request timeout
+
+### Retry Logic
+- **OOM Errors:** Automatic retry with memory cleanup
+- **Network Errors:** 3 retries with exponential backoff
+- **Model Errors:** Single retry with model reload
+
+## Security and NSFW Features
+
+### NSFW Optimization
+- **Zero Content Restrictions:** No filtering or censorship
+- **Anatomical Accuracy:** Professional quality standards
+- **Adult Content Support:** Explicit support across all workers
+- **Unrestricted Mode:** Dedicated endpoints for adult content
+
+### Security Features
+- **Input Validation:** Comprehensive prompt validation
+- **Rate Limiting:** Per-user and per-endpoint limits
+- **Authentication:** Optional API key support
+- **Logging:** Comprehensive audit trails
+
+## Integration Guide
+
+### Frontend Integration
+1. **Job Submission:** Send jobs to appropriate worker endpoints
+2. **Status Monitoring:** Poll callback endpoint for job status
+3. **Asset Retrieval:** Download generated assets from callback URLs
+4. **Error Handling:** Implement retry logic for transient errors
+
+### API Client Example
 ```python
-# Monitor VRAM usage
-import torch
-vram_used = torch.cuda.memory_allocated() / 1024**3  # GB
-vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-
-# Include in metadata
-metadata["vram_used_gb"] = vram_used
-metadata["vram_total_gb"] = vram_total
-metadata["vram_utilization"] = vram_used / vram_total
-```
-
----
-
-## **🔧 Error Handling**
-
-### **Standardized Error Responses**
-```python
-# Error callback format
-error_callback = {
-    "job_id": job_id,
-    "status": "failed",
-    "error_message": str(error),
-    "metadata": {
-        "error_type": type(error).__name__,
-        "error_timestamp": datetime.now().isoformat(),
-        "worker_version": "2.1.0"
-    }
-}
-```
-
-### **Common Error Scenarios**
-```python
-try:
-    # Generation attempt
-    result = generate_content(prompt, config)
-except torch.cuda.OutOfMemoryError:
-    # Handle VRAM issues
-    error_message = "Insufficient VRAM for generation"
-    cleanup_gpu_memory()
-except ValueError as e:
-    # Handle parameter errors
-    error_message = f"Invalid parameters: {str(e)}"
-except Exception as e:
-    # Handle unexpected errors
-    error_message = f"Generation failed: {str(e)}"
-    log_error(e)
-```
-
----
-
-## **🛠️ Storage Buckets**
-
-### **SDXL Buckets**
-- `sdxl_image_fast` - Fast SDXL image generation
-- `sdxl_image_high` - High quality SDXL image generation
-
-### **WAN Buckets**
-- `image_fast` - Fast WAN image generation
-- `image_high` - High quality WAN image generation
-- `video_fast` - Fast WAN video generation
-- `video_high` - High quality WAN video generation
-
-### **Enhanced WAN Buckets**
-- `image7b_fast_enhanced` - Enhanced fast image generation
-- `image7b_high_enhanced` - Enhanced high quality image generation
-- `video7b_fast_enhanced` - Enhanced fast video generation
-- `video7b_high_enhanced` - Enhanced high quality video generation
-
-### **Reference Image Buckets**
-- `reference_images` - User-uploaded reference images
-- `workspace_assets` - Workspace reference assets
-
----
-
-## **📈 Usage Tracking**
-
-### **Worker Metrics**
-```python
-# Track worker performance
-worker_metrics = {
-    "worker_id": worker_id,
-    "job_type": job_type,
-    "generation_time": generation_time,
-    "vram_used": vram_used,
-    "success": True,
-    "timestamp": datetime.now().isoformat()
-}
-
-# Send to metrics endpoint
-requests.post(metrics_url, json=worker_metrics)
-```
-
-### **Job Completion Tracking**
-```python
-# Track job completion statistics
-completion_stats = {
-    "job_id": job_id,
-    "user_id": user_id,
-    "job_type": job_type,
-    "assets_generated": len(assets),
-    "total_size_mb": sum(get_file_size(asset) for asset in assets),
-    "completion_timestamp": datetime.now().isoformat()
-}
-```
-
----
-
-## **🚀 Recent Updates (July 20, 2025)**
-
-### **Major Enhancements**
-1. **🎯 Compel Integration**: SDXL worker now supports Compel prompt enhancement with weighted attention
-2. **🤖 Qwen 7B Enhancement**: WAN worker includes AI-powered prompt enhancement
-3. **🎭 Dual Orchestrator**: Centralized management of both workers with monitoring and restart capabilities
-4. **Standardized Callback Parameters**: Consistent `job_id`, `assets` array across all workers
-5. **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
-6. **Seed Support**: User-controlled seeds for reproducible generation
-7. **Flexible SDXL Quantities**: User-selectable 1, 3, or 6 images per batch
-8. **Reference Image Support**: Optional image-to-image with type and strength control
-9. **Video Reference Frame Support**: I2V-style generation with start reference frame for WAN 1.3B model
-10. **Comprehensive Error Handling**: Enhanced debugging and error tracking
-11. **Metadata Consistency**: Improved data flow and storage
-12. **Path Consistency Fix**: Fixed video path handling for WAN workers
-
-### **Performance Improvements**
-- Optimized batch processing for multi-image SDXL jobs
-- Enhanced error recovery and retry mechanisms
-- Improved Redis queue management
-- Better resource utilization tracking
-- AI-powered prompt enhancement for higher quality output
-
-### **Developer Experience**
-- Enhanced API documentation and examples
-- Comprehensive debugging information
-- Backward compatibility preservation
-- Clear error messages and status codes
-- Centralized worker management
-
-### **Backward Compatibility**
-- All existing job types remain functional
-- Legacy metadata fields are preserved
-- Single-reference workflows continue to work
-- Non-reference generation unchanged
-- Compel integration is optional and backward compatible
-
----
-
-## **⚠️ Current Issues & Required Fixes**
-
-### **🔧 Compel Integration Issues**
-
-#### **1. CLIP Token Limit Exceeded**
-**Status**: ⚠️ **CRITICAL** - Compel weights causing token limit violations
-**Impact**: Only ~60% of Compel weights are being processed due to truncation
-**Solution**: Implement proper Compel library integration instead of string concatenation
-
-#### **2. Frontend Weight Optimization**
-**Status**: ⚠️ **HIGH** - Too many Compel weights generated
-**Impact**: 132 tokens generated when CLIP limit is 77 tokens
-**Solution**: Optimize frontend to generate fewer, more impactful weights
-
-#### **3. SDXL Worker Compel Processing**
-**Status**: ⚠️ **MEDIUM** - Using string concatenation instead of proper library
-**Impact**: Token limit violations and partial processing
-**Solution**: Update SDXL worker to use Compel library's native processing
-
-### **🎯 Immediate Action Plan**
-
-#### **Priority 1: Fix SDXL Worker Compel Integration**
-```python
-# REQUIRED: Replace string concatenation with SDXL-specific Compel library usage
-def process_compel_weights_sdxl(self, prompt, weights_config=None):
-    """Process prompt with SDXL-specific Compel library integration"""
-    if not weights_config:
-        return prompt, None
-        
-    try:
-        # Initialize Compel with both SDXL text encoders and tokenizers
-        compel_processor = Compel(
-            tokenizers=[self.pipe.tokenizer, self.pipe.tokenizer_2],
-            text_encoders=[self.pipe.text_encoder, self.pipe.text_encoder_2]
-        )
-        
-        # Build both conditioning tensors for SDXL
-        conditioning, pooled_conditioning = compel_processor.build_conditioning_tensor(
-            f"{prompt} {weights_config}"
-        )
-        
-        logger.info(f"✅ Compel weights applied with SDXL library integration")
-        return (conditioning, pooled_conditioning), prompt
-        
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        return prompt, None  # Fallback to original prompt
-```
-
-#### **Priority 2: Optimize Frontend Compel Weights**
-```typescript
-// OPTIMIZED: Generate fewer, more impactful weights
-const OPTIMIZED_QUICK_BOOSTS = [
-  { id: 'masterpiece', label: 'Masterpiece', weight: 1.3 },
-  { id: 'best_quality', label: 'Best Quality', weight: 1.2 },
-  { id: 'perfect_anatomy', label: 'Perfect Anatomy', weight: 1.2 },
-  { id: 'professional', label: 'Professional', weight: 1.1 }
-];
-
-// Target: ~40 tokens instead of 132 tokens
-```
-
-#### **Priority 3: Add Token Count Validation**
-```typescript
-// Add token counting to prevent exceeding CLIP limits
-function countTokens(text: string): number {
-  // Implement token counting logic
-  return text.split(' ').length; // Simplified for now
-}
-
-function validateCompelWeights(prompt: string, weights: string): boolean {
-  const totalTokens = countTokens(`${prompt} ${weights}`);
-  return totalTokens <= 77; // CLIP limit
-}
-```
-
----
-
-## **🔧 SDXL Worker Repository Changes Required**
-
-### **Overview**
-The SDXL worker needs critical updates to fix the Compel integration token limit issues. The current implementation uses string concatenation which causes CLIP token limit violations (132 > 77 tokens).
-
-### **Required Changes**
-
-#### **1. Update Compel Processing Function**
-
-**File**: `sdxl_worker.py`  
-**Function**: `process_compel_weights`  
-**Current Issue**: String concatenation causing token limit violations
-
-**Replace this function:**
-```python
-def process_compel_weights(self, prompt, weights_config=None):
-    """
-    Process prompt with Compel weights (simple string concatenation)
-    CURRENT ISSUE: Creates token sequences exceeding CLIP's 77-token limit
-    """
-    if not weights_config:
-        return prompt, None
-        
-    try:
-        # Simple string concatenation approach (CAUSES TOKEN LIMIT ISSUES)
-        final_prompt = f"{prompt} {weights_config}"
-        logger.info(f"✅ Compel weights applied: {prompt} -> {final_prompt}")
-        return final_prompt, prompt  # Return enhanced and original
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        return prompt, None  # Fallback to original prompt
-```
-
-**With this implementation:**
-```python
-def process_compel_weights(self, prompt, weights_config=None):
-    """
-    Process prompt with SDXL-specific Compel library integration
-    FIXES: Generate both prompt_embeds and pooled_prompt_embeds for SDXL
-    """
-    if not weights_config:
-        return prompt, None
-        
-    try:
-        # Import Compel at the top of the file
-        import compel
-        from compel import Compel
-        
-        # Initialize Compel with both SDXL text encoders and tokenizers
-        compel_processor = Compel(
-            tokenizers=[self.pipe.tokenizer, self.pipe.tokenizer_2],
-            text_encoders=[self.pipe.text_encoder, self.pipe.text_encoder_2]
-        )
-        
-        # Build both conditioning tensors for SDXL
-        conditioning, pooled_conditioning = compel_processor.build_conditioning_tensor(
-            f"{prompt} {weights_config}"
-        )
-        
-        logger.info(f"✅ Compel weights applied with SDXL library integration")
-        logger.info(f"📝 Original prompt: {prompt}")
-        logger.info(f"🎯 Compel weights: {weights_config}")
-        logger.info(f"🔧 Generated prompt_embeds: {conditioning.shape}")
-        logger.info(f"🔧 Generated pooled_prompt_embeds: {pooled_conditioning.shape}")
-        
-        # Return both conditioning tensors and original prompt
-        return (conditioning, pooled_conditioning), prompt
-        
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        logger.info(f"🔄 Falling back to original prompt: {prompt}")
-        return prompt, None  # Fallback to original prompt
-```
-
-#### **2. Update SDXL Generation Function**
-
-**File**: `sdxl_worker.py`  
-**Function**: `generate_sdxl_image` or similar generation function
-
-**Find the generation call and update it to handle Compel conditioning:**
-
-**Current (problematic):**
-```python
-# Current generation call
-result = self.pipe(
-    prompt=final_prompt,  # This is a string with concatenated weights
-    **config
-).images[0]
-```
-
-**Replace with:**
-```python
-# Updated generation call with proper SDXL Compel handling
-if isinstance(final_prompt, tuple) and len(final_prompt) == 2:
-    # Compel conditioning tensors were returned (prompt_embeds, pooled_prompt_embeds)
-    prompt_embeds, pooled_prompt_embeds = final_prompt
-    result = self.pipe(
-        prompt_embeds=prompt_embeds,
-        pooled_prompt_embeds=pooled_prompt_embeds,  # SDXL requires this
-        **config
-    ).images[0]
-    logger.info("✅ Generated with Compel conditioning tensors (SDXL)")
-elif isinstance(final_prompt, torch.Tensor):
-    # Legacy single conditioning tensor (fallback)
-    result = self.pipe(
-        prompt_embeds=final_prompt,  # Use single conditioning tensor
-        **config
-    ).images[0]
-    logger.info("✅ Generated with single Compel conditioning tensor (legacy)")
-else:
-    # Fallback to string prompt (no Compel or Compel failed)
-    result = self.pipe(
-        prompt=final_prompt,  # Use string prompt
-        **config
-    ).images[0]
-    logger.info("✅ Generated with string prompt (no Compel)")
-```
-
-#### **3. Add Compel Import**
-
-**File**: `sdxl_worker.py`  
-**Location**: Top of file with other imports
-
-**Add these imports:**
-```python
-import compel
-from compel import Compel
-```
-
-**Full import section should look like:**
-```python
-import os
-import json
-import time
 import requests
-import uuid
-import torch
-import gc
-import io
-import sys
-import compel  # ADD THIS
-from compel import Compel  # ADD THIS
-sys.path.append('/workspace/python_deps/lib/python3.11/site-packages')
-from pathlib import Path
-from PIL import Image
-from diffusers import StableDiffusionXLPipeline
-import logging
+
+# Submit chat job
+response = requests.post("http://worker:8000/chat", json={
+    "prompt": "User message",
+    "config": {"job_type": "chat_conversation"},
+    "metadata": {"user_id": "user_123"}
+})
+
+# Monitor job status
+job_id = response.json()["job_id"]
+status = requests.get(f"http://orchestrator:8002/job/{job_id}")
 ```
 
-#### **4. Update Error Handling**
+## Python Files Overview
 
-**File**: `sdxl_worker.py`  
-**Location**: In the main job processing function
+### Core Worker Files
+- **`sdxl_worker.py`**: SDXL image generation with NSFW optimization
+- **`chat_worker.py`**: Enhanced chat and prompt enhancement system
+- **`wan_worker.py`**: WAN video and image processing with reference frames
 
-**Add better error handling for Compel processing:**
+### System Management Files
+- **`dual_orchestrator.py`**: Central job distribution and coordination
+- **`memory_manager.py`**: Intelligent VRAM management and worker coordination
+- **`worker_registration.py`**: Dynamic worker discovery and registration
 
-```python
-# In the main job processing function, update the Compel section:
-if compel_enabled and compel_weights:
-    logger.info(f"🎯 Compel enhancement enabled: {compel_weights}")
-    
-    try:
-        # Apply Compel weights to the prompt (proper library integration)
-        final_prompt, original_prompt = self.process_compel_weights(prompt, compel_weights)
-        compel_success = True
-        logger.info(f"✅ Compel processing successful")
-        
-    except Exception as e:
-        logger.error(f"❌ Compel processing failed: {e}")
-        final_prompt = prompt  # Fallback to original prompt
-        original_prompt = None
-        compel_success = False
-        logger.info(f"🔄 Using original prompt due to Compel failure: {prompt}")
-    
-    # Log the final prompt being used
-    if isinstance(final_prompt, torch.Tensor):
-        logger.info(f"🎯 Using Compel conditioning tensor for generation")
-    else:
-        logger.info(f"🎯 Using Compel-enhanced prompt: {final_prompt}")
-else:
-    final_prompt = prompt
-    original_prompt = None
-    compel_success = False
-    logger.info(f"🎯 Using standard prompt (no Compel): {prompt}")
-```
+### Infrastructure Files
+- **`startup.sh`**: System startup and initialization script
+- **`requirements.txt`**: Python dependencies and versions
+- **`wan_generate.py`**: WAN generation utilities
 
-#### **5. Update Metadata in Callback**
+### Testing Files
+- **`testing/chat_worker_validator.py`**: Chat worker validation tests
+- **`testing/comprehensive_test.sh`**: Comprehensive system testing
+- **`testing/quick_health_check.sh`**: Quick health check script
 
-**File**: `sdxl_worker.py`  
-**Location**: In the callback section
-
-**Update the metadata to include Compel processing status:**
-
-```python
-# In the callback metadata section:
-callback_metadata = {
-    "seed": config.get("seed"),
-    "generation_time": generation_time,
-    "num_images": len(uploaded_assets),
-    "compel_enabled": compel_enabled,
-    "compel_weights": compel_weights if compel_enabled else None,
-    "compel_success": compel_success if compel_enabled else False,
-    "enhancement_strategy": "compel" if compel_success else "fallback" if compel_enabled else "none",
-    "original_prompt": original_prompt,
-    "final_prompt_type": "conditioning_tensor" if isinstance(final_prompt, torch.Tensor) else "string"
-}
-```
-
-### **Testing Instructions**
-
-#### **1. Test Compel Integration**
-```bash
-# Test with a simple prompt and Compel weights
-curl -X POST http://localhost:8000/test-compel \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "beautiful woman",
-    "compel_weights": "(masterpiece:1.3), (best quality:1.2)"
-  }'
-```
-
-#### **2. Verify Token Count**
-- Check logs for "Token indices sequence length" warnings
-- Should see "Using Compel conditioning tensor for generation"
-- No more token limit violations
-
-#### **3. Test Fallback Behavior**
-- Test with invalid Compel weights
-- Should fallback to original prompt
-- Should log "Using string prompt (no Compel)"
-
-### **Expected Log Output**
-
-**Successful Compel Processing:**
-```
-🎯 Compel enhancement enabled: (masterpiece:1.3), (best quality:1.2)
-✅ Compel weights applied with SDXL library integration (list API)
-📝 Final combined prompt: (beautiful woman:1.1), (masterpiece:1.3), (best quality:1.2)
-🔧 Generated prompt_embeds: torch.Size([1, 77, 2048])
-🔧 Generated pooled_prompt_embeds: torch.Size([1, 1280])
-🔧 Generated negative_prompt_embeds: torch.Size([1, 77, 2048])
-🔧 Generated negative_pooled_prompt_embeds: torch.Size([1, 1280])
-✅ Compel processing successful
-🎯 Using Compel conditioning tensors for SDXL generation
-✅ Generated with Compel conditioning tensors (SDXL)
-```
-**Fallback Behavior:**
-```
-🎯 Compel enhancement enabled: (invalid:weights)
-❌ Compel processing failed: [error details]
-🔄 Falling back to original prompt: beautiful woman
-🔄 Using original prompt due to Compel failure: beautiful woman
-🎯 Using standard prompt (no Compel): beautiful woman
-✅ Generated with string prompt (no Compel)
-```
-
-#### **Deprecated/Incorrect Approaches**
-- String concatenation for SDXL+Compel
-- More than 6 enhancement weights
-- Duplicate weights
-- No negative conditioning for SDXL
-- Logging or metadata that dumps tensor values
-
-### **Dependencies**
-
-**Ensure these are installed in the SDXL worker environment:**
-```bash
-pip install compel==0.1.8
-pip install pyparsing==3.0.9
-```
-
-**Verify PYTHONPATH is set:**
-```bash
-export PYTHONPATH=/workspace/python_deps/lib/python3.11/site-packages:$PYTHONPATH
-```
-
-### **Validation Checklist**
-
-- [x] Compel library imports successfully
-- [x] `process_compel_weights` uses `requires_pooled=[False, True]` for SDXL
-- [x] Generation function handles both prompt_embeds and pooled_prompt_embeds for SDXL
-- [x] Error handling includes fallback to original prompt
-- [x] Metadata includes Compel processing status and tensor types
-- [x] No more 'bool object is not iterable' or argument errors in logs
-- [x] Compel weights are properly applied without token limit violations
-- [x] Both conditioning tensors are generated and used correctly
-- [x] Legacy single tensor fallback works for backward compatibility
-
-### **Rollback Plan**
-
-If issues occur, the worker can be rolled back by:
-1. Reverting to the string concatenation approach
-2. Disabling Compel processing temporarily
-3. Using the original prompt without enhancement
-
-The fallback mechanisms ensure the worker continues to function even if Compel processing fails. 
+This documentation provides the frontend AI with complete context of the ourvidz-worker system architecture, all active workers, Python files, APIs, and integration patterns. 
