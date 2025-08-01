@@ -3,6 +3,11 @@ import { GenerationRequest, GenerationFormat, GENERATION_CONFIGS } from '@/types
 import { videoAPI, imageAPI, usageAPI } from '@/lib/database';
 
 export class GenerationService {
+/**
+ * Queue generation
+ * @param {GenerationRequest} request - request parameter
+ * @returns {Promise<string>} Promise that resolves to the result
+ */
   static async queueGeneration(request: GenerationRequest): Promise<string> {
     console.log('🎬 GenerationService.queueGeneration called with enhanced SDXL tracking:', {
       request,

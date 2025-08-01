@@ -1,0 +1,14 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+.git/
+
+# Log files
+*.log
+
+# Lock files (can be large and change frequently)
+*.lock
+bun.lockb
+package-lock.json

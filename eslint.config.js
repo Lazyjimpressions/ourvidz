@@ -3,6 +3,7 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import jsdoc from "eslint-plugin-jsdoc";
 
 export default tseslint.config(
   { ignores: ["dist"] },
@@ -16,6 +17,7 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "jsdoc": jsdoc,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -24,6 +26,30 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
       "@typescript-eslint/no-unused-vars": "off",
+      
+      // JSDoc rules
+      "jsdoc/require-jsdoc": [
+        "warn",
+        {
+          publicOnly: true,
+          require: {
+            FunctionDeclaration: true,
+            MethodDefinition: true,
+            ClassDeclaration: true,
+            ArrowFunctionExpression: false, // Skip arrow functions
+          },
+          contexts: [
+            "ExportNamedDeclaration > FunctionDeclaration",
+            "ExportDefaultDeclaration > FunctionDeclaration",
+            "ClassDeclaration",
+            "MethodDefinition"
+          ]
+        }
+      ],
+      "jsdoc/require-param": "warn",
+      "jsdoc/require-returns": "warn",
+      "jsdoc/check-param-names": "warn",
+      "jsdoc/check-tag-names": "warn",
     },
   }
 );
