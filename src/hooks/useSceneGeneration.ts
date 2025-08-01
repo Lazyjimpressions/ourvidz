@@ -122,13 +122,13 @@ export const useSceneGeneration = () => {
         visualElements.push(...matches.map(match => match.toLowerCase()));
       }
 
-      // Enhanced NSFW detection
+      // Enhanced NSFW detection - force NSFW for adult roleplay templates
       const nsfwPatterns = [
         /\b(naked|nude|sex|intimate|breast|penis|vagina|orgasm|climax|aroused|erotic|lusty|masturbat|penetrat|thrust|moan)\b/gi,
         /\b(nipple|clit|pussy|cock|dick|cum|orgasm|pleasure|desire|lust)\b/gi
       ];
-      const isNSFW = nsfwPatterns.some(pattern => pattern.test(content)) || 
-                     roleplayTemplate?.isAdult || false;
+      const isNSFW = roleplayTemplate?.isAdult === true || 
+                     nsfwPatterns.some(pattern => pattern.test(content));
 
       const sceneContext: SceneContext = {
         characters: characters.slice(0, 2), // Limit to main characters for prompt efficiency
@@ -182,11 +182,11 @@ export const useSceneGeneration = () => {
       addTokens(characterTokens, 1);
     }
 
-    // 3. NSFW anatomical accuracy (if applicable)
+    // 3. NSFW anatomical accuracy (prioritized for adult roleplay)
     if (sceneContext.isNSFW && tokenCount < maxTokens) {
-      addTokens(['perfect anatomy', 'natural proportions'], 1);
-      if (tokenCount < maxTokens - 10) {
-        addTokens(['detailed intimate anatomy'], 1);
+      addTokens(['anatomically correct', 'detailed anatomy', 'lustify style'], 1);
+      if (tokenCount < maxTokens - 8) {
+        addTokens(['professional adult photography'], 1);
       }
     }
 
@@ -244,8 +244,8 @@ export const useSceneGeneration = () => {
       // Generate optimized prompt
       const prompt = generateSDXLPrompt(sceneContext, options);
 
-      // Determine generation format based on quality
-      const format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      // Always use high quality for scene generation
+      const format = 'sdxl_image_high';
 
       // Use character reference if available and requested
       let referenceImages = undefined;
