@@ -363,7 +363,7 @@ Please help me with this creative project.`;
         ) : (
           <>
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble key={message.id} message={message} mode={currentMode} />
             ))}
             
             {/* Loading indicator for AI response */}
