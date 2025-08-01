@@ -346,10 +346,9 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    // Add safe fallbacks for undefined values
-    const safeOriginalPrompt = originalPrompt || prompt;
-    const safeEnhancedPrompt = enhancedPrompt || prompt;
-    let workingPrompt = safeEnhancedPrompt;
+    // CRITICAL FIX: Preserve original prompt separately - never overwrite it
+    const preservedOriginalPrompt = originalPrompt || prompt;
+    let workingPrompt = enhancedPrompt || prompt; // Use enhanced if provided, fallback to original
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
     let qwenExpansionPercentage = null;
@@ -363,7 +362,7 @@ serve(async (req)=>{
         
         const { data: enhancementData, error: enhancementError } = await supabase.functions.invoke('enhance-prompt', {
           body: {
-            prompt: prompt,
+            prompt: preservedOriginalPrompt, // Use preserved original prompt for enhancement
             jobType: jobType,
             format: format,
             quality: quality,
@@ -487,8 +486,8 @@ serve(async (req)=>{
         negative_prompt: negativePrompt,
         negative_prompt_generation_error: negativePromptError
       },
-      // **PHASE 1**: Include enhancement data in job metadata
-      original_prompt: originalPrompt,
+      // **PHASE 1**: Include enhancement data in job metadata - FIXED
+      original_prompt: preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
       enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
@@ -501,7 +500,7 @@ serve(async (req)=>{
       selected_presets: selectedPresets,
       // PHASE 4 DEBUG: Additional tracking
       debug: {
-        original_prompt_length: originalPrompt.length,
+        original_prompt_length: preservedOriginalPrompt?.length || 0,  // CRITICAL FIX: Use preserved original prompt
         working_prompt_length: workingPrompt.length,
         enhancement_strategy_source: enhancementStrategy,
         created_at: new Date().toISOString()
@@ -546,8 +545,8 @@ serve(async (req)=>{
       video_id: videoId,
       image_id: imageId,
       status: 'queued',
-      // **PHASE 1**: Store enhancement fields directly in jobs table
-      original_prompt: originalPrompt,
+      // **PHASE 1**: Store enhancement fields directly in jobs table - FIXED
+      original_prompt: preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
       enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs
@@ -790,12 +789,12 @@ serve(async (req)=>{
       ],
       debug: {
         userId: user.id,
-        hasPrompt: !!safeOriginalPrompt,
-        originalPromptLength: safeOriginalPrompt?.length || 0,
+        hasPrompt: !!preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
+        originalPromptLength: preservedOriginalPrompt?.length || 0,
         enhancedPromptLength: workingPrompt?.length || 0,
         enhancementStrategy: enhancementStrategy,
         enhancementTimeMs: enhancementTimeMs,
-        promptEnhanced: workingPrompt !== safeOriginalPrompt,
+        promptEnhanced: workingPrompt !== preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
         promptWordCount: finalPrompt.split(' ').length,
         hasNegativePrompt: isSDXL && !!negativePrompt,
         negativePromptLength: isSDXL ? negativePrompt.length : 0,
