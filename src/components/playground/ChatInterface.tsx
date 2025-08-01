@@ -363,7 +363,12 @@ Please help me with this creative project.`;
         ) : (
           <>
             {messages.map((message) => (
-              <MessageBubble key={message.id} message={message} mode={currentMode} />
+              <MessageBubble 
+                key={message.id} 
+                message={message} 
+                mode={currentMode}
+                roleplayTemplate={currentRoleplayTemplate}
+              />
             ))}
             
             {/* Loading indicator for AI response */}

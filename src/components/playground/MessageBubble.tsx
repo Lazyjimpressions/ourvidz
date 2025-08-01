@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { ResponseTruncation } from './ResponseTruncation';
+import { SceneImageGenerator } from './SceneImageGenerator';
+import { usePlayground } from '@/contexts/PlaygroundContext';
 
 interface Message {
   id: string;
@@ -17,9 +19,10 @@ interface Message {
 interface MessageBubbleProps {
   message: Message;
   mode?: string;
+  roleplayTemplate?: any;
 }
 
-export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'chat' }) => {
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'chat', roleplayTemplate }) => {
   const isUser = message.sender === 'user';
   const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
 
@@ -97,6 +100,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
             </Button>
           )}
         </div>
+
+        {/* Scene Image Generator - Only for AI messages in roleplay mode */}
+        {!isUser && mode === 'roleplay' && (
+          <SceneImageGenerator
+            messageContent={message.content}
+            roleplayTemplate={roleplayTemplate}
+            mode={mode}
+            onImageGenerated={(assetId) => {
+              toast.success('Scene image generated!', {
+                description: 'Check your library for the new image'
+              });
+            }}
+          />
+        )}
       </div>
     </div>
   );
