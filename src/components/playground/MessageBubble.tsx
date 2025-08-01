@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Bot, User, Copy, RotateCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { ResponseTruncation } from './ResponseTruncation';
 import { SceneImageGenerator } from './SceneImageGenerator';
-import { usePlayground } from '@/contexts/PlaygroundContext';
+import { InlineImageDisplay } from './InlineImageDisplay';
+import { ImageLightbox } from './ImageLightbox';
 
 interface Message {
   id: string;
@@ -25,6 +26,8 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'chat', roleplayTemplate }) => {
   const isUser = message.sender === 'user';
   const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
+  const [generatedImageId, setGeneratedImageId] = useState<string | null>(null);
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const handleCopy = async () => {
     try {
@@ -106,14 +109,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           <SceneImageGenerator
             messageContent={message.content}
             roleplayTemplate={roleplayTemplate}
-            mode={mode}
             onImageGenerated={(assetId) => {
-              toast.success('Scene image generated!', {
-                description: 'Check your library for the new image'
-              });
+              setGeneratedImageId(assetId);
+              toast.success('Scene image generated!');
             }}
           />
         )}
+
+        {/* Inline Image Display */}
+        {generatedImageId && (
+          <InlineImageDisplay
+            assetId={generatedImageId}
+            onExpand={setLightboxImageUrl}
+          />
+        )}
+
+        {/* Image Lightbox */}
+        <ImageLightbox
+          imageUrl={lightboxImageUrl}
+          onClose={() => setLightboxImageUrl(null)}
+        />
       </div>
     </div>
   );
