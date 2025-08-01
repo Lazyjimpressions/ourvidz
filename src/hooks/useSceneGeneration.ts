@@ -153,76 +153,92 @@ export const useSceneGeneration = () => {
     options: SceneGenerationOptions = {}
   ): string => {
     const { style = 'lustify', quality = 'fast' } = options;
-    const tokens: string[] = [];
-    let tokenCount = 0;
     const maxTokens = 75; // SDXL Lustify limit
-
-    // Helper function to add tokens safely
-    const addTokens = (newTokens: string[], priority: number = 1) => {
-      const remaining = maxTokens - tokenCount;
-      const tokensToAdd = newTokens.slice(0, Math.floor(remaining / priority));
-      tokens.push(...tokensToAdd);
-      tokenCount += tokensToAdd.length;
+    
+    // Collect all potential tokens with priorities
+    const tokenGroups = {
+      quality: ['score_9', 'score_8_up', 'masterpiece', 'best quality'],
+      character: [] as string[],
+      scene: [] as string[],
+      nsfw: [] as string[],
+      technical: ['professional photography', '4K', 'sharp focus', 'warm lighting']
     };
 
-    // 1. Quality tags (12 tokens - highest priority)
-    addTokens(['score_9', 'score_8_up', 'masterpiece', 'best quality', 'ultra detailed'], 1);
-
-    // 2. Character descriptions (15-20 tokens)
-    if (sceneContext.characters.length > 0 && tokenCount < maxTokens) {
+    // Build character tokens
+    if (sceneContext.characters.length > 0) {
       const mainCharacter = sceneContext.characters[0];
-      const characterTokens = [
-        'beautiful',
-        mainCharacter.visualDescription
-          .replace(/[^a-zA-Z0-9\s]/g, '')
-          .split(' ')
-          .filter(token => token.length > 2)
-          .slice(0, 6)
-      ].flat();
-      addTokens(characterTokens, 1);
+      const characterDesc = mainCharacter.visualDescription
+        .replace(/[^a-zA-Z0-9\s]/g, '')
+        .split(' ')
+        .filter(token => token.length > 2)
+        .slice(0, 4);
+      tokenGroups.character = ['beautiful', 'attractive', ...characterDesc];
     }
 
-    // 3. NSFW anatomical accuracy (prioritized for adult roleplay)
-    if (sceneContext.isNSFW && tokenCount < maxTokens) {
-      addTokens(['anatomically correct', 'detailed anatomy', 'lustify style'], 1);
-      if (tokenCount < maxTokens - 8) {
-        addTokens(['professional adult photography'], 1);
-      }
-    }
+    // Build scene tokens
+    const sceneTokens = [
+      sceneContext.mood,
+      ...sceneContext.setting.split(' ').slice(0, 2),
+      ...sceneContext.visualElements.slice(0, 2)
+    ].filter(token => token && token.length > 2);
+    tokenGroups.scene = sceneTokens;
 
-    // 4. Scene context (10-15 tokens)
-    if (tokenCount < maxTokens) {
-      const sceneTokens = [
-        sceneContext.mood,
-        sceneContext.setting.split(' ').slice(0, 2),
-        sceneContext.visualElements.slice(0, 2)
-      ].flat().filter(token => token.length > 2);
-      addTokens(sceneTokens, 1);
-    }
-
-    // 5. Technical specifications (remaining tokens)
-    if (tokenCount < maxTokens) {
-      const techTokens = [
-        'professional photography',
-        '4K',
-        'sharp focus',
-        'warm lighting'
+    // Build NSFW tokens
+    if (sceneContext.isNSFW) {
+      tokenGroups.nsfw = [
+        'anatomically correct',
+        'detailed anatomy', 
+        'lustify style',
+        'professional adult photography',
+        'intimate'
       ];
-      if (quality === 'high') {
-        techTokens.push('shot on Canon EOS R5', 'f/1.8');
-      }
-      addTokens(techTokens, 2);
     }
 
-    const prompt = tokens.join(', ');
+    // Add quality-specific tokens
+    if (quality === 'high') {
+      tokenGroups.technical.push('shot on Canon EOS R5', 'f/1.8');
+    }
+
+    // Smart token assembly with deduplication
+    const finalTokens: string[] = [];
+    const usedTokens = new Set<string>();
     
-    console.log('Generated SDXL prompt:', {
+    // Add tokens by priority, removing duplicates
+    const addUniqueTokens = (tokens: string[], limit: number) => {
+      for (const token of tokens) {
+        if (finalTokens.length >= maxTokens) break;
+        const normalizedToken = token.toLowerCase().trim();
+        if (!usedTokens.has(normalizedToken) && normalizedToken.length > 0) {
+          finalTokens.push(token);
+          usedTokens.add(normalizedToken);
+          if (finalTokens.length >= limit) break;
+        }
+      }
+    };
+
+    // Assemble in priority order
+    addUniqueTokens(tokenGroups.quality, 15);      // Quality (15 tokens max)
+    addUniqueTokens(tokenGroups.character, 35);    // Character (20 tokens max)
+    addUniqueTokens(tokenGroups.nsfw, 50);         // NSFW (15 tokens max)  
+    addUniqueTokens(tokenGroups.scene, 65);        // Scene (15 tokens max)
+    addUniqueTokens(tokenGroups.technical, 75);    // Technical (10 tokens max)
+
+    const prompt = finalTokens.join(', ');
+    
+    console.log('🎨 Optimized SDXL prompt generated:', {
       prompt,
-      tokenCount,
+      tokenCount: finalTokens.length,
       characterCount: sceneContext.characters.length,
       isNSFW: sceneContext.isNSFW,
       style,
-      quality
+      quality,
+      tokenBreakdown: {
+        quality: tokenGroups.quality.length,
+        character: tokenGroups.character.length,
+        nsfw: tokenGroups.nsfw.length,
+        scene: tokenGroups.scene.length,
+        technical: tokenGroups.technical.length
+      }
     });
 
     return prompt;

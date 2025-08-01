@@ -110,6 +110,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
             messageContent={message.content}
             roleplayTemplate={roleplayTemplate}
             onImageGenerated={(assetId) => {
+              console.log('🖼️ MessageBubble received generated image ID:', assetId);
               setGeneratedImageId(assetId);
               toast.success('Scene image generated!');
             }}
@@ -118,10 +119,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
 
         {/* Inline Image Display */}
         {generatedImageId && (
-          <InlineImageDisplay
-            assetId={generatedImageId}
-            onExpand={setLightboxImageUrl}
-          />
+          <div className="mt-2">
+            <InlineImageDisplay
+              assetId={generatedImageId}
+              onExpand={setLightboxImageUrl}
+            />
+          </div>
         )}
 
         {/* Image Lightbox */}

@@ -25,24 +25,30 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
 
   // Generate scene image
   const handleGenerateImage = useCallback(async () => {
+    console.log('🎬 Scene image generation started:', { messageContent: messageContent.slice(0, 100) });
+    
     try {
+      // Set up event listener BEFORE starting generation
+      const handleCompletion = (event: CustomEvent) => {
+        console.log('🎯 Generation completed event received:', event.detail);
+        if (event.detail?.assetId) {
+          console.log('✅ Passing asset ID to parent:', event.detail.assetId);
+          onImageGenerated?.(event.detail.assetId);
+          window.removeEventListener('generation-completed', handleCompletion as EventListener);
+        } else {
+          console.warn('⚠️ Generation completed but no asset ID found:', event.detail);
+        }
+      };
+      window.addEventListener('generation-completed', handleCompletion as EventListener);
+
       await generateSceneImage(messageContent, roleplayTemplate, {
         quality: 'high',
         style: 'lustify',
         useCharacterReference: false
       });
 
-      // Listen for completion to get asset ID
-      const handleCompletion = (event: CustomEvent) => {
-        if (event.detail?.assetId) {
-          onImageGenerated?.(event.detail.assetId);
-          window.removeEventListener('generation-completed', handleCompletion as EventListener);
-        }
-      };
-      window.addEventListener('generation-completed', handleCompletion as EventListener);
-
     } catch (error) {
-      console.error('Scene generation failed:', error);
+      console.error('❌ Scene generation failed:', error);
     }
   }, [generateSceneImage, messageContent, roleplayTemplate, onImageGenerated]);
 
