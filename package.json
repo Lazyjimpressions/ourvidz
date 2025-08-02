@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "lint:jsdoc": "eslint .",
     "jsdoc:generate": "node scripts/generate-jsdoc.js",
+    "docs:update": "node scripts/update-docs.js",
+    "docs:status": "node scripts/update-docs.js status",
     "preview": "vite preview"
   },
   "dependencies": {
