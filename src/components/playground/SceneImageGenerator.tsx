@@ -15,6 +15,7 @@ interface SceneImageGeneratorProps {
 export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   messageContent,
   roleplayTemplate,
+  mode,
   onImageGenerated
 }) => {
   const { 
@@ -62,10 +63,21 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
     }
   }, [generateSceneImage, messageContent, roleplayTemplate, onImageGenerated]);
 
-  // Check if message contains scene content
+  // Check if message contains scene content with debug logging
   const hasScene = detectScene(messageContent);
+  
+  console.log('🎬 SceneImageGenerator Debug:', {
+    messageContent: messageContent.slice(0, 100),
+    hasScene,
+    mode,
+    roleplayTemplate: !!roleplayTemplate,
+    isRoleplayMode: mode === 'roleplay'
+  });
 
-  if (!hasScene) return null;
+  // For roleplay mode, be more lenient - show button if content is substantial
+  const shouldShowButton = hasScene || (mode === 'roleplay' && messageContent.length > 50);
+  
+  if (!shouldShowButton) return null;
 
   return (
     <div className="mt-2">

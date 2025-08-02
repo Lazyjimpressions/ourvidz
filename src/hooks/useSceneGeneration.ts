@@ -36,25 +36,48 @@ export const useSceneGeneration = () => {
       /\([^)]*action[^)]*\)/gi,
       
       // Movement and positioning
-      /\b(moves?|walks?|sits?|stands?|leans?|approaches?|steps?|turns?)\b/gi,
+      /\b(moves?|walks?|sits?|stands?|leans?|approaches?|steps?|turns?|enters?|exits?|comes?|goes?)\b/gi,
       
       // Physical interactions
-      /\b(touches?|kisses?|embraces?|holds?|caresses?|grabs?|pulls?)\b/gi,
+      /\b(touches?|kisses?|embraces?|holds?|caresses?|grabs?|pulls?|strokes?|runs?.*hands?|fingers?)\b/gi,
       
       // Environmental descriptions
-      /\b(in the|at the|on the|near the)\s+\w+/gi,
+      /\b(in the|at the|on the|near the|inside|outside|around|behind|beside)\s+\w+/gi,
       
       // Visual descriptions
-      /\b(wearing|dressed|naked|nude|clothing|outfit|lingerie)\b/gi,
+      /\b(wearing|dressed|naked|nude|clothing|outfit|lingerie|appearance|looks?|beautiful|attractive|eyes?|hair|smile)\b/gi,
       
       // Emotional/sensual indicators
-      /\b(passionate|intimate|romantic|seductive|sensual|aroused)\b/gi,
+      /\b(passionate|intimate|romantic|seductive|sensual|aroused|desire|longing|breathless|whispers?|moans?|gasps?)\b/gi,
       
       // Setting indicators
-      /\b(bedroom|bed|room|kitchen|bathroom|sofa|chair|hotel|car)\b/gi
+      /\b(bedroom|bed|room|kitchen|bathroom|sofa|chair|hotel|car|office|house|apartment|couch|table|window|door)\b/gi,
+      
+      // Character indicators
+      /\b(she|he|her|his|him|they|their)\s+(looks?|appears?|seems?|feels?|notices?|sees?|watches?)/gi,
+      
+      // Descriptive language common in roleplay
+      /\b(gentle|soft|warm|cool|bright|dark|dim|quiet|loud|smooth|rough|silk|lace|leather)\b/gi,
+      
+      // Body language and expressions
+      /\b(smiles?|blushes?|laughs?|giggles?|nods?|shakes?.*head|raises?.*eyebrow|winks?)\b/gi
     ];
     
-    return patterns.some(pattern => pattern.test(content));
+    const matchCount = patterns.reduce((count, pattern) => {
+      const matches = content.match(pattern);
+      return count + (matches ? matches.length : 0);
+    }, 0);
+    
+    const hasScene = matchCount > 0;
+    
+    console.log('🔍 Scene detection analysis:', {
+      content: content.slice(0, 100),
+      matchCount,
+      hasScene,
+      contentLength: content.length
+    });
+    
+    return hasScene;
   }, []);
 
   // Advanced scene analysis using roleplay context
