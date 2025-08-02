@@ -27,21 +27,26 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   const handleGenerateImage = useCallback(async () => {
     console.log('🎬 Scene image generation started:', { messageContent: messageContent.slice(0, 100) });
     
+    // Set up persistent event listener that doesn't get removed immediately
+    const handleCompletion = (event: CustomEvent) => {
+      console.log('🎯 Generation completed event received:', event.detail);
+      if (event.detail?.assetId || event.detail?.imageId) {
+        const assetId = event.detail.assetId || event.detail.imageId;
+        console.log('✅ Passing asset data to parent:', {
+          assetId,
+          imageUrl: event.detail.imageUrl
+        });
+        onImageGenerated?.(assetId, event.detail.imageUrl);
+        // Remove listener after successful handling
+        window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      } else {
+        console.warn('⚠️ Generation completed but no asset ID found:', event.detail);
+      }
+    };
+    
     try {
-      // Set up event listener BEFORE starting generation
-      const handleCompletion = (event: CustomEvent) => {
-        console.log('🎯 Generation completed event received:', event.detail);
-        if (event.detail?.assetId) {
-          console.log('✅ Passing asset data to parent:', {
-            assetId: event.detail.assetId,
-            imageUrl: event.detail.imageUrl
-          });
-          onImageGenerated?.(event.detail.assetId, event.detail.imageUrl);
-          window.removeEventListener('generation-completed', handleCompletion as EventListener);
-        } else {
-          console.warn('⚠️ Generation completed but no asset ID found:', event.detail);
-        }
-      };
+      // Remove any existing listeners first
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
       window.addEventListener('generation-completed', handleCompletion as EventListener);
 
       await generateSceneImage(messageContent, roleplayTemplate, {
@@ -52,6 +57,8 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
 
     } catch (error) {
       console.error('❌ Scene generation failed:', error);
+      // Clean up listener on error
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
     }
   }, [generateSceneImage, messageContent, roleplayTemplate, onImageGenerated]);
 
