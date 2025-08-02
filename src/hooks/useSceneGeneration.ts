@@ -155,89 +155,142 @@ export const useSceneGeneration = () => {
     const { style = 'lustify', quality = 'fast' } = options;
     const maxTokens = 75; // SDXL Lustify limit
     
-    // Collect all potential tokens with priorities
-    const tokenGroups = {
-      quality: ['score_9', 'score_8_up', 'masterpiece', 'best quality'],
-      character: [] as string[],
-      scene: [] as string[],
-      nsfw: [] as string[],
-      technical: ['professional photography', '4K', 'sharp focus', 'warm lighting']
-    };
-
-    // Build character tokens
+    // Build quality tokens
+    const qualityTokens = ['score_9', 'score_8_up', 'masterpiece', 'best quality'];
+    
+    // Build character tokens from roleplay context
+    const characterTokens: string[] = [];
     if (sceneContext.characters.length > 0) {
       const mainCharacter = sceneContext.characters[0];
+      // Extract clean character description tokens
       const characterDesc = mainCharacter.visualDescription
-        .replace(/[^a-zA-Z0-9\s]/g, '')
-        .split(' ')
-        .filter(token => token.length > 2)
-        .slice(0, 4);
-      tokenGroups.character = ['beautiful', 'attractive', ...characterDesc];
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(token => token.length > 2 && !['the', 'and', 'with', 'her', 'his', 'has'].includes(token))
+        .slice(0, 6);
+      
+      characterTokens.push('1girl', 'beautiful woman', ...characterDesc);
     }
 
-    // Build scene tokens
-    const sceneTokens = [
-      sceneContext.mood,
-      ...sceneContext.setting.split(' ').slice(0, 2),
-      ...sceneContext.visualElements.slice(0, 2)
-    ].filter(token => token && token.length > 2);
-    tokenGroups.scene = sceneTokens;
-
-    // Build NSFW tokens
-    if (sceneContext.isNSFW) {
-      tokenGroups.nsfw = [
-        'anatomically correct',
-        'detailed anatomy', 
-        'lustify style',
-        'professional adult photography',
-        'intimate'
-      ];
-    }
-
-    // Add quality-specific tokens
-    if (quality === 'high') {
-      tokenGroups.technical.push('shot on Canon EOS R5', 'f/1.8');
-    }
-
-    // Smart token assembly with deduplication
-    const finalTokens: string[] = [];
-    const usedTokens = new Set<string>();
+    // Build scene and action tokens
+    const sceneTokens: string[] = [];
     
-    // Add tokens by priority, removing duplicates
-    const addUniqueTokens = (tokens: string[], limit: number) => {
-      for (const token of tokens) {
-        if (finalTokens.length >= maxTokens) break;
-        const normalizedToken = token.toLowerCase().trim();
-        if (!usedTokens.has(normalizedToken) && normalizedToken.length > 0) {
-          finalTokens.push(token);
-          usedTokens.add(normalizedToken);
-          if (finalTokens.length >= limit) break;
-        }
-      }
-    };
+    // Add mood and setting
+    if (sceneContext.mood) {
+      sceneTokens.push(sceneContext.mood + ' atmosphere');
+    }
+    
+    // Add setting details
+    const cleanSetting = sceneContext.setting
+      .replace(/^(intimate |indoor |outdoor )/i, '')
+      .trim();
+    if (cleanSetting && cleanSetting !== 'setting') {
+      sceneTokens.push(cleanSetting);
+    }
+    
+    // Add key visual elements
+    const relevantVisuals = sceneContext.visualElements
+      .filter(element => element.length > 2 && !['skin', 'body', 'face'].includes(element))
+      .slice(0, 3);
+    sceneTokens.push(...relevantVisuals);
 
-    // Assemble in priority order
-    addUniqueTokens(tokenGroups.quality, 15);      // Quality (15 tokens max)
-    addUniqueTokens(tokenGroups.character, 35);    // Character (20 tokens max)
-    addUniqueTokens(tokenGroups.nsfw, 50);         // NSFW (15 tokens max)  
-    addUniqueTokens(tokenGroups.scene, 65);        // Scene (15 tokens max)
-    addUniqueTokens(tokenGroups.technical, 75);    // Technical (10 tokens max)
+    // Add action context if available
+    if (sceneContext.actions.length > 0) {
+      const mainAction = sceneContext.actions[0]
+        .toLowerCase()
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(word => word.length > 3)
+        .slice(0, 2)
+        .join(' ');
+      
+      if (mainAction) {
+        sceneTokens.push(mainAction);
+      }
+    }
+
+    // Build NSFW/adult tokens
+    const nsfwTokens: string[] = [];
+    if (sceneContext.isNSFW) {
+      nsfwTokens.push(
+        'lustify style',
+        'anatomically correct',
+        'detailed anatomy',
+        'intimate scene',
+        'sensual'
+      );
+    }
+
+    // Build technical quality tokens
+    const technicalTokens = [
+      'professional photography',
+      'cinematic lighting',
+      'high detail',
+      'sharp focus'
+    ];
+    
+    if (quality === 'high') {
+      technicalTokens.push('ultra detailed', '8k resolution');
+    }
+
+    // Smart token assembly with strict deduplication
+    const allTokenGroups = [
+      { tokens: qualityTokens, priority: 1, maxCount: 4 },
+      { tokens: characterTokens, priority: 2, maxCount: 8 },
+      { tokens: sceneTokens, priority: 3, maxCount: 6 },
+      { tokens: nsfwTokens, priority: 4, maxCount: 5 },
+      { tokens: technicalTokens, priority: 5, maxCount: 4 }
+    ];
+
+    const finalTokens: string[] = [];
+    const usedTokensSet = new Set<string>();
+    
+    // Add tokens by priority while avoiding duplicates
+    for (const group of allTokenGroups) {
+      let addedFromGroup = 0;
+      
+      for (const token of group.tokens) {
+        if (finalTokens.length >= maxTokens) break;
+        if (addedFromGroup >= group.maxCount) break;
+        
+        const normalizedToken = token.toLowerCase().trim();
+        
+        // Skip if already used or too similar to existing tokens
+        if (usedTokensSet.has(normalizedToken)) continue;
+        if (Array.from(usedTokensSet).some(used => 
+          used.includes(normalizedToken) || normalizedToken.includes(used)
+        )) continue;
+        
+        finalTokens.push(token);
+        usedTokensSet.add(normalizedToken);
+        addedFromGroup++;
+      }
+      
+      if (finalTokens.length >= maxTokens) break;
+    }
 
     const prompt = finalTokens.join(', ');
     
     console.log('🎨 Optimized SDXL prompt generated:', {
       prompt,
       tokenCount: finalTokens.length,
-      characterCount: sceneContext.characters.length,
-      isNSFW: sceneContext.isNSFW,
-      style,
-      quality,
+      maxTokens,
+      sceneContext: {
+        characters: sceneContext.characters.length,
+        isNSFW: sceneContext.isNSFW,
+        mood: sceneContext.mood,
+        setting: sceneContext.setting,
+        actions: sceneContext.actions.length,
+        visualElements: sceneContext.visualElements.length
+      },
       tokenBreakdown: {
-        quality: tokenGroups.quality.length,
-        character: tokenGroups.character.length,
-        nsfw: tokenGroups.nsfw.length,
-        scene: tokenGroups.scene.length,
-        technical: tokenGroups.technical.length
+        quality: qualityTokens.length,
+        character: characterTokens.length,
+        scene: sceneTokens.length,
+        nsfw: nsfwTokens.length,
+        technical: technicalTokens.length,
+        final: finalTokens.length
       }
     });
 

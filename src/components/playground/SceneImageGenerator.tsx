@@ -9,7 +9,7 @@ interface SceneImageGeneratorProps {
   messageContent: string;
   roleplayTemplate?: RoleplayTemplate | null;
   mode?: string;
-  onImageGenerated?: (assetId: string) => void;
+  onImageGenerated?: (assetId: string, imageUrl?: string) => void;
 }
 
 export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
@@ -32,8 +32,11 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
       const handleCompletion = (event: CustomEvent) => {
         console.log('🎯 Generation completed event received:', event.detail);
         if (event.detail?.assetId) {
-          console.log('✅ Passing asset ID to parent:', event.detail.assetId);
-          onImageGenerated?.(event.detail.assetId);
+          console.log('✅ Passing asset data to parent:', {
+            assetId: event.detail.assetId,
+            imageUrl: event.detail.imageUrl
+          });
+          onImageGenerated?.(event.detail.assetId, event.detail.imageUrl);
           window.removeEventListener('generation-completed', handleCompletion as EventListener);
         } else {
           console.warn('⚠️ Generation completed but no asset ID found:', event.detail);

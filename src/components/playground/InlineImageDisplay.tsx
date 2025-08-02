@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button';
 
 interface InlineImageDisplayProps {
   assetId: string;
+  imageUrl?: string;
   onExpand?: (imageUrl: string) => void;
 }
 
 export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
   assetId,
+  imageUrl: providedImageUrl,
   onExpand
 }) => {
   const { getSignedUrl, loading } = useSignedImageUrls();
@@ -21,19 +23,28 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
 
   useEffect(() => {
     const loadImage = async () => {
+      console.log('🖼️ InlineImageDisplay loading image:', { assetId, providedImageUrl });
+      
       try {
-        const url = await getSignedUrl(assetId);
-        setImageUrl(url);
+        // Use provided image URL if available, otherwise get signed URL
+        if (providedImageUrl) {
+          console.log('✅ Using provided image URL:', providedImageUrl);
+          setImageUrl(providedImageUrl);
+        } else {
+          console.log('🔗 Getting signed URL for asset:', assetId);
+          const url = await getSignedUrl(assetId);
+          setImageUrl(url);
+        }
       } catch (error) {
-        console.error('Failed to load image:', error);
+        console.error('❌ Failed to load image:', error);
         setImageError(true);
       }
     };
 
-    if (assetId) {
+    if (assetId || providedImageUrl) {
       loadImage();
     }
-  }, [assetId, getSignedUrl]);
+  }, [assetId, providedImageUrl, getSignedUrl]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
