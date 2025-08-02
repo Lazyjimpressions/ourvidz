@@ -9,12 +9,13 @@ interface SceneImageGeneratorProps {
   messageContent: string;
   roleplayTemplate?: RoleplayTemplate | null;
   mode?: string;
-  onImageGenerated?: (assetId: string) => void;
+  onImageGenerated?: (assetId: string, imageUrl?: string) => void;
 }
 
 export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   messageContent,
   roleplayTemplate,
+  mode,
   onImageGenerated
 }) => {
   const { 
@@ -27,18 +28,26 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   const handleGenerateImage = useCallback(async () => {
     console.log('🎬 Scene image generation started:', { messageContent: messageContent.slice(0, 100) });
     
+    // Set up persistent event listener that doesn't get removed immediately
+    const handleCompletion = (event: CustomEvent) => {
+      console.log('🎯 Generation completed event received:', event.detail);
+      if (event.detail?.assetId || event.detail?.imageId) {
+        const assetId = event.detail.assetId || event.detail.imageId;
+        console.log('✅ Passing asset data to parent:', {
+          assetId,
+          imageUrl: event.detail.imageUrl
+        });
+        onImageGenerated?.(assetId, event.detail.imageUrl);
+        // Remove listener after successful handling
+        window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      } else {
+        console.warn('⚠️ Generation completed but no asset ID found:', event.detail);
+      }
+    };
+    
     try {
-      // Set up event listener BEFORE starting generation
-      const handleCompletion = (event: CustomEvent) => {
-        console.log('🎯 Generation completed event received:', event.detail);
-        if (event.detail?.assetId) {
-          console.log('✅ Passing asset ID to parent:', event.detail.assetId);
-          onImageGenerated?.(event.detail.assetId);
-          window.removeEventListener('generation-completed', handleCompletion as EventListener);
-        } else {
-          console.warn('⚠️ Generation completed but no asset ID found:', event.detail);
-        }
-      };
+      // Remove any existing listeners first
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
       window.addEventListener('generation-completed', handleCompletion as EventListener);
 
       await generateSceneImage(messageContent, roleplayTemplate, {
@@ -49,13 +58,26 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
 
     } catch (error) {
       console.error('❌ Scene generation failed:', error);
+      // Clean up listener on error
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
     }
   }, [generateSceneImage, messageContent, roleplayTemplate, onImageGenerated]);
 
-  // Check if message contains scene content
+  // Check if message contains scene content with debug logging
   const hasScene = detectScene(messageContent);
+  
+  console.log('🎬 SceneImageGenerator Debug:', {
+    messageContent: messageContent.slice(0, 100),
+    hasScene,
+    mode,
+    roleplayTemplate: !!roleplayTemplate,
+    isRoleplayMode: mode === 'roleplay'
+  });
 
-  if (!hasScene) return null;
+  // For roleplay mode, be more lenient - show button if content is substantial
+  const shouldShowButton = hasScene || (mode === 'roleplay' && messageContent.length > 50);
+  
+  if (!shouldShowButton) return null;
 
   return (
     <div className="mt-2">

@@ -109,9 +109,9 @@ export const useGeneration = () => {
             completedAt: new Date().toISOString()
           });
           
-          // Emit completion event with asset ID resolution
+          // Emit completion event with asset ID and image URL resolution
           try {
-            console.log('🎉 Generation completed, resolving asset ID and emitting event');
+            console.log('🎉 Generation completed, resolving asset ID and image URL');
             
             const { data: jobData, error: jobError } = await supabase
               .from('jobs')
@@ -131,9 +131,29 @@ export const useGeneration = () => {
                   jobType: jobData.job_type 
                 });
                 
-                // Emit event with resolved asset ID
+                // Get image URL for images
+                let imageUrl = null;
+                if (assetType === 'image') {
+                  const { data: imageData, error: imageError } = await supabase
+                    .from('images')
+                    .select('image_url')
+                    .eq('id', assetId)
+                    .single();
+                  
+                  if (!imageError && imageData?.image_url) {
+                    imageUrl = imageData.image_url;
+                    console.log('🖼️ Resolved image URL:', imageUrl);
+                  }
+                }
+                
+                // Emit event with both asset ID and image URL
                 window.dispatchEvent(new CustomEvent('generation-completed', {
-                  detail: { assetId, type: assetType, jobId: currentJob.id }
+                  detail: { 
+                    assetId, 
+                    imageUrl,
+                    type: assetType, 
+                    jobId: currentJob.id 
+                  }
                 }));
               } else {
                 console.warn('⚠️ No asset ID found for completed job:', currentJob.id);

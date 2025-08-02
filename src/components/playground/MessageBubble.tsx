@@ -26,7 +26,21 @@ interface MessageBubbleProps {
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'chat', roleplayTemplate }) => {
   const isUser = message.sender === 'user';
   const timeAgo = formatDistanceToNow(new Date(message.created_at), { addSuffix: true });
-  const [generatedImageId, setGeneratedImageId] = useState<string | null>(null);
+  
+  // Use message ID as key for persistent storage
+  const storageKey = `generated-image-${message.id}`;
+  const [generatedImageId, setGeneratedImageId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`${storageKey}-id`) || null;
+    }
+    return null;
+  });
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`${storageKey}-url`) || null;
+    }
+    return null;
+  });
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const handleCopy = async () => {
@@ -109,9 +123,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           <SceneImageGenerator
             messageContent={message.content}
             roleplayTemplate={roleplayTemplate}
-            onImageGenerated={(assetId) => {
-              console.log('🖼️ MessageBubble received generated image ID:', assetId);
+            onImageGenerated={(assetId, imageUrl) => {
+              console.log('🖼️ MessageBubble received generated image:', { assetId, imageUrl });
               setGeneratedImageId(assetId);
+              setGeneratedImageUrl(imageUrl || null);
+              
+              // Persist to localStorage for this message
+              if (typeof window !== 'undefined') {
+                localStorage.setItem(`${storageKey}-id`, assetId);
+                if (imageUrl) {
+                  localStorage.setItem(`${storageKey}-url`, imageUrl);
+                }
+              }
+              
               toast.success('Scene image generated!');
             }}
           />
@@ -122,6 +146,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           <div className="mt-2">
             <InlineImageDisplay
               assetId={generatedImageId}
+              imageUrl={generatedImageUrl}
               onExpand={setLightboxImageUrl}
             />
           </div>

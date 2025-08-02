@@ -33,11 +33,45 @@ const useSignedImageUrls = () => {
 
       console.log(`🔍 Generating signed URL for path: "${path}" in bucket: "${bucketName}"`);
 
+      // If we have an asset ID instead of a path, try to get bucket info from database
+      if (path && !path.includes('/') && !path.includes('.')) {
+        console.log('🔍 Path looks like asset ID, checking database for bucket info...');
+        try {
+          const { data: imageData } = await supabase
+            .from('images')
+            .select('image_url, metadata')
+            .eq('id', path)
+            .single();
+          
+          if (imageData?.image_url) {
+            console.log('✅ Found image data in database:', imageData);
+            // Use the actual storage path from database
+            const storagePath = imageData.image_url;
+            const bucketFromMeta = (imageData.metadata as any)?.bucket;
+            if (bucketFromMeta) {
+              bucketName = bucketFromMeta;
+              console.log(`🎯 Using bucket from metadata: ${bucketName}`);
+            }
+            // Try with the actual storage path
+            const { data, error } = await supabase.storage
+              .from(bucketName)
+              .createSignedUrl(storagePath, 3600);
+            
+            if (!error && data?.signedUrl) {
+              console.log(`✅ Success: Generated signed URL using database path`);
+              return data.signedUrl;
+            }
+          }
+        } catch (dbError) {
+          console.log('⚠️ Failed to get image from database, continuing with bucket search');
+        }
+      }
+
       // Try buckets in order aligned with OptimizedAssetService
       const bucketsToTry = [
         bucketName,
+        'sdxl_image_high', // Move high up since most recent images are here
         'sdxl_image_fast',
-        'sdxl_image_high',
         'image7b_fast_enhanced', 
         'image7b_high_enhanced',
         'image_fast',

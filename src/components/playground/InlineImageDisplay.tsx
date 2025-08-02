@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button';
 
 interface InlineImageDisplayProps {
   assetId: string;
+  imageUrl?: string;
   onExpand?: (imageUrl: string) => void;
 }
 
 export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
   assetId,
+  imageUrl: providedImageUrl,
   onExpand
 }) => {
   const { getSignedUrl, loading } = useSignedImageUrls();
@@ -21,19 +23,58 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
 
   useEffect(() => {
     const loadImage = async () => {
+      console.log('🖼️ InlineImageDisplay loading image:', { assetId, providedImageUrl });
+      setImageError(false);
+      
       try {
-        const url = await getSignedUrl(assetId);
-        setImageUrl(url);
+        // Check if provided URL is a full URL or storage path
+        if (providedImageUrl) {
+          if (providedImageUrl.startsWith('http://') || providedImageUrl.startsWith('https://')) {
+            console.log('✅ Using full URL directly:', providedImageUrl);
+            setImageUrl(providedImageUrl);
+            setImageLoading(false); // Reset loading state for direct URLs
+          } else {
+            console.log('🔗 Converting storage path to signed URL:', providedImageUrl);
+            const url = await getSignedUrl(providedImageUrl);
+            if (url) {
+              setImageUrl(url);
+              setImageLoading(false); // Reset loading state after getting signed URL
+            } else {
+              throw new Error('Failed to get signed URL');
+            }
+          }
+        } else if (assetId) {
+          console.log('🔗 Getting signed URL for asset:', assetId);
+          const url = await getSignedUrl(assetId);
+          if (url) {
+            setImageUrl(url);
+            setImageLoading(false);
+          } else {
+            throw new Error('Failed to get signed URL for asset');
+          }
+        }
       } catch (error) {
-        console.error('Failed to load image:', error);
+        console.error('❌ Failed to load image:', error);
         setImageError(true);
+        setImageLoading(false);
       }
     };
 
-    if (assetId) {
+    // Add timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      if (imageLoading) {
+        console.warn('⚠️ Image loading timeout reached');
+        setImageError(true);
+        setImageLoading(false);
+      }
+    }, 10000); // 10 second timeout
+
+    if (assetId || providedImageUrl) {
       loadImage();
     }
-  }, [assetId, getSignedUrl]);
+
+    return () => clearTimeout(timeout);
+  }, [assetId, providedImageUrl, getSignedUrl]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
