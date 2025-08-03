@@ -6,6 +6,26 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { MediaTile } from '@/types/workspace';
 
+// ✅ FIX: Standardized query keys for workspace consistency
+const WORKSPACE_QUERY_KEYS = {
+  ITEMS: ['workspace-items-all'],
+  ASSETS: ['workspace-assets'], 
+  MEDIA_GRID: ['media-grid-workspace-assets']
+} as const;
+
+// ✅ ADD: Coordinated invalidation system
+const createWorkspaceInvalidator = (queryClient: any) => {
+  return () => {
+    console.log('🔄 COORDINATED INVALIDATION: Invalidating all workspace queries');
+    
+    queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.ITEMS });
+    queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.ASSETS });
+    queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.MEDIA_GRID });
+    
+    console.log('✅ All workspace queries invalidated');
+  };
+};
+
 export const useRealtimeWorkspace = () => {
   const queryClient = useQueryClient();
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
@@ -18,6 +38,9 @@ export const useRealtimeWorkspace = () => {
   
   // PHASE 2: Job tracking ref moved to top level (HOOKS RULE COMPLIANCE)
   const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
+  
+  // ✅ ADD: Coordinated invalidation function
+  const invalidateWorkspaceQueries = useCallback(createWorkspaceInvalidator(queryClient), [queryClient]);
   
   // Get active workspace session first
   const { data: activeSession, isLoading: sessionLoading, error: sessionError } = useQuery({
@@ -60,7 +83,7 @@ export const useRealtimeWorkspace = () => {
 
   // Fetch ALL workspace items for the user (from all sessions)
   const { data: assets = [], isLoading: itemsLoading, error: itemsError } = useQuery({
-    queryKey: ['workspace-items-all'],
+    queryKey: WORKSPACE_QUERY_KEYS.ITEMS,
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -81,6 +104,7 @@ export const useRealtimeWorkspace = () => {
         return [];
       }
       
+      // ✅ ADD: Comprehensive data verification logging
       console.log('🚀 DEBUG: ALL workspace items fetched:', {
         count: data?.length || 0,
         userId: user.id,
@@ -91,6 +115,19 @@ export const useRealtimeWorkspace = () => {
           url: item.url ? 'has_url' : 'no_url',
           prompt: item.prompt?.substring(0, 30) + '...'
         }))
+      });
+      
+      // ✅ ADD: Data verification summary
+      console.log('🔍 WORKSPACE DATA VERIFICATION:', {
+        totalItems: data?.length || 0,
+        itemsWithUrls: data?.filter((item: any) => item.url)?.length || 0,
+        itemsWithoutUrls: data?.filter((item: any) => !item.url)?.length || 0,
+        sessionId: activeSession?.id,
+        userId: user.id,
+        contentTypes: data?.reduce((acc: any, item: any) => {
+          acc[item.content_type] = (acc[item.content_type] || 0) + 1;
+          return acc;
+        }, {}) || {}
       });
       
       return data || [];
@@ -104,11 +141,9 @@ export const useRealtimeWorkspace = () => {
     refetchInterval: false, // No polling - use realtime instead
     // Retry strategy for failed requests
     retry: (failureCount, error) => {
-      if (failureCount < 2) return true;
-      console.error('❌ Asset fetch failed after retries:', error);
-      return false;
-    },
-    retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
+      console.log('🔄 Retry attempt:', failureCount, 'for workspace items query');
+      return failureCount < 3;
+    }
   });
 
   // Debug assets state
@@ -153,11 +188,8 @@ export const useRealtimeWorkspace = () => {
             return newFilter;
           });
           
-          // Single query invalidation for all batched items
-          queryClient.invalidateQueries({ 
-            queryKey: ['realtime-workspace-assets'],
-            exact: false 
-          });
+          // ✅ FIX: Use coordinated invalidation for all workspace queries
+          invalidateWorkspaceQueries();
           
           // Dispatch batch completion event
           window.dispatchEvent(new CustomEvent('generation-completed', {
@@ -194,11 +226,9 @@ export const useRealtimeWorkspace = () => {
               console.log('🎉 Workspace item created:', workspaceItem.id, 'content_type:', workspaceItem.content_type);
               processedUpdatesRef.current.add(workspaceItem.id);
               
-              // Invalidate workspace items query to refresh
-              queryClient.invalidateQueries({ 
-                queryKey: ['workspace-items-all'],
-                exact: false 
-              });
+              // ✅ FIX: Use coordinated invalidation for all workspace queries
+              console.log('🔄 QUERY INVALIDATION: Workspace item inserted, invalidating queries');
+              invalidateWorkspaceQueries();
               
               // Dispatch completion event
               window.dispatchEvent(new CustomEvent('generation-completed', {
@@ -237,11 +267,9 @@ export const useRealtimeWorkspace = () => {
                 detail: { assetId: video.id, type: 'video', status: 'completed' }
               }));
               
-              // Invalidate cache to force refresh
-              queryClient.invalidateQueries({ 
-                queryKey: ['realtime-workspace-assets'],
-                exact: false 
-              });
+              // ✅ FIX: Use coordinated invalidation for all workspace queries
+              console.log('🔄 QUERY INVALIDATION: Video completed, invalidating queries');
+              invalidateWorkspaceQueries();
               
               setTimeout(() => processedUpdatesRef.current.delete(video.id), 60000);
             }
@@ -278,13 +306,11 @@ export const useRealtimeWorkspace = () => {
                 }
               }));
               
-              // For job completion, trigger asset refresh with delay
+              // ✅ FIX: For job completion, trigger coordinated refresh with delay
               if (job.status === 'completed') {
                 setTimeout(() => {
-                  queryClient.invalidateQueries({ 
-                    queryKey: ['realtime-workspace-assets'],
-                    exact: false 
-                  });
+                  console.log('🔄 QUERY INVALIDATION: Job completed, invalidating queries');
+                  invalidateWorkspaceQueries();
                 }, 2000); // Small delay to allow asset creation
               }
             }
@@ -338,11 +364,9 @@ export const useRealtimeWorkspace = () => {
           return newFilter;
         });
         
-        // Invalidate cache to force refresh
-        queryClient.invalidateQueries({ 
-          queryKey: ['realtime-workspace-assets'],
-          exact: false 
-        });
+        // ✅ FIX: Use coordinated invalidation for all workspace queries
+        console.log('🔄 QUERY INVALIDATION: Batch generation completed, invalidating queries');
+        invalidateWorkspaceQueries();
         
         // Enhanced toast notification
         const message = totalCompleted === totalExpected 
@@ -385,10 +409,8 @@ export const useRealtimeWorkspace = () => {
               return newFilter;
             });
             
-            queryClient.invalidateQueries({ 
-              queryKey: ['realtime-workspace-assets'],
-              exact: false 
-            });
+            console.log('🔄 QUERY INVALIDATION: Job status update completed, invalidating queries');
+            invalidateWorkspaceQueries();
           }
           
           // Cleanup tracking
@@ -420,11 +442,11 @@ export const useRealtimeWorkspace = () => {
     };
   }, [queryClient]);
 
-  // Helper function to safely convert seed values from scientific notation
+  // ✅ ENHANCE: Helper function to safely convert seed values with better error handling
   const convertSeedValue = (seedValue: any): number => {
     if (seedValue === null || seedValue === undefined) {
-      console.log('🔍 SEED CONVERSION: Seed value is null/undefined:', seedValue);
-      return 0; // Return 0 as default for missing seeds
+      console.log('🔍 SEED CONVERSION: Seed value is null/undefined, using 0');
+      return 0;
     }
     
     if (typeof seedValue === 'number') {
@@ -445,18 +467,40 @@ export const useRealtimeWorkspace = () => {
     return 0; // Return 0 as fallback
   };
 
-  // Transform workspace items to tiles
+  // ✅ ENHANCE: Transform workspace items to tiles with comprehensive validation
   const transformWorkspaceItemToTiles = useCallback((item: any): MediaTile[] => {
+    // ✅ ADD: Comprehensive validation
+    if (!item || !item.id) {
+      console.warn('⚠️ Invalid workspace item:', item);
+      return [];
+    }
+    
+    if (!item.url) {
+      console.warn('⚠️ Workspace item missing URL:', item.id);
+      return [];
+    }
+    
     console.log('🔄 TRANSFORM WORKSPACE ITEM TO TILES:', {
       itemId: item.id,
       contentType: item.content_type,
-      url: item.url,
+      url: item.url ? 'has_url' : 'no_url',
       rawSeed: item.seed,
-      metadata: item.metadata
+      hasMetadata: !!item.metadata
     });
 
     const tiles: MediaTile[] = [];
     const extractedSeed = convertSeedValue(item.seed);
+    
+    // ✅ ADD: Safe metadata parsing
+    let safeMetadata = {};
+    try {
+      safeMetadata = item.metadata ? 
+        (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : 
+        {};
+    } catch (error) {
+      console.warn('⚠️ Failed to parse metadata for item:', item.id, error);
+      safeMetadata = {};
+    }
     
     if (item.content_type === 'image' && item.url) {
       tiles.push({
@@ -464,15 +508,15 @@ export const useRealtimeWorkspace = () => {
         originalAssetId: item.id,
         type: 'image',
         url: item.url,
-        prompt: item.prompt,
+        prompt: item.prompt || '',
         timestamp: new Date(item.created_at),
         quality: (item.quality as 'fast' | 'high') || 'fast',
         modelType: item.model_type || 'sdxl',
-        enhancedPrompt: item.enhanced_prompt,
+        enhancedPrompt: item.enhanced_prompt || '',
         seed: extractedSeed,
         generationParams: {
           ...item.generation_params,
-          ...item.metadata,
+          ...safeMetadata,
           seed: extractedSeed
         }
       });
@@ -482,48 +526,74 @@ export const useRealtimeWorkspace = () => {
         originalAssetId: item.id,
         type: 'video',
         url: item.url,
-        prompt: item.prompt,
+        prompt: item.prompt || '',
         timestamp: new Date(item.created_at),
         quality: (item.quality as 'fast' | 'high') || 'fast',
         duration: 5, // Default duration
-        thumbnailUrl: item.thumbnail_url,
-        enhancedPrompt: item.enhanced_prompt,
+        thumbnailUrl: item.thumbnail_url || '',
+        enhancedPrompt: item.enhanced_prompt || '',
         seed: extractedSeed,
         generationParams: {
           ...item.generation_params,
-          ...item.metadata,
+          ...safeMetadata,
           seed: extractedSeed
         }
       });
     }
     
+    console.log('✅ Generated tiles for item:', item.id, 'tile count:', tiles.length);
     return tiles;
   }, []);
 
-  // Optimized workspace tiles from workspace items
+  // ✅ ENHANCE: Optimized workspace tiles from workspace items with comprehensive logging
   const workspaceTiles = useCallback(() => {
+    console.log('🎬 WORKSPACE TILES PROCESSING:', {
+      totalAssets: assets?.length || 0,
+      sessionId: activeSession?.id,
+      timestamp: new Date().toISOString()
+    });
+    
     if (!assets || assets.length === 0) {
+      console.log('📭 No workspace assets available');
       return [];
     }
     
     const allTiles: MediaTile[] = [];
+    let processedCount = 0;
+    let errorCount = 0;
+    
     assets.forEach(item => {
-      const tiles = transformWorkspaceItemToTiles(item);
-      allTiles.push(...tiles);
+      try {
+        const tiles = transformWorkspaceItemToTiles(item);
+        allTiles.push(...tiles);
+        processedCount++;
+      } catch (error) {
+        console.error('❌ Error processing workspace item:', item.id, error);
+        errorCount++;
+      }
+    });
+    
+    console.log('🎯 FINAL WORKSPACE TILES:', {
+      totalItems: assets.length,
+      processedCount,
+      errorCount,
+      tileCount: allTiles.length,
+      tileTypes: allTiles.reduce((acc, tile) => {
+        acc[tile.type] = (acc[tile.type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
     });
     
     // Sort by timestamp descending (newest first)
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }, [assets, transformWorkspaceItemToTiles]);
+  }, [assets, transformWorkspaceItemToTiles, activeSession?.id]);
 
   // Add to workspace - now handled by backend automatically
   const addToWorkspace = useCallback((assetIds: string[]) => {
     console.log('➕ Assets automatically added to workspace via backend:', assetIds);
-    // Refresh workspace items to show new additions
-    queryClient.invalidateQueries({ 
-      queryKey: ['workspace-items-all'],
-      exact: false 
-    });
+    // ✅ FIX: Use coordinated invalidation for all workspace queries
+    console.log('🔄 QUERY INVALIDATION: Adding to workspace, invalidating queries');
+    invalidateWorkspaceQueries();
   }, [queryClient]);
 
   // Import to workspace - would need to create workspace items
@@ -545,18 +615,16 @@ export const useRealtimeWorkspace = () => {
       
       if (error) throw error;
       
-      // Refresh workspace items
-      queryClient.invalidateQueries({ 
-        queryKey: ['workspace-items-all'],
-        exact: false 
-      });
+      // ✅ FIX: Use coordinated invalidation for all workspace queries
+      console.log('🔄 QUERY INVALIDATION: Clearing workspace, invalidating queries');
+      invalidateWorkspaceQueries();
       
       toast.success('Workspace cleared');
     } catch (error) {
       console.error('❌ Error clearing workspace:', error);
       toast.error('Failed to clear workspace');
     }
-  }, [activeSession?.id, queryClient]);
+  }, [activeSession?.id, invalidateWorkspaceQueries]);
 
   // Delete tile - delete workspace item
   const deleteTile = useCallback(async (tile: MediaTile) => {
@@ -575,11 +643,9 @@ export const useRealtimeWorkspace = () => {
       
       if (error) throw error;
       
-      // Refresh workspace items
-      queryClient.invalidateQueries({ 
-        queryKey: ['workspace-items-all'],
-        exact: false 
-      });
+      // ✅ FIX: Use coordinated invalidation for all workspace queries
+      console.log('🔄 QUERY INVALIDATION: Deleting tile, invalidating queries');
+      invalidateWorkspaceQueries();
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
       
@@ -602,7 +668,7 @@ export const useRealtimeWorkspace = () => {
         return next;
       });
     }
-  }, [deletingTiles, queryClient]);
+  }, [deletingTiles, invalidateWorkspaceQueries]);
 
   return {
     tiles: workspaceTiles(),

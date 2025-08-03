@@ -22,7 +22,7 @@ export const useWorkspace = () => {
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
   const [workspaceFilter, setWorkspaceFilter] = useState<Set<string>>(new Set());
   
-  // Simple workspace query with static key - refetches when workspaceFilter changes
+  // ✅ FIX: Use consistent query key with other workspace hooks
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['workspace-assets'],
     queryFn: async () => {
