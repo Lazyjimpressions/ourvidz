@@ -9,6 +9,7 @@ interface SessionWorkspaceProps {
   onJobDelete: (jobId: string) => void;
   onJobSave: (jobId: string) => void;
   onJobUseAsReference: (jobId: string) => void;
+  onJobImport: (jobId: string) => Promise<void>;
   activeJobId?: string;
   isDeleting: Set<string>;
 }
@@ -19,6 +20,7 @@ export const SessionWorkspace: React.FC<SessionWorkspaceProps> = ({
   onJobDelete,
   onJobSave,
   onJobUseAsReference,
+  onJobImport,
   activeJobId,
   isDeleting
 }) => {
@@ -66,6 +68,7 @@ export const SessionWorkspace: React.FC<SessionWorkspaceProps> = ({
               job={job}
               isActive={job.id === activeJob?.id}
               onClick={() => onJobSelect(job.id)}
+              onImport={() => onJobImport(job.id)}
               isDeleting={isDeleting.has(job.id)}
             />
           ))}

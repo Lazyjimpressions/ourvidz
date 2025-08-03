@@ -35,6 +35,7 @@ export interface WorkspaceJob {
   items: WorkspaceItem[]; // 3 items for images, 1 for video
   createdAt: Date;
   type: 'image' | 'video';
+  status: 'pending' | 'ready' | 'imported' | 'failed';
 }
 
 export interface SimplifiedWorkspaceState {
@@ -99,6 +100,7 @@ export interface SimplifiedWorkspaceActions {
   deleteJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
+  importJob: (jobId: string) => Promise<void>;
   // Legacy item actions for mobile compatibility
   editItem?: (item: WorkspaceItem) => void;
   saveItem?: (itemId: string) => Promise<boolean | undefined>;
@@ -114,8 +116,8 @@ export interface SimplifiedWorkspaceActions {
  * @returns {SimplifiedWorkspaceState & SimplifiedWorkspaceActions} Combined state and actions
  */
 export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & SimplifiedWorkspaceActions => {
-  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   // Core State (6 variables)
   const [mode, setMode] = useState<'image' | 'video'>('image');
@@ -233,13 +235,18 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         // Convert job map to WorkspaceJob array
         const jobs: WorkspaceJob[] = Array.from(jobMap.entries()).map(([jobId, items]) => {
           const firstItem = items[0];
+          // Determine job status based on items
+          const hasValidUrls = items.every(item => item.url && item.url.length > 0);
+          const status = hasValidUrls ? 'ready' : 'pending';
+          
           return {
             id: jobId,
             sessionId: firstItem.sessionId || '',
             prompt: firstItem.prompt,
             items: items.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()),
             createdAt: firstItem.timestamp,
-            type: firstItem.type
+            type: firstItem.type,
+            status
           };
         });
 
@@ -445,17 +452,26 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                     console.log('🔄 WORKSPACE REALTIME: Item already exists in job');
                   }
                   
+                  // Update job status to ready if all items have URLs
+                  const updatedJob = updatedJobs[existingJobIndex];
+                  const allItemsHaveUrls = updatedJob.items.every(item => item.url && item.url.length > 0);
+                  if (allItemsHaveUrls && updatedJob.status === 'pending') {
+                    updatedJobs[existingJobIndex] = { ...updatedJob, status: 'ready' };
+                    console.log(`✅ WORKSPACE REALTIME: Job ${jobId} status updated to 'ready'`);
+                  }
+                  
                   return updatedJobs;
-                } else {
-                  // Create new job
-                  const newJob: WorkspaceJob = {
-                    id: jobId,
-                    sessionId: newItem.session_id || '',
-                    prompt: newItem.prompt || 'Untitled',
-                    items: [workspaceItem],
-                    createdAt: new Date(newItem.created_at),
-                    type: newItem.content_type as 'image' | 'video'
-                  };
+                 } else {
+                   // Create new job
+                   const newJob: WorkspaceJob = {
+                     id: jobId,
+                     sessionId: newItem.session_id || '',
+                     prompt: newItem.prompt || 'Untitled',
+                     items: [workspaceItem],
+                     createdAt: new Date(newItem.created_at),
+                     type: newItem.content_type as 'image' | 'video',
+                     status: signedUrl ? 'ready' : 'pending'
+                   };
                   
                    console.log(`✅ WORKSPACE REALTIME: Created new job ${jobId} with 1 item`);
                    const updated = [newJob, ...prevJobs];
@@ -783,6 +799,60 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     console.log('Using job as reference:', firstItem.url);
   };
 
+  const importJob = async (jobId: string) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    try {
+      // Generate signed URLs for all items in the job
+      const updatedItems = await Promise.all(
+        job.items.map(async (item) => {
+          if (item.url && item.url.startsWith('http')) {
+            return item; // Already has signed URL
+          }
+
+          if (item.bucketName && item.sessionId) {
+            try {
+              const storagePath = `${item.sessionId}/${item.id}`;
+              const { data: urlData, error } = await supabase.storage
+                .from(item.bucketName)
+                .createSignedUrl(storagePath, 3600);
+
+              if (urlData?.signedUrl && !error) {
+                return { ...item, url: urlData.signedUrl };
+              }
+            } catch (error) {
+              console.error(`Failed to generate signed URL for item ${item.id}:`, error);
+            }
+          }
+
+          return item;
+        })
+      );
+
+      // Update job with new URLs and mark as imported
+      setWorkspaceJobs(prev =>
+        prev.map(j =>
+          j.id === jobId
+            ? { ...j, items: updatedItems, status: 'imported' as const }
+            : j
+        )
+      );
+
+      toast({
+        title: "Job Imported",
+        description: "Images are now ready for viewing",
+      });
+    } catch (error) {
+      console.error('Failed to import job:', error);
+      toast({
+        title: "Import Failed",
+        description: "Failed to load job images",
+        variant: "destructive",
+      });
+    }
+  };
+
   return {
     // Core State
     mode,
@@ -843,6 +913,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     deleteJob,
     saveJob,
     useJobAsReference,
+    importJob,
     // Legacy actions for mobile compatibility
     editItem: (item: WorkspaceItem) => console.log('Edit item:', item),
     saveItem,

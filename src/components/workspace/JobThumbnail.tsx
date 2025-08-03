@@ -8,6 +8,7 @@ interface JobThumbnailProps {
   job: WorkspaceJob;
   isActive: boolean;
   onClick: () => void;
+  onImport: () => void;
   isDeleting: boolean;
 }
 
@@ -15,27 +16,51 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
   job,
   isActive,
   onClick,
+  onImport,
   isDeleting
 }) => {
   const thumbnailItem = job.items[0]; // Use first item as thumbnail
   
-  // Phase 3: Enhanced thumbnail logging and loading state
-  console.log('🖼️ JobThumbnail render:', {
-    jobId: job.id,
-    hasItems: job.items.length > 0,
-    thumbnailUrl: thumbnailItem?.url,
-    thumbnailUrlLength: thumbnailItem?.url?.length || 0,
-    isSignedUrl: thumbnailItem?.url?.includes('supabase') || false
-  });
+  // Handle click based on job status
+  const handleClick = () => {
+    if (job.status === 'pending') {
+      // Show message for pending jobs
+      return;
+    } else if (job.status === 'ready') {
+      // Import the job
+      onImport();
+    } else {
+      // For imported jobs, just select
+      onClick();
+    }
+  };
+
+  // Determine visual state based on job status
+  const getStatusDisplay = () => {
+    switch (job.status) {
+      case 'pending':
+        return { text: 'Preparing...', className: 'opacity-60' };
+      case 'ready':
+        return { text: 'Ready', className: 'border-primary/50 ring-1 ring-primary/20' };
+      case 'imported':
+        return { text: 'Imported', className: '' };
+      case 'failed':
+        return { text: 'Retry', className: 'border-destructive' };
+      default:
+        return { text: '', className: '' };
+    }
+  };
+
+  const statusDisplay = getStatusDisplay();
 
   return (
     <div
       className={`relative group cursor-pointer rounded-lg border-2 transition-colors ${
         isActive 
           ? 'border-primary bg-primary/5' 
-          : 'border-border hover:border-primary/50'
-      }`}
-      onClick={onClick}
+          : `border-border hover:border-primary/50 ${statusDisplay.className}`
+      } ${statusDisplay.className}`}
+      onClick={handleClick}
     >
       {/* Thumbnail Image/Video */}
       <div className="aspect-square rounded-md overflow-hidden mb-2">
@@ -52,8 +77,7 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
           </div>
         ) : (
           <div className="relative w-full h-full">
-            {/* Phase 4: Loading state for thumbnails */}
-            {!thumbnailItem?.url ? (
+            {job.status === 'pending' || !thumbnailItem?.url ? (
               <div className="w-full h-full bg-muted flex items-center justify-center">
                 <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-primary" />
               </div>
@@ -64,11 +88,7 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
                 className="w-full h-full object-cover"
                 onError={(e) => {
                   console.error('❌ JobThumbnail: Image failed to load:', thumbnailItem.url);
-                  // Phase 3: Error fallback for thumbnails
                   e.currentTarget.style.display = 'none';
-                }}
-                onLoad={() => {
-                  console.log('✅ JobThumbnail: Image loaded successfully:', thumbnailItem.url?.substring(0, 50) + '...');
                 }}
               />
             )}
@@ -85,7 +105,7 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
           {job.prompt}
         </div>
         <div className="text-xs text-muted-foreground mt-1">
-          {job.items.length} {job.type}s • {job.items[0]?.quality}
+          {job.items.length} {job.type}s • {statusDisplay.text}
         </div>
       </div>
 
@@ -116,6 +136,19 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+      </div>
+
+      {/* Status Indicator */}
+      <div className="absolute top-2 left-2">
+        {job.status === 'ready' && (
+          <div className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+        )}
+        {job.status === 'imported' && (
+          <div className="w-2 h-2 bg-green-500 rounded-full" />
+        )}
+        {job.status === 'failed' && (
+          <div className="w-2 h-2 bg-destructive rounded-full" />
+        )}
       </div>
 
       {/* Active Indicator */}

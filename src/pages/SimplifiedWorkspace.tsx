@@ -77,6 +77,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     deleteJob,
     saveJob,
     useJobAsReference,
+    importJob,
   } = useSimplifiedWorkspaceState();
 
   // Simple workspace management handlers
@@ -123,6 +124,7 @@ export const SimplifiedWorkspace: React.FC = () => {
           onJobDelete={deleteJob}
           onJobSave={saveJob}
           onJobUseAsReference={useJobAsReference}
+          onJobImport={importJob}
           activeJobId={activeJobId}
           isDeleting={new Set()} // TODO: Track deleting state
         />
