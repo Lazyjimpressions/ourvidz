@@ -154,6 +154,10 @@ export const JobGrid: React.FC<JobGridProps> = ({
                 src={item.url}
                 alt={`Generated image ${index + 1}`}
                 className="w-full h-full object-cover rounded-lg bg-muted cursor-pointer transition-transform hover:scale-105"
+                onError={(e) => {
+                  console.error(`Failed to load image: ${item.url}`);
+                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTkgMTJMMTEgMTRMMTUgMTBNMjEgMTJDMjEgMTYuOTcwNiAxNi45NzA2IDIxIDEyIDIxUzcgMTYuOTcwNiA3IDEyQzcgNy4wMjk0NCAxMS4wMjk0IDMgMTYgM1MyMSA3LjAyOTQgMjEgMTJaIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+';
+                }}
                 onClick={() => {
                   // TODO: Open lightbox modal
                   window.open(item.url, '_blank');

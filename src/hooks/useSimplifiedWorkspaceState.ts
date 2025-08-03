@@ -247,23 +247,47 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         jobs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
         setWorkspaceJobs(jobs);
-        setWorkspaceItems(data?.map((item: any) => ({
-          id: String(item.id),
-          url: item.url || '',
-          prompt: item.prompt || '',
-          type: item.content_type as 'image' | 'video',
-          timestamp: new Date(item.created_at),
-          quality: (item.quality as 'fast' | 'high') || 'high',
-          modelType: item.model_type,
-          thumbnailUrl: item.thumbnail_url,
-          enhancedPrompt: item.enhanced_prompt,
-          seed: item.seed,
-          generationParams: item.generation_params || {},
-          jobId: item.job_id,
-          sessionId: item.session_id,
-          bucketName: item.bucket_name,
-          status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
-        })) || []);
+        // Process items and generate signed URLs for display
+        const processedItems = await Promise.all((data || []).map(async (item: any) => {
+          let displayUrl = item.url || '';
+          
+          // Generate signed URL if we have storage path and bucket
+          if (item.storage_path && item.bucket_name && !displayUrl.startsWith('http')) {
+            try {
+              console.log(`🔗 Generating signed URL for: ${item.storage_path} in ${item.bucket_name}`);
+              const { data: urlData } = await supabase.storage
+                .from(item.bucket_name)
+                .createSignedUrl(item.storage_path, 3600);
+              
+              if (urlData?.signedUrl) {
+                displayUrl = urlData.signedUrl;
+                console.log(`✅ Generated signed URL for workspace item ${item.id}`);
+              }
+            } catch (error) {
+              console.error('❌ Error generating signed URL:', error);
+            }
+          }
+          
+          return {
+            id: String(item.id),
+            url: displayUrl,
+            prompt: item.prompt || '',
+            type: item.content_type as 'image' | 'video',
+            timestamp: new Date(item.created_at),
+            quality: (item.quality as 'fast' | 'high') || 'high',
+            modelType: item.model_type,
+            thumbnailUrl: item.thumbnail_url,
+            enhancedPrompt: item.enhanced_prompt,
+            seed: item.seed,
+            generationParams: item.generation_params || {},
+            jobId: item.job_id,
+            sessionId: item.session_id,
+            bucketName: item.bucket_name,
+            status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
+          };
+        }));
+        
+        setWorkspaceItems(processedItems);
 
         // Set active job to the most recent one
         if (jobs.length > 0 && !activeJobId) {
@@ -291,9 +315,97 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             table: 'workspace_items',
             filter: `user_id=eq.${user.id}`
           },
-          (payload) => {
+          async (payload) => {
             console.log('🔔 WORKSPACE: Real-time update:', payload);
-            loadWorkspaceJobs(); // Reload on any change
+            
+            if (payload.eventType === 'INSERT') {
+              const newItem = payload.new as any;
+              console.log('✨ New workspace item received:', newItem);
+              
+              // Generate signed URL for immediate display
+              let signedUrl = newItem.url || '';
+              if (newItem.storage_path && newItem.bucket_name) {
+                try {
+                  const { data: urlData } = await supabase.storage
+                    .from(newItem.bucket_name)
+                    .createSignedUrl(newItem.storage_path, 3600);
+                  
+                  if (urlData?.signedUrl) {
+                    signedUrl = urlData.signedUrl;
+                    console.log(`✅ Generated signed URL for new item`);
+                  }
+                } catch (error) {
+                  console.error('❌ Error generating signed URL:', error);
+                }
+              }
+              
+              // Add new item to workspace immediately
+              const workspaceItem = {
+                id: String(newItem.id),
+                url: signedUrl,
+                prompt: newItem.prompt || '',
+                type: newItem.content_type as 'image' | 'video',
+                timestamp: new Date(newItem.created_at),
+                quality: (newItem.quality as 'fast' | 'high') || 'high',
+                modelType: newItem.model_type,
+                thumbnailUrl: newItem.thumbnail_url,
+                enhancedPrompt: newItem.enhanced_prompt,
+                seed: newItem.seed,
+                generationParams: newItem.generation_params || {},
+                jobId: newItem.job_id,
+                sessionId: newItem.session_id,
+                bucketName: newItem.bucket_name,
+                status: newItem.status as 'generated' | 'saved' | 'deleted' || 'generated'
+              };
+              
+              setWorkspaceItems(prev => [workspaceItem, ...prev]);
+              
+              // Update workspace jobs immediately
+              setWorkspaceJobs(prevJobs => {
+                const jobId = newItem.job_id || `session_${newItem.session_id}_${newItem.created_at}`;
+                const existingJobIndex = prevJobs.findIndex(job => job.id === jobId);
+                
+                if (existingJobIndex >= 0) {
+                  // Add item to existing job
+                  const updatedJobs = [...prevJobs];
+                  const existingJob = updatedJobs[existingJobIndex];
+                  
+                  // Check if item already exists
+                  const itemExists = existingJob.items.some(item => item.id === workspaceItem.id);
+                  if (!itemExists) {
+                    updatedJobs[existingJobIndex] = {
+                      ...existingJob,
+                      items: [...existingJob.items, workspaceItem]
+                    };
+                    console.log(`✅ Added item to existing job ${jobId}`);
+                  }
+                  
+                  return updatedJobs;
+                } else {
+                  // Create new job
+                  const newJob: WorkspaceJob = {
+                    id: jobId,
+                    sessionId: newItem.session_id || '',
+                    prompt: newItem.prompt || '',
+                    items: [workspaceItem],
+                    createdAt: new Date(newItem.created_at),
+                    type: newItem.content_type as 'image' | 'video'
+                  };
+                  
+                  console.log(`✅ Created new job ${jobId} with item`);
+                  return [newJob, ...prevJobs];
+                }
+              });
+              
+              // Set as active job if it's the first one
+              if (!activeJobId && newItem.job_id) {
+                console.log(`🎯 Setting active job to: ${newItem.job_id}`);
+                setActiveJobId(newItem.job_id);
+              }
+            } else {
+              // For other events, reload all data
+              loadWorkspaceJobs();
+            }
           }
         )
         .subscribe();
