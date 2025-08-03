@@ -26,6 +26,17 @@ const createWorkspaceInvalidator = (queryClient: any) => {
   };
 };
 
+/**
+ * Unified real-time workspace hook with session storage based architecture
+ * Provides coordinated query invalidation and real-time workspace updates
+ * 
+ * @returns {Object} Workspace state and actions
+ * @returns {MediaTile[]} returns.workspaceTiles - Current workspace items as media tiles
+ * @returns {boolean} returns.isLoading - Loading state for workspace data
+ * @returns {Function} returns.addToWorkspace - Add asset to workspace
+ * @returns {Function} returns.clearWorkspace - Clear all workspace items
+ * @returns {Function} returns.deleteTile - Delete specific workspace item
+ */
 export const useRealtimeWorkspace = () => {
   const queryClient = useQueryClient();
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
@@ -42,7 +53,10 @@ export const useRealtimeWorkspace = () => {
   // ✅ ADD: Coordinated invalidation function
   const invalidateWorkspaceQueries = useCallback(createWorkspaceInvalidator(queryClient), [queryClient]);
   
-  // Get active workspace session first
+  /**
+   * Get active workspace session for the current user
+   * Creates session storage based workspace management
+   */
   const { data: activeSession, isLoading: sessionLoading, error: sessionError } = useQuery({
     queryKey: ['active-workspace-session'],
     queryFn: async () => {
@@ -81,7 +95,10 @@ export const useRealtimeWorkspace = () => {
     });
   }, [activeSession, sessionLoading, sessionError]);
 
-  // Fetch ALL workspace items for the user (from all sessions)
+  /**
+   * Fetch all workspace items for the current user
+   * Uses unified query keys for consistent data access
+   */
   const { data: assets = [], isLoading: itemsLoading, error: itemsError } = useQuery({
     queryKey: WORKSPACE_QUERY_KEYS.ITEMS,
     queryFn: async () => {

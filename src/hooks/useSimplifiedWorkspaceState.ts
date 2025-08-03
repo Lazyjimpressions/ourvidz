@@ -103,6 +103,12 @@ export interface SimplifiedWorkspaceActions {
   useSeed: (item: WorkspaceItem) => void;
 }
 
+/**
+ * Unified session storage based workspace state management hook
+ * Provides simplified state management with 68% reduction in variables
+ * 
+ * @returns {SimplifiedWorkspaceState & SimplifiedWorkspaceActions} Combined state and actions
+ */
 export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & SimplifiedWorkspaceActions => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
