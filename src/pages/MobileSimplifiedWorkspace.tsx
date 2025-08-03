@@ -75,12 +75,13 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
   const handleEditItem = (item: WorkspaceItem) => {
     // Set the prompt to the item's prompt for editing
     setPrompt(item.prompt);
-    // Load other item parameters
-    if (item.referenceImage) {
-      setReferenceImage(item.referenceImage);
+    // Load generation parameters if available
+    if (item.generationParams?.referenceImage) {
+      // TODO: Handle reference image loading from generation params
+      console.log('Reference image in params:', item.generationParams.referenceImage);
     }
-    if (item.referenceStrength) {
-      setReferenceStrength(item.referenceStrength);
+    if (item.generationParams?.referenceStrength) {
+      setReferenceStrength(item.generationParams.referenceStrength);
     }
     if (item.seed) {
       // TODO: Add seed to state management
@@ -90,7 +91,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
   };
 
   const handleSaveItem = (item: WorkspaceItem) => {
-    saveItem(item);
+    saveItem?.(item.id);
   };
 
   const handleViewItem = (item: WorkspaceItem) => {
