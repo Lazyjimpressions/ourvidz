@@ -254,14 +254,20 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           // Generate signed URL if we have storage path and bucket
           if (item.storage_path && item.bucket_name && !displayUrl.startsWith('http')) {
             try {
-              console.log(`🔗 Generating signed URL for: ${item.storage_path} in ${item.bucket_name}`);
-              const { data: urlData } = await supabase.storage
+          console.log(`🔐 WORKSPACE LOAD: Generating signed URL for item ${item.id}:`, {
+                bucket: item.bucket_name,
+                path: item.storage_path
+              });
+              
+              const { data: urlData, error } = await supabase.storage
                 .from(item.bucket_name)
                 .createSignedUrl(item.storage_path, 3600);
               
-              if (urlData?.signedUrl) {
+              if (urlData?.signedUrl && !error) {
                 displayUrl = urlData.signedUrl;
-                console.log(`✅ Generated signed URL for workspace item ${item.id}`);
+                console.log(`✅ WORKSPACE LOAD: Generated signed URL for item ${item.id}`);
+              } else {
+                console.error(`❌ WORKSPACE LOAD: Failed to generate signed URL for item ${item.id}:`, error);
               }
             } catch (error) {
               console.error('❌ Error generating signed URL:', error);
@@ -316,30 +322,50 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             filter: `user_id=eq.${user.id}`
           },
           async (payload) => {
-            console.log('🔔 WORKSPACE: Real-time update:', payload);
+            console.log('📡 WORKSPACE REALTIME: Event received at', new Date().toISOString(), {
+              eventType: payload.eventType,
+              table: payload.table,
+              hasNew: !!payload.new,
+              newItemId: payload.new ? (payload.new as any).id : null
+            });
             
-            if (payload.eventType === 'INSERT') {
+            if (payload.eventType === 'INSERT' && payload.new) {
               const newItem = payload.new as any;
-              console.log('✨ New workspace item received:', newItem);
+              console.log('✨ WORKSPACE REALTIME: Processing INSERT for item:', {
+                id: newItem.id,
+                job_id: newItem.job_id,
+                storage_path: newItem.storage_path,
+                bucket_name: newItem.bucket_name,
+                content_type: newItem.content_type
+              });
               
-              // Generate signed URL for immediate display
-              let signedUrl = newItem.url || '';
+              // Generate signed URL with enhanced error handling
+              let signedUrl = '';
               if (newItem.storage_path && newItem.bucket_name) {
                 try {
-                  const { data: urlData } = await supabase.storage
+                  console.log('🔐 WORKSPACE REALTIME: Generating signed URL for:', {
+                    bucket: newItem.bucket_name,
+                    path: newItem.storage_path
+                  });
+                  
+                  const { data: urlData, error } = await supabase.storage
                     .from(newItem.bucket_name)
                     .createSignedUrl(newItem.storage_path, 3600);
                   
-                  if (urlData?.signedUrl) {
+                  if (urlData?.signedUrl && !error) {
                     signedUrl = urlData.signedUrl;
-                    console.log(`✅ Generated signed URL for new item`);
+                    console.log('✅ WORKSPACE REALTIME: Signed URL generated successfully');
+                  } else {
+                    console.error('❌ WORKSPACE REALTIME: Failed to generate signed URL:', error);
                   }
                 } catch (error) {
-                  console.error('❌ Error generating signed URL:', error);
+                  console.error('❌ WORKSPACE REALTIME: Exception generating signed URL:', error);
                 }
+              } else {
+                console.warn('⚠️ WORKSPACE REALTIME: Missing storage_path or bucket_name');
               }
               
-              // Add new item to workspace immediately
+              // Create workspace item with signed URL
               const workspaceItem = {
                 id: String(newItem.id),
                 url: signedUrl,
@@ -358,9 +384,20 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                 status: newItem.status as 'generated' | 'saved' | 'deleted' || 'generated'
               };
               
-              setWorkspaceItems(prev => [workspaceItem, ...prev]);
+              console.log('➕ WORKSPACE REALTIME: Adding item to workspace items');
+              setWorkspaceItems(prev => {
+                // Check for duplicates
+                const exists = prev.some(item => item.id === workspaceItem.id);
+                if (exists) {
+                  console.log('🔄 WORKSPACE REALTIME: Item already exists, skipping');
+                  return prev;
+                }
+                const updated = [workspaceItem, ...prev];
+                console.log('📊 WORKSPACE REALTIME: New items count:', updated.length);
+                return updated;
+              });
               
-              // Update workspace jobs immediately
+              console.log('🔄 WORKSPACE REALTIME: Updating jobs list');
               setWorkspaceJobs(prevJobs => {
                 const jobId = newItem.job_id || `session_${newItem.session_id}_${newItem.created_at}`;
                 const existingJobIndex = prevJobs.findIndex(job => job.id === jobId);
@@ -370,14 +407,16 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                   const updatedJobs = [...prevJobs];
                   const existingJob = updatedJobs[existingJobIndex];
                   
-                  // Check if item already exists
+                  // Check if item already exists in job
                   const itemExists = existingJob.items.some(item => item.id === workspaceItem.id);
                   if (!itemExists) {
                     updatedJobs[existingJobIndex] = {
                       ...existingJob,
                       items: [...existingJob.items, workspaceItem]
                     };
-                    console.log(`✅ Added item to existing job ${jobId}`);
+                    console.log(`✅ WORKSPACE REALTIME: Added item to existing job ${jobId} (${updatedJobs[existingJobIndex].items.length} items total)`);
+                  } else {
+                    console.log('🔄 WORKSPACE REALTIME: Item already exists in job');
                   }
                   
                   return updatedJobs;
@@ -386,29 +425,40 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                   const newJob: WorkspaceJob = {
                     id: jobId,
                     sessionId: newItem.session_id || '',
-                    prompt: newItem.prompt || '',
+                    prompt: newItem.prompt || 'Untitled',
                     items: [workspaceItem],
                     createdAt: new Date(newItem.created_at),
                     type: newItem.content_type as 'image' | 'video'
                   };
                   
-                  console.log(`✅ Created new job ${jobId} with item`);
-                  return [newJob, ...prevJobs];
+                  console.log(`✅ WORKSPACE REALTIME: Created new job ${jobId} with 1 item`);
+                  const updated = [newJob, ...prevJobs];
+                  console.log('📊 WORKSPACE REALTIME: New jobs count:', updated.length);
+                  return updated;
                 }
               });
               
-              // Set as active job if it's the first one
+              // Set as active job if none selected
               if (!activeJobId && newItem.job_id) {
-                console.log(`🎯 Setting active job to: ${newItem.job_id}`);
+                console.log(`🎯 WORKSPACE REALTIME: Setting active job to: ${newItem.job_id}`);
                 setActiveJobId(newItem.job_id);
               }
             } else {
-              // For other events, reload all data
+              console.log('🔄 WORKSPACE REALTIME: Non-INSERT event, reloading all data');
               loadWorkspaceJobs();
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('📡 WORKSPACE REALTIME: Subscription status:', status);
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ WORKSPACE REALTIME: Successfully subscribed to real-time updates');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ WORKSPACE REALTIME: Channel error occurred');
+          } else if (status === 'TIMED_OUT') {
+            console.error('❌ WORKSPACE REALTIME: Subscription timed out');
+          }
+        });
 
       return () => {
         supabase.removeChannel(channel);
