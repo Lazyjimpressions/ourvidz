@@ -103,21 +103,22 @@ serve(async (req)=>{
       updatedMetadata.enhancement_strategy = 'template_based';
     }
     
-    // WORKSPACE SUPPORT: Check if job is destined for workspace
-    const isWorkspaceJob = currentJob.destination === 'workspace' || currentJob.workspace_session_id;
-    console.log('🎯 WORKSPACE DESTINATION CHECK:', {
-      job_id: currentJob.id,
-      destination: currentJob.destination,
-      workspace_session_id: currentJob.workspace_session_id,
-      isWorkspaceJob
-    });
+// WORKSPACE SUPPORT: Check if job is destined for workspace
+const isWorkspaceJob = currentJob.destination === 'workspace' || currentJob.workspace_session_id;
+console.log('🎯 WORKSPACE DESTINATION CHECK:', {
+  job_id: job_id,
+  destination: currentJob.destination,
+  workspace_session_id: currentJob.workspace_session_id,
+  isWorkspaceJob,
+  currentJobId: currentJob.id
+});
     
     updateData.metadata = updatedMetadata;
     
     // WORKSPACE SUPPORT: Route to workspace or library based on destination
     if (isWorkspaceJob && status === 'completed' && assets && assets.length > 0) {
-      console.log('🎯 WORKSPACE JOB: Routing to workspace items');
-      await handleWorkspaceJobCallback(supabase, currentJob, status, assets, error_message);
+      console.log('🎯 WORKSPACE JOB: Routing to workspace items with job_id:', job_id);
+      await handleWorkspaceJobCallback(supabase, currentJob, status, assets, error_message, job_id);
     } else if (status === 'completed' && assets && assets.length > 0) {
       console.log('📚 LIBRARY JOB: Routing to library items');
       // Existing library handling logic
@@ -868,7 +869,7 @@ async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
 }
 
 // WORKSPACE SUPPORT: Handle workspace-first generation (PHASE 1 FIX)
-async function handleWorkspaceJobCallback(supabase, job, status, assets, error_message) {
+async function handleWorkspaceJobCallback(supabase, job, status, assets, error_message, job_id) {
   console.log('🎯 WORKSPACE CALLBACK (FIXED):', {
     job_id: job.id,
     job_type: job.job_type,
@@ -887,7 +888,7 @@ async function handleWorkspaceJobCallback(supabase, job, status, assets, error_m
       
       const workspaceItemData = {
         session_id: job.workspace_session_id,
-        job_id: job.id, // CRITICAL FIX: Ensure job_id is set
+        job_id: job_id, // CRITICAL FIX: Use the actual job_id parameter from callback
         user_id: job.user_id,
         prompt: prompt,
         enhanced_prompt: jobMetadata.enhanced_prompt || jobMetadata.final_prompt || prompt,
@@ -895,7 +896,7 @@ async function handleWorkspaceJobCallback(supabase, job, status, assets, error_m
         model_type: job.job_type,
         quality: job.quality || 'fast',
         storage_path: assetUrl,
-        bucket_name: isImageJob ? 'sdxl_image_high' : 'video_high', // PHASE 1 FIX: Correct bucket
+        bucket_name: job.job_type.startsWith('sdxl_') ? `sdxl_${job.job_type.replace('sdxl_', '')}` : (isImageJob ? 'image_high' : 'video_high'), // PHASE 1 FIX: Correct SDXL bucket
         url: assetUrl,
         thumbnail_url: assetUrl,
         generation_params: {

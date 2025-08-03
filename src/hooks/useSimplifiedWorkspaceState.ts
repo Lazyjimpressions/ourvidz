@@ -24,6 +24,7 @@ export interface WorkspaceItem {
   generationParams?: Record<string, any>;
   jobId?: string; // Reference to job this item belongs to
   sessionId?: string; // Reference to session this item belongs to
+  bucketName?: string; // Storage bucket for signed URL generation
 }
 
 export interface WorkspaceJob {
@@ -165,7 +166,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     setSearchParams({ mode: modeValue });
   }, [setSearchParams]);
 
-  // Load workspace jobs from database
+  // Load workspace jobs from database with real-time updates
   useEffect(() => {
     const loadWorkspaceJobs = async () => {
       try {
@@ -200,7 +201,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         const jobMap = new Map<string, WorkspaceItem[]>();
         
         data?.forEach((item: any) => {
-          const jobId = item.job_id || item.id; // Fallback to item id if no job_id
+          // PHASE 3 FIX: Better job ID fallback strategy
+          const jobId = item.job_id || `session_${item.session_id}_${item.created_at}`;
           
           const workspaceItem: WorkspaceItem = {
             id: String(item.id),
@@ -215,7 +217,9 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             seed: item.seed,
             generationParams: item.generation_params || {},
             jobId: item.job_id,
-            sessionId: item.session_id
+            sessionId: item.session_id,
+            // PHASE 2 FIX: Add bucket hint for signed URL generation
+            bucketName: item.bucket_name
           };
 
           if (!jobMap.has(jobId)) {
@@ -254,7 +258,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           seed: item.seed,
           generationParams: item.generation_params || {},
           jobId: item.job_id,
-          sessionId: item.session_id
+          sessionId: item.session_id,
+          bucketName: item.bucket_name
         })) || []);
 
         // Set active job to the most recent one

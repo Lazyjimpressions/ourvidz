@@ -67,10 +67,18 @@ const useSignedImageUrls = () => {
         }
       }
 
-      // Try buckets in order aligned with OptimizedAssetService
+      // PHASE 2 FIX: Smart bucket detection for SDXL images
+      let bucketList = [bucketName];
+      
+      // Add SDXL buckets if path suggests it's an SDXL image
+      if (path.includes('sdxl_') || bucketName?.includes('sdxl')) {
+        bucketList = ['sdxl_image_high', 'sdxl_image_fast', ...bucketList];
+      }
+      
+      // Complete bucket list with fallbacks
       const bucketsToTry = [
-        bucketName,
-        'sdxl_image_high', // Move high up since most recent images are here
+        ...bucketList,
+        'sdxl_image_high', // Most common for recent images
         'sdxl_image_fast',
         'image7b_fast_enhanced', 
         'image7b_high_enhanced',
