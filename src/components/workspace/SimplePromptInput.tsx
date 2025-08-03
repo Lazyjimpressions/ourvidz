@@ -16,7 +16,7 @@ const ReferenceImageUpload: React.FC<{
       onFileChange(uploadedFile);
     }
   };
-  return <div className="border border-gray-600 rounded-lg p-2 h-12">
+  return <div className="border border-gray-600 p-2 h-16 py-0 px-0 rounded">
       {file ? <div className="relative">
           <img src={URL.createObjectURL(file)} alt={label} className="w-full h-12 object-cover rounded" />
           <button onClick={() => onFileChange(null)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
