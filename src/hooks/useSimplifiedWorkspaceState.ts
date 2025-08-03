@@ -142,12 +142,11 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   // Enhancement Model Selection (1 variable) - NEW
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
   
-  // Real-time workspace items
+  // Real-time workspace items - Direct database query
   const [workspaceItems, setWorkspaceItems] = useState<WorkspaceItem[]>([]);
 
   // Integrate with existing hooks
   const { generateContent, isGenerating: generationInProgress, error: generationError } = useGeneration();
-  const { tiles: realtimeTiles, isLoading: workspaceLoading, addToWorkspace: addToRealtimeWorkspace, deleteTile: deleteRealtimeTile } = useRealtimeWorkspace();
 
   // Sync mode with URL
   useEffect(() => {
@@ -163,48 +162,90 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     setSearchParams({ mode: newMode });
   }, [setSearchParams]);
 
-  // Convert realtime tiles to workspace items
+  // Direct database query for workspace items
   useEffect(() => {
-    const convertTilesToItems = async () => {
-      const items: WorkspaceItem[] = [];
-      
-      for (const tile of realtimeTiles) {
-        try {
-          // Get asset details from AssetService
-          const assets = await AssetService.getAssetsByIds([tile.originalAssetId]);
-          const asset = assets[0];
-          
-          if (asset) {
-            items.push({
-              id: tile.id,
-              url: asset.url || asset.thumbnailUrl || '',
-              prompt: asset.prompt,
-              type: asset.type,
-              modelType: asset.modelType,
-              quality: asset.quality as 'fast' | 'high',
-              originalAssetId: tile.originalAssetId,
-              timestamp: asset.createdAt.toISOString(),
-              generationParams: {
-                seed: asset.metadata?.seed,
-                originalAssetId: tile.originalAssetId,
-                timestamp: asset.createdAt.toISOString()
-              }
-            });
-          }
-        } catch (error) {
-          console.error('Failed to convert tile to item:', error);
+    const loadWorkspaceItems = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        console.log('🔄 WORKSPACE: Loading workspace items for user:', user.id);
+        
+        const { data, error } = await (supabase as any)
+          .from('workspace_items')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'generated')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('❌ WORKSPACE: Error loading items:', error);
+          return;
         }
+
+        console.log('✅ WORKSPACE: Loaded items:', {
+          count: data?.length || 0,
+          items: data?.slice(0, 3).map((item: any) => ({
+            id: item.id,
+            content_type: item.content_type,
+            prompt: item.prompt?.substring(0, 30) + '...'
+          }))
+        });
+
+        // Convert database items to WorkspaceItem format
+        const items: WorkspaceItem[] = data?.map((item: any) => ({
+          id: String(item.id),
+          url: item.url || '',
+          prompt: item.prompt || 'Untitled',
+          type: item.content_type as 'image' | 'video',
+          modelType: item.model_type,
+          quality: item.quality as 'fast' | 'high',
+          seed: item.seed,
+          referenceStrength: item.reference_strength,
+          generationParams: {
+            seed: item.seed,
+            originalAssetId: String(item.id),
+            timestamp: item.created_at
+          }
+        })) || [];
+
+        setWorkspaceItems(items);
+      } catch (error) {
+        console.error('❌ WORKSPACE: Failed to load items:', error);
       }
-      
-      setWorkspaceItems(items);
     };
 
-    if (realtimeTiles.length > 0) {
-      convertTilesToItems();
-    } else {
-      setWorkspaceItems([]);
-    }
-  }, [realtimeTiles]);
+    loadWorkspaceItems();
+
+    // Set up real-time subscription for workspace items
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const channel = supabase
+        .channel('workspace-items-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'workspace_items',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('🔔 WORKSPACE: Real-time update:', payload);
+            loadWorkspaceItems(); // Reload on any change
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+
+    setupRealtime();
+  }, []);
 
   // Sync generation state
   useEffect(() => {
@@ -341,8 +382,20 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   // Workspace management
   const clearWorkspace = useCallback(async () => {
     try {
-      // Clear realtime workspace
-      await addToRealtimeWorkspace([]);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('🧹 WORKSPACE: Clearing all workspace items');
+
+      // Delete all workspace items for this user
+      const { error } = await (supabase as any)
+        .from('workspace_items')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('status', 'generated');
+
+      if (error) throw error;
+
       setWorkspaceItems([]);
       
       toast({
@@ -350,50 +403,49 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         description: "All items have been removed from workspace",
       });
     } catch (error) {
-      console.error('Failed to clear workspace:', error);
+      console.error('❌ WORKSPACE: Clear failed:', error);
       toast({
         title: "Failed to Clear Workspace",
         description: "Please try again",
         variant: "destructive",
       });
     }
-  }, [addToRealtimeWorkspace, toast]);
+  }, [toast]);
 
   const deleteItem = useCallback(async (itemId: string) => {
     try {
-      const item = workspaceItems.find(i => i.id === itemId);
-      if (!item) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
 
-      // Delete from realtime workspace - expects MediaTile object
-      await deleteRealtimeTile({
-        id: itemId,
-        originalAssetId: item.originalAssetId || itemId,
-        type: item.type,
-        prompt: item.prompt,
-        url: item.url,
-        timestamp: new Date(),
-        quality: item.quality || 'fast'
+      console.log('🗑️ WORKSPACE: Deleting item:', itemId);
+
+      const { error } = await supabase.functions.invoke('delete-workspace-item', {
+        body: { item_id: itemId, user_id: user.id }
       });
+
+      if (error) throw error;
+
+      // Update local state immediately
+      setWorkspaceItems(prev => prev.filter(item => item.id !== itemId));
 
       toast({
         title: "Item Deleted",
-        description: `${item.type} has been removed from workspace`,
+        description: "Item removed from workspace and storage",
       });
     } catch (error) {
-      console.error('Failed to delete item:', error);
+      console.error('❌ WORKSPACE: Delete failed:', error);
       toast({
-        title: "Failed to Delete Item",
-        description: "Please try again",
+        title: "Delete Failed",
+        description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
     }
-  }, [workspaceItems, deleteRealtimeTile, toast]);
+  }, [toast]);
 
   const addToWorkspace = useCallback(async (item: WorkspaceItem) => {
     try {
-      // Add to realtime workspace - expects array of asset IDs
-      await addToRealtimeWorkspace([item.originalAssetId || item.id]);
-
+      console.log('➕ WORKSPACE: Adding item to workspace:', item.id);
+      // Items are already in workspace when generated
       toast({
         title: "Added to Workspace",
         description: `${item.type} has been added to workspace`,
@@ -406,7 +458,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         variant: "destructive",
       });
     }
-  }, [addToRealtimeWorkspace, toast]);
+  }, [toast]);
 
   const editItem = useCallback((item: WorkspaceItem) => {
     setPrompt(item.prompt);
@@ -416,17 +468,40 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
 
   const saveItem = useCallback(async (item: WorkspaceItem) => {
     try {
-      // TODO: Implement save to library functionality
-      console.log('Save item:', item);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('💾 WORKSPACE: Saving item to library:', item.id);
+
+      // Mark as saved in database
+      const { error } = await (supabase as any)
+        .from('workspace_items')
+        .update({ status: 'saved' })
+        .eq('id', item.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Update local state to mark as saved
+      setWorkspaceItems(prev =>
+        prev.map(existingItem =>
+          existingItem.id === item.id
+            ? { ...existingItem, status: 'saved' as any }
+            : existingItem
+        )
+      );
+
       toast({
-        title: "Save Feature",
-        description: "Save to library functionality coming soon",
+        title: "Item Saved",
+        description: "Item saved to your library permanently",
       });
+
+      return true;
     } catch (error) {
-      console.error('Failed to save item:', error);
+      console.error('❌ WORKSPACE: Save failed:', error);
       toast({
-        title: "Failed to Save",
-        description: "Please try again",
+        title: "Save Failed",
+        description: error instanceof Error ? error.message : "Please try again",
         variant: "destructive",
       });
     }
