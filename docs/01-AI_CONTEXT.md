@@ -1,6 +1,6 @@
 # AI Context Guide - OurVidz Documentation
 
-**Last Updated:** July 30, 2025  
+**Last Updated:** August 2, 2025  
 **Purpose:** Central navigation and context guide for AI assistants
 
 ## 🚀 Quick Start for AI
@@ -11,6 +11,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Backend**: Supabase Online (PostgreSQL, Auth, Storage, Edge Functions)
 - **AI Workers**: RunPod RTX 6000 ADA (48GB VRAM) - **Separate Repository**
 - **Architecture**: Triple worker system with job queuing and real-time status
+- **Workspace System**: Workspace-first generation flow with temporary staging
 
 ### 🔗 Repository Structure
 
@@ -20,6 +21,10 @@ OurVidz.com is an AI-powered adult content generation platform with:
    ```
    ourvidz-1/
    ├── src/                    # React frontend application
+   │   ├── pages/             # Page components (Workspace, Library, etc.)
+   │   ├── components/        # Reusable UI components
+   │   ├── hooks/             # Custom React hooks
+   │   └── contexts/          # React contexts
    ├── supabase/              # Database, migrations, edge functions
    ├── docs/                  # Documentation (this directory)
    └── scripts/               # Automation scripts
@@ -53,6 +58,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Workers**: Python files in separate `ourvidz-worker` repository, orchestrated by `dual_orchestrator.py`
 - **Models**: Stored inside container at `/workspace/models/` (not network storage)
 - **Worker Types**: SDXL/WAN (Redis queue workers), Chat (Flask API on Port 7861)
+- **Workspace System**: Temporary staging area before library storage
 
 ## 📚 Documentation Navigation
 
@@ -70,6 +76,20 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - [08-ADMIN.md](./08-ADMIN.md) - Admin portal and management
 - [09-TESTING.md](./09-TESTING.md) - Testing strategies and procedures
 - [10-CHANGELOG.md](./10-CHANGELOG.md) - Version history and updates
+- [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md) - Dynamic prompting system documentation
+
+### **Page-Specific Documentation**
+- [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md) - Workspace page implementation
+- [pages/02-STORYBOARD_PURPOSE.md](./pages/02-STORYBOARD_PURPOSE.md) - Storyboard functionality
+- [pages/03-PLAYGROUND_PURPOSE.md](./pages/03-PLAYGROUND_PURPOSE.md) - Playground features
+- [pages/04-LIBRARY_PURPOSE.md](./pages/04-LIBRARY_PURPOSE.md) - Library management
+- [pages/05-ADMIN_PURPOSE.md](./pages/05-ADMIN_PURPOSE.md) - Admin portal
+- [pages/06-DASHBOARD_PURPOSE.md](./pages/06-DASHBOARD_PURPOSE.md) - Dashboard overview
+
+### **Component Documentation**
+- [components/00-COMPONENT_INVENTORY.md](./components/00-COMPONENT_INVENTORY.md) - Component inventory and refactoring
+- [components/01-COMPONENT_REFACTORING_PLAN.md](./components/01-COMPONENT_REFACTORING_PLAN.md) - Refactoring strategy
+- [components/PHASE_5_SUMMARY.md](./components/PHASE_5_SUMMARY.md) - Latest component phase summary
 
 ## 🤖 AI Assistant Guidelines
 
@@ -79,12 +99,15 @@ OurVidz.com is an AI-powered adult content generation platform with:
 3. **Worker Changes**: Note that workers are in separate `ourvidz-worker` repo
 4. **Model Storage**: Models are stored inside the RunPod container (persistent across restarts)
 5. **Documentation**: Update relevant docs in `docs/` directory (this repo)
+6. **Workspace System**: Understand workspace-first generation flow
 
 ### **Key Technologies:**
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL, Auth, Storage, Edge Functions)
 - **Workers**: Python, FastAPI, RunPod, RTX 6000 ADA
-- **AI Models**: SDXL, WAN, various video generation models
+- **AI Models**: SDXL, WAN, Qwen 2.5-7B Base/Instruct
+- **Prompting System**: 12 specialized templates for all models and use cases
+- **Workspace System**: Temporary staging with session management
 
 ### **Important Notes:**
 - **Supabase is ONLINE** - Not local development
@@ -92,6 +115,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Models in container storage** - AI models stored inside RunPod container (persistent, no external dependencies)
 - **Real-time system** - Uses WebSocket connections for job status
 - **Production focus** - All systems are production-ready
+- **Workspace-first flow** - Content generated to workspace first, then saved to library
 
 ## 🔧 Common Tasks for AI
 
@@ -111,6 +135,7 @@ npm run lint:jsdoc
 ```bash
 # Run migrations (in Supabase dashboard)
 # SQL commands must be run manually in online terminal
+# Use workspace_migration.sql for workspace system setup
 ```
 
 ### **Documentation Updates**
@@ -130,11 +155,25 @@ npm run jsdoc:generate
 - ✅ Worker system active on RunPod
 - ✅ Real-time job queuing working
 - ✅ Admin portal functional
+- ✅ **Workspace-first generation system implemented**
 
-### **Recent Updates:**
+### **Recent Updates (August 2, 2025):**
+- **Workspace-First Implementation**: Complete workspace generation flow
+- **Database Schema**: New workspace_sessions and workspace_items tables
+- **Edge Functions**: Updated queue-job and job-callback for workspace support
+- **Component Refactoring**: Simplified workspace components and state management
+- **Frontend Integration**: New workspace pages and hooks
+- Dynamic Prompting System implemented (12 specialized templates)
 - JSDoc automation system implemented
 - Documentation consolidation in progress
 - Worker system optimized for performance
+
+### **Current Architecture:**
+- **Workspace System**: Temporary staging area for generated content
+- **Session Management**: User workspace sessions with automatic cleanup
+- **Library Integration**: Save selected items from workspace to permanent library
+- **Real-time Updates**: Live generation status and workspace updates
+- **Mobile Support**: Responsive workspace interface for all devices
 
 ---
 

@@ -14,12 +14,12 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 - **Ultra-Fast Images**: SDXL generation in 3-8 seconds (flexible quantities: 1,3,6 images)
 - **WAN Video Generation**: 135-240+ seconds per video
-- **Hybrid Enhancement System**: AI-powered prompt enhancement with ContentCompliantEnhancementOrchestrator
+- **Dynamic Prompting System**: 12 specialized templates for all models and use cases
 - **Multi-Reference System (SDXL Only)**: Optional image-to-image with separate style, composition, and character references
 - **Reference Image Storage**: Dedicated Supabase bucket for user-uploaded/third-party reference images
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Enhanced Negative Prompts**: Intelligent generation for SDXL with multi-party scene detection
-- **AI-Powered Enhancement**: System prompts, intelligent worker selection, and comprehensive analytics
+- **AI-Powered Enhancement**: Model-specific optimization with Qwen Base/Instruct
 - **Auto-Enhancement**: Intelligent triggers based on prompt quality analysis
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
@@ -31,7 +31,7 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 ### **✅ PRODUCTION READY**
 - **Triple Worker System**: SDXL + Chat + WAN workers operational on RTX 6000 ADA
-- **Hybrid Enhancement System**: ContentCompliantEnhancementOrchestrator with system prompts
+- **Dynamic Prompting System**: 12 specialized templates for all models and use cases
 - **All 10 Job Types**: Live and operational with flexible SDXL quantities
 - **Multi-Reference System (SDXL Only)**: Style, composition, and character references
 - **Reference Image Storage**: Dedicated bucket for user/third-party reference images
@@ -39,7 +39,7 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 - **Seed Control**: Reproducible generation with user-controlled seeds
 - **Backend**: Supabase Online + Upstash Redis fully operational
 - **Frontend**: Deployed on Lovable production
-- **Edge Functions**: All functions operational including enhance-prompt with orchestrator
+- **Edge Functions**: All functions operational including enhance-prompt with dynamic templates
 - **Callback & Queue Standardization**: All edge functions and workers use standardized parameters
 
 ### **✅ ALL FEATURES OPERATIONAL**
@@ -53,15 +53,15 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 ---
 
-## **🆕 Notable Improvements in 1.1.0 (July 27, 2025)**
-- **Hybrid Enhancement System**: ContentCompliantEnhancementOrchestrator with AI-powered enhancement
-- **System Prompt Templates**: 4 specialized prompts for different model/quality combinations
-- **Critical Bug Fixes**: SDXL token compression fixed (77-token CLIP encoder limit)
-- **Intelligent Worker Selection**: Routes to chat vs WAN workers based on job type
-- **Comprehensive Analytics**: Full enhancement tracking and quality validation
-- **Auto-Enhancement**: Intelligent triggers based on prompt quality analysis
-- **Quality Preservation**: Intelligent compression preserving visual quality terms
-- **Multi-Tier Fallback**: Robust error handling with graceful degradation
+## **🆕 Notable Improvements in 1.2.0 (January 8, 2025)**
+- **Dynamic Prompting System**: 12 specialized templates for all models and use cases
+- **Model-Specific Optimization**: Tailored for Qwen Base vs Instruct behaviors
+- **Content Mode Awareness**: Appropriate language for SFW/NSFW contexts
+- **Token Limit Enforcement**: Prevents CLIP truncation and ensures quality
+- **Professional Comments**: Design decisions documented for each template
+- **Version Control**: Template versioning and update tracking
+- **Admin Control**: Real-time template management via admin interface
+- **Comprehensive Coverage**: Enhancement, chat, roleplay, and admin use cases
 
 ---
 
