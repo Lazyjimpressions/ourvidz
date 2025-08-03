@@ -26,6 +26,13 @@ OurVidz.com is an AI-powered adult content generation platform with:
    │   ├── hooks/             # Custom React hooks
    │   └── contexts/          # React contexts
    ├── supabase/              # Database, migrations, edge functions
+   │   ├── functions/         # Supabase Edge Functions
+   │   │   ├── _shared/       # Shared utilities (cache-utils.ts, monitoring.ts)
+   │   │   ├── queue-job/     # Job queuing with workspace support
+   │   │   ├── job-callback/  # Job completion handling
+   │   │   ├── enhance-prompt/ # AI prompt enhancement
+   │   │   └── playground-chat/ # Chat functionality
+   │   └── migrations/        # Database schema changes
    ├── docs/                  # Documentation (this directory)
    └── scripts/               # Automation scripts
    ```
@@ -64,12 +71,23 @@ OurVidz.com is an AI-powered adult content generation platform with:
 
 ### **Core Architecture**
 - [02-ARCHITECTURE.md](./02-ARCHITECTURE.md) - System architecture overview
-- [03-API.md](./03-API.md) - API endpoints and data flows
+- [03-API.md](./03-API.md) - **Edge Functions API & Endpoints** (Comprehensive API documentation)
 - [04-DEPLOYMENT.md](./04-DEPLOYMENT.md) - Deployment and environment setup
+
+### **Backend & Edge Functions**
+- [03-API.md](./03-API.md) - **Complete Edge Functions API** with workspace support
+  - Job management endpoints (queue-job, job-callback)
+  - Workspace management RPC functions
+  - Content generation APIs
+  - Real-time subscription examples
+  - Error handling and performance metrics
+- **Shared Utilities**: `supabase/functions/_shared/`
+  - `cache-utils.ts` - Intelligent caching system for templates and prompts
+  - `monitoring.ts` - Performance tracking and error monitoring
 
 ### **Worker System (Separate Repo)**
 - [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md) - Consolidated worker documentation
-- [06-WORKER_API.md](./06-WORKER_API.md) - Worker API specifications
+- [06-WORKER_API.md](./06-WORKER_API.md) - **Worker API Specifications** (RunPod worker endpoints)
 - [07-RUNPOD_SETUP.md](./07-RUNPOD_SETUP.md) - RunPod infrastructure
 
 ### **Development & Operations**
@@ -89,21 +107,52 @@ OurVidz.com is an AI-powered adult content generation platform with:
 ### **Component Documentation**
 - [components/00-COMPONENT_INVENTORY.md](./components/00-COMPONENT_INVENTORY.md) - Component inventory and refactoring
 - [components/01-COMPONENT_REFACTORING_PLAN.md](./components/01-COMPONENT_REFACTORING_PLAN.md) - Refactoring strategy
-- [components/PHASE_5_SUMMARY.md](./components/PHASE_5_SUMMARY.md) - Latest component phase summary
+- [components/PHASE_6_SUMMARY.md](./components/PHASE_6_SUMMARY.md) - Latest component phase summary
+
+## 🔧 Backend Architecture (Edge Functions)
+
+### **Edge Functions Overview**
+The backend consists of **Supabase Edge Functions** that handle all server-side operations:
+
+#### **Core Functions:**
+- **`queue-job`** - Creates and routes generation jobs with workspace support
+- **`job-callback`** - Handles job completion and routes to workspace/library
+- **`enhance-prompt`** - AI-powered prompt enhancement service
+- **`playground-chat`** - Chat functionality for playground
+
+#### **Shared Utilities (`_shared/`):**
+- **`cache-utils.ts`** - Intelligent caching system
+  - Template caching (prompt templates, negative prompts)
+  - Content detection (SFW/NSFW classification)
+  - Performance optimization (80% reduction in database calls)
+  - Fallback mechanisms for reliability
+- **`monitoring.ts`** - Performance and error tracking
+  - Execution time monitoring
+  - Cache hit/miss tracking
+  - Error logging and reporting
+  - System health validation
+
+### **API Integration Points**
+- **Frontend → Edge Functions**: HTTP requests to Supabase Edge Functions
+- **Edge Functions → Workers**: Redis queue communication
+- **Workers → Edge Functions**: Callback notifications
+- **Real-time Updates**: WebSocket subscriptions for live status
 
 ## 🤖 AI Assistant Guidelines
 
 ### **When Working on This Project:**
 1. **Frontend Changes**: Work in `src/` directory (this repo)
 2. **Database Changes**: Work in `supabase/` directory (this repo)
-3. **Worker Changes**: Note that workers are in separate `ourvidz-worker` repo
-4. **Model Storage**: Models are stored inside the RunPod container (persistent across restarts)
-5. **Documentation**: Update relevant docs in `docs/` directory (this repo)
-6. **Workspace System**: Understand workspace-first generation flow
+3. **Edge Functions**: Work in `supabase/functions/` directory (this repo)
+4. **Worker Changes**: Note that workers are in separate `ourvidz-worker` repo
+5. **Model Storage**: Models are stored inside the RunPod container (persistent across restarts)
+6. **Documentation**: Update relevant docs in `docs/` directory (this repo)
+7. **Workspace System**: Understand workspace-first generation flow
 
 ### **Key Technologies:**
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL, Auth, Storage, Edge Functions)
+- **Edge Functions**: Deno runtime, TypeScript, shared utilities
 - **Workers**: Python, FastAPI, RunPod, RTX 6000 ADA
 - **AI Models**: SDXL, WAN, Qwen 2.5-7B Base/Instruct
 - **Prompting System**: 12 specialized templates for all models and use cases
@@ -111,6 +160,8 @@ OurVidz.com is an AI-powered adult content generation platform with:
 
 ### **Important Notes:**
 - **Supabase is ONLINE** - Not local development
+- **Edge Functions**: Deployed to Supabase, use Deno runtime
+- **Shared Utilities**: Provide caching, monitoring, and content detection
 - **Workers are separate repo** - Python files in `ourvidz-worker` repository, called at startup by RunPod server
 - **Models in container storage** - AI models stored inside RunPod container (persistent, no external dependencies)
 - **Real-time system** - Uses WebSocket connections for job status
@@ -129,6 +180,18 @@ npm run build
 
 # Lint with JSDoc validation
 npm run lint:jsdoc
+```
+
+### **Edge Functions Development**
+```bash
+# Deploy edge functions (using Lovable)
+# Edge functions are automatically deployed with the project
+
+# Test edge functions locally
+supabase functions serve
+
+# View edge function logs
+supabase functions logs
 ```
 
 ### **Database Operations**
@@ -152,6 +215,7 @@ npm run jsdoc:generate
 ### **Production Systems:**
 - ✅ Frontend deployed and running
 - ✅ Supabase backend operational
+- ✅ Edge Functions deployed and active
 - ✅ Worker system active on RunPod
 - ✅ Real-time job queuing working
 - ✅ Admin portal functional
@@ -161,6 +225,7 @@ npm run jsdoc:generate
 - **Workspace-First Implementation**: Complete workspace generation flow
 - **Database Schema**: New workspace_sessions and workspace_items tables
 - **Edge Functions**: Updated queue-job and job-callback for workspace support
+- **Shared Utilities**: Intelligent caching and monitoring systems implemented
 - **Component Refactoring**: Simplified workspace components and state management
 - **Frontend Integration**: New workspace pages and hooks
 - Dynamic Prompting System implemented (12 specialized templates)
@@ -174,7 +239,10 @@ npm run jsdoc:generate
 - **Library Integration**: Save selected items from workspace to permanent library
 - **Real-time Updates**: Live generation status and workspace updates
 - **Mobile Support**: Responsive workspace interface for all devices
+- **Edge Functions**: Comprehensive backend API with caching and monitoring
 
 ---
 
-**For detailed information about specific systems, refer to the numbered documentation files above.** 
+**For detailed information about specific systems, refer to the numbered documentation files above.**  
+**For API details, see [03-API.md](./03-API.md) - Complete Edge Functions API**  
+**For worker details, see [06-WORKER_API.md](./06-WORKER_API.md) - Worker API Specifications** 
