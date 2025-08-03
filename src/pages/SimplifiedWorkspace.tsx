@@ -1,6 +1,6 @@
 import React from 'react';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
+import { SessionWorkspace } from '@/components/workspace/SessionWorkspace';
 import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
@@ -46,6 +46,8 @@ export const SimplifiedWorkspace: React.FC = () => {
     // UI State
     isGenerating,
     workspaceItems,
+    workspaceJobs,
+    activeJobId,
     lightboxIndex,
     
     // Actions
@@ -70,6 +72,11 @@ export const SimplifiedWorkspace: React.FC = () => {
     clearWorkspace,
     deleteItem,
     setLightboxIndex,
+    // Job-level actions
+    selectJob,
+    deleteJob,
+    saveJob,
+    useJobAsReference,
   } = useSimplifiedWorkspaceState();
 
   // Simple workspace management handlers
@@ -109,21 +116,16 @@ export const SimplifiedWorkspace: React.FC = () => {
       <WorkspaceHeader onClearWorkspace={clearWorkspace} />
       
       {/* Main Content Area */}
-      <div className="pt-12">
-        {/* Workspace Grid */}
-        <div className="container mx-auto px-4 py-8">
-          <WorkspaceGrid
-            items={workspaceItems}
-            onEdit={handleEditItem}
-            onSave={handleSaveItem}
-            onDelete={(item: WorkspaceItem) => deleteItem(item.id)}
-            onView={handleViewItem}
-            onDownload={handleDownload}
-            onUseAsReference={handleUseAsReference}
-            onUseSeed={handleUseSeed}
-            isDeleting={new Set()} // TODO: Track deleting state
-          />
-        </div>
+      <div className="pt-12 pb-32">
+        <SessionWorkspace
+          jobs={workspaceJobs}
+          onJobSelect={selectJob}
+          onJobDelete={deleteJob}
+          onJobSave={saveJob}
+          onJobUseAsReference={useJobAsReference}
+          activeJobId={activeJobId}
+          isDeleting={new Set()} // TODO: Track deleting state
+        />
       </div>
 
       {/* Simple Prompt Input */}

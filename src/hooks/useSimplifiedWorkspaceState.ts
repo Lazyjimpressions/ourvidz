@@ -13,18 +13,26 @@ export interface WorkspaceItem {
   url: string;
   prompt: string;
   type: 'image' | 'video';
+  timestamp: Date;
+  quality: 'fast' | 'high';
   modelType?: string;
-  quality?: 'fast' | 'high';
-  generationParams?: {
-    seed?: number;
-    originalAssetId?: string;
-    timestamp?: string;
-  };
+  duration?: number;
+  thumbnailUrl?: string;
+  // Enhanced workspace metadata for dragging
+  enhancedPrompt?: string;
   seed?: number;
-  originalAssetId?: string;
-  timestamp?: string;
-  referenceImage?: File | null;
-  referenceStrength?: number;
+  generationParams?: Record<string, any>;
+  jobId?: string; // Reference to job this item belongs to
+  sessionId?: string; // Reference to session this item belongs to
+}
+
+export interface WorkspaceJob {
+  id: string; // job_id from database
+  sessionId: string;
+  prompt: string;
+  items: WorkspaceItem[]; // 3 items for images, 1 for video
+  createdAt: Date;
+  type: 'image' | 'video';
 }
 
 export interface SimplifiedWorkspaceState {
@@ -50,57 +58,51 @@ export interface SimplifiedWorkspaceState {
   style: string;
   styleRef: File | null;
   
-  // UI State (2 variables)
+  // UI State
   isGenerating: boolean;
+  workspaceItems: WorkspaceItem[];
+  workspaceJobs: WorkspaceJob[];
+  activeJobId: string | null;
   lightboxIndex: number | null;
   
   // Enhancement Model Selection (1 variable) - NEW
   enhancementModel: 'qwen_base' | 'qwen_instruct';
-  
-  // Real-time workspace items
-  workspaceItems: WorkspaceItem[];
 }
 
 export interface SimplifiedWorkspaceActions {
-  // Core Actions (6 actions)
-  updateMode: (mode: 'image' | 'video') => void;
+  // Actions
+  updateMode: (newMode: string) => void;
   setPrompt: (prompt: string) => void;
-  setReferenceImage: (file: File | null) => void;
+  setReferenceImage: (image: File | null) => void;
   setReferenceStrength: (strength: number) => void;
   setContentType: (type: 'sfw' | 'nsfw') => void;
   setQuality: (quality: 'fast' | 'high') => void;
-  
-  // Video-specific Actions (4 actions)
-  setBeginningRefImage: (file: File | null) => void;
-  setEndingRefImage: (file: File | null) => void;
+  setBeginningRefImage: (image: File | null) => void;
+  setEndingRefImage: (image: File | null) => void;
   setVideoDuration: (duration: number) => void;
   setMotionIntensity: (intensity: number) => void;
   setSoundEnabled: (enabled: boolean) => void;
-  
-  // Control Parameter Actions - NEW
   setAspectRatio: (ratio: '16:9' | '1:1' | '9:16') => void;
   setShotType: (type: 'wide' | 'medium' | 'close') => void;
   setCameraAngle: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
   setStyle: (style: string) => void;
-  setStyleRef: (file: File | null) => void;
-  
-  // Enhancement Model Selection Action - NEW
+  setStyleRef: (ref: File | null) => void;
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct') => void;
-  
-  // Generation Actions
   generate: () => Promise<void>;
-  
-  // Workspace Management Actions
-  clearWorkspace: () => void;
-  deleteItem: (assetId: string) => void;
+  clearWorkspace: () => Promise<void>;
+  deleteItem: (id: string) => Promise<void>;
   setLightboxIndex: (index: number | null) => void;
-  
-  // Additional Workspace Actions
-  editItem: (item: WorkspaceItem) => void;
-  saveItem: (item: WorkspaceItem) => void;
-  downloadItem: (item: WorkspaceItem) => void;
-  useAsReference: (item: WorkspaceItem) => void;
-  useSeed: (item: WorkspaceItem) => void;
+  // Job-level actions
+  selectJob: (jobId: string) => void;
+  deleteJob: (jobId: string) => Promise<void>;
+  saveJob: (jobId: string) => Promise<void>;
+  useJobAsReference: (jobId: string) => void;
+  // Legacy item actions for mobile compatibility
+  editItem?: (item: WorkspaceItem) => void;
+  saveItem?: (itemId: string) => Promise<boolean | undefined>;
+  downloadItem?: (item: WorkspaceItem) => void;
+  useAsReference?: (item: WorkspaceItem) => void;
+  useSeed?: (item: WorkspaceItem) => void;
 }
 
 /**
@@ -135,15 +137,15 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   const [style, setStyle] = useState<string>('');
   const [styleRef, setStyleRef] = useState<File | null>(null);
   
-  // UI State (2 variables)
+  // UI State
   const [isGenerating, setIsGenerating] = useState(false);
+  const [workspaceItems, setWorkspaceItems] = useState<WorkspaceItem[]>([]);
+  const [workspaceJobs, setWorkspaceJobs] = useState<WorkspaceJob[]>([]);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   
   // Enhancement Model Selection (1 variable) - NEW
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
-  
-  // Real-time workspace items - Direct database query
-  const [workspaceItems, setWorkspaceItems] = useState<WorkspaceItem[]>([]);
 
   // Integrate with existing hooks
   const { generateContent, isGenerating: generationInProgress, error: generationError } = useGeneration();
@@ -157,26 +159,28 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   }, [searchParams, mode]);
 
   // Update URL when mode changes
-  const updateMode = useCallback((newMode: 'image' | 'video') => {
-    setMode(newMode);
-    setSearchParams({ mode: newMode });
+  const updateMode = useCallback((newMode: string) => {
+    const modeValue = newMode as 'image' | 'video';
+    setMode(modeValue);
+    setSearchParams({ mode: modeValue });
   }, [setSearchParams]);
 
-  // Direct database query for workspace items
+  // Load workspace jobs from database
   useEffect(() => {
-    const loadWorkspaceItems = async () => {
+    const loadWorkspaceJobs = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
         console.log('🔄 WORKSPACE: Loading workspace items for user:', user.id);
         
-        const { data, error } = await (supabase as any)
-          .from('workspace_items')
+        // Get workspace items grouped by job_id using any typing
+        const { data, error } = await supabase
+          .from('workspace_items' as any)
           .select('*')
           .eq('user_id', user.id)
           .eq('status', 'generated')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false }) as { data: any[] | null, error: any };
 
         if (error) {
           console.error('❌ WORKSPACE: Error loading items:', error);
@@ -192,30 +196,77 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           }))
         });
 
-        // Convert database items to WorkspaceItem format
-        const items: WorkspaceItem[] = data?.map((item: any) => ({
+        // Group items by job_id and create jobs
+        const jobMap = new Map<string, WorkspaceItem[]>();
+        
+        data?.forEach((item: any) => {
+          const jobId = item.job_id || item.id; // Fallback to item id if no job_id
+          
+          const workspaceItem: WorkspaceItem = {
+            id: String(item.id),
+            url: item.url || '',
+            prompt: item.prompt || '',
+            type: item.content_type as 'image' | 'video',
+            timestamp: new Date(item.created_at),
+            quality: (item.quality as 'fast' | 'high') || 'high',
+            modelType: item.model_type,
+            thumbnailUrl: item.thumbnail_url,
+            enhancedPrompt: item.enhanced_prompt,
+            seed: item.seed,
+            generationParams: item.generation_params || {},
+            jobId: item.job_id,
+            sessionId: item.session_id
+          };
+
+          if (!jobMap.has(jobId)) {
+            jobMap.set(jobId, []);
+          }
+          jobMap.get(jobId)!.push(workspaceItem);
+        });
+
+        // Convert job map to WorkspaceJob array
+        const jobs: WorkspaceJob[] = Array.from(jobMap.entries()).map(([jobId, items]) => {
+          const firstItem = items[0];
+          return {
+            id: jobId,
+            sessionId: firstItem.sessionId || '',
+            prompt: firstItem.prompt,
+            items: items.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()),
+            createdAt: firstItem.timestamp,
+            type: firstItem.type
+          };
+        });
+
+        // Sort jobs by creation time (newest first)
+        jobs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        setWorkspaceJobs(jobs);
+        setWorkspaceItems(data?.map((item: any) => ({
           id: String(item.id),
           url: item.url || '',
-          prompt: item.prompt || 'Untitled',
+          prompt: item.prompt || '',
           type: item.content_type as 'image' | 'video',
+          timestamp: new Date(item.created_at),
+          quality: (item.quality as 'fast' | 'high') || 'high',
           modelType: item.model_type,
-          quality: item.quality as 'fast' | 'high',
+          thumbnailUrl: item.thumbnail_url,
+          enhancedPrompt: item.enhanced_prompt,
           seed: item.seed,
-          referenceStrength: item.reference_strength,
-          generationParams: {
-            seed: item.seed,
-            originalAssetId: String(item.id),
-            timestamp: item.created_at
-          }
-        })) || [];
+          generationParams: item.generation_params || {},
+          jobId: item.job_id,
+          sessionId: item.session_id
+        })) || []);
 
-        setWorkspaceItems(items);
+        // Set active job to the most recent one
+        if (jobs.length > 0 && !activeJobId) {
+          setActiveJobId(jobs[0].id);
+        }
       } catch (error) {
-        console.error('❌ WORKSPACE: Failed to load items:', error);
+        console.error('❌ WORKSPACE: Failed to load jobs:', error);
       }
     };
 
-    loadWorkspaceItems();
+    loadWorkspaceJobs();
 
     // Set up real-time subscription for workspace items
     const setupRealtime = async () => {
@@ -234,7 +285,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           },
           (payload) => {
             console.log('🔔 WORKSPACE: Real-time update:', payload);
-            loadWorkspaceItems(); // Reload on any change
+            loadWorkspaceJobs(); // Reload on any change
           }
         )
         .subscribe();
@@ -245,7 +296,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     };
 
     setupRealtime();
-  }, []);
+  }, [activeJobId]);
 
   // Sync generation state
   useEffect(() => {
@@ -297,12 +348,12 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         return urlData.publicUrl;
       };
       
-      // Create generation request with workspace destination
+      // Create generation request with workspace destination  
       const generationRequest: GenerationRequest = {
-        format: mode === 'image' ? 'sdxl_image_fast' : 'video_high',
+        format: mode === 'image' ? 'sdxl_image_high' : 'video_high',
         prompt: prompt.trim(),
         metadata: {
-          num_images: mode === 'image' ? 6 : 1, // Default to 6 images for workspace
+          num_images: mode === 'image' ? 3 : 1, // 3 images per job for 1x3 grid
           destination: 'workspace', // WORKSPACE-FIRST: Generate to workspace
           session_name: `Workspace Session ${new Date().toLocaleTimeString()}`,
           user_requested_enhancement: true,
@@ -388,8 +439,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
       console.log('🧹 WORKSPACE: Clearing all workspace items');
 
       // Delete all workspace items for this user
-      const { error } = await (supabase as any)
-        .from('workspace_items')
+      const { error } = await supabase
+        .from('workspace_items' as any)
         .delete()
         .eq('user_id', user.id)
         .eq('status', 'generated');
@@ -397,6 +448,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
       if (error) throw error;
 
       setWorkspaceItems([]);
+      setWorkspaceJobs([]);
+      setActiveJobId(null);
       
       toast({
         title: "Workspace Cleared",
@@ -442,42 +495,18 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     }
   }, [toast]);
 
-  const addToWorkspace = useCallback(async (item: WorkspaceItem) => {
-    try {
-      console.log('➕ WORKSPACE: Adding item to workspace:', item.id);
-      // Items are already in workspace when generated
-      toast({
-        title: "Added to Workspace",
-        description: `${item.type} has been added to workspace`,
-      });
-    } catch (error) {
-      console.error('Failed to add to workspace:', error);
-      toast({
-        title: "Failed to Add to Workspace",
-        description: "Please try again",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
-
-  const editItem = useCallback((item: WorkspaceItem) => {
-    setPrompt(item.prompt);
-    // TODO: Implement edit functionality with actual asset editing
-    console.log('Edit item:', item);
-  }, []);
-
-  const saveItem = useCallback(async (item: WorkspaceItem) => {
+  const saveItem = useCallback(async (itemId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      console.log('💾 WORKSPACE: Saving item to library:', item.id);
+      console.log('💾 WORKSPACE: Saving item to library:', itemId);
 
       // Mark as saved in database
-      const { error } = await (supabase as any)
-        .from('workspace_items')
+      const { error } = await supabase
+        .from('workspace_items' as any)
         .update({ status: 'saved' })
-        .eq('id', item.id)
+        .eq('id', itemId)
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -485,7 +514,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
       // Update local state to mark as saved
       setWorkspaceItems(prev =>
         prev.map(existingItem =>
-          existingItem.id === item.id
+          existingItem.id === itemId
             ? { ...existingItem, status: 'saved' as any }
             : existingItem
         )
@@ -507,91 +536,86 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     }
   }, [toast]);
 
-  const downloadItem = useCallback(async (item: WorkspaceItem) => {
-    try {
-      // Create a temporary link and trigger download
-      const response = await fetch(item.url);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${item.type}_${Date.now()}.${item.type === 'image' ? 'png' : 'mp4'}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+  // Job-level actions
+  const selectJob = (jobId: string) => {
+    setActiveJobId(jobId);
+  };
 
-      toast({
-        title: "Download Started",
-        description: `${item.type} download has begun`,
-      });
-    } catch (error) {
-      console.error('Failed to download item:', error);
-      toast({
-        title: "Download Failed",
-        description: "Please try again",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
+  const deleteJob = async (jobId: string) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job) return;
 
-  const useAsReference = useCallback(async (item: WorkspaceItem) => {
     try {
-      // Convert item to reference image
-      const response = await fetch(item.url);
-      const blob = await response.blob();
-      const file = new File([blob], `reference_${Date.now()}.png`, { type: 'image/png' });
+      // Delete all items in the job
+      await Promise.all(job.items.map(item => deleteItem(item.id)));
       
-      setReferenceImage(file);
-      setReferenceStrength(0.85);
-
-      toast({
-        title: "Reference Set",
-        description: `${item.type} is now your reference image`,
-      });
+      // Remove job from state
+      setWorkspaceJobs(prev => prev.filter(j => j.id !== jobId));
+      
+      // If this was the active job, select another one
+      if (activeJobId === jobId) {
+        const remainingJobs = workspaceJobs.filter(j => j.id !== jobId);
+        setActiveJobId(remainingJobs.length > 0 ? remainingJobs[0].id : null);
+      }
     } catch (error) {
-      console.error('Failed to set reference:', error);
-      toast({
-        title: "Failed to Set Reference",
-        description: "Please try again",
-        variant: "destructive",
-      });
+      console.error('Error deleting job:', error);
     }
-  }, [toast]);
+  };
 
-  const useSeed = useCallback((item: WorkspaceItem) => {
-    const seed = item.generationParams?.seed || item.seed;
-    if (seed) {
-      // TODO: Apply seed to current generation
-      console.log('Use seed:', seed);
-      toast({
-        title: "Seed Feature",
-        description: "Seed application functionality coming soon",
-      });
+  const saveJob = async (jobId: string) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    try {
+      // Call save function for each item in the job
+      await Promise.all(job.items.map(item => saveItem(item.id)));
+      console.log(`Saved job ${jobId} with ${job.items.length} items to library`);
+    } catch (error) {
+      console.error('Error saving job:', error);
     }
-  }, [toast]);
+  };
+
+  const useJobAsReference = (jobId: string) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job || job.items.length === 0) return;
+
+    // Use first item as reference
+    const firstItem = job.items[0];
+    // TODO: Set reference image from URL
+    console.log('Using job as reference:', firstItem.url);
+  };
 
   return {
-    // State
+    // Core State
     mode,
     prompt,
     referenceImage,
     referenceStrength,
     contentType,
     quality,
+    
+    // Video-specific State
     beginningRefImage,
     endingRefImage,
     videoDuration,
     motionIntensity,
     soundEnabled,
+    
+    // Control Parameters
     aspectRatio,
     shotType,
     cameraAngle,
     style,
     styleRef,
+    
+    // Enhancement Model
     enhancementModel,
+    
+    // UI State
     isGenerating,
     workspaceItems,
+    workspaceJobs,
+    activeJobId,
     lightboxIndex,
     
     // Actions
@@ -599,29 +623,33 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     setPrompt,
     setReferenceImage,
     setReferenceStrength,
-    setContentType,
+    setContentType: (type: 'sfw' | 'nsfw') => setContentType(type),
     setQuality,
     setBeginningRefImage,
     setEndingRefImage,
     setVideoDuration,
     setMotionIntensity,
     setSoundEnabled,
-    setAspectRatio,
-    setShotType,
-    setCameraAngle,
+    setAspectRatio: (ratio: '16:9' | '1:1' | '9:16') => setAspectRatio(ratio),
+    setShotType: (type: 'wide' | 'medium' | 'close') => setShotType(type),
+    setCameraAngle: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => setCameraAngle(angle),
     setStyle,
-    setStyleRef,
-    setEnhancementModel,
+    setStyleRef: (ref: File | null) => setStyleRef(ref),
+    setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct') => setEnhancementModel(model),
     generate,
     clearWorkspace,
     deleteItem,
     setLightboxIndex,
-    
-    // Additional Workspace Actions
-    editItem,
+    // Job-level actions
+    selectJob,
+    deleteJob,
+    saveJob,
+    useJobAsReference,
+    // Legacy actions for mobile compatibility
+    editItem: (item: WorkspaceItem) => console.log('Edit item:', item),
     saveItem,
-    downloadItem,
-    useAsReference,
-    useSeed,
+    downloadItem: (item: WorkspaceItem) => console.log('Download item:', item),
+    useAsReference: (item: WorkspaceItem) => console.log('Use as reference:', item),
+    useSeed: (item: WorkspaceItem) => console.log('Use seed:', item),
   };
-}; 
+};

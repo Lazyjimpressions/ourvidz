@@ -11,14 +11,13 @@ interface ContentCardProps {
     type: 'image' | 'video';
     modelType?: string;
     quality?: 'fast' | 'high';
+    timestamp: Date;
     generationParams?: {
       seed?: number;
       originalAssetId?: string;
-      timestamp?: string;
     };
     seed?: number;
     originalAssetId?: string;
-    timestamp?: string;
   };
   onEdit: () => void;
   onSave: () => void;
