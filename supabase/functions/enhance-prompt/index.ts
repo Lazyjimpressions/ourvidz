@@ -149,8 +149,10 @@ class DynamicEnhancementOrchestrator {
             enhancementResult.fallback_level = 2
           } catch (dbTemplateError) {
             console.log('⚠️ Database template fallback failed, using hardcoded:', dbTemplateError.message)
+            console.log('💥 Template lookup criteria:', { modelType, useCase: 'enhancement', contentMode })
             enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
             enhancementResult.fallback_level = 3
+            enhancementResult.template_name = 'hardcoded_fallback'
           }
         }
       }
@@ -210,16 +212,30 @@ class DynamicEnhancementOrchestrator {
    * Get dynamic template from database (PHASE 2 FIX)
    */
   private async getDynamicTemplate(modelType: string, useCase: string, contentMode: string) {
-    // PHASE 2 FIX: Map job_type to correct template lookup
-    let lookupModelType = modelType
-    if (modelType === 'sdxl_image_high' || modelType === 'sdxl_image_fast') {
-      lookupModelType = 'sdxl'
+    // PHASE 2 FIX: Map job_type to correct enhancer_model for template lookup
+    let lookupEnhancerModel = modelType
+    if (modelType === 'sdxl_image_high' || modelType === 'sdxl_image_fast' || modelType === 'sdxl') {
+      lookupEnhancerModel = 'qwen_instruct' // Default enhancer for SDXL
     }
     
-    const template = await getDatabaseTemplate(lookupModelType, useCase, contentMode)
+    console.log('🔍 Template lookup:', { 
+      originalModelType: modelType, 
+      lookupEnhancerModel, 
+      useCase, 
+      contentMode 
+    })
+    
+    const template = await getDatabaseTemplate(lookupEnhancerModel, useCase, contentMode)
     if (!template) {
-      throw new Error(`No template found for ${lookupModelType}/${useCase}/${contentMode}`)
+      throw new Error(`No template found for enhancer_model=${lookupEnhancerModel}/${useCase}/${contentMode}`)
     }
+    
+    console.log('✅ Template found:', { 
+      template_name: template.template_name,
+      enhancer_model: template.enhancer_model,
+      id: template.id
+    })
+    
     return template
   }
 
@@ -243,10 +259,11 @@ class DynamicEnhancementOrchestrator {
   private async enhanceWithTemplate(request: any, template: any, contentMode: string) {
     // Use selectedModel directly from request, fallback to preferences
     const selectedModel = request.selectedModel || request.preferences?.enhancement_style
-    const workerType = this.selectWorkerType(template.model_type, selectedModel)
+    const workerType = this.selectWorkerType(template.enhancer_model || template.model_type, selectedModel)
     
     console.log('🚀 Enhancing with template:', {
-      template: template.template_name,
+      template: template.template_name || 'unnamed_template',
+      enhancerModel: template.enhancer_model,
       modelType: template.model_type,
       selectedModel,
       workerType,

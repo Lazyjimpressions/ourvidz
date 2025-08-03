@@ -248,7 +248,7 @@ export async function getDatabaseTemplate(
   const { data, error } = await supabase
     .from('prompt_templates')
     .select('*')
-    .eq('model_type', modelType)
+    .eq('enhancer_model', modelType)
     .eq('use_case', useCase)
     .eq('content_mode', contentMode)
     .eq('is_active', true)
@@ -257,10 +257,16 @@ export async function getDatabaseTemplate(
     .single();
 
   if (error || !data) {
+    console.log(`❌ Database template lookup failed:`, { 
+      modelType, 
+      useCase, 
+      contentMode, 
+      error: error?.message || 'No data returned'
+    });
     throw new Error(`No template found in database for ${modelType}/${useCase}/${contentMode}`);
   }
 
-  console.log(`✅ Database template loaded: ${data.template_name}`);
+  console.log(`✅ Database template loaded: "${data.template_name}" (ID: ${data.id})`);
   return data;
 }
 

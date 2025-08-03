@@ -43,6 +43,7 @@ export const JobGrid: React.FC<JobGridProps> = ({
               <span>Generated {new Date(job.createdAt).toLocaleTimeString()}</span>
               <span>{job.items.length} {job.type}s</span>
               <span className="capitalize">{job.items[0]?.quality} quality</span>
+              <span>Status: {job.items[0]?.status || 'generated'}</span>
             </div>
           </div>
         </div>

@@ -25,6 +25,7 @@ export interface WorkspaceItem {
   jobId?: string; // Reference to job this item belongs to
   sessionId?: string; // Reference to session this item belongs to
   bucketName?: string; // Storage bucket for signed URL generation
+  status?: 'generated' | 'saved' | 'deleted'; // Item status
 }
 
 export interface WorkspaceJob {
@@ -180,7 +181,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           .from('workspace_items' as any)
           .select('*')
           .eq('user_id', user.id)
-          .eq('status', 'generated')
+          .neq('status', 'deleted') // Show all items except deleted
           .order('created_at', { ascending: false }) as { data: any[] | null, error: any };
 
         if (error) {
@@ -219,7 +220,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             jobId: item.job_id,
             sessionId: item.session_id,
             // PHASE 2 FIX: Add bucket hint for signed URL generation
-            bucketName: item.bucket_name
+            bucketName: item.bucket_name,
+            status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
           };
 
           if (!jobMap.has(jobId)) {
@@ -259,7 +261,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           generationParams: item.generation_params || {},
           jobId: item.job_id,
           sessionId: item.session_id,
-          bucketName: item.bucket_name
+          bucketName: item.bucket_name,
+          status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
         })) || []);
 
         // Set active job to the most recent one
