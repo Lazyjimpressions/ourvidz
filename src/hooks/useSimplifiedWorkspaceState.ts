@@ -343,9 +343,13 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
               let signedUrl = '';
               if (newItem.storage_path && newItem.bucket_name) {
                 try {
-                  console.log('🔐 WORKSPACE REALTIME: Generating signed URL for:', {
+                  // Phase 2: Enhanced signed URL generation logging
+                  console.log('🔐 WORKSPACE REALTIME: Generating signed URL for NEW item:', {
+                    itemId: newItem.id,
                     bucket: newItem.bucket_name,
-                    path: newItem.storage_path
+                    path: newItem.storage_path,
+                    pathLength: newItem.storage_path.length,
+                    bucketValid: ['sdxl_image_high', 'sdxl_image_fast', 'image_high', 'image_fast'].includes(newItem.bucket_name)
                   });
                   
                   const { data: urlData, error } = await supabase.storage
@@ -354,16 +358,35 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                   
                   if (urlData?.signedUrl && !error) {
                     signedUrl = urlData.signedUrl;
-                    console.log('✅ WORKSPACE REALTIME: Signed URL generated successfully');
+                    console.log('✅ WORKSPACE REALTIME: Signed URL generated successfully for item', newItem.id, 'URL length:', signedUrl.length);
                   } else {
-                    console.error('❌ WORKSPACE REALTIME: Failed to generate signed URL:', error?.message || 'Unknown error');
-                    console.error('❌ Full error details:', error);
+                    console.error('❌ WORKSPACE REALTIME: Failed to generate signed URL for item', newItem.id, ':', error?.message || 'Unknown error');
+                    console.error('❌ WORKSPACE REALTIME: Full error details:', {
+                      error,
+                      bucket: newItem.bucket_name,
+                      path: newItem.storage_path,
+                      hasUrlData: !!urlData,
+                      errorMessage: error?.message || 'NO_MESSAGE'
+                    });
                   }
                 } catch (error) {
-                  console.error('❌ WORKSPACE REALTIME: Exception generating signed URL:', error);
+                  console.error('❌ WORKSPACE REALTIME: Exception generating signed URL for item', newItem.id, ':', error);
+                  console.error('❌ WORKSPACE REALTIME: Exception details:', {
+                    errorMessage: error instanceof Error ? error.message : 'Unknown error',
+                    errorType: error instanceof Error ? error.constructor.name : typeof error,
+                    bucket: newItem.bucket_name,
+                    path: newItem.storage_path
+                  });
                 }
               } else {
-                console.warn('⚠️ WORKSPACE REALTIME: Missing storage_path or bucket_name for item:', newItem.id);
+                // Phase 2: Enhanced warning with detailed information
+                console.error('⚠️ WORKSPACE REALTIME: Missing storage_path or bucket_name for item:', {
+                  itemId: newItem.id,
+                  hasStoragePath: !!newItem.storage_path,
+                  hasBucketName: !!newItem.bucket_name,
+                  storagePath: newItem.storage_path,
+                  bucketName: newItem.bucket_name
+                });
               }
               
               // Create workspace item with signed URL
@@ -398,8 +421,10 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                 return updated;
               });
               
-              console.log('🔄 WORKSPACE REALTIME: Updating jobs list');
-              setWorkspaceJobs(prevJobs => {
+               console.log('🔄 WORKSPACE REALTIME: Updating jobs list');
+               setWorkspaceJobs(prevJobs => {
+                 // Phase 1: Enhanced state change logging
+                 console.log('📊 WORKSPACE REALTIME: Current jobs count before update:', prevJobs?.length || 0);
                 const jobId = newItem.job_id || `session_${newItem.session_id}_${newItem.created_at}`;
                 const existingJobIndex = prevJobs.findIndex(job => job.id === jobId);
                 
@@ -432,10 +457,12 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                     type: newItem.content_type as 'image' | 'video'
                   };
                   
-                  console.log(`✅ WORKSPACE REALTIME: Created new job ${jobId} with 1 item`);
-                  const updated = [newJob, ...prevJobs];
-                  console.log('📊 WORKSPACE REALTIME: New jobs count:', updated.length);
-                  return updated;
+                   console.log(`✅ WORKSPACE REALTIME: Created new job ${jobId} with 1 item`);
+                   const updated = [newJob, ...prevJobs];
+                   console.log('📊 WORKSPACE REALTIME: New jobs count:', updated.length);
+                   // Phase 1: Force React re-render verification
+                   console.log('🔄 WORKSPACE REALTIME: State update triggered, React should re-render now');
+                   return updated;
                 }
               });
               

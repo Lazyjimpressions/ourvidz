@@ -18,6 +18,15 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
   isDeleting
 }) => {
   const thumbnailItem = job.items[0]; // Use first item as thumbnail
+  
+  // Phase 3: Enhanced thumbnail logging and loading state
+  console.log('🖼️ JobThumbnail render:', {
+    jobId: job.id,
+    hasItems: job.items.length > 0,
+    thumbnailUrl: thumbnailItem?.url,
+    thumbnailUrlLength: thumbnailItem?.url?.length || 0,
+    isSignedUrl: thumbnailItem?.url?.includes('supabase') || false
+  });
 
   return (
     <div
@@ -42,11 +51,28 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
             </div>
           </div>
         ) : (
-          <img
-            src={thumbnailItem?.url}
-            alt="Job thumbnail"
-            className="w-full h-full object-cover"
-          />
+          <div className="relative w-full h-full">
+            {/* Phase 4: Loading state for thumbnails */}
+            {!thumbnailItem?.url ? (
+              <div className="w-full h-full bg-muted flex items-center justify-center">
+                <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-primary" />
+              </div>
+            ) : (
+              <img
+                src={thumbnailItem.url}
+                alt="Job thumbnail"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  console.error('❌ JobThumbnail: Image failed to load:', thumbnailItem.url);
+                  // Phase 3: Error fallback for thumbnails
+                  e.currentTarget.style.display = 'none';
+                }}
+                onLoad={() => {
+                  console.log('✅ JobThumbnail: Image loaded successfully:', thumbnailItem.url?.substring(0, 50) + '...');
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
 
