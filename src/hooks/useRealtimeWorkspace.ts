@@ -20,54 +20,87 @@ export const useRealtimeWorkspace = () => {
   const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
   
   // Get active workspace session first
-  const { data: activeSession } = useQuery({
+  const { data: activeSession, isLoading: sessionLoading, error: sessionError } = useQuery({
     queryKey: ['active-workspace-session'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) {
+        console.log('🚀 DEBUG: No authenticated user found');
+        return null;
+      }
       
-      const { data } = await (supabase as any)
+      console.log('🚀 DEBUG: Fetching active workspace session for user:', user.id);
+      const { data, error } = await (supabase as any)
         .from('workspace_sessions')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
       
+      if (error) {
+        console.error('🚀 DEBUG: Error fetching workspace session:', error);
+        return null;
+      }
+      
+      console.log('🚀 DEBUG: Active workspace session:', data);
       return data;
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
-  // Fetch workspace items directly from workspace_items table
-  const { data: assets = [], isLoading } = useQuery({
-    queryKey: ['workspace-items', activeSession?.id],
+  // Debug session state
+  useEffect(() => {
+    console.log('🚀 DEBUG: Session state changed:', {
+      sessionLoading,
+      sessionError,
+      activeSession,
+      hasSession: !!activeSession?.id
+    });
+  }, [activeSession, sessionLoading, sessionError]);
+
+  // Fetch ALL workspace items for the user (from all sessions)
+  const { data: assets = [], isLoading: itemsLoading, error: itemsError } = useQuery({
+    queryKey: ['workspace-items-all'],
     queryFn: async () => {
-      if (!activeSession?.id) {
-        console.log('🚀 No active workspace session found');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.log('🚀 DEBUG: No authenticated user for items query');
         return [];
       }
       
-      console.log('🚀 Fetching workspace items for session:', activeSession.id);
+      console.log('🚀 DEBUG: Fetching ALL workspace items for user:', user.id);
       const { data, error } = await (supabase as any)
         .from('workspace_items')
         .select('*')
-        .eq('session_id', activeSession.id)
+        .eq('user_id', user.id)
         .eq('status', 'generated')
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error('❌ Error fetching workspace items:', error);
+        console.error('❌ DEBUG: Error fetching workspace items:', error);
         return [];
       }
       
+      console.log('🚀 DEBUG: ALL workspace items fetched:', {
+        count: data?.length || 0,
+        userId: user.id,
+        items: data?.map((item: any) => ({
+          id: item.id,
+          session_id: item.session_id,
+          content_type: item.content_type,
+          url: item.url ? 'has_url' : 'no_url',
+          prompt: item.prompt?.substring(0, 30) + '...'
+        }))
+      });
+      
       return data || [];
     },
-    enabled: !!activeSession?.id,
-    // AGGRESSIVE OPTIMIZATION: Cache for 4 hours - assets don't change once completed
-    staleTime: 4 * 60 * 60 * 1000, // 4 hours
-    gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, // Don't refetch on mount, rely on cache
+    enabled: !sessionLoading,
+    // Reduce cache time for debugging
+    staleTime: 30 * 1000, // 30 seconds for debugging
+    gcTime: 5 * 60 * 1000, // 5 minutes for debugging
+    refetchOnWindowFocus: true, // Enable for debugging
+    refetchOnMount: true, // Enable for debugging
     refetchInterval: false, // No polling - use realtime instead
     // Retry strategy for failed requests
     retry: (failureCount, error) => {
@@ -77,6 +110,21 @@ export const useRealtimeWorkspace = () => {
     },
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
+
+  // Debug assets state
+  useEffect(() => {
+    console.log('🚀 DEBUG: Assets state changed:', {
+      itemsLoading,
+      itemsError,
+      assetsCount: assets.length,
+      sessionId: activeSession?.id,
+      assets: assets.slice(0, 3).map((item: any) => ({
+        id: item.id,
+        content_type: item.content_type,
+        url: item.url ? 'has_url' : 'no_url'
+      }))
+    });
+  }, [assets, itemsLoading, itemsError, activeSession?.id]);
 
   // Session storage is no longer needed as we use database sessions
   useEffect(() => {
@@ -148,7 +196,7 @@ export const useRealtimeWorkspace = () => {
               
               // Invalidate workspace items query to refresh
               queryClient.invalidateQueries({ 
-                queryKey: ['workspace-items'],
+                queryKey: ['workspace-items-all'],
                 exact: false 
               });
               
@@ -473,7 +521,7 @@ export const useRealtimeWorkspace = () => {
     console.log('➕ Assets automatically added to workspace via backend:', assetIds);
     // Refresh workspace items to show new additions
     queryClient.invalidateQueries({ 
-      queryKey: ['workspace-items'],
+      queryKey: ['workspace-items-all'],
       exact: false 
     });
   }, [queryClient]);
@@ -499,7 +547,7 @@ export const useRealtimeWorkspace = () => {
       
       // Refresh workspace items
       queryClient.invalidateQueries({ 
-        queryKey: ['workspace-items'],
+        queryKey: ['workspace-items-all'],
         exact: false 
       });
       
@@ -529,7 +577,7 @@ export const useRealtimeWorkspace = () => {
       
       // Refresh workspace items
       queryClient.invalidateQueries({ 
-        queryKey: ['workspace-items'],
+        queryKey: ['workspace-items-all'],
         exact: false 
       });
       
@@ -558,7 +606,7 @@ export const useRealtimeWorkspace = () => {
 
   return {
     tiles: workspaceTiles(),
-    isLoading,
+    isLoading: sessionLoading || itemsLoading,
     deletingTiles,
     addToWorkspace,
     importToWorkspace,
