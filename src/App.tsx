@@ -13,15 +13,24 @@ import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import Library from "@/pages/Library";
 import LibraryV2 from "@/pages/LibraryV2";
-import Workspace from "@/pages/Workspace";
+import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
+import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
 import Admin from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
 import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
 import Playground from "@/pages/Playground";
 import NotFound from "@/pages/NotFound";
+import { useMobileDetection } from "@/hooks/useMobileDetection";
 
 const queryClient = new QueryClient();
+
+// Mobile-aware workspace component
+const WorkspaceWithMobileDetection = () => {
+  const { isMobile } = useMobileDetection();
+  
+  return isMobile ? <MobileSimplifiedWorkspace /> : <SimplifiedWorkspace />;
+};
 
 function App() {
   return (
@@ -35,7 +44,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/workspace" element={<ProtectedRoute><Workspace /></ProtectedRoute>} />
+              <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
               <Route path="/library-v2" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
