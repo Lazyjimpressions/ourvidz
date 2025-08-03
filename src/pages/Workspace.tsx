@@ -12,9 +12,7 @@ import { ScrollNavigation } from '@/components/ScrollNavigation';
 import { ImageInputControls } from '@/components/ImageInputControls';
 import { VideoInputControls } from '@/components/VideoInputControls';
 import { LibraryImportModal } from '@/components/LibraryImportModal';
-import { MultiReferencePanel } from '@/components/workspace/MultiReferencePanel';
-import { VideoReferencePanel } from '@/components/workspace/VideoReferencePanel';
-import { UnifiedReferencePanel } from '@/components/workspace/UnifiedReferencePanel';
+// Removed unused imports - components integrated into simplified workspace
 import { CompactReferenceUpload } from '@/components/workspace/CompactReferenceUpload';
 import { SeedDisplay } from '@/components/workspace/SeedDisplay';
 import { Button } from '@/components/ui/button';
@@ -833,28 +831,7 @@ const Workspace = () => {
           )}
         </div>
         
-        {/* Video Reference Panel - Only for video mode */}
-        {isVideoMode && showReferencePanel && (
-          <VideoReferencePanel
-            strength={referenceStrength}
-            onStrengthChange={setReferenceStrength}
-            onReferencesChange={handleVideoReferencesChange}
-            onClear={handleClearVideoReferences}
-            references={videoReferences}
-          />
-        )}
-
-        {/* Image Reference Panel - Only for image mode when unified panel is not shown */}
-        {!isVideoMode && showReferencePanel && !hasActiveReferences && (
-          <MultiReferencePanel
-            mode="image"
-            strength={referenceStrength}
-            onStrengthChange={setReferenceStrength}
-            onReferencesChange={handleReferencesChange}
-            onClear={handleClearReferences}
-            references={activeReferences.length > 0 ? activeReferences : defaultReferences}
-          />
-        )}
+        {/* Reference controls integrated into input controls */}
       </div>
 
       {/* Scroll Navigation */}
