@@ -141,7 +141,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
 
   // Integrate with existing hooks
   const { generateContent, isGenerating: generationInProgress, error: generationError } = useGeneration();
-  const { tiles: realtimeTiles, addToWorkspace: addToRealtimeWorkspace, deleteTile: deleteRealtimeTile } = useRealtimeWorkspace();
+  const { tiles: realtimeTiles, isLoading: workspaceLoading, addToWorkspace: addToRealtimeWorkspace, deleteTile: deleteRealtimeTile } = useRealtimeWorkspace();
 
   // Sync mode with URL
   useEffect(() => {
