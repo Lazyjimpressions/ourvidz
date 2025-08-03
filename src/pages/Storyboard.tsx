@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { StoryboardLayout } from "@/components/StoryboardLayout";
-import { StoryboardConceptSection } from "@/components/workspace/StoryboardConceptSection";
+// StoryboardConceptSection removed - simplified implementation
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,11 +51,14 @@ const Storyboard = () => {
   if (activeStep === 'concept') {
     return (
       <StoryboardLayout>
-        <StoryboardConceptSection
-          concept={concept}
-          setConcept={setConcept}
-          onNext={handleNext}
-        />
+        <div className="text-center py-8">
+          <h2 className="text-xl text-white mb-4">Storyboard Concept</h2>
+          <p className="text-gray-400 mb-4">This feature will be implemented soon</p>
+          <Button onClick={handleNext} className="gap-2">
+            Next
+            <ArrowRight className="w-4 h-4" />
+          </Button>
+        </div>
       </StoryboardLayout>
     );
   }

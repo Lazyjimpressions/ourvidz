@@ -11,7 +11,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
-import Library from "@/pages/Library";
 import LibraryV2 from "@/pages/LibraryV2";
 import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
@@ -45,7 +44,7 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
-              <Route path="/library" element={<ProtectedRoute><Library /></ProtectedRoute>} />
+              <Route path="/library" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
               <Route path="/library-v2" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

@@ -14,11 +14,10 @@ import {
   Copy,
   Plus
 } from "lucide-react";
-import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
-import { LibraryImportModal } from "@/components/LibraryImportModal";
-import { SDXLImageSelector } from "@/components/workspace/SDXLImageSelector";
+import { SimpleLightbox } from "@/components/workspace/SimpleLightbox";
+// SDXL Image Selector removed - functionality simplified
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
-import { useVirtualizedWorkspace } from '@/hooks/useVirtualizedWorkspace';
+import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { MediaTile } from '@/types/workspace';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -259,26 +258,20 @@ export const VirtualizedMediaGrid = ({
   const [currentSDXLTile, setCurrentSDXLTile] = useState<MediaTile | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Use optimized virtualized workspace hook
+  // Use current realtime workspace hook
   const { 
     tiles,
-    visibleTiles, 
-    totalCount,
     isLoading, 
-    loadingUrls,
     deletingTiles, 
-    importToWorkspace, 
+    addToWorkspace, 
     clearWorkspace, 
-    deleteTile,
-    deleteIndividualImages,
-    updateImageSelection,
-    registerTileElement,
-    getSessionInfo
-  } = useVirtualizedWorkspace({
-    itemHeight: 300,
-    overscan: 3,
-    visibleCount: 12
-  });
+    deleteTile
+  } = useRealtimeWorkspace();
+
+  // For compatibility with existing VirtualizedMediaGrid features
+  const visibleTiles = tiles; // Show all tiles for now
+  const totalCount = tiles.length;
+  const loadingUrls = new Set<string>(); // Simplified for now
 
   const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -313,6 +306,11 @@ export const VirtualizedMediaGrid = ({
   }, [onClearWorkspace, clearWorkspace]);
 
   // Register import handler with parent component
+  const importToWorkspace = useCallback((assets: UnifiedAsset[]) => {
+    const assetIds = assets.map(asset => asset.id);
+    addToWorkspace(assetIds);
+  }, [addToWorkspace]);
+
   useEffect(() => {
     if (onImport) {
       onImport(importToWorkspace);
@@ -327,13 +325,15 @@ export const VirtualizedMediaGrid = ({
 
   const handleSDXLSelectionUpdate = (selectedIndices: number[]) => {
     if (currentSDXLTile) {
-      updateImageSelection(currentSDXLTile, selectedIndices);
+      // TODO: Implement SDXL selection update in realtime workspace
+      console.log('SDXL selection update:', selectedIndices);
     }
   };
 
   const handleSDXLIndividualDelete = (imageIndices: number[]) => {
     if (currentSDXLTile) {
-      deleteIndividualImages(currentSDXLTile, imageIndices);
+      // TODO: Implement SDXL individual delete in realtime workspace
+      console.log('SDXL individual delete:', imageIndices);
     }
   };
 
@@ -383,15 +383,7 @@ export const VirtualizedMediaGrid = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span>⚡ Optimized: {totalCount} total, {visibleTiles.length} visible</span>
-            {(() => {
-              const sessionInfo = getSessionInfo();
-              return sessionInfo && (
-                <span className="text-blue-400">
-                  Session: {sessionInfo.duration}
-                  {sessionInfo.isNewSession && " (new)"}
-                </span>
-              );
-            })()}
+            {/* Session info temporarily disabled until implemented in realtime workspace */}
           </div>
           {loadingUrls.size > 0 && (
             <span className="animate-pulse">Loading {loadingUrls.size} images...</span>
@@ -419,47 +411,72 @@ export const VirtualizedMediaGrid = ({
             onSDXLManage={tile.isPartOfSet ? () => handleSDXLManage(tile) : undefined}
             isDeleting={deletingTiles.has(tile.id)}
             isLoadingUrl={loadingUrls.has(tile.originalAssetId)}
-            registerElement={(element) => registerTileElement(tile.id, element)}
+            registerElement={() => {}} // Simplified for now
           />
         ))}
       </div>
 
-      {/* Modal for Full Resolution */}
+      {/* Simple Lightbox */}
       {selectedTile && selectedTile.url && (
-        <WorkspaceContentModal
-          tiles={tiles.filter(t => t.url)} // Only pass tiles with URLs
-          currentIndex={tiles.filter(t => t.url).findIndex(t => t.id === selectedTile.id)}
-          onClose={() => setSelectedTile(null)}
-          onIndexChange={(newIndex) => {
-            const tilesWithUrls = tiles.filter(t => t.url);
-            const newTile = tilesWithUrls[newIndex];
-            if (newTile) {
-              setSelectedIndex(tiles.findIndex(t => t.id === newTile.id));
-              setSelectedTile(newTile);
-            }
-          }}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
+          <button
+            onClick={() => setSelectedTile(null)}
+            className="absolute top-4 right-4 text-white text-2xl"
+          >
+            ×
+          </button>
+          {selectedTile.type === 'image' ? (
+            <img
+              src={selectedTile.url}
+              alt={selectedTile.prompt}
+              className="max-w-full max-h-full object-contain"
+            />
+          ) : (
+            <video
+              src={selectedTile.url}
+              controls
+              className="max-w-full max-h-full"
+            />
+          )}
+          <div className="absolute bottom-4 left-4 text-white">
+            <p className="text-sm">{selectedTile.prompt}</p>
+          </div>
+        </div>
       )}
 
-      {/* Library Import Modal */}
-      <LibraryImportModal
-        open={showLibraryModal}
-        onClose={() => setShowLibraryModal(false)}
-        onImport={importToWorkspace}
-      />
+      {/* Import from Library Button */}
+      {showLibraryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-gray-800 p-6 rounded-lg">
+            <h3 className="text-white text-lg mb-4">Import from Library</h3>
+            <p className="text-gray-400 mb-4">This feature will be implemented soon</p>
+            <button
+              onClick={() => setShowLibraryModal(false)}
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* SDXL Image Selector Modal */}
-      {currentSDXLTile && (
-        <SDXLImageSelector
-          open={showSDXLSelector}
-          onClose={() => {
-            setShowSDXLSelector(false);
-            setCurrentSDXLTile(null);
-          }}
-          tile={currentSDXLTile}
-          onSelectionUpdate={handleSDXLSelectionUpdate}
-          onIndividualDelete={handleSDXLIndividualDelete}
-        />
+      {/* SDXL Image Selector temporarily disabled */}
+      {showSDXLSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-gray-800 p-6 rounded-lg">
+            <h3 className="text-white text-lg mb-4">SDXL Image Management</h3>
+            <p className="text-gray-400 mb-4">This feature will be implemented soon</p>
+            <button
+              onClick={() => {
+                setShowSDXLSelector(false);
+                setCurrentSDXLTile(null);
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </>
   );

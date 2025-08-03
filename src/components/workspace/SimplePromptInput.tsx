@@ -1,6 +1,49 @@
 import React, { useState } from 'react';
 import { Image, Video, Play, Settings, Palette, Camera, Square, Volume2, Zap, X } from 'lucide-react';
-import { ReferenceImageUpload } from './ReferenceImageUpload';
+// Inline reference upload component (replaces deleted ReferenceImageUpload)
+const ReferenceImageUpload: React.FC<{
+  file: File | null;
+  onFileChange: (file: File | null) => void;
+  label: string;
+}> = ({ file, onFileChange, label }) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = event.target.files?.[0];
+    if (uploadedFile) {
+      onFileChange(uploadedFile);
+    }
+  };
+
+  return (
+    <div className="border border-gray-600 rounded-lg p-3">
+      {file ? (
+        <div className="relative">
+          <img
+            src={URL.createObjectURL(file)}
+            alt={label}
+            className="w-full h-20 object-cover rounded"
+          />
+          <button
+            onClick={() => onFileChange(null)}
+            className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+          >
+            ×
+          </button>
+        </div>
+      ) : (
+        <label className="cursor-pointer flex flex-col items-center gap-2 p-4 text-gray-400 hover:text-white">
+          <Image className="w-6 h-6" />
+          <span className="text-sm">{label}</span>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+        </label>
+      )}
+    </div>
+  );
+};
 
 interface SimplePromptInputProps {
   prompt: string;
@@ -180,10 +223,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
             <div className="flex items-center">
               {mode === 'image' ? (
                 <ReferenceImageUpload
-                  referenceImage={referenceImage}
-                  onReferenceImageChange={onReferenceImageChange}
-                  referenceStrength={referenceStrength}
-                  onReferenceStrengthChange={onReferenceStrengthChange}
+                  file={referenceImage}
+                  onFileChange={onReferenceImageChange}
+                  label="Reference Image"
                 />
               ) : (
                 // Video mode: Beginning and Ending ref image boxes
@@ -191,19 +233,17 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-gray-400">Beginning</span>
                     <ReferenceImageUpload
-                      referenceImage={beginningRefImage || null}
-                      onReferenceImageChange={onBeginningRefImageChange || (() => {})}
-                      referenceStrength={referenceStrength}
-                      onReferenceStrengthChange={onReferenceStrengthChange}
+                      file={beginningRefImage || null}
+                      onFileChange={onBeginningRefImageChange || (() => {})}
+                      label="Beginning"
                     />
                   </div>
                   <div className="flex flex-col items-center gap-1">
                     <span className="text-xs text-gray-400">Ending</span>
                     <ReferenceImageUpload
-                      referenceImage={endingRefImage || null}
-                      onReferenceImageChange={onEndingRefImageChange || (() => {})}
-                      referenceStrength={referenceStrength}
-                      onReferenceStrengthChange={onReferenceStrengthChange}
+                      file={endingRefImage || null}
+                      onFileChange={onEndingRefImageChange || (() => {})}
+                      label="Ending"
                     />
                   </div>
                 </div>

@@ -9,7 +9,16 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Copy, Calendar, Clock, Image, Video, Zap, Crown, Download } from 'lucide-react';
-import { SeedDisplay } from '@/components/workspace/SeedDisplay';
+// Inline seed display component (replaces deleted SeedDisplay)
+const SeedDisplay: React.FC<{ seed?: number }> = ({ seed }) => {
+  if (!seed) return null;
+  return (
+    <div className="bg-gray-800 p-2 rounded text-sm">
+      <span className="text-gray-400">Seed: </span>
+      <span className="text-white font-mono">{seed}</span>
+    </div>
+  );
+};
 import { toast } from 'sonner';
 import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 
@@ -154,13 +163,7 @@ export const PromptInfoModal = ({
                 <h4 className="font-medium">Generation Details</h4>
                 
                 {details.seed !== undefined && (
-                  <SeedDisplay 
-                    seed={details.seed}
-                    onUseSeed={(seedValue) => {
-                      copyToClipboard(seedValue.toString(), 'Seed');
-                    }}
-                    className="justify-start"
-                  />
+                  <SeedDisplay seed={details.seed} />
                 )}
 
                 {details.generationTime && (

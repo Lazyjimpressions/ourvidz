@@ -13,25 +13,14 @@ import {
   Copy,
   Plus
 } from "lucide-react";
-import { WorkspaceContentModal } from "@/components/WorkspaceContentModal";
-import { LibraryImportModal } from "@/components/LibraryImportModal";
+import { SimpleLightbox } from "@/components/workspace/SimpleLightbox";
 import { UnifiedAsset } from '@/lib/services/AssetService';
-import { useMediaGridWorkspace } from '@/hooks/useMediaGridWorkspace';
+import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-interface MediaTile {
-  id: string;
-  originalAssetId: string;
-  type: 'image' | 'video';
-  url: string;
-  prompt: string;
-  timestamp: Date;
-  quality: 'fast' | 'high';
-  modelType?: string;
-  duration?: number;
-  thumbnailUrl?: string;
-}
+// Use the shared MediaTile interface from types
+import { MediaTile } from '@/types/workspace';
 
 interface MediaGridProps {
   onRegenerateItem?: (itemId: string) => void;
@@ -45,12 +34,13 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [showLibraryModal, setShowLibraryModal] = useState(false);
 
-  // Use the isolated media grid workspace hook
-  const { tiles, isLoading, deletingTiles, importToWorkspace, clearWorkspace, deleteTile } = useMediaGridWorkspace();
+  // Use the current realtime workspace hook
+  const { tiles, isLoading, deletingTiles, addToWorkspace, clearWorkspace, deleteTile } = useRealtimeWorkspace();
 
   const handleDownload = async (tile: MediaTile, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
+      if (!tile.url) return;
       const response = await fetch(tile.url);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -84,6 +74,11 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
   }, [onClearWorkspace, clearWorkspace]);
 
   // Register import handler with parent component
+  const importToWorkspace = useCallback((assets: UnifiedAsset[]) => {
+    const assetIds = assets.map(asset => asset.id);
+    addToWorkspace(assetIds);
+  }, [addToWorkspace]);
+
   useEffect(() => {
     if (onImport) {
       onImport(importToWorkspace);
@@ -149,7 +144,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
             {/* Media Content */}
             {tile.type === 'image' ? (
               <img
-                src={tile.url}
+                src={tile.url || ''}
                 alt="Generated content"
                 className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
                 onError={(e) => {
@@ -167,7 +162,7 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
                   />
                 ) : (
                   <video
-                    src={tile.url}
+                    src={tile.url || ''}
                     className="w-full h-full object-cover"
                     muted
                     preload="metadata"
@@ -299,25 +294,49 @@ export const MediaGrid = ({ onRegenerateItem, onGenerateMoreLike, onClearWorkspa
         ))}
       </div>
 
-      {/* Modal for Full Resolution */}
+      {/* Simple Lightbox */}
       {selectedTile && (
-        <WorkspaceContentModal
-          tiles={tiles}
-          currentIndex={selectedIndex}
-          onClose={() => setSelectedTile(null)}
-          onIndexChange={(newIndex) => {
-            setSelectedIndex(newIndex);
-            setSelectedTile(tiles[newIndex]);
-          }}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
+          <button
+            onClick={() => setSelectedTile(null)}
+            className="absolute top-4 right-4 text-white text-2xl"
+          >
+            ×
+          </button>
+          {selectedTile.type === 'image' ? (
+            <img
+              src={selectedTile.url || ''}
+              alt={selectedTile.prompt}
+              className="max-w-full max-h-full object-contain"
+            />
+          ) : (
+            <video
+              src={selectedTile.url || ''}
+              controls
+              className="max-w-full max-h-full"
+            />
+          )}
+          <div className="absolute bottom-4 left-4 text-white">
+            <p className="text-sm">{selectedTile.prompt}</p>
+          </div>
+        </div>
       )}
 
-      {/* Library Import Modal */}
-      <LibraryImportModal
-        open={showLibraryModal}
-        onClose={() => setShowLibraryModal(false)}
-        onImport={importToWorkspace}
-      />
+      {/* Import from Library Button */}
+      {showLibraryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+          <div className="bg-gray-800 p-6 rounded-lg">
+            <h3 className="text-white text-lg mb-4">Import from Library</h3>
+            <p className="text-gray-400 mb-4">This feature will be implemented soon</p>
+            <button
+              onClick={() => setShowLibraryModal(false)}
+              className="bg-blue-600 text-white px-4 py-2 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 };
