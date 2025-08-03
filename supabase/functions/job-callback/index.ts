@@ -90,14 +90,17 @@ serve(async (req)=>{
     // PHASE 1 FIX: Extract enhancement metadata from worker response
     if (workerMetadata.original_prompt) {
       updatedMetadata.original_prompt = workerMetadata.original_prompt;
-      console.log('📝 Storing original prompt from worker:', workerMetadata.original_prompt);
     }
     if (workerMetadata.final_prompt) {
       updatedMetadata.enhanced_prompt = workerMetadata.final_prompt;
-      console.log('📝 Storing enhanced prompt from worker:', workerMetadata.final_prompt);
     }
-    if (workerMetadata.enhancement_strategy) {
+    // PHASE 4 FIX: Correct enhancement strategy tracking
+    if (workerMetadata.enhancement_strategy && workerMetadata.enhancement_strategy !== 'none') {
       updatedMetadata.enhancement_strategy = workerMetadata.enhancement_strategy;
+      console.log('📈 Enhancement strategy tracked:', workerMetadata.enhancement_strategy);
+    } else {
+      // Default strategy for jobs without explicit strategy
+      updatedMetadata.enhancement_strategy = 'template_based';
     }
     
     // WORKSPACE SUPPORT: Check if job is destined for workspace
@@ -864,69 +867,57 @@ async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
   }
 }
 
-// WORKSPACE SUPPORT: Handle workspace-first generation
+// WORKSPACE SUPPORT: Handle workspace-first generation (PHASE 1 FIX)
 async function handleWorkspaceJobCallback(supabase, job, status, assets, error_message) {
-  console.log('🎯 WORKSPACE CALLBACK PROCESSING:', {
+  console.log('🎯 WORKSPACE CALLBACK (FIXED):', {
     job_id: job.id,
     job_type: job.job_type,
     status,
-    assets,
-    assetsCount: assets ? assets.length : 0,
-    workspace_session_id: job.workspace_session_id,
-    destination: job.destination,
-    timestamp: new Date().toISOString()
+    assetsCount: assets ? assets.length : 0
   });
   
   if (status === 'completed' && assets && assets.length > 0) {
     const jobMetadata = job.metadata || {};
-    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled';
+    const prompt = jobMetadata.original_prompt || jobMetadata.prompt || 'Untitled';
     const isImageJob = job.job_type === 'image' || job.job_type.includes('image');
-    const isVideoJob = job.job_type === 'video' || job.job_type.includes('video');
     
-    console.log('✅ WORKSPACE: Processing completed job for workspace');
-    
-    // Create workspace items for each asset
+    // PHASE 1 FIX: Ensure job_id is properly set for each workspace item
     for (let i = 0; i < assets.length; i++) {
       const assetUrl = assets[i];
-      const title = assets.length > 1 ? `${prompt} (${i + 1})` : prompt;
       
       const workspaceItemData = {
         session_id: job.workspace_session_id,
-        job_id: job.id,
+        job_id: job.id, // CRITICAL FIX: Ensure job_id is set
         user_id: job.user_id,
         prompt: prompt,
-        enhanced_prompt: jobMetadata.enhanced_prompt || prompt,
+        enhanced_prompt: jobMetadata.enhanced_prompt || jobMetadata.final_prompt || prompt,
         content_type: isImageJob ? 'image' : 'video',
         model_type: job.job_type,
         quality: job.quality || 'fast',
         storage_path: assetUrl,
-        bucket_name: isImageJob ? 'image_fast' : 'video_high',
+        bucket_name: isImageJob ? 'sdxl_image_high' : 'video_high', // PHASE 1 FIX: Correct bucket
         url: assetUrl,
         thumbnail_url: assetUrl,
         generation_params: {
-          ...jobMetadata,
           seed: jobMetadata.seed,
-          original_asset_id: jobMetadata.original_asset_id,
-          timestamp: new Date().toISOString()
+          original_prompt: jobMetadata.original_prompt,
+          enhanced_prompt: jobMetadata.enhanced_prompt || jobMetadata.final_prompt,
+          enhancement_strategy: jobMetadata.enhancement_strategy,
+          job_type: job.job_type
         },
         seed: jobMetadata.seed,
         reference_image_url: jobMetadata.reference_image_url,
         reference_strength: jobMetadata.reference_strength,
         status: 'generated',
         metadata: {
-          ...jobMetadata,
-          workspace_processed_at: new Date().toISOString(),
           asset_index: i,
           total_assets: assets.length,
-          job_type: job.job_type
+          job_type: job.job_type,
+          enhancement_strategy: jobMetadata.enhancement_strategy || 'unknown'
         }
       };
       
-      console.log(`🔄 WORKSPACE: Creating workspace item ${i + 1}/${assets.length}:`, {
-        session_id: job.workspace_session_id,
-        content_type: workspaceItemData.content_type,
-        asset_url: assetUrl
-      });
+      console.log(`🔄 WORKSPACE (${i + 1}/${assets.length}): Creating item with job_id=${job.id}`);
       
       const { data: workspaceItem, error: workspaceError } = await supabase
         .from('workspace_items')
@@ -935,16 +926,9 @@ async function handleWorkspaceJobCallback(supabase, job, status, assets, error_m
         .single();
       
       if (workspaceError) {
-        console.error('❌ WORKSPACE: Failed to create workspace item:', {
-          error: workspaceError,
-          item_data: workspaceItemData
-        });
+        console.error('❌ WORKSPACE: Insert failed:', workspaceError);
       } else {
-        console.log('✅ WORKSPACE: Created workspace item:', {
-          item_id: workspaceItem.id,
-          content_type: workspaceItem.content_type,
-          status: workspaceItem.status
-        });
+        console.log(`✅ WORKSPACE: Item created with job_id=${workspaceItem.job_id}`);
       }
     }
   } else if (status === 'failed') {

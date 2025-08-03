@@ -192,23 +192,33 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Extract model type from job type
+   * Extract model type from job type (PHASE 2 FIX)
    */
   private getModelTypeFromJobType(jobType: string): string {
+    // PHASE 2 FIX: Handle full job_type patterns correctly
     if (jobType?.includes('sdxl')) return 'sdxl'
     if (jobType?.includes('wan') || jobType?.includes('video')) return 'wan'
     if (jobType?.includes('qwen_instruct')) return 'qwen_instruct'
     if (jobType?.includes('qwen_base')) return 'qwen_base'
-    return 'sdxl' // Default fallback
+    
+    // PHASE 2 FIX: Return actual job_type for template lookup
+    console.log('🔧 Model type mapping:', { jobType, mappedType: jobType })
+    return jobType || 'sdxl'
   }
 
   /**
-   * Get dynamic template from database with better fallback logic
+   * Get dynamic template from database (PHASE 2 FIX)
    */
   private async getDynamicTemplate(modelType: string, useCase: string, contentMode: string) {
-    const template = await getDatabaseTemplate(modelType, useCase, contentMode)
+    // PHASE 2 FIX: Map job_type to correct template lookup
+    let lookupModelType = modelType
+    if (modelType === 'sdxl_image_high' || modelType === 'sdxl_image_fast') {
+      lookupModelType = 'sdxl'
+    }
+    
+    const template = await getDatabaseTemplate(lookupModelType, useCase, contentMode)
     if (!template) {
-      throw new Error(`No template found for ${modelType}/${useCase}/${contentMode}`)
+      throw new Error(`No template found for ${lookupModelType}/${useCase}/${contentMode}`)
     }
     return template
   }
@@ -253,12 +263,12 @@ class DynamicEnhancementOrchestrator {
         result = await this.enhanceWithWanWorker(request, template)
       }
 
-      // Apply token optimization
-      const optimized = this.optimizeTokens(result.enhanced_prompt, template.token_limit || 512)
+      // PHASE 3 FIX: Apply strict token optimization for CLIP compatibility
+      const optimized = this.optimizeTokens(result.enhanced_prompt, Math.min(template.token_limit || 75, 75))
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,
-        strategy: `dynamic_${template.model_type}_${workerType}_${contentMode}`,
+        strategy: `${template.template_name}_${workerType}`, // PHASE 4 FIX: Better strategy naming
         template_name: template.template_name || 'dynamic',
         model_used: workerType === 'chat' ? 'qwen_instruct' : 'qwen_base',
         token_count: optimized.token_count,
@@ -581,36 +591,52 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Optimize tokens if over limit
+   * Optimize prompt for token limits (PHASE 3 FIX - CLIP compatibility)
    */
-  private optimizeTokens(prompt: string, tokenLimit: number) {
-    const tokenCount = this.estimateTokens(prompt)
+  private optimizeTokens(prompt: string, tokenLimit: number = 75): { enhanced_prompt: string, token_count: number, compressed: boolean } {
+    const estimatedTokens = this.estimateTokens(prompt)
     
-    if (tokenCount <= tokenLimit) {
+    if (estimatedTokens <= tokenLimit) {
       return {
         enhanced_prompt: prompt,
-        token_count: tokenCount,
+        token_count: estimatedTokens,
         compressed: false
       }
     }
 
-    // Simple compression: remove redundant words and trim
+    // PHASE 3 FIX: Aggressive compression for CLIP 77-token limit
     let compressed = prompt
-      .replace(/\b(\w+)\s+\1\b/gi, '$1') // Remove repeated words
-      .replace(/,\s*,/g, ',') // Remove double commas
-      .replace(/\s+/g, ' ') // Normalize spaces
+      .replace(/\b(very|really|quite|rather|extremely|incredibly|absolutely|highly|ultra|super)\s+/gi, '')
+      .replace(/\b(the|a|an|this|that|these|those)\s+/gi, ' ')
+      .replace(/\b(and|or|but|so|yet|for|nor)\s+/gi, ', ')
+      .replace(/\s+/g, ' ')
+      .replace(/[,]{2,}/g, ',')
       .trim()
 
-    // If still too long, truncate intelligently
-    if (this.estimateTokens(compressed) > tokenLimit) {
-      const words = compressed.split(' ')
-      const targetWords = Math.floor(tokenLimit * 0.75) // Conservative estimate
-      compressed = words.slice(0, targetWords).join(' ')
+    const compressedTokens = this.estimateTokens(compressed)
+    
+    if (compressedTokens <= tokenLimit) {
+      console.log(`📝 PHASE 3: Compressed from ${estimatedTokens} to ${compressedTokens} tokens`)
+      return {
+        enhanced_prompt: compressed,
+        token_count: compressedTokens,
+        compressed: true
+      }
+    }
+
+    // PHASE 3 FIX: Hard truncation for CLIP compliance
+    const wordsPerToken = 0.75
+    const maxWords = Math.floor(tokenLimit * wordsPerToken)
+    const words = compressed.split(' ')
+    
+    if (words.length > maxWords) {
+      compressed = words.slice(0, maxWords).join(' ')
+      console.log(`✂️ PHASE 3: Hard truncated to ${maxWords} words for CLIP compliance`)
     }
 
     return {
       enhanced_prompt: compressed,
-      token_count: this.estimateTokens(compressed),
+      token_count: Math.min(this.estimateTokens(compressed), tokenLimit),
       compressed: true
     }
   }
