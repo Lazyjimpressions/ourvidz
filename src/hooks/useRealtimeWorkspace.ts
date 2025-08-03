@@ -19,17 +19,50 @@ export const useRealtimeWorkspace = () => {
   // PHASE 2: Job tracking ref moved to top level (HOOKS RULE COMPLIANCE)
   const jobTrackingRef = useRef<Map<string, { timer: NodeJS.Timeout; assets: Set<string> }>>(new Map());
   
-  // Efficient workspace query with aggressive caching
-  const { data: assets = [], isLoading } = useQuery({
-    queryKey: ['realtime-workspace-assets', Array.from(workspaceFilter).sort()],
+  // Get active workspace session first
+  const { data: activeSession } = useQuery({
+    queryKey: ['active-workspace-session'],
     queryFn: async () => {
-      if (workspaceFilter.size === 0) {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      
+      const { data } = await (supabase as any)
+        .from('workspace_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+      
+      return data;
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  // Fetch workspace items directly from workspace_items table
+  const { data: assets = [], isLoading } = useQuery({
+    queryKey: ['workspace-items', activeSession?.id],
+    queryFn: async () => {
+      if (!activeSession?.id) {
+        console.log('🚀 No active workspace session found');
         return [];
       }
-      console.log('🚀 Fetching workspace assets with optimization:', Array.from(workspaceFilter));
-      return AssetService.getAssetsByIds(Array.from(workspaceFilter));
+      
+      console.log('🚀 Fetching workspace items for session:', activeSession.id);
+      const { data, error } = await (supabase as any)
+        .from('workspace_items')
+        .select('*')
+        .eq('session_id', activeSession.id)
+        .eq('status', 'generated')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('❌ Error fetching workspace items:', error);
+        return [];
+      }
+      
+      return data || [];
     },
-    enabled: workspaceFilter.size > 0,
+    enabled: !!activeSession?.id,
     // AGGRESSIVE OPTIMIZATION: Cache for 4 hours - assets don't change once completed
     staleTime: 4 * 60 * 60 * 1000, // 4 hours
     gcTime: 24 * 60 * 60 * 1000, // Keep in cache for 24 hours
@@ -45,47 +78,12 @@ export const useRealtimeWorkspace = () => {
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 
-  // Restore workspace from session storage on mount  
+  // Session storage is no longer needed as we use database sessions
   useEffect(() => {
-    const restoreWorkspace = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      console.log('🔄 REALTIME: Restoring workspace from session storage for user:', user.id);
-      
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      const storedFilter = sessionStorage.getItem(userScopedKey);
-      
-      if (storedFilter) {
-        try {
-          const filterArray = JSON.parse(storedFilter);
-          if (Array.isArray(filterArray) && filterArray.length > 0) {
-            setWorkspaceFilter(new Set(filterArray));
-            console.log('✅ REALTIME: Restored workspace with', filterArray.length, 'assets');
-          }
-        } catch (error) {
-          console.warn('⚠️ Failed to parse stored workspace filter:', error);
-        }
-      }
-    };
-    
-    restoreWorkspace();
+    console.log('🔄 REALTIME: Using database-based workspace sessions');
   }, []);
 
-  // Save workspace filter to session storage whenever it changes
-  useEffect(() => {
-    const saveWorkspace = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      sessionStorage.setItem(userScopedKey, JSON.stringify(Array.from(workspaceFilter)));
-    };
-    
-    if (workspaceFilter.size > 0) {
-      saveWorkspace();
-    }
-  }, [workspaceFilter]);
+  // No longer need to save to session storage - using database sessions
 
   // Batched realtime subscription with debouncing for rapid SDXL completions
   useEffect(() => {
@@ -135,29 +133,35 @@ export const useRealtimeWorkspace = () => {
           {
             event: '*',
             schema: 'public',
-            table: 'images',
+            table: 'workspace_items',
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {
-            const image = payload.new as any;
+            const workspaceItem = payload.new as any;
             const eventType = payload.eventType;
             
-            if (eventType === 'UPDATE' && image.status === 'completed' && 
-                !processedUpdatesRef.current.has(image.id)) {
+            if (eventType === 'INSERT' && workspaceItem.status === 'generated' && 
+                !processedUpdatesRef.current.has(workspaceItem.id)) {
               
-              console.log('🎉 Image completed - adding to batch:', image.id, 'job_id:', image.job_id);
-              processedUpdatesRef.current.add(image.id);
-              pendingBatchUpdatesRef.current.add(image.id);
+              console.log('🎉 Workspace item created:', workspaceItem.id, 'content_type:', workspaceItem.content_type);
+              processedUpdatesRef.current.add(workspaceItem.id);
               
-              // Clear existing timer and set new one (debouncing)
-              if (batchUpdateTimerRef.current) {
-                clearTimeout(batchUpdateTimerRef.current);
-              }
+              // Invalidate workspace items query to refresh
+              queryClient.invalidateQueries({ 
+                queryKey: ['workspace-items'],
+                exact: false 
+              });
               
-              // Process batch after 500ms of no new completions
-              batchUpdateTimerRef.current = setTimeout(processBatchedUpdates, 500);
+              // Dispatch completion event
+              window.dispatchEvent(new CustomEvent('generation-completed', {
+                detail: { 
+                  assetId: workspaceItem.id, 
+                  type: workspaceItem.content_type, 
+                  status: 'completed'
+                }
+              }));
               
-              setTimeout(() => processedUpdatesRef.current.delete(image.id), 60000);
+              setTimeout(() => processedUpdatesRef.current.delete(workspaceItem.id), 60000);
             }
           }
         )
@@ -393,78 +397,54 @@ export const useRealtimeWorkspace = () => {
     return 0; // Return 0 as fallback
   };
 
-  // Transform assets to tiles - FIXED: Proper seed extraction and conversion
-  const transformAssetToTiles = useCallback((asset: UnifiedAsset): MediaTile[] => {
-    console.log('🔄 TRANSFORM ASSET TO TILES:', {
-      assetId: asset.id,
-      type: asset.type,
-      rawMetadata: asset.metadata,
-      metadataKeys: asset.metadata ? Object.keys(asset.metadata) : null,
-      rawSeed: asset.metadata?.seed,
-      seedType: typeof asset.metadata?.seed
+  // Transform workspace items to tiles
+  const transformWorkspaceItemToTiles = useCallback((item: any): MediaTile[] => {
+    console.log('🔄 TRANSFORM WORKSPACE ITEM TO TILES:', {
+      itemId: item.id,
+      contentType: item.content_type,
+      url: item.url,
+      rawSeed: item.seed,
+      metadata: item.metadata
     });
 
     const tiles: MediaTile[] = [];
+    const extractedSeed = convertSeedValue(item.seed);
     
-    if (asset.type === 'image') {
-      // Handle individual image records only
-      if (asset.url) {
-        // FIXED: Proper seed extraction and conversion
-        const extractedSeed = convertSeedValue(asset.metadata?.seed);
-        
-        console.log('🎯 SEED EXTRACTION FOR IMAGE:', {
-          assetId: asset.id,
-          rawSeed: asset.metadata?.seed,
-          extractedSeed,
-          generationTime: asset.metadata?.generation_time,
-          negativePrompt: asset.metadata?.negative_prompt
-        });
-
-        // Handle single image
-        tiles.push({
-          id: asset.id,
-          originalAssetId: asset.id,
-          type: 'image',
-          url: asset.url,
-          prompt: asset.prompt,
-          timestamp: asset.createdAt,
-          quality: (asset.quality as 'fast' | 'high') || 'fast',
-          modelType: asset.metadata?.job_type || asset.modelType, // PHASE 1 FIX: Use job_type for accurate model detection
-          enhancedPrompt: asset.enhancedPrompt,
-          seed: extractedSeed, // FIXED: Use converted seed value
-          generationParams: {
-            ...asset.metadata,
-            seed: extractedSeed, // FIXED: Ensure seed is properly converted in generationParams too
-            generation_time: asset.metadata?.generation_time,
-            negative_prompt: asset.metadata?.negative_prompt,
-            reference_strength: asset.metadata?.reference_strength
-          }
-        });
-      }
-    } else if (asset.type === 'video' && asset.url) {
-      const extractedSeed = convertSeedValue(asset.metadata?.seed);
-      
-      console.log('🎯 SEED EXTRACTION FOR VIDEO:', {
-        assetId: asset.id,
-        rawSeed: asset.metadata?.seed,
-        extractedSeed
-      });
-
+    if (item.content_type === 'image' && item.url) {
       tiles.push({
-        id: asset.id,
-        originalAssetId: asset.id,
-        type: 'video',
-        url: asset.url,
-        prompt: asset.prompt,
-        timestamp: asset.createdAt,
-        quality: (asset.quality as 'fast' | 'high') || 'fast',
-        duration: asset.duration,
-        thumbnailUrl: asset.thumbnailUrl,
-        enhancedPrompt: asset.enhancedPrompt,
-        seed: extractedSeed, // FIXED: Use converted seed value
+        id: item.id,
+        originalAssetId: item.id,
+        type: 'image',
+        url: item.url,
+        prompt: item.prompt,
+        timestamp: new Date(item.created_at),
+        quality: (item.quality as 'fast' | 'high') || 'fast',
+        modelType: item.model_type || 'sdxl',
+        enhancedPrompt: item.enhanced_prompt,
+        seed: extractedSeed,
         generationParams: {
-          ...asset.metadata,
-          seed: extractedSeed // FIXED: Ensure seed is properly converted
+          ...item.generation_params,
+          ...item.metadata,
+          seed: extractedSeed
+        }
+      });
+    } else if (item.content_type === 'video' && item.url) {
+      tiles.push({
+        id: item.id,
+        originalAssetId: item.id,
+        type: 'video',
+        url: item.url,
+        prompt: item.prompt,
+        timestamp: new Date(item.created_at),
+        quality: (item.quality as 'fast' | 'high') || 'fast',
+        duration: 5, // Default duration
+        thumbnailUrl: item.thumbnail_url,
+        enhancedPrompt: item.enhanced_prompt,
+        seed: extractedSeed,
+        generationParams: {
+          ...item.generation_params,
+          ...item.metadata,
+          seed: extractedSeed
         }
       });
     }
@@ -472,86 +452,91 @@ export const useRealtimeWorkspace = () => {
     return tiles;
   }, []);
 
-  // Optimized workspace tiles with enhanced caching
+  // Optimized workspace tiles from workspace items
   const workspaceTiles = useCallback(() => {
-    const completedAssets = assets.filter(asset => 
-      asset.status === 'completed' && asset.url
-    );
+    if (!assets || assets.length === 0) {
+      return [];
+    }
     
     const allTiles: MediaTile[] = [];
-    completedAssets.forEach(asset => {
-      const tiles = transformAssetToTiles(asset);
+    assets.forEach(item => {
+      const tiles = transformWorkspaceItemToTiles(item);
       allTiles.push(...tiles);
     });
     
     // Sort by timestamp descending (newest first)
     return allTiles.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-  }, [assets, transformAssetToTiles]);
+  }, [assets, transformWorkspaceItemToTiles]);
 
-  // Add to workspace
+  // Add to workspace - now handled by backend automatically
   const addToWorkspace = useCallback((assetIds: string[]) => {
-    console.log('➕ Adding assets to workspace:', assetIds);
-    setWorkspaceFilter(prev => {
-      const newFilter = new Set(prev);
-      assetIds.forEach(id => newFilter.add(id));
-      return newFilter;
+    console.log('➕ Assets automatically added to workspace via backend:', assetIds);
+    // Refresh workspace items to show new additions
+    queryClient.invalidateQueries({ 
+      queryKey: ['workspace-items'],
+      exact: false 
     });
-  }, []);
+  }, [queryClient]);
 
-  // Import to workspace
+  // Import to workspace - would need to create workspace items
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('🔄 Adding imported assets to workspace:', importedAssets.length);
-    
-    const newFilterIds = importedAssets.map(asset => asset.id);
-    const newFilter = new Set([...workspaceFilter, ...newFilterIds]);
-    setWorkspaceFilter(newFilter);
-    
-    toast.success(`Added ${importedAssets.length} asset${importedAssets.length !== 1 ? 's' : ''} to workspace`);
-  }, [workspaceFilter]);
-
-  // Clear workspace with user-scoped session management
-  const clearWorkspace = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    setWorkspaceFilter(new Set());
-    
-    if (user) {
-      const userScopedKey = `workspaceFilter_${user.id}`;
-      const sessionStartKey = `workspaceSessionStart_${user.id}`;
-      sessionStorage.removeItem(userScopedKey);
-      sessionStorage.setItem(sessionStartKey, Date.now().toString());
-      console.log('🔄 Cleared workspace and reset session for user:', user.id);
-    }
-    
-    toast.success('Workspace cleared');
+    console.log('🔄 Import to workspace not yet implemented for workspace_items');
+    // TODO: Implement workspace item creation for imported assets
+    toast.success(`Import feature coming soon`);
   }, []);
 
-  // Delete tile
+  // Clear workspace - delete all items in current session
+  const clearWorkspace = useCallback(async () => {
+    if (!activeSession?.id) return;
+    
+    try {
+      const { error } = await (supabase as any)
+        .from('workspace_items')
+        .delete()
+        .eq('session_id', activeSession.id);
+      
+      if (error) throw error;
+      
+      // Refresh workspace items
+      queryClient.invalidateQueries({ 
+        queryKey: ['workspace-items'],
+        exact: false 
+      });
+      
+      toast.success('Workspace cleared');
+    } catch (error) {
+      console.error('❌ Error clearing workspace:', error);
+      toast.error('Failed to clear workspace');
+    }
+  }, [activeSession?.id, queryClient]);
+
+  // Delete tile - delete workspace item
   const deleteTile = useCallback(async (tile: MediaTile) => {
     if (deletingTiles.has(tile.id)) return;
     
-    console.log('🗑️ Starting workspace tile deletion:', tile.id);
+    console.log('🗑️ Starting workspace item deletion:', tile.id);
     
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
-      // Remove from workspace filter first (optimistic update)
-      setWorkspaceFilter(prev => {
-        const newFilter = new Set(prev);
-        newFilter.delete(tile.originalAssetId);
-        return newFilter;
-      });
+      // Delete workspace item
+      const { error } = await (supabase as any)
+        .from('workspace_items')
+        .delete()
+        .eq('id', tile.id);
       
-      // Actual deletion
-      await AssetService.deleteAsset(tile.originalAssetId, tile.type);
+      if (error) throw error;
+      
+      // Refresh workspace items
+      queryClient.invalidateQueries({ 
+        queryKey: ['workspace-items'],
+        exact: false 
+      });
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
       
     } catch (error) {
       console.error('❌ Workspace deletion failed:', error);
-      
-      // Restore to workspace filter on error
-      setWorkspaceFilter(prev => new Set([...prev, tile.originalAssetId]));
       
       const errorMessage = error instanceof Error 
         ? error.message.includes('Failed to fetch') 
@@ -569,7 +554,7 @@ export const useRealtimeWorkspace = () => {
         return next;
       });
     }
-  }, [deletingTiles]);
+  }, [deletingTiles, queryClient]);
 
   return {
     tiles: workspaceTiles(),
