@@ -491,7 +491,6 @@ serve(async (req)=>{
       enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
-      enhanced_tracking: true,
       // **PHASE 2**: Include analytics data in job metadata
       qwen_expansion_percentage: qwenExpansionPercentage,
       quality_improvement: qualityImprovement,
@@ -533,6 +532,37 @@ serve(async (req)=>{
       character_id: characterId
     };
 
+    // WORKSPACE SUPPORT: Check if this is a workspace job
+    const isWorkspaceJob = metadata?.destination === 'workspace';
+    let workspaceSessionId = null;
+    
+    if (isWorkspaceJob) {
+      console.log('🎯 WORKSPACE JOB: Creating workspace session');
+      // Create or get active workspace session
+      const { data: session, error: sessionError } = await supabase.rpc('create_workspace_session', {
+        p_user_id: user.id,
+        p_session_name: metadata?.session_name || 'Workspace Session'
+      });
+      
+      if (sessionError) {
+        console.error('❌ WORKSPACE: Failed to create workspace session:', sessionError);
+        return new Response(JSON.stringify({
+          error: 'Failed to create workspace session',
+          success: false,
+          details: sessionError.message
+        }), {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json'
+          },
+          status: 500
+        });
+      }
+      
+      workspaceSessionId = session;
+      console.log('✅ WORKSPACE: Created session:', workspaceSessionId);
+    }
+
     // Create job record with enhanced error handling - INCLUDING negative prompt in metadata
     const { data: job, error: jobError } = await supabase.from('jobs').insert({
       user_id: user.id,
@@ -549,7 +579,10 @@ serve(async (req)=>{
       original_prompt: preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
       enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
-      enhancement_time_ms: enhancementTimeMs
+      enhancement_time_ms: enhancementTimeMs,
+      // WORKSPACE SUPPORT: Add destination and session fields
+      destination: isWorkspaceJob ? 'workspace' : 'library',
+      workspace_session_id: workspaceSessionId
     }).select().single();
     if (jobError) {
       console.error('❌ Error creating job in database:', {
