@@ -391,6 +391,7 @@ export type Database = {
           compel_weights: Json | null
           completed_at: string | null
           created_at: string | null
+          destination: string | null
           enhanced_prompt: string | null
           enhancement_strategy: string | null
           enhancement_time_ms: number | null
@@ -418,12 +419,14 @@ export type Database = {
           test_metadata: Json | null
           user_id: string
           video_id: string | null
+          workspace_session_id: string | null
         }
         Insert: {
           attempts?: number | null
           compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
+          destination?: string | null
           enhanced_prompt?: string | null
           enhancement_strategy?: string | null
           enhancement_time_ms?: number | null
@@ -451,12 +454,14 @@ export type Database = {
           test_metadata?: Json | null
           user_id: string
           video_id?: string | null
+          workspace_session_id?: string | null
         }
         Update: {
           attempts?: number | null
           compel_weights?: Json | null
           completed_at?: string | null
           created_at?: string | null
+          destination?: string | null
           enhanced_prompt?: string | null
           enhancement_strategy?: string | null
           enhancement_time_ms?: number | null
@@ -484,6 +489,7 @@ export type Database = {
           test_metadata?: Json | null
           user_id?: string
           video_id?: string | null
+          workspace_session_id?: string | null
         }
         Relationships: [
           {
@@ -519,6 +525,13 @@ export type Database = {
             columns: ["video_id"]
             isOneToOne: false
             referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_workspace_session_id_fkey"
+            columns: ["workspace_session_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -947,14 +960,18 @@ export type Database = {
       }
       prompt_templates: {
         Row: {
+          comment: string | null
           content_mode: string
           created_at: string | null
           created_by: string | null
+          description: string | null
+          enhancer_model: string
           id: string
           is_active: boolean | null
+          job_type: string | null
           metadata: Json | null
-          model_type: string
           system_prompt: string
+          target_model: string | null
           template_name: string
           token_limit: number | null
           updated_at: string | null
@@ -962,14 +979,18 @@ export type Database = {
           version: number | null
         }
         Insert: {
+          comment?: string | null
           content_mode?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
+          enhancer_model: string
           id?: string
           is_active?: boolean | null
+          job_type?: string | null
           metadata?: Json | null
-          model_type: string
           system_prompt: string
+          target_model?: string | null
           template_name: string
           token_limit?: number | null
           updated_at?: string | null
@@ -977,14 +998,18 @@ export type Database = {
           version?: number | null
         }
         Update: {
+          comment?: string | null
           content_mode?: string
           created_at?: string | null
           created_by?: string | null
+          description?: string | null
+          enhancer_model?: string
           id?: string
           is_active?: boolean | null
+          job_type?: string | null
           metadata?: Json | null
-          model_type?: string
           system_prompt?: string
+          target_model?: string | null
           template_name?: string
           token_limit?: number | null
           updated_at?: string | null
@@ -1275,6 +1300,138 @@ export type Database = {
           },
         ]
       }
+      workspace_items: {
+        Row: {
+          bucket_name: string | null
+          content_type: string
+          created_at: string | null
+          enhanced_prompt: string | null
+          generation_params: Json | null
+          id: string
+          job_id: string | null
+          metadata: Json | null
+          model_type: string | null
+          prompt: string
+          quality: string | null
+          reference_image_url: string | null
+          reference_strength: number | null
+          seed: number | null
+          session_id: string
+          status: string | null
+          storage_path: string | null
+          thumbnail_url: string | null
+          updated_at: string | null
+          url: string | null
+          user_id: string
+        }
+        Insert: {
+          bucket_name?: string | null
+          content_type: string
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          generation_params?: Json | null
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          model_type?: string | null
+          prompt: string
+          quality?: string | null
+          reference_image_url?: string | null
+          reference_strength?: number | null
+          seed?: number | null
+          session_id: string
+          status?: string | null
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          url?: string | null
+          user_id: string
+        }
+        Update: {
+          bucket_name?: string | null
+          content_type?: string
+          created_at?: string | null
+          enhanced_prompt?: string | null
+          generation_params?: Json | null
+          id?: string
+          job_id?: string | null
+          metadata?: Json | null
+          model_type?: string | null
+          prompt?: string
+          quality?: string | null
+          reference_image_url?: string | null
+          reference_strength?: number | null
+          seed?: number | null
+          session_id?: string
+          status?: string | null
+          storage_path?: string | null
+          thumbnail_url?: string | null
+          updated_at?: string | null
+          url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_items_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_sessions: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          metadata: Json | null
+          session_name: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          session_name?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          metadata?: Json | null
+          session_name?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1283,6 +1440,14 @@ export type Database = {
       clean_orphaned_jobs: {
         Args: Record<PropertyKey, never>
         Returns: number
+      }
+      clear_workspace_session: {
+        Args: { p_session_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      create_workspace_session: {
+        Args: { p_user_id: string; p_session_name?: string }
+        Returns: string
       }
       get_system_stats: {
         Args: { p_days?: number }
@@ -1312,6 +1477,10 @@ export type Database = {
         Args: { expires_at: string }
         Returns: boolean
       }
+      link_workspace_items_to_jobs: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       log_user_activity: {
         Args: {
           p_user_id: string
@@ -1322,6 +1491,10 @@ export type Database = {
           p_ip_address?: unknown
           p_user_agent?: string
         }
+        Returns: string
+      }
+      save_workspace_item_to_library: {
+        Args: { p_workspace_item_id: string; p_user_id: string }
         Returns: string
       }
       validate_video_path_consistency: {
