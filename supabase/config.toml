@@ -67,3 +67,6 @@ verify_jwt = false
 
 [functions.validate-enhancement-fix]
 verify_jwt = true
+
+[functions.health-check-workers]
+verify_jwt = true
