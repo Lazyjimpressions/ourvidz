@@ -14,7 +14,7 @@ import { Plus } from 'lucide-react';
 interface PromptTemplate {
   id: string;
   template_name: string;
-  model_type: string;
+  enhancer_model: string;
   use_case: string;
   content_mode: string;
   system_prompt: string;
@@ -25,6 +25,10 @@ interface PromptTemplate {
   updated_at: string;
   created_by?: string;
   metadata?: any;
+  job_type?: string;
+  target_model?: string;
+  description?: string;
+  comment?: string;
 }
 
 interface NegativePrompt {
@@ -173,7 +177,7 @@ export function PromptManagementTab() {
         .from('prompt_templates')
         .insert({
           template_name: 'New Template',
-          model_type: 'sdxl',
+          enhancer_model: 'sdxl',
           use_case: 'enhancement',
           content_mode: 'sfw',
           system_prompt: 'Enter your system prompt here...',
@@ -289,7 +293,7 @@ export function PromptManagementTab() {
       const matchesSearch = template.template_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            template.use_case.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            template.system_prompt.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesModel = filterModel === 'all' || template.model_type === filterModel;
+      const matchesModel = filterModel === 'all' || template.enhancer_model === filterModel;
       const matchesContent = filterContentMode === 'all' || template.content_mode === filterContentMode;
       return matchesSearch && matchesModel && matchesContent;
     });
@@ -318,7 +322,7 @@ export function PromptManagementTab() {
       const matchesSearch = template.template_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            template.use_case.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            template.system_prompt.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesModel = filterModel === 'all' || template.model_type === filterModel;
+      const matchesModel = filterModel === 'all' || template.enhancer_model === filterModel;
       const matchesContent = filterContentMode === 'all' || template.content_mode === filterContentMode;
       return matchesSearch && matchesModel && matchesContent;
     });
@@ -330,7 +334,7 @@ export function PromptManagementTab() {
       const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: {
           prompt: 'Test prompt for quality assessment',
-          jobType: template.model_type === 'sdxl' ? 'sdxl_image_fast' : 'image_fast',
+          jobType: template.enhancer_model === 'sdxl' ? 'sdxl_image_fast' : 'image_fast',
           format: 'image',
           quality: 'fast',
           selectedModel: 'qwen_instruct',

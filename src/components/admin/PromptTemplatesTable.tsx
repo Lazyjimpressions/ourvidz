@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 interface PromptTemplate {
   id: string;
   template_name: string;
-  model_type: string;
+  enhancer_model: string;
   use_case: string;
   content_mode: string;
   system_prompt: string;
@@ -19,6 +19,10 @@ interface PromptTemplate {
   updated_at: string;
   created_by?: string;
   metadata?: any;
+  job_type?: string;
+  target_model?: string;
+  description?: string;
+  comment?: string;
 }
 
 interface PromptTemplatesTableProps {
@@ -110,12 +114,12 @@ export function PromptTemplatesTable({
                 
                 <TableCell className="p-1">
                   <EditableCell
-                    value={template.model_type}
+                    value={template.enhancer_model}
                     type="select"
                     options={modelOptions}
-                    onSave={(value) => handleUpdate(template.id, 'model_type', value)}
-                    isEditing={editingCells[`${template.id}-model_type`] || false}
-                    onEditingChange={(editing) => handleCellEdit(template.id, 'model_type', editing)}
+                    onSave={(value) => handleUpdate(template.id, 'enhancer_model', value)}
+                    isEditing={editingCells[`${template.id}-enhancer_model`] || false}
+                    onEditingChange={(editing) => handleCellEdit(template.id, 'enhancer_model', editing)}
                   />
                 </TableCell>
                 
