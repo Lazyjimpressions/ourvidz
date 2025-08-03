@@ -14,13 +14,13 @@ const ReferenceImageUpload: React.FC<{
   };
 
   return (
-    <div className="border border-gray-600 rounded-lg p-3">
+    <div className="border border-gray-600 rounded-lg p-2">
       {file ? (
         <div className="relative">
           <img
             src={URL.createObjectURL(file)}
             alt={label}
-            className="w-full h-20 object-cover rounded"
+            className="w-full h-12 object-cover rounded"
           />
           <button
             onClick={() => onFileChange(null)}
@@ -30,7 +30,7 @@ const ReferenceImageUpload: React.FC<{
           </button>
         </div>
       ) : (
-        <label className="cursor-pointer flex flex-col items-center gap-2 p-4 text-gray-400 hover:text-white">
+        <label className="cursor-pointer flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-white h-12">
           <Image className="w-6 h-6" />
           <span className="text-sm">{label}</span>
           <input

@@ -37,7 +37,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     lightboxIndex,
     
     // Actions
-    setMode,
+    updateMode,
     setPrompt,
     setReferenceImage,
     setReferenceStrength,
@@ -128,7 +128,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         onReferenceImageChange={setReferenceImage}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={setReferenceStrength}
-        onModeChange={setMode}
+        onModeChange={updateMode}
         onContentTypeChange={setContentType}
         beginningRefImage={beginningRefImage}
         endingRefImage={endingRefImage}

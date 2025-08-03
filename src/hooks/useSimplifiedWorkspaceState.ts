@@ -63,7 +63,7 @@ export interface SimplifiedWorkspaceState {
 
 export interface SimplifiedWorkspaceActions {
   // Core Actions (6 actions)
-  setMode: (mode: 'image' | 'video') => void;
+  updateMode: (mode: 'image' | 'video') => void;
   setPrompt: (prompt: string) => void;
   setReferenceImage: (file: File | null) => void;
   setReferenceStrength: (strength: number) => void;
@@ -514,7 +514,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     lightboxIndex,
     
     // Actions
-    setMode,
+    updateMode,
     setPrompt,
     setReferenceImage,
     setReferenceStrength,
