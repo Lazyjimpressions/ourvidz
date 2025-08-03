@@ -339,7 +339,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                 content_type: newItem.content_type
               });
               
-              // Generate signed URL with enhanced error handling
+              // Generate signed URL immediately for display
               let signedUrl = '';
               if (newItem.storage_path && newItem.bucket_name) {
                 try {
@@ -356,13 +356,14 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                     signedUrl = urlData.signedUrl;
                     console.log('✅ WORKSPACE REALTIME: Signed URL generated successfully');
                   } else {
-                    console.error('❌ WORKSPACE REALTIME: Failed to generate signed URL:', error);
+                    console.error('❌ WORKSPACE REALTIME: Failed to generate signed URL:', error?.message || 'Unknown error');
+                    console.error('❌ Full error details:', error);
                   }
                 } catch (error) {
                   console.error('❌ WORKSPACE REALTIME: Exception generating signed URL:', error);
                 }
               } else {
-                console.warn('⚠️ WORKSPACE REALTIME: Missing storage_path or bucket_name');
+                console.warn('⚠️ WORKSPACE REALTIME: Missing storage_path or bucket_name for item:', newItem.id);
               }
               
               // Create workspace item with signed URL

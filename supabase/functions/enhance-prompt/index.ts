@@ -129,7 +129,7 @@ class DynamicEnhancementOrchestrator {
       // Try to get dynamic template from database first
       let enhancementResult
       try {
-        const template = await this.getDynamicTemplate(modelType, 'enhancement', contentMode)
+        const template = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
         enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
         enhancementResult.fallback_level = 0
       } catch (dbError) {
@@ -144,7 +144,7 @@ class DynamicEnhancementOrchestrator {
           
           // Use database templates even without workers
           try {
-            const dbTemplate = await this.getDynamicTemplate(modelType, 'enhancement', contentMode)
+            const dbTemplate = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
             enhancementResult = await this.enhanceWithRules(request, modelType, contentMode, dbTemplate)
             enhancementResult.fallback_level = 2
           } catch (dbTemplateError) {
@@ -209,34 +209,49 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Get dynamic template from database (PHASE 2 FIX)
+   * Get dynamic template from database with correct 5-field matching
    */
-  private async getDynamicTemplate(modelType: string, useCase: string, contentMode: string) {
-    // PHASE 2 FIX: Map job_type to correct enhancer_model for template lookup
-    let lookupEnhancerModel = modelType
-    if (modelType === 'sdxl_image_high' || modelType === 'sdxl_image_fast' || modelType === 'sdxl') {
-      lookupEnhancerModel = 'qwen_instruct' // Default enhancer for SDXL
+  private async getDynamicTemplate(jobType: string, selectedModel: string, useCase: string, contentMode: string) {
+    // Extract target_model from job_type
+    let targetModel = 'sdxl'; // default
+    if (jobType?.includes('wan') || jobType?.includes('video')) {
+      targetModel = 'wan';
+    } else if (jobType?.includes('sdxl')) {
+      targetModel = 'sdxl';
     }
+
+    // Extract job_type category (image/video)
+    let jobTypeCategory = 'image'; // default
+    if (jobType?.includes('video')) {
+      jobTypeCategory = 'video';
+    }
+
+    // Use actual selectedModel parameter (not hardcoded)
+    const enhancerModel = selectedModel || 'qwen_instruct';
     
-    console.log('🔍 Template lookup:', { 
-      originalModelType: modelType, 
-      lookupEnhancerModel, 
-      useCase, 
-      contentMode 
-    })
+    console.log('🔍 Template lookup with all 5 fields:', { 
+      originalJobType: jobType,
+      targetModel,
+      enhancerModel,
+      jobTypeCategory,
+      useCase,
+      contentMode
+    });
     
-    const template = await getDatabaseTemplate(lookupEnhancerModel, useCase, contentMode)
+    const template = await getDatabaseTemplate(targetModel, enhancerModel, jobTypeCategory, useCase, contentMode);
     if (!template) {
-      throw new Error(`No template found for enhancer_model=${lookupEnhancerModel}/${useCase}/${contentMode}`)
+      throw new Error(`No template found for ${targetModel}/${enhancerModel}/${jobTypeCategory}/${useCase}/${contentMode}`);
     }
     
     console.log('✅ Template found:', { 
       template_name: template.template_name,
+      target_model: template.target_model,
       enhancer_model: template.enhancer_model,
+      job_type: template.job_type,
       id: template.id
-    })
+    });
     
-    return template
+    return template;
   }
 
   /**

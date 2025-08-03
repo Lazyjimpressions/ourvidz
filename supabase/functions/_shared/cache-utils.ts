@@ -234,7 +234,9 @@ export function getChatTemplateFromCache(
  * Fallback to database if cache fails
  */
 export async function getDatabaseTemplate(
-  modelType: string,
+  targetModel: string,
+  enhancerModel: string,
+  jobType: string,
   useCase: string,
   contentMode: string
 ): Promise<any> {
@@ -243,27 +245,77 @@ export async function getDatabaseTemplate(
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   );
 
-  console.log(`🔄 Fetching template from database: ${modelType}_${useCase}_${contentMode}`);
+  console.log(`🔄 Fetching template from database:`, {
+    targetModel,
+    enhancerModel,
+    jobType,
+    useCase,
+    contentMode
+  });
 
-  const { data, error } = await supabase
+  // Build query with all 5 criteria
+  let query = supabase
     .from('prompt_templates')
     .select('*')
-    .eq('enhancer_model', modelType)
+    .eq('target_model', targetModel)
+    .eq('enhancer_model', enhancerModel)
+    .eq('job_type', jobType)
     .eq('use_case', useCase)
     .eq('content_mode', contentMode)
     .eq('is_active', true)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+    .limit(1);
+
+  let { data, error } = await query.single();
+
+  // Fallback 1: Try different enhancer model
+  if (error || !data) {
+    console.log(`⚠️ Exact match failed, trying enhancer fallback...`);
+    const fallbackEnhancer = enhancerModel === 'qwen_instruct' ? 'qwen_base' : 'qwen_instruct';
+    
+    ({ data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('target_model', targetModel)
+      .eq('enhancer_model', fallbackEnhancer)
+      .eq('job_type', jobType)
+      .eq('use_case', useCase)
+      .eq('content_mode', contentMode)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single());
+  }
+
+  // Fallback 2: Try different content mode
+  if (error || !data) {
+    console.log(`⚠️ Enhancer fallback failed, trying content mode fallback...`);
+    const fallbackContent = contentMode === 'sfw' ? 'nsfw' : 'sfw';
+    
+    ({ data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('target_model', targetModel)
+      .eq('enhancer_model', enhancerModel)
+      .eq('job_type', jobType)
+      .eq('use_case', useCase)
+      .eq('content_mode', fallbackContent)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single());
+  }
 
   if (error || !data) {
     console.log(`❌ Database template lookup failed:`, { 
-      modelType, 
-      useCase, 
-      contentMode, 
+      targetModel,
+      enhancerModel,
+      jobType,
+      useCase,
+      contentMode,
       error: error?.message || 'No data returned'
     });
-    throw new Error(`No template found in database for ${modelType}/${useCase}/${contentMode}`);
+    throw new Error(`No template found in database for ${targetModel}/${enhancerModel}/${jobType}/${useCase}/${contentMode}`);
   }
 
   console.log(`✅ Database template loaded: "${data.template_name}" (ID: ${data.id})`);

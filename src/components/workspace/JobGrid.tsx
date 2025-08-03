@@ -150,21 +150,32 @@ export const JobGrid: React.FC<JobGridProps> = ({
         <div className="grid grid-cols-3 gap-4">
           {job.items.map((item, index) => (
             <div key={item.id} className="aspect-square relative group">
-              <img
-                src={item.url}
-                alt={`Generated image ${index + 1}`}
-                className="w-full h-full object-cover rounded-lg bg-muted cursor-pointer transition-transform hover:scale-105"
-                onError={(e) => {
-                  console.error(`Failed to load image: ${item.url}`);
-                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTkgMTJMMTEgMTRMMTUgMTBNMjEgMTJDMjEgMTYuOTcwNiAxNi45NzA2IDIxIDEyIDIxUzcgMTYuOTcwNiA3IDEyQzcgNy4wMjk0NCAxMS4wMjk0IDMgMTYgM1MyMSA3LjAyOTQgMjEgMTJaIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+';
-                }}
-                onClick={() => {
-                  // TODO: Open lightbox modal
-                  window.open(item.url, '_blank');
-                }}
-              />
-              
-              {/* Individual Image Actions on Hover */}
+              {item.url ? (
+                <img
+                  src={item.url}
+                  alt={`Generated image ${index + 1}`}
+                  className="w-full h-full object-cover rounded-lg bg-muted cursor-pointer transition-transform hover:scale-105"
+                  onError={(e) => {
+                    console.error(`❌ JobGrid: Failed to load image: ${item.url}`);
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                    e.currentTarget.parentElement?.insertAdjacentHTML('beforeend', '<div class="text-center text-muted-foreground"><div class="text-xs">Image failed to load</div></div>');
+                  }}
+                  onClick={() => {
+                    // TODO: Open lightbox modal
+                    window.open(item.url, '_blank');
+                  }}
+                />
+              ) : (
+                <div className="w-full h-full bg-muted rounded-lg flex items-center justify-center">
+                  <div className="text-center text-muted-foreground">
+                    <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-xs">Loading...</p>
+                  </div>
+                </div>
+               )}
+               
+               {/* Individual Image Actions on Hover */}
               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
                 <div className="flex gap-2">
                   <TooltipProvider>
