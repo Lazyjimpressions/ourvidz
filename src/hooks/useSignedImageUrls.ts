@@ -33,6 +33,11 @@ const useSignedImageUrls = () => {
 
       console.log(`🔍 Generating signed URL for path: "${path}" in bucket: "${bucketName}"`);
 
+      // CRITICAL FIX: Add debug logging for SDXL bucket issues
+      if (bucketName === 'sdxl_image_high' || bucketName === 'sdxl_image_fast') {
+        console.log(`🎯 SDXL Debug: path="${path}", bucket="${bucketName}", hasUserPrefix=${path.includes('/')}`);
+      }
+
       // If we have an asset ID instead of a path, try to get bucket info from database
       if (path && !path.includes('/') && !path.includes('.')) {
         console.log('🔍 Path looks like asset ID, checking database for bucket info...');
@@ -88,17 +93,28 @@ const useSignedImageUrls = () => {
 
       for (const tryBucket of bucketsToTry) {
         try {
+          console.log(`🔄 Trying bucket "${tryBucket}" with path "${cleanPath}"`);
           const { data, error } = await supabase.storage
             .from(tryBucket)
             .createSignedUrl(cleanPath, 3600); // 1 hour expiry
 
           if (!error && data?.signedUrl) {
             console.log(`✅ Success: Generated signed URL for "${cleanPath}" in bucket "${tryBucket}"`);
+            console.log(`🔗 URL: ${data.signedUrl.substring(0, 100)}...`);
             return data.signedUrl;
           }
           
           if (error) {
             console.log(`❌ Failed bucket "${tryBucket}": ${error.message}`);
+            // Add specific debug for SDXL buckets
+            if (tryBucket.includes('sdxl')) {
+              console.log(`🎯 SDXL Debug - Error details:`, {
+                bucket: tryBucket,
+                path: cleanPath,
+                errorMessage: error.message,
+                error: error
+              });
+            }
           }
         } catch (bucketError) {
           console.log(`❌ Error with bucket "${tryBucket}":`, bucketError);

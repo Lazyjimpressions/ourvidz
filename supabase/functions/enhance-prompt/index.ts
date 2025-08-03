@@ -263,8 +263,9 @@ class DynamicEnhancementOrchestrator {
         result = await this.enhanceWithWanWorker(request, template)
       }
 
-      // PHASE 3 FIX: Apply strict token optimization for CLIP compatibility
-      const optimized = this.optimizeTokens(result.enhanced_prompt, Math.min(template.token_limit || 75, 75))
+      // Apply model-specific token optimization with visibility limits
+      const modelType = this.getModelTypeFromJobType(request.job_type)
+      const optimized = this.optimizeTokens(result.enhanced_prompt, modelType)
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,
@@ -591,9 +592,15 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Optimize prompt for token limits (PHASE 3 FIX - CLIP compatibility)
+   * Optimize prompt for token limits with model-specific limits for visibility
    */
-  private optimizeTokens(prompt: string, tokenLimit: number = 75): { enhanced_prompt: string, token_count: number, compressed: boolean } {
+  private optimizeTokens(prompt: string, modelType: string = 'sdxl', tokenLimit?: number): { enhanced_prompt: string, token_count: number, compressed: boolean } {
+    // Set model-specific token limits for visibility (90 for SDXL, 150 for WAN)
+    if (!tokenLimit) {
+      tokenLimit = modelType.includes('wan') || modelType.includes('image7b') ? 150 : 90;
+    }
+    
+    console.log(`🎯 Token optimization: ${modelType} limit=${tokenLimit}, original=${this.estimateTokens(prompt)} tokens`);
     const estimatedTokens = this.estimateTokens(prompt)
     
     if (estimatedTokens <= tokenLimit) {
