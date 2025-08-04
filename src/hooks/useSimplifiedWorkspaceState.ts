@@ -100,7 +100,7 @@ export interface SimplifiedWorkspaceActions {
   deleteJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
-  importJob: (jobId: string) => Promise<void>;
+  // importJob removed - not needed
   // Legacy item actions for mobile compatibility
   editItem?: (item: WorkspaceItem) => void;
   saveItem?: (itemId: string) => Promise<boolean | undefined>;
@@ -799,59 +799,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     console.log('Using job as reference:', firstItem.url);
   };
 
-  const importJob = async (jobId: string) => {
-    const job = workspaceJobs.find(j => j.id === jobId);
-    if (!job) return;
-
-    try {
-      // Generate signed URLs for all items in the job
-      const updatedItems = await Promise.all(
-        job.items.map(async (item) => {
-          if (item.url && item.url.startsWith('http')) {
-            return item; // Already has signed URL
-          }
-
-          if (item.bucketName && item.sessionId) {
-            try {
-              const storagePath = `${item.sessionId}/${item.id}`;
-              const { data: urlData, error } = await supabase.storage
-                .from(item.bucketName)
-                .createSignedUrl(storagePath, 3600);
-
-              if (urlData?.signedUrl && !error) {
-                return { ...item, url: urlData.signedUrl };
-              }
-            } catch (error) {
-              console.error(`Failed to generate signed URL for item ${item.id}:`, error);
-            }
-          }
-
-          return item;
-        })
-      );
-
-      // Update job with new URLs and mark as imported
-      setWorkspaceJobs(prev =>
-        prev.map(j =>
-          j.id === jobId
-            ? { ...j, items: updatedItems, status: 'imported' as const }
-            : j
-        )
-      );
-
-      toast({
-        title: "Job Imported",
-        description: "Images are now ready for viewing",
-      });
-    } catch (error) {
-      console.error('Failed to import job:', error);
-      toast({
-        title: "Import Failed",
-        description: "Failed to load job images",
-        variant: "destructive",
-      });
-    }
-  };
+  // Removed importJob - not needed since images are already in library
 
   return {
     // Core State
@@ -913,7 +861,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     deleteJob,
     saveJob,
     useJobAsReference,
-    importJob,
+    // importJob removed - not needed
     // Legacy actions for mobile compatibility
     editItem: (item: WorkspaceItem) => console.log('Edit item:', item),
     saveItem,

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { JobGrid } from './JobGrid';
 import { JobThumbnail } from './JobThumbnail';
-import { WorkspaceJob } from '@/hooks/useSimplifiedWorkspaceState';
+import { JobWorkspaceJob } from '@/hooks/useJobWorkspace';
 
 interface SessionWorkspaceProps {
-  jobs: WorkspaceJob[];
+  jobs: JobWorkspaceJob[];
   onJobSelect: (jobId: string) => void;
   onJobDelete: (jobId: string) => void;
   onJobSave: (jobId: string) => void;

@@ -2,6 +2,7 @@ import React from 'react';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { SessionWorkspace } from '@/components/workspace/SessionWorkspace';
 import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
+import { useJobWorkspace } from '@/hooks/useJobWorkspace';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
 /**
@@ -17,6 +18,11 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
  * @returns {JSX.Element} Rendered workspace page
  */
 export const SimplifiedWorkspace: React.FC = () => {
+  const state = useSimplifiedWorkspaceState();
+  // Use a simple session ID for now - could be improved with proper session management
+  const sessionId = 'current-session';
+  const jobWorkspace = useJobWorkspace(sessionId);
+  
   const {
     // Core State
     mode,
@@ -77,8 +83,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     deleteJob,
     saveJob,
     useJobAsReference,
-    importJob,
-  } = useSimplifiedWorkspaceState();
+  } = state;
 
   // Simple workspace management handlers
   const handleEditItem = (item: WorkspaceItem) => {
@@ -119,13 +124,13 @@ export const SimplifiedWorkspace: React.FC = () => {
       {/* Main Content Area */}
       <div className="pt-12 pb-32">
         <SessionWorkspace
-          jobs={workspaceJobs}
-          onJobSelect={selectJob}
-          onJobDelete={deleteJob}
-          onJobSave={saveJob}
-          onJobUseAsReference={useJobAsReference}
-          onJobImport={importJob}
-          activeJobId={activeJobId}
+          jobs={jobWorkspace.jobs}
+          onJobSelect={jobWorkspace.selectJob}
+          onJobDelete={jobWorkspace.deleteJob}
+          onJobSave={jobWorkspace.saveJob}
+          onJobUseAsReference={jobWorkspace.useJobAsReference}
+          onJobImport={() => Promise.resolve()} // No longer needed
+          activeJobId={jobWorkspace.activeJobId}
           isDeleting={new Set()} // TODO: Track deleting state
         />
       </div>

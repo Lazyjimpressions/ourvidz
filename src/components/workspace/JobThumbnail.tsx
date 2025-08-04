@@ -1,11 +1,11 @@
 import React from 'react';
-import { WorkspaceJob } from '@/hooks/useSimplifiedWorkspaceState';
+import { JobWorkspaceJob } from '@/hooks/useJobWorkspace';
 import { Play, Trash2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface JobThumbnailProps {
-  job: WorkspaceJob;
+  job: JobWorkspaceJob;
   isActive: boolean;
   onClick: () => void;
   onImport: () => void;
@@ -44,10 +44,8 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
         return { text: 'Ready', className: 'border-primary/50 ring-1 ring-primary/20' };
       case 'imported':
         return { text: 'Imported', className: '' };
-      case 'failed':
-        return { text: 'Retry', className: 'border-destructive' };
       default:
-        return { text: '', className: '' };
+        return { text: 'Ready', className: '' };
     }
   };
 
@@ -145,9 +143,6 @@ export const JobThumbnail: React.FC<JobThumbnailProps> = ({
         )}
         {job.status === 'imported' && (
           <div className="w-2 h-2 bg-green-500 rounded-full" />
-        )}
-        {job.status === 'failed' && (
-          <div className="w-2 h-2 bg-destructive rounded-full" />
         )}
       </div>
 

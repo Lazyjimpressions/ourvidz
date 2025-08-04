@@ -1,11 +1,11 @@
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Save, Trash2, Download, Image, RefreshCw } from "lucide-react";
-import { WorkspaceJob } from '@/hooks/useSimplifiedWorkspaceState';
+import { JobWorkspaceJob } from '@/hooks/useJobWorkspace';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface JobGridProps {
-  job: WorkspaceJob;
+  job: JobWorkspaceJob;
   onJobDelete: (jobId: string) => void;
   onJobSave: (jobId: string) => void;
   onJobUseAsReference: (jobId: string) => void;
