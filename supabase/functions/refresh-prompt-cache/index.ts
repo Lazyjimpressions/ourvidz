@@ -74,7 +74,7 @@ serve(async (req) => {
       .from('prompt_templates')
       .select('*')
       .eq('is_active', true)
-      .order('model_type', { ascending: true })
+      .order('enhancer_model', { ascending: true })
       .order('use_case', { ascending: true })
       .order('content_mode', { ascending: true })
 
@@ -119,7 +119,7 @@ serve(async (req) => {
 
     // Group templates by job_type, content_mode, and mapped use_case
     for (const template of promptTemplates || []) {
-      const { model_type, use_case, content_mode, job_type } = template
+      const { enhancer_model, use_case, content_mode, job_type } = template
       
       // Map database use_case values to cache keys for chat templates
       let mappedUseCase = use_case;
@@ -140,16 +140,16 @@ serve(async (req) => {
         if (!templateCache.chat[content_mode]) {
           templateCache.chat[content_mode] = {}
         }
-        templateCache.chat[content_mode][mappedUseCase] = template.template_content;
+        templateCache.chat[content_mode][mappedUseCase] = template;
       } else {
         // Keep enhancement templates organized by use_case/model_type/content_mode
         if (!templateCache[use_case]) {
           templateCache[use_case] = {}
         }
-        if (!templateCache[use_case][model_type]) {
-          templateCache[use_case][model_type] = {}
+        if (!templateCache[use_case][enhancer_model]) {
+          templateCache[use_case][enhancer_model] = {}
         }
-        templateCache[use_case][model_type][content_mode] = template
+        templateCache[use_case][enhancer_model][content_mode] = template
       }
     }
 
