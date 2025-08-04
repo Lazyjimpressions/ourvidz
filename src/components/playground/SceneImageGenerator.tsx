@@ -9,7 +9,7 @@ interface SceneImageGeneratorProps {
   messageContent: string;
   roleplayTemplate?: RoleplayTemplate | null;
   mode?: string;
-  onImageGenerated?: (assetId: string, imageUrl?: string) => void;
+  onImageGenerated?: (assetId: string, imageUrl?: string, bucket?: string) => void;
 }
 
 export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
@@ -35,9 +35,10 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
         const assetId = event.detail.assetId || event.detail.imageId;
         console.log('✅ Passing asset data to parent:', {
           assetId,
-          imageUrl: event.detail.imageUrl
+          imageUrl: event.detail.imageUrl,
+          bucket: event.detail.bucket
         });
-        onImageGenerated?.(assetId, event.detail.imageUrl);
+        onImageGenerated?.(assetId, event.detail.imageUrl, event.detail.bucket);
         // Remove listener after successful handling
         window.removeEventListener('generation-completed', handleCompletion as EventListener);
       } else {

@@ -449,7 +449,8 @@ const LibraryV2 = () => {
         {/* Preview Modal */}
         {previewAsset && (
           <AssetPreviewModal
-            asset={previewAsset as UnifiedAsset}
+            assets={filteredAssets as UnifiedAsset[]}
+            startIndex={filteredAssets.findIndex(asset => asset.id === previewAsset.id)}
             open={!!previewAsset}
             onClose={handleClosePreview}
             onDownload={() => toast.info('Download functionality coming soon')}

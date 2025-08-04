@@ -191,6 +191,9 @@ export function getChatTemplateFromCache(
     return null;
   }
 
+  console.log(`🔍 Searching for template: ${contextType} in ${contentTier} tier`);
+  console.log(`📋 Available templates in ${contentTier}:`, Object.keys(cache.templateCache.chat[contentTier]));
+
   // Map context types to chat template types
   let chatType: string;
   
@@ -209,17 +212,17 @@ export function getChatTemplateFromCache(
     chatType = 'admin';
   }
   else {
-    chatType = 'general'; // Default fallback
+    chatType = 'chat'; // Changed from 'general' to 'chat' to match cache structure
   }
 
   const template = cache.templateCache.chat[contentTier][chatType];
   
   if (!template) {
-    // Fallback to general template if specific one not found
-    const fallbackTemplate = cache.templateCache.chat[contentTier]['general'];
+    // Fallback to chat template if specific one not found
+    const fallbackTemplate = cache.templateCache.chat[contentTier]['chat'];
     if (fallbackTemplate) {
-      console.log(`✅ Using fallback general chat template for ${contextType} (${contentTier})`);
-      return fallbackTemplate;
+      console.log(`✅ Using fallback chat template for ${contextType} (${contentTier})`);
+      return fallbackTemplate.system_prompt;
     }
     
     console.warn(`⚠️ No chat template found for ${contextType} (${contentTier})`);
@@ -227,7 +230,7 @@ export function getChatTemplateFromCache(
   }
 
   console.log(`✅ Chat template found: ${chatType} (${contentTier})`);
-  return template;
+  return template.system_prompt;
 }
 
 /**
@@ -257,7 +260,7 @@ export async function getDatabaseTemplate(
   let query = supabase
     .from('prompt_templates')
     .select('*')
-    .eq('target_model', targetModel)
+    .is('target_model', targetModel)
     .eq('enhancer_model', enhancerModel)
     .eq('job_type', jobType)
     .eq('use_case', useCase)
@@ -276,7 +279,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .eq('target_model', targetModel)
+      .is('target_model', targetModel)
       .eq('enhancer_model', fallbackEnhancer)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
@@ -295,7 +298,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .eq('target_model', targetModel)
+      .is('target_model', targetModel)
       .eq('enhancer_model', enhancerModel)
       .eq('job_type', jobType)
       .eq('use_case', useCase)

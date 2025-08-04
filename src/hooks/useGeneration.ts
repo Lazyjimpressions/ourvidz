@@ -131,26 +131,38 @@ export const useGeneration = () => {
                   jobType: jobData.job_type 
                 });
                 
-                // Get image URL for images
+                // Get image URL and bucket for images
                 let imageUrl = null;
+                let bucket = null;
                 if (assetType === 'image') {
                   const { data: imageData, error: imageError } = await supabase
                     .from('images')
-                    .select('image_url')
+                    .select('image_url, metadata')
                     .eq('id', assetId)
                     .single();
                   
                   if (!imageError && imageData?.image_url) {
                     imageUrl = imageData.image_url;
-                    console.log('🖼️ Resolved image URL:', imageUrl);
+                    
+                    // Extract bucket from job type or metadata
+                    if (jobData.job_type?.includes('sdxl_image_high')) {
+                      bucket = 'sdxl_image_high';
+                    } else if (jobData.job_type?.includes('sdxl_image_fast')) {
+                      bucket = 'sdxl_image_fast';
+                    } else if (imageData.metadata && typeof imageData.metadata === 'object' && 'bucket' in imageData.metadata) {
+                      bucket = (imageData.metadata as any).bucket;
+                    }
+                    
+                    console.log('🖼️ Resolved image URL and bucket:', { imageUrl, bucket });
                   }
                 }
                 
-                // Emit event with both asset ID and image URL
+                // Emit event with asset ID, image URL, and bucket
                 window.dispatchEvent(new CustomEvent('generation-completed', {
                   detail: { 
                     assetId, 
                     imageUrl,
+                    bucket,
                     type: assetType, 
                     jobId: currentJob.id 
                   }

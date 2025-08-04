@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
@@ -8,90 +8,94 @@ import { Button } from '@/components/ui/button';
 interface InlineImageDisplayProps {
   assetId: string;
   imageUrl?: string;
+  bucket?: string;
   onExpand?: (imageUrl: string) => void;
 }
 
 export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
   assetId,
   imageUrl: providedImageUrl,
+  bucket: providedBucket,
   onExpand
 }) => {
   const { getSignedUrl, loading } = useSignedImageUrls();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const mountedRef = useRef(true);
 
-  useEffect(() => {
-    const loadImage = async () => {
-      console.log('🖼️ InlineImageDisplay loading image:', { assetId, providedImageUrl });
-      setImageError(false);
-      
-      try {
-        // Check if provided URL is a full URL or storage path
-        if (providedImageUrl) {
-          if (providedImageUrl.startsWith('http://') || providedImageUrl.startsWith('https://')) {
-            console.log('✅ Using full URL directly:', providedImageUrl);
+  // Define all handlers first, before any early returns
+  const handleImageLoad = useCallback(() => {
+    console.log('✅ Image loaded successfully:', imageUrl);
+  }, [imageUrl]);
+
+  const handleImageError = useCallback(() => {
+    console.error('❌ Image failed to load:', imageUrl);
+    if (mountedRef.current) {
+      setImageError(true);
+    }
+  }, [imageUrl]);
+
+  const handleExpand = useCallback(() => {
+    if (imageUrl && onExpand) {
+      onExpand(imageUrl);
+    }
+  }, [imageUrl, onExpand]);
+
+  const loadImage = useCallback(async () => {
+    if (!mountedRef.current) return;
+    
+    console.log('🖼️ InlineImageDisplay loading image:', { assetId, providedImageUrl, bucket: providedBucket });
+    setImageError(false);
+    
+    try {
+      // Check if provided URL is a full URL or storage path
+      if (providedImageUrl) {
+        if (providedImageUrl.startsWith('http://') || providedImageUrl.startsWith('https://')) {
+          console.log('✅ Using full URL directly:', providedImageUrl);
+          if (mountedRef.current) {
             setImageUrl(providedImageUrl);
-            setImageLoading(false); // Reset loading state for direct URLs
-          } else {
-            console.log('🔗 Converting storage path to signed URL:', providedImageUrl);
-            const url = await getSignedUrl(providedImageUrl);
-            if (url) {
-              setImageUrl(url);
-              setImageLoading(false); // Reset loading state after getting signed URL
-            } else {
-              throw new Error('Failed to get signed URL');
-            }
           }
-        } else if (assetId) {
-          console.log('🔗 Getting signed URL for asset:', assetId);
-          const url = await getSignedUrl(assetId);
-          if (url) {
+        } else {
+          console.log('🔗 Converting storage path to signed URL:', providedImageUrl, 'bucket:', providedBucket);
+          const url = await getSignedUrl(providedImageUrl, providedBucket);
+          console.log('🔗 Received signed URL:', url);
+          if (url && mountedRef.current) {
             setImageUrl(url);
-            setImageLoading(false);
-          } else {
-            throw new Error('Failed to get signed URL for asset');
+          } else if (mountedRef.current) {
+            throw new Error('Failed to get signed URL');
           }
         }
-      } catch (error) {
-        console.error('❌ Failed to load image:', error);
-        setImageError(true);
-        setImageLoading(false);
+      } else if (assetId) {
+        console.log('🔗 Getting signed URL for asset:', assetId, 'bucket:', providedBucket);
+        const url = await getSignedUrl(assetId, providedBucket);
+        console.log('🔗 Received signed URL for asset:', url);
+        if (url && mountedRef.current) {
+          setImageUrl(url);
+        } else if (mountedRef.current) {
+          throw new Error('Failed to get signed URL for asset');
+        }
       }
-    };
-
-    // Add timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      if (imageLoading) {
-        console.warn('⚠️ Image loading timeout reached');
+    } catch (error) {
+      console.error('❌ Failed to load image:', error);
+      if (mountedRef.current) {
         setImageError(true);
-        setImageLoading(false);
       }
-    }, 10000); // 10 second timeout
+    }
+  }, [assetId, providedImageUrl, providedBucket, getSignedUrl]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    
     if (assetId || providedImageUrl) {
       loadImage();
     }
 
-    return () => clearTimeout(timeout);
-  }, [assetId, providedImageUrl, getSignedUrl]);
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [loadImage]);
 
-  const handleImageLoad = () => {
-    setImageLoading(false);
-  };
-
-  const handleImageError = () => {
-    setImageLoading(false);
-    setImageError(true);
-  };
-
-  const handleExpand = () => {
-    if (imageUrl && onExpand) {
-      onExpand(imageUrl);
-    }
-  };
-
-  if (loading || imageLoading) {
+  if (loading) {
     return (
       <Card className="mt-2 p-3 max-w-xs bg-muted/30">
         <div className="flex items-center gap-2">

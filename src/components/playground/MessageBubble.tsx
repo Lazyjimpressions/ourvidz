@@ -41,6 +41,12 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
     }
     return null;
   });
+  const [generatedImageBucket, setGeneratedImageBucket] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`${storageKey}-bucket`) || null;
+    }
+    return null;
+  });
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const handleCopy = async () => {
@@ -123,16 +129,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           <SceneImageGenerator
             messageContent={message.content}
             roleplayTemplate={roleplayTemplate}
-            onImageGenerated={(assetId, imageUrl) => {
-              console.log('🖼️ MessageBubble received generated image:', { assetId, imageUrl });
+            onImageGenerated={(assetId, imageUrl, bucket) => {
+              console.log('🖼️ MessageBubble received generated image:', { assetId, imageUrl, bucket });
               setGeneratedImageId(assetId);
               setGeneratedImageUrl(imageUrl || null);
+              setGeneratedImageBucket(bucket || null);
               
               // Persist to localStorage for this message
               if (typeof window !== 'undefined') {
                 localStorage.setItem(`${storageKey}-id`, assetId);
                 if (imageUrl) {
                   localStorage.setItem(`${storageKey}-url`, imageUrl);
+                }
+                if (bucket) {
+                  localStorage.setItem(`${storageKey}-bucket`, bucket);
                 }
               }
               
@@ -147,6 +157,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
             <InlineImageDisplay
               assetId={generatedImageId}
               imageUrl={generatedImageUrl}
+              bucket={generatedImageBucket}
               onExpand={setLightboxImageUrl}
             />
           </div>

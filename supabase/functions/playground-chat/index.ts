@@ -96,12 +96,18 @@ serve(async (req) => {
         } else if (templateContext === 'story_development') {
           useCase = 'chat_creative';
         } else if (templateContext === 'roleplay') {
-          useCase = 'chat_roleplay';
+          useCase = 'roleplay';
         } else if (templateContext === 'admin') {
           useCase = 'chat_admin';
         }
         
-        const dbTemplate = await getDatabaseTemplate('qwen_instruct', useCase, contentTier);
+        const dbTemplate = await getDatabaseTemplate(
+          null,                    // target_model (null in template)
+          'qwen_instruct',         // enhancer_model  
+          'chat',                  // job_type
+          useCase,                 // use_case ('roleplay' for roleplay context)
+          contentTier              // content_mode ('nsfw'/'sfw')
+        );
         return dbTemplate?.system_prompt || null;
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);

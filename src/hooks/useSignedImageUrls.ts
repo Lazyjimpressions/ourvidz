@@ -21,11 +21,22 @@ const useSignedImageUrls = () => {
         return null;
       }
 
-      // Require bucket parameter for workspace items
+      // Auto-detect bucket if not provided
       if (!bucket) {
-        console.error('Bucket parameter is required for signed URL generation');
-        setError('Bucket parameter is required');
-        return null;
+        if (path.includes('sdxl_image_high') || path.includes('/sdxl_image_high/')) {
+          bucket = 'sdxl_image_high';
+        } else if (path.includes('sdxl_image_fast') || path.includes('/sdxl_image_fast/')) {
+          bucket = 'sdxl_image_fast';
+        } else if (path.includes('image_high') || path.includes('/image_high/')) {
+          bucket = 'image_high';
+        } else if (path.includes('image_fast') || path.includes('/image_fast/')) {
+          bucket = 'image_fast';
+        } else {
+          console.error('Cannot determine bucket from path and no bucket provided:', path);
+          setError('Cannot determine bucket for signed URL generation');
+          return null;
+        }
+        console.log(`🔍 Auto-detected bucket "${bucket}" from path: "${path}"`);
       }
 
       console.log(`🔍 Generating signed URL for path: "${path}" in bucket: "${bucket}"`);
