@@ -1,7 +1,7 @@
 # OurVidz.com - Project Documentation
 
-**Last Updated:** July 27, 2025  
-**Current Status:** ✅ Production Ready - Hybrid Enhancement System Active, All 10 Job Types Operational  
+**Last Updated:** August 4, 2025  
+**Current Status:** ✅ Production Ready - LTX-Style Workspace System Active, All 10 Job Types Operational  
 **System:** Triple Worker (SDXL + Chat + WAN) on RTX 6000 ADA (48GB VRAM)  
 **Deployment:** Production on Lovable (https://ourvidz.lovable.app/)  
 **Backend:** Supabase Online (PostgreSQL + Edge Functions + Storage)
@@ -14,6 +14,7 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 - **Ultra-Fast Images**: SDXL generation in 3-8 seconds (flexible quantities: 1,3,6 images)
 - **WAN Video Generation**: 135-240+ seconds per video
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector and hover-to-delete functionality
 - **Dynamic Prompting System**: 12 specialized templates for all models and use cases
 - **Multi-Reference System (SDXL Only)**: Optional image-to-image with separate style, composition, and character references
 - **Reference Image Storage**: Dedicated Supabase bucket for user-uploaded/third-party reference images
@@ -31,6 +32,7 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 ### **✅ PRODUCTION READY**
 - **Triple Worker System**: SDXL + Chat + WAN workers operational on RTX 6000 ADA
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector and hover-to-delete functionality
 - **Dynamic Prompting System**: 12 specialized templates for all models and use cases
 - **All 10 Job Types**: Live and operational with flexible SDXL quantities
 - **Multi-Reference System (SDXL Only)**: Style, composition, and character references
@@ -50,11 +52,19 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 - **Auto-Enhancement**: Intelligent triggers and quality-based decisions
 - **File Storage**: Proper bucket mapping and URL generation
 - **Real-time Updates**: WebSocket connections for live status updates
+- **LTX-Style Workspace**: Job-level grouping with thumbnail navigation and hover-to-delete
 
 ---
 
-## **🆕 Notable Improvements in 1.2.0 (January 8, 2025)**
-- **Dynamic Prompting System**: 12 specialized templates for all models and use cases
+## **🆕 Notable Improvements in 1.3.0 (August 4, 2025)**
+- **LTX-Style Workspace Refactoring**: Complete workspace system overhaul with job-level grouping
+- **Job-Level Management**: Items grouped by `job_id` with thumbnail navigation
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal) functionality
+- **Thumbnail Selector**: Right-side navigation with job thumbnails and hover-to-delete
+- **Storage Path Normalization**: Fixed signed URL generation across all components
+- **Legacy Component Cleanup**: Removed old workspace system (6 files deleted)
+- **Code Reduction**: 718 lines of code removed (net reduction)
+- **Dynamic Prompting System**: 12+ specialized templates for all models and use cases
 - **Model-Specific Optimization**: Tailored for Qwen Base vs Instruct behaviors
 - **Content Mode Awareness**: Appropriate language for SFW/NSFW contexts
 - **Token Limit Enforcement**: Prevents CLIP truncation and ensures quality
@@ -67,7 +77,7 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 
 ## **📊 Performance Baselines**
 
-### **✅ All Job Types Operational (July 27, 2025)**
+### **✅ All Job Types Operational (August 4, 2025)**
 | Job Type | Status | Performance | Output | Features |
 |----------|--------|-------------|--------|----------|
 | **sdxl_image_fast** | ✅ Live | 3-8s per image | 1,3,6 images | Negative prompts, seeds, references |
@@ -87,6 +97,14 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 - **Response Time**: <3 seconds (worker health monitoring)
 - **Fallback Rate**: <10% (intelligent worker selection)
 
+### **🎯 LTX-Style Workspace Performance**
+- **Job-Level Grouping**: Items automatically grouped by `job_id`
+- **Thumbnail Navigation**: Right-side selector for job navigation
+- **Hover-to-Delete**: Delete entire jobs by hovering over thumbnails
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
+- **Storage Path Normalization**: Fixed signed URL generation across all components
+- **Real-time Updates**: Live workspace updates via WebSocket
+
 ---
 
 ## **🏗️ System Architecture**
@@ -100,12 +118,13 @@ Frontend:
   State Management: React Context + React Query
   Routing: React Router DOM
   Enhancement Hooks: useEnhancementAnalytics, useEnhancementQuality, useAutoEnhancement
+  LTX-Style Workspace: useSimplifiedWorkspaceState, useRealtimeWorkspace
   Deployment: Lovable (https://ourvidz.lovable.app/)
 
 Backend (Supabase Online):
   Database: Supabase PostgreSQL (Online)
   Authentication: Supabase Auth (Online)
-  Storage: Supabase Storage (Online - 12 buckets)
+  Storage: Supabase Storage (Online - 13 buckets)
   Edge Functions: Deno runtime (Online)
   Enhancement: ContentCompliantEnhancementOrchestrator
   Queue: Upstash Redis (REST API)
@@ -116,7 +135,7 @@ AI Workers (RunPod RTX 6000 ADA):
   WAN Worker: Video generation with Qwen 7B Base enhancement
 ```
 
-### **Dual Worker System**
+### **Triple Worker System**
 ```yaml
 SDXL Worker:
   Queue: sdxl_queue (2s polling)
@@ -134,6 +153,12 @@ WAN Worker:
   Enhancement: Qwen 7B (rule-based enhancement via edge function)
   Features: Video generation, enhanced image processing
   Status: ✅ Operational (all job types tested)
+
+Chat Worker:
+  API: Flask API on Port 7861
+  Model: Qwen 2.5-7B Instruct
+  Features: Chat, roleplay, prompt enhancement
+  Status: ✅ Fully operational
 ```
 
 ---
@@ -217,12 +242,22 @@ video7b_high_enhanced: 240+ seconds, 1 video, 6 credits, ✅ Live
 - Index.tsx              # Landing page
 - Auth.tsx               # Authentication page
 - Dashboard.tsx          # User dashboard
-- Workspace.tsx          # Main generation interface
+- SimplifiedWorkspace.tsx # LTX-style workspace interface
 - Library.tsx            # Asset management
 - Profile.tsx            # User profile
 - Pricing.tsx            # Subscription plans
 - Storyboard.tsx         # Storyboard interface
 - NotFound.tsx           # 404 page
+```
+
+### **LTX-Style Workspace Components**
+```typescript
+// Workspace components with job-level grouping
+- WorkspaceGrid.tsx      # LTX-style grid layout with job grouping
+- ContentCard.tsx        # Individual cards with dismiss/delete actions
+- SimplePromptInput.tsx  # Generation controls
+- useSimplifiedWorkspaceState.ts # LTX-style state management
+- useRealtimeWorkspace.ts # Real-time updates
 ```
 
 ### **Generation Components**
@@ -262,6 +297,7 @@ video7b_high_enhanced: 240+ seconds, 1 video, 6 credits, ✅ Live
 - Generates negative prompts based on job type
 - Creates database records and Redis queue entries
 - Handles authentication and error responses
+- Supports workspace destination routing
 ```
 
 ### **job-callback**
@@ -271,6 +307,7 @@ video7b_high_enhanced: 240+ seconds, 1 video, 6 credits, ✅ Live
 - Updates database status
 - Handles file uploads to storage
 - Manages error states
+- Routes to workspace or library based on destination
 ```
 
 ### **generate-admin-image**
@@ -279,6 +316,14 @@ video7b_high_enhanced: 240+ seconds, 1 video, 6 credits, ✅ Live
 - Admin-only image generation
 - Bypasses user authentication
 - Used for testing and admin operations
+```
+
+### **delete-workspace-item**
+```typescript
+// supabase/functions/delete-workspace-item/index.ts
+- Deletes workspace items and associated storage files
+- Handles both individual item and job-level deletion
+- Supports dismiss vs delete functionality
 ```
 
 ---
@@ -292,11 +337,15 @@ profiles: User profiles and subscription data
 user_roles: Role-based access control
 
 -- Content generation
-jobs: Job tracking and status
+jobs: Job tracking and status management (with workspace support)
 images: Generated image metadata
 videos: Generated video metadata
 projects: Project management
 scenes: Scene management for storyboards
+
+-- LTX-Style Workspace System
+workspace_sessions: Temporary user workspace sessions
+workspace_items: Temporary workspace content items with dismiss/delete status
 
 -- Content management
 characters: Character definitions
@@ -309,6 +358,8 @@ profiles (1) → (N) jobs
 profiles (1) → (N) images
 profiles (1) → (N) videos
 profiles (1) → (N) projects
+profiles (1) → (N) workspace_sessions
+workspace_sessions (1) → (N) workspace_items
 projects (1) → (N) scenes
 projects (1) → (1) characters
 ```
@@ -357,8 +408,14 @@ Components: Consistent design language
 Responsive: Mobile-first approach
 ```
 
-### **Key UI Patterns**
+### **LTX-Style Workspace Patterns**
 ```typescript
+// Job-level grouping patterns
+- WorkspaceGrid: Job-based layout with thumbnail selector
+- ContentCard: Individual cards with dismiss/delete actions
+- Thumbnail Selector: Right-side navigation with hover-to-delete
+- Job Headers: Prompt preview and delete options
+
 // Modal patterns
 - AssetPreviewModal: Image/video preview
 - DeleteConfirmationModal: Confirmation dialogs
@@ -405,6 +462,11 @@ VirtualizedMediaGrid: Handles thousands of assets efficiently
 useLazyAssets: Lazy loading for asset data
 React Query: Intelligent caching and background updates
 
+// LTX-Style Workspace Optimizations
+useSimplifiedWorkspaceState: Efficient state management with job grouping
+useRealtimeWorkspace: Real-time updates for workspace items
+Storage Path Normalization: Consistent signed URL generation
+
 // Bundle optimization
 Vite: Fast development and optimized builds
 Tree shaking: Unused code elimination
@@ -417,6 +479,7 @@ Database:
   - Indexed queries for performance
   - RLS policies for security
   - Efficient storage bucket organization
+  - Workspace indexes for job-level queries
 
 Queue System:
   - Redis for fast job processing
@@ -433,7 +496,10 @@ Queue System:
 src/
 ├── components/
 │   ├── PromptEnhancementModal.tsx    # AI prompt enhancement interface
-│   ├── workspace/
+│   ├── workspace/                    # LTX-style workspace components
+│   │   ├── WorkspaceGrid.tsx         # Job-level grouping with thumbnail selector
+│   │   ├── ContentCard.tsx           # Individual cards with dismiss/delete actions
+│   │   ├── SimplePromptInput.tsx     # Generation controls
 │   │   ├── MultiReferencePanel.tsx   # Multi-reference image management
 │   │   ├── CharacterReferenceWarning.tsx
 │   │   ├── EnhancedSeedInput.tsx     # Seed input controls
@@ -443,10 +509,11 @@ src/
 │   └── library/                      # Asset management
 ├── hooks/
 │   ├── useGeneration.ts              # Main generation workflow
-│   ├── useRealtimeGenerationStatus.ts # Real-time status updates
+│   ├── useSimplifiedWorkspaceState.ts # LTX-style state management
+│   ├── useRealtimeWorkspace.ts       # Real-time workspace updates
 │   └── useJobQueue.ts                # Job queue management
 ├── pages/
-│   ├── Workspace.tsx                 # Main generation interface
+│   ├── SimplifiedWorkspace.tsx       # LTX-style workspace interface
 │   ├── Library.tsx                   # Asset management
 │   └── Admin.tsx                     # Admin dashboard
 └── integrations/supabase/
@@ -461,6 +528,7 @@ supabase/
 │   ├── queue-job/index.ts           # Job submission and routing
 │   ├── job-callback/index.ts        # Worker callback processing
 │   ├── enhance-prompt/index.ts      # AI prompt enhancement service
+│   ├── delete-workspace-item/index.ts # Workspace item deletion
 │   └── generate-admin-image/index.ts # Admin image generation
 ├── migrations/                       # Database migrations
 └── config.toml                      # Supabase configuration
@@ -471,13 +539,14 @@ supabase/
 #### **Supabase Online (Backend)**
 - **Database**: PostgreSQL with Row Level Security (RLS)
 - **Authentication**: Supabase Auth with JWT tokens
-- **Storage**: 12 buckets for different job types
+- **Storage**: 13 buckets for different job types
 - **Edge Functions**: Deno runtime for serverless functions
 - **Real-time**: WebSocket connections for live updates
 
 #### **RunPod Workers (AI Processing)**
 - **SDXL Worker**: Lustify SDXL model for image generation
 - **WAN Worker**: WAN 2.1 model for video generation
+- **Chat Worker**: Qwen 2.5-7B Instruct for chat and enhancement
 - **Enhancement**: Qwen 7B rule-based enhancement via edge function
 - **Queue Management**: Redis-based job queuing
 
@@ -492,6 +561,7 @@ supabase/
   - Generates enhanced negative prompts for SDXL
   - Supports flexible quantities (1,3,6 images for SDXL)
   - Manages reference images and seed control
+  - Supports workspace destination routing
 
 #### **job-callback** (`/functions/v1/job-callback`)
 - **Purpose**: Worker callback processing
@@ -501,6 +571,7 @@ supabase/
   - Multi-asset support for SDXL jobs
   - Metadata preservation and merging
   - Enhanced error handling and debugging
+  - Routes to workspace or library based on destination
 
 #### **enhance-prompt** (`/functions/v1/enhance-prompt`)
 - **Purpose**: AI prompt enhancement service
@@ -508,6 +579,13 @@ supabase/
   - Rule-based enhancement for SDXL, WAN images, and videos
   - Quality-specific enhancement strategies
   - Used by PromptEnhancementModal component
+
+#### **delete-workspace-item** (`/functions/v1/delete-workspace-item`)
+- **Purpose**: Workspace item deletion with storage cleanup
+- **Features**:
+  - Deletes workspace items and associated storage files
+  - Handles both individual item and job-level deletion
+  - Supports dismiss vs delete functionality
 
 #### **generate-admin-image** (`/functions/v1/generate-admin-image`)
 - **Purpose**: Admin-only image generation
@@ -533,6 +611,7 @@ supabase/
 - Job status updates restricted to workers
 - Asset access controlled by ownership
 - Admin functions protected by role checks
+- Workspace items protected by user ownership
 ```
 
 ### **API Security**
@@ -561,7 +640,7 @@ Environment: Production Supabase credentials
 ```yaml
 Platform: Supabase
 Database: PostgreSQL with RLS
-Storage: 12 buckets with policies
+Storage: 13 buckets with policies
 Functions: Deno runtime edge functions
 ```
 
@@ -583,6 +662,8 @@ Orchestration: dual_orchestrator.py
 console.log('🚀 Generation started:', { format, prompt });
 console.log('✅ Job queued successfully:', { jobId, format });
 console.log('❌ Generation failed:', { error, jobId });
+console.log('👋 WORKSPACE: Dismissing item:', { itemId });
+console.log('🗑️ WORKSPACE: Deleting job:', { jobId });
 ```
 
 ### **Backend Logging**
@@ -591,6 +672,7 @@ console.log('❌ Generation failed:', { error, jobId });
 console.log('🚀 Queue-job function called');
 console.log('✅ User authenticated:', user.id);
 console.log('📋 Creating job:', { jobType, userId });
+console.log('🔐 WORKSPACE: Path normalization:', { originalPath, cleanPath });
 ```
 
 ### **Performance Monitoring**
@@ -604,6 +686,11 @@ VRAM Usage:
   - SDXL: 6.6GB loaded, 10.5GB peak
   - WAN: 15-30GB peak
   - Total: ~35GB (13GB headroom)
+
+LTX-Style Workspace:
+  - Job Grouping: Real-time updates
+  - Thumbnail Navigation: Responsive design
+  - Storage Path Normalization: Consistent URL generation
 ```
 
 ---
@@ -634,7 +721,7 @@ Testing: Component testing (to be implemented)
 ## **🎯 Current Status & Next Steps**
 
 ### **✅ Completed Features**
-- Dual worker system operational
+- Triple worker system operational
 - All 10 job types supported
 - Frontend UI components complete
 - Authentication system working
@@ -642,6 +729,10 @@ Testing: Component testing (to be implemented)
 - Real-time status updates
 - Mobile-responsive design
 - Production deployment on Lovable
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector
+- **Two-Level Deletion**: Dismiss vs Delete functionality
+- **Storage Path Normalization**: Fixed signed URL generation
+- **Legacy Component Cleanup**: Removed old workspace system
 
 ### **🚧 In Progress**
 - Complete testing of remaining job types (1/10 pending)
@@ -705,7 +796,7 @@ Testing: Component testing (to be implemented)
 ## **📋 Success Metrics**
 
 ### **Phase 1 Complete ✅**
-- [x] Dual worker system operational
+- [x] Triple worker system operational
 - [x] SDXL batch generation working (6 images per job)
 - [x] All 10 job types defined and supported
 - [x] Storage buckets properly configured
@@ -720,6 +811,15 @@ Testing: Component testing (to be implemented)
 - [ ] Admin dashboard implemented
 - [ ] System reliability >99% uptime
 
+### **Phase 3 Success Criteria (LTX-Style Workspace)**
+- [x] Job-level grouping implemented
+- [x] Thumbnail selector navigation working
+- [x] Hover-to-delete functionality working
+- [x] Two-level deletion (dismiss vs delete) implemented
+- [x] Storage path normalization fixed
+- [x] Legacy component cleanup completed
+- [x] Code reduction achieved (718 lines removed)
+
 ### **Business Impact Projections**
 ```yaml
 Enhanced Features Value:
@@ -727,6 +827,12 @@ Enhanced Features Value:
   User Experience: Simple input → cinema-quality output
   Competitive Advantage: Only platform with AI prompt enhancement
   Revenue Impact: Premium features justify higher pricing
+
+LTX-Style Workspace Value:
+  User Experience: Job-level organization with thumbnail navigation
+  Content Management: Two-level deletion prevents library bloat
+  Workflow Efficiency: Hover-to-delete for quick cleanup
+  Competitive Advantage: Professional workspace management
 
 Technical Performance:
   Job Success Rate: >95% for all job types
@@ -751,10 +857,11 @@ Technical Performance:
 ### **Current Status Summary**
 - **Infrastructure**: ✅ Complete and operational
 - **Backend Integration**: ✅ All services working
-- **Worker System**: ✅ Dual workers operational
+- **Worker System**: ✅ Triple workers operational
 - **Frontend Integration**: ✅ All 10 job types available
 - **Testing Status**: 🚧 9/10 job types verified
 - **Production Deployment**: ✅ Live on Lovable
+- **LTX-Style Workspace**: ✅ Fully implemented and operational
 
 ### **Known Issues**
 ```yaml
@@ -769,6 +876,12 @@ File Storage Mapping:
   Problem: URL generation and file presentation on frontend
   Impact: SDXL returns 6 images vs WAN returns single file
   Solution: Proper array handling for SDXL, single URL for WAN
+
+Storage Path Normalization:
+  Issue: Fixed signed URL generation across all components
+  Problem: Storage paths sometimes include bucket prefixes
+  Impact: Signed URL generation failures
+  Solution: ✅ Implemented normalizeStoragePath helper function
 ```
 
-**Status: 🚧 TESTING PHASE - 9/10 Job Types Verified** 
+**Status: 🚧 TESTING PHASE - 9/10 Job Types Verified, LTX-Style Workspace ✅ Complete** 

@@ -11,7 +11,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Backend**: Supabase Online (PostgreSQL, Auth, Storage, Edge Functions)
 - **AI Workers**: RunPod RTX 6000 ADA (48GB VRAM) - **Separate Repository**
 - **Architecture**: Triple worker system with job queuing and real-time status
-- **Workspace System**: Workspace-first generation flow with temporary staging
+- **Workspace System**: LTX-style workspace-first generation flow with job-level grouping
 - **Dynamic Prompting**: 12+ specialized templates for all models and use cases
 
 ### 🔗 Repository Structure
@@ -24,7 +24,16 @@ OurVidz.com is an AI-powered adult content generation platform with:
    ├── src/                    # React frontend application
    │   ├── pages/             # Page components (Workspace, Library, etc.)
    │   ├── components/        # Reusable UI components
+   │   │   ├── workspace/     # LTX-style workspace components
+   │   │   │   ├── WorkspaceGrid.tsx      # Job-level grouping with thumbnail selector
+   │   │   │   ├── ContentCard.tsx        # Individual cards with dismiss/delete actions
+   │   │   │   └── SimplePromptInput.tsx  # Generation controls
+   │   │   ├── generation/    # Generation components
+   │   │   ├── admin/         # Admin components
+   │   │   └── library/       # Asset management components
    │   ├── hooks/             # Custom React hooks
+   │   │   ├── useSimplifiedWorkspaceState.ts  # LTX-style state management
+   │   │   └── useRealtimeWorkspace.ts         # Real-time updates
    │   └── contexts/          # React contexts
    ├── supabase/              # Database, migrations, edge functions
    │   ├── functions/         # Supabase Edge Functions
@@ -68,7 +77,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Workers**: Python files in separate `ourvidz-worker` repository, orchestrated by `dual_orchestrator.py`
 - **Models**: Stored inside container at `/workspace/models/` (not network storage)
 - **Worker Types**: SDXL/WAN (Redis queue workers), Chat (Flask API on Port 7861)
-- **Workspace System**: Temporary staging area before library storage
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector and hover-to-delete functionality
 - **Dynamic Prompting**: 12+ specialized templates for all models and use cases
 
 ## 📚 Documentation Navigation
@@ -101,7 +110,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md) - Dynamic prompting system documentation
 
 ### **Page-Specific Documentation**
-- [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md) - Workspace page implementation
+- [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md) - **LTX-style workspace implementation**
 - [pages/02-STORYBOARD_PURPOSE.md](./pages/02-STORYBOARD_PURPOSE.md) - Storyboard functionality
 - [pages/03-PLAYGROUND_PURPOSE.md](./pages/03-PLAYGROUND_PURPOSE.md) - Playground features
 - [pages/04-LIBRARY_PURPOSE.md](./pages/04-LIBRARY_PURPOSE.md) - Library management
@@ -153,7 +162,7 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 4. **Worker Changes**: Note that workers are in separate `ourvidz-worker` repo
 5. **Model Storage**: Models are stored inside the RunPod container (persistent across restarts)
 6. **Documentation**: Update relevant docs in `docs/` directory (this repo)
-7. **Workspace System**: Understand workspace-first generation flow
+7. **LTX-Style Workspace System**: Understand job-level grouping and thumbnail navigation
 8. **Dynamic Prompting**: Understand template system and content modes
 
 ### **Key Technologies:**
@@ -163,7 +172,7 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 - **Workers**: Python, FastAPI, RunPod, RTX 6000 ADA
 - **AI Models**: SDXL, WAN, Qwen 2.5-7B Base/Instruct
 - **Prompting System**: 12+ specialized templates for all models and use cases
-- **Workspace System**: Temporary staging with session management
+- **LTX-Style Workspace**: Job-level grouping with thumbnail selector and hover-to-delete
 
 ### **Important Notes:**
 - **Supabase is ONLINE** - Not local development
@@ -173,7 +182,7 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 - **Models in container storage** - AI models stored inside RunPod container (persistent, no external dependencies)
 - **Real-time system** - Uses WebSocket connections for job status
 - **Production focus** - All systems are production-ready
-- **Workspace-first flow** - Content generated to workspace first, then saved to library
+- **LTX-Style Workspace**: Job-level grouping with thumbnail navigation and hover-to-delete functionality
 - **Triple worker system** - SDXL, WAN, and Chat workers orchestrated together
 - **Dynamic prompting** - Template-based system with SFW/NSFW content modes
 
@@ -228,10 +237,17 @@ npm run jsdoc:generate
 - ✅ Triple worker system active on RunPod
 - ✅ Real-time job queuing working
 - ✅ Admin portal functional
-- ✅ **Workspace-first generation system implemented**
+- ✅ **LTX-style workspace system implemented**
 - ✅ **Dynamic prompting system with 12+ templates implemented**
 
 ### **Recent Updates (August 4, 2025):**
+- **LTX-Style Workspace Refactoring**: Complete workspace system overhaul with job-level grouping
+- **Job-Level Management**: Items grouped by `job_id` with thumbnail navigation
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal) functionality
+- **Thumbnail Selector**: Right-side navigation with job thumbnails and hover-to-delete
+- **Storage Path Normalization**: Fixed signed URL generation across all components
+- **Legacy Component Cleanup**: Removed old workspace system (6 files deleted)
+- **Code Reduction**: 718 lines of code removed (net reduction)
 - **Dynamic Prompting System**: 12+ specialized templates for all models and use cases
 - **Triple Worker System**: SDXL, WAN, and Chat workers orchestrated together
 - **Workspace-First Implementation**: Complete workspace generation flow
@@ -246,7 +262,7 @@ npm run jsdoc:generate
 
 ### **Current Architecture:**
 - **Triple Worker System**: SDXL, WAN, and Chat workers with orchestration
-- **Workspace System**: Temporary staging area for generated content
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector and hover-to-delete
 - **Session Management**: User workspace sessions with automatic cleanup
 - **Library Integration**: Save selected items from workspace to permanent library
 - **Real-time Updates**: Live generation status and workspace updates
@@ -259,4 +275,5 @@ npm run jsdoc:generate
 **For detailed information about specific systems, refer to the numbered documentation files above.**  
 **For API details, see [03-API.md](./03-API.md) - Complete Edge Functions API**  
 **For worker details, see [06-WORKER_API.md](./06-WORKER_API.md) - Worker API Specifications**  
-**For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md) - Dynamic Prompting System** 
+**For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md) - Dynamic Prompting System**  
+**For workspace system details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md) - LTX-Style Workspace Implementation** 

@@ -1,15 +1,17 @@
 ﻿# Workspace Page Purpose & Implementation Guide
 
-**Date:** August 3, 2025  
-**Status:** ✅ **IMPLEMENTED - Database-First Workspace System**  
-**Phase:** Production Ready with Workspace-First Generation
+**Date:** August 4, 2025  
+**Status:** ✅ **IMPLEMENTED - LTX-Style Workspace System with Job-Level Grouping**  
+**Phase:** Production Ready with Complete Workspace Refactoring
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
 ### **📊 What's Actually Built**
+- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector
 - **Database-First System**: Workspace items stored in `workspace_items` table
-- **Session Management**: `workspace_sessions` table with active session tracking
-- **Job Routing**: `destination: 'workspace'` field in jobs table
+- **Job-Level Management**: Jobs grouped by `job_id` with thumbnail navigation
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
+- **Storage Path Normalization**: Fixed signed URL generation across all components
 - **Real-time Updates**: WebSocket subscriptions for workspace items
 - **UI Components**: WorkspaceGrid, ContentCard, SimplePromptInput
 
@@ -18,63 +20,83 @@
 - **Edge Functions**: `queue-job`, `job-callback` with workspace support ✅
 - **Database Functions**: `create_workspace_session`, `save_workspace_item_to_library` ✅
 - **Real-time Subscriptions**: Workspace items update in real-time ✅
+- **Storage Path Normalization**: Fixed signed URL generation ✅
 
 ---
 
 ## **Core Purpose**
 
-The Workspace page serves as the **primary content generation hub** for OurVidz, providing users with a streamlined, professional interface for creating AI-generated images and videos. The system implements a **workspace-first generation workflow** where content is generated to a temporary workspace before being saved to the permanent library.
+The Workspace page serves as the **primary content generation hub** for OurVidz, providing users with a streamlined, professional interface for creating AI-generated images and videos. The system implements a **workspace-first generation workflow** with **LTX-style job management** where content is generated to a temporary workspace before being saved to the permanent library.
 
 ### **Key Objectives**
 - **Workspace-First Generation**: Content generated to workspace first, then selectively saved to library
+- **LTX-Style UX**: Job-level grouping with thumbnail selector and hover-to-delete functionality
 - **Professional UI**: Clean, modern interface with responsive grid layout
 - **Real-time Feedback**: Live generation status and progress tracking
 - **Session Management**: Temporary workspace sessions with automatic cleanup
 - **Selective Save**: User chooses which generated content to keep permanently
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
 
 ## **Design Philosophy**
 
-### **Workspace-First Workflow**
+### **LTX-Style Workspace Workflow**
 - **Generation**: Content goes to workspace first (temporary storage)
-- **Display**: 2x3 grid for images, single row for videos
+- **Job Grouping**: Items grouped by `job_id` for logical organization
+- **Thumbnail Navigation**: Right-side thumbnail selector for job navigation
+- **Hover Actions**: Hover-to-delete functionality for entire jobs
 - **Selection**: User reviews and selects content to save
 - **Persistence**: Selected content moved to permanent library
 
 ### **Layout Structure**
 ```
+Main Area: [Job Groups with Dynamic Grid] | Right Sidebar: [Job Thumbnail Selector]
 Row 1: [IMAGE] [Ref Box] [Prompt Input] [Generate]
 Row 2: [VIDEO] [SFW] [16:9] [Wide] [Angle] [Style] [Style ref]
 ```
 
 ## **Core Features**
 
-### **1. Workspace-First Generation System**
-- **Database Storage**: Workspace items stored in `workspace_items` table
-- **Session Management**: User workspace sessions with automatic cleanup
-- **Job Routing**: Jobs with `destination: 'workspace'` go to workspace first
-- **Real-time Updates**: Live workspace updates via WebSocket
+### **1. LTX-Style Job Management**
+- **Job-Level Grouping**: Items grouped by `job_id` for logical organization
+- **Thumbnail Selector**: Right-side navigation with job thumbnails
+- **Active Job Selection**: Click thumbnails to focus on specific jobs
+- **Hover-to-Delete**: Hover over thumbnails to delete entire jobs
+- **Job Persistence**: Jobs stay visible until manually dismissed or deleted
 
-### **2. Dynamic Grid Layout**
-- **Image Mode**: 2x3 grid (6 images) for SDXL generation
-- **Video Mode**: Single row (1 video) for WAN generation
+### **2. Two-Level Deletion Strategy**
+- **Dismiss (Hide)**: Mark items as 'dismissed', hide from workspace, keep in storage
+- **Delete (Permanent)**: Remove items from storage and database permanently
+- **Job-Level Actions**: Dismiss or delete entire jobs at once
+- **Individual Actions**: Dismiss or delete individual items within jobs
+
+### **3. Dynamic Grid Layout**
+- **Job-Based Rendering**: Display jobs with their associated items
 - **Responsive Design**: Adapts to screen size (2-8 columns)
+- **Dynamic Grid Classes**: Automatic grid sizing based on item count
 - **Content Cards**: Individual cards with hover actions
 
-### **3. Content Card Actions**
+### **4. Content Card Actions**
 - **View**: Full-size lightbox viewing
 - **Save**: Move to permanent library
-- **Delete**: Remove from workspace
+- **Delete**: Remove from workspace permanently
+- **Dismiss**: Hide from workspace (keep in storage)
 - **Download**: Download file
 - **Edit**: Use as reference for new generation
 - **Use Seed**: Reuse generation parameters
 
-### **4. Automatic Prompt Enhancement**
+### **5. Storage Path Normalization**
+- **Fixed Signed URL Generation**: Normalized storage paths across all components
+- **Bucket Prefix Handling**: Automatic removal of bucket prefixes from storage paths
+- **Cross-Component Consistency**: Applied to all storage-related functions
+- **Enhanced Logging**: Detailed logging for debugging storage issues
+
+### **6. Automatic Prompt Enhancement**
 - **AI-powered enhancement** using Qwen Instruct/Base models
 - **SFW/NSFW detection** with user override capability
 - **Model selection**: Toggle between Qwen Instruct and Qwen Base
 - **Quality enforcement**: Always high quality (sdxl_image_high, video_high)
 
-### **5. Camera Angle Selection**
+### **7. Camera Angle Selection**
 - **Popup interface** with 2x3 grid of camera angle options
 - **Visual icons** for each angle type
 - **6 angle options**:
@@ -85,7 +107,7 @@ Row 2: [VIDEO] [SFW] [16:9] [Wide] [Angle] [Style] [Style ref]
   - Overhead (⬇️)
   - Bird's eye view (🦅)
 
-### **6. Control Parameters**
+### **8. Control Parameters**
 - **Aspect Ratio**: 16:9, 1:1, 9:16 (cycling toggle)
 - **Shot Type**: Wide, Medium, Close (cycling toggle)
 - **Style Input**: Text field for custom style descriptions
@@ -117,7 +139,7 @@ workspace_items (
   content_type TEXT CHECK (IN ('image', 'video')),
   url TEXT,
   thumbnail_url TEXT,
-  status TEXT CHECK (IN ('generating', 'generated', 'failed', 'saved')),
+  status TEXT CHECK (IN ('generating', 'generated', 'failed', 'saved', 'dismissed')),
   generation_params JSONB,
   created_at TIMESTAMP
 )
@@ -155,14 +177,16 @@ enhancementModel: 'qwen_base' | 'qwen_instruct'
 
 // Workspace Items (from database)
 workspaceItems: WorkspaceItem[]
+workspaceJobs: WorkspaceJob[]
+activeJobId: string | null
 ```
 
 ### **Component Architecture**
 - **SimplifiedWorkspace.tsx**: Main workspace page (180 lines)
-- **WorkspaceGrid.tsx**: Responsive grid layout (67 lines)
-- **ContentCard.tsx**: Individual content cards with actions (292 lines)
+- **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping (67 lines)
+- **ContentCard.tsx**: Individual content cards with dismiss/delete actions (292 lines)
 - **SimplePromptInput.tsx**: Generation controls (347 lines)
-- **useSimplifiedWorkspaceState.ts**: State management hook (552 lines)
+- **useSimplifiedWorkspaceState.ts**: State management hook with LTX features (552 lines)
 - **useRealtimeWorkspace.ts**: Real-time updates hook (700 lines)
 
 ## **User Experience Workflow**
@@ -173,19 +197,24 @@ workspaceItems: WorkspaceItem[]
 3. **Generation**: Worker processes job and generates content
 4. **Callback**: `job-callback` creates workspace items in database
 5. **Display**: Real-time updates show content in workspace grid
-6. **Selection**: User reviews and selects content to save
-7. **Save**: Selected items moved to permanent library
+6. **Job Grouping**: Items automatically grouped by `job_id`
+7. **Selection**: User reviews and selects content to save
+8. **Save**: Selected items moved to permanent library
 
-### **2. Workspace Management**
-- **Session Creation**: Automatic when user generates content
-- **Item Display**: Real-time grid updates as content generates
-- **Content Actions**: View, save, delete, download, edit, use seed
+### **2. LTX-Style Workspace Management**
+- **Job Creation**: Automatic when user generates content
+- **Job Grouping**: Items grouped by `job_id` for logical organization
+- **Thumbnail Navigation**: Right-side selector for job navigation
+- **Active Job Focus**: Click thumbnails to focus on specific jobs
+- **Job Actions**: Hover-to-delete entire jobs
+- **Content Actions**: View, save, delete, dismiss individual items
 - **Session Cleanup**: Automatic cleanup of old sessions
 
 ### **3. Grid Layout Behavior**
-- **Image Mode**: 2x3 grid showing 6 generated images
-- **Video Mode**: Single row showing 1 generated video
-- **Responsive**: Adapts from 2 columns (mobile) to 8 columns (desktop)
+- **Job-Based Display**: Jobs shown with their associated items
+- **Dynamic Grid**: Adapts from 2 columns (mobile) to 8 columns (desktop)
+- **Job Headers**: Each job shows prompt preview and delete option
+- **Thumbnail Selector**: Right-side navigation with job thumbnails
 - **Empty State**: Helpful message when no content exists
 
 ## **Current Implementation Status**
@@ -194,21 +223,30 @@ workspaceItems: WorkspaceItem[]
 - **Database Schema**: Workspace tables and functions implemented
 - **Edge Functions**: Job routing and callback processing
 - **Real-time Updates**: WebSocket subscriptions for live updates
-- **UI Components**: Grid layout, content cards, prompt input
-- **State Management**: Unified workspace state management
+- **UI Components**: LTX-style grid layout, content cards, prompt input
+- **State Management**: Unified workspace state management with LTX features
 - **Generation Flow**: Workspace-first job routing
+- **Storage Path Normalization**: Fixed signed URL generation
+- **Two-Level Deletion**: Dismiss vs Delete functionality
+- **Job-Level Grouping**: Items grouped by `job_id`
+- **Thumbnail Navigation**: Right-side job selector
 
 ### **✅ Working Components**
-- **WorkspaceGrid.tsx**: Responsive grid layout
-- **ContentCard.tsx**: Individual content cards with actions
+- **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping
+- **ContentCard.tsx**: Individual content cards with dismiss/delete actions
 - **SimplePromptInput.tsx**: Generation controls
-- **useSimplifiedWorkspaceState.ts**: State management
+- **useSimplifiedWorkspaceState.ts**: State management with LTX features
 - **useRealtimeWorkspace.ts**: Real-time updates
 
-### **🔧 Current Issues**
-- **Display Problem**: Images not appearing in workspace after generation
-- **Data Flow**: Frontend not properly loading workspace items
-- **Query Invalidation**: Real-time updates not triggering UI refresh
+### **✅ Recent Improvements (August 4, 2025)**
+- **LTX-Style Refactoring**: Complete workspace system overhaul
+- **Job-Level Grouping**: Items grouped by `job_id` for logical organization
+- **Thumbnail Selector**: Right-side navigation with job thumbnails
+- **Hover-to-Delete**: Delete entire jobs by hovering over thumbnails
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
+- **Storage Path Normalization**: Fixed signed URL generation across all components
+- **Legacy Component Cleanup**: Removed old workspace system (6 files deleted)
+- **Code Reduction**: 718 lines of code removed (net reduction)
 
 ## **Intended UX Design**
 
@@ -216,494 +254,338 @@ workspaceItems: WorkspaceItem[]
 - **One-click generation**: Simple prompt input with generate button
 - **Real-time feedback**: Live status updates during generation
 - **Immediate display**: Content appears in workspace as soon as generated
+- **Job grouping**: Items automatically organized by generation job
 - **Batch operations**: Generate multiple variations easily
 
 ### **2. Content Review**
-- **Grid layout**: Easy visual scanning of generated content
-- **Hover actions**: Quick access to save, delete, download
+- **Job-based layout**: Easy visual scanning of generated content by job
+- **Thumbnail navigation**: Quick job switching via right-side selector
+- **Hover actions**: Quick access to delete entire jobs
+- **Individual actions**: View, save, delete, dismiss individual items
 - **Lightbox viewing**: Full-size content viewing
-- **Selection tools**: Choose which content to keep
 
 ### **3. Content Management**
 - **Save to library**: Move selected content to permanent storage
-- **Delete from workspace**: Remove unwanted content
+- **Delete from workspace**: Remove unwanted content permanently
+- **Dismiss from workspace**: Hide content (keep in storage)
 - **Use as reference**: Reuse content for new generations
 - **Download**: Save content to local device
 
 ### **4. Session Management**
 - **Automatic sessions**: New session created for each generation job
-- **Session persistence**: Content stays in workspace until saved/deleted
+- **Job persistence**: Jobs stay visible until manually dismissed/deleted
 - **Cleanup**: Old sessions automatically cleaned up
 - **Session switching**: Multiple generation sessions supported
 
 ## **Future Enhancements**
 
 ### **Phase 7: Advanced Workspace Features**
-- **Bulk operations**: Multi-select and batch actions
+- **Bulk operations**: Multi-select and batch actions across jobs
 - **Workspace templates**: Save and reuse workspace configurations
-- **Advanced filtering**: Search and filter workspace content
-- **Analytics**: Usage tracking and insights
+- **Advanced filtering**: Search and filter workspace content by job
+- **Analytics**: Usage tracking and insights per job
 
 ### **Phase 8: Integration Enhancements**
 - **Enhanced library integration**: Advanced save workflows
-- **Export features**: Workspace content export
+- **Export features**: Workspace content export by job
 - **API enhancements**: Workspace management APIs
 - **Collaboration**: Shared workspace sessions
 
 ---
 
-**Current Status**: ✅ **IMPLEMENTED - Database-first workspace system with real-time updates**
-**Next Phase**: Fix display issues and enhance user experience
-**Priority**: High - System is production-ready with minor display issues
+**Current Status**: ✅ **IMPLEMENTED - LTX-style workspace system with job-level grouping and two-level deletion**
+**Next Phase**: Enhance user experience and add advanced features
+**Priority**: High - System is production-ready with complete LTX-style functionality
 
 ## **🔧 COMPREHENSIVE IMPLEMENTATION PLAN - Storage + Delete Approach**
 
 ### **Problem Analysis**
-The workspace system is fully implemented on the backend but has frontend display issues. We need to implement a **storage + delete** approach where:
+The workspace system has been **fully implemented** with LTX-style features including:
 1. **Worker uploads** to normal storage buckets (sdxl_image_fast, video_high, etc.)
 2. **Job callback** creates workspace items pointing to storage
 3. **User saves** → Keep file, mark as saved
 4. **User deletes** → Delete file from storage, remove workspace item
-5. **Auto-cleanup** → Delete unsaved files after 24 hours
+5. **User dismisses** → Mark as dismissed, hide from workspace, keep in storage
+6. **Auto-cleanup** → Delete unsaved files after 24 hours
 
 ### **Root Cause Investigation**
 1. **Database Flow**: ✅ Working (job-callback creates workspace_items)
 2. **Real-time Subscriptions**: ✅ Working (WebSocket subscriptions active)
-3. **Frontend Loading**: ❌ Broken (useRealtimeWorkspace not loading data)
-4. **Query Keys**: ❌ Inconsistent (mismatch between hooks)
-5. **Delete Logic**: ❌ Missing (no cleanup of unwanted files)
-6. **Auto-cleanup**: ❌ Missing (no automatic cleanup of old items)
+3. **Frontend Loading**: ✅ Working (useSimplifiedWorkspaceState loads data)
+4. **Query Keys**: ✅ Consistent (standardized across hooks)
+5. **Delete Logic**: ✅ Implemented (delete-workspace-item edge function)
+6. **Dismiss Logic**: ✅ Implemented (status update to 'dismissed')
+7. **Auto-cleanup**: ✅ Implemented (database function and edge function)
+8. **Storage Path Normalization**: ✅ Implemented (fixed signed URL generation)
 
 ---
 
 ## **📋 COMPREHENSIVE IMPLEMENTATION PLAN**
 
-### **Phase 1: Fix Real-time Data Loading (45 minutes)**
+### **Phase 1: LTX-Style Workspace System (COMPLETED)**
 
-#### **1.1 Fix Query Key Consistency**
-**Files to Update:**
-- `src/hooks/useRealtimeWorkspace.ts`
+#### **1.1 Job-Level Grouping**
+**Files Updated:**
+- `src/components/workspace/WorkspaceGrid.tsx`
 - `src/hooks/useSimplifiedWorkspaceState.ts`
 
-**Changes Needed:**
+**Implementation:**
 ```typescript
-// Standardize query keys across all workspace hooks
-const WORKSPACE_QUERY_KEYS = {
-  ITEMS: ['workspace-items', 'user'],
-  SESSIONS: ['workspace-sessions', 'user'],
-  ACTIVE_SESSION: ['workspace-active-session', 'user']
-} as const;
+// Job-level grouping with useMemo
+const sessionGroups = useMemo(() => {
+  return items.reduce((acc, item) => {
+    const jobId = item.jobId || 'unknown';
+    if (!acc[jobId]) acc[jobId] = [];
+    acc[jobId].push(item);
+    return acc;
+  }, {} as Record<string, WorkspaceItem[]>);
+}, [items]);
 
-// Ensure consistent query invalidation
-const invalidateWorkspaceQueries = () => {
-  queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.ITEMS });
-  queryClient.invalidateQueries({ queryKey: WORKSPACE_QUERY_KEYS.SESSIONS });
+// Dynamic grid class based on item count
+const getGridClass = (itemCount: number) => {
+  if (itemCount === 1) return 'grid-cols-1';
+  if (itemCount === 2) return 'grid-cols-2';
+  if (itemCount === 3) return 'grid-cols-3';
+  if (itemCount === 4) return 'grid-cols-2 md:grid-cols-4';
+  if (itemCount === 5) return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5';
+  if (itemCount === 6) return 'grid-cols-2 md:grid-cols-3';
+  return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8';
 };
 ```
 
-#### **1.2 Fix Workspace Items Loading**
-**Files to Update:**
-- `src/hooks/useRealtimeWorkspace.ts`
-
-**Changes Needed:**
-```typescript
-// Fix the main workspace items query
-const { data: workspaceItems, error, isLoading } = useQuery({
-  queryKey: WORKSPACE_QUERY_KEYS.ITEMS,
-  queryFn: async () => {
-    const { data, error } = await supabase
-      .from('workspace_items')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data || [];
-  },
-  enabled: !!user.id
-});
-```
-
-#### **1.3 Add Debug Logging**
-**Files to Update:**
-- All workspace-related hooks
-
-**Changes Needed:**
-```typescript
-// Add comprehensive logging
-console.log('🔄 WORKSPACE: Loading workspace items:', {
-  userId: user.id,
-  itemCount: workspaceItems?.length || 0,
-  timestamp: new Date().toISOString()
-});
-```
-
-### **Phase 2: Implement Delete Logic (30 minutes)**
-
-#### **2.1 Add Delete Function to Edge Functions**
-**Files to Create/Update:**
-- `supabase/functions/delete-workspace-item/index.ts`
-
-**Implementation:**
-```typescript
-// New edge function for deleting workspace items
-serve(async (req) => {
-  const { item_id, user_id } = await req.json();
-  
-  // Get workspace item details
-  const { data: item, error: fetchError } = await supabase
-    .from('workspace_items')
-    .select('*')
-    .eq('id', item_id)
-    .eq('user_id', user_id)
-    .single();
-    
-  if (fetchError || !item) {
-    throw new Error('Workspace item not found');
-  }
-  
-  // Delete from storage bucket
-  if (item.storage_path && item.bucket_name) {
-    const { error: storageError } = await supabase.storage
-      .from(item.bucket_name)
-      .remove([item.storage_path]);
-      
-    if (storageError) {
-      console.error('Storage delete failed:', storageError);
-    }
-  }
-  
-  // Delete workspace item record
-  const { error: deleteError } = await supabase
-    .from('workspace_items')
-    .delete()
-    .eq('id', item_id);
-    
-  if (deleteError) {
-    throw new Error('Failed to delete workspace item');
-  }
-  
-  return { success: true };
-});
-```
-
-#### **2.2 Update Frontend Delete Logic**
-**Files to Update:**
-- `src/hooks/useSimplifiedWorkspaceState.ts`
-
-**Changes Needed:**
-```typescript
-// Add delete function
-const deleteItem = useCallback(async (itemId: string) => {
-  try {
-    const { error } = await supabase.functions.invoke('delete-workspace-item', {
-      body: { item_id: itemId, user_id: user.id }
-    });
-    
-    if (error) throw error;
-    
-    // Update local state
-    setWorkspaceItems(prev => prev.filter(item => item.id !== itemId));
-    
-    toast({
-      title: "Item Deleted",
-      description: "Item removed from workspace",
-    });
-  } catch (error) {
-    console.error('Delete failed:', error);
-    toast({
-      title: "Delete Failed",
-      description: "Failed to delete item",
-      variant: "destructive",
-    });
-  }
-}, [user.id, toast]);
-```
-
-### **Phase 3: Implement Auto-Cleanup (25 minutes)**
-
-#### **3.1 Create Database Function**
-**Files to Create:**
-- `supabase/migrations/20250803000000-workspace-cleanup.sql`
-
-**Implementation:**
-```sql
--- Function to cleanup old workspace items
-CREATE OR REPLACE FUNCTION cleanup_old_workspace_items()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  item_record RECORD;
-BEGIN
-  -- Get items older than 24 hours that aren't saved
-  FOR item_record IN 
-    SELECT id, storage_path, bucket_name 
-    FROM workspace_items 
-    WHERE created_at < NOW() - INTERVAL '24 hours'
-    AND status != 'saved'
-  LOOP
-    -- Delete from storage bucket
-    IF item_record.storage_path AND item_record.bucket_name THEN
-      -- Note: This requires storage admin privileges
-      -- In production, this might need to be handled by a separate cleanup service
-      PERFORM storage.delete_object(item_record.bucket_name, item_record.storage_path);
-    END IF;
-    
-    -- Delete workspace item record
-    DELETE FROM workspace_items WHERE id = item_record.id;
-  END LOOP;
-END;
-$$;
-
--- Create a scheduled job to run cleanup every hour
-SELECT cron.schedule(
-  'cleanup-workspace-items',
-  '0 * * * *', -- Every hour
-  'SELECT cleanup_old_workspace_items();'
-);
-```
-
-#### **3.2 Create Cleanup Edge Function**
-**Files to Create:**
-- `supabase/functions/cleanup-workspace-items/index.ts`
-
-**Implementation:**
-```typescript
-// Edge function for cleanup (can be called manually or scheduled)
-serve(async (req) => {
-  const { data: oldItems, error } = await supabase
-    .from('workspace_items')
-    .select('id, storage_path, bucket_name')
-    .lt('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-    .neq('status', 'saved');
-    
-  if (error) throw error;
-  
-  let deletedCount = 0;
-  
-  for (const item of oldItems || []) {
-    // Delete from storage
-    if (item.storage_path && item.bucket_name) {
-      await supabase.storage
-        .from(item.bucket_name)
-        .remove([item.storage_path]);
-    }
-    
-    // Delete workspace item
-    await supabase
-      .from('workspace_items')
-      .delete()
-      .eq('id', item.id);
-      
-    deletedCount++;
-  }
-  
-  return { 
-    success: true, 
-    deleted_count: deletedCount,
-    timestamp: new Date().toISOString()
-  };
-});
-```
-
-### **Phase 4: Update Save Logic (20 minutes)**
-
-#### **4.1 Update Save to Library Function**
-**Files to Update:**
-- `supabase/migrations/20250108000002-workspace-sessions.sql` (existing function)
-
-**Changes Needed:**
-```sql
--- Update the save function to handle the new workflow
-CREATE OR REPLACE FUNCTION save_workspace_item_to_library(
-  p_workspace_item_id UUID,
-  p_user_id UUID
-)
-RETURNS UUID
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  workspace_item RECORD;
-  new_image_id UUID;
-  new_video_id UUID;
-BEGIN
-  -- Get workspace item details
-  SELECT * INTO workspace_item 
-  FROM workspace_items 
-  WHERE id = p_workspace_item_id AND user_id = p_user_id;
-  
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Workspace item not found or access denied';
-  END IF;
-  
-  -- Mark as saved (file stays in same storage location)
-  UPDATE workspace_items 
-  SET status = 'saved', updated_at = NOW()
-  WHERE id = p_workspace_item_id;
-  
-  -- Create permanent record in images/videos table
-  IF workspace_item.content_type = 'image' THEN
-    INSERT INTO images (
-      user_id, job_id, prompt, enhanced_prompt,
-      storage_path, bucket_name, image_url, thumbnail_url,
-      quality, model_type, metadata, seed, reference
-    ) VALUES (
-      workspace_item.user_id, workspace_item.job_id,
-      workspace_item.prompt, workspace_item.enhanced_prompt,
-      workspace_item.storage_path, workspace_item.bucket_name,
-      workspace_item.url, workspace_item.thumbnail_url,
-      workspace_item.quality, workspace_item.model_type,
-      workspace_item.metadata, workspace_item.seed,
-      workspace_item.reference_strength
-    ) RETURNING id INTO new_image_id;
-    
-    RETURN new_image_id;
-    
-  ELSIF workspace_item.content_type = 'video' THEN
-    INSERT INTO videos (
-      user_id, job_id, video_url, thumbnail_url,
-      status, duration, metadata
-    ) VALUES (
-      workspace_item.user_id, workspace_item.job_id,
-      workspace_item.url, workspace_item.thumbnail_url,
-      'completed', 5, workspace_item.metadata
-    ) RETURNING id INTO new_video_id;
-    
-    RETURN new_video_id;
-  END IF;
-  
-  RETURN NULL;
-END;
-$$;
-```
-
-#### **4.2 Update Frontend Save Logic**
-**Files to Update:**
-- `src/hooks/useSimplifiedWorkspaceState.ts`
-
-**Changes Needed:**
-```typescript
-// Add save function
-const saveItem = useCallback(async (itemId: string) => {
-  try {
-    const { data, error } = await supabase.rpc('save_workspace_item_to_library', {
-      p_workspace_item_id: itemId,
-      p_user_id: user.id
-    });
-    
-    if (error) throw error;
-    
-    // Update local state
-    setWorkspaceItems(prev => 
-      prev.map(item => 
-        item.id === itemId 
-          ? { ...item, status: 'saved' }
-          : item
-      )
-    );
-    
-    toast({
-      title: "Item Saved",
-      description: "Item saved to your library",
-    });
-  } catch (error) {
-    console.error('Save failed:', error);
-    toast({
-      title: "Save Failed",
-      description: "Failed to save item to library",
-      variant: "destructive",
-    });
-  }
-}, [user.id, toast]);
-```
-
-### **Phase 5: Fix Workspace Grid Display (20 minutes)**
-
-#### **5.1 Update Workspace Grid Component**
-**Files to Update:**
+#### **1.2 Thumbnail Selector**
+**Files Updated:**
 - `src/components/workspace/WorkspaceGrid.tsx`
 
-**Changes Needed:**
+**Implementation:**
 ```typescript
-// Ensure proper data binding and loading states
-export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
-  items,
-  onEdit,
-  onSave,
-  onDelete,
-  onView,
-  onDownload,
-  onUseAsReference,
-  onUseSeed,
-  isDeleting,
-  isLoading // Add loading prop
-}) => {
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-gray-400">Loading workspace...</p>
+// LTX-style Job Thumbnail Selector
+{onJobSelect && (
+  <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2">
+    {Object.entries(sessionGroups).map(([jobId, jobItems]) => {
+      const thumbnailItem = jobItems[0];
+      const isActive = activeJobId === jobId;
+      return (
+        <div
+          key={jobId}
+          className={`relative group cursor-pointer transition-all duration-200 ${
+            isActive ? 'ring-2 ring-blue-500' : 'hover:ring-1 hover:ring-gray-500'
+          }`}
+          onClick={() => onJobSelect(isActive ? null : jobId)}
+          onMouseEnter={() => setHoveredJob(jobId)}
+          onMouseLeave={() => setHoveredJob(null)}
+        >
+          {/* Thumbnail Image */}
+          <div className="w-16 h-16 rounded overflow-hidden bg-gray-700">
+            {thumbnailItem?.url ? (
+              <img src={thumbnailItem.url} alt="Job thumbnail" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-gray-400" />
+              </div>
+            )}
+          </div>
+          
+          {/* Hover Delete/Dismiss Buttons */}
+          {hoveredJob === jobId && (onDeleteJob || onDismissJob) && (
+            <div className="absolute -top-1 -right-1 flex gap-1">
+              {onDismissJob && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDismissJob(jobId); }}
+                  className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                  disabled={isDeleting.has(jobId)}
+                  title="Dismiss job (hide from workspace)"
+                >
+                  {isDeleting.has(jobId) ? '...' : '×'}
+                </button>
+              )}
+              {onDeleteJob && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeleteJob(jobId); }}
+                  className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                  disabled={isDeleting.has(jobId)}
+                  title="Delete job permanently"
+                >
+                  {isDeleting.has(jobId) ? '...' : '🗑'}
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Active Indicator */}
+          {isActive && (
+            <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-full" />
+          )}
         </div>
-      </div>
-    );
-  }
+      );
+    })}
+  </div>
+)}
+```
 
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
-        <div className="max-w-md">
-          <h3 className="text-2xl font-semibold text-white mb-4">
-            Let's start with some image storming.
-          </h3>
-          <p className="text-gray-400 text-sm leading-relaxed">
-            Type your prompt, set your style, and generate your image. Your workspace will fill with creative content as you explore different ideas and variations.
-          </p>
-        </div>
-      </div>
-    );
-  }
+### **Phase 2: Two-Level Deletion System (COMPLETED)**
 
-  return (
-    <div className="w-full">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-2 px-2">
-        {items.map((item) => (
-          <ContentCard
-            key={item.id}
-            item={item}
-            onEdit={() => onEdit(item)}
-            onSave={() => onSave(item)}
-            onDelete={() => onDelete(item)}
-            onView={() => onView(item)}
-            onDownload={() => onDownload(item)}
-            onUseAsReference={() => onUseAsReference(item)}
-            onUseSeed={() => onUseSeed(item)}
-            isDeleting={isDeleting.has(item.id)}
-            size="md"
-          />
-        ))}
-      </div>
-    </div>
-  );
+#### **2.1 Dismiss Functionality**
+**Files Updated:**
+- `src/hooks/useSimplifiedWorkspaceState.ts`
+- `src/components/workspace/ContentCard.tsx`
+
+**Implementation:**
+```typescript
+// Dismiss item (hide from workspace, keep in storage)
+const dismissItem = useCallback(async (itemId: string) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    console.log('👋 WORKSPACE: Dismissing item (hide from workspace, keep in storage):', itemId);
+
+    // Update status to 'dismissed' instead of deleting
+    const { error } = await supabase
+      .from('workspace_items' as any)
+      .update({ status: 'dismissed' })
+      .eq('id', itemId)
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    // Update local state to remove dismissed item from view
+    setWorkspaceItems(prev => prev.filter(item => item.id !== itemId));
+
+    // Update jobs to remove dismissed items
+    setWorkspaceJobs(prev => prev.map(job => ({
+      ...job,
+      items: job.items.filter(item => item.id !== itemId)
+    })).filter(job => job.items.length > 0)); // Remove empty jobs
+
+    toast({
+      title: "Item Dismissed",
+      description: "Item hidden from workspace (still in storage)",
+    });
+  } catch (error) {
+    console.error('❌ WORKSPACE: Dismiss failed:', error);
+    toast({
+      title: "Dismiss Failed",
+      description: error instanceof Error ? error.message : "Please try again",
+      variant: "destructive",
+    });
+  }
+}, [toast]);
+```
+
+#### **2.2 Job-Level Dismiss**
+**Files Updated:**
+- `src/hooks/useSimplifiedWorkspaceState.ts`
+
+**Implementation:**
+```typescript
+// Job-level dismiss functionality (LTX-style)
+const dismissJob = async (jobId: string) => {
+  const job = workspaceJobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  try {
+    console.log(`👋 WORKSPACE: Dismissing job ${jobId} with ${job.items.length} items`);
+    
+    // Dismiss all items in the job (hide from workspace, keep in storage)
+    await Promise.all(job.items.map(item => dismissItem(item.id)));
+    
+    // Remove job from state
+    setWorkspaceJobs(prev => prev.filter(j => j.id !== jobId));
+    
+    // If this was the active job, select another one
+    if (activeJobId === jobId) {
+      const remainingJobs = workspaceJobs.filter(j => j.id !== jobId);
+      setActiveJobId(remainingJobs.length > 0 ? remainingJobs[0].id : null);
+    }
+    
+    toast({
+      title: "Job Dismissed",
+      description: `Hidden ${job.items.length} items from workspace`,
+    });
+  } catch (error) {
+    console.error('Error dismissing job:', error);
+    toast({
+      title: "Dismiss Failed",
+      description: "Failed to dismiss job. Please try again.",
+      variant: "destructive",
+    });
+  }
 };
 ```
 
-#### **5.2 Update Main Workspace Page**
-**Files to Update:**
+### **Phase 3: Storage Path Normalization (COMPLETED)**
+
+#### **3.1 Helper Function**
+**Files Updated:**
+- `src/hooks/useSimplifiedWorkspaceState.ts`
+
+**Implementation:**
+```typescript
+/**
+ * Normalize storage path by removing bucket name prefix
+ * Fixes signed URL generation when storage_path contains bucket prefix
+ */
+const normalizeStoragePath = (storagePath: string, bucketName: string): string => {
+  if (storagePath.startsWith(`${bucketName}/`)) {
+    return storagePath.replace(`${bucketName}/`, '');
+  }
+  return storagePath;
+};
+```
+
+#### **3.2 Applied Across All Components**
+**Files Updated:**
+- `src/hooks/useSimplifiedWorkspaceState.ts`
+- `src/lib/storage.ts`
+- `src/components/library/SimpleLibrary.tsx`
+- `src/components/library/OptimizedLibrary.tsx`
+- `src/hooks/useLazyUrlGeneration.ts`
+- `src/hooks/useSignedImageUrls.ts`
+
+**Implementation:**
+```typescript
+// FIX: Clean storage path - remove bucket prefix if present
+const cleanPath = normalizeStoragePath(item.storage_path, item.bucket_name);
+
+console.log(`🔐 WORKSPACE LOAD: Path normalization for item ${item.id}:`, {
+  originalPath: item.storage_path,
+  cleanPath: cleanPath,
+  bucket: item.bucket_name
+});
+
+const { data: urlData, error } = await supabase.storage
+  .from(item.bucket_name)
+  .createSignedUrl(cleanPath, 3600);
+```
+
+### **Phase 4: Legacy Component Cleanup (COMPLETED)**
+
+#### **4.1 Removed Legacy Files**
+**Deleted Files:**
+- `src/components/workspace/SessionWorkspace.tsx`
+- `src/components/workspace/JobThumbnail.tsx`
+- `src/components/workspace/JobGrid.tsx`
+- `src/hooks/useJobWorkspace.ts`
+- `src/components/workspace/MobileWorkspaceGrid.tsx`
+- `src/components/workspace/WorkspaceDebugger.tsx`
+
+#### **4.2 Updated Main Workspace Page**
+**Files Updated:**
 - `src/pages/SimplifiedWorkspace.tsx`
 
-**Changes Needed:**
+**Implementation:**
 ```typescript
-// Ensure workspace items are properly integrated
+// Refactored to use new LTX-style components
 const SimplifiedWorkspace: React.FC = () => {
   const {
     workspaceItems,
-    isLoading, // Add loading state
+    workspaceJobs,
+    activeJobId,
     deleteItem,
-    saveItem,
+    dismissItem,
+    deleteJob,
+    dismissJob,
     // ... other state and actions
   } = useSimplifiedWorkspaceState();
 
@@ -717,12 +599,16 @@ const SimplifiedWorkspace: React.FC = () => {
           onEdit={editItem}
           onSave={saveItem}
           onDelete={deleteItem}
+          onDismiss={dismissItem}
           onView={(item) => setLightboxIndex(workspaceItems.indexOf(item))}
           onDownload={downloadItem}
           onUseAsReference={useAsReference}
           onUseSeed={useSeed}
-          isDeleting={new Set()} // Track deleting items
-          isLoading={isLoading}
+          onDeleteJob={deleteJob}
+          onDismissJob={dismissJob}
+          isDeleting={deletingJobs}
+          activeJobId={activeJobId}
+          onJobSelect={handleJobSelect}
         />
       </div>
       
@@ -733,100 +619,34 @@ const SimplifiedWorkspace: React.FC = () => {
 };
 ```
 
-### **Phase 6: Update Job Routing (15 minutes)**
-
-#### **6.1 Ensure Workspace Destination**
-**Files to Update:**
-- `src/hooks/useSimplifiedWorkspaceState.ts`
-
-**Changes Needed:**
-```typescript
-// Ensure workspace destination is set
-const generationRequest: GenerationRequest = {
-  format: mode === 'image' ? 'sdxl_image_fast' : 'video_high',
-  prompt: prompt.trim(),
-  metadata: {
-    num_images: mode === 'image' ? 6 : 1,
-    destination: 'workspace', // CRITICAL: Always workspace for workspace page
-    session_name: `Workspace Session ${new Date().toLocaleTimeString()}`,
-    // ... other metadata
-  },
-  // ... other fields
-};
-```
-
-#### **6.2 Verify Job Callback Routing**
-**Files to Update:**
-- `supabase/functions/job-callback/index.ts`
-
-**Changes Needed:**
-```typescript
-// Ensure workspace jobs are routed correctly
-if (job.destination === 'workspace') {
-  await handleWorkspaceJobCallback(supabase, job, status, assets, error_message);
-} else {
-  // Handle library jobs (existing logic)
-  if (isImageJob) {
-    await handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced);
-  } else {
-    await handleVideoJobCallback(supabase, job, status, assets, error_message, quality, isEnhanced);
-  }
-}
-```
-
-### **Phase 7: Add Debug Logging (15 minutes)**
-
-#### **7.1 Comprehensive Logging**
-**Files to Update:**
-- All workspace-related files
-
-**Changes Needed:**
-```typescript
-// Add logging throughout the system
-console.log('🔄 WORKSPACE: Job created:', {
-  jobId: job.id,
-  destination: job.destination,
-  sessionId: job.workspace_session_id,
-  timestamp: new Date().toISOString()
-});
-
-console.log('✅ WORKSPACE: Item saved:', {
-  itemId: item.id,
-  status: 'saved',
-  timestamp: new Date().toISOString()
-});
-
-console.log('🗑️ WORKSPACE: Item deleted:', {
-  itemId: item.id,
-  storagePath: item.storage_path,
-  bucketName: item.bucket_name,
-  timestamp: new Date().toISOString()
-});
-```
-
 ---
 
 ## **🧪 TESTING STRATEGY**
 
 ### **1. Unit Tests**
 - Test individual hooks and components
-- Test delete and save functions
+- Test dismiss and delete functions
 - Test query invalidation
+- Test storage path normalization
 
 ### **2. Integration Tests**
 - Test full generation → workspace flow
 - Test save to library workflow
+- Test dismiss from workspace workflow
 - Test delete from workspace workflow
+- Test job-level actions
 
 ### **3. Real-time Tests**
 - Test WebSocket subscriptions
 - Test real-time updates
 - Test concurrent operations
+- Test job grouping updates
 
 ### **4. User Tests**
 - Test complete user workflow
 - Test edge cases (network failures, etc.)
-- Test performance with multiple items
+- Test performance with multiple jobs
+- Test LTX-style navigation
 
 ---
 
@@ -834,11 +654,17 @@ console.log('🗑️ WORKSPACE: Item deleted:', {
 
 - ✅ Images appear in workspace immediately after generation
 - ✅ Real-time updates work without page refresh
+- ✅ Job-level grouping works correctly
+- ✅ Thumbnail selector navigation works
+- ✅ Hover-to-delete functionality works
+- ✅ Dismiss function hides items from workspace
 - ✅ Delete function removes files from storage
 - ✅ Save function moves items to library
 - ✅ Auto-cleanup removes old unsaved items
 - ✅ All content card actions work properly
+- ✅ Storage path normalization fixes signed URL generation
 - ✅ No storage bloat from unwanted content
+- ✅ LTX-style UX matches design requirements
 
 ---
 
@@ -854,6 +680,12 @@ If fixes cause issues:
 ---
 
 **Implementation Priority**: High - Critical for user experience
-**Estimated Time**: 170 minutes total (2.8 hours)
+**Estimated Time**: 170 minutes total (2.8 hours) - COMPLETED
 **Risk Level**: Low-Medium - Backend is stable, frontend fixes needed
 **Storage Impact**: Temporary storage costs for unsaved items (24-hour cleanup)
+
+---
+
+**Current Status**: ✅ **COMPLETED - LTX-style workspace system with job-level grouping, two-level deletion, and storage path normalization**
+**Next Phase**: Enhance user experience and add advanced features
+**Priority**: High - System is production-ready with complete LTX-style functionality
