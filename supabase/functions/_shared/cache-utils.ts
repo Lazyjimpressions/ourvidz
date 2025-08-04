@@ -191,6 +191,9 @@ export function getChatTemplateFromCache(
     return null;
   }
 
+  console.log(`🔍 Searching for template: ${contextType} in ${contentTier} tier`);
+  console.log(`📋 Available templates in ${contentTier}:`, Object.keys(cache.templateCache.chat[contentTier]));
+
   // Map context types to chat template types
   let chatType: string;
   
@@ -209,16 +212,16 @@ export function getChatTemplateFromCache(
     chatType = 'admin';
   }
   else {
-    chatType = 'general'; // Default fallback
+    chatType = 'chat'; // Changed from 'general' to 'chat' to match cache structure
   }
 
   const template = cache.templateCache.chat[contentTier][chatType];
   
   if (!template) {
-    // Fallback to general template if specific one not found
-    const fallbackTemplate = cache.templateCache.chat[contentTier]['general'];
+    // Fallback to chat template if specific one not found
+    const fallbackTemplate = cache.templateCache.chat[contentTier]['chat'];
     if (fallbackTemplate) {
-      console.log(`✅ Using fallback general chat template for ${contextType} (${contentTier})`);
+      console.log(`✅ Using fallback chat template for ${contextType} (${contentTier})`);
       return fallbackTemplate.system_prompt;
     }
     
