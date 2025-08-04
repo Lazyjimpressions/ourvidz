@@ -23,6 +23,24 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
   const [imageError, setImageError] = useState(false);
   const mountedRef = useRef(true);
 
+  // Define all handlers first, before any early returns
+  const handleImageLoad = useCallback(() => {
+    console.log('✅ Image loaded successfully:', imageUrl);
+  }, [imageUrl]);
+
+  const handleImageError = useCallback(() => {
+    console.error('❌ Image failed to load:', imageUrl);
+    if (mountedRef.current) {
+      setImageError(true);
+    }
+  }, [imageUrl]);
+
+  const handleExpand = useCallback(() => {
+    if (imageUrl && onExpand) {
+      onExpand(imageUrl);
+    }
+  }, [imageUrl, onExpand]);
+
   const loadImage = useCallback(async () => {
     if (!mountedRef.current) return;
     
@@ -76,23 +94,6 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
       mountedRef.current = false;
     };
   }, [loadImage]);
-
-  const handleExpand = useCallback(() => {
-    if (imageUrl && onExpand) {
-      onExpand(imageUrl);
-    }
-  }, [imageUrl, onExpand]);
-
-  const handleImageLoad = useCallback(() => {
-    console.log('✅ Image loaded successfully:', imageUrl);
-  }, [imageUrl]);
-
-  const handleImageError = useCallback(() => {
-    console.error('❌ Image failed to load:', imageUrl);
-    if (mountedRef.current) {
-      setImageError(true);
-    }
-  }, [imageUrl]);
 
   if (loading) {
     return (
