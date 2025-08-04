@@ -96,7 +96,7 @@ serve(async (req) => {
         } else if (templateContext === 'story_development') {
           useCase = 'chat_creative';
         } else if (templateContext === 'roleplay') {
-          useCase = 'chat_roleplay';
+          useCase = 'roleplay';
         } else if (templateContext === 'admin') {
           useCase = 'chat_admin';
         }
