@@ -244,27 +244,14 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           )}
         </div>
 
-        {/* Bottom-Left Corner - Seed Info (Small, Subtle) */}
-        {getSeedFromItem() && (
-          <div className="absolute bottom-2 left-2">
-            <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-mono text-white/80">
-              Seed: {getSeedFromItem()}
-            </div>
-          </div>
-        )}
+        {/* REMOVED: Bottom-Left Corner - Seed Info (was covering action icons) */}
+        {/* REMOVED: Prompt Display on Hover (was covering action icons) */}
       </div>
 
       {/* NO IMAGE/HIGH BADGES - Clean Design Like LTX */}
       {/* Removed all type and quality indicators for clean look */}
 
-      {/* Prompt Display on Hover - Subtle */}
-      {isHovered && (
-        <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white p-2 text-xs">
-          <div className="truncate" title={item.prompt}>
-            {item.prompt}
-          </div>
-        </div>
-      )}
+      {/* REMOVED: Prompt Display on Hover - No longer needed */}
     </div>
   );
 }; 
