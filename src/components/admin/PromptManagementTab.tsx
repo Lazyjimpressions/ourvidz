@@ -170,17 +170,32 @@ export function PromptManagementTab() {
     toast({ title: 'Success', description: 'Template updated successfully' });
   };
 
-  const createTemplate = async () => {
+  const createTemplate = async (templateType: 'enhancement' | 'chat' = 'enhancement') => {
     setIsCreatingTemplate(true);
     try {
+      const chatDefaults = {
+        template_name: 'New Chat Template',
+        enhancer_model: 'qwen_instruct',
+        use_case: 'roleplay',
+        job_type: 'chat',
+        system_prompt: 'You are a helpful AI assistant...',
+      };
+      
+      const enhancementDefaults = {
+        template_name: 'New Template',
+        enhancer_model: 'sdxl',
+        use_case: 'enhancement',
+        job_type: 'enhancement',
+        system_prompt: 'Enter your system prompt here...',
+      };
+      
+      const defaults = templateType === 'chat' ? chatDefaults : enhancementDefaults;
+      
       const { error } = await supabase
         .from('prompt_templates')
         .insert({
-          template_name: 'New Template',
-          enhancer_model: 'sdxl',
-          use_case: 'enhancement',
+          ...defaults,
           content_mode: 'sfw',
-          system_prompt: 'Enter your system prompt here...',
           token_limit: 512,
           is_active: true,
           metadata: {}
@@ -310,11 +325,11 @@ export function PromptManagementTab() {
   };
 
   const getChatTemplates = () => {
-    return promptTemplates.filter(template => template.use_case.startsWith('chat_'));
+    return promptTemplates.filter(template => template.job_type === 'chat');
   };
 
   const getEnhancementTemplates = () => {
-    return promptTemplates.filter(template => !template.use_case.startsWith('chat_'));
+    return promptTemplates.filter(template => template.job_type !== 'chat');
   };
 
   const getFilteredChatTemplates = () => {
@@ -435,10 +450,10 @@ export function PromptManagementTab() {
         <TabsContent value="templates" className="space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium">
-              Enhancement Templates ({getFilteredTemplates().filter(t => !t.use_case.startsWith('chat_')).length})
+              Enhancement Templates ({getFilteredTemplates().filter(t => t.job_type !== 'chat').length})
             </span>
             <button
-              onClick={createTemplate}
+              onClick={() => createTemplate('enhancement')}
               disabled={isCreatingTemplate}
               className="text-xs text-blue-600 hover:text-blue-800 underline"
             >
@@ -447,7 +462,7 @@ export function PromptManagementTab() {
           </div>
 
           <PromptTemplatesTable
-            templates={getFilteredTemplates().filter(t => !t.use_case.startsWith('chat_'))}
+            templates={getFilteredTemplates().filter(t => t.job_type !== 'chat')}
             onUpdate={updateTemplate}
             onDelete={deleteTemplate}
             onTest={testPrompt}
@@ -462,10 +477,7 @@ export function PromptManagementTab() {
               Chat Templates ({getFilteredChatTemplates().length})
             </span>
             <button
-              onClick={() => {
-                createTemplate();
-                // Will need to modify the create function to set appropriate defaults for chat
-              }}
+              onClick={() => createTemplate('chat')}
               disabled={isCreatingTemplate}
               className="text-xs text-blue-600 hover:text-blue-800 underline"
             >
@@ -567,9 +579,9 @@ export function PromptManagementTab() {
                 <CardTitle className="text-sm font-medium">Chat Template Distribution</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {['chat_general', 'chat_roleplay', 'chat_creative', 'chat_admin', 'chat_sdxl_conversion'].map(useCase => {
+                {['roleplay', 'chat', 'creative', 'admin', 'general'].map(useCase => {
                   const count = getChatTemplates().filter(t => t.use_case === useCase).length;
-                  const displayName = useCase.replace('chat_', '').replace('_', ' ');
+                  const displayName = useCase.replace('_', ' ');
                   return (
                     <div key={useCase} className="flex justify-between">
                       <span className="capitalize text-xs">{displayName}</span>
