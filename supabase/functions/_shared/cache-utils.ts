@@ -219,7 +219,7 @@ export function getChatTemplateFromCache(
     const fallbackTemplate = cache.templateCache.chat[contentTier]['general'];
     if (fallbackTemplate) {
       console.log(`✅ Using fallback general chat template for ${contextType} (${contentTier})`);
-      return fallbackTemplate;
+      return fallbackTemplate.system_prompt;
     }
     
     console.warn(`⚠️ No chat template found for ${contextType} (${contentTier})`);
@@ -227,7 +227,7 @@ export function getChatTemplateFromCache(
   }
 
   console.log(`✅ Chat template found: ${chatType} (${contentTier})`);
-  return template;
+  return template.system_prompt;
 }
 
 /**
