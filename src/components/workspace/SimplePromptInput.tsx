@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Settings, Palette, Camera, Square, Volume2, Zap, X } from 'lucide-react';
-// Inline reference upload component (replaces deleted ReferenceImageUpload)
+import { Image, Video, Play, Settings, Palette, Camera, Square, Volume2, Zap, X, Cog } from 'lucide-react';
+
+// Inline reference upload component with LTX styling
 const ReferenceImageUpload: React.FC<{
   file: File | null;
   onFileChange: (file: File | null) => void;
   label: string;
-  // NEW: Support for URL-based reference images (for drag & drop from workspace)
   imageUrl?: string | null;
   onImageUrlChange?: (url: string | null) => void;
 }> = ({
@@ -21,7 +21,6 @@ const ReferenceImageUpload: React.FC<{
     const uploadedFile = event.target.files?.[0];
     if (uploadedFile) {
       onFileChange(uploadedFile);
-      // Clear URL if file is uploaded
       if (onImageUrlChange) {
         onImageUrlChange(null);
       }
@@ -58,7 +57,6 @@ const ReferenceImageUpload: React.FC<{
       if (onImageUrlChange) {
         onImageUrlChange(url);
       }
-      // Clear file if URL is dropped
       onFileChange(null);
       return;
     }
@@ -90,32 +88,31 @@ const ReferenceImageUpload: React.FC<{
 
   return (
     <div 
-      className={`border border-gray-600 p-2 h-16 py-0 px-0 rounded transition-colors ${
-        isDragOver ? 'border-blue-400 bg-blue-400/10' : ''
+      className={`border border-gray-600 rounded-lg overflow-hidden h-14 w-20 transition-all duration-200 ${
+        isDragOver ? 'border-blue-400 bg-blue-400/10 scale-105' : 'hover:border-gray-500'
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {displayImage ? (
-        <div className="relative">
+        <div className="relative w-full h-full">
           <img 
             src={displayImage} 
             alt={label} 
-            className="w-full h-12 object-cover rounded" 
+            className="w-full h-full object-cover" 
           />
           <button 
             onClick={clearReference} 
-            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors"
+            className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs transition-colors"
           >
             ×
           </button>
         </div>
       ) : (
-        <label className="cursor-pointer flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-white h-12 transition-colors">
-          <Image className="w-6 h-6" />
-          <span className="text-sm">{label}</span>
-          <span className="text-xs text-gray-500">Drop image here</span>
+        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-white transition-colors bg-gray-800/50 hover:bg-gray-700/50">
+          <Image className="w-4 h-4 mb-0.5" />
+          <span className="text-xs text-center leading-tight">{label}</span>
           <input 
             type="file" 
             accept="image/*" 
@@ -127,6 +124,259 @@ const ReferenceImageUpload: React.FC<{
     </div>
   );
 };
+
+// LTX-Style Advanced Controls Modal
+const AdvancedControlsModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  mode: 'image' | 'video';
+  // Image controls
+  aspectRatio?: '16:9' | '1:1' | '9:16';
+  onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
+  shotType?: 'wide' | 'medium' | 'close';
+  onShotTypeChange?: (type: 'wide' | 'medium' | 'close') => void;
+  cameraAngle?: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye';
+  onCameraAngleChange?: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
+  style?: string;
+  onStyleChange?: (style: string) => void;
+  styleRef?: File | null;
+  onStyleRefChange?: (file: File | null) => void;
+  // Video controls
+  videoDuration?: number;
+  onVideoDurationChange?: (duration: number) => void;
+  soundEnabled?: boolean;
+  onSoundToggle?: (enabled: boolean) => void;
+  motionIntensity?: number;
+  onMotionIntensityChange?: (intensity: number) => void;
+}> = ({
+  isOpen,
+  onClose,
+  mode,
+  aspectRatio = '16:9',
+  onAspectRatioChange,
+  shotType = 'wide',
+  onShotTypeChange,
+  cameraAngle = 'none',
+  onCameraAngleChange,
+  style = '',
+  onStyleChange,
+  styleRef,
+  onStyleRefChange,
+  videoDuration = 3,
+  onVideoDurationChange,
+  soundEnabled = false,
+  onSoundToggle,
+  motionIntensity = 0.5,
+  onMotionIntensityChange
+}) => {
+  if (!isOpen) return null;
+
+  // Style presets similar to LTX Studio
+  const stylePresets = [
+    { name: 'None', image: null, style: '' },
+    { name: 'Cinematic', image: null, style: 'cinematic lighting, film grain, dramatic composition' },
+    { name: 'Vintage', image: null, style: 'vintage photography, retro aesthetic, warm tones' },
+    { name: 'Low Key', image: null, style: 'low key lighting, dramatic shadows, high contrast' },
+    { name: 'Indy', image: null, style: 'indie film aesthetic, natural lighting, muted colors' },
+    { name: 'Y2K', image: null, style: 'Y2K aesthetic, digital glitch, cyber punk vibes' },
+    { name: 'Pop', image: null, style: 'pop art style, bright colors, high saturation' },
+    { name: 'Grunge', image: null, style: 'grunge aesthetic, rough textures, alternative style' },
+    { name: 'Dreamy', image: null, style: 'dreamy atmosphere, soft focus, ethereal lighting' },
+    { name: 'Hand Drawn', image: null, style: 'hand drawn illustration, sketch-like, artistic' },
+    { name: '2D Novel', image: null, style: '2D anime style, visual novel aesthetic' },
+    { name: 'Boost', image: null, style: 'enhanced details, sharp focus, vivid colors' }
+  ];
+
+  const cameraAngles = [
+    { value: 'none', label: 'None', icon: '◢' },
+    { value: 'eye_level', label: 'Eye level', icon: '👁️' },
+    { value: 'low_angle', label: 'Low angle', icon: '⬆️' },
+    { value: 'over_shoulder', label: 'Over shoulder', icon: '👤' },
+    { value: 'overhead', label: 'Overhead', icon: '⬇️' },
+    { value: 'bird_eye', label: 'Bird\'s eye', icon: '🦅' }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-gray-900 rounded-2xl border border-gray-700 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+          <h2 className="text-xl font-semibold text-white">Advanced Controls</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-white transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-8">
+          {/* Style Section */}
+          <div>
+            <h3 className="text-lg font-medium text-white mb-4">Style</h3>
+            
+            {/* Style Presets Grid */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
+              {stylePresets.map((preset) => (
+                <button
+                  key={preset.name}
+                  onClick={() => onStyleChange?.(preset.style)}
+                  className={`relative aspect-square rounded-lg border-2 transition-all ${
+                    style === preset.style
+                      ? 'border-blue-500 bg-blue-500/20'
+                      : 'border-gray-600 hover:border-gray-500'
+                  }`}
+                >
+                  {preset.image ? (
+                    <img 
+                      src={preset.image} 
+                      alt={preset.name}
+                      className="w-full h-full object-cover rounded-md"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-800 rounded-md flex items-center justify-center">
+                      <span className="text-xs text-gray-400">{preset.name}</span>
+                    </div>
+                  )}
+                  <span className="absolute bottom-1 left-1 text-xs font-medium text-white bg-black/60 px-1 rounded">
+                    {preset.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Style Input */}
+            <input
+              type="text"
+              value={style}
+              onChange={(e) => onStyleChange?.(e.target.value)}
+              placeholder="Custom style description..."
+              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Controls Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Aspect Ratio */}
+            <div>
+              <label className="block text-sm font-medium text-white mb-3">Aspect Ratio</label>
+              <div className="flex gap-2">
+                {['16:9', '1:1', '9:16'].map((ratio) => (
+                  <button
+                    key={ratio}
+                    onClick={() => onAspectRatioChange?.(ratio as any)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      aspectRatio === ratio
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {ratio}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Shot Type */}
+            <div>
+              <label className="block text-sm font-medium text-white mb-3">Shot Type</label>
+              <div className="flex gap-2">
+                {['wide', 'medium', 'close'].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => onShotTypeChange?.(type as any)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                      shotType === type
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Camera Angle */}
+            <div>
+              <label className="block text-sm font-medium text-white mb-3">Camera Angle</label>
+              <div className="grid grid-cols-3 gap-2">
+                {cameraAngles.map((angle) => (
+                  <button
+                    key={angle.value}
+                    onClick={() => onCameraAngleChange?.(angle.value as any)}
+                    className={`p-2 rounded-lg text-xs transition-colors ${
+                      cameraAngle === angle.value
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <div className="text-lg mb-1">{angle.icon}</div>
+                    <div>{angle.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Video-specific controls */}
+            {mode === 'video' && (
+              <>
+                {/* Video Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-3">Duration</label>
+                  <select 
+                    value={videoDuration}
+                    onChange={(e) => onVideoDurationChange?.(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={3}>3 seconds</option>
+                    <option value={5}>5 seconds</option>
+                    <option value={10}>10 seconds</option>
+                    <option value={15}>15 seconds</option>
+                  </select>
+                </div>
+
+                {/* Sound & Motion */}
+                <div>
+                  <label className="block text-sm font-medium text-white mb-3">Video Settings</label>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-300">Sound</span>
+                      <button
+                        onClick={() => onSoundToggle?.(!soundEnabled)}
+                        className={`w-12 h-6 rounded-full transition-colors ${
+                          soundEnabled ? 'bg-blue-600' : 'bg-gray-600'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
+                          soundEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                        }`} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-300">Motion Intensity</span>
+                      <button
+                        onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                          motionIntensity > 0.5
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 text-gray-300'
+                        }`}
+                      >
+                        {motionIntensity > 0.5 ? 'High' : 'Low'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface SimplePromptInputProps {
   prompt: string;
   onPromptChange: (prompt: string) => void;
@@ -138,7 +388,6 @@ interface SimplePromptInputProps {
   onGenerate: () => void;
   referenceImage: File | null;
   onReferenceImageChange: (file: File | null) => void;
-  // NEW: URL-based reference image support for drag & drop
   referenceImageUrl?: string | null;
   onReferenceImageUrlChange?: (url: string | null) => void;
   referenceStrength: number;
@@ -150,7 +399,6 @@ interface SimplePromptInputProps {
   endingRefImage?: File | null;
   onBeginningRefImageChange?: (file: File | null) => void;
   onEndingRefImageChange?: (file: File | null) => void;
-  // NEW: URL-based video reference image support
   beginningRefImageUrl?: string | null;
   endingRefImageUrl?: string | null;
   onBeginningRefImageUrlChange?: (url: string | null) => void;
@@ -161,7 +409,7 @@ interface SimplePromptInputProps {
   onMotionIntensityChange?: (intensity: number) => void;
   soundEnabled?: boolean;
   onSoundToggle?: (enabled: boolean) => void;
-  // NEW: Control parameters
+  // Control parameters
   aspectRatio?: '16:9' | '1:1' | '9:16';
   onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
   shotType?: 'wide' | 'medium' | 'close';
@@ -172,10 +420,11 @@ interface SimplePromptInputProps {
   onStyleChange?: (style: string) => void;
   styleRef?: File | null;
   onStyleRefChange?: (file: File | null) => void;
-  // NEW: Enhancement model selection
+  // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct') => void;
 }
+
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   prompt,
   onPromptChange,
@@ -187,7 +436,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onGenerate,
   referenceImage,
   onReferenceImageChange,
-  // NEW: URL-based reference image support
   referenceImageUrl,
   onReferenceImageUrlChange,
   referenceStrength,
@@ -198,7 +446,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   endingRefImage,
   onBeginningRefImageChange,
   onEndingRefImageChange,
-  // NEW: URL-based video reference image support
   beginningRefImageUrl,
   endingRefImageUrl,
   onBeginningRefImageUrlChange,
@@ -209,7 +456,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onMotionIntensityChange,
   soundEnabled = false,
   onSoundToggle,
-  // NEW: Control parameters with defaults
   aspectRatio = '16:9',
   onAspectRatioChange,
   shotType = 'wide',
@@ -220,12 +466,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onStyleChange,
   styleRef = null,
   onStyleRefChange,
-  // NEW: Enhancement model selection with defaults
   enhancementModel = 'qwen_instruct',
   onEnhancementModelChange
 }) => {
-  // State for angle popup
-  const [showAnglePopup, setShowAnglePopup] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isGenerating && prompt.trim()) {
@@ -233,248 +478,189 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Handle aspect ratio toggle
-  const handleAspectRatioToggle = () => {
-    if (!onAspectRatioChange) return;
-    const ratios: Array<'16:9' | '1:1' | '9:16'> = ['16:9', '1:1', '9:16'];
-    const currentIndex = ratios.indexOf(aspectRatio);
-    const nextIndex = (currentIndex + 1) % ratios.length;
-    onAspectRatioChange(ratios[nextIndex]);
-  };
-
-  // Handle shot type toggle
-  const handleShotTypeToggle = () => {
-    if (!onShotTypeChange) return;
-    const types: Array<'wide' | 'medium' | 'close'> = ['wide', 'medium', 'close'];
-    const currentIndex = types.indexOf(shotType);
-    const nextIndex = (currentIndex + 1) % types.length;
-    onShotTypeChange(types[nextIndex]);
-  };
-
-  // Handle camera angle selection
-  const handleCameraAngleSelect = (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => {
-    if (onCameraAngleChange) {
-      onCameraAngleChange(angle);
-    }
-    setShowAnglePopup(false);
-  };
-
-  // Handle enhancement model toggle
   const handleEnhancementModelToggle = () => {
     if (!onEnhancementModelChange) return;
     const newModel = enhancementModel === 'qwen_instruct' ? 'qwen_base' : 'qwen_instruct';
     onEnhancementModelChange(newModel);
   };
 
-  // Handle style input
-  const handleStyleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (onStyleChange) {
-      onStyleChange(e.target.value);
-    }
-  };
-
-  // Handle style reference upload
-  const handleStyleRefUpload = (file: File | null) => {
-    if (onStyleRefChange) {
-      onStyleRefChange(file);
-    }
-  };
-
-  // Camera angle options with display names
-  const cameraAngleOptions = [{
-    value: 'none',
-    label: 'None',
-    icon: '◢'
-  }, {
-    value: 'eye_level',
-    label: 'Eye level',
-    icon: '👁️'
-  }, {
-    value: 'low_angle',
-    label: 'Low angle',
-    icon: '⬆️'
-  }, {
-    value: 'over_shoulder',
-    label: 'Over the shoulder',
-    icon: '👤'
-  }, {
-    value: 'overhead',
-    label: 'Overhead',
-    icon: '⬇️'
-  }, {
-    value: 'bird_eye',
-    label: 'Bird\'s eye view',
-    icon: '🦅'
-  }];
-  return <>
-      {/* Bottom Floating Control Bar - Fixed Width Background */}
+  return (
+    <>
+      {/* LTX-Style Bottom Control Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center">
-        <div className="bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 px-2 py-1 w-[1040px]">
+        <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-t-2xl px-6 py-4 w-full max-w-5xl">
           
-          {/* Row 1: IMAGE button + Ref Box + Prompt Input + Generate - Full justified */}
-          <div className="flex items-center gap-3">
+          {/* Row 1: Mode Buttons + Reference + Prompt + Generate */}
+          <div className="flex items-center gap-4 mb-3">
             
-            {/* IMAGE Button - Left */}
-            <button onClick={() => onModeChange('image')} className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded text-xs font-medium transition-colors ${mode === 'image' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-              <Image size={16} />
-              IMAGE
-            </button>
+            {/* Mode Toggle - Pill Style */}
+            <div className="flex bg-gray-800 rounded-full p-1">
+              <button
+                onClick={() => onModeChange('image')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  mode === 'image'
+                    ? 'bg-blue-600 text-white shadow-lg'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                <Image size={16} />
+                Image
+              </button>
+              <button
+                onClick={() => onModeChange('video')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  mode === 'video'
+                    ? 'bg-blue-600 text-white shadow-lg'
+                    : 'text-gray-300 hover:text-white'
+                }`}
+              >
+                <Video size={16} />
+                Video
+              </button>
+            </div>
 
-            {/* Reference Image Box */}
-            <div className="flex items-center">
+            {/* Reference Image(s) */}
+            <div className="flex items-center gap-2">
               {mode === 'image' ? (
-                <ReferenceImageUpload 
-                  file={referenceImage} 
-                  onFileChange={onReferenceImageChange} 
+                <ReferenceImageUpload
+                  file={referenceImage}
+                  onFileChange={onReferenceImageChange}
                   imageUrl={referenceImageUrl}
                   onImageUrlChange={onReferenceImageUrlChange}
-                  label="Reference Image" 
+                  label="Reference"
                 />
               ) : (
-                // Video mode: Beginning and Ending ref image boxes
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col items-center gap-1">
-                    <ReferenceImageUpload 
-                      file={beginningRefImage || null} 
-                      onFileChange={onBeginningRefImageChange || (() => {})} 
-                      imageUrl={beginningRefImageUrl}
-                      onImageUrlChange={onBeginningRefImageUrlChange}
-                      label="Beginning" 
-                    />
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <ReferenceImageUpload 
-                      file={endingRefImage || null} 
-                      onFileChange={onEndingRefImageChange || (() => {})} 
-                      imageUrl={endingRefImageUrl}
-                      onImageUrlChange={onEndingRefImageUrlChange}
-                      label="Ending" 
-                    />
-                  </div>
-                </div>
+                <>
+                  <ReferenceImageUpload
+                    file={beginningRefImage || null}
+                    onFileChange={onBeginningRefImageChange || (() => {})}
+                    imageUrl={beginningRefImageUrl}
+                    onImageUrlChange={onBeginningRefImageUrlChange}
+                    label="Start"
+                  />
+                  <ReferenceImageUpload
+                    file={endingRefImage || null}
+                    onFileChange={onEndingRefImageChange || (() => {})}
+                    imageUrl={endingRefImageUrl}
+                    onImageUrlChange={onEndingRefImageUrlChange}
+                    label="End"
+                  />
+                </>
               )}
             </div>
 
-            {/* Prompt Window - Expanded textarea, 3 rows, black background */}
-            <div className="flex-1 flex justify-end">
-              <form onSubmit={handleSubmit} className="flex items-center gap-2 w-full">
-                <textarea value={prompt} onChange={e => onPromptChange(e.target.value)} placeholder="A close-up of a woman talking on the phone..." className="flex-1 h-16 py-2 px-3 bg-black border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent resize-none" rows={3} disabled={isGenerating} />
+            {/* Prompt Input - Maintained Size */}
+            <div className="flex-1">
+              <form onSubmit={handleSubmit} className="flex items-center gap-2">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => onPromptChange(e.target.value)}
+                  placeholder="A close-up of a woman talking on the phone..."
+                  className="flex-1 h-16 py-3 px-4 bg-black border border-gray-600 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={3}
+                  disabled={isGenerating}
+                />
                 
                 {/* Generate Button */}
-                <button type="submit" disabled={isGenerating || !prompt.trim()} className="p-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Generate">
-                  <Play size={16} />
+                <button
+                  type="submit"
+                  disabled={isGenerating || !prompt.trim()}
+                  className="h-16 w-16 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center shadow-lg"
+                  title="Generate"
+                >
+                  {isGenerating ? (
+                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Play size={20} />
+                  )}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* Row 2: VIDEO button (left) + Control buttons (right) - All same size, right justified */}
-          <div className="flex items-center justify-between gap-3 mt-2">
+          {/* Row 2: Controls */}
+          <div className="flex items-center justify-between">
             
-            {/* VIDEO Button - Left */}
-            <button onClick={() => onModeChange('video')} className={`flex flex-col items-center gap-0.5 px-3 py-2 rounded text-xs font-medium transition-colors ${mode === 'video' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-              <Video size={16} />
-              VIDEO
-            </button>
-
-            {/* Control Buttons - Right justified, all same size */}
+            {/* Left Side - Model Controls */}
             <div className="flex items-center gap-2">
-              
-              {/* SFW/NSFW Toggle */}
-              <button onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')} className={`px-3 py-2 rounded text-xs font-medium transition-colors ${contentType === 'sfw' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-                {contentType.toUpperCase()}
+              {/* SFW Toggle - NSFW-first design */}
+              <button
+                onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  contentType === 'sfw'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title="Safe for Work Mode"
+              >
+                SFW
               </button>
 
-              {/* Enhancement Model Toggle - NEW */}
-              <button onClick={handleEnhancementModelToggle} className={`px-3 py-2 rounded text-xs font-medium transition-colors ${enhancementModel === 'qwen_instruct' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Enhancement Model: ${enhancementModel === 'qwen_instruct' ? 'Qwen Instruct' : 'Qwen Base'}`}>
+              {/* Enhancement Model Selection */}
+              <button
+                onClick={handleEnhancementModelToggle}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  enhancementModel === 'qwen_instruct'
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-orange-600 text-white'
+                }`}
+                title={`Enhancement: ${enhancementModel === 'qwen_instruct' ? 'Instruct (Creative)' : 'Base (Literal)'}`}
+              >
                 {enhancementModel === 'qwen_instruct' ? 'Instruct' : 'Base'}
               </button>
+            </div>
 
-              {/* Mode-specific controls - All same size */}
-              {mode === 'image' ? <>
-                  {/* 16:9 Aspect Ratio - WIRED */}
-                  <button onClick={handleAspectRatioToggle} className={`px-3 py-2 rounded text-xs font-medium transition-colors ${aspectRatio === '16:9' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Aspect Ratio: ${aspectRatio}`}>
-                    {aspectRatio}
-                  </button>
-                  
-                  {/* Wide Button - WIRED */}
-                  <button onClick={handleShotTypeToggle} className={`px-3 py-2 rounded text-xs font-medium transition-colors ${shotType === 'wide' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Shot Type: ${shotType}`}>
-                    {shotType.charAt(0).toUpperCase() + shotType.slice(1)}
-                  </button>
-                  
-                  {/* Angle Button - NEW with popup */}
-                  <div className="relative">
-                    <button onClick={() => setShowAnglePopup(!showAnglePopup)} className={`px-3 py-2 rounded text-xs font-medium transition-colors flex items-center gap-1 ${cameraAngle !== 'none' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Camera Angle: ${cameraAngleOptions.find(opt => opt.value === cameraAngle)?.label || 'None'}`}>
-                      <Camera size={12} />
-                      Angle
-                    </button>
-                    
-                    {/* Angle Popup */}
-                    {showAnglePopup && <div className="absolute bottom-full right-0 mb-2 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-3 min-w-[280px]">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-sm font-medium text-white">Angle</h3>
-                          <button onClick={() => setShowAnglePopup(false)} className="text-gray-400 hover:text-white">
-                            <X size={16} />
-                          </button>
-                        </div>
-                        
-                        {/* 2x3 Grid of Angle Options */}
-                        <div className="grid grid-cols-3 gap-2">
-                          {cameraAngleOptions.map(option => <button key={option.value} onClick={() => handleCameraAngleSelect(option.value as any)} className={`p-2 rounded text-xs transition-colors ${cameraAngle === option.value ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>
-                              <div className="text-lg mb-1">{option.icon}</div>
-                              <div className="text-xs">{option.label}</div>
-                            </button>)}
-                        </div>
-                      </div>}
-                  </div>
-                  
-                  {/* Style - WIRED */}
-                  <div className="relative">
-                    <input type="text" value={style} onChange={handleStyleInput} placeholder="Style..." className="px-3 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent w-20" disabled={isGenerating} />
-                  </div>
-                  
-                  {/* Style Ref - WIRED */}
-                  <div className="relative">
-                    <input type="file" accept="image/*" onChange={e => handleStyleRefUpload(e.target.files?.[0] || null)} className="hidden" id="style-ref-upload" disabled={isGenerating} />
-                    <label htmlFor="style-ref-upload" className={`px-3 py-2 rounded text-xs font-medium transition-colors cursor-pointer ${styleRef ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={styleRef ? "Style Reference Set" : "Upload Style Reference"}>
-                      Style ref
-                    </label>
-                  </div>
-                </> : <>
-                  {/* Video Model Selector */}
-                  <select className="px-3 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
-                    <option>WAN 2.1</option>
-                  </select>
-                  
-                  {/* 16:9 Aspect Ratio - WIRED */}
-                  <button onClick={handleAspectRatioToggle} className={`px-3 py-2 rounded text-xs font-medium transition-colors ${aspectRatio === '16:9' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Aspect Ratio: ${aspectRatio}`}>
-                    {aspectRatio}
-                  </button>
-                  
-                  {/* Video Duration - WIRED */}
-                  <select className="px-3 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500" value={videoDuration} onChange={e => onVideoDurationChange?.(Number(e.target.value))}>
-                    <option value={3}>3s</option>
-                    <option value={5}>5s</option>
-                    <option value={10}>10s</option>
-                    <option value={15}>15s</option>
-                  </select>
-                  
-                  {/* Sound Toggle - WIRED */}
-                  <button onClick={() => onSoundToggle?.(!soundEnabled)} className={`px-3 py-2 rounded transition-colors ${soundEnabled ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title="Sound">
-                    <Volume2 size={14} />
-                  </button>
-                  
-                  {/* Motion Intensity - WIRED */}
-                  <button onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)} className={`px-3 py-2 rounded transition-colors ${motionIntensity > 0.5 ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`} title={`Motion Intensity: ${motionIntensity}`}>
-                    <Zap size={14} />
-                  </button>
-                </>}
+            {/* Right Side - Quick Controls + Advanced */}
+            <div className="flex items-center gap-2">
+              
+              {/* Mode-specific Quick Controls */}
+              {mode === 'video' && (
+                <>
+                  <span className="text-xs text-gray-400">WAN 2.1</span>
+                  <div className="w-px h-4 bg-gray-600" />
+                  <span className="text-xs text-gray-300">{videoDuration}s</span>
+                </>
+              )}
+              
+              {/* Advanced Controls Button */}
+              <button
+                onClick={() => setShowAdvanced(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 text-gray-300 rounded-full text-xs font-medium hover:bg-gray-600 transition-colors"
+                title="Advanced Controls"
+              >
+                <Cog size={12} />
+                Advanced
+              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom Spacer - Minimal height */}
-      <div className="h-20" />
-    </>;
+      {/* Advanced Controls Modal */}
+      <AdvancedControlsModal
+        isOpen={showAdvanced}
+        onClose={() => setShowAdvanced(false)}
+        mode={mode}
+        aspectRatio={aspectRatio}
+        onAspectRatioChange={onAspectRatioChange}
+        shotType={shotType}
+        onShotTypeChange={onShotTypeChange}
+        cameraAngle={cameraAngle}
+        onCameraAngleChange={onCameraAngleChange}
+        style={style}
+        onStyleChange={onStyleChange}
+        styleRef={styleRef}
+        onStyleRefChange={onStyleRefChange}
+        videoDuration={videoDuration}
+        onVideoDurationChange={onVideoDurationChange}
+        soundEnabled={soundEnabled}
+        onSoundToggle={onSoundToggle}
+        motionIntensity={motionIntensity}
+        onMotionIntensityChange={onMotionIntensityChange}
+      />
+
+      {/* Bottom Spacer */}
+      <div className="h-24" />
+    </>
+  );
 };
