@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Settings, Palette, Camera, Square, Volume2, Zap, X, Cog } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown } from 'lucide-react';
 
-// Inline reference upload component with LTX styling
+// Compact reference upload component
 const ReferenceImageUpload: React.FC<{
   file: File | null;
   onFileChange: (file: File | null) => void;
@@ -51,9 +51,9 @@ const ReferenceImageUpload: React.FC<{
       return;
     }
 
-    // Handle URL drops (from workspace images)
+    // Handle URL drops
     const url = e.dataTransfer.getData('text/plain');
-    if (url && url.startsWith('http') && (url.includes('.jpg') || url.includes('.png') || url.includes('.jpeg') || url.includes('.webp'))) {
+    if (url && url.startsWith('http')) {
       if (onImageUrlChange) {
         onImageUrlChange(url);
       }
@@ -61,7 +61,7 @@ const ReferenceImageUpload: React.FC<{
       return;
     }
 
-    // Handle custom data drops (from workspace items)
+    // Handle workspace item drops
     try {
       const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
       if (workspaceItem.url && workspaceItem.type === 'image') {
@@ -69,7 +69,6 @@ const ReferenceImageUpload: React.FC<{
           onImageUrlChange(workspaceItem.url);
         }
         onFileChange(null);
-        return;
       }
     } catch (error) {
       // Not a JSON drop, ignore
@@ -83,13 +82,12 @@ const ReferenceImageUpload: React.FC<{
     }
   };
 
-  // Show either file or URL image
   const displayImage = file ? URL.createObjectURL(file) : imageUrl;
 
   return (
     <div 
-      className={`border border-gray-600 rounded-lg overflow-hidden h-14 w-20 transition-all duration-200 ${
-        isDragOver ? 'border-blue-400 bg-blue-400/10 scale-105' : 'hover:border-gray-500'
+      className={`border border-gray-600 rounded h-12 w-16 transition-all duration-200 overflow-hidden ${
+        isDragOver ? 'border-blue-400 bg-blue-400/10' : ''
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -104,15 +102,15 @@ const ReferenceImageUpload: React.FC<{
           />
           <button 
             onClick={clearReference} 
-            className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs transition-colors"
+            className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
           >
             ×
           </button>
         </div>
       ) : (
-        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-white transition-colors bg-gray-800/50 hover:bg-gray-700/50">
-          <Image className="w-4 h-4 mb-0.5" />
-          <span className="text-xs text-center leading-tight">{label}</span>
+        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 hover:text-white transition-colors bg-gray-800/50">
+          <Camera className="w-3 h-3 mb-0.5" />
+          <span className="text-xs">{label}</span>
           <input 
             type="file" 
             accept="image/*" 
@@ -121,258 +119,6 @@ const ReferenceImageUpload: React.FC<{
           />
         </label>
       )}
-    </div>
-  );
-};
-
-// LTX-Style Advanced Controls Modal
-const AdvancedControlsModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  mode: 'image' | 'video';
-  // Image controls
-  aspectRatio?: '16:9' | '1:1' | '9:16';
-  onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
-  shotType?: 'wide' | 'medium' | 'close';
-  onShotTypeChange?: (type: 'wide' | 'medium' | 'close') => void;
-  cameraAngle?: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye';
-  onCameraAngleChange?: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
-  style?: string;
-  onStyleChange?: (style: string) => void;
-  styleRef?: File | null;
-  onStyleRefChange?: (file: File | null) => void;
-  // Video controls
-  videoDuration?: number;
-  onVideoDurationChange?: (duration: number) => void;
-  soundEnabled?: boolean;
-  onSoundToggle?: (enabled: boolean) => void;
-  motionIntensity?: number;
-  onMotionIntensityChange?: (intensity: number) => void;
-}> = ({
-  isOpen,
-  onClose,
-  mode,
-  aspectRatio = '16:9',
-  onAspectRatioChange,
-  shotType = 'wide',
-  onShotTypeChange,
-  cameraAngle = 'none',
-  onCameraAngleChange,
-  style = '',
-  onStyleChange,
-  styleRef,
-  onStyleRefChange,
-  videoDuration = 3,
-  onVideoDurationChange,
-  soundEnabled = false,
-  onSoundToggle,
-  motionIntensity = 0.5,
-  onMotionIntensityChange
-}) => {
-  if (!isOpen) return null;
-
-  // Style presets similar to LTX Studio
-  const stylePresets = [
-    { name: 'None', image: null, style: '' },
-    { name: 'Cinematic', image: null, style: 'cinematic lighting, film grain, dramatic composition' },
-    { name: 'Vintage', image: null, style: 'vintage photography, retro aesthetic, warm tones' },
-    { name: 'Low Key', image: null, style: 'low key lighting, dramatic shadows, high contrast' },
-    { name: 'Indy', image: null, style: 'indie film aesthetic, natural lighting, muted colors' },
-    { name: 'Y2K', image: null, style: 'Y2K aesthetic, digital glitch, cyber punk vibes' },
-    { name: 'Pop', image: null, style: 'pop art style, bright colors, high saturation' },
-    { name: 'Grunge', image: null, style: 'grunge aesthetic, rough textures, alternative style' },
-    { name: 'Dreamy', image: null, style: 'dreamy atmosphere, soft focus, ethereal lighting' },
-    { name: 'Hand Drawn', image: null, style: 'hand drawn illustration, sketch-like, artistic' },
-    { name: '2D Novel', image: null, style: '2D anime style, visual novel aesthetic' },
-    { name: 'Boost', image: null, style: 'enhanced details, sharp focus, vivid colors' }
-  ];
-
-  const cameraAngles = [
-    { value: 'none', label: 'None', icon: '◢' },
-    { value: 'eye_level', label: 'Eye level', icon: '👁️' },
-    { value: 'low_angle', label: 'Low angle', icon: '⬆️' },
-    { value: 'over_shoulder', label: 'Over shoulder', icon: '👤' },
-    { value: 'overhead', label: 'Overhead', icon: '⬇️' },
-    { value: 'bird_eye', label: 'Bird\'s eye', icon: '🦅' }
-  ];
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-900 rounded-2xl border border-gray-700 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">Advanced Controls</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
-          >
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-8">
-          {/* Style Section */}
-          <div>
-            <h3 className="text-lg font-medium text-white mb-4">Style</h3>
-            
-            {/* Style Presets Grid */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
-              {stylePresets.map((preset) => (
-                <button
-                  key={preset.name}
-                  onClick={() => onStyleChange?.(preset.style)}
-                  className={`relative aspect-square rounded-lg border-2 transition-all ${
-                    style === preset.style
-                      ? 'border-blue-500 bg-blue-500/20'
-                      : 'border-gray-600 hover:border-gray-500'
-                  }`}
-                >
-                  {preset.image ? (
-                    <img 
-                      src={preset.image} 
-                      alt={preset.name}
-                      className="w-full h-full object-cover rounded-md"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-800 rounded-md flex items-center justify-center">
-                      <span className="text-xs text-gray-400">{preset.name}</span>
-                    </div>
-                  )}
-                  <span className="absolute bottom-1 left-1 text-xs font-medium text-white bg-black/60 px-1 rounded">
-                    {preset.name}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Custom Style Input */}
-            <input
-              type="text"
-              value={style}
-              onChange={(e) => onStyleChange?.(e.target.value)}
-              placeholder="Custom style description..."
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Controls Section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Aspect Ratio */}
-            <div>
-              <label className="block text-sm font-medium text-white mb-3">Aspect Ratio</label>
-              <div className="flex gap-2">
-                {['16:9', '1:1', '9:16'].map((ratio) => (
-                  <button
-                    key={ratio}
-                    onClick={() => onAspectRatioChange?.(ratio as any)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      aspectRatio === ratio
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {ratio}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Shot Type */}
-            <div>
-              <label className="block text-sm font-medium text-white mb-3">Shot Type</label>
-              <div className="flex gap-2">
-                {['wide', 'medium', 'close'].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => onShotTypeChange?.(type as any)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
-                      shotType === type
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Camera Angle */}
-            <div>
-              <label className="block text-sm font-medium text-white mb-3">Camera Angle</label>
-              <div className="grid grid-cols-3 gap-2">
-                {cameraAngles.map((angle) => (
-                  <button
-                    key={angle.value}
-                    onClick={() => onCameraAngleChange?.(angle.value as any)}
-                    className={`p-2 rounded-lg text-xs transition-colors ${
-                      cameraAngle === angle.value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                    }`}
-                  >
-                    <div className="text-lg mb-1">{angle.icon}</div>
-                    <div>{angle.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Video-specific controls */}
-            {mode === 'video' && (
-              <>
-                {/* Video Duration */}
-                <div>
-                  <label className="block text-sm font-medium text-white mb-3">Duration</label>
-                  <select 
-                    value={videoDuration}
-                    onChange={(e) => onVideoDurationChange?.(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={3}>3 seconds</option>
-                    <option value={5}>5 seconds</option>
-                    <option value={10}>10 seconds</option>
-                    <option value={15}>15 seconds</option>
-                  </select>
-                </div>
-
-                {/* Sound & Motion */}
-                <div>
-                  <label className="block text-sm font-medium text-white mb-3">Video Settings</label>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-300">Sound</span>
-                      <button
-                        onClick={() => onSoundToggle?.(!soundEnabled)}
-                        className={`w-12 h-6 rounded-full transition-colors ${
-                          soundEnabled ? 'bg-blue-600' : 'bg-gray-600'
-                        }`}
-                      >
-                        <div className={`w-5 h-5 bg-white rounded-full transition-transform ${
-                          soundEnabled ? 'translate-x-6' : 'translate-x-0.5'
-                        }`} />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-300">Motion Intensity</span>
-                      <button
-                        onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
-                        className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                          motionIntensity > 0.5
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-700 text-gray-300'
-                        }`}
-                      >
-                        {motionIntensity > 0.5 ? 'High' : 'Low'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
@@ -450,7 +196,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   endingRefImageUrl,
   onBeginningRefImageUrlChange,
   onEndingRefImageUrlChange,
-  videoDuration = 3,
+  videoDuration = 5,
   onVideoDurationChange,
   motionIntensity = 0.5,
   onMotionIntensityChange,
@@ -469,8 +215,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   enhancementModel = 'qwen_instruct',
   onEnhancementModelChange
 }) => {
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isGenerating && prompt.trim()) {
@@ -478,44 +222,59 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  const handleEnhancementModelToggle = () => {
-    if (!onEnhancementModelChange) return;
-    const newModel = enhancementModel === 'qwen_instruct' ? 'qwen_base' : 'qwen_instruct';
-    onEnhancementModelChange(newModel);
+  const handleAspectRatioToggle = () => {
+    if (!onAspectRatioChange) return;
+    const ratios: Array<'16:9' | '1:1' | '9:16'> = ['16:9', '1:1', '9:16'];
+    const currentIndex = ratios.indexOf(aspectRatio);
+    const nextIndex = (currentIndex + 1) % ratios.length;
+    onAspectRatioChange(ratios[nextIndex]);
+  };
+
+  const handleShotTypeToggle = () => {
+    if (!onShotTypeChange) return;
+    const types: Array<'wide' | 'medium' | 'close'> = ['wide', 'medium', 'close'];
+    const currentIndex = types.indexOf(shotType);
+    const nextIndex = (currentIndex + 1) % types.length;
+    onShotTypeChange(types[nextIndex]);
+  };
+
+  const handleCameraAngleToggle = () => {
+    if (!onCameraAngleChange) return;
+    const angles: Array<'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye'> = 
+      ['none', 'eye_level', 'low_angle', 'over_shoulder', 'overhead', 'bird_eye'];
+    const currentIndex = angles.indexOf(cameraAngle);
+    const nextIndex = (currentIndex + 1) % angles.length;
+    onCameraAngleChange(angles[nextIndex]);
+  };
+
+  const handleStyleRefUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (onStyleRefChange) {
+      onStyleRefChange(file);
+    }
   };
 
   return (
     <>
-      {/* LTX-Style Bottom Control Bar */}
+      {/* Bottom Control Bar - Matching LTX Layout */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center">
-        <div className="bg-gray-900/95 backdrop-blur-sm border border-gray-700 rounded-t-2xl px-6 py-4 w-full max-w-5xl">
+        <div className="bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 px-3 py-2 w-full max-w-6xl">
           
-          {/* Row 1: Mode Buttons + Reference + Prompt + Generate */}
-          <div className="flex items-center gap-4 mb-3">
+          {/* Row 1: IMAGE button + Reference + Prompt + Generate */}
+          <div className="flex items-center gap-3 mb-2">
             
-            {/* Mode Toggle - Pill Style */}
-            <div className="flex bg-gray-800 rounded-full p-1">
+            {/* IMAGE Button (Stacked Mode Toggle) */}
+            <div className="flex flex-col">
               <button
                 onClick={() => onModeChange('image')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                   mode === 'image'
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-gray-300 hover:text-white'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
-                <Image size={16} />
-                Image
-              </button>
-              <button
-                onClick={() => onModeChange('video')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  mode === 'video'
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-gray-300 hover:text-white'
-                }`}
-              >
-                <Video size={16} />
-                Video
+                <Image size={12} />
+                IMAGE
               </button>
             </div>
 
@@ -527,7 +286,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   onFileChange={onReferenceImageChange}
                   imageUrl={referenceImageUrl}
                   onImageUrlChange={onReferenceImageUrlChange}
-                  label="Reference"
+                  label="Ref"
                 />
               ) : (
                 <>
@@ -549,15 +308,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               )}
             </div>
 
-            {/* Prompt Input - Maintained Size */}
+            {/* Prompt Input - Wider like LTX */}
             <div className="flex-1">
               <form onSubmit={handleSubmit} className="flex items-center gap-2">
                 <textarea
                   value={prompt}
                   onChange={(e) => onPromptChange(e.target.value)}
                   placeholder="A close-up of a woman talking on the phone..."
-                  className="flex-1 h-16 py-3 px-4 bg-black border border-gray-600 rounded-xl text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  rows={3}
+                  className="flex-1 h-12 py-2 px-3 bg-black border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                  rows={2}
                   disabled={isGenerating}
                 />
                 
@@ -565,102 +324,186 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <button
                   type="submit"
                   disabled={isGenerating || !prompt.trim()}
-                  className="h-16 w-16 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center shadow-lg"
-                  title="Generate"
+                  className="h-12 w-12 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                 >
                   {isGenerating ? (
-                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                   ) : (
-                    <Play size={20} />
+                    <Play size={16} />
                   )}
                 </button>
               </form>
             </div>
           </div>
 
-          {/* Row 2: Controls */}
-          <div className="flex items-center justify-between">
+          {/* Row 2: VIDEO button + Controls */}
+          <div className="flex items-center justify-between gap-3">
             
-            {/* Left Side - Model Controls */}
+            {/* VIDEO Button (Stacked) */}
+            <div className="flex flex-col">
+              <button
+                onClick={() => onModeChange('video')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                  mode === 'video'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <Video size={12} />
+                VIDEO
+              </button>
+            </div>
+
+            {/* Control Buttons - Right Side */}
             <div className="flex items-center gap-2">
-              {/* SFW Toggle - NSFW-first design */}
+              
+              {/* SFW Button */}
               <button
                 onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
                   contentType === 'sfw'
                     ? 'bg-green-600 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
-                title="Safe for Work Mode"
               >
                 SFW
               </button>
 
-              {/* Enhancement Model Selection */}
-              <button
-                onClick={handleEnhancementModelToggle}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  enhancementModel === 'qwen_instruct'
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-orange-600 text-white'
-                }`}
-                title={`Enhancement: ${enhancementModel === 'qwen_instruct' ? 'Instruct (Creative)' : 'Base (Literal)'}`}
-              >
-                {enhancementModel === 'qwen_instruct' ? 'Instruct' : 'Base'}
-              </button>
-            </div>
+              {/* Enhancement Model Dropdown */}
+              <div className="relative">
+                <select
+                  value={enhancementModel}
+                  onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct')}
+                  className="px-2 py-1 bg-gray-700 text-gray-300 border border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 appearance-none pr-6"
+                >
+                  <option value="qwen_instruct">Instruct</option>
+                  <option value="qwen_base">Base</option>
+                </select>
+                <ChevronDown size={10} className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
 
-            {/* Right Side - Quick Controls + Advanced */}
-            <div className="flex items-center gap-2">
-              
-              {/* Mode-specific Quick Controls */}
-              {mode === 'video' && (
+              {/* Mode-specific controls */}
+              {mode === 'image' ? (
                 <>
-                  <span className="text-xs text-gray-400">WAN 2.1</span>
-                  <div className="w-px h-4 bg-gray-600" />
-                  <span className="text-xs text-gray-300">{videoDuration}s</span>
+                  {/* 16:9 Button */}
+                  <button
+                    onClick={handleAspectRatioToggle}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      aspectRatio === '16:9'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {aspectRatio}
+                  </button>
+                  
+                  {/* Shot Type Button */}
+                  <button
+                    onClick={handleShotTypeToggle}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      shotType !== 'wide'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Shot Type
+                  </button>
+                  
+                  {/* Angle Button */}
+                  <button
+                    onClick={handleCameraAngleToggle}
+                    className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      cameraAngle !== 'none'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <Camera size={10} />
+                    Angle
+                  </button>
+                  
+                  {/* Style Input */}
+                  <input
+                    type="text"
+                    value={style}
+                    onChange={(e) => onStyleChange?.(e.target.value)}
+                    placeholder="Style"
+                    className="px-2 py-1 bg-gray-700 text-gray-300 border border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 w-16"
+                  />
+                  
+                  {/* Style Ref Upload */}
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleStyleRefUpload}
+                      className="hidden"
+                      id="style-ref-upload"
+                    />
+                    <label
+                      htmlFor="style-ref-upload"
+                      className={`px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
+                        styleRef
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      Style ref
+                    </label>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Video Model Label */}
+                  <span className="text-xs text-gray-400">LTX Turbo</span>
+                  
+                  {/* 16:9 Button */}
+                  <button
+                    onClick={handleAspectRatioToggle}
+                    className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      aspectRatio === '16:9'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {aspectRatio}
+                  </button>
+                  
+                  {/* 5s Duration (Static) */}
+                  <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs">5s</span>
+                  
+                  {/* Sound Button */}
+                  <button
+                    onClick={() => onSoundToggle?.(!soundEnabled)}
+                    className={`p-1 rounded transition-colors ${
+                      soundEnabled
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <Volume2 size={12} />
+                  </button>
+                  
+                  {/* Motion Intensity Button */}
+                  <button
+                    onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
+                    className={`p-1 rounded transition-colors ${
+                      motionIntensity > 0.5
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <Zap size={12} />
+                  </button>
                 </>
               )}
-              
-              {/* Advanced Controls Button */}
-              <button
-                onClick={() => setShowAdvanced(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-gray-700 text-gray-300 rounded-full text-xs font-medium hover:bg-gray-600 transition-colors"
-                title="Advanced Controls"
-              >
-                <Cog size={12} />
-                Advanced
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Advanced Controls Modal */}
-      <AdvancedControlsModal
-        isOpen={showAdvanced}
-        onClose={() => setShowAdvanced(false)}
-        mode={mode}
-        aspectRatio={aspectRatio}
-        onAspectRatioChange={onAspectRatioChange}
-        shotType={shotType}
-        onShotTypeChange={onShotTypeChange}
-        cameraAngle={cameraAngle}
-        onCameraAngleChange={onCameraAngleChange}
-        style={style}
-        onStyleChange={onStyleChange}
-        styleRef={styleRef}
-        onStyleRefChange={onStyleRefChange}
-        videoDuration={videoDuration}
-        onVideoDurationChange={onVideoDurationChange}
-        soundEnabled={soundEnabled}
-        onSoundToggle={onSoundToggle}
-        motionIntensity={motionIntensity}
-        onMotionIntensityChange={onMotionIntensityChange}
-      />
-
       {/* Bottom Spacer */}
-      <div className="h-24" />
+      <div className="h-20" />
     </>
   );
 };
