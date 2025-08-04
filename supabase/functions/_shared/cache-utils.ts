@@ -257,7 +257,7 @@ export async function getDatabaseTemplate(
   let query = supabase
     .from('prompt_templates')
     .select('*')
-    .eq('target_model', targetModel)
+    .is('target_model', targetModel)
     .eq('enhancer_model', enhancerModel)
     .eq('job_type', jobType)
     .eq('use_case', useCase)
@@ -276,7 +276,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .eq('target_model', targetModel)
+      .is('target_model', targetModel)
       .eq('enhancer_model', fallbackEnhancer)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
@@ -295,7 +295,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .eq('target_model', targetModel)
+      .is('target_model', targetModel)
       .eq('enhancer_model', enhancerModel)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
