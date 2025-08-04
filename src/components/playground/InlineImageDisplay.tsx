@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 interface InlineImageDisplayProps {
   assetId: string;
   imageUrl?: string;
+  bucket?: string;
   onExpand?: (imageUrl: string) => void;
 }
 
 export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
   assetId,
   imageUrl: providedImageUrl,
+  bucket: providedBucket,
   onExpand
 }) => {
   const { getSignedUrl, loading } = useSignedImageUrls();
@@ -35,7 +37,7 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
             setImageLoading(false); // Reset loading state for direct URLs
           } else {
             console.log('🔗 Converting storage path to signed URL:', providedImageUrl);
-            const url = await getSignedUrl(providedImageUrl);
+            const url = await getSignedUrl(providedImageUrl, providedBucket);
             if (url) {
               setImageUrl(url);
               setImageLoading(false); // Reset loading state after getting signed URL
@@ -45,7 +47,7 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
           }
         } else if (assetId) {
           console.log('🔗 Getting signed URL for asset:', assetId);
-          const url = await getSignedUrl(assetId);
+          const url = await getSignedUrl(assetId, providedBucket);
           if (url) {
             setImageUrl(url);
             setImageLoading(false);
@@ -74,7 +76,7 @@ export const InlineImageDisplay: React.FC<InlineImageDisplayProps> = ({
     }
 
     return () => clearTimeout(timeout);
-  }, [assetId, providedImageUrl, getSignedUrl]);
+  }, [assetId, providedImageUrl, providedBucket, getSignedUrl]);
 
   const handleImageLoad = () => {
     setImageLoading(false);
