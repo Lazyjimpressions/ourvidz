@@ -1,6 +1,6 @@
 # OurVidz.com - Codebase Index
 
-**Last Updated:** July 21, 2025
+**Last Updated:** August 4, 2025
 
 ---
 
@@ -16,6 +16,8 @@ OurVidz.com is an AI-powered platform for generating adult content videos and im
 - **NSFW-Capable**: Apache 2.0 licensed models, no content restrictions
 - **Preview-Approve Workflow**: User approval before final generation
 - **Mobile-First Design**: Optimized for modern usage patterns
+- **Workspace-First Generation**: Temporary staging area before library storage
+- **Dynamic Prompting System**: 12+ specialized templates for all models and use cases
 
 ---
 
@@ -34,27 +36,30 @@ Frontend:
 Backend (Supabase Online):
   Database: Supabase PostgreSQL (Online)
   Authentication: Supabase Auth (Online)
-  Storage: Supabase Storage (Online - 12 buckets)
+  Storage: Supabase Storage (Online - 13 buckets)
   Edge Functions: Deno runtime (Online)
   Queue: Upstash Redis (REST API)
 
 AI Workers (RunPod):
   Platform: RunPod RTX 6000 ADA (48GB VRAM)
   Models: SDXL Lustify (custom) + WAN 2.1 + Qwen 7B enhancement
-  Architecture: Dual worker system (dual_orchestrator.py)
+  Architecture: Triple worker system (dual_orchestrator.py)
   Location: Remote cloud deployment
 ```
 
-### **Dual Worker System**
-- **Orchestrator:** `dual_orchestrator.py` launches both SDXL and WAN workers, manages health, and sets up environment variables (`PYTHONPATH`, `HF_HOME`, etc.).
+### **Triple Worker System**
+- **Orchestrator:** `dual_orchestrator.py` launches SDXL, WAN, and Chat workers, manages health, and sets up environment variables.
 - **SDXL Worker:**
   - Model: SDXL Lustify (`/workspace/models/sdxl-lustify/lustifySDXLNSFWSFW_v20.safetensors`)
   - Compel integration is present and correctly implemented.
-  - In this deployment, enabling Compel with SDXL Lustify produces nonsense images, while prompt-only generation works fine. This may be a model compatibility issue specific to this SDXL Lustify version.
-  - The official SDXL 1.0 model is known to work with Compel, but has not been tested in this environment.
+  - In this deployment, enabling Compel with SDXL Lustify produces nonsense images, while prompt-only generation works fine.
 - **WAN Worker:**
   - Model: WAN 2.1
   - Qwen 7B enhancement for prompt improvement
+- **Chat Worker:**
+  - Model: Qwen 2.5-7B Instruct
+  - Flask API on Port 7861
+  - Handles chat, roleplay, and prompt enhancement
 
 ---
 
@@ -95,13 +100,51 @@ src/
 ```
 supabase/
 ├── functions/             # Edge functions (Supabase Online)
-│   ├── queue-job/        # Job creation and routing
-│   ├── job-callback/     # Job completion handling
-│   ├── enhance-prompt/   # Prompt enhancement service
-│   └── generate-admin-image/ # Admin image generation
-├── migrations/           # Database migrations
+│   ├── queue-job/        # Job creation and routing with workspace support
+│   ├── job-callback/     # Job completion handling with workspace routing
+│   ├── enhance-prompt/   # Dynamic prompt enhancement service
+│   ├── playground-chat/  # Chat functionality
+│   ├── delete-workspace-item/ # Workspace item deletion
+│   ├── refresh-prompt-cache/ # Template cache management
+│   └── _shared/          # Shared utilities (cache-utils.ts, monitoring.ts)
+├── migrations/           # Database migrations (60+ migrations)
 └── config.toml           # Supabase configuration
 ```
+
+---
+
+## 🧠 Dynamic Prompting System
+
+### **Template Categories (12+ Active Templates)**
+- **Enhancement Templates (6)**: SDXL/WAN × Qwen Base/Instruct × SFW/NSFW
+- **Chat Templates (3)**: General chat, roleplay, admin assistance
+- **Roleplay Templates (2)**: Fantasy and adult roleplay scenarios
+- **Creative Writing Templates (1)**: Adult content narrative development
+
+### **Template Features**
+- **Model-Specific Optimization**: Tailored for Qwen Base vs Instruct behaviors
+- **Content Mode Awareness**: Appropriate language for SFW/NSFW contexts
+- **Token Limit Enforcement**: Prevents CLIP truncation and ensures quality
+- **Professional Comments**: Design decisions documented for each template
+- **Version Control**: Template versioning and update tracking
+
+---
+
+## 🎯 Workspace-First System
+
+### **Core Features**
+- **Database-First Storage**: Workspace items stored in `workspace_items` table
+- **Session Management**: `workspace_sessions` table with active session tracking
+- **Job Routing**: `destination: 'workspace'` field in jobs table
+- **Real-time Updates**: WebSocket subscriptions for workspace items
+- **Selective Save**: User chooses which content to save to permanent library
+- **Auto-cleanup**: Automatic cleanup of old workspace items
+
+### **Workflow**
+1. **Generation**: Content goes to workspace first (temporary storage)
+2. **Display**: 2x3 grid for images, single row for videos
+3. **Selection**: User reviews and selects content to save
+4. **Persistence**: Selected content moved to permanent library
 
 ---
 
@@ -109,31 +152,33 @@ supabase/
 
 - **`RUNPOD_WORKSPACE_STRUCTURE.md`** documents all model, dependency, and code paths for the worker environment.
 - **`worker_api.md`** and **`API.md`** document all job payloads, edge function APIs, and callback formats.
+- **`11-PROMPTING_SYSTEM.md`** documents the dynamic prompting system with 12+ templates.
+- **`pages/01-WORKSPACE_PURPOSE.md`** documents the workspace-first implementation.
 - **All troubleshooting steps, environment checks, and known issues are documented.**
 
 ---
 
 ## 🔧 Key Components and Status
 
-- **PromptEnhancementModal.tsx:**
-  - Used for AI-powered prompt enhancement (via edge function)
-  - **Does NOT generate Compel weights**
-- **CompelModal.tsx:**
-  - Used for Compel prompt weighting controls (sliders, presets)
-  - Generates `compel_weights` string sent to backend
-- **queue-job edge function:**
-  - Handles job creation, negative prompt generation, and job queuing
-  - **No conflict with Compel, but negative prompt is always included for SDXL**
-- **job-callback edge function:**
-  - Handles job completion and updates Supabase
-- **SDXL Worker:**
-  - Compel integration is present and correctly implemented.
-  - In this deployment, enabling Compel with SDXL Lustify produces nonsense images, while prompt-only generation works fine. This may be a model compatibility issue specific to this SDXL Lustify version.
-  - The official SDXL 1.0 model is known to work with Compel, but has not been tested in this environment.
-- **WAN Worker:**
-  - Qwen 7B enhancement works as expected
+- **DynamicEnhancementOrchestrator:**
+  - Handles AI-powered prompt enhancement with template selection
+  - Supports multiple models (Qwen Base/Instruct) and content modes (SFW/NSFW)
+  - Includes fallback mechanisms and token optimization
+- **Workspace System:**
+  - Database-first implementation with real-time updates
+  - Session management and automatic cleanup
+  - Selective save to library functionality
+- **Edge Functions:**
+  - `enhance-prompt`: Dynamic prompt enhancement with template system
+  - `queue-job`: Job creation with workspace support
+  - `job-callback`: Job completion with workspace routing
+  - `delete-workspace-item`: Workspace item deletion
+  - `refresh-prompt-cache`: Template cache management
+- **Shared Utilities:**
+  - `cache-utils.ts`: Intelligent caching system for templates and prompts
+  - `monitoring.ts`: Performance tracking and error monitoring
 - **All dependencies and model paths are correct and documented**
-- **Dual orchestrator and worker environment are stable**
+- **Triple orchestrator and worker environment are stable**
 
 ---
 
@@ -142,7 +187,7 @@ supabase/
 - **In this deployment, enabling Compel with SDXL Lustify produces nonsense images, while prompt-only generation works fine.**
   - This may be a model compatibility issue specific to this SDXL Lustify version.
   - The official SDXL 1.0 model is known to work with Compel, but has not been tested in this environment.
-- **PromptEnhancementModal is for AI prompt enhancement, not Compel weights.**
+- **Workspace display issues**: Some frontend display problems with workspace items loading
 - **All troubleshooting steps and environment checks have been completed and documented.**
 
 ---
@@ -151,7 +196,8 @@ supabase/
 
 - **Frontend, backend, and worker code are up to date and stable.**
 - **All dependencies and model files are present and correct.**
-- **Prompt enhancement and prompt weighting are separate features.**
-- **Compel prompt weighting is only confirmed to work with official SDXL 1.0.**
+- **Dynamic prompting system with 12+ templates is fully implemented.**
+- **Workspace-first generation system is implemented with database support.**
 - **All edge functions and job flows are working as intended.**
-- **All troubleshooting and environment validation steps have been completed.** 
+- **All troubleshooting and environment validation steps have been completed.**
+- **Triple worker system (SDXL, WAN, Chat) is operational.** 

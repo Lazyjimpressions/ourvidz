@@ -1,6 +1,6 @@
 # AI Context Guide - OurVidz Documentation
 
-**Last Updated:** August 2, 2025  
+**Last Updated:** August 4, 2025  
 **Purpose:** Central navigation and context guide for AI assistants
 
 ## 🚀 Quick Start for AI
@@ -12,6 +12,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **AI Workers**: RunPod RTX 6000 ADA (48GB VRAM) - **Separate Repository**
 - **Architecture**: Triple worker system with job queuing and real-time status
 - **Workspace System**: Workspace-first generation flow with temporary staging
+- **Dynamic Prompting**: 12+ specialized templates for all models and use cases
 
 ### 🔗 Repository Structure
 
@@ -29,10 +30,12 @@ OurVidz.com is an AI-powered adult content generation platform with:
    │   ├── functions/         # Supabase Edge Functions
    │   │   ├── _shared/       # Shared utilities (cache-utils.ts, monitoring.ts)
    │   │   ├── queue-job/     # Job queuing with workspace support
-   │   │   ├── job-callback/  # Job completion handling
-   │   │   ├── enhance-prompt/ # AI prompt enhancement
-   │   │   └── playground-chat/ # Chat functionality
-   │   └── migrations/        # Database schema changes
+   │   │   ├── job-callback/  # Job completion handling with workspace routing
+   │   │   ├── enhance-prompt/ # Dynamic prompt enhancement with template system
+   │   │   ├── playground-chat/ # Chat functionality
+   │   │   ├── delete-workspace-item/ # Workspace item deletion
+   │   │   └── refresh-prompt-cache/ # Template cache management
+   │   └── migrations/        # Database schema changes (60+ migrations)
    ├── docs/                  # Documentation (this directory)
    └── scripts/               # Automation scripts
    ```
@@ -66,6 +69,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Models**: Stored inside container at `/workspace/models/` (not network storage)
 - **Worker Types**: SDXL/WAN (Redis queue workers), Chat (Flask API on Port 7861)
 - **Workspace System**: Temporary staging area before library storage
+- **Dynamic Prompting**: 12+ specialized templates for all models and use cases
 
 ## 📚 Documentation Navigation
 
@@ -117,8 +121,10 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 #### **Core Functions:**
 - **`queue-job`** - Creates and routes generation jobs with workspace support
 - **`job-callback`** - Handles job completion and routes to workspace/library
-- **`enhance-prompt`** - AI-powered prompt enhancement service
+- **`enhance-prompt`** - Dynamic prompt enhancement service with template system
 - **`playground-chat`** - Chat functionality for playground
+- **`delete-workspace-item`** - Workspace item deletion with storage cleanup
+- **`refresh-prompt-cache`** - Template cache management
 
 #### **Shared Utilities (`_shared/`):**
 - **`cache-utils.ts`** - Intelligent caching system
@@ -148,6 +154,7 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 5. **Model Storage**: Models are stored inside the RunPod container (persistent across restarts)
 6. **Documentation**: Update relevant docs in `docs/` directory (this repo)
 7. **Workspace System**: Understand workspace-first generation flow
+8. **Dynamic Prompting**: Understand template system and content modes
 
 ### **Key Technologies:**
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
@@ -155,7 +162,7 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 - **Edge Functions**: Deno runtime, TypeScript, shared utilities
 - **Workers**: Python, FastAPI, RunPod, RTX 6000 ADA
 - **AI Models**: SDXL, WAN, Qwen 2.5-7B Base/Instruct
-- **Prompting System**: 12 specialized templates for all models and use cases
+- **Prompting System**: 12+ specialized templates for all models and use cases
 - **Workspace System**: Temporary staging with session management
 
 ### **Important Notes:**
@@ -167,6 +174,8 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 - **Real-time system** - Uses WebSocket connections for job status
 - **Production focus** - All systems are production-ready
 - **Workspace-first flow** - Content generated to workspace first, then saved to library
+- **Triple worker system** - SDXL, WAN, and Chat workers orchestrated together
+- **Dynamic prompting** - Template-based system with SFW/NSFW content modes
 
 ## 🔧 Common Tasks for AI
 
@@ -216,33 +225,38 @@ npm run jsdoc:generate
 - ✅ Frontend deployed and running
 - ✅ Supabase backend operational
 - ✅ Edge Functions deployed and active
-- ✅ Worker system active on RunPod
+- ✅ Triple worker system active on RunPod
 - ✅ Real-time job queuing working
 - ✅ Admin portal functional
 - ✅ **Workspace-first generation system implemented**
+- ✅ **Dynamic prompting system with 12+ templates implemented**
 
-### **Recent Updates (August 2, 2025):**
+### **Recent Updates (August 4, 2025):**
+- **Dynamic Prompting System**: 12+ specialized templates for all models and use cases
+- **Triple Worker System**: SDXL, WAN, and Chat workers orchestrated together
 - **Workspace-First Implementation**: Complete workspace generation flow
 - **Database Schema**: New workspace_sessions and workspace_items tables
 - **Edge Functions**: Updated queue-job and job-callback for workspace support
 - **Shared Utilities**: Intelligent caching and monitoring systems implemented
 - **Component Refactoring**: Simplified workspace components and state management
 - **Frontend Integration**: New workspace pages and hooks
-- Dynamic Prompting System implemented (12 specialized templates)
 - JSDoc automation system implemented
 - Documentation consolidation in progress
 - Worker system optimized for performance
 
 ### **Current Architecture:**
+- **Triple Worker System**: SDXL, WAN, and Chat workers with orchestration
 - **Workspace System**: Temporary staging area for generated content
 - **Session Management**: User workspace sessions with automatic cleanup
 - **Library Integration**: Save selected items from workspace to permanent library
 - **Real-time Updates**: Live generation status and workspace updates
 - **Mobile Support**: Responsive workspace interface for all devices
 - **Edge Functions**: Comprehensive backend API with caching and monitoring
+- **Dynamic Prompting**: Template-based system with content mode awareness
 
 ---
 
 **For detailed information about specific systems, refer to the numbered documentation files above.**  
 **For API details, see [03-API.md](./03-API.md) - Complete Edge Functions API**  
-**For worker details, see [06-WORKER_API.md](./06-WORKER_API.md) - Worker API Specifications** 
+**For worker details, see [06-WORKER_API.md](./06-WORKER_API.md) - Worker API Specifications**  
+**For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md) - Dynamic Prompting System** 

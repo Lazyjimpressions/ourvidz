@@ -1,6 +1,6 @@
 # Supabase Environment Output
 
-**Generated:** August 2, 2025  
+**Generated:** August 4, 2025  
 **Project:** OurVidz.com  
 **Environment:** Production  
 **PRD Version:** v3.0
@@ -32,8 +32,8 @@
 | **Database Schema** | | |
 | Tables | Total Tables | 22 |
 | Functions | Total Functions | 20 |
-| Migrations | Total Migrations | 60 |
-| Performance | Indexes Count | 80 |
+| Migrations | Total Migrations | 65+ |
+| Performance | Indexes Count | 80+ |
 | **Data Statistics** | | |
 | Data Stats | Characters Count | 0 |
 | Data Stats | Conversations Count | 20 |
@@ -69,7 +69,7 @@
 
 ## 🎯 **Workspace-First System**
 
-### **New Database Tables (August 2, 2025)**
+### **New Database Tables (August 4, 2025)**
 
 #### **workspace_sessions**
 ```sql
@@ -157,6 +157,13 @@ CREATE OR REPLACE FUNCTION public.clear_workspace_session(
 ) RETURNS BOOLEAN;
 ```
 
+#### **link_workspace_items_to_jobs**
+```sql
+-- Links workspace items to jobs based on session_id and timing
+CREATE OR REPLACE FUNCTION public.link_workspace_items_to_jobs()
+RETURNS INTEGER;
+```
+
 ### **Workspace System Indexes**
 - `idx_workspace_sessions_user_id` - User session lookup
 - `idx_workspace_sessions_active` - Active session filtering
@@ -164,6 +171,8 @@ CREATE OR REPLACE FUNCTION public.clear_workspace_session(
 - `idx_workspace_items_job_id` - Job association lookup
 - `idx_workspace_items_user_id` - User items lookup
 - `idx_workspace_items_status` - Status filtering
+- `idx_workspace_items_job_id_session` - Job and session lookup
+- `idx_workspace_items_user_created` - User items by creation time
 - `idx_jobs_destination` - Workspace/library routing
 - `idx_jobs_workspace_session` - Session association
 
@@ -172,10 +181,10 @@ CREATE OR REPLACE FUNCTION public.clear_workspace_session(
 ## 🧠 **Dynamic Prompting System**
 
 ### **Prompt Templates Overview**
-- **Total Templates:** 12 active templates
+- **Total Templates:** 12+ active templates
 - **Coverage:** All models (SDXL, WAN, Qwen Base/Instruct) × All use cases (enhancement, chat, roleplay, admin)
 - **Content Modes:** SFW and NSFW variants for appropriate use cases
-- **Token Limits:** Enforced per template (75-1000 tokens)
+- **Token Limits:** Enforced per template (75-2048 tokens)
 
 ### **Template Categories**
 
@@ -197,17 +206,24 @@ WAN Enhancement:
 #### **Chat Templates (3)**
 ```yaml
 General Chat:
-  - Chat Assistant – Qwen Instruct (NSFW): 600 tokens, flirtatious conversation
-  - Chat Assistant – Qwen Instruct (SFW): 400 tokens, helpful assistant
+  - Qwen Instruct General Chat (NSFW): 2048 tokens, flirtatious conversation
+  - Qwen Instruct General Chat (SFW): 2048 tokens, helpful assistant
 
 Specialized:
-  - Admin Assistant – Qwen Instruct: 400 tokens, technical prompt analysis
+  - Qwen Instruct Admin Assistant: 2048 tokens, technical prompt analysis
 ```
 
-#### **Roleplay Template (1)**
+#### **Roleplay Templates (2)**
 ```yaml
-Immersive Roleplay:
-  - Qwen Instruct Roleplay Fantasy: 1000 tokens, erotic roleplay scenes
+Fantasy Roleplay:
+  - Qwen Instruct Roleplay Fantasy: 2048 tokens, immersive fantasy storytelling
+  - Qwen Instruct Roleplay Adult: 2048 tokens, adult roleplay scenarios
+```
+
+#### **Creative Writing Template (1)**
+```yaml
+Creative Writing:
+  - Qwen Instruct Creative Writing: 2048 tokens, adult content narrative development
 ```
 
 ### **Template Features**
@@ -224,17 +240,20 @@ Immersive Roleplay:
 ### **Active Functions**
 - **queue-job:** ✅ Active (JWT verification enabled) - Job submission and routing with workspace support
 - **job-callback:** ✅ Active (JWT verification disabled) - Worker callback processing with workspace routing
-- **enhance-prompt:** ✅ Active - AI prompt enhancement service
+- **enhance-prompt:** ✅ Active - Dynamic prompt enhancement service with template system
 - **generate-admin-image:** ✅ Active (Admin bypass) - Admin image generation
 - **get-active-worker-url:** ✅ Active - Worker URL management
 - **register-chat-worker:** ✅ Active - Chat worker registration
 - **update-worker-url:** ✅ Active - Worker URL updates
 - **playground-chat:** ✅ Active - Chat playground functionality
 - **validate-enhancement-fix:** ✅ Active - Enhancement validation
+- **delete-workspace-item:** ✅ Active - Workspace item deletion with storage cleanup
+- **refresh-prompt-cache:** ✅ Active - Template cache management
 
 ### **Workspace System Integration**
 - **queue-job:** Creates workspace sessions, routes jobs to workspace or library
 - **job-callback:** Routes completed jobs to workspace_items or images/videos tables
+- **delete-workspace-item:** Deletes workspace items and associated storage files
 - **Real-time Updates:** Workspace items update in real-time via WebSocket
 
 ---
@@ -277,8 +296,8 @@ Configuration:
   - compel_configs: Compel weight configurations
   - prompt_ab_tests: A/B testing framework
 
-Prompting System:
-  - prompt_templates: 12 active templates for dynamic prompting
+Prompting System (NEW):
+  - prompt_templates: 12+ active templates for dynamic prompting
   - negative_prompts: SDXL negative prompt configurations
 ```
 
@@ -347,6 +366,7 @@ app_role: 'admin' | 'moderator' | 'premium_user' | 'basic_user' | 'guest'
 - `clean_orphaned_jobs()` - Database maintenance
 - `create_workspace_session()` - Secure workspace session creation
 - `save_workspace_item_to_library()` - Secure item migration
+- `link_workspace_items_to_jobs()` - Secure job linking
 
 ---
 
@@ -374,11 +394,12 @@ RUNPOD_ENDPOINT_ID=[endpoint_id]
 ```
 
 ### **Migration Status**
-- **Latest Migration:** 20250802000000 (Workspace system implementation)
-- **Total Migrations Applied:** 60
+- **Latest Migration:** 20250803165333 (Workspace system improvements)
+- **Total Migrations Applied:** 65+
 - **Schema Version:** Current and up-to-date
 - **All Migrations:** Successfully applied and validated
 - **Workspace System:** ✅ Fully implemented and operational
+- **Dynamic Prompting:** ✅ Fully implemented with 12+ templates
 
 ### **Real-time Configuration**
 - **Enabled Tables:** images, videos, jobs, conversations, messages, workspace_items
@@ -391,7 +412,7 @@ RUNPOD_ENDPOINT_ID=[endpoint_id]
 ## 📊 **System Health Indicators**
 
 ### **Database Performance**
-- **80 Optimized Indexes** for query performance
+- **80+ Optimized Indexes** for query performance
 - **RLS Policies Optimized** for performance (consolidated from multiple permissive policies)
 - **Foreign Key Indexes** added to resolve Library page performance issues
 - **Orphaned Job Cleanup** function implemented
@@ -412,4 +433,4 @@ RUNPOD_ENDPOINT_ID=[endpoint_id]
 
 ---
 
-*This file provides a quick reference for Supabase infrastructure state as of August 2, 2025. For detailed architecture information, see [02-ARCHITECTURE.md](./02-ARCHITECTURE.md). For worker system details, see [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md). For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md). For workspace system details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md).*
+*This file provides a quick reference for Supabase infrastructure state as of August 4, 2025. For detailed architecture information, see [02-ARCHITECTURE.md](./02-ARCHITECTURE.md). For worker system details, see [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md). For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md). For workspace system details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md).*
