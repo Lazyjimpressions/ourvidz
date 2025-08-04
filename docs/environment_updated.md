@@ -67,7 +67,7 @@
 
 ---
 
-## 🎯 **Workspace-First System**
+## 🎯 **LTX-Style Workspace System**
 
 ### **New Database Tables (August 4, 2025)**
 
@@ -87,7 +87,7 @@ CREATE TABLE public.workspace_sessions (
 
 #### **workspace_items**
 ```sql
--- Temporary workspace content items
+-- Temporary workspace content items with LTX-style status management
 CREATE TABLE public.workspace_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id UUID NOT NULL REFERENCES public.workspace_sessions(id) ON DELETE CASCADE,
@@ -113,8 +113,8 @@ CREATE TABLE public.workspace_items (
   reference_image_url TEXT,
   reference_strength DECIMAL(3,2),
   
-  -- Status and metadata
-  status TEXT DEFAULT 'generated' CHECK (status IN ('generating', 'generated', 'failed', 'saved')),
+  -- Status and metadata (LTX-style: dismiss vs delete)
+  status TEXT DEFAULT 'generated' CHECK (status IN ('generating', 'generated', 'failed', 'saved', 'dismissed')),
   metadata JSONB DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -128,7 +128,7 @@ ALTER TABLE public.jobs ADD COLUMN destination TEXT DEFAULT 'library' CHECK (des
 ALTER TABLE public.jobs ADD COLUMN workspace_session_id UUID REFERENCES public.workspace_sessions(id) ON DELETE SET NULL;
 ```
 
-### **Workspace System Functions**
+### **LTX-Style Workspace System Functions**
 
 #### **create_workspace_session**
 ```sql
@@ -164,13 +164,13 @@ CREATE OR REPLACE FUNCTION public.link_workspace_items_to_jobs()
 RETURNS INTEGER;
 ```
 
-### **Workspace System Indexes**
+### **LTX-Style Workspace System Indexes**
 - `idx_workspace_sessions_user_id` - User session lookup
 - `idx_workspace_sessions_active` - Active session filtering
 - `idx_workspace_items_session_id` - Session items lookup
 - `idx_workspace_items_job_id` - Job association lookup
 - `idx_workspace_items_user_id` - User items lookup
-- `idx_workspace_items_status` - Status filtering
+- `idx_workspace_items_status` - Status filtering (including 'dismissed')
 - `idx_workspace_items_job_id_session` - Job and session lookup
 - `idx_workspace_items_user_created` - User items by creation time
 - `idx_jobs_destination` - Workspace/library routing
@@ -250,7 +250,7 @@ Creative Writing:
 - **delete-workspace-item:** ✅ Active - Workspace item deletion with storage cleanup
 - **refresh-prompt-cache:** ✅ Active - Template cache management
 
-### **Workspace System Integration**
+### **LTX-Style Workspace System Integration**
 - **queue-job:** Creates workspace sessions, routes jobs to workspace or library
 - **job-callback:** Routes completed jobs to workspace_items or images/videos tables
 - **delete-workspace-item:** Deletes workspace items and associated storage files
@@ -274,9 +274,9 @@ Content Generation:
   - conversations: Chat conversations (20 records)
   - messages: Chat messages (191 records)
 
-Workspace System (NEW):
+LTX-Style Workspace System (NEW):
   - workspace_sessions: Temporary user workspace sessions
-  - workspace_items: Temporary workspace content items
+  - workspace_items: Temporary workspace content items with dismiss/delete status
 
 Project Management:
   - projects: Project organization (23 records)
@@ -313,8 +313,8 @@ Prompting System (NEW):
 - **Registered Users:** 1
 - **Active Projects:** 23
 - **Usage Log Entries:** 4,169
-- **Workspace Sessions:** 0 (new system)
-- **Workspace Items:** 0 (new system)
+- **Workspace Sessions:** 0 (new LTX-style system)
+- **Workspace Items:** 0 (new LTX-style system)
 
 ### **Job Types Supported (10 Total)**
 ```yaml
@@ -398,7 +398,7 @@ RUNPOD_ENDPOINT_ID=[endpoint_id]
 - **Total Migrations Applied:** 65+
 - **Schema Version:** Current and up-to-date
 - **All Migrations:** Successfully applied and validated
-- **Workspace System:** ✅ Fully implemented and operational
+- **LTX-Style Workspace System:** ✅ Fully implemented and operational
 - **Dynamic Prompting:** ✅ Fully implemented with 12+ templates
 
 ### **Real-time Configuration**
@@ -433,4 +433,29 @@ RUNPOD_ENDPOINT_ID=[endpoint_id]
 
 ---
 
-*This file provides a quick reference for Supabase infrastructure state as of August 4, 2025. For detailed architecture information, see [02-ARCHITECTURE.md](./02-ARCHITECTURE.md). For worker system details, see [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md). For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md). For workspace system details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md).*
+## 🆕 **Recent Updates (August 4, 2025)**
+
+### **LTX-Style Workspace Refactoring**
+- **Job-Level Grouping**: Items grouped by `job_id` for logical organization
+- **Thumbnail Selector**: Right-side navigation with job thumbnails
+- **Hover-to-Delete**: Delete entire jobs by hovering over thumbnails
+- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
+- **Storage Path Normalization**: Fixed signed URL generation across all components
+- **Legacy Component Cleanup**: Removed old workspace system (6 files deleted)
+- **Code Reduction**: 718 lines of code removed (net reduction)
+
+### **Frontend Improvements**
+- **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping
+- **ContentCard.tsx**: Individual cards with dismiss/delete actions
+- **useSimplifiedWorkspaceState.ts**: State management with LTX features
+- **SimplifiedWorkspace.tsx**: Refactored to use new LTX-style components
+
+### **Backend Enhancements**
+- **Storage Path Normalization**: Helper function for consistent signed URL generation
+- **Enhanced Logging**: Detailed logging for debugging storage issues
+- **Status Management**: Support for 'dismissed' status in workspace items
+- **Job-Level Actions**: Dismiss and delete entire jobs at once
+
+---
+
+*This file provides a quick reference for Supabase infrastructure state as of August 4, 2025. For detailed architecture information, see [02-ARCHITECTURE.md](./02-ARCHITECTURE.md). For worker system details, see [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md). For prompting system details, see [11-PROMPTING_SYSTEM.md](./11-PROMPTING_SYSTEM.md). For LTX-style workspace system details, see [pages/01-WORKSPACE_PURPOSE.md](./pages/01-WORKSPACE_PURPOSE.md).*
