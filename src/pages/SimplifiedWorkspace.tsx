@@ -1,8 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { SessionWorkspace } from '@/components/workspace/SessionWorkspace';
+import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
 import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
-import { useJobWorkspace } from '@/hooks/useJobWorkspace';
 import { useActiveWorkspaceSession } from '@/hooks/useActiveWorkspaceSession';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
@@ -15,13 +14,18 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
  * - Unified component architecture
  * - Mobile-responsive design
  * - Real-time workspace updates
+ * - Job-level grouping with streamlined UI
+ * - LTX-style job thumbnail selector
  * 
  * @returns {JSX.Element} Rendered workspace page
  */
 export const SimplifiedWorkspace: React.FC = () => {
   const state = useSimplifiedWorkspaceState();
   const { sessionId, loading: sessionLoading } = useActiveWorkspaceSession();
-  const jobWorkspace = useJobWorkspace(sessionId);
+  
+  // Job selection state
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [deletingJobs, setDeletingJobs] = useState<Set<string>>(new Set());
   
   const {
     // Core State
@@ -53,7 +57,6 @@ export const SimplifiedWorkspace: React.FC = () => {
     isGenerating,
     workspaceItems,
     workspaceJobs,
-    activeJobId,
     lightboxIndex,
     
     // Actions
@@ -77,15 +80,17 @@ export const SimplifiedWorkspace: React.FC = () => {
     generate,
     clearWorkspace,
     deleteItem,
+    dismissItem,
     setLightboxIndex,
     // Job-level actions
     selectJob,
     deleteJob,
     saveJob,
     useJobAsReference,
+    dismissJob,
   } = state;
 
-  // Simple workspace management handlers
+  // Workspace management handlers
   const handleEditItem = (item: WorkspaceItem) => {
     // TODO: Implement edit functionality
     console.log('Edit item:', item);
@@ -116,6 +121,55 @@ export const SimplifiedWorkspace: React.FC = () => {
     console.log('Use seed:', item);
   };
 
+  // Job-level deletion handler
+  const handleDeleteJob = async (jobId: string) => {
+    setDeletingJobs(prev => new Set(prev).add(jobId));
+    
+    try {
+      await deleteJob(jobId);
+      
+      // Clear active job if it was deleted
+      if (activeJobId === jobId) {
+        setActiveJobId(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete job:', error);
+    } finally {
+      setDeletingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
+
+  // Job-level dismiss handler
+  const handleDismissJob = async (jobId: string) => {
+    setDeletingJobs(prev => new Set(prev).add(jobId));
+    
+    try {
+      await dismissJob(jobId);
+      
+      // Clear active job if it was dismissed
+      if (activeJobId === jobId) {
+        setActiveJobId(null);
+      }
+    } catch (error) {
+      console.error('Failed to dismiss job:', error);
+    } finally {
+      setDeletingJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(jobId);
+        return newSet;
+      });
+    }
+  };
+
+  // Job selection handler
+  const handleJobSelect = (jobId: string | null) => {
+    setActiveJobId(jobId);
+  };
+
   // Show loading state while session is being resolved
   if (sessionLoading || !sessionId) {
     return (
@@ -135,16 +189,24 @@ export const SimplifiedWorkspace: React.FC = () => {
       
       {/* Main Content Area */}
       <div className="pt-12 pb-32">
-        <SessionWorkspace
-          jobs={jobWorkspace.jobs}
-          onJobSelect={jobWorkspace.selectJob}
-          onJobDelete={jobWorkspace.deleteJob}
-          onJobSave={jobWorkspace.saveJob}
-          onJobUseAsReference={jobWorkspace.useJobAsReference}
-          onJobImport={() => Promise.resolve()} // No longer needed
-          activeJobId={jobWorkspace.activeJobId}
-          isDeleting={new Set()} // TODO: Track deleting state
-        />
+        <div className="container mx-auto px-4 py-8">
+          <WorkspaceGrid
+            items={workspaceItems}
+            onEdit={handleEditItem}
+            onSave={handleSaveItem}
+            onDelete={(item: WorkspaceItem) => deleteItem(item.id)}
+            onDismiss={(item: WorkspaceItem) => dismissItem(item.id)}
+            onView={handleViewItem}
+            onDownload={handleDownload}
+            onUseAsReference={handleUseAsReference}
+            onUseSeed={handleUseSeed}
+            onDeleteJob={handleDeleteJob}
+            onDismissJob={handleDismissJob}
+            isDeleting={new Set()} // TODO: Track deleting state
+            activeJobId={activeJobId}
+            onJobSelect={handleJobSelect}
+          />
+        </div>
       </div>
 
       {/* Simple Prompt Input */}

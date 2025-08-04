@@ -140,15 +140,21 @@ const OptimizedLibrary = () => {
       }
       
       try {
+        // FIX: Clean storage path - remove bucket prefix if present
+        let cleanPath = path;
+        if (cleanPath.startsWith(`${bucket}/`)) {
+          cleanPath = cleanPath.replace(`${bucket}/`, '');
+        }
+        
         const { data, error } = await supabase.storage
           .from(bucket)
-          .createSignedUrl(path, 3600);
+          .createSignedUrl(cleanPath, 3600);
         
         if (data?.signedUrl) {
           results.push(data.signedUrl);
           newUrls[cacheKey] = data.signedUrl;
         } else {
-          console.warn(`Failed to generate signed URL for ${path} in ${bucket}:`, error);
+          console.warn(`Failed to generate signed URL for ${cleanPath} in ${bucket}:`, error);
         }
       } catch (error) {
         console.error(`Error generating signed URL for ${path}:`, error);

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Image, Play, Edit, Save, Trash2, Download, Eye } from "lucide-react";
+import { Image, Play, Edit, Save, Trash2, Download, Eye, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContentCardProps {
@@ -22,6 +22,7 @@ interface ContentCardProps {
   onEdit: () => void;
   onSave: () => void;
   onDelete: () => void;
+  onDismiss?: () => void;
   onView: () => void;
   onDownload?: () => void;
   onUseAsReference?: () => void;
@@ -36,6 +37,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   onEdit,
   onSave,
   onDelete,
+  onDismiss,
   onView,
   onDownload,
   onUseAsReference,
@@ -148,6 +150,27 @@ export const ContentCard: React.FC<ContentCardProps> = ({
               )}
             </div>
 
+            {/* Dismiss Button */}
+            {onDismiss && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
+                      onClick={(e) => handleActionClick(e, onDismiss)}
+                    >
+                      <X className={iconSize[size]} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Hide from workspace</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Delete Button */}
             <TooltipProvider>
               <Tooltip>
@@ -167,7 +190,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Remove from workspace</p>
+                  <p>Delete permanently</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

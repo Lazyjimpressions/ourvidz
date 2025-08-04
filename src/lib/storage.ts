@@ -173,24 +173,30 @@ export const getSignedUrl = async (
       return { data: { signedUrl: cachedUrl }, error: null };
     }
 
+    // FIX: Clean storage path - remove bucket prefix if present
+    let cleanPath = filePath;
+    if (cleanPath.startsWith(`${bucket}/`)) {
+      cleanPath = cleanPath.replace(`${bucket}/`, '');
+    }
+
     // PHASE 2: Direct Supabase call with exact bucket+path from database
     const { data, error } = await supabase.storage
       .from(bucket)
-      .createSignedUrl(filePath, expiresIn);
+      .createSignedUrl(cleanPath, expiresIn);
 
     if (error) {
-      console.error(`❌ Supabase error for ${bucket}/${filePath.slice(0, 30)}...:`, error.message);
+      console.error(`❌ Supabase error for ${bucket}/${cleanPath.slice(0, 30)}...:`, error.message);
       return { data: null, error };
     }
 
     if (!data?.signedUrl) {
-      console.error(`❌ No signed URL returned for ${bucket}/${filePath.slice(0, 30)}...`);
+      console.error(`❌ No signed URL returned for ${bucket}/${cleanPath.slice(0, 30)}...`);
       return { data: null, error: new Error('No signed URL returned') };
     }
 
     // Cache successful result
     urlCache.set(bucket, filePath, data.signedUrl, expiresIn);
-    console.log(`✅ Generated signed URL for: ${bucket}/${filePath.slice(0, 30)}...`);
+    console.log(`✅ Generated signed URL for: ${bucket}/${cleanPath.slice(0, 30)}...`);
     
     return { data, error: null };
     

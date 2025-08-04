@@ -8,6 +8,17 @@ import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+/**
+ * Normalize storage path by removing bucket name prefix
+ * Fixes signed URL generation when storage_path contains bucket prefix
+ */
+const normalizeStoragePath = (storagePath: string, bucketName: string): string => {
+  if (storagePath.startsWith(`${bucketName}/`)) {
+    return storagePath.replace(`${bucketName}/`, '');
+  }
+  return storagePath;
+};
+
 export interface WorkspaceItem {
   id: string;
   url: string;
@@ -25,7 +36,7 @@ export interface WorkspaceItem {
   jobId?: string; // Reference to job this item belongs to
   sessionId?: string; // Reference to session this item belongs to
   bucketName?: string; // Storage bucket for signed URL generation
-  status?: 'generated' | 'saved' | 'deleted'; // Item status
+  status?: 'generated' | 'saved' | 'deleted' | 'dismissed'; // Item status
 }
 
 export interface WorkspaceJob {
@@ -94,12 +105,18 @@ export interface SimplifiedWorkspaceActions {
   generate: () => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
+  dismissItem: (id: string) => Promise<void>;
   setLightboxIndex: (index: number | null) => void;
   // Job-level actions
   selectJob: (jobId: string) => void;
   deleteJob: (jobId: string) => Promise<void>;
+  dismissJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
+  // Helper functions
+  getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
+  getActiveJob: () => WorkspaceJob | null;
+  getJobById: (jobId: string) => WorkspaceJob | null;
   // importJob removed - not needed
   // Legacy item actions for mobile compatibility
   editItem?: (item: WorkspaceItem) => void;
@@ -183,7 +200,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           .from('workspace_items' as any)
           .select('*')
           .eq('user_id', user.id)
-          .neq('status', 'deleted') // Show all items except deleted
+          .not('status', 'in', '(deleted,dismissed)') // Show all items except deleted and dismissed
           .order('created_at', { ascending: false }) as { data: any[] | null, error: any };
 
         if (error) {
@@ -223,7 +240,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             sessionId: item.session_id,
             // PHASE 2 FIX: Add bucket hint for signed URL generation
             bucketName: item.bucket_name,
-            status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
+            status: item.status as 'generated' | 'saved' | 'deleted' | 'dismissed' || 'generated'
           };
 
           if (!jobMap.has(jobId)) {
@@ -261,14 +278,23 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           // Generate signed URL if we have storage path and bucket
           if (item.storage_path && item.bucket_name && !displayUrl.startsWith('http')) {
             try {
-          console.log(`🔐 WORKSPACE LOAD: Generating signed URL for item ${item.id}:`, {
+              console.log(`🔐 WORKSPACE LOAD: Generating signed URL for item ${item.id}:`, {
                 bucket: item.bucket_name,
                 path: item.storage_path
               });
               
+              // FIX: Clean storage path - remove bucket prefix if present
+              const cleanPath = normalizeStoragePath(item.storage_path, item.bucket_name);
+              
+              console.log(`🔐 WORKSPACE LOAD: Path normalization for item ${item.id}:`, {
+                originalPath: item.storage_path,
+                cleanPath: cleanPath,
+                bucket: item.bucket_name
+              });
+              
               const { data: urlData, error } = await supabase.storage
                 .from(item.bucket_name)
-                .createSignedUrl(item.storage_path, 3600);
+                .createSignedUrl(cleanPath, 3600);
               
               if (urlData?.signedUrl && !error) {
                 displayUrl = urlData.signedUrl;
@@ -296,7 +322,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
             jobId: item.job_id,
             sessionId: item.session_id,
             bucketName: item.bucket_name,
-            status: item.status as 'generated' | 'saved' | 'deleted' || 'generated'
+            status: item.status as 'generated' | 'saved' | 'deleted' | 'dismissed' || 'generated'
           };
         }));
         
@@ -359,9 +385,19 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                     bucketValid: ['sdxl_image_high', 'sdxl_image_fast', 'image_high', 'image_fast'].includes(newItem.bucket_name)
                   });
                   
+                  // FIX: Clean storage path - remove bucket prefix if present
+                  const cleanPath = normalizeStoragePath(newItem.storage_path, newItem.bucket_name);
+                  
+                  console.log('🔐 WORKSPACE REALTIME: Path normalization for NEW item:', {
+                    itemId: newItem.id,
+                    originalPath: newItem.storage_path,
+                    cleanPath: cleanPath,
+                    bucket: newItem.bucket_name
+                  });
+
                   const { data: urlData, error } = await supabase.storage
                     .from(newItem.bucket_name)
-                    .createSignedUrl(newItem.storage_path, 3600);
+                    .createSignedUrl(cleanPath, 3600);
                   
                   if (urlData?.signedUrl && !error) {
                     signedUrl = urlData.signedUrl;
@@ -412,7 +448,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
                 jobId: newItem.job_id,
                 sessionId: newItem.session_id,
                 bucketName: newItem.bucket_name,
-                status: newItem.status as 'generated' | 'saved' | 'deleted' || 'generated'
+                status: newItem.status as 'generated' | 'saved' | 'deleted' | 'dismissed' || 'generated'
               };
               
               console.log('➕ WORKSPACE REALTIME: Adding item to workspace items');
@@ -709,6 +745,38 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     }
   }, [toast]);
 
+  const dismissItem = useCallback(async (itemId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('👋 WORKSPACE: Dismissing item:', itemId);
+
+      const { error } = await supabase
+        .from('workspace_items' as any)
+        .update({ status: 'dismissed' })
+        .eq('id', itemId)
+        .eq('user_id', user.id);
+        
+      if (error) throw error;
+
+      // Update local state immediately
+      setWorkspaceItems(prev => prev.filter(item => item.id !== itemId));
+
+      toast({
+        title: "Item Dismissed",
+        description: "Item removed from workspace",
+      });
+    } catch (error) {
+      console.error('❌ WORKSPACE: Dismiss failed:', error);
+      toast({
+        title: "Dismiss Failed",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   const saveItem = useCallback(async (itemId: string) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -760,6 +828,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     if (!job) return;
 
     try {
+      console.log(`🗑️ WORKSPACE: Deleting job ${jobId} with ${job.items.length} items`);
+      
       // Delete all items in the job
       await Promise.all(job.items.map(item => deleteItem(item.id)));
       
@@ -771,8 +841,52 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
         const remainingJobs = workspaceJobs.filter(j => j.id !== jobId);
         setActiveJobId(remainingJobs.length > 0 ? remainingJobs[0].id : null);
       }
+      
+      toast({
+        title: "Job Deleted",
+        description: `Removed ${job.items.length} items from workspace`,
+      });
     } catch (error) {
       console.error('Error deleting job:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete job. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // NEW: Job-level dismiss functionality (LTX-style)
+  const dismissJob = async (jobId: string) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    try {
+      console.log(`👋 WORKSPACE: Dismissing job ${jobId} with ${job.items.length} items`);
+      
+      // Dismiss all items in the job (hide from workspace, keep in storage)
+      await Promise.all(job.items.map(item => dismissItem(item.id)));
+      
+      // Remove job from state
+      setWorkspaceJobs(prev => prev.filter(j => j.id !== jobId));
+      
+      // If this was the active job, select another one
+      if (activeJobId === jobId) {
+        const remainingJobs = workspaceJobs.filter(j => j.id !== jobId);
+        setActiveJobId(remainingJobs.length > 0 ? remainingJobs[0].id : null);
+      }
+      
+      toast({
+        title: "Job Dismissed",
+        description: `Hidden ${job.items.length} items from workspace`,
+      });
+    } catch (error) {
+      console.error('Error dismissing job:', error);
+      toast({
+        title: "Dismiss Failed",
+        description: "Failed to dismiss job. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -797,6 +911,31 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     const firstItem = job.items[0];
     // TODO: Set reference image from URL
     console.log('Using job as reference:', firstItem.url);
+  };
+
+  // NEW: Helper functions for job management
+  const getJobStats = () => {
+    const totalJobs = workspaceJobs.length;
+    const totalItems = workspaceItems.length;
+    const readyJobs = workspaceJobs.filter(job => job.status === 'ready').length;
+    const pendingJobs = workspaceJobs.filter(job => job.status === 'pending').length;
+    
+    return {
+      totalJobs,
+      totalItems,
+      readyJobs,
+      pendingJobs,
+      hasActiveJob: !!activeJobId
+    };
+  };
+
+  const getActiveJob = () => {
+    if (!activeJobId) return null;
+    return workspaceJobs.find(job => job.id === activeJobId) || null;
+  };
+
+  const getJobById = (jobId: string) => {
+    return workspaceJobs.find(job => job.id === jobId) || null;
   };
 
   // Removed importJob - not needed since images are already in library
@@ -855,12 +994,18 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     generate,
     clearWorkspace,
     deleteItem,
+    dismissItem,
     setLightboxIndex,
     // Job-level actions
     selectJob,
     deleteJob,
+    dismissJob,
     saveJob,
     useJobAsReference,
+    // Helper functions
+    getJobStats,
+    getActiveJob,
+    getJobById,
     // importJob removed - not needed
     // Legacy actions for mobile compatibility
     editItem: (item: WorkspaceItem) => console.log('Edit item:', item),

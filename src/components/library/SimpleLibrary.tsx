@@ -143,14 +143,20 @@ const SimpleLibrary = () => {
   // Generate signed URL for a single path
   const generateSignedUrl = useCallback(async (path: string, bucket: string): Promise<string | null> => {
     try {
+      // FIX: Clean storage path - remove bucket prefix if present
+      let cleanPath = path;
+      if (cleanPath.startsWith(`${bucket}/`)) {
+        cleanPath = cleanPath.replace(`${bucket}/`, '');
+      }
+      
       const { data, error } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(path, 3600); // 1 hour expiry
+        .createSignedUrl(cleanPath, 3600); // 1 hour expiry
       
       if (data?.signedUrl) {
         return data.signedUrl;
       } else {
-        console.warn(`Failed to generate signed URL for ${path} in ${bucket}:`, error);
+        console.warn(`Failed to generate signed URL for ${cleanPath} in ${bucket}:`, error);
         return null;
       }
     } catch (error) {

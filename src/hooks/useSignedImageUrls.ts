@@ -41,20 +41,26 @@ const useSignedImageUrls = () => {
 
       console.log(`🔍 Generating signed URL for path: "${path}" in bucket: "${bucket}"`);
 
+      // FIX: Clean storage path - remove bucket prefix if present
+      let cleanPath = path;
+      if (cleanPath.startsWith(`${bucket}/`)) {
+        cleanPath = cleanPath.replace(`${bucket}/`, '');
+      }
+
       // Direct signed URL generation using exact bucket and path
       const { data, error } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(path, 3600); // 1 hour expiry
+        .createSignedUrl(cleanPath, 3600); // 1 hour expiry
 
       if (!error && data?.signedUrl) {
-        console.log(`✅ Success: Generated signed URL for "${path}" in bucket "${bucket}"`);
+        console.log(`✅ Success: Generated signed URL for "${cleanPath}" in bucket "${bucket}"`);
         return data.signedUrl;
       }
       
       if (error) {
         console.error(`❌ Failed to generate signed URL: ${error.message}`, {
           bucket,
-          path,
+          path: cleanPath,
           error
         });
         setError(`Failed to generate signed URL: ${error.message}`);
