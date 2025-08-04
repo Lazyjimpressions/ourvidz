@@ -4,14 +4,20 @@ import { WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
 
 interface WorkspaceGridProps {
   items: WorkspaceItem[];
+  // LTX-Style Actions
+  onIterate?: (item: WorkspaceItem) => void;
+  onCreateVideo?: (item: WorkspaceItem) => void;
+  onDownload: (item: WorkspaceItem) => void;
+  onExpand?: (item: WorkspaceItem) => void;
+  // Legacy Actions (for compatibility)
   onEdit: (item: WorkspaceItem) => void;
   onSave: (item: WorkspaceItem) => void;
   onDelete: (item: WorkspaceItem) => void;
   onDismiss?: (item: WorkspaceItem) => void;
   onView: (item: WorkspaceItem) => void;
-  onDownload: (item: WorkspaceItem) => void;
   onUseAsReference: (item: WorkspaceItem) => void;
   onUseSeed: (item: WorkspaceItem) => void;
+  // Job-level Actions
   onDeleteJob?: (jobId: string) => void;
   onDismissJob?: (jobId: string) => void;
   isDeleting: Set<string>;
@@ -21,14 +27,20 @@ interface WorkspaceGridProps {
 
 export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   items,
+  // LTX-Style Actions
+  onIterate,
+  onCreateVideo,
+  onDownload,
+  onExpand,
+  // Legacy Actions
   onEdit,
   onSave,
   onDelete,
   onDismiss,
   onView,
-  onDownload,
   onUseAsReference,
   onUseSeed,
+  // Job-level Actions
   onDeleteJob,
   onDismissJob,
   isDeleting,
@@ -48,15 +60,17 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     }, {} as Record<string, WorkspaceItem[]>);
   }, [items]);
 
-  // Get grid class based on number of items
+  // LTX-Style Grid Class - Larger images for desktop with clean spacing
   const getGridClass = (itemCount: number) => {
+    // Desktop-first approach with larger images
     if (itemCount === 1) return 'grid-cols-1';
-    if (itemCount === 2) return 'grid-cols-2';
-    if (itemCount === 3) return 'grid-cols-3';
-    if (itemCount === 4) return 'grid-cols-2 md:grid-cols-4';
-    if (itemCount === 5) return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5';
-    if (itemCount === 6) return 'grid-cols-2 md:grid-cols-3';
-    return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8';
+    if (itemCount === 2) return 'grid-cols-1 md:grid-cols-2';
+    if (itemCount === 3) return 'grid-cols-1 md:grid-cols-3';
+    if (itemCount === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
+    if (itemCount === 5) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5';
+    if (itemCount === 6) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'; // Classic 2x3 grid
+    // For larger sets, maintain elegant spacing
+    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
   };
 
   // Filter jobs based on active selection
@@ -86,28 +100,31 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         {/* Job Groups */}
         {Object.entries(displayJobs).map(([jobId, jobItems]) => (
           <div key={jobId} className="job-group mb-8">
-            {/* Job header with delete option */}
-            <div className="flex items-center justify-between mb-2 px-2">
-              <span className="text-sm text-gray-400">
-                {jobItems[0]?.prompt?.substring(0, 50)}...
-              </span>
-              {onDeleteJob && (
-                <button 
-                  onClick={() => onDeleteJob(jobId)}
-                  className="text-red-400 hover:text-red-300 text-sm px-2 py-1 rounded transition-colors"
-                  disabled={isDeleting.has(jobId)}
-                >
-                  {isDeleting.has(jobId) ? 'Deleting...' : 'Delete Job'}
-                </button>
-              )}
+            {/* Job header - Clean, minimal design like LTX */}
+            <div className="flex items-center justify-between mb-4 px-2">
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-300 font-medium">
+                  {jobItems[0]?.prompt?.substring(0, 60)}...
+                </span>
+                <span className="text-xs text-gray-500 mt-1">
+                  {jobItems.length} image{jobItems.length !== 1 ? 's' : ''} • {new Date(jobItems[0]?.timestamp || Date.now()).toLocaleTimeString()}
+                </span>
+              </div>
+              {/* No delete job text button - use hover icons on thumbnails instead */}
             </div>
             
-            {/* Dynamic grid: 1x3 for 3 images, 2x3 for 6 images */}
-            <div className={`grid gap-2 px-2 ${getGridClass(jobItems.length)}`}>
+            {/* LTX-Style Dynamic Grid - Larger images with clean spacing */}
+            <div className={`grid gap-4 px-2 ${getGridClass(jobItems.length)}`}>
               {jobItems.map((item) => (
                 <ContentCard
                   key={item.id}
                   item={item}
+                  // LTX-Style Actions (TODO: Update ContentCard to support these)
+                  // onIterate={onIterate ? () => onIterate(item) : undefined}
+                  // onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                  // onDownload={() => onDownload(item)}
+                  // onExpand={onExpand ? () => onExpand(item) : undefined}
+                  // Legacy Actions (for compatibility)
                   onEdit={() => onEdit(item)}
                   onSave={() => onSave(item)}
                   onDelete={() => onDelete(item)}
@@ -117,7 +134,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   onUseAsReference={() => onUseAsReference(item)}
                   onUseSeed={() => onUseSeed(item)}
                   isDeleting={isDeleting.has(item.id)}
-                  size="md"
+                  size="lg" // Larger size for LTX-style
                 />
               ))}
             </div>
@@ -157,7 +174,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   )}
                 </div>
 
-                {/* Hover Delete Button */}
+                {/* Hover Delete/Dismiss Buttons - Small, clean like LTX */}
                 {hoveredJob === jobId && (onDeleteJob || onDismissJob) && (
                   <div className="absolute -top-1 -right-1 flex gap-1">
                     {onDismissJob && (
@@ -166,7 +183,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                           e.stopPropagation();
                           onDismissJob(jobId);
                         }}
-                        className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                        className="w-5 h-5 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
                         disabled={isDeleting.has(jobId)}
                         title="Dismiss job (hide from workspace)"
                       >
@@ -179,7 +196,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                           e.stopPropagation();
                           onDeleteJob(jobId);
                         }}
-                        className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                        className="w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
                         disabled={isDeleting.has(jobId)}
                         title="Delete job permanently"
                       >
