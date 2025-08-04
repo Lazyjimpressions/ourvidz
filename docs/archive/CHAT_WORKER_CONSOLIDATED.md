@@ -1,41 +1,22 @@
 # Chat Worker System - Consolidated Documentation
 
 **Last Updated:** July 30, 2025  
-**Status:** ✅ Production Ready - Simplified Chat Worker with NSFW Optimization  
-**System:** Triple Worker (SDXL + Chat + WAN) on RTX 6000 ADA (48GB VRAM)
+**Status:** ✅ **PRODUCTION READY - Pure Inference Engine Architecture**  
+**Version:** 2.0 (Pure Inference Engine)
 
----
+## 🎯 **NEW ARCHITECTURE OVERVIEW**
 
-## 🎯 **Overview**
+The Chat Worker has been **completely refactored** to be a **pure inference engine** that respects all system prompts sent from the edge function without any override logic.
 
-The Chat Worker has been simplified and optimized with core features for prompt enhancement, dynamic system prompts, unrestricted mode detection, and NSFW optimization. This consolidated documentation covers all aspects of the current chat worker system.
+### **Key Architectural Changes**
+- **Before**: Worker contained prompt logic, content filtering, and could override system prompts
+- **After**: Worker is a pure inference engine that uses whatever system prompt is provided
 
----
-
-## 🚀 **Key Features**
-
-### **1. Dynamic System Prompt Support**
-- **Custom System Prompts**: Override default prompts for each conversation
-- **Context-Aware Responses**: Automatic context detection and appropriate prompting
-- **Flexible Integration**: Support for custom system prompts per request
-
-### **2. Unrestricted Mode Detection**
-- **Automatic Detection**: Detects adult content requests automatically
-- **Explicit Keywords**: Recognizes "unrestricted mode", "adult mode", "nsfw mode"
-- **Content Analysis**: Analyzes prompts for adult content indicators
-- **Dedicated Endpoint**: Direct access via `/chat/unrestricted`
-
-### **3. NSFW Optimization**
-- **Zero Content Restrictions**: No filtering, sanitization, or moderation
-- **Anatomical Accuracy**: Emphasizes realistic proportions and natural poses
-- **Professional Standards**: Maintains high-quality adult content generation
-- **Unrestricted Processing**: Processes all prompts without censorship
-
-### **4. Simplified Prompt Enhancement System**
-- **Direct Qwen Instruct Enhancement**: Uses Qwen 2.5-7B Instruct model directly
-- **Dynamic System Prompts**: Model-specific prompts for SDXL and WAN
-- **Quality Levels**: Fast and high quality modes
-- **Memory Management**: OOM handling with retry logic
+### **Benefits of New Architecture**
+- ✅ **Predictable behavior**: Same system prompt always produces same results
+- ✅ **No prompt overrides**: Worker never modifies provided prompts
+- ✅ **Clear separation of concerns**: Edge function handles logic, worker handles inference
+- ✅ **Easier debugging**: Issues can be traced to either edge function or worker clearly
 
 ---
 
@@ -43,36 +24,63 @@ The Chat Worker has been simplified and optimized with core features for prompt 
 
 ### **Primary Chat Endpoints**
 
-#### `/chat` (POST)
-**Purpose**: General conversational chat with dynamic system prompts
+#### `/chat` (POST) ⭐ **UPDATED - Single Endpoint for All Chat**
+**Purpose**: Unified chat endpoint for all conversations (SFW and NSFW). Worker respects all system prompts without modification.
+
 ```json
 {
   "message": "Tell me a story about a magical forest",
   "system_prompt": "You are a creative storyteller specializing in fantasy tales.",
-  "conversation_id": "story_001"
+  "conversation_id": "story_001",
+  "context_type": "roleplay",  // "roleplay", "general", "creative", "admin"
+  "conversation_history": [
+    {"sender": "user", "content": "Previous message", "created_at": "2025-07-30T10:00:00Z"},
+    {"sender": "assistant", "content": "Previous response", "created_at": "2025-07-30T10:00:01Z"}
+  ],
+  "project_id": "project_456"  // Optional
 }
 ```
 
 **Response:**
 ```json
 {
-  "success": true,
   "response": "Once upon a time, in a mystical forest...",
-  "generation_time": 2.3,
-  "conversation_id": "story_001",
-  "context_type": "general",
-  "message_id": "msg_1234567890",
-  "system_prompt_used": true,
-  "unrestricted_mode": false
+  "conversation_history": [...],
+  "system_prompt_used": "You are a creative storyteller specializing in fantasy tales.",
+  "model_info": {
+    "model_name": "Qwen2.5-7B-Instruct",
+    "model_loaded": true
+  },
+  "processing_time": 2.3
 }
 ```
 
-#### `/chat/unrestricted` (POST)
-**Purpose**: Dedicated unrestricted mode for adult content
+**Key Changes:**
+- ✅ **No more `/chat/unrestricted` endpoint** - All chat goes through `/chat`
+- ✅ **Worker respects ALL system prompts** without modification
+- ✅ **No content filtering** - Edge function handles all content decisions
+- ✅ **No prompt overrides** - Worker uses exactly what you send
+- ✅ **Simplified response format** - Removed unnecessary fields
+
+#### `/chat/debug/system-prompt` (POST) ⭐ **NEW**
+**Purpose**: Test endpoint to verify system prompt handling and pure inference behavior.
+
 ```json
 {
-  "message": "Help me create adult content for my project",
-  "conversation_id": "adult_002"
+  "message": "test message",
+  "system_prompt": "You are a helpful assistant.",
+  "conversation_history": []
+}
+```
+
+**Response:**
+```json
+{
+  "system_prompt_received": "You are a helpful assistant.",
+  "system_prompt_used": "You are a helpful assistant.",
+  "messages_built": [...],
+  "no_override_detected": true,
+  "pure_inference_mode": true
 }
 ```
 
@@ -140,95 +148,59 @@ The Chat Worker has been simplified and optimized with core features for prompt 
 }
 ```
 
-#### `/model/info` (GET)
-**Purpose**: Model information and status
+#### `/health` (GET) ⭐ **UPDATED**
+**Purpose**: Health check with new architecture information
 ```json
 {
+  "status": "healthy",
+  "architecture": "pure_inference_engine",
+  "worker_type": "chat",
+  "gpu_utilization": 45.2,
+  "memory_usage": 8.5,
+  "active_jobs": 2,
+  "uptime": 3600,
   "model_loaded": true,
-  "model_path": "/workspace/models/huggingface_cache/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28",
-  "model_device": "cuda:0",
-  "device_type": "cuda",
-  "model_parameters": 7250000000,
-  "model_size_gb": 13.5,
-  "is_eval_mode": true,
-  "torch_version": "2.4.1",
-  "cuda_available": true,
-  "cuda_version": "12.4",
-  "gpu_name": "NVIDIA RTX 6000 Ada Generation"
+  "system_prompt_features": {
+    "pure_inference_engine": true,
+    "no_prompt_overrides": true,
+    "respects_provided_prompts": true
+  }
 }
 ```
 
 ---
 
-## 🧠 **NSFW Optimization Features**
+## 🔧 **Functions Removed from Worker**
 
-### **✅ NSFW Language Integration**
-- **System Prompts**: Explicitly mention "adult content generation"
-- **Content Focus**: "Adult/NSFW content with anatomical accuracy"
-- **Anatomical Accuracy**: "realistic proportions, natural poses, detailed features"
-- **Quality Tags**: "masterpiece, best quality, ultra detailed"
-- **Professional Standards**: "professional photography, studio lighting"
+### **1. `detect_unrestricted_mode(message: str) -> bool`**
+- **Purpose**: Detected explicit content requests
+- **Status**: ❌ **REMOVED** - Now handled by edge function
 
-### **✅ Zero Content Restrictions**
-- **No Filtering**: No content filtering or sanitization
-- **No Moderation**: No moderation or censorship language
-- **No Restrictions**: No "appropriate content" or "family-friendly" requirements
-- **Unrestricted Processing**: All prompts processed without restrictions
+### **2. `generate_unrestricted_response(messages: list) -> dict`**
+- **Purpose**: Modified system prompts for unrestricted content
+- **Status**: ❌ **REMOVED** - Now handled by edge function
 
-### **✅ Anatomical Accuracy Focus**
-- **Realistic Proportions**: Emphasized throughout all enhancements
-- **Natural Poses**: Focus on authentic and natural positioning
-- **Detailed Features**: High-quality anatomical detail
-- **Authentic Expressions**: Realistic facial and body expressions
-- **Realistic Interactions**: Natural and authentic interactions
+### **3. `build_conversation_system_prompt(context_type: str, project_id: str) -> str`**
+- **Purpose**: Generated default system prompts
+- **Status**: ❌ **REMOVED** - Now handled by edge function
+
+### **4. `/chat/unrestricted` Endpoint**
+- **Purpose**: Dedicated endpoint for unrestricted chat
+- **Status**: ❌ **REMOVED** - All chat goes through `/chat`
 
 ---
 
-## 🔄 **Enhancement System Architecture**
+## 🔧 **Functions Simplified in Worker**
 
-### **Direct Enhancement Approach**
-1. **Qwen Instruct Model**: Direct enhancement using Qwen 2.5-7B Instruct
-2. **Dynamic System Prompts**: Model-specific prompts for SDXL and WAN
-3. **Quality Optimization**: Fast and high quality modes
-4. **Error Handling**: Comprehensive error handling and fallbacks
+### **1. `generate_chat_response()`**
+- **Before**: Checked for unrestricted mode, called different generation methods
+- **After**: Pure inference - uses provided system prompt directly
+- **Impact**: ✅ **Simplified and predictable behavior**
 
-### **Supported Job Types**
-
-#### **SDXL LUSTIFY**
-- `sdxl_image_fast`: 75-token optimal, quality tags, anatomical accuracy
-- `sdxl_image_high`: 100-120 token, advanced quality, studio lighting
-
-#### **WAN 2.1 Video**
-- `video_fast`: 175-token, smooth motion, temporal consistency
-- `video_high`: 250-token, cinematic quality, complex motion
-- `wan_7b_enhanced`: Enhanced mode with 7B model capabilities
-
-### **Quality Levels**
-- `fast`: Optimized for speed and efficiency
-- `high`: Maximum quality with extended token limits
-
----
-
-## ⚡ **Performance Features**
-
-### **Memory Management**
-- **Automatic Loading**: Model loads automatically when needed
-- **Memory Cleanup**: OOM handling with automatic retry logic
-- **Device Optimization**: Efficient tensor operations and device management
-
-### **Error Handling**
-- **Graceful Degradation**: Comprehensive error handling and fallbacks
-- **OOM Recovery**: Automatic memory cleanup and retry logic
-- **Comprehensive Logging**: Detailed error reporting and tracking
-
-### **Error Response Format**
-```json
-{
-  "success": false,
-  "error": "error description",
-  "enhanced_prompt": "original prompt (as fallback)"
-}
-```
+### **2. `build_conversation_messages()`**
+- **Before**: Generated default prompts when none provided
+- **After**: Uses provided system prompt or minimal fallback
+- **Impact**: ✅ **No prompt generation, just message assembly**
 
 ---
 
@@ -240,28 +212,31 @@ curl -X POST http://localhost:7861/chat \
   -H "Content-Type: application/json" \
   -d '{
     "message": "Hello, how are you?",
+    "system_prompt": "You are a helpful assistant.",
     "conversation_id": "conv_123"
   }'
 ```
 
-### **Custom System Prompt**
+### **Roleplay with Custom System Prompt**
 ```bash
 curl -X POST http://localhost:7861/chat \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Tell me a story about a magical forest",
-    "system_prompt": "You are a creative storyteller specializing in fantasy tales. Be imaginative and descriptive.",
-    "conversation_id": "story_001"
+    "message": "Hello, I am a character named Elara",
+    "system_prompt": "You are roleplaying as characters in an adult interactive story. Stay in character.",
+    "conversation_id": "roleplay_001",
+    "context_type": "roleplay"
   }'
 ```
 
-### **Unrestricted Mode**
+### **Debug System Prompt Handling**
 ```bash
-curl -X POST http://localhost:7861/chat/unrestricted \
+curl -X POST http://localhost:7861/chat/debug/system-prompt \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Help me create adult content for my project",
-    "conversation_id": "adult_002"
+    "message": "test message",
+    "system_prompt": "You are a helpful assistant.",
+    "conversation_history": []
   }'
 ```
 
@@ -326,6 +301,7 @@ No additional environment variables required. Uses existing configuration:
 - **Memory Status**: `GET /memory/status`
 - **Model Info**: `GET /model/info`
 - **Enhancement Info**: `GET /enhancement/info`
+- **Debug System Prompt**: `POST /chat/debug/system-prompt`
 
 ---
 
@@ -335,7 +311,7 @@ No additional environment variables required. Uses existing configuration:
 1. **No Breaking Changes**: Existing API calls continue to work
 2. **New Parameters**: Add `system_prompt` parameter as needed
 3. **Enhanced Responses**: Handle new response fields
-4. **New Endpoints**: Use `/chat/unrestricted` for direct adult content access
+4. **Removed Endpoints**: No more `/chat/unrestricted` endpoint
 
 ### **Example Migration**
 **Before:**
@@ -365,22 +341,20 @@ python test_chat_worker_updates.py
 ### **Test Coverage**
 - Basic chat functionality
 - System prompt parameter handling
-- Unrestricted mode detection
-- Dedicated unrestricted endpoint
+- Pure inference mode validation
 - Health check validation
 - Enhancement system testing
-- NSFW optimization validation
+- Debug endpoint testing
 
 ---
 
 ## 🎯 **Best Practices**
 
-### **NSFW Optimization**
-1. **Explicit Language**: Use explicit "adult content" language
-2. **Anatomical Accuracy**: Emphasize realistic proportions
-3. **Professional Quality**: Maintain professional standards
-4. **No Restrictions**: Avoid content filtering
-5. **Unrestricted Processing**: Process prompts without sanitization
+### **Pure Inference Engine**
+1. **Always provide system prompts**: Worker expects system prompts from edge function
+2. **No content filtering**: Edge function handles all content decisions
+3. **Predictable behavior**: Same prompt always produces same results
+4. **Clear separation**: Edge function handles logic, worker handles inference
 
 ### **Performance Optimization**
 1. **Memory Management**: Monitor VRAM usage and model loading
@@ -394,10 +368,23 @@ python test_chat_worker_updates.py
 For issues or questions:
 1. Check the logs for detailed error information
 2. Use the health check endpoints to verify service status
-3. Review the test script for usage examples
-4. Monitor memory usage and model loading status
-5. Verify NSFW optimization settings
+3. Use the debug endpoint to verify system prompt handling
+4. Review the test script for usage examples
+5. Monitor memory usage and model loading status
 
 ---
 
-**Status: ✅ PRODUCTION READY - Simplified Chat Worker with Comprehensive NSFW Optimization** 
+## 🎯 **Summary**
+
+The Chat Worker has been successfully refactored to be a **pure inference engine**. All prompt logic, content filtering, and system prompt selection has been moved to the edge function. The worker now:
+
+- ✅ Respects all system prompts without modification
+- ✅ Provides predictable, deterministic behavior
+- ✅ Maintains clear separation of concerns
+- ✅ Supports easier debugging and testing
+
+The edge function is now responsible for all prompt management and content filtering, while the worker focuses solely on generating high-quality responses using the provided system prompts.
+
+---
+
+**Status: ✅ PRODUCTION READY - Pure Inference Engine Architecture** 

@@ -2,11 +2,13 @@
 
 **Last Updated:** July 30, 2025  
 **Repository:** `ourvidz-worker` (Separate from this frontend repo)  
-**Status:** Production Active
+**Status:** Production Active - **Pure Inference Engine Architecture**
 
 ## 🚀 Overview
 
 The OurVidz worker API provides endpoints for AI content generation, running on **RunPod RTX 6000 ADA** hardware. This is a **separate repository** from the frontend application.
+
+**🎯 NEW ARCHITECTURE**: The worker has been refactored to be a **pure inference engine** that respects all system prompts sent from the edge function without any override logic.
 
 **Note:** For complete worker system details, see [CODEBASE_INDEX_ourvidz_worker.md](./CODEBASE_INDEX_ourvidz_worker.md) - the authoritative source for the `ourvidz-worker` repository.
 
@@ -92,43 +94,85 @@ Generates videos from prompts.
 
 ### **2. Chat & Playground**
 
-#### **Chat** - `POST /chat`
-Real-time chat functionality for the playground.
+#### **Chat** - `POST /chat` ⭐ **UPDATED - Pure Inference Engine**
+**NEW**: Single endpoint for all chat requests (SFW and NSFW). Worker respects all system prompts without override.
 
 ```python
 # Request
 {
     "message": "Hello, how are you?",
-    "context": "previous conversation context",
-    "model": "gpt-4",  # or other available models
-    "temperature": 0.7
+    "system_prompt": "You are a helpful AI assistant for OurVidz platform users.",
+    "conversation_id": "conv_123",
+    "context_type": "roleplay",  # "roleplay", "general", "creative", "admin"
+    "conversation_history": [
+        {"sender": "user", "content": "Previous message", "created_at": "2025-07-30T10:00:00Z"},
+        {"sender": "assistant", "content": "Previous response", "created_at": "2025-07-30T10:00:01Z"}
+    ],
+    "project_id": "project_456"  # Optional
 }
 
 # Response
 {
-    "status": "success",
     "response": "Hello! I'm doing well, thank you for asking.",
-    "model": "gpt-4",
-    "tokens_used": 25,
-    "response_time": 1.2
+    "conversation_history": [...],
+    "system_prompt_used": "You are a helpful AI assistant for OurVidz platform users.",
+    "model_info": {
+        "model_name": "Qwen2.5-7B-Instruct",
+        "model_loaded": true
+    },
+    "processing_time": 1.23
+}
+```
+
+**Key Changes:**
+- ✅ **No more `/chat/unrestricted` endpoint** - All chat goes through `/chat`
+- ✅ **Worker respects ALL system prompts** without modification
+- ✅ **No content filtering** - Edge function handles all content decisions
+- ✅ **No prompt overrides** - Worker uses exactly what you send
+- ✅ **Simplified response format** - Removed unnecessary fields
+
+#### **Debug System Prompt** - `POST /chat/debug/system-prompt`
+Test endpoint to verify system prompt handling.
+
+```python
+# Request
+{
+    "message": "test message",
+    "system_prompt": "You are a helpful assistant.",
+    "conversation_history": []
+}
+
+# Response
+{
+    "system_prompt_received": "You are a helpful assistant.",
+    "system_prompt_used": "You are a helpful assistant.",
+    "messages_built": [...],
+    "no_override_detected": true,
+    "pure_inference_mode": true
 }
 ```
 
 ### **3. Health & Status**
 
 #### **Health Check** - `GET /health`
-Returns worker health status.
+Returns worker health status with new architecture info.
 
 ```python
 # Response
 {
     "status": "healthy",
-    "worker_type": "sdxl",
+    "architecture": "pure_inference_engine",
+    "worker_type": "chat",
     "gpu_utilization": 45.2,
     "memory_usage": 8.5,  # GB
     "active_jobs": 2,
     "uptime": 3600,  # seconds
-    "model_loaded": True
+    "model_loaded": true,
+    "system_prompt_features": {
+        "pure_inference_engine": true,
+        "no_prompt_overrides": true,
+        "respects_provided_prompts": true
+    }
 }
 ```
 
@@ -138,8 +182,9 @@ Returns detailed worker status.
 ```python
 # Response
 {
-    "worker_type": "sdxl",
+    "worker_type": "chat",
     "status": "active",
+    "architecture": "pure_inference_engine",
     "performance": {
         "jobs_completed": 150,
         "jobs_failed": 3,
@@ -152,9 +197,8 @@ Returns detailed worker status.
         "disk_usage": 25.3
     },
     "models": {
-        "sdxl_base": "loaded",
-        "sdxl_refiner": "loaded",
-        "wan_model": "not_loaded"
+        "qwen_instruct": "loaded",
+        "qwen_base": "not_loaded"
     }
 }
 ```
@@ -239,7 +283,8 @@ WORKER_CONFIGS = {
         "model_path": "/models/chat/",
         "max_concurrent_jobs": 8,
         "memory_limit": 4,  # GB
-        "polling_interval": 1
+        "polling_interval": 1,
+        "architecture": "pure_inference_engine"  # NEW
     }
 }
 ```
@@ -256,7 +301,7 @@ def load_models():
     elif WORKER_TYPE == "video":
         load_video_models()
     elif WORKER_TYPE == "chat":
-        load_chat_models()
+        load_chat_models()  # Pure inference engine
 ```
 
 ## 📊 Performance Metrics
@@ -270,6 +315,7 @@ def load_models():
 | WAN   | High    | 10s      | 6GB        | 2               |
 | Video | Fast    | 60s      | 16GB       | 1               |
 | Video | High    | 120s     | 20GB       | 1               |
+| Chat  | N/A     | 5-15s    | 4GB        | 8               |
 
 ### **Resource Monitoring**
 ```python
@@ -303,15 +349,14 @@ def authenticate_request(request):
 
 ### **Input Validation**
 ```python
-# Prompt validation
+# Prompt validation - Simplified for pure inference
 def validate_prompt(prompt: str):
     """Validate and sanitize prompts"""
     if len(prompt) > 1000:
         raise ValueError("Prompt too long")
     
-    # Remove potentially harmful content
-    sanitized = sanitize_prompt(prompt)
-    return sanitized
+    # No content filtering - edge function handles this
+    return prompt
 ```
 
 ## 🚨 Error Handling
@@ -325,7 +370,8 @@ ERROR_CODES = {
     "INVALID_PROMPT": "Invalid or unsafe prompt",
     "GENERATION_FAILED": "Image/video generation failed",
     "NETWORK_ERROR": "Network connectivity issue",
-    "DATABASE_ERROR": "Database operation failed"
+    "DATABASE_ERROR": "Database operation failed",
+    "SYSTEM_PROMPT_MISSING": "System prompt not provided"  # NEW
 }
 ```
 
@@ -354,32 +400,38 @@ def retry_operation(operation, max_retries=3):
 ### **Local Development**
 ```bash
 # Run worker locally
-python main.py --worker-type sdxl --dev
+python main.py --worker-type chat --dev
 
 # Test endpoints
-curl -X POST http://localhost:8000/generate_image \
+curl -X POST http://localhost:7861/chat \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "test image", "model": "sdxl"}'
+  -d '{
+    "message": "test message", 
+    "system_prompt": "You are a helpful assistant.",
+    "conversation_id": "test_123"
+  }'
 ```
 
 ### **Testing Endpoints**
 ```python
 # Health check test
 def test_health():
-    response = requests.get("http://localhost:8000/health")
+    response = requests.get("http://localhost:7861/health")
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+    assert response.json()["architecture"] == "pure_inference_engine"
 
-# Image generation test
-def test_image_generation():
+# Chat test with system prompt
+def test_chat_with_system_prompt():
     data = {
-        "prompt": "test prompt",
-        "model": "sdxl",
-        "quality": "fast"
+        "message": "test message",
+        "system_prompt": "You are a helpful assistant.",
+        "conversation_id": "test_123"
     }
-    response = requests.post("http://localhost:8000/generate_image", json=data)
+    response = requests.post("http://localhost:7861/chat", json=data)
     assert response.status_code == 200
-    assert "image_url" in response.json()
+    assert "response" in response.json()
+    assert response.json()["system_prompt_used"] == "You are a helpful assistant."
 ```
 
 ## 📈 Monitoring & Logging
@@ -398,6 +450,7 @@ logger = logging.getLogger(__name__)
 
 # Log job processing
 logger.info(f"Processing job {job_id} with type {job_type}")
+logger.info(f"Using system prompt: {system_prompt[:100]}...")  # NEW
 logger.error(f"Job {job_id} failed: {error_message}")
 ```
 
@@ -411,11 +464,57 @@ def collect_metrics():
         "average_generation_time": get_avg_generation_time(),
         "success_rate": get_success_rate(),
         "gpu_utilization": get_gpu_utilization(),
-        "memory_usage": get_memory_usage()
+        "memory_usage": get_memory_usage(),
+        "system_prompt_respect_rate": get_system_prompt_respect_rate()  # NEW
     }
+```
+
+## 🎯 **Migration Guide**
+
+### **For Frontend Systems**
+
+#### **Step 1: Update API Calls**
+- ❌ Remove any calls to `/chat/unrestricted`
+- ✅ Ensure all chat requests go through `/chat`
+- ✅ Always provide `system_prompt` field
+
+#### **Step 2: Update Response Handling**
+- ❌ Remove handling of `unrestricted_mode` field
+- ❌ Remove handling of `custom_system_preserved` field  
+- ❌ Remove handling of `enhanced_system_prompt` field
+- ✅ Handle new `system_prompt_used` field
+
+#### **Step 3: Implement Prompt Logic**
+- ✅ Add logic to detect conversation type
+- ✅ Add logic to retrieve prompts from prompt table
+- ✅ Add logic to handle content filtering
+- ✅ Add logic to select appropriate system prompts
+
+### **Example Migration**
+
+**Before:**
+```python
+# Old unrestricted endpoint
+response = requests.post(f"{worker_url}/chat/unrestricted", json={
+    "message": "Hello",
+    "conversation_id": "123"
+})
+```
+
+**After:**
+```python
+# New unified endpoint with system prompt
+response = requests.post(f"{worker_url}/chat", json={
+    "message": "Hello",
+    "system_prompt": "You are a helpful assistant.",
+    "conversation_id": "123",
+    "context_type": "general"
+})
 ```
 
 ---
 
 **For worker system details, see [05-WORKER_SYSTEM.md](./05-WORKER_SYSTEM.md)**  
-**For RunPod setup, see [07-RUNPOD_SETUP.md](./07-RUNPOD_SETUP.md)** 
+**For RunPod setup, see [07-RUNPOD_SETUP.md](./07-RUNPOD_SETUP.md)**
+
+**🎯 NEW**: **Pure Inference Engine Architecture** - Worker respects all system prompts without override 
