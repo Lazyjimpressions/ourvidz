@@ -3,6 +3,7 @@ import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { SessionWorkspace } from '@/components/workspace/SessionWorkspace';
 import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
 import { useJobWorkspace } from '@/hooks/useJobWorkspace';
+import { useActiveWorkspaceSession } from '@/hooks/useActiveWorkspaceSession';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
 /**
@@ -19,8 +20,7 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
  */
 export const SimplifiedWorkspace: React.FC = () => {
   const state = useSimplifiedWorkspaceState();
-  // Use a simple session ID for now - could be improved with proper session management
-  const sessionId = 'current-session';
+  const { sessionId, loading: sessionLoading } = useActiveWorkspaceSession();
   const jobWorkspace = useJobWorkspace(sessionId);
   
   const {
@@ -115,6 +115,18 @@ export const SimplifiedWorkspace: React.FC = () => {
     // TODO: Implement use seed functionality
     console.log('Use seed:', item);
   };
+
+  // Show loading state while session is being resolved
+  if (sessionLoading || !sessionId) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Setting up workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
