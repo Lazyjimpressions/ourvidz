@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Image, Play, Edit, Save, Trash2, Download, Eye, X } from "lucide-react";
+import { RotateCcw, Play, Edit, Trash2, Download, Eye, X, Image as ImageIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContentCardProps {
@@ -19,12 +19,17 @@ interface ContentCardProps {
     seed?: number;
     originalAssetId?: string;
   };
+  // LTX-Style Actions
+  onIterate?: () => void;
+  onCreateVideo?: () => void;
+  onDownload?: () => void;
+  onExpand?: () => void;
+  // Legacy Actions (for compatibility)
   onEdit: () => void;
   onSave: () => void;
   onDelete: () => void;
   onDismiss?: () => void;
   onView: () => void;
-  onDownload?: () => void;
   onUseAsReference?: () => void;
   onUseSeed?: () => void;
   isDeleting?: boolean;
@@ -34,12 +39,17 @@ interface ContentCardProps {
 
 export const ContentCard: React.FC<ContentCardProps> = ({
   item,
+  // LTX-Style Actions
+  onIterate,
+  onCreateVideo,
+  onDownload,
+  onExpand,
+  // Legacy Actions
   onEdit,
   onSave,
   onDelete,
   onDismiss,
   onView,
-  onDownload,
   onUseAsReference,
   onUseSeed,
   isDeleting = false,
@@ -53,6 +63,27 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     action();
   };
 
+  // NEW: Drag and drop functionality for workspace images
+  const handleDragStart = (e: React.DragEvent) => {
+    // Set drag data for the workspace item
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      id: item.id,
+      url: item.url,
+      type: item.type,
+      prompt: item.prompt
+    }));
+    
+    // Also set as text for URL-based drops
+    e.dataTransfer.setData('text/plain', item.url);
+    
+    // Set drag image
+    const dragImage = new Image();
+    dragImage.src = item.url;
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    
+    console.log('🖱️ DRAG START: Dragging workspace item:', item.id);
+  };
+
   const getSeedFromItem = (): number | undefined => {
     return item.generationParams?.seed || item.seed;
   };
@@ -63,16 +94,17 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     lg: 'w-64 h-64'
   };
 
-  const buttonSize = {
-    sm: 'h-6 w-6',
-    md: 'h-8 w-8',
-    lg: 'h-10 w-10'
-  };
-
+  // LTX-Style: Much smaller icons for subtle hover actions
   const iconSize = {
     sm: 'w-3 h-3',
     md: 'w-4 h-4',
-    lg: 'w-5 h-5'
+    lg: 'w-4 h-4' // Keep consistent size for larger cards
+  };
+
+  const buttonSize = {
+    sm: 'w-6 h-6',
+    md: 'w-7 h-7',
+    lg: 'w-8 h-8'
   };
 
   return (
@@ -80,7 +112,9 @@ export const ContentCard: React.FC<ContentCardProps> = ({
       className={`relative group bg-muted rounded-lg overflow-hidden cursor-pointer transition-all duration-200 hover:scale-105 hover:shadow-lg ${sizeClasses[size]} ${className}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={onView}
+      onClick={onExpand || onView}
+      draggable={true} // Enable draggable attribute
+      onDragStart={handleDragStart} // Handle drag start
     >
       {/* Media Content */}
       {item.type === 'video' ? (
@@ -101,207 +135,129 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         />
       )}
 
-      {/* Overlay with Actions */}
-      <div className={`absolute inset-0 bg-black/60 transition-opacity duration-200 ${
+      {/* LTX-Style Hover Overlay - Subtle and Clean */}
+      <div className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${
         isHovered ? 'opacity-100' : 'opacity-0'
       }`}>
-        <div className="absolute inset-0 flex flex-col justify-between p-3">
-          {/* Top Actions */}
-          <div className="flex justify-between items-start">
-            <div className="flex gap-1">
-              {item.type === 'image' && onUseAsReference && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                        onClick={(e) => handleActionClick(e, onUseAsReference)}
-                      >
-                        <Image className={iconSize[size]} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Use as reference</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              
-              {getSeedFromItem() && onUseSeed && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                        onClick={(e) => handleActionClick(e, onUseSeed)}
-                      >
-                        <span className="text-xs font-mono">🎲</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Use seed {getSeedFromItem()}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-
-            {/* Dismiss Button */}
-            {onDismiss && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                      onClick={(e) => handleActionClick(e, onDismiss)}
-                    >
-                      <X className={iconSize[size]} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Hide from workspace</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-
-            {/* Delete Button */}
+        
+        {/* Top-Right Corner Actions - Small, Clean Icons */}
+        <div className="absolute top-2 right-2 flex gap-1">
+          {/* Dismiss Button (X) */}
+          {onDismiss && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className={`${buttonSize[size]} p-0 bg-destructive/80 hover:bg-destructive`}
-                    onClick={(e) => handleActionClick(e, onDelete)}
-                    disabled={isDeleting}
+                  <button
+                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onDismiss)}
                   >
-                    {isDeleting ? (
-                      <div className="animate-spin rounded-full border-b-2 border-white" style={{ width: iconSize[size], height: iconSize[size] }}></div>
-                    ) : (
-                      <Trash2 className={iconSize[size]} />
-                    )}
-                  </Button>
+                    <X className={iconSize[size]} />
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Delete permanently</p>
+                  <p>Hide from workspace</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          </div>
+          )}
 
-          {/* Bottom Actions */}
-          <div className="flex justify-between items-end">
-            {/* Seed Display */}
-            {getSeedFromItem() && (
-              <div className="bg-background/80 px-2 py-1 rounded text-xs font-mono">
-                Seed: {getSeedFromItem()}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-1">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                      onClick={(e) => handleActionClick(e, onEdit)}
-                    >
-                      <Edit className={iconSize[size]} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Edit prompt</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                      onClick={(e) => handleActionClick(e, onSave)}
-                    >
-                      <Save className={iconSize[size]} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Save to library</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {onDownload && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className={`${buttonSize[size]} p-0 bg-background/80 hover:bg-background`}
-                        onClick={(e) => handleActionClick(e, onDownload)}
-                      >
-                        <Download className={iconSize[size]} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Download</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-          </div>
+          {/* Delete Button */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className={`${buttonSize[size]} bg-red-500/80 hover:bg-red-600/90 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                  onClick={(e) => handleActionClick(e, onDelete)}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <div className="animate-spin rounded-full border-b-2 border-white" style={{ width: iconSize[size], height: iconSize[size] }}></div>
+                  ) : (
+                    <Trash2 className={iconSize[size]} />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Delete permanently</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
-      </div>
 
-      {/* Type Indicator */}
-      <div className="absolute top-2 left-2">
-        <div className={`px-2 py-1 rounded text-xs font-medium ${
-          item.type === 'video' 
-            ? 'bg-blue-500/80 text-white' 
-            : 'bg-green-500/80 text-white'
-        }`}>
-          {item.type === 'video' ? (
-            <div className="flex items-center gap-1">
-              <Play className="w-3 h-3" />
-              VIDEO
-            </div>
-          ) : (
-            <div className="flex items-center gap-1">
-              <Image className="w-3 h-3" />
-              IMAGE
-            </div>
+        {/* Bottom-Right Corner Actions - LTX-Style Small Icons */}
+        <div className="absolute bottom-2 right-2 flex gap-1">
+          {/* Iterate Button (Regen) - Creates 3 more images */}
+          {onIterate && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onIterate)}
+                  >
+                    <RotateCcw className={iconSize[size]} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Regenerate 3 variations</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* Create Video Button */}
+          {onCreateVideo && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onCreateVideo)}
+                  >
+                    <Play className={iconSize[size]} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Create video from image</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* Download Button */}
+          {onDownload && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onDownload)}
+                  >
+                    <Download className={iconSize[size]} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Download image</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
+
+        {/* Bottom-Left Corner - Seed Info (Small, Subtle) */}
+        {getSeedFromItem() && (
+          <div className="absolute bottom-2 left-2">
+            <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-mono text-white/80">
+              Seed: {getSeedFromItem()}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Quality Indicator */}
-      {item.quality && (
-        <div className="absolute top-2 right-2">
-          <div className={`px-2 py-1 rounded text-xs font-medium ${
-            item.quality === 'high' 
-              ? 'bg-purple-500/80 text-white' 
-              : 'bg-orange-500/80 text-white'
-          }`}>
-            {item.quality === 'high' ? 'HIGH' : 'FAST'}
-          </div>
-        </div>
-      )}
+      {/* NO IMAGE/HIGH BADGES - Clean Design Like LTX */}
+      {/* Removed all type and quality indicators for clean look */}
 
-      {/* Prompt Tooltip on Hover */}
+      {/* Prompt Display on Hover - Subtle */}
       {isHovered && (
         <div className="absolute bottom-0 left-0 right-0 bg-black/80 text-white p-2 text-xs">
           <div className="truncate" title={item.prompt}>

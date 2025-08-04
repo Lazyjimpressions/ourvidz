@@ -91,6 +91,11 @@ export const SimplifiedWorkspace: React.FC = () => {
     dismissJob,
   } = state;
 
+  // NEW: URL-based reference image state for drag & drop
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
+  const [beginningRefImageUrl, setBeginningRefImageUrl] = useState<string | null>(null);
+  const [endingRefImageUrl, setEndingRefImageUrl] = useState<string | null>(null);
+
   // LTX-Style Workspace Management Handlers
 
   /**
@@ -100,10 +105,12 @@ export const SimplifiedWorkspace: React.FC = () => {
   const handleIterate = (item: WorkspaceItem) => {
     console.log('🔄 ITERATE: Dropping image to reference box for img2img:', item);
     
-    // Set the image as reference for image-to-image generation
-    // Note: For now, we'll store the URL in a custom field since setReferenceImage expects File
-    // TODO: Implement proper File conversion from URL for reference images
+    // Set the image as reference for image-to-image generation using URL
+    setReferenceImageUrl(item.url);
     setReferenceStrength(0.7); // Default strength for img2img
+    
+    // Clear any file-based reference
+    setReferenceImage(null);
     
     // Switch to image mode if not already
     if (mode !== 'image') {
@@ -124,9 +131,11 @@ export const SimplifiedWorkspace: React.FC = () => {
   const handleCreateVideo = (item: WorkspaceItem) => {
     console.log('🎬 CREATE VIDEO: Dropping image to video reference box:', item);
     
-    // Set the image as beginning reference for video generation
-    // Note: For now, we'll store the URL in a custom field since setBeginningRefImage expects File
-    // TODO: Implement proper File conversion from URL for video reference images
+    // Set the image as beginning reference for video generation using URL
+    setBeginningRefImageUrl(item.url);
+    
+    // Clear any file-based reference
+    setBeginningRefImage(null);
     
     // Switch to video mode if not already
     if (mode !== 'video') {
@@ -314,6 +323,9 @@ export const SimplifiedWorkspace: React.FC = () => {
         onGenerate={generate}
         referenceImage={referenceImage}
         onReferenceImageChange={setReferenceImage}
+        // NEW: URL-based reference image support
+        referenceImageUrl={referenceImageUrl}
+        onReferenceImageUrlChange={setReferenceImageUrl}
         referenceStrength={referenceStrength}
         onReferenceStrengthChange={setReferenceStrength}
         onModeChange={updateMode}
@@ -322,6 +334,11 @@ export const SimplifiedWorkspace: React.FC = () => {
         endingRefImage={endingRefImage}
         onBeginningRefImageChange={setBeginningRefImage}
         onEndingRefImageChange={setEndingRefImage}
+        // NEW: URL-based video reference image support
+        beginningRefImageUrl={beginningRefImageUrl}
+        endingRefImageUrl={endingRefImageUrl}
+        onBeginningRefImageUrlChange={setBeginningRefImageUrl}
+        onEndingRefImageUrlChange={setEndingRefImageUrl}
         videoDuration={videoDuration}
         onVideoDurationChange={setVideoDuration}
         motionIntensity={motionIntensity}

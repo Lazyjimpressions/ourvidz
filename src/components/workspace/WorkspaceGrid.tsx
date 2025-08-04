@@ -119,18 +119,17 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 <ContentCard
                   key={item.id}
                   item={item}
-                  // LTX-Style Actions (TODO: Update ContentCard to support these)
-                  // onIterate={onIterate ? () => onIterate(item) : undefined}
-                  // onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
-                  // onDownload={() => onDownload(item)}
-                  // onExpand={onExpand ? () => onExpand(item) : undefined}
+                  // LTX-Style Actions
+                  onIterate={onIterate ? () => onIterate(item) : undefined}
+                  onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                  onDownload={() => onDownload(item)}
+                  onExpand={onExpand ? () => onExpand(item) : undefined}
                   // Legacy Actions (for compatibility)
                   onEdit={() => onEdit(item)}
                   onSave={() => onSave(item)}
                   onDelete={() => onDelete(item)}
                   onDismiss={() => onDismiss?.(item)}
                   onView={() => onView(item)}
-                  onDownload={() => onDownload(item)}
                   onUseAsReference={() => onUseAsReference(item)}
                   onUseSeed={() => onUseSeed(item)}
                   isDeleting={isDeleting.has(item.id)}

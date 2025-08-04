@@ -5,29 +5,127 @@ const ReferenceImageUpload: React.FC<{
   file: File | null;
   onFileChange: (file: File | null) => void;
   label: string;
+  // NEW: Support for URL-based reference images (for drag & drop from workspace)
+  imageUrl?: string | null;
+  onImageUrlChange?: (url: string | null) => void;
 }> = ({
   file,
   onFileChange,
-  label
+  label,
+  imageUrl,
+  onImageUrlChange
 }) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (uploadedFile) {
       onFileChange(uploadedFile);
+      // Clear URL if file is uploaded
+      if (onImageUrlChange) {
+        onImageUrlChange(null);
+      }
     }
   };
-  return <div className="border border-gray-600 p-2 h-16 py-0 px-0 rounded">
-      {file ? <div className="relative">
-          <img src={URL.createObjectURL(file)} alt={label} className="w-full h-12 object-cover rounded" />
-          <button onClick={() => onFileChange(null)} className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    // Handle file drops
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0 && files[0].type.startsWith('image/')) {
+      onFileChange(files[0]);
+      if (onImageUrlChange) {
+        onImageUrlChange(null);
+      }
+      return;
+    }
+
+    // Handle URL drops (from workspace images)
+    const url = e.dataTransfer.getData('text/plain');
+    if (url && url.startsWith('http') && (url.includes('.jpg') || url.includes('.png') || url.includes('.jpeg') || url.includes('.webp'))) {
+      if (onImageUrlChange) {
+        onImageUrlChange(url);
+      }
+      // Clear file if URL is dropped
+      onFileChange(null);
+      return;
+    }
+
+    // Handle custom data drops (from workspace items)
+    try {
+      const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
+      if (workspaceItem.url && workspaceItem.type === 'image') {
+        if (onImageUrlChange) {
+          onImageUrlChange(workspaceItem.url);
+        }
+        onFileChange(null);
+        return;
+      }
+    } catch (error) {
+      // Not a JSON drop, ignore
+    }
+  };
+
+  const clearReference = () => {
+    onFileChange(null);
+    if (onImageUrlChange) {
+      onImageUrlChange(null);
+    }
+  };
+
+  // Show either file or URL image
+  const displayImage = file ? URL.createObjectURL(file) : imageUrl;
+
+  return (
+    <div 
+      className={`border border-gray-600 p-2 h-16 py-0 px-0 rounded transition-colors ${
+        isDragOver ? 'border-blue-400 bg-blue-400/10' : ''
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {displayImage ? (
+        <div className="relative">
+          <img 
+            src={displayImage} 
+            alt={label} 
+            className="w-full h-12 object-cover rounded" 
+          />
+          <button 
+            onClick={clearReference} 
+            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs transition-colors"
+          >
             ×
           </button>
-        </div> : <label className="cursor-pointer flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-white h-12">
+        </div>
+      ) : (
+        <label className="cursor-pointer flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-white h-12 transition-colors">
           <Image className="w-6 h-6" />
           <span className="text-sm">{label}</span>
-          <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-        </label>}
-    </div>;
+          <span className="text-xs text-gray-500">Drop image here</span>
+          <input 
+            type="file" 
+            accept="image/*" 
+            onChange={handleFileUpload} 
+            className="hidden" 
+          />
+        </label>
+      )}
+    </div>
+  );
 };
 interface SimplePromptInputProps {
   prompt: string;
@@ -40,6 +138,9 @@ interface SimplePromptInputProps {
   onGenerate: () => void;
   referenceImage: File | null;
   onReferenceImageChange: (file: File | null) => void;
+  // NEW: URL-based reference image support for drag & drop
+  referenceImageUrl?: string | null;
+  onReferenceImageUrlChange?: (url: string | null) => void;
   referenceStrength: number;
   onReferenceStrengthChange: (strength: number) => void;
   onModeChange: (mode: 'image' | 'video') => void;
@@ -49,6 +150,11 @@ interface SimplePromptInputProps {
   endingRefImage?: File | null;
   onBeginningRefImageChange?: (file: File | null) => void;
   onEndingRefImageChange?: (file: File | null) => void;
+  // NEW: URL-based video reference image support
+  beginningRefImageUrl?: string | null;
+  endingRefImageUrl?: string | null;
+  onBeginningRefImageUrlChange?: (url: string | null) => void;
+  onEndingRefImageUrlChange?: (url: string | null) => void;
   videoDuration?: number;
   onVideoDurationChange?: (duration: number) => void;
   motionIntensity?: number;
@@ -81,6 +187,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onGenerate,
   referenceImage,
   onReferenceImageChange,
+  // NEW: URL-based reference image support
+  referenceImageUrl,
+  onReferenceImageUrlChange,
   referenceStrength,
   onReferenceStrengthChange,
   onModeChange,
@@ -89,6 +198,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   endingRefImage,
   onBeginningRefImageChange,
   onEndingRefImageChange,
+  // NEW: URL-based video reference image support
+  beginningRefImageUrl,
+  endingRefImageUrl,
+  onBeginningRefImageUrlChange,
+  onEndingRefImageUrlChange,
   videoDuration = 3,
   onVideoDurationChange,
   motionIntensity = 0.5,
@@ -208,18 +322,37 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
             {/* Reference Image Box */}
             <div className="flex items-center">
-              {mode === 'image' ? <ReferenceImageUpload file={referenceImage} onFileChange={onReferenceImageChange} label="Reference Image" /> :
-            // Video mode: Beginning and Ending ref image boxes
-            <div className="flex items-center gap-2">
+              {mode === 'image' ? (
+                <ReferenceImageUpload 
+                  file={referenceImage} 
+                  onFileChange={onReferenceImageChange} 
+                  imageUrl={referenceImageUrl}
+                  onImageUrlChange={onReferenceImageUrlChange}
+                  label="Reference Image" 
+                />
+              ) : (
+                // Video mode: Beginning and Ending ref image boxes
+                <div className="flex items-center gap-2">
                   <div className="flex flex-col items-center gap-1">
-                    
-                    <ReferenceImageUpload file={beginningRefImage || null} onFileChange={onBeginningRefImageChange || (() => {})} label="Beginning" />
+                    <ReferenceImageUpload 
+                      file={beginningRefImage || null} 
+                      onFileChange={onBeginningRefImageChange || (() => {})} 
+                      imageUrl={beginningRefImageUrl}
+                      onImageUrlChange={onBeginningRefImageUrlChange}
+                      label="Beginning" 
+                    />
                   </div>
                   <div className="flex flex-col items-center gap-1">
-                    
-                    <ReferenceImageUpload file={endingRefImage || null} onFileChange={onEndingRefImageChange || (() => {})} label="Ending" />
+                    <ReferenceImageUpload 
+                      file={endingRefImage || null} 
+                      onFileChange={onEndingRefImageChange || (() => {})} 
+                      imageUrl={endingRefImageUrl}
+                      onImageUrlChange={onEndingRefImageUrlChange}
+                      label="Ending" 
+                    />
                   </div>
-                </div>}
+                </div>
+              )}
             </div>
 
             {/* Prompt Window - Expanded textarea, 3 rows, black background */}
