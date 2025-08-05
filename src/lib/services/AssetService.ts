@@ -403,6 +403,14 @@ export class AssetService {
       console.log('📅 Session filtering enabled - showing assets from:', startOfDay.toISOString());
     }
 
+    // Filter out dismissed items for workspace view
+    if (sessionOnly) {
+      // For workspace view, exclude items that have been dismissed
+      imageQuery = imageQuery.not('metadata->workspace_dismissed', 'eq', true);
+      videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
+      console.log('🚫 Filtering out dismissed items for workspace view');
+    }
+
     // Fetch images and videos in parallel
     const [imagesResult, videosResult] = await Promise.all([
       imageQuery.order('created_at', { ascending: false }),

@@ -34,6 +34,7 @@ export interface LibraryFirstWorkspaceState {
   workspaceAssets: UnifiedAsset[];
   activeJobId: string | null;
   lightboxIndex: number | null;
+  workspaceCleared: boolean;
   
   // Enhancement Model Selection
   enhancementModel: 'qwen_base' | 'qwen_instruct';
@@ -105,6 +106,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [workspaceCleared, setWorkspaceCleared] = useState(false);
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
@@ -150,13 +152,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // Library service already handles URL generation
       const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
       
-      console.log('📚 LIBRARY-FIRST: Workspace assets loaded:', {
-        total: allAssets.length,
-        images: allAssets.filter(a => a.type === 'image').length,
-        videos: allAssets.filter(a => a.type === 'video').length
+      // Additional client-side filtering to ensure dismissed items are excluded
+      const filteredAssets = allAssets.filter(asset => {
+        const isDismissed = asset.metadata?.workspace_dismissed === true;
+        if (isDismissed) {
+          console.log('🚫 Filtering out dismissed asset:', asset.id);
+        }
+        return !isDismissed;
       });
       
-      return allAssets;
+      console.log('📚 LIBRARY-FIRST: Workspace assets loaded:', {
+        total: allAssets.length,
+        filtered: filteredAssets.length,
+        dismissed: allAssets.length - filteredAssets.length,
+        images: filteredAssets.filter(a => a.type === 'image').length,
+        videos: filteredAssets.filter(a => a.type === 'video').length
+      });
+      
+      return filteredAssets;
     },
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true
@@ -219,6 +232,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // Only process session assets for workspace
       if (sessionOnly) {
         console.log('🎉 WORKSPACE: Received library assets:', assets.length);
+        
+        // Reset cleared state when new content arrives
+        setWorkspaceCleared(false);
         
         // Refresh workspace data
         queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
@@ -433,6 +449,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      // Set workspace as cleared immediately for better UX
+      setWorkspaceCleared(true);
+
       // Dismiss all today's items
       const todayStart = getTodayStart();
       
@@ -491,6 +510,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         title: "Workspace Cleared",
         description: "All items dismissed from workspace",
       });
+      
+      console.log('✅ WORKSPACE: Successfully cleared workspace');
     } catch (error) {
       console.error('❌ WORKSPACE: Clear failed:', error);
       toast({
@@ -644,6 +665,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     deleteItem,
     dismissItem,
     setLightboxIndex,
+    workspaceCleared,
     selectJob,
     deleteJob,
     dismissJob,
