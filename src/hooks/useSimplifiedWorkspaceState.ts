@@ -141,7 +141,7 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceStrength, setReferenceStrength] = useState(0.85);
-  const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('nsfw');
+  const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('high');
   
   // Video-specific State (4 variables)

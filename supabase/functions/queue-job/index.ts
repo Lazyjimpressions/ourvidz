@@ -346,8 +346,8 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    // CRITICAL FIX: Preserve original prompt separately - never overwrite it
-    const preservedOriginalPrompt = originalPrompt || prompt;
+    // CRITICAL FIX: Preserve actual user input from metadata.prompt
+    const preservedOriginalPrompt = metadata?.prompt || prompt;
     let workingPrompt = enhancedPrompt || prompt; // Use enhanced if provided, fallback to original
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
@@ -576,10 +576,11 @@ serve(async (req)=>{
       image_id: imageId,
       status: 'queued',
       // **PHASE 1**: Store enhancement fields directly in jobs table - FIXED
-      original_prompt: preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt
+      original_prompt: preservedOriginalPrompt,  // CRITICAL FIX: Use preserved original prompt  
       enhanced_prompt: workingPrompt,
       enhancement_strategy: enhancementStrategy,
       enhancement_time_ms: enhancementTimeMs,
+      template_name: enhancementResult?.enhancement_metadata?.template_name || null,
       // WORKSPACE SUPPORT: Add destination and session fields
       destination: isWorkspaceJob ? 'workspace' : 'library',
       workspace_session_id: workspaceSessionId

@@ -416,6 +416,7 @@ export type Database = {
           reviewed_by: string | null
           started_at: string | null
           status: string | null
+          template_name: string | null
           test_metadata: Json | null
           user_id: string
           video_id: string | null
@@ -451,6 +452,7 @@ export type Database = {
           reviewed_by?: string | null
           started_at?: string | null
           status?: string | null
+          template_name?: string | null
           test_metadata?: Json | null
           user_id: string
           video_id?: string | null
@@ -486,6 +488,7 @@ export type Database = {
           reviewed_by?: string | null
           started_at?: string | null
           status?: string | null
+          template_name?: string | null
           test_metadata?: Json | null
           user_id?: string
           video_id?: string | null
