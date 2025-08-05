@@ -364,29 +364,23 @@ export const SimplifiedWorkspace: React.FC = () => {
           />
           <WorkspaceGrid
             items={workspaceAssets}
-            sessionGroups={sessionGroups}
-            sortedJobIds={sortedJobIds}
             activeJobId={activeJobId}
             onJobSelect={handleJobSelect}
             onDeleteJob={handleDeleteJob}
             onDismissJob={handleDismissJob}
-            onSaveJob={saveJob}
-            onUseJobAsReference={useJobAsReference}
             onIterateFromItem={handleIterateFromItem}
             onRegenerateJob={handleRegenerateJob}
             onCreateVideo={handleCreateVideo}
             onDownload={handleDownload}
             onExpand={handleExpand}
-            onEditItem={handleEditItem}
-            onSaveItem={handleSaveItem}
-            onViewItem={handleViewItem}
+            onEdit={handleEditItem}
+            onSave={handleSaveItem}
+            onView={handleViewItem}
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
-            onDeleteItem={deleteItem}
-            onDismissItem={dismissItem}
+            onDelete={(item) => deleteItem(item.id, item.type)}
+            onDismiss={(item) => dismissItem(item.id, item.type)}
             isDeleting={deletingJobs}
-            lightboxIndex={lightboxIndex}
-            setLightboxIndex={setLightboxIndex}
           />
         </div>
       </div>
