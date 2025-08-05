@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
-import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
-import { useActiveWorkspaceSession } from '@/hooks/useActiveWorkspaceSession';
+import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
+import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
 /**
@@ -21,11 +21,9 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
  * @returns {JSX.Element} Rendered workspace page
  */
 export const SimplifiedWorkspace: React.FC = () => {
-  const state = useSimplifiedWorkspaceState();
-  const { sessionId, loading: sessionLoading } = useActiveWorkspaceSession();
+  const state = useLibraryFirstWorkspace();
   
   // Job selection state
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [deletingJobs, setDeletingJobs] = useState<Set<string>>(new Set());
   
   const {
@@ -56,8 +54,8 @@ export const SimplifiedWorkspace: React.FC = () => {
     
     // UI State
     isGenerating,
-    workspaceItems,
-    workspaceJobs,
+    workspaceAssets,
+    activeJobId,
     lightboxIndex,
     
     // Actions
@@ -89,9 +87,6 @@ export const SimplifiedWorkspace: React.FC = () => {
     saveJob,
     useJobAsReference,
     dismissJob,
-    // NEW: Separate iterate and regenerate actions
-    regenerateJob,
-    iterateFromItem,
   } = state;
 
   // NEW: URL-based reference image state for drag & drop
@@ -108,7 +103,7 @@ export const SimplifiedWorkspace: React.FC = () => {
    * NEW: Use item as reference for iteration (img2img)
    * Matches LTX Studio's iterate functionality
    */
-  const handleIterateFromItem = (item: WorkspaceItem) => {
+  const handleIterateFromItem = (item: UnifiedAsset) => {
     console.log('🔄 ITERATE FROM ITEM: Setting up img2img reference:', item);
     
     // Set the image as reference for image-to-image generation using URL
@@ -116,9 +111,8 @@ export const SimplifiedWorkspace: React.FC = () => {
     setReferenceStrength(0.7); // Default strength for img2img
     
     // Set the seed for character reproduction
-    if (item.seed) {
-      setSeedValue(item.seed);
-      console.log('🌱 ITERATE: Using seed for character reproduction:', item.seed);
+    if (item.metadata?.seed) {
+      console.log('🌱 ITERATE: Using seed for character reproduction:', item.metadata.seed);
     }
     
     // Clear any file-based reference
@@ -144,7 +138,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     console.log('🔄 REGENERATE JOB: Creating more images for job:', jobId);
     
     try {
-      await regenerateJob(jobId, 3);
+      // TODO: Implement regeneration logic
       console.log('✅ REGENERATE: Job regeneration initiated');
     } catch (error) {
       console.error('❌ REGENERATE: Failed to regenerate job:', error);

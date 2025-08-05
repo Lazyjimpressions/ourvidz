@@ -5,14 +5,14 @@
 
 ## 📋 **Overview of Changes**
 
-This document summarizes the comprehensive updates made to the OurVidz documentation to reflect significant changes in the system architecture, including the dynamic prompting system, workspace-first implementation, and triple worker system.
+This document summarizes the comprehensive updates made to the OurVidz documentation to reflect significant changes in the system architecture, including the dynamic prompting system, dual-destination implementation, and triple worker system.
 
 ## 🔄 **Files Updated**
 
 ### **1. CODEBASE_INDEX.md** ✅ **UPDATED**
 **Changes Made:**
 - Updated last modified date to August 4, 2025
-- Added workspace-first generation system to project overview
+- Added dual-destination generation system to project overview
 - Added dynamic prompting system (12+ templates) to features
 - Updated storage buckets count from 12 to 13
 - Changed from "Dual Worker System" to "Triple Worker System"
@@ -22,7 +22,7 @@ This document summarizes the comprehensive updates made to the OurVidz documenta
   - `refresh-prompt-cache`
 - Added new sections:
   - Dynamic Prompting System (12+ templates)
-  - Workspace-First System (database-first implementation)
+  - Dual-Destination System (database-first implementation)
 - Updated key components section with:
   - DynamicEnhancementOrchestrator
   - Workspace System
@@ -43,7 +43,7 @@ This document summarizes the comprehensive updates made to the OurVidz documenta
 - Updated recent updates section with:
   - Dynamic Prompting System
   - Triple Worker System
-  - Workspace-First Implementation
+  - Dual-Destination Implementation
 - Updated current architecture with triple worker system and dynamic prompting
 - Added reference to prompting system documentation
 
@@ -107,7 +107,7 @@ This document summarizes the comprehensive updates made to the OurVidz documenta
 - Added documentation status section
 - Added recent major updates section (August 2025):
   - Dynamic Prompting System
-  - Workspace-First System
+  - Dual-Destination System
   - Triple Worker System
 - Added next phase priorities
 - Added performance metrics
@@ -128,7 +128,7 @@ This document summarizes the comprehensive updates made to the OurVidz documenta
 - **Chat Worker**: Chat and roleplay functionality (Qwen 2.5-7B Instruct)
 - **Orchestration**: Coordinated worker management through dual_orchestrator.py
 
-### **3. Workspace-First System**
+### **3. Dual-Destination System**
 - **Database-First Implementation**: Complete workspace system with real-time updates
 - **Session Management**: User workspace sessions with automatic cleanup
 - **Selective Save**: User chooses which content to save to permanent library

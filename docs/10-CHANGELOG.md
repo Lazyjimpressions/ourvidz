@@ -91,10 +91,13 @@
 
 ---
 
-## 🚀 **Version 3.1.0 - Workspace-First Implementation**
+## 🚀 **Version 3.1.0 - Dual-Destination Implementation**
 
-**Release Date:** August 2, 2025  
-**Major Release:** Complete workspace-first generation system
+**Release Date:** August 4, 2025  
+**Major Release:** Complete dual-destination generation system
+
+#### **Dual-Destination Generation System**
+- **New Architecture**: Content generated to library by default, with optional workspace routing
 
 ### **🎯 Major Features**
 
@@ -250,8 +253,8 @@ CREATE OR REPLACE FUNCTION public.clear_workspace_session(
 - **useRealtimeWorkspace.ts** (3.8KB): Real-time workspace updates
 
 #### **Updated Components**
-- **MobileSimplifiedWorkspace.tsx**: Integrated workspace-first generation
-- **SimplifiedWorkspace.tsx**: Integrated workspace-first generation
+- **MobileSimplifiedWorkspace.tsx**: Integrated dual-destination generation
+- **SimplifiedWorkspace.tsx**: Integrated dual-destination generation
 - **MobileSimplePromptInput.tsx**: Updated prop naming for consistency
 
 #### **Removed Components**
@@ -413,7 +416,7 @@ const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 #### **Frontend Updates**
 - Update component imports to use new workspace components
 - Replace legacy state management with useSimplifiedWorkspaceState
-- Update generation calls to use workspace-first flow
+- Update generation calls to use dual-destination flow
 - Implement real-time workspace updates
 
 #### **Edge Function Updates**
@@ -424,7 +427,7 @@ const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 ### **Breaking Changes**
 - **State Management**: Complete state management refactor
 - **Component Structure**: Major component reorganization
-- **Generation Flow**: Workspace-first instead of direct-to-library
+- **Generation Flow**: Dual-destination instead of direct-to-library
 - **API Changes**: New workspace endpoints and functions
 
 ### **Compatibility**
@@ -451,4 +454,4 @@ const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
 ---
 
-**Version 3.1.0 represents a major architectural improvement, implementing a workspace-first generation flow that significantly enhances user experience while maintaining system performance and security.** 
+**Version 3.1.0 represents a major architectural improvement, implementing a dual-destination generation flow that significantly enhances user experience while maintaining system performance and security.** 

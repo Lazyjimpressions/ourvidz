@@ -389,7 +389,7 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ## 🔄 Data Flow
 
-### **Workspace-First Generation Flow**
+### **Dual-Destination Generation Flow**
 ```
 1. User submits prompt (workspace destination)
 2. Frontend → queue-job edge function

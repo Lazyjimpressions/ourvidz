@@ -705,6 +705,27 @@ export class AssetService {
     const allAssets = [...imageAssets, ...videoAssets];
     allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
+    // LIBRARY-FIRST: Emit event for workspace and other consumers after URL generation
+    const completedAssets = allAssets.filter(asset => asset.status === 'completed' && asset.url && !asset.error);
+    
+    if (completedAssets.length > 0) {
+      // Emit event for workspace and other consumers
+      window.dispatchEvent(new CustomEvent('library-assets-ready', {
+        detail: {
+          assets: completedAssets,
+          type: 'batch',
+          timestamp: new Date().toISOString(),
+          sessionOnly: sessionOnly
+        }
+      }));
+      
+      console.log('📡 LIBRARY: Emitted assets-ready event:', {
+        assetCount: completedAssets.length,
+        types: completedAssets.map(a => a.type),
+        sessionOnly: sessionOnly
+      });
+    }
+
     console.log('✅ ENHANCED Final asset summary:', {
       total: allAssets.length,
       images: imageAssets.length,
@@ -714,6 +735,7 @@ export class AssetService {
       completedImages: imageAssets.filter(a => a.status === 'completed').length,
       imagesWithUrls: imageAssets.filter(a => !!a.url).length,
       imagesWithErrors: imageAssets.filter(a => !!a.error).length,
+      completedWithUrls: completedAssets.length,
       assetBreakdown: allAssets.map(a => ({
         id: a.id,
         type: a.type,

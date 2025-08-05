@@ -11,7 +11,7 @@ OurVidz.com is an AI-powered adult content generation platform with:
 - **Backend**: Supabase Online (PostgreSQL, Auth, Storage, Edge Functions)
 - **AI Workers**: RunPod RTX 6000 ADA (48GB VRAM) - **Separate Repository**
 - **Architecture**: Triple worker system with job queuing and real-time status
-- **Workspace System**: LTX-style workspace-first generation flow with job-level grouping
+- **Workspace System**: LTX-style dual-destination generation flow with job-level grouping
 - **Dynamic Prompting**: 12+ specialized templates for all models and use cases
 
 ### 🔗 Repository Structure
@@ -257,7 +257,7 @@ npm run jsdoc:generate
 - **Code Reduction**: 718 lines of code removed (net reduction)
 - **Dynamic Prompting System**: 12+ specialized templates for all models and use cases
 - **Triple Worker System**: SDXL, WAN, and Chat workers orchestrated together
-- **Workspace-First Implementation**: Complete workspace generation flow
+- **Dual-Destination Implementation**: Complete workspace generation flow
 - **Database Schema**: New workspace_sessions and workspace_items tables
 - **Edge Functions**: Updated queue-job and job-callback for workspace support
 - **Shared Utilities**: Intelligent caching and monitoring systems implemented
