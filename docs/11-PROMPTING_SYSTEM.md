@@ -1,493 +1,286 @@
-# Dynamic Prompting System Documentation
+# Dynamic Prompting System
 
 **Last Updated:** August 4, 2025  
-**Status:** Production Active  
-**Total Templates:** 12 Active Templates
-**Architecture:** Pure Inference Engine - No Worker Overrides
+**Architecture:** Pure Inference Engine - No Worker Overrides  
+**Status:** ✅ Production Ready with Enhanced Logging
 
-## 🧠 Overview
+## Overview
 
-The OurVidz Dynamic Prompting System provides **12 specialized templates** that optimize AI interactions across all models and use cases. This system replaces hardcoded prompts with database-driven, version-controlled templates that adapt to content modes (SFW/NSFW) and model-specific behaviors.
+The Dynamic Prompting System uses 12 specialized, database-driven templates for AI interactions. This system has been **completely overhauled** to implement a **Pure Inference Engine** architecture, eliminating template override risks and providing comprehensive logging.
 
-### **🎯 NEW ARCHITECTURE: Pure Inference Engine**
-**✅ RESOLVED - MEDIUM PRIORITY**: The chat worker has been completely overhauled from a hardcoded prompt system to a **pure inference engine** that eliminates all template override risks.
+### 🎯 NEW ARCHITECTURE: Pure Inference Engine
 
-**Key Changes:**
-- ❌ **Removed**: All hardcoded prompts from worker code (38-127 lines deleted)
-- ❌ **Removed**: `EnhancementSystemPrompts` class and `create_enhanced_messages` function
-- ✅ **Implemented**: Pure inference architecture with `/chat`, `/enhance`, and `/generate` endpoints
-- ✅ **Result**: Worker respects ALL system prompts from edge functions without modification
-- ✅ **Security**: Complete separation of concerns - edge functions control all prompts
+**Key Changes (August 4, 2025):**
+- **Removed hardcoded prompts** from chat worker
+- **New pure inference endpoints** (`/chat`, `/enhance`, `/generate`)
+- **Enhanced logging** throughout the enhancement pipeline
+- **Template override risk eliminated** through pure inference architecture
+- **Security improvements** with edge function control over all prompts
 
-### **Key Features**
-- **Model-Specific Optimization:** Tailored for Qwen Base vs Instruct behaviors
-- **Content Mode Awareness:** Appropriate language for SFW/NSFW contexts  
-- **Token Limit Enforcement:** Prevents CLIP truncation and ensures quality
-- **Professional Comments:** Design decisions documented for each template
-- **Version Control:** Template versioning and update tracking
-- **Admin Control:** Real-time template management via admin interface
+**Security Implications:**
+- Workers can no longer override database templates
+- All prompt construction happens in edge functions
+- Complete audit trail of prompt enhancement process
+
+## Key Features
+
+- **Database-Driven Templates:** 12 specialized templates with version control
 - **Pure Inference:** Worker executes exactly what edge functions provide - no overrides
+- **Enhanced Logging:** Comprehensive logging of prompt enhancement process
+- **Content Mode Detection:** Automatic SFW/NSFW detection and routing
+- **Fallback System:** Multiple levels of fallback for reliability
+- **Token Optimization:** Model-specific token limit enforcement
+- **Performance Monitoring:** Real-time execution time and cache hit tracking
 
----
+## Template Reference
 
-## 📋 Template Reference
+### Core Templates (12 Active)
 
-### **Enhancement Templates (8 Total)**
+| Template Name | Model Type | Use Case | Content Mode | Token Limit |
+|---------------|------------|----------|--------------|-------------|
+| `enhancement_sdxl_sfw` | qwen_instruct | enhancement | sfw | 75 |
+| `enhancement_sdxl_nsfw` | qwen_instruct | enhancement | nsfw | 75 |
+| `enhancement_wan_sfw` | qwen_base | enhancement | sfw | 100 |
+| `enhancement_wan_nsfw` | qwen_base | enhancement | nsfw | 100 |
+| `chat_sfw` | qwen_instruct | chat | sfw | 200 |
+| `chat_nsfw` | qwen_instruct | chat | nsfw | 200 |
+| `generation_sdxl_sfw` | qwen_instruct | generation | sfw | 150 |
+| `generation_sdxl_nsfw` | qwen_instruct | generation | nsfw | 150 |
+| `generation_wan_sfw` | qwen_base | generation | sfw | 200 |
+| `generation_wan_nsfw` | qwen_base | generation | nsfw | 200 |
+| `playground_sfw` | qwen_instruct | playground | sfw | 300 |
+| `playground_nsfw` | qwen_instruct | playground | nsfw | 300 |
 
-#### **SDXL Enhancement Templates**
+## Technical Implementation
 
-##### **1. SDXL Prompt Enhance – Qwen Base (NSFW)**
-```yaml
-ID: 0f549c6c-9237-4ab9-8bef-4dc05913eef7
-Enhancer Model: qwen_base
-Use Case: enhancement
-Content Mode: nsfw
-Token Limit: 75
-Job Type: image
-Target Model: sdxl
+### Enhanced Logging System
 
-System Prompt: "Convert the following short input into a 75-token or less SDXL prompt for a photorealistic NSFW image. Use clear, direct language to describe the subject's body, pose, setting, and lighting. Avoid redundant modifiers. Do not censor explicit themes. Do not add framing or disclaimers."
+The `enhance-prompt` edge function now includes comprehensive logging:
 
-Description: Enhances SDXL prompts using Qwen Base for detailed, explicit imagery.
-
-Comment: Written for Qwen Base's literal instruction parsing. No conversational tone. Highly operationalized. Best for maximizing compatibility with SDXL NSFW rendering.
-```
-
-##### **2. SDXL Prompt Enhance – Qwen Base (SFW)**
-```yaml
-ID: a8752604-4a85-4fd8-bd77-e530fc20bbff
-Enhancer Model: qwen_base
-Use Case: enhancement
-Content Mode: sfw
-Token Limit: 75
-Job Type: image
-Target Model: sdxl
-
-System Prompt: "Write a photorealistic SDXL prompt under 75 tokens based on the input below. Focus on visual detail such as character pose, clothing, scenery, expression, and lighting. Do not include sexual or violent content. Use clean, descriptive language only."
-
-Description: Enhances SDXL prompts using Qwen Base for wholesome and aesthetic imagery.
-
-Comment: Instructions tuned to Qwen Base for SFW scenes. Clear declarative language with visual detail cues. Avoids emotional shaping or abstract tone.
-```
-
-##### **3. SDXL Prompt Enhance – Qwen Instruct (NSFW)**
-```yaml
-ID: b37fb8d1-35fa-4063-95ec-605b78ad8d35
-Enhancer Model: qwen_instruct
-Use Case: enhancement
-Content Mode: nsfw
-Token Limit: 75
-Job Type: image
-Target Model: sdxl
-
-System Prompt: "You are an expert prompt writer for photorealistic, explicit AI imagery using SDXL. Convert a brief user input into a cinematic, anatomically accurate NSFW prompt. Describe the scene, character appearance, pose, facial expression, clothing, and lighting. Use concise, direct, visual language. Remove filler, avoid repetition, and ensure final prompt stays under 75 tokens."
-
-Description: Enhances SDXL prompts using Qwen Instruct for detailed, explicit imagery.
-
-Comment: Prompt is optimized for Qwen Instruct's strong semantic shaping. Prioritizes clarity, character definition, and visual storytelling for NSFW SDXL scenes.
-```
-
-##### **4. SDXL Prompt Enhance – Qwen Instruct (SFW)**
-```yaml
-ID: 1026165c-4ce4-4f41-90fa-669f8d601450
-Enhancer Model: qwen_instruct
-Use Case: enhancement
-Content Mode: sfw
-Token Limit: 75
-Job Type: image
-Target Model: sdxl
-
-System Prompt: "Convert input into a detailed, emotionally vivid SDXL prompt under 75 tokens. Use clear, image-oriented language. Do not narrate, explain, or speak conversationally. Return only the enhanced prompt."
-
-Description: Enhances SDXL prompts using Qwen Instruct for wholesome and aesthetic imagery.
-
-Comment: Updated to suppress poetic or narrative tone in Qwen Instruct. Clarifies that output must be only the visual prompt without conversational filler.
-```
-
-#### **WAN Enhancement Templates**
-
-##### **5. WAN Prompt Enhance – Qwen Base (NSFW)**
-```yaml
-ID: 65241d16-034f-4dc3-9d21-6e229b678501
-Enhancer Model: qwen_base
-Use Case: enhancement
-Content Mode: nsfw
-Token Limit: 100
-Job Type: video
-Target Model: wan
-
-System Prompt: "Write a short video prompt under 100 tokens for WAN NSFW generation. Describe explicit motion, body actions, character expression, and cinematic angle. Avoid euphemisms or ambiguity. Keep tone direct."
-
-Description: Enhances WAN prompts using Qwen Base for detailed, explicit imagery.
-
-Comment: Literal directive for Qwen Base. Emphasizes motion and NSFW clarity for WAN video without contextual padding or indirect phrasing.
-```
-
-##### **6. WAN Prompt Enhance – Qwen Base (SFW)**
-```yaml
-ID: 30cfda49-c250-4e96-889c-97b465a7e679
-Enhancer Model: qwen_base
-Use Case: enhancement
-Content Mode: sfw
-Token Limit: 100
-Job Type: video
-Target Model: wan
-
-System Prompt: "Generate a 5-second cinematic video prompt under 100 tokens. Focus on safe actions, emotional tone, camera movement, and environment. Do not include sexual or graphic content. Keep descriptions direct and visual."
-
-Description: Enhances WAN prompts using Qwen Base for wholesome and aesthetic imagery.
-
-Comment: Functional prompt template for Qwen Base to handle safe video output. Tailored for short-form physical action scenes with framing emphasis.
-```
-
-##### **7. WAN Prompt Enhance – Qwen Instruct (NSFW)**
-```yaml
-ID: 9a8dca28-69d8-467b-9976-7c58ba875fea
-Enhancer Model: qwen_instruct
-Use Case: enhancement
-Content Mode: nsfw
-Token Limit: 100
-Job Type: video
-Target Model: wan
-
-System Prompt: "Convert input into a 5-second cinematic SD-style video prompt. Describe character motion, facial expression, and camera angle in explicit detail. Do not speak to the user. Return only the enhanced prompt. Limit to 100 tokens."
-
-Description: Enhances WAN prompts using Qwen Instruct for detailed, explicit imagery.
-
-Comment: Rewritten to eliminate conversational role preamble. Tightens focus on NSFW cinematic motion and enforces non-chatty output.
-```
-
-##### **8. WAN Prompt Enhance – Qwen Instruct (SFW)**
-```yaml
-ID: 59eccd23-2e44-43f8-913c-e85cd19d55da
-Enhancer Model: qwen_instruct
-Use Case: enhancement
-Content Mode: sfw
-Token Limit: 100
-Job Type: video
-Target Model: wan
-
-System Prompt: "Convert the input into a 5-second cinematic video prompt. Describe character action, body language, and environment. Avoid chatty tone or narration. Output must be under 100 tokens and contain no adult or violent content."
-
-Description: Enhances WAN prompts using Qwen Instruct for wholesome and aesthetic imagery.
-
-Comment: Fixes soft phrasing that triggered chatty output. Now instructs Qwen Instruct to return only prompt text with visual focus and SFW boundaries.
-```
-
-### **Chat Templates (3 Total)**
-
-#### **General Chat Templates**
-
-##### **9. Chat Assistant – Qwen Instruct (NSFW)**
-```yaml
-ID: 4c6df7e0-a09e-4561-90b1-d981bba31806
-Enhancer Model: qwen_instruct
-Use Case: chat
-Content Mode: nsfw
-Token Limit: 600
-Job Type: chat
-Target Model: null
-
-System Prompt: "Reply as a flirtatious, modern conversational partner. Use uncensored, natural, and sexually expressive language. Do not narrate or explain. Speak directly."
-
-Description: Casual NSFW chat persona using Qwen Instruct.
-
-Comment: Optimized for casual erotic NSFW chat. Directs Qwen to reply without instructional tone or formatting artifacts.
-```
-
-##### **10. Chat Assistant – Qwen Instruct (SFW)**
-```yaml
-ID: e2859c4d-c1db-46c7-94bd-d430c5c5c6b7
-Enhancer Model: qwen_instruct
-Use Case: chat
-Content Mode: sfw
-Token Limit: 400
-Job Type: chat
-Target Model: null
-
-System Prompt: "Respond in a helpful, polite, and concise tone. Do not include adult or suggestive content. Avoid roleplaying or storytelling. Always reply factually and clearly."
-
-Description: Helpful assistant for SFW general chat.
-
-Comment: Prevents verbosity, poetic drift, and chat-like behaviors. Keeps assistant focused on short, safe responses for SFW conversation.
-```
-
-#### **Specialized Chat Templates**
-
-##### **11. Admin Assistant – Qwen Instruct**
-```yaml
-ID: 7647a214-cbd3-49ec-8c45-643c360e2172
-Enhancer Model: qwen_instruct
-Use Case: admin
-Content Mode: sfw
-Token Limit: 400
-Job Type: chat
-Target Model: null
-
-System Prompt: "You are a technical assistant trained to write, edit, and analyze prompts for AI image and video generation. You may include explicit or NSFW terms if needed. Do not generate full scenes or roleplay. Focus on visual composition, anatomy, framing, lighting, and clarity. Keep output concise."
-
-Description: Prompt testing and debugging assistant.
-
-Comment: Allows prompt enhancement and critique in both SFW and NSFW modes. Suppresses chatty output and narration. Designed for operators testing SDXL/WAN jobs.
-```
-
-### **Roleplay Templates (1 Total)**
-
-#### **Immersive Roleplay Templates**
-
-##### **12. Qwen Instruct Roleplay Fantasy**
-```yaml
-ID: dede7994-c064-426c-b544-7f9d8742078b
-Enhancer Model: qwen_instruct
-Use Case: roleplay
-Content Mode: nsfw
-Token Limit: 1000
-Job Type: chat
-Target Model: null
-
-System Prompt: "Continue the erotic roleplay scene in progress. Use first-person or character dialogue. Stay in character and write visually rich, uncensored responses with strong emotional tone. Do not narrate externally or break character."
-
-Description: Immersive roleplay prompt using Qwen Instruct for adult chat scenarios.
-
-Comment: Enforces immersive multi-character erotic roleplay without breaking the fourth wall. Focused on maintaining consistent tone and pacing.
-```
-
----
-
-## 🔧 Technical Implementation
-
-### **Template Selection Logic**
 ```typescript
-interface TemplateSelection {
-  enhancer_model: 'qwen_base' | 'qwen_instruct';
-  use_case: 'enhancement' | 'chat' | 'roleplay' | 'admin';
-  content_mode: 'sfw' | 'nsfw';
-  job_type: 'image' | 'video' | 'chat';
-  target_model: 'sdxl' | 'wan' | null;
-}
-```
+// Request logging with prompt preview
+console.log('🎯 Dynamic enhance prompt request:', {
+  prompt: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt,
+  jobType,
+  format,
+  quality,
+  selectedModel,
+  promptLength: prompt.length
+});
 
-### **Template Matching Priority**
-1. **Exact Match:** All parameters match
-2. **Model Fallback:** Same use case, content mode, job type
-3. **Content Mode Fallback:** Same use case, job type
-4. **Use Case Fallback:** Same job type
-5. **Hardcoded Fallback:** System default prompts
+// Template selection logging
+console.log('🚀 Enhancing with template:', {
+  template: template.template_name || 'unnamed_template',
+  enhancerModel: template.enhancer_model,
+  modelType: template.model_type,
+  selectedModel,
+  workerType,
+  contentMode
+});
 
-### **Token Limit Enforcement**
-- **SDXL Templates:** 75 tokens (prevents CLIP truncation)
-- **WAN Templates:** 100 tokens (video generation optimization)
-- **Chat Templates:** 400-600 tokens (conversation flexibility)
-- **Roleplay Templates:** 1000 tokens (immersive storytelling)
+// Pure inference payload logging
+console.log('💬 Chat worker payload (pure inference):', {
+  messagesCount: messages.length,
+  systemPromptLength: template.system_prompt.length,
+  userPromptLength: request.prompt.length,
+  maxTokens: payload.max_tokens,
+  templateName: template.template_name || 'unnamed'
+});
 
----
-
-## 📊 Template Performance
-
-### **Enhancement Template Usage**
-```yaml
-SDXL Enhancement:
-  Qwen Base (NSFW): High usage, excellent compatibility
-  Qwen Base (SFW): Medium usage, good quality
-  Qwen Instruct (NSFW): High usage, detailed output
-  Qwen Instruct (SFW): Medium usage, artistic quality
-
-WAN Enhancement:
-  Qwen Base (NSFW): High usage, motion clarity
-  Qwen Base (SFW): Medium usage, safe content
-  Qwen Instruct (NSFW): High usage, cinematic detail
-  Qwen Instruct (SFW): Medium usage, professional quality
-```
-
-### **Chat Template Usage**
-```yaml
-General Chat:
-  NSFW Chat: High usage, natural conversation
-  SFW Chat: Medium usage, helpful responses
-
-Specialized:
-  Admin Assistant: Low usage, technical support
-```
-
-### **Roleplay Template Usage**
-```yaml
-Immersive Roleplay:
-  NSFW Roleplay: High usage, character consistency
-```
-
----
-
-## 🛠️ Admin Management
-
-### **Template Management Interface**
-- **Edit Templates:** Real-time template modification
-- **Test Templates:** Live testing with sample inputs
-- **Version Control:** Template versioning and rollback
-- **Usage Analytics:** Template performance tracking
-- **A/B Testing:** Template comparison and optimization
-
-### **Template Validation**
-- **Token Count Validation:** Ensures compliance with limits
-- **Content Mode Validation:** Verifies appropriate language
-- **Model Compatibility:** Checks enhancer/target model pairs
-- **Syntax Validation:** Validates system prompt formatting
-
----
-
-## 🏗️ Pure Inference Engine Architecture
-
-### **Architectural Transformation**
-
-#### **Before (Problematic Architecture)**
-```python
-# ❌ HARDCODED PROMPTS - Template Override Risk
-class EnhancementSystemPrompts:
-    @staticmethod
-    def get_sdxl_system_prompt(job_type, quality):
-        base_prompt = """You are an expert AI prompt engineer..."""
-        return base_prompt
-
-def create_enhanced_messages(original_prompt, job_type, quality):
-    # ❌ RISK: Hardcoded system prompts override database templates
-    system_prompt = EnhancementSystemPrompts.get_sdxl_system_prompt(job_type, quality)
-    user_prompt = f"""ENHANCEMENT REQUEST:..."""
-    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-```
-
-#### **After (Pure Inference Engine)**
-```python
-# ✅ PURE INFERENCE - No Template Override Risk
-def generate_inference(self, messages: list, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9) -> dict:
-    """
-    Pure inference method - executes exactly what is provided
-    NO MODIFICATION of system prompts or messages
-    """
-    # Apply chat template - NO MODIFICATION
-    text = self.qwen_instruct_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    # Generate response with provided messages only
-```
-
-### **Security & Risk Mitigation**
-
-#### **Template Override Risk: ELIMINATED** ✅
-- **Before**: Worker could override database templates with hardcoded prompts
-- **After**: Worker has zero ability to modify or override templates
-- **Result**: Complete separation of concerns - edge functions control all prompts
-
-#### **Data Flow Security**
-```
-Database Templates → Edge Functions → Worker (Pure Inference) → Response
-     ↑                    ↑                    ↑
-  Template Source    Template Assembly    Template Execution
-```
-
-### **Performance Improvements**
-
-#### **Memory Optimization**
-- ✅ Model set to `eval()` mode for inference-only
-- ✅ PyTorch 2.0 compilation when available
-- ✅ Comprehensive OOM error handling with retry logic
-- ✅ Memory cleanup and validation
-
-#### **Response Time**
-- ✅ Direct inference without prompt processing overhead
-- ✅ Optimized tokenization and generation
-- ✅ Reduced computational complexity
-
-### **Migration Path**
-
-#### **For Edge Functions**
-1. **Fetch templates** from database
-2. **Construct messages** array with system/user roles
-3. **Send to worker** via `/chat`, `/enhance`, or `/generate` endpoints
-4. **Receive response** and process as needed
-
-#### **Example Edge Function Integration**
-```javascript
-// Edge function example
-const systemTemplate = await fetchSystemTemplate(jobType, quality);
-const userTemplate = await fetchUserTemplate(jobType, quality);
-
-const messages = [
-  { role: 'system', content: systemTemplate },
-  { role: 'user', content: userTemplate.replace('{original_prompt}', originalPrompt) }
-];
-
-const response = await fetch(workerUrl + '/enhance', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ messages, max_tokens: 200 })
+// Enhanced prompt result logging
+console.log('🎯 ENHANCED PROMPT GENERATED:', {
+  originalPrompt: prompt.length > 200 ? prompt.substring(0, 200) + '...' : prompt,
+  enhancedPrompt: enhancementResult.enhanced_prompt,
+  templateUsed: enhancementResult.template_name,
+  strategy: enhancementResult.strategy
 });
 ```
 
----
+### Pure Inference Engine Integration
 
-## 🔄 Integration Points
+**Edge Function Responsibility:**
+- Fetch database templates
+- Construct complete `messages` array
+- Send to worker for pure inference
+- Handle all prompt logic
 
-### **Edge Functions**
-- **enhance-prompt:** Uses templates for dynamic enhancement
-- **playground-chat:** Uses chat templates for conversation
-- **validate-enhancement-fix:** Validates template outputs
+**Worker Responsibility:**
+- Execute exactly what's provided
+- No prompt modification
+- Return enhanced result
 
-### **Worker System - Pure Inference Engine** ⭐ **UPDATED**
-- **SDXL Worker:** Uses enhancement templates for image generation
-- **WAN Worker:** Uses enhancement templates for video generation
-- **Chat Worker:** **Pure inference engine** - executes exactly what edge functions provide
-
-#### **New Chat Worker Endpoints**
 ```typescript
-// Pure Inference Endpoints - No Template Overrides
-POST /chat - Accepts messages array from edge functions
-POST /enhance - Accepts enhancement messages from edge functions  
-POST /generate - Generic inference with any messages array
-GET /worker/info - Worker capabilities and architecture info
-```
-
-#### **Data Flow Security**
-```
-Database Templates → Edge Functions → Worker (Pure Inference) → Response
-     ↑                    ↑                    ↑
-  Template Source    Template Assembly    Template Execution
-```
-
-#### **Worker Information Response**
-```json
-{
-  "worker_type": "pure_inference_engine",
-  "model": "Qwen2.5-7B-Instruct",
-  "capabilities": {
-    "chat": true,
-    "enhancement": true,
-    "generation": true,
-    "hardcoded_prompts": false,
-    "prompt_modification": false,
-    "pure_inference": true
+// Build messages array using database template - THIS IS THE KEY FIX
+const messages = [
+  {
+    role: "system",
+    content: template.system_prompt
+  },
+  {
+    role: "user", 
+    content: request.prompt
   }
-}
+];
+
+// Send to pure inference endpoint
+const response = await fetch(`${chatWorkerUrl}/enhance`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    messages: messages,
+    max_tokens: template.token_limit || 200,
+    temperature: 0.7,
+    top_p: 0.9
+  })
+});
 ```
 
-### **Admin Interface**
-- **PromptTemplatesTable:** Template management and editing
-- **Template Testing:** Live template validation
-- **Usage Analytics:** Template performance monitoring
+### Data Flow Security
 
----
+```
+[Database Template] → [Edge Function] → [Pure Inference Worker] → [Enhanced Result]
+       ↓                      ↓                      ↓                    ↓
+   System Prompt      Messages Array         Execute Only         Return Result
+   User Prompt        No Overrides           No Modifications     No Template Logic
+```
 
-## 📈 Future Enhancements
+## Performance
 
-### **Planned Features**
-- **Template A/B Testing:** Automated template comparison
-- **Performance Scoring:** AI-powered template evaluation
-- **Dynamic Template Selection:** Context-aware template choosing
-- **Template Optimization:** Automated template improvement
-- **Multi-language Support:** International template variants
+### Token Optimization
 
-### **Advanced Capabilities**
-- **Template Chaining:** Sequential template application
-- **Conditional Logic:** Context-dependent template selection
-- **Template Inheritance:** Base template extension
-- **Custom Templates:** User-defined template creation
+- **SDXL:** 75 token limit (prevents CLIP truncation)
+- **WAN:** 100 token limit (video generation)
+- **Chat:** 200 token limit (conversation)
+- **Automatic compression** when limits exceeded
 
----
+### Caching Strategy
 
-*This documentation reflects the current state of the Dynamic Prompting System as of August 2, 2025. For implementation details, see the enhance-prompt edge function and worker system documentation.* 
+1. **Database Template** (Primary)
+2. **System Cache** (Fallback)
+3. **Hardcoded Templates** (Emergency)
+
+### Monitoring Metrics
+
+- **Execution Time:** Real-time performance tracking
+- **Cache Hit Rate:** Template retrieval efficiency
+- **Fallback Level:** System reliability indicator
+- **Token Count:** Optimization effectiveness
+- **Worker Response Time:** Pure inference performance
+
+## Admin Management
+
+### Template Management
+
+```sql
+-- View active templates
+SELECT * FROM prompt_templates WHERE is_active = true ORDER BY version DESC;
+
+-- Update template
+UPDATE prompt_templates 
+SET system_prompt = 'New system prompt', version = version + 1 
+WHERE template_name = 'enhancement_sdxl_sfw';
+
+-- Deactivate template
+UPDATE prompt_templates SET is_active = false WHERE template_name = 'old_template';
+```
+
+### Log Analysis
+
+```sql
+-- Monitor enhancement performance
+SELECT 
+  template_name,
+  AVG(execution_time_ms) as avg_time,
+  COUNT(*) as usage_count,
+  AVG(fallback_level) as avg_fallback
+FROM enhancement_logs 
+WHERE created_at > NOW() - INTERVAL '24 hours'
+GROUP BY template_name;
+```
+
+## Integration Points
+
+### Edge Functions
+
+- **`enhance-prompt`:** Main enhancement with pure inference
+- **`playground-chat`:** Chat interface with template routing
+- **`queue-job`:** Job queuing with template selection
+
+### Worker System
+
+**Chat Worker:** Pure inference engine
+- **Endpoint:** `/enhance` (new pure inference endpoint)
+- **Model:** Qwen Instruct
+- **Capability:** Template-driven enhancement
+- **Security:** No prompt overrides
+
+**WAN Worker:** Legacy format maintained
+- **Endpoint:** `/generate` (existing format)
+- **Model:** Qwen Base
+- **Capability:** Video generation enhancement
+- **Compatibility:** Backward compatible
+
+### Frontend Integration
+
+```typescript
+// Enhanced prompt request with logging
+const response = await fetch('/functions/v1/enhance-prompt', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    prompt: userPrompt,
+    jobType: 'sdxl_image',
+    quality: 'high',
+    selectedModel: 'qwen_instruct',
+    user_id: userId
+  })
+});
+
+// Response includes comprehensive metadata
+const result = await response.json();
+console.log('Enhancement metadata:', result.enhancement_metadata);
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Template Not Found**
+   - Check database for active templates
+   - Verify model_type, use_case, content_mode match
+   - Check template version and is_active status
+
+2. **Worker Communication Failure**
+   - Verify worker URL from `get-active-worker-url`
+   - Check worker health status
+   - Review pure inference endpoint availability
+
+3. **Token Limit Exceeded**
+   - Review template token_limit settings
+   - Check automatic compression logic
+   - Monitor token optimization performance
+
+### Debug Commands
+
+```bash
+# Check worker status
+curl -X GET "https://your-worker-url/worker/info"
+
+# Test pure inference endpoint
+curl -X POST "https://your-worker-url/enhance" \
+  -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"system","content":"Test"},{"role":"user","content":"Hello"}],"max_tokens":100}'
+
+# Monitor edge function logs
+supabase functions logs enhance-prompt --follow
+```
+
+## Recent Updates
+
+### August 4, 2025: Enhanced Logging & Pure Inference
+
+- **Enhanced Logging:** Comprehensive logging throughout enhancement pipeline
+- **Pure Inference Integration:** Complete integration with new worker architecture
+- **Template Override Elimination:** Security improvement through pure inference
+- **Performance Monitoring:** Real-time metrics and fallback tracking
+- **Error Handling:** Improved error handling with detailed logging 
