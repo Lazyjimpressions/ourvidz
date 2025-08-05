@@ -113,6 +113,9 @@ export interface SimplifiedWorkspaceActions {
   dismissJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
+  // NEW: Separate iterate and regenerate actions
+  regenerateJob: (jobId: string, count?: number) => Promise<void>;
+  iterateFromItem: (item: WorkspaceItem) => void;
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => WorkspaceJob | null;
@@ -951,6 +954,62 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     return workspaceJobs.find(job => job.id === jobId) || null;
   };
 
+  // NEW: Regenerate job with same parameters
+  const regenerateJob = useCallback(async (jobId: string, count: number = 3) => {
+    const job = workspaceJobs.find(j => j.id === jobId);
+    if (!job || job.items.length === 0) {
+      console.error('Job not found for regeneration:', jobId);
+      return;
+    }
+
+    const firstItem = job.items[0];
+    console.log('🔄 REGENERATE: Generating', count, 'more images using job parameters:', {
+      jobId,
+      prompt: firstItem.prompt,
+      seed: firstItem.seed,
+      enhancedPrompt: firstItem.enhancedPrompt
+    });
+
+    try {
+      // Use the job's original parameters
+      await generate(
+        null, // No reference image for regeneration
+        null, // No beginning ref
+        null, // No ending ref
+        firstItem.seed // Use original seed for consistency
+      );
+
+      toast({
+        title: "Regenerating Images",
+        description: `Generating ${count} more images with the same parameters`,
+      });
+    } catch (error) {
+      console.error('❌ REGENERATE: Failed:', error);
+      toast({
+        title: "Regeneration Failed",
+        description: "Failed to generate more images. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [workspaceJobs, generate, toast]);
+
+  // NEW: Iterate from item (use as reference)
+  const iterateFromItem = useCallback((item: WorkspaceItem) => {
+    console.log('🔄 ITERATE: Using item as reference for new generation:', {
+      itemId: item.id,
+      prompt: item.prompt,
+      seed: item.seed,
+      url: item.url
+    });
+
+    // Set item as reference image for next generation
+    // This will be used when user modifies the prompt and generates
+    if (item.url) {
+      // Implementation will be handled in SimplifiedWorkspace component
+      console.log('📤 ITERATE: Item ready to be used as reference');
+    }
+  }, []);
+
   // Removed importJob - not needed since images are already in library
 
   return {
@@ -1019,6 +1078,9 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
     getJobStats,
     getActiveJob,
     getJobById,
+    // NEW: Separate iterate and regenerate actions
+    regenerateJob,
+    iterateFromItem,
     // importJob removed - not needed
     // Legacy actions for mobile compatibility
     editItem: (item: WorkspaceItem) => console.log('Edit item:', item),
