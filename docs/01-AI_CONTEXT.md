@@ -241,6 +241,13 @@ npm run jsdoc:generate
 - ✅ **Dynamic prompting system with 12+ templates implemented**
 
 ### **Recent Updates (August 4, 2025):**
+- **Chat Worker Pure Inference Engine Overhaul**: Complete architectural transformation eliminating template override risks
+  - ❌ **Removed**: All hardcoded prompts from worker code (38-127 lines deleted)
+  - ❌ **Removed**: `EnhancementSystemPrompts` class and `create_enhanced_messages` function
+  - ✅ **Implemented**: Pure inference architecture with `/chat`, `/enhance`, and `/generate` endpoints
+  - ✅ **Result**: Worker respects ALL system prompts from edge functions without modification
+  - ✅ **Security**: Complete separation of concerns - edge functions control all prompts
+  - ✅ **Performance**: Model in `eval()` mode with PyTorch 2.0 compilation and OOM handling
 - **LTX-Style Workspace Refactoring**: Complete workspace system overhaul with job-level grouping
 - **Job-Level Management**: Items grouped by `job_id` with thumbnail navigation
 - **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal) functionality
@@ -262,6 +269,7 @@ npm run jsdoc:generate
 
 ### **Current Architecture:**
 - **Triple Worker System**: SDXL, WAN, and Chat workers with orchestration
+- **Pure Inference Engine**: Chat worker respects all system prompts from edge functions - no overrides
 - **LTX-Style Workspace System**: Job-level grouping with thumbnail selector and hover-to-delete
 - **Session Management**: User workspace sessions with automatic cleanup
 - **Library Integration**: Save selected items from workspace to permanent library
@@ -269,6 +277,7 @@ npm run jsdoc:generate
 - **Mobile Support**: Responsive workspace interface for all devices
 - **Edge Functions**: Comprehensive backend API with caching and monitoring
 - **Dynamic Prompting**: Template-based system with content mode awareness
+- **Template Override Risk**: Eliminated through pure inference architecture
 
 ---
 

@@ -1,6 +1,6 @@
 # Worker API Documentation - Consolidated
 
-**Last Updated:** July 30, 2025  
+**Last Updated:** August 4, 2025  
 **Repository:** `ourvidz-worker` (Separate from this frontend repo)  
 **Status:** Production Active - **Pure Inference Engine Architecture**
 
@@ -9,6 +9,8 @@
 The OurVidz worker API provides endpoints for AI content generation, running on **RunPod RTX 6000 ADA** hardware. This is a **separate repository** from the frontend application.
 
 **🎯 NEW ARCHITECTURE**: The worker has been refactored to be a **pure inference engine** that respects all system prompts sent from the edge function without any override logic.
+
+**✅ RESOLVED - MEDIUM PRIORITY**: Worker Code Interference Risk eliminated through pure inference architecture.
 
 **Note:** For complete worker system details, see [CODEBASE_INDEX_ourvidz_worker.md](./CODEBASE_INDEX_ourvidz_worker.md) - the authoritative source for the `ourvidz-worker` repository.
 
@@ -33,7 +35,110 @@ supabase = create_client(
 
 ## 📋 Core Endpoints
 
-### **1. Image Generation**
+### **1. Pure Inference Engine Endpoints** ⭐ **NEW ARCHITECTURE**
+
+#### **Chat** - `POST /chat`
+**NEW**: Pure inference endpoint that accepts messages array from edge functions.
+
+```python
+# Request
+{
+    "messages": [
+        {"role": "system", "content": "System prompt from edge function"},
+        {"role": "user", "content": "User message"}
+    ],
+    "max_tokens": 512,
+    "temperature": 0.7,
+    "top_p": 0.9
+}
+
+# Response
+{
+    "response": "AI response based on provided messages",
+    "messages_used": [
+        {"role": "system", "content": "System prompt from edge function"},
+        {"role": "user", "content": "User message"}
+    ],
+    "model_info": {
+        "model_name": "Qwen2.5-7B-Instruct",
+        "model_loaded": true,
+        "architecture": "pure_inference_engine"
+    },
+    "processing_time": 1.23
+}
+```
+
+#### **Enhancement** - `POST /enhance`
+**NEW**: Pure inference endpoint for prompt enhancement.
+
+```python
+# Request
+{
+    "messages": [
+        {"role": "system", "content": "Enhancement system prompt from edge function"},
+        {"role": "user", "content": "Original prompt to enhance"}
+    ],
+    "max_tokens": 200,
+    "temperature": 0.7,
+    "top_p": 0.9
+}
+
+# Response
+{
+    "enhanced_prompt": "Enhanced prompt result",
+    "messages_used": [...],
+    "processing_time": 0.85
+}
+```
+
+#### **Generic Generation** - `POST /generate`
+**NEW**: Generic inference endpoint for any messages array.
+
+```python
+# Request
+{
+    "messages": [
+        {"role": "system", "content": "Any system prompt"},
+        {"role": "user", "content": "Any user message"}
+    ],
+    "max_tokens": 512,
+    "temperature": 0.7,
+    "top_p": 0.9
+}
+
+# Response
+{
+    "response": "Generated response",
+    "messages_used": [...],
+    "processing_time": 1.45
+}
+```
+
+#### **Worker Information** - `GET /worker/info`
+**NEW**: Returns worker capabilities and architecture information.
+
+```python
+# Response
+{
+    "worker_type": "pure_inference_engine",
+    "model": "Qwen2.5-7B-Instruct",
+    "capabilities": {
+        "chat": true,
+        "enhancement": true,
+        "generation": true,
+        "hardcoded_prompts": false,
+        "prompt_modification": false,
+        "pure_inference": true
+    },
+    "architecture": {
+        "template_override_risk": "eliminated",
+        "separation_of_concerns": "complete",
+        "edge_function_control": true
+    }
+}
+```
+
+### **2. Image Generation**
 
 #### **Generate Image** - `POST /generate_image`
 Generates images using SDXL or WAN models.
@@ -92,7 +197,7 @@ Generates videos from prompts.
 }
 ```
 
-### **2. Chat & Playground**
+### **3. Chat & Playground**
 
 #### **Chat** - `POST /chat` ⭐ **UPDATED - Pure Inference Engine**
 **NEW**: Single endpoint for all chat requests (SFW and NSFW). Worker respects all system prompts without override.
@@ -152,7 +257,7 @@ Test endpoint to verify system prompt handling.
 }
 ```
 
-### **3. Health & Status**
+### **4. Health & Status**
 
 #### **Health Check** - `GET /health`
 Returns worker health status with new architecture info.
@@ -171,7 +276,13 @@ Returns worker health status with new architecture info.
     "system_prompt_features": {
         "pure_inference_engine": true,
         "no_prompt_overrides": true,
-        "respects_provided_prompts": true
+        "respects_provided_prompts": true,
+        "template_override_risk": "eliminated"
+    },
+    "capabilities": {
+        "hardcoded_prompts": false,
+        "prompt_modification": false,
+        "pure_inference": true
     }
 }
 ```
@@ -198,7 +309,12 @@ Returns detailed worker status.
     },
     "models": {
         "qwen_instruct": "loaded",
-        "qwen_base": "not_loaded"
+        "architecture": "pure_inference_engine"
+    },
+    "security": {
+        "template_override_risk": "eliminated",
+        "hardcoded_prompts": false,
+        "edge_function_control": true
     }
 }
 ```

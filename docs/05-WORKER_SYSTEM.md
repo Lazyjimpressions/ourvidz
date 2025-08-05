@@ -65,16 +65,23 @@ ourvidz-worker/ (Separate Repository)
 - **Cinematic Quality**: Professional video production standards
 
 ### **3. Chat Worker (chat_worker.py)**
-- **Purpose**: Qwen Instruct service with dynamic prompts and NSFW optimization
+- **Purpose**: **Pure inference engine** with Qwen Instruct service - no hardcoded prompts
 - **Polling**: 3-second intervals
 - **Model**: Qwen 2.5-7B Instruct
 - **Performance**: 5-15 seconds for chat, 1-3 seconds for enhancement
 - **VRAM Usage**: 15GB (load when possible)
 - **Job Types**: `chat_enhance`, `chat_conversation`, `chat_unrestricted`, `admin_utilities`
 
+**🎯 NEW ARCHITECTURE: Pure Inference Engine**
+- ✅ **No hardcoded prompts** - Worker respects ALL system prompts from edge functions
+- ✅ **Template override risk eliminated** - Complete separation of concerns
+- ✅ **New endpoints**: `/chat`, `/enhance`, `/generate`, `/worker/info`
+- ✅ **Memory optimization** - Model in `eval()` mode with PyTorch 2.0 compilation
+- ✅ **OOM handling** - Comprehensive error handling with retry logic
+
 **Key Features:**
-- **Dynamic System Prompts**: Custom prompts per conversation with context awareness
-- **Unrestricted Mode Detection**: Automatic adult content detection and processing
+- **Pure Inference**: Executes exactly what edge functions provide - no modifications
+- **Database-Driven Templates**: All prompts controlled by edge functions
 - **NSFW Optimization**: Zero content restrictions with anatomical accuracy
 - **Simplified Enhancement**: Direct Qwen Instruct enhancement with memory management
 - **OOM Handling**: Comprehensive error handling with retry logic and PyTorch 2.0 compilation
@@ -192,6 +199,66 @@ WAN_WORKER_API_KEY=        # API key for WAN worker authentication
 HF_TOKEN=                  # Optional HuggingFace token
 ```
 
+## 🏗️ Pure Inference Engine Architecture
+
+### **Architectural Transformation**
+
+#### **Before (Problematic Architecture)**
+```python
+# ❌ HARDCODED PROMPTS - Template Override Risk
+class EnhancementSystemPrompts:
+    @staticmethod
+    def get_sdxl_system_prompt(job_type, quality):
+        base_prompt = """You are an expert AI prompt engineer..."""
+        return base_prompt
+
+def create_enhanced_messages(original_prompt, job_type, quality):
+    # ❌ RISK: Hardcoded system prompts override database templates
+    system_prompt = EnhancementSystemPrompts.get_sdxl_system_prompt(job_type, quality)
+    user_prompt = f"""ENHANCEMENT REQUEST:..."""
+    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+```
+
+#### **After (Pure Inference Engine)**
+```python
+# ✅ PURE INFERENCE - No Template Override Risk
+def generate_inference(self, messages: list, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9) -> dict:
+    """
+    Pure inference method - executes exactly what is provided
+    NO MODIFICATION of system prompts or messages
+    """
+    # Apply chat template - NO MODIFICATION
+    text = self.qwen_instruct_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    # Generate response with provided messages only
+```
+
+### **Security & Risk Mitigation**
+
+#### **Template Override Risk: ELIMINATED** ✅
+- **Before**: Worker could override database templates with hardcoded prompts
+- **After**: Worker has zero ability to modify or override templates
+- **Result**: Complete separation of concerns - edge functions control all prompts
+
+#### **Data Flow Security**
+```
+Database Templates → Edge Functions → Worker (Pure Inference) → Response
+     ↑                    ↑                    ↑
+  Template Source    Template Assembly    Template Execution
+```
+
+### **Performance Improvements**
+
+#### **Memory Optimization**
+- ✅ Model set to `eval()` mode for inference-only
+- ✅ PyTorch 2.0 compilation when available
+- ✅ Comprehensive OOM error handling with retry logic
+- ✅ Memory cleanup and validation
+
+#### **Response Time**
+- ✅ Direct inference without prompt processing overhead
+- ✅ Optimized tokenization and generation
+- ✅ Reduced computational complexity
+
 ## 🔍 Monitoring & Debugging
 
 ### **Health Checks**
@@ -199,6 +266,7 @@ HF_TOKEN=                  # Optional HuggingFace token
 - **Model Loading**: Verifies all models are loaded correctly
 - **VRAM Usage**: Monitors GPU memory utilization
 - **Job Processing**: Tracks successful/failed job rates
+- **Pure Inference Status**: Verifies no hardcoded prompts or overrides
 
 ### **Logging**
 ```python
@@ -206,6 +274,7 @@ HF_TOKEN=                  # Optional HuggingFace token
 logger.info(f"Processing job {job_id} with type {job_type}")
 logger.error(f"Job {job_id} failed: {error_message}")
 logger.debug(f"VRAM usage: {gpu_memory_used}GB")
+logger.info(f"Pure inference mode: no template overrides detected")
 ```
 
 ## 🔧 Development Notes
@@ -219,14 +288,16 @@ logger.debug(f"VRAM usage: {gpu_memory_used}GB")
 - **Triple Worker System**: Orchestrated by `dual_orchestrator.py`
 - **Real-time Updates**: WebSocket connections for live status via Supabase
 - **Error Handling**: Comprehensive error handling and retry logic
+- **Pure Inference**: Chat worker respects all system prompts from edge functions
 
 ### **Common Issues**
 1. **VRAM Overflow**: Monitor concurrent job limits
 2. **Model Loading**: Ensure all model paths are correct
 3. **Network Timeouts**: Handle long-running generation jobs
 4. **Memory Leaks**: Regular container restarts recommended
+5. **Template Overrides**: Eliminated through pure inference architecture
 
 ---
 
 **For API specifications, see [06-WORKER_API.md](./06-WORKER_API.md)**  
-**For RunPod setup details, see [07-RUNPOD_SETUP.md](./07-RUNPOD_SETUP.md)** 
+**For RunPod setup details, see [07-RUNPOD_SETUP.md](./07-RUNPOD_SETUP.md)**

@@ -1,12 +1,23 @@
 # Dynamic Prompting System Documentation
 
-**Last Updated:** August 2, 2025  
+**Last Updated:** August 4, 2025  
 **Status:** Production Active  
 **Total Templates:** 12 Active Templates
+**Architecture:** Pure Inference Engine - No Worker Overrides
 
 ## 🧠 Overview
 
 The OurVidz Dynamic Prompting System provides **12 specialized templates** that optimize AI interactions across all models and use cases. This system replaces hardcoded prompts with database-driven, version-controlled templates that adapt to content modes (SFW/NSFW) and model-specific behaviors.
+
+### **🎯 NEW ARCHITECTURE: Pure Inference Engine**
+**✅ RESOLVED - MEDIUM PRIORITY**: The chat worker has been completely overhauled from a hardcoded prompt system to a **pure inference engine** that eliminates all template override risks.
+
+**Key Changes:**
+- ❌ **Removed**: All hardcoded prompts from worker code (38-127 lines deleted)
+- ❌ **Removed**: `EnhancementSystemPrompts` class and `create_enhanced_messages` function
+- ✅ **Implemented**: Pure inference architecture with `/chat`, `/enhance`, and `/generate` endpoints
+- ✅ **Result**: Worker respects ALL system prompts from edge functions without modification
+- ✅ **Security**: Complete separation of concerns - edge functions control all prompts
 
 ### **Key Features**
 - **Model-Specific Optimization:** Tailored for Qwen Base vs Instruct behaviors
@@ -15,6 +26,7 @@ The OurVidz Dynamic Prompting System provides **12 specialized templates** that 
 - **Professional Comments:** Design decisions documented for each template
 - **Version Control:** Template versioning and update tracking
 - **Admin Control:** Real-time template management via admin interface
+- **Pure Inference:** Worker executes exactly what edge functions provide - no overrides
 
 ---
 
@@ -322,6 +334,94 @@ Immersive Roleplay:
 
 ---
 
+## 🏗️ Pure Inference Engine Architecture
+
+### **Architectural Transformation**
+
+#### **Before (Problematic Architecture)**
+```python
+# ❌ HARDCODED PROMPTS - Template Override Risk
+class EnhancementSystemPrompts:
+    @staticmethod
+    def get_sdxl_system_prompt(job_type, quality):
+        base_prompt = """You are an expert AI prompt engineer..."""
+        return base_prompt
+
+def create_enhanced_messages(original_prompt, job_type, quality):
+    # ❌ RISK: Hardcoded system prompts override database templates
+    system_prompt = EnhancementSystemPrompts.get_sdxl_system_prompt(job_type, quality)
+    user_prompt = f"""ENHANCEMENT REQUEST:..."""
+    return [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+```
+
+#### **After (Pure Inference Engine)**
+```python
+# ✅ PURE INFERENCE - No Template Override Risk
+def generate_inference(self, messages: list, max_tokens: int = 512, temperature: float = 0.7, top_p: float = 0.9) -> dict:
+    """
+    Pure inference method - executes exactly what is provided
+    NO MODIFICATION of system prompts or messages
+    """
+    # Apply chat template - NO MODIFICATION
+    text = self.qwen_instruct_tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    # Generate response with provided messages only
+```
+
+### **Security & Risk Mitigation**
+
+#### **Template Override Risk: ELIMINATED** ✅
+- **Before**: Worker could override database templates with hardcoded prompts
+- **After**: Worker has zero ability to modify or override templates
+- **Result**: Complete separation of concerns - edge functions control all prompts
+
+#### **Data Flow Security**
+```
+Database Templates → Edge Functions → Worker (Pure Inference) → Response
+     ↑                    ↑                    ↑
+  Template Source    Template Assembly    Template Execution
+```
+
+### **Performance Improvements**
+
+#### **Memory Optimization**
+- ✅ Model set to `eval()` mode for inference-only
+- ✅ PyTorch 2.0 compilation when available
+- ✅ Comprehensive OOM error handling with retry logic
+- ✅ Memory cleanup and validation
+
+#### **Response Time**
+- ✅ Direct inference without prompt processing overhead
+- ✅ Optimized tokenization and generation
+- ✅ Reduced computational complexity
+
+### **Migration Path**
+
+#### **For Edge Functions**
+1. **Fetch templates** from database
+2. **Construct messages** array with system/user roles
+3. **Send to worker** via `/chat`, `/enhance`, or `/generate` endpoints
+4. **Receive response** and process as needed
+
+#### **Example Edge Function Integration**
+```javascript
+// Edge function example
+const systemTemplate = await fetchSystemTemplate(jobType, quality);
+const userTemplate = await fetchUserTemplate(jobType, quality);
+
+const messages = [
+  { role: 'system', content: systemTemplate },
+  { role: 'user', content: userTemplate.replace('{original_prompt}', originalPrompt) }
+];
+
+const response = await fetch(workerUrl + '/enhance', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ messages, max_tokens: 200 })
+});
+```
+
+---
+
 ## 🔄 Integration Points
 
 ### **Edge Functions**
@@ -329,10 +429,42 @@ Immersive Roleplay:
 - **playground-chat:** Uses chat templates for conversation
 - **validate-enhancement-fix:** Validates template outputs
 
-### **Worker System**
+### **Worker System - Pure Inference Engine** ⭐ **UPDATED**
 - **SDXL Worker:** Uses enhancement templates for image generation
 - **WAN Worker:** Uses enhancement templates for video generation
-- **Chat Worker:** Uses chat and roleplay templates
+- **Chat Worker:** **Pure inference engine** - executes exactly what edge functions provide
+
+#### **New Chat Worker Endpoints**
+```typescript
+// Pure Inference Endpoints - No Template Overrides
+POST /chat - Accepts messages array from edge functions
+POST /enhance - Accepts enhancement messages from edge functions  
+POST /generate - Generic inference with any messages array
+GET /worker/info - Worker capabilities and architecture info
+```
+
+#### **Data Flow Security**
+```
+Database Templates → Edge Functions → Worker (Pure Inference) → Response
+     ↑                    ↑                    ↑
+  Template Source    Template Assembly    Template Execution
+```
+
+#### **Worker Information Response**
+```json
+{
+  "worker_type": "pure_inference_engine",
+  "model": "Qwen2.5-7B-Instruct",
+  "capabilities": {
+    "chat": true,
+    "enhancement": true,
+    "generation": true,
+    "hardcoded_prompts": false,
+    "prompt_modification": false,
+    "pure_inference": true
+  }
+}
+```
 
 ### **Admin Interface**
 - **PromptTemplatesTable:** Template management and editing
