@@ -89,25 +89,37 @@ export const SimplifiedWorkspace: React.FC = () => {
     saveJob,
     useJobAsReference,
     dismissJob,
+    // NEW: Separate iterate and regenerate actions
+    regenerateJob,
+    iterateFromItem,
   } = state;
 
   // NEW: URL-based reference image state for drag & drop
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [beginningRefImageUrl, setBeginningRefImageUrl] = useState<string | null>(null);
   const [endingRefImageUrl, setEndingRefImageUrl] = useState<string | null>(null);
+  
+  // NEW: Seed state for character reproduction
+  const [seedValue, setSeedValue] = useState<number | null>(null);
 
   // LTX-Style Workspace Management Handlers
 
   /**
-   * Iterate function - drops image to reference box for image-to-image
+   * NEW: Use item as reference for iteration (img2img)
    * Matches LTX Studio's iterate functionality
    */
-  const handleIterate = (item: WorkspaceItem) => {
-    console.log('🔄 ITERATE: Dropping image to reference box for img2img:', item);
+  const handleIterateFromItem = (item: WorkspaceItem) => {
+    console.log('🔄 ITERATE FROM ITEM: Setting up img2img reference:', item);
     
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);
     setReferenceStrength(0.7); // Default strength for img2img
+    
+    // Set the seed for character reproduction
+    if (item.seed) {
+      setSeedValue(item.seed);
+      console.log('🌱 ITERATE: Using seed for character reproduction:', item.seed);
+    }
     
     // Clear any file-based reference
     setReferenceImage(null);
@@ -121,6 +133,21 @@ export const SimplifiedWorkspace: React.FC = () => {
     const promptInput = document.querySelector('.prompt-input-container');
     if (promptInput) {
       promptInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  /**
+   * NEW: Regenerate job with same parameters
+   * Creates 3 more images using the original job's prompt and seed
+   */
+  const handleRegenerateJob = async (jobId: string) => {
+    console.log('🔄 REGENERATE JOB: Creating more images for job:', jobId);
+    
+    try {
+      await regenerateJob(jobId, 3);
+      console.log('✅ REGENERATE: Job regeneration initiated');
+    } catch (error) {
+      console.error('❌ REGENERATE: Failed to regenerate job:', error);
     }
   };
 
@@ -194,7 +221,7 @@ export const SimplifiedWorkspace: React.FC = () => {
   // Legacy handlers (kept for compatibility, but not used in LTX-style UI)
   const handleEditItem = (item: WorkspaceItem) => {
     // Redirect to iterate function for LTX-style behavior
-    handleIterate(item);
+    handleIterateFromItem(item);
   };
 
   const handleSaveItem = (item: WorkspaceItem) => {
@@ -209,12 +236,18 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleUseAsReference = (item: WorkspaceItem) => {
     // Redirect to iterate function for LTX-style behavior
-    handleIterate(item);
+    handleIterateFromItem(item);
   };
 
   const handleUseSeed = (item: WorkspaceItem) => {
-    // TODO: Implement use seed functionality
     console.log('🌱 USE SEED: Using seed from item:', item);
+    
+    if (item.seed) {
+      setSeedValue(item.seed);
+      console.log('🌱 SEED SET: Using seed for character reproduction:', item.seed);
+    } else {
+      console.warn('⚠️ SEED WARNING: Item has no seed value');
+    }
   };
 
   // Job-level deletion handler
@@ -289,7 +322,7 @@ export const SimplifiedWorkspace: React.FC = () => {
           <WorkspaceGrid
             items={workspaceItems}
             // LTX-Style Actions
-            onIterate={handleIterate}
+            onIterate={handleIterateFromItem}
             onCreateVideo={handleCreateVideo}
             onDownload={handleDownload}
             onExpand={handleExpand}
@@ -301,6 +334,9 @@ export const SimplifiedWorkspace: React.FC = () => {
             onView={handleViewItem}
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
+            // NEW: Separate iterate and regenerate actions
+            onIterateFromItem={handleIterateFromItem}
+            onRegenerateJob={handleRegenerateJob}
             // Job-level Actions
             onDeleteJob={handleDeleteJob}
             onDismissJob={handleDismissJob}
@@ -320,7 +356,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         quality={quality}
         onQualityChange={setQuality}
         isGenerating={isGenerating}
-        onGenerate={generate}
+        onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
         referenceImage={referenceImage}
         onReferenceImageChange={setReferenceImage}
         // NEW: URL-based reference image support

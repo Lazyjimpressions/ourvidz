@@ -18,6 +18,9 @@ interface WorkspaceGridProps {
   onView: (item: WorkspaceItem) => void;
   onUseAsReference: (item: WorkspaceItem) => void;
   onUseSeed: (item: WorkspaceItem) => void;
+  // NEW: Separate iterate and regenerate actions
+  onIterateFromItem?: (item: WorkspaceItem) => void;
+  onRegenerateJob?: (jobId: string) => void;
   // Job-level Actions
   onDeleteJob?: (jobId: string) => void;
   onDismissJob?: (jobId: string) => void;
@@ -41,6 +44,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   onView,
   onUseAsReference,
   onUseSeed,
+  // NEW: Separate iterate and regenerate actions
+  onIterateFromItem,
+  onRegenerateJob,
   // Job-level Actions
   onDeleteJob,
   onDismissJob,
@@ -185,6 +191,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     onView={() => onView(item)}
                     onUseAsReference={() => onUseAsReference(item)}
                     onUseSeed={() => onUseSeed(item)}
+                    // NEW: Separate iterate and regenerate actions
+                    onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                    onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.jobId) : undefined}
                     isDeleting={isDeleting.has(item.id)}
                     size="lg" // Larger size for LTX-style
                   />

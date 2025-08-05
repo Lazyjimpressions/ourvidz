@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from "@/contexts/AuthContext";
-import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain } from "lucide-react";
+import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain, Users } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import LibraryVersionToggle from "@/components/LibraryVersionToggle";
@@ -60,6 +60,12 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       label: "🧠 Playground",
       onClick: () => navigate("/playground"),
       active: isActiveRoute("/playground")
+    },
+    { 
+      icon: Users, 
+      label: "🎭 Roleplay",
+      onClick: () => navigate("/roleplay"),
+      active: isActiveRoute("/roleplay")
     }
   ];
 

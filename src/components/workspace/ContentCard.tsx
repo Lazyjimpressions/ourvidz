@@ -35,6 +35,9 @@ interface ContentCardProps {
   onView: () => void;
   onUseAsReference?: () => void;
   onUseSeed?: () => void;
+  // NEW: Separate iterate and regenerate actions
+  onIterateFromItem?: () => void;
+  onRegenerateJob?: () => void;
   isDeleting?: boolean;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -55,6 +58,9 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   onView,
   onUseAsReference,
   onUseSeed,
+  // NEW: Separate iterate and regenerate actions
+  onIterateFromItem,
+  onRegenerateJob,
   isDeleting = false,
   className = "",
   size = 'md'
@@ -279,20 +285,39 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
         {/* Bottom-Right Corner Actions - LTX-Style Small Icons */}
         <div className="absolute bottom-2 right-2 flex gap-1">
-          {/* Iterate Button (Regen) - Only for images */}
-          {onIterate && item.type === 'image' && (
+          {/* NEW: Use as Reference Button (Edit icon) - Only for images */}
+          {onIterateFromItem && item.type === 'image' && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
-                    onClick={(e) => handleActionClick(e, onIterate)}
+                    className={`${buttonSize[size]} bg-blue-600/80 hover:bg-blue-700/90 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onIterateFromItem)}
+                  >
+                    <Edit className={iconSize[size]} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Use as reference for new generation</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* NEW: Regenerate Job Button (RotateCcw icon) - Only for images */}
+          {onRegenerateJob && item.type === 'image' && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`${buttonSize[size]} bg-purple-600/80 hover:bg-purple-700/90 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onRegenerateJob)}
                   >
                     <RotateCcw className={iconSize[size]} />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Regenerate 3 variations</p>
+                  <p>Generate 3 more like this</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

@@ -32,6 +32,7 @@ serve(async (req) => {
     const user_id = requestBody.user_id
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
+    const contentType = requestBody.contentType // Extract contentType from request
 
     if (!prompt || typeof prompt !== 'string') {
       return new Response(JSON.stringify({
@@ -49,6 +50,7 @@ serve(async (req) => {
       format,
       quality,
       selectedModel,
+      contentType,
       promptLength: prompt.length
     })
 
@@ -62,6 +64,7 @@ serve(async (req) => {
       quality: quality as 'fast' | 'high',
       user_id,
       selectedModel: selectedModel,
+      contentType: contentType,
       preferences: { enhancement_style: selectedModel },
       regeneration: regeneration || false
     })
@@ -139,9 +142,9 @@ class DynamicEnhancementOrchestrator {
     const startTime = Date.now()
     
     try {
-      // Detect content mode (simplified from 3-tier to SFW/NSFW)
-      const contentMode = await this.detectContentMode(request.prompt)
-      console.log('🔍 Content mode detected:', contentMode)
+      // Use provided contentType or fallback to auto-detection
+      const contentMode = request.contentType || await this.detectContentMode(request.prompt)
+      console.log('🔍 Content mode:', request.contentType ? `user-provided: ${contentMode}` : `auto-detected: ${contentMode}`)
 
       // Get model type from job type
       const modelType = this.getModelTypeFromJobType(request.job_type)
