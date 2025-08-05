@@ -1,9 +1,135 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
+
+/**
+ * Enhanced Prompt Verification Logging
+ */
+function logEnhancementVerification(jobMetadata: any, jobId: string) {
+  const hasEnhancement = jobMetadata.enhancement_strategy && 
+                        jobMetadata.enhancement_strategy !== 'none';
+  
+  if (hasEnhancement) {
+    console.log('🎯 ENHANCEMENT VERIFICATION:', {
+      jobId: jobId,
+      strategy: jobMetadata.enhancement_strategy,
+      templateUsed: jobMetadata.template_name || jobMetadata.template_used,
+      originalPrompt: jobMetadata.original_prompt?.substring(0, 200) + '...',
+      enhancedPrompt: jobMetadata.enhanced_prompt?.substring(0, 200) + '...',
+      expansionRatio: jobMetadata.enhanced_prompt && jobMetadata.original_prompt 
+        ? (jobMetadata.enhanced_prompt.length / jobMetadata.original_prompt.length).toFixed(2)
+        : 'unknown',
+      enhancementTimeMs: jobMetadata.enhancement_time_ms
+    });
+    
+    // Validate enhancement integrity
+    if (!jobMetadata.original_prompt || !jobMetadata.enhanced_prompt) {
+      console.warn('⚠️ ENHANCEMENT INTEGRITY ISSUE:', {
+        jobId: jobId,
+        hasOriginal: !!jobMetadata.original_prompt,
+        hasEnhanced: !!jobMetadata.enhanced_prompt,
+        strategy: jobMetadata.enhancement_strategy
+      });
+    }
+  } else {
+    console.log('📝 NO ENHANCEMENT:', {
+      jobId: jobId,
+      strategy: jobMetadata.enhancement_strategy || 'none',
+      promptLength: jobMetadata.prompt?.length || 0
+    });
+  }
+}
+
+/**
+ * Template Tracking & Validation
+ */
+function logTemplateTracking(jobMetadata: any, jobId: string) {
+  const templateInfo = {
+    template_name: jobMetadata.template_name || jobMetadata.template_used,
+    model_used: jobMetadata.model_used,
+    fallback_level: jobMetadata.fallback_level,
+    content_mode: jobMetadata.content_mode
+  };
+  
+  console.log('📋 TEMPLATE TRACKING:', {
+    jobId: jobId,
+    templateInfo: templateInfo,
+    templatePresent: !!templateInfo.template_name,
+    fallbackUsed: templateInfo.fallback_level > 0
+  });
+  
+  // Alert if template information is missing
+  if (!templateInfo.template_name && jobMetadata.enhancement_strategy !== 'none') {
+    console.warn('⚠️ MISSING TEMPLATE INFO:', {
+      jobId: jobId,
+      strategy: jobMetadata.enhancement_strategy,
+      availableFields: Object.keys(jobMetadata)
+    });
+  }
+}
+
+/**
+ * Comprehensive Status Tracking
+ */
+function logJobCompletionStatus(job: any, status: string, assets: any[]) {
+  const completionInfo = {
+    jobId: job.id,
+    status: status,
+    jobType: job.job_type,
+    destination: job.destination,
+    assetsGenerated: assets?.length || 0,
+    isWorkspace: job.destination === 'workspace',
+    processingTime: job.completed_at && job.created_at 
+      ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
+      : null
+  };
+  
+  console.log('🏁 JOB COMPLETION STATUS:', completionInfo);
+  
+  // Log asset details
+  if (assets && assets.length > 0) {
+    assets.forEach((asset, index) => {
+      console.log(`📎 Asset ${index + 1}:`, {
+        url: asset.substring(0, 100) + '...',
+        length: asset.length
+      });
+    });
+  }
+}
+
+/**
+ * Error Context Enhancement
+ */
+function logContextualError(error: any, context: {
+  stage: string;
+  jobId: string;
+  operation: string;
+  metadata?: any;
+}) {
+  console.error(`❌ ERROR in ${context.stage}:`, {
+    jobId: context.jobId,
+    operation: context.operation,
+    errorMessage: error.message,
+    errorCode: error.code,
+    hasMetadata: !!context.metadata,
+    metadataKeys: context.metadata ? Object.keys(context.metadata) : [],
+    timestamp: new Date().toISOString()
+  });
+  
+  // Log metadata sample if available
+  if (context.metadata) {
+    console.error('📋 Error context metadata:', {
+      enhancement_strategy: context.metadata.enhancement_strategy,
+      template_name: context.metadata.template_name,
+      original_prompt_length: context.metadata.original_prompt?.length,
+      enhanced_prompt_length: context.metadata.enhanced_prompt?.length
+    });
+  }
+}
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -46,11 +172,11 @@ serve(async (req)=>{
     console.log('🔍 Fetching job details for:', job_id);
     const { data: currentJob, error: fetchError } = await supabase.from('jobs').select('metadata, job_type, image_id, video_id, format, quality, model_type, user_id, destination, workspace_session_id').eq('id', job_id).single();
     if (fetchError) {
-      console.error('❌ CRITICAL: Error fetching current job:', {
-        job_id,
-        error: fetchError,
-        errorMessage: fetchError.message,
-        errorCode: fetchError.code
+      logContextualError(fetchError, {
+        stage: 'job_fetch',
+        jobId: job_id,
+        operation: 'fetch_current_job',
+        metadata: { job_id }
       });
       throw fetchError;
     }
@@ -102,6 +228,10 @@ serve(async (req)=>{
       // Default strategy for jobs without explicit strategy
       updatedMetadata.enhancement_strategy = 'template_based';
     }
+
+    // Add enhanced logging after metadata extraction
+    logEnhancementVerification(updatedMetadata, job_id);
+    logTemplateTracking(updatedMetadata, job_id);
     
 // WORKSPACE SUPPORT: Check if job is destined for workspace
 const isWorkspaceJob = currentJob.destination === 'workspace' || currentJob.workspace_session_id;
@@ -181,10 +311,11 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
     // Update job status
     const { data: job, error: updateError } = await supabase.from('jobs').update(updateData).eq('id', job_id).select().single();
     if (updateError) {
-      console.error('❌ CRITICAL: Error updating job:', {
-        job_id,
-        error: updateError,
-        updateData
+      logContextualError(updateError, {
+        stage: 'job_update',
+        jobId: job_id,
+        operation: 'update_job_status',
+        metadata: updatedMetadata
       });
       throw updateError;
     }
@@ -259,6 +390,9 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
         jobType: job.job_type
       });
     }
+    // Log comprehensive completion status
+    logJobCompletionStatus(job, status, assets);
+    
     console.log('✅ STANDARDIZED CALLBACK PROCESSING COMPLETE:', {
       job_id,
       status,
@@ -292,10 +426,10 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
       status: 200
     });
   } catch (error) {
-    console.error('❌ CRITICAL: Error in job callback function:', {
-      error: error.message,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
+    logContextualError(error, {
+      stage: 'main_callback',
+      jobId: 'unknown',
+      operation: 'process_callback'
     });
     return new Response(JSON.stringify({
       error: error.message,
@@ -428,12 +562,11 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
         .single();
       
       if (updateError) {
-        console.error('❌ PHASE 3: Error updating image by job_id and index:', {
+        logContextualError(updateError, {
+          stage: 'image_update',
           jobId: job.id,
-          imageIndex: i,
-          error: updateError,
-          isEnhanced,
-          jobType: job.job_type
+          operation: `update_image_${i}`,
+          metadata: { imageIndex: i, isEnhanced, jobType: job.job_type }
         });
         
         // PHASE 3 FIX: Fallback for enhanced images without image_index
