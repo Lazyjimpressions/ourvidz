@@ -629,7 +629,8 @@ class DynamicEnhancementOrchestrator {
       const { data: templates, error } = await supabase
         .from('prompt_templates')
         .select('*')
-        .eq('model_type', enhancerModel)  // enhancer model
+        .eq('target_model', targetModel)      // Use target_model (sdxl/wan)
+        .eq('enhancer_model', enhancerModel)  // Use enhancer_model (qwen_instruct)
         .eq('use_case', useCase)
         .eq('content_mode', contentMode)
         .eq('is_active', true)
