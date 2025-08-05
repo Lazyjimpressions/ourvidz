@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ContentCard } from './ContentCard';
 import { WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
+import { Play, Video as VideoIcon, Image as ImageIcon } from 'lucide-react';
 
 interface WorkspaceGridProps {
   items: WorkspaceItem[];
@@ -73,6 +74,25 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
   };
 
+  // Get job metadata for display
+  const getJobMetadata = (jobItems: WorkspaceItem[]) => {
+    const firstItem = jobItems[0];
+    const isVideoJob = firstItem?.type === 'video';
+    const itemCount = jobItems.length;
+    const hasVideos = jobItems.some(item => item.type === 'video');
+    const hasImages = jobItems.some(item => item.type === 'image');
+    
+    return {
+      isVideoJob,
+      itemCount,
+      hasVideos,
+      hasImages,
+      mixedContent: hasVideos && hasImages,
+      prompt: firstItem?.prompt || 'No prompt',
+      timestamp: firstItem?.timestamp
+    };
+  };
+
   // Filter jobs based on active selection
   const displayJobs = activeJobId 
     ? { [activeJobId]: sessionGroups[activeJobId] || [] }
@@ -98,47 +118,81 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
       {/* Main Content Area */}
       <div className="flex-1">
         {/* Job Groups */}
-        {Object.entries(displayJobs).map(([jobId, jobItems]) => (
-          <div key={jobId} className="job-group mb-8">
-            {/* Job header - Clean, minimal design like LTX */}
-            <div className="flex items-center justify-between mb-4 px-2">
-              <div className="flex flex-col">
-                <span className="text-sm text-gray-300 font-medium">
-                  {jobItems[0]?.prompt?.substring(0, 60)}...
-                </span>
-                <span className="text-xs text-gray-500 mt-1">
-                  {jobItems.length} image{jobItems.length !== 1 ? 's' : ''} • {new Date(jobItems[0]?.timestamp || Date.now()).toLocaleTimeString()}
+        {Object.entries(displayJobs).map(([jobId, jobItems]) => {
+          const metadata = getJobMetadata(jobItems);
+          
+          return (
+            <div key={jobId} className="job-group mb-6">
+              {/* LTX-Style Job Header - Clean and Informative */}
+              <div className="flex items-center justify-between mb-3 px-2">
+                <div className="flex items-center gap-3">
+                  {/* Content Type Indicator */}
+                  <div className="flex items-center gap-2">
+                    {metadata.mixedContent ? (
+                      <div className="flex items-center gap-1 bg-purple-600/20 text-purple-400 text-xs px-2 py-1 rounded">
+                        <ImageIcon className="w-3 h-3" />
+                        <VideoIcon className="w-3 h-3" />
+                        Mixed
+                      </div>
+                    ) : metadata.isVideoJob ? (
+                      <div className="flex items-center gap-1 bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded">
+                        <VideoIcon className="w-3 h-3" />
+                        Video
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
+                        <ImageIcon className="w-3 h-3" />
+                        Image
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Item Count */}
+                  <span className="text-xs text-gray-400">
+                    {metadata.itemCount} {metadata.itemCount === 1 ? 'item' : 'items'}
+                  </span>
+                </div>
+                
+                {/* Timestamp */}
+                <span className="text-xs text-gray-500">
+                  {metadata.timestamp ? new Date(metadata.timestamp).toLocaleTimeString() : ''}
                 </span>
               </div>
-              {/* No delete job text button - use hover icons on thumbnails instead */}
+
+              {/* Prompt Preview */}
+              <div className="mb-3 px-2">
+                <p className="text-sm text-gray-300 line-clamp-2">
+                  {metadata.prompt}
+                </p>
+              </div>
+
+              {/* Content Grid */}
+              <div className={`grid gap-3 ${getGridClass(jobItems.length)}`}>
+                {jobItems.map((item) => (
+                  <ContentCard
+                    key={item.id}
+                    item={item}
+                    // LTX-Style Actions
+                    onIterate={onIterate ? () => onIterate(item) : undefined}
+                    onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                    onDownload={() => onDownload(item)}
+                    onExpand={onExpand ? () => onExpand(item) : undefined}
+                    // Legacy Actions (for compatibility)
+                    onEdit={() => onEdit(item)}
+                    onSave={() => onSave(item)}
+                    onDelete={() => onDelete(item)}
+                    onDismiss={() => onDismiss?.(item)}
+                    onView={() => onView(item)}
+                    onUseAsReference={() => onUseAsReference(item)}
+                    onUseSeed={() => onUseSeed(item)}
+                    isDeleting={isDeleting.has(item.id)}
+                    size="lg" // Larger size for LTX-style
+                  />
+                ))}
+              </div>
             </div>
-            
-            {/* LTX-Style Dynamic Grid - Larger images with clean spacing */}
-            <div className={`grid gap-4 px-2 ${getGridClass(jobItems.length)}`}>
-              {jobItems.map((item) => (
-                <ContentCard
-                  key={item.id}
-                  item={item}
-                  // LTX-Style Actions
-                  onIterate={onIterate ? () => onIterate(item) : undefined}
-                  onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
-                  onDownload={() => onDownload(item)}
-                  onExpand={onExpand ? () => onExpand(item) : undefined}
-                  // Legacy Actions (for compatibility)
-                  onEdit={() => onEdit(item)}
-                  onSave={() => onSave(item)}
-                  onDelete={() => onDelete(item)}
-                  onDismiss={() => onDismiss?.(item)}
-                  onView={() => onView(item)}
-                  onUseAsReference={() => onUseAsReference(item)}
-                  onUseSeed={() => onUseSeed(item)}
-                  isDeleting={isDeleting.has(item.id)}
-                  size="lg" // Larger size for LTX-style
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* LTX-style Job Thumbnail Selector */}
@@ -146,6 +200,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2">
           {Object.entries(sessionGroups).map(([jobId, jobItems]) => {
             const thumbnailItem = jobItems[0];
+            const metadata = getJobMetadata(jobItems);
             const isActive = activeJobId === jobId;
             
             return (
@@ -158,19 +213,57 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 onMouseEnter={() => setHoveredJob(jobId)}
                 onMouseLeave={() => setHoveredJob(null)}
               >
-                {/* Thumbnail Image */}
-                <div className="w-16 h-16 rounded overflow-hidden bg-gray-700">
+                {/* Thumbnail Container */}
+                <div className="w-16 h-16 rounded overflow-hidden bg-gray-700 relative">
                   {thumbnailItem?.url ? (
-                    <img 
-                      src={thumbnailItem.url} 
-                      alt="Job thumbnail"
-                      className="w-full h-full object-cover"
-                    />
+                    <>
+                      {/* Video Thumbnail */}
+                      {thumbnailItem.type === 'video' ? (
+                        <div className="relative w-full h-full">
+                          {/* Use thumbnail URL if available, otherwise video poster */}
+                          <img 
+                            src={thumbnailItem.thumbnailUrl || thumbnailItem.url} 
+                            alt="Video thumbnail"
+                            className="w-full h-full object-cover"
+                          />
+                          
+                          {/* Video Play Overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                            <div className="bg-black/60 rounded-full p-1">
+                              <Play className="w-4 h-4 text-white" fill="white" />
+                            </div>
+                          </div>
+                          
+                          {/* Video Duration */}
+                          {thumbnailItem.duration && (
+                            <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">
+                              {thumbnailItem.duration}s
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Image Thumbnail */
+                        <img 
+                          src={thumbnailItem.url} 
+                          alt="Image thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-gray-400" />
                     </div>
                   )}
+                  
+                  {/* Content Type Indicator */}
+                  <div className="absolute top-1 left-1">
+                    {metadata.isVideoJob ? (
+                      <VideoIcon className="w-3 h-3 text-blue-400" />
+                    ) : (
+                      <ImageIcon className="w-3 h-3 text-green-400" />
+                    )}
+                  </div>
                 </div>
 
                 {/* Hover Delete/Dismiss Buttons - Small, clean like LTX */}

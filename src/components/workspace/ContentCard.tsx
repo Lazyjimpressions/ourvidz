@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Play, Edit, Trash2, Download, Eye, X, Image as ImageIcon } from "lucide-react";
+import { RotateCcw, Play, Edit, Trash2, Download, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContentCardProps {
@@ -15,9 +15,12 @@ interface ContentCardProps {
     generationParams?: {
       seed?: number;
       originalAssetId?: string;
+      duration?: number; // Video duration in seconds
     };
     seed?: number;
     originalAssetId?: string;
+    duration?: number; // Video duration in seconds
+    thumbnailUrl?: string; // Video thumbnail URL
   };
   // LTX-Style Actions
   onIterate?: () => void;
@@ -57,6 +60,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   size = 'md'
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
 
   const handleActionClick = (e: React.MouseEvent, action: () => void) => {
     e.stopPropagation();
@@ -84,8 +88,32 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     console.log('🖱️ DRAG START: Dragging workspace item:', item.id);
   };
 
+  // Video-specific handlers
+  const handleVideoMouseEnter = (e: React.MouseEvent<HTMLVideoElement>) => {
+    if (item.type === 'video') {
+      e.currentTarget.play();
+      setIsVideoPlaying(true);
+    }
+  };
+
+  const handleVideoMouseLeave = (e: React.MouseEvent<HTMLVideoElement>) => {
+    if (item.type === 'video') {
+      e.currentTarget.pause();
+      e.currentTarget.currentTime = 0;
+      setIsVideoPlaying(false);
+    }
+  };
+
   const getSeedFromItem = (): number | undefined => {
     return item.generationParams?.seed || item.seed;
+  };
+
+  const getVideoDuration = (): number | undefined => {
+    return item.generationParams?.duration || item.duration;
+  };
+
+  const formatDuration = (seconds: number): string => {
+    return `${seconds}s`;
   };
 
   const sizeClasses = {
@@ -118,21 +146,56 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     >
       {/* Media Content */}
       {item.type === 'video' ? (
-        <video
-          src={item.url}
-          className="w-full h-full object-cover"
-          muted
-          loop
-          onMouseEnter={(e) => e.currentTarget.play()}
-          onMouseLeave={(e) => e.currentTarget.pause()}
-        />
+        <div className="relative w-full h-full">
+          {/* Video Element */}
+          <video
+            src={item.url}
+            className="w-full h-full object-cover"
+            muted
+            loop
+            onMouseEnter={handleVideoMouseEnter}
+            onMouseLeave={handleVideoMouseLeave}
+            poster={item.thumbnailUrl} // Use thumbnail as poster
+          />
+          
+          {/* Video Play Overlay - Shows when not playing */}
+          {!isVideoPlaying && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="bg-black/60 rounded-full p-2">
+                <Play className="w-6 h-6 text-white" fill="white" />
+              </div>
+            </div>
+          )}
+          
+          {/* Video Duration Badge */}
+          {getVideoDuration() && (
+            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatDuration(getVideoDuration()!)}
+            </div>
+          )}
+          
+          {/* Video Type Indicator */}
+          <div className="absolute top-2 left-2 bg-blue-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+            <VideoIcon className="w-3 h-3" />
+            Video
+          </div>
+        </div>
       ) : (
-        <img
-          src={item.url}
-          alt={`Content ${item.id}`}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
+        <div className="relative w-full h-full">
+          <img
+            src={item.url}
+            alt={`Content ${item.id}`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+          
+          {/* Image Type Indicator */}
+          <div className="absolute top-2 left-2 bg-green-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+            <ImageIcon className="w-3 h-3" />
+            Image
+          </div>
+        </div>
       )}
 
       {/* LTX-Style Hover Overlay - Subtle and Clean */}
@@ -186,8 +249,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
         {/* Bottom-Right Corner Actions - LTX-Style Small Icons */}
         <div className="absolute bottom-2 right-2 flex gap-1">
-          {/* Iterate Button (Regen) - Creates 3 more images */}
-          {onIterate && (
+          {/* Iterate Button (Regen) - Only for images */}
+          {onIterate && item.type === 'image' && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -205,8 +268,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             </TooltipProvider>
           )}
 
-          {/* Create Video Button */}
-          {onCreateVideo && (
+          {/* Create Video Button - Only for images */}
+          {onCreateVideo && item.type === 'image' && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -237,7 +300,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Download image</p>
+                  <p>Download {item.type}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
