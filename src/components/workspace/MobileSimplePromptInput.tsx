@@ -169,7 +169,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     <>
       {/* Mobile Bottom Control Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center">
-        <div className="bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 p-3 w-full max-w-6xl">
+        <div className="bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 p-3 w-full max-w-[1040px]">
           
           {/* Mode Toggle */}
           <div className="flex bg-gray-700 rounded p-1 mb-3">

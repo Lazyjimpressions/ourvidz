@@ -256,9 +256,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   return (
     <>
-      {/* Bottom Control Bar - Matching LTX Layout */}
+      {/* Bottom Control Bar - Fixed Width Like LTX */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center">
-        <div className="bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 px-3 py-2 w-full max-w-6xl">
+        <div className="bg-gray-800/95 backdrop-blur-sm border border-gray-700 rounded-t-2xl px-4 py-3 w-[1040px]">
           
           {/* Row 1: IMAGE button + Reference + Prompt + Generate */}
           <div className="flex items-center gap-3 mb-2">
