@@ -624,7 +624,8 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           shot_type: shotType,
           camera_angle: cameraAngle,
           style: style,
-          enhancement_model: enhancementModel
+          enhancement_model: enhancementModel,
+          contentType: contentType
         },
         // Reference image URLs
         ...(referenceImage && {
