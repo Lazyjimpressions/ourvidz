@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Settings, Palette, Camera, Square, Volume2, Zap, X } from 'lucide-react';
-// Inline reference upload component (replaces deleted ReferenceImageUpload)
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown } from 'lucide-react';
+
+// Mobile reference upload component
 const ReferenceImageUpload: React.FC<{
   file: File | null;
   onFileChange: (file: File | null) => void;
@@ -14,25 +15,25 @@ const ReferenceImageUpload: React.FC<{
   };
 
   return (
-    <div className="border border-gray-600 rounded-lg p-2">
+    <div className="border border-gray-600 rounded overflow-hidden h-12 w-16">
       {file ? (
-        <div className="relative">
+        <div className="relative w-full h-full">
           <img
             src={URL.createObjectURL(file)}
             alt={label}
-            className="w-full h-12 object-cover rounded"
+            className="w-full h-full object-cover"
           />
           <button
             onClick={() => onFileChange(null)}
-            className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
+            className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs"
           >
             ×
           </button>
         </div>
       ) : (
-        <label className="cursor-pointer flex flex-col items-center gap-1 p-2 text-gray-400 hover:text-white h-12">
-          <Image className="w-6 h-6" />
-          <span className="text-sm">{label}</span>
+        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-gray-400 bg-gray-800/50">
+          <Camera className="w-3 h-3 mb-0.5" />
+          <span className="text-xs">{label}</span>
           <input
             type="file"
             accept="image/*"
@@ -71,7 +72,7 @@ interface MobileSimplePromptInputProps {
   onMotionIntensityChange?: (intensity: number) => void;
   soundEnabled?: boolean;
   onSoundEnabledChange?: (enabled: boolean) => void;
-  // NEW: Control parameters
+  // Control parameters
   aspectRatio?: '16:9' | '1:1' | '9:16';
   onAspectRatioChange?: (ratio: '16:9' | '1:1' | '9:16') => void;
   shotType?: 'wide' | 'medium' | 'close';
@@ -82,7 +83,7 @@ interface MobileSimplePromptInputProps {
   onStyleChange?: (style: string) => void;
   styleRef?: File | null;
   onStyleRefChange?: (file: File | null) => void;
-  // NEW: Enhancement model selection
+  // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct') => void;
 }
@@ -106,13 +107,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   endingRefImage,
   onBeginningRefImageChange,
   onEndingRefImageChange,
-  videoDuration = 3,
+  videoDuration = 5,
   onVideoDurationChange,
   motionIntensity = 0.5,
   onMotionIntensityChange,
   soundEnabled = false,
   onSoundEnabledChange,
-  // NEW: Control parameters with defaults
   aspectRatio = '16:9',
   onAspectRatioChange,
   shotType = 'wide',
@@ -123,13 +123,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onStyleChange,
   styleRef = null,
   onStyleRefChange,
-  // NEW: Enhancement model selection with defaults
   enhancementModel = 'qwen_instruct',
   onEnhancementModelChange
 }) => {
-  // State for angle popup
-  const [showAnglePopup, setShowAnglePopup] = useState(false);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isGenerating && prompt.trim()) {
@@ -137,173 +133,140 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     }
   };
 
-  // Handle aspect ratio toggle
   const handleAspectRatioToggle = () => {
     if (!onAspectRatioChange) return;
-    
     const ratios: Array<'16:9' | '1:1' | '9:16'> = ['16:9', '1:1', '9:16'];
     const currentIndex = ratios.indexOf(aspectRatio);
     const nextIndex = (currentIndex + 1) % ratios.length;
     onAspectRatioChange(ratios[nextIndex]);
   };
 
-  // Handle shot type toggle
   const handleShotTypeToggle = () => {
     if (!onShotTypeChange) return;
-    
     const types: Array<'wide' | 'medium' | 'close'> = ['wide', 'medium', 'close'];
     const currentIndex = types.indexOf(shotType);
     const nextIndex = (currentIndex + 1) % types.length;
     onShotTypeChange(types[nextIndex]);
   };
 
-  // Handle camera angle selection
-  const handleCameraAngleSelect = (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => {
-    if (onCameraAngleChange) {
-      onCameraAngleChange(angle);
-    }
-    setShowAnglePopup(false);
+  const handleCameraAngleToggle = () => {
+    if (!onCameraAngleChange) return;
+    const angles: Array<'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye'> = 
+      ['none', 'eye_level', 'low_angle', 'over_shoulder', 'overhead', 'bird_eye'];
+    const currentIndex = angles.indexOf(cameraAngle);
+    const nextIndex = (currentIndex + 1) % angles.length;
+    onCameraAngleChange(angles[nextIndex]);
   };
 
-  // Handle enhancement model toggle
-  const handleEnhancementModelToggle = () => {
-    if (!onEnhancementModelChange) return;
-    
-    const newModel = enhancementModel === 'qwen_instruct' ? 'qwen_base' : 'qwen_instruct';
-    onEnhancementModelChange(newModel);
-  };
-
-  // Handle style input
-  const handleStyleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (onStyleChange) {
-      onStyleChange(e.target.value);
-    }
-  };
-
-  // Handle style reference upload
-  const handleStyleRefUpload = (file: File | null) => {
+  const handleStyleRefUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
     if (onStyleRefChange) {
       onStyleRefChange(file);
     }
   };
 
-  // Camera angle options with display names
-  const cameraAngleOptions = [
-    { value: 'none', label: 'None', icon: '◢' },
-    { value: 'eye_level', label: 'Eye level', icon: '👁️' },
-    { value: 'low_angle', label: 'Low angle', icon: '⬆️' },
-    { value: 'over_shoulder', label: 'Over the shoulder', icon: '👤' },
-    { value: 'overhead', label: 'Overhead', icon: '⬇️' },
-    { value: 'bird_eye', label: 'Bird\'s eye view', icon: '🦅' }
-  ];
-
   return (
     <>
       {/* Mobile Bottom Control Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 p-4">
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-800/95 backdrop-blur-sm border-t border-gray-700 p-3">
         
+        {/* Mode Toggle */}
+        <div className="flex bg-gray-700 rounded p-1 mb-3">
+          <button
+            onClick={() => onModeChange('image')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-all ${
+              mode === 'image'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300'
+            }`}
+          >
+            <Image size={14} />
+            Image
+          </button>
+          <button
+            onClick={() => onModeChange('video')}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded text-sm font-medium transition-all ${
+              mode === 'video'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300'
+            }`}
+          >
+            <Video size={14} />
+            Video
+          </button>
+        </div>
+
+        {/* Reference Images */}
+        <div className="flex justify-center gap-3 mb-3">
+          {mode === 'image' ? (
+            <ReferenceImageUpload
+              file={referenceImage}
+              onFileChange={onReferenceImageChange}
+              label="Ref"
+            />
+          ) : (
+            <>
+              <ReferenceImageUpload
+                file={beginningRefImage || null}
+                onFileChange={onBeginningRefImageChange || (() => {})}
+                label="Start"
+              />
+              <ReferenceImageUpload
+                file={endingRefImage || null}
+                onFileChange={onEndingRefImageChange || (() => {})}
+                label="End"
+              />
+            </>
+          )}
+        </div>
+
         {/* Prompt Input */}
-        <form onSubmit={handleSubmit} className="mb-4">
+        <form onSubmit={handleSubmit} className="mb-3">
           <textarea
             value={prompt}
             onChange={(e) => onPromptChange(e.target.value)}
             placeholder="A close-up of a woman talking on the phone..."
-            className="w-full h-20 p-3 bg-black border border-gray-600 rounded-lg text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+            className="w-full h-16 p-3 bg-black border border-gray-600 rounded text-white placeholder-gray-400 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
             rows={3}
             disabled={isGenerating}
           />
         </form>
 
-        {/* Mode Toggle */}
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => onModeChange('image')}
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-              mode === 'image'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-          >
-            <Image size={16} className="mx-auto mb-1" />
-            IMAGE
-          </button>
-          <button
-            onClick={() => onModeChange('video')}
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-colors ${
-              mode === 'video'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-          >
-            <Video size={16} className="mx-auto mb-1" />
-            VIDEO
-          </button>
-        </div>
-
-        {/* Reference Image */}
-        <div className="mb-4">
-          {mode === 'image' ? (
-            <ReferenceImageUpload
-              file={referenceImage}
-              onFileChange={onReferenceImageChange}
-              label="Reference Image"
-            />
-          ) : (
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <span className="text-xs text-gray-400 block mb-1">Beginning</span>
-                <ReferenceImageUpload
-                  file={beginningRefImage || null}
-                  onFileChange={onBeginningRefImageChange || (() => {})}
-                  label="Beginning"
-                />
-              </div>
-              <div className="flex-1">
-                <span className="text-xs text-gray-400 block mb-1">Ending</span>
-                <ReferenceImageUpload
-                  file={endingRefImage || null}
-                  onFileChange={onEndingRefImageChange || (() => {})}
-                  label="Ending"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Control Buttons */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          {/* SFW/NSFW Toggle */}
+        {/* Controls */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          
+          {/* SFW Button */}
           <button
             onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`py-2 rounded text-sm font-medium transition-colors ${
               contentType === 'sfw'
-                ? 'bg-blue-600 text-white'
+                ? 'bg-green-600 text-white'
                 : 'bg-gray-700 text-gray-300'
             }`}
           >
-            {contentType.toUpperCase()}
+            SFW
           </button>
 
-          {/* Enhancement Model Toggle - NEW */}
-          <button
-            onClick={handleEnhancementModelToggle}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              enhancementModel === 'qwen_instruct'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300'
-            }`}
-            title={`Enhancement Model: ${enhancementModel === 'qwen_instruct' ? 'Qwen Instruct' : 'Qwen Base'}`}
-          >
-            {enhancementModel === 'qwen_instruct' ? 'Instruct' : 'Base'}
-          </button>
+          {/* Enhancement Model Dropdown */}
+          <div className="relative">
+            <select
+              value={enhancementModel}
+              onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct')}
+              className="w-full py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm appearance-none"
+            >
+              <option value="qwen_instruct">Instruct</option>
+              <option value="qwen_base">Base</option>
+            </select>
+            <ChevronDown size={12} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
 
           {/* Mode-specific controls */}
           {mode === 'image' ? (
             <>
-              {/* 16:9 Aspect Ratio */}
+              {/* Aspect Ratio */}
               <button
                 onClick={handleAspectRatioToggle}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`py-2 rounded text-sm font-medium transition-colors ${
                   aspectRatio === '16:9'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-700 text-gray-300'
@@ -312,90 +275,52 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                 {aspectRatio}
               </button>
               
-              {/* Wide Button */}
+              {/* Shot Type */}
               <button
                 onClick={handleShotTypeToggle}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  shotType === 'wide'
+                className={`py-2 rounded text-sm font-medium transition-colors capitalize ${
+                  shotType !== 'wide'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-700 text-gray-300'
                 }`}
               >
-                {shotType.charAt(0).toUpperCase() + shotType.slice(1)}
+                {shotType}
               </button>
               
-              {/* Angle Button - NEW with popup */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowAnglePopup(!showAnglePopup)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
-                    cameraAngle !== 'none'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300'
-                  }`}
-                  title={`Camera Angle: ${cameraAngleOptions.find(opt => opt.value === cameraAngle)?.label || 'None'}`}
-                >
-                  <Camera size={14} />
-                  Angle
-                </button>
-                
-                {/* Angle Popup */}
-                {showAnglePopup && (
-                  <div className="absolute bottom-full right-0 mb-2 bg-gray-800 border border-gray-600 rounded-lg shadow-lg p-3 min-w-[280px]">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-medium text-white">Angle</h3>
-                      <button
-                        onClick={() => setShowAnglePopup(false)}
-                        className="text-gray-400 hover:text-white"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                    
-                    {/* 2x3 Grid of Angle Options */}
-                    <div className="grid grid-cols-3 gap-2">
-                      {cameraAngleOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => handleCameraAngleSelect(option.value as any)}
-                          className={`p-2 rounded text-xs transition-colors ${
-                            cameraAngle === option.value
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                          }`}
-                        >
-                          <div className="text-lg mb-1">{option.icon}</div>
-                          <div className="text-xs">{option.label}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Camera Angle */}
+              <button
+                onClick={handleCameraAngleToggle}
+                className={`flex items-center justify-center gap-1 py-2 rounded text-sm font-medium transition-colors ${
+                  cameraAngle !== 'none'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300'
+                }`}
+              >
+                <Camera size={12} />
+                Angle
+              </button>
               
               {/* Style Input */}
               <input
                 type="text"
                 value={style}
-                onChange={handleStyleInput}
+                onChange={(e) => onStyleChange?.(e.target.value)}
                 placeholder="Style..."
-                className="px-4 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 w-24"
-                disabled={isGenerating}
+                className="py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
               
               {/* Style Ref Upload */}
-              <div>
+              <div className="relative">
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={(e) => handleStyleRefUpload(e.target.files?.[0] || null)}
+                  onChange={handleStyleRefUpload}
                   className="hidden"
-                  id="mobile-style-ref-upload"
-                  disabled={isGenerating}
+                  id="mobile-style-ref"
                 />
                 <label
-                  htmlFor="mobile-style-ref-upload"
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                  htmlFor="mobile-style-ref"
+                  className={`block w-full py-2 px-3 text-center rounded text-sm font-medium transition-colors cursor-pointer ${
                     styleRef
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-700 text-gray-300'
@@ -407,15 +332,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             </>
           ) : (
             <>
-              {/* Video Model Selector */}
-              <select className="px-4 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500">
-                <option>WAN 2.1</option>
-              </select>
+              {/* Video Model */}
+              <div className="py-2 px-3 bg-gray-700 text-gray-300 rounded text-sm text-center">
+                LTX Turbo
+              </div>
               
-              {/* 16:9 Aspect Ratio */}
+              {/* Aspect Ratio */}
               <button
                 onClick={handleAspectRatioToggle}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`py-2 rounded text-sm font-medium transition-colors ${
                   aspectRatio === '16:9'
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-700 text-gray-300'
@@ -424,40 +349,35 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                 {aspectRatio}
               </button>
               
-              {/* Video Duration */}
-              <select 
-                className="px-4 py-2 bg-gray-700 text-gray-300 border border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={videoDuration}
-                onChange={(e) => onVideoDurationChange?.(Number(e.target.value))}
-              >
-                <option value={3}>3s</option>
-                <option value={5}>5s</option>
-                <option value={10}>10s</option>
-                <option value={15}>15s</option>
-              </select>
+              {/* Duration (Static) */}
+              <div className="py-2 px-3 bg-gray-700 text-gray-300 rounded text-sm text-center">
+                5s
+              </div>
               
               {/* Sound Toggle */}
               <button
                 onClick={() => onSoundEnabledChange?.(!soundEnabled)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
-                  soundEnabled 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-700 text-gray-300'
+                className={`flex items-center justify-center gap-1 py-2 rounded transition-colors ${
+                  soundEnabled
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300'
                 }`}
               >
-                <Volume2 size={16} />
+                <Volume2 size={14} />
+                Sound
               </button>
               
               {/* Motion Intensity */}
               <button
                 onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
-                className={`px-4 py-2 rounded-lg transition-colors ${
+                className={`flex items-center justify-center gap-1 py-2 rounded transition-colors ${
                   motionIntensity > 0.5
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300'
                 }`}
               >
-                <Zap size={16} />
+                <Zap size={14} />
+                Motion
               </button>
             </>
           )}
@@ -467,15 +387,19 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         <button
           onClick={onGenerate}
           disabled={isGenerating || !prompt.trim()}
-          className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          className="w-full py-3 bg-blue-600 text-white rounded font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
         >
-          <Play size={16} />
+          {isGenerating ? (
+            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+          ) : (
+            <Play size={16} />
+          )}
           Generate
         </button>
       </div>
 
       {/* Bottom Spacer */}
-      <div className="h-64" />
+      <div className="h-80" />
     </>
   );
 }; 
