@@ -2,26 +2,10 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { RotateCcw, Play, Edit, Trash2, Download, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { UnifiedAsset } from '@/lib/services/AssetService';
 
 interface ContentCardProps {
-  item: {
-    id: string;
-    url: string;
-    prompt: string;
-    type: 'image' | 'video';
-    modelType?: string;
-    quality?: 'fast' | 'high';
-    timestamp: Date;
-    generationParams?: {
-      seed?: number;
-      originalAssetId?: string;
-      duration?: number; // Video duration in seconds
-    };
-    seed?: number;
-    originalAssetId?: string;
-    duration?: number; // Video duration in seconds
-    thumbnailUrl?: string; // Video thumbnail URL
-  };
+  item: UnifiedAsset;
   // LTX-Style Actions
   onIterate?: () => void;
   onCreateVideo?: () => void;
@@ -127,11 +111,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
 
   const getSeedFromItem = (): number | undefined => {
-    return item.generationParams?.seed || item.seed;
+    return item.metadata?.seed || item.metadata?.generationParams?.seed;
   };
 
   const getVideoDuration = (): number | undefined => {
-    return item.generationParams?.duration || item.duration;
+    return item.duration || item.metadata?.duration || item.metadata?.generationParams?.duration;
   };
 
   const formatDuration = (seconds: number): string => {

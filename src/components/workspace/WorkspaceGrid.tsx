@@ -1,25 +1,25 @@
 import React, { useState, useMemo } from 'react';
 import { ContentCard } from './ContentCard';
-import { WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
+import { UnifiedAsset } from '@/lib/services/AssetService';
 import { Play, Video as VideoIcon, Image as ImageIcon } from 'lucide-react';
 
 interface WorkspaceGridProps {
-  items: WorkspaceItem[];
+  items: UnifiedAsset[];
   // LTX-Style Actions
-  onIterate?: (item: WorkspaceItem) => void;
-  onCreateVideo?: (item: WorkspaceItem) => void;
-  onDownload: (item: WorkspaceItem) => void;
-  onExpand?: (item: WorkspaceItem) => void;
+  onIterate?: (item: UnifiedAsset) => void;
+  onCreateVideo?: (item: UnifiedAsset) => void;
+  onDownload: (item: UnifiedAsset) => void;
+  onExpand?: (item: UnifiedAsset) => void;
   // Legacy Actions (for compatibility)
-  onEdit: (item: WorkspaceItem) => void;
-  onSave: (item: WorkspaceItem) => void;
-  onDelete: (item: WorkspaceItem) => void;
-  onDismiss?: (item: WorkspaceItem) => void;
-  onView: (item: WorkspaceItem) => void;
-  onUseAsReference: (item: WorkspaceItem) => void;
-  onUseSeed: (item: WorkspaceItem) => void;
+  onEdit: (item: UnifiedAsset) => void;
+  onSave: (item: UnifiedAsset) => void;
+  onDelete: (item: UnifiedAsset) => void;
+  onDismiss?: (item: UnifiedAsset) => void;
+  onView: (item: UnifiedAsset) => void;
+  onUseAsReference: (item: UnifiedAsset) => void;
+  onUseSeed: (item: UnifiedAsset) => void;
   // NEW: Separate iterate and regenerate actions
-  onIterateFromItem?: (item: WorkspaceItem) => void;
+  onIterateFromItem?: (item: UnifiedAsset) => void;
   onRegenerateJob?: (jobId: string) => void;
   // Job-level Actions
   onDeleteJob?: (jobId: string) => void;
@@ -60,11 +60,11 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   // Job-level grouping
   const sessionGroups = useMemo(() => {
     return items.reduce((acc, item) => {
-      const jobId = item.jobId || 'unknown';
+      const jobId = item.metadata?.job_id || 'unknown';
       if (!acc[jobId]) acc[jobId] = [];
       acc[jobId].push(item);
       return acc;
-    }, {} as Record<string, WorkspaceItem[]>);
+    }, {} as Record<string, UnifiedAsset[]>);
   }, [items]);
 
   // LTX-Style Grid Class - Larger images for desktop with clean spacing
@@ -81,7 +81,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   };
 
   // Get job metadata for display
-  const getJobMetadata = (jobItems: WorkspaceItem[]) => {
+  const getJobMetadata = (jobItems: UnifiedAsset[]) => {
     const firstItem = jobItems[0];
     const isVideoJob = firstItem?.type === 'video';
     const itemCount = jobItems.length;
@@ -95,7 +95,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
       hasImages,
       mixedContent: hasVideos && hasImages,
       prompt: firstItem?.prompt || 'No prompt',
-      timestamp: firstItem?.timestamp
+      timestamp: firstItem?.createdAt
     };
   };
 
@@ -191,9 +191,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     onView={() => onView(item)}
                     onUseAsReference={() => onUseAsReference(item)}
                     onUseSeed={() => onUseSeed(item)}
-                    // NEW: Separate iterate and regenerate actions
-                    onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
-                    onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.jobId) : undefined}
+                                         // NEW: Separate iterate and regenerate actions
+                     onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                     onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
                     isDeleting={isDeleting.has(item.id)}
                     size="lg" // Larger size for LTX-style
                   />

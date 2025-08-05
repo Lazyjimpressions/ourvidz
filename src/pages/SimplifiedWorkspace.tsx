@@ -6,12 +6,12 @@ import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
 /**
- * Unified session storage based workspace page component
- * Provides 87% complexity reduction compared to legacy workspace
+ * Library-first workspace page component
+ * Provides unified workspace experience using library assets
  * 
  * Features:
- * - Session storage based state management
- * - Unified component architecture
+ * - Library-first architecture
+ * - Event-driven updates
  * - Mobile-responsive design
  * - Real-time workspace updates
  * - Job-level grouping with streamlined UI
@@ -149,7 +149,7 @@ export const SimplifiedWorkspace: React.FC = () => {
    * Create Video function - drops image to video reference box
    * Matches LTX Studio's create video functionality
    */
-  const handleCreateVideo = (item: WorkspaceItem) => {
+  const handleCreateVideo = (item: UnifiedAsset) => {
     console.log('🎬 CREATE VIDEO: Dropping image to video reference box:', item);
     
     // Set the image as beginning reference for video generation using URL
@@ -174,7 +174,7 @@ export const SimplifiedWorkspace: React.FC = () => {
    * Download function - downloads the image file
    * Matches LTX Studio's download functionality
    */
-  const handleDownload = async (item: WorkspaceItem) => {
+  const handleDownload = async (item: UnifiedAsset) => {
     console.log('💾 DOWNLOAD: Downloading image:', item);
     
     try {
@@ -202,43 +202,43 @@ export const SimplifiedWorkspace: React.FC = () => {
    * Expand function - shows full-size lightbox modal
    * Matches LTX Studio's click-to-expand functionality
    */
-  const handleExpand = (item: WorkspaceItem) => {
+  const handleExpand = (item: UnifiedAsset) => {
     console.log('🔍 EXPAND: Opening lightbox for image:', item);
     
-    // Find the index of the item in workspaceItems
-    const itemIndex = workspaceItems.findIndex(wsItem => wsItem.id === item.id);
+    // Find the index of the item in workspaceAssets
+    const itemIndex = workspaceAssets.findIndex(wsItem => wsItem.id === item.id);
     if (itemIndex !== -1) {
       setLightboxIndex(itemIndex);
     }
   };
 
   // Legacy handlers (kept for compatibility, but not used in LTX-style UI)
-  const handleEditItem = (item: WorkspaceItem) => {
+  const handleEditItem = (item: UnifiedAsset) => {
     // Redirect to iterate function for LTX-style behavior
     handleIterateFromItem(item);
   };
 
-  const handleSaveItem = (item: WorkspaceItem) => {
+  const handleSaveItem = (item: UnifiedAsset) => {
     // Not needed in LTX-style UI since images are auto-saved
     console.log('💾 SAVE: Image auto-saved to library (LTX-style):', item);
   };
 
-  const handleViewItem = (item: WorkspaceItem) => {
+  const handleViewItem = (item: UnifiedAsset) => {
     // Redirect to expand function for LTX-style behavior
     handleExpand(item);
   };
 
-  const handleUseAsReference = (item: WorkspaceItem) => {
+  const handleUseAsReference = (item: UnifiedAsset) => {
     // Redirect to iterate function for LTX-style behavior
     handleIterateFromItem(item);
   };
 
-  const handleUseSeed = (item: WorkspaceItem) => {
+  const handleUseSeed = (item: UnifiedAsset) => {
     console.log('🌱 USE SEED: Using seed from item:', item);
     
-    if (item.seed) {
-      setSeedValue(item.seed);
-      console.log('🌱 SEED SET: Using seed for character reproduction:', item.seed);
+    if (item.metadata?.seed) {
+      setSeedValue(item.metadata.seed);
+      console.log('🌱 SEED SET: Using seed for character reproduction:', item.metadata.seed);
     } else {
       console.warn('⚠️ SEED WARNING: Item has no seed value');
     }
@@ -253,7 +253,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       
       // Clear active job if it was deleted
       if (activeJobId === jobId) {
-        setActiveJobId(null);
+        selectJob(null);
       }
     } catch (error) {
       console.error('Failed to delete job:', error);
@@ -275,7 +275,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       
       // Clear active job if it was dismissed
       if (activeJobId === jobId) {
-        setActiveJobId(null);
+        selectJob(null);
       }
     } catch (error) {
       console.error('Failed to dismiss job:', error);
@@ -290,172 +290,106 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   // Job selection handler
   const handleJobSelect = (jobId: string | null) => {
-    setActiveJobId(jobId);
+    selectJob(jobId);
   };
 
-  // Show loading state while session is being resolved
-  if (sessionLoading || !sessionId) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Setting up workspace...</p>
-        </div>
-      </div>
-    );
-  }
+  // Group assets by job_id for WorkspaceGrid
+  const sessionGroups = workspaceAssets.reduce((acc, asset) => {
+    const jobId = asset.metadata?.job_id || 'no_job_id';
+    if (!acc[jobId]) {
+      acc[jobId] = [];
+    }
+    acc[jobId].push(asset);
+    return acc;
+  }, {} as Record<string, UnifiedAsset[]>);
+
+  const sortedJobIds = Object.keys(sessionGroups).sort((a, b) => {
+    const dateA = new Date(sessionGroups[a][0]?.createdAt || 0);
+    const dateB = new Date(sessionGroups[b][0]?.createdAt || 0);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  const activeJobItems = activeJobId ? sessionGroups[activeJobId] : [];
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Fixed Header */}
-      <WorkspaceHeader onClearWorkspace={clearWorkspace} />
-      
-      {/* Main Content Area */}
-      <div className="pt-12 pb-32">
-        <div className="container mx-auto px-4 py-8">
+    <div className="flex flex-col h-full bg-gray-900 text-white">
+      <WorkspaceHeader
+        onClearWorkspace={clearWorkspace}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-4">
+          <SimplePromptInput
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            mode={mode}
+            contentType={contentType}
+            quality={quality}
+            onQualityChange={setQuality}
+            isGenerating={isGenerating}
+            onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
+            referenceImage={referenceImage}
+            onReferenceImageChange={setReferenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageUrlChange={setReferenceImageUrl}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            onModeChange={updateMode}
+            onContentTypeChange={setContentType}
+            beginningRefImage={beginningRefImage}
+            endingRefImage={endingRefImage}
+            onBeginningRefImageChange={setBeginningRefImage}
+            onEndingRefImageChange={setEndingRefImage}
+            beginningRefImageUrl={beginningRefImageUrl}
+            endingRefImageUrl={endingRefImageUrl}
+            onBeginningRefImageUrlChange={setBeginningRefImageUrl}
+            onEndingRefImageUrlChange={setEndingRefImageUrl}
+            videoDuration={videoDuration}
+            onVideoDurationChange={setVideoDuration}
+            motionIntensity={motionIntensity}
+            onMotionIntensityChange={setMotionIntensity}
+            soundEnabled={soundEnabled}
+            onSoundToggle={setSoundEnabled}
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={setAspectRatio}
+            shotType={shotType}
+            onShotTypeChange={setShotType}
+            cameraAngle={cameraAngle}
+            onCameraAngleChange={setCameraAngle}
+            style={style}
+            onStyleChange={setStyle}
+            styleRef={styleRef}
+            onStyleRefChange={setStyleRef}
+            enhancementModel={enhancementModel}
+            onEnhancementModelChange={setEnhancementModel}
+          />
           <WorkspaceGrid
-            items={workspaceItems}
-            // LTX-Style Actions
-            onIterate={handleIterateFromItem}
+            items={workspaceAssets}
+            sessionGroups={sessionGroups}
+            sortedJobIds={sortedJobIds}
+            activeJobId={activeJobId}
+            onJobSelect={handleJobSelect}
+            onDeleteJob={handleDeleteJob}
+            onDismissJob={handleDismissJob}
+            onSaveJob={saveJob}
+            onUseJobAsReference={useJobAsReference}
+            onIterateFromItem={handleIterateFromItem}
+            onRegenerateJob={handleRegenerateJob}
             onCreateVideo={handleCreateVideo}
             onDownload={handleDownload}
             onExpand={handleExpand}
-            // Legacy Actions (for compatibility)
-            onEdit={handleEditItem}
-            onSave={handleSaveItem}
-            onDelete={(item: WorkspaceItem) => deleteItem(item.id)}
-            onDismiss={(item: WorkspaceItem) => dismissItem(item.id)}
-            onView={handleViewItem}
+            onEditItem={handleEditItem}
+            onSaveItem={handleSaveItem}
+            onViewItem={handleViewItem}
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
-            // NEW: Separate iterate and regenerate actions
-            onIterateFromItem={handleIterateFromItem}
-            onRegenerateJob={handleRegenerateJob}
-            // Job-level Actions
-            onDeleteJob={handleDeleteJob}
-            onDismissJob={handleDismissJob}
+            onDeleteItem={deleteItem}
+            onDismissItem={dismissItem}
             isDeleting={deletingJobs}
-            activeJobId={activeJobId}
-            onJobSelect={handleJobSelect}
+            lightboxIndex={lightboxIndex}
+            setLightboxIndex={setLightboxIndex}
           />
         </div>
       </div>
-
-      {/* Simple Prompt Input */}
-      <SimplePromptInput
-        prompt={prompt}
-        onPromptChange={setPrompt}
-        mode={mode}
-        contentType={contentType}
-        quality={quality}
-        onQualityChange={setQuality}
-        isGenerating={isGenerating}
-        onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
-        referenceImage={referenceImage}
-        onReferenceImageChange={setReferenceImage}
-        // NEW: URL-based reference image support
-        referenceImageUrl={referenceImageUrl}
-        onReferenceImageUrlChange={setReferenceImageUrl}
-        referenceStrength={referenceStrength}
-        onReferenceStrengthChange={setReferenceStrength}
-        onModeChange={updateMode}
-        onContentTypeChange={setContentType}
-        beginningRefImage={beginningRefImage}
-        endingRefImage={endingRefImage}
-        onBeginningRefImageChange={setBeginningRefImage}
-        onEndingRefImageChange={setEndingRefImage}
-        // NEW: URL-based video reference image support
-        beginningRefImageUrl={beginningRefImageUrl}
-        endingRefImageUrl={endingRefImageUrl}
-        onBeginningRefImageUrlChange={setBeginningRefImageUrl}
-        onEndingRefImageUrlChange={setEndingRefImageUrl}
-        videoDuration={videoDuration}
-        onVideoDurationChange={setVideoDuration}
-        motionIntensity={motionIntensity}
-        onMotionIntensityChange={setMotionIntensity}
-        soundEnabled={soundEnabled}
-        onSoundToggle={setSoundEnabled}
-        // Control parameters
-        aspectRatio={aspectRatio}
-        onAspectRatioChange={setAspectRatio}
-        shotType={shotType}
-        onShotTypeChange={setShotType}
-        cameraAngle={cameraAngle}
-        onCameraAngleChange={setCameraAngle}
-        style={style}
-        onStyleChange={setStyle}
-        styleRef={styleRef}
-        onStyleRefChange={setStyleRef}
-        enhancementModel={enhancementModel}
-        onEnhancementModelChange={setEnhancementModel}
-      />
-
-      {/* LTX-Style Lightbox Modal */}
-      {lightboxIndex !== null && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4"
-          onClick={() => setLightboxIndex(null)}
-        >
-          {/* Close button */}
-          <button
-            onClick={() => setLightboxIndex(null)}
-            className="absolute top-6 right-6 text-white hover:text-gray-300 text-3xl font-bold z-10 transition-colors"
-            aria-label="Close lightbox"
-          >
-            ×
-          </button>
-          
-          {/* Image container */}
-          <div className="relative max-w-full max-h-full">
-            {workspaceItems[lightboxIndex] && (
-              <img
-                src={workspaceItems[lightboxIndex].url}
-                alt={workspaceItems[lightboxIndex].prompt}
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                onClick={(e) => e.stopPropagation()} // Prevent closing when clicking image
-              />
-            )}
-            
-            {/* Image info overlay */}
-            {workspaceItems[lightboxIndex] && (
-              <div className="absolute bottom-4 left-4 right-4 bg-black bg-opacity-75 text-white p-4 rounded-lg">
-                <p className="text-sm font-medium truncate">
-                  {workspaceItems[lightboxIndex].prompt}
-                </p>
-                <p className="text-xs text-gray-300 mt-1">
-                  Click outside to close • ESC to close
-                </p>
-              </div>
-            )}
-          </div>
-          
-          {/* Navigation arrows (if multiple images) */}
-          {workspaceItems.length > 1 && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxIndex(lightboxIndex > 0 ? lightboxIndex - 1 : workspaceItems.length - 1);
-                }}
-                className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 text-2xl font-bold z-10 transition-colors"
-                aria-label="Previous image"
-              >
-                ‹
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxIndex(lightboxIndex < workspaceItems.length - 1 ? lightboxIndex + 1 : 0);
-                }}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-white hover:text-gray-300 text-2xl font-bold z-10 transition-colors"
-                aria-label="Next image"
-              >
-                ›
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 };
