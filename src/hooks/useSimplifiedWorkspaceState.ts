@@ -102,7 +102,7 @@ export interface SimplifiedWorkspaceActions {
   setStyle: (style: string) => void;
   setStyleRef: (ref: File | null) => void;
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct') => void;
-  generate: () => Promise<void>;
+  generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
   dismissItem: (id: string) => Promise<void>;
@@ -565,7 +565,12 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
   }, [generationError, toast]);
 
   // Generate content
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (
+    referenceImageUrl?: string | null,
+    beginningRefImageUrl?: string | null, 
+    endingRefImageUrl?: string | null,
+    seed?: number | null
+  ) => {
     if (!prompt.trim() || isGenerating) return;
     
     setIsGenerating(true);
@@ -607,11 +612,15 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           destination: 'workspace', // WORKSPACE-FIRST: Generate to workspace
           session_name: `Workspace Session ${new Date().toLocaleTimeString()}`,
           user_requested_enhancement: true,
-          // Reference image data
-          ...(referenceImage && {
+          // Reference image data - prioritize URL over file
+          ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
             reference_strength: referenceStrength,
             reference_type: 'character' as const
+          }),
+          // Seed for character reproduction
+          ...(seed && {
+            seed: seed
           }),
           // Video-specific parameters
           ...(mode === 'video' && {
@@ -627,16 +636,19 @@ export const useSimplifiedWorkspaceState = (): SimplifiedWorkspaceState & Simpli
           enhancement_model: enhancementModel,
           contentType: contentType
         },
-        // Reference image URLs
-        ...(referenceImage && {
-          referenceImageUrl: await uploadReferenceImage(referenceImage)
-        }),
-        ...(mode === 'video' && beginningRefImage && {
-          startReferenceImageUrl: await uploadReferenceImage(beginningRefImage)
-        }),
-        ...(mode === 'video' && endingRefImage && {
-          endReferenceImageUrl: await uploadReferenceImage(endingRefImage)
-        })
+        // Reference image URLs - prioritize passed URLs over files
+        ...(referenceImageUrl ? 
+          { referenceImageUrl } : 
+          referenceImage ? { referenceImageUrl: await uploadReferenceImage(referenceImage) } : {}
+        ),
+        ...(mode === 'video' && beginningRefImageUrl ? 
+          { startReferenceImageUrl: beginningRefImageUrl } :
+          mode === 'video' && beginningRefImage ? { startReferenceImageUrl: await uploadReferenceImage(beginningRefImage) } : {}
+        ),
+        ...(mode === 'video' && endingRefImageUrl ? 
+          { endReferenceImageUrl: endingRefImageUrl } :
+          mode === 'video' && endingRefImage ? { endReferenceImageUrl: await uploadReferenceImage(endingRefImage) } : {}
+        )
       };
       
       const result = await GenerationService.queueGeneration(generationRequest);

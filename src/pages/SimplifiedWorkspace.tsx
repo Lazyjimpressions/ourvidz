@@ -95,6 +95,9 @@ export const SimplifiedWorkspace: React.FC = () => {
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [beginningRefImageUrl, setBeginningRefImageUrl] = useState<string | null>(null);
   const [endingRefImageUrl, setEndingRefImageUrl] = useState<string | null>(null);
+  
+  // NEW: Seed state for character reproduction
+  const [seedValue, setSeedValue] = useState<number | null>(null);
 
   // LTX-Style Workspace Management Handlers
 
@@ -108,6 +111,12 @@ export const SimplifiedWorkspace: React.FC = () => {
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);
     setReferenceStrength(0.7); // Default strength for img2img
+    
+    // Set the seed for character reproduction
+    if (item.seed) {
+      setSeedValue(item.seed);
+      console.log('🌱 ITERATE: Using seed for character reproduction:', item.seed);
+    }
     
     // Clear any file-based reference
     setReferenceImage(null);
@@ -213,8 +222,14 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   const handleUseSeed = (item: WorkspaceItem) => {
-    // TODO: Implement use seed functionality
     console.log('🌱 USE SEED: Using seed from item:', item);
+    
+    if (item.seed) {
+      setSeedValue(item.seed);
+      console.log('🌱 SEED SET: Using seed for character reproduction:', item.seed);
+    } else {
+      console.warn('⚠️ SEED WARNING: Item has no seed value');
+    }
   };
 
   // Job-level deletion handler
@@ -320,7 +335,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         quality={quality}
         onQualityChange={setQuality}
         isGenerating={isGenerating}
-        onGenerate={generate}
+        onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
         referenceImage={referenceImage}
         onReferenceImageChange={setReferenceImage}
         // NEW: URL-based reference image support
