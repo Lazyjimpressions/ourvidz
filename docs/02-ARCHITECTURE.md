@@ -389,25 +389,7 @@ SUPABASE_ANON_KEY=your_anon_key
 
 ## 🔄 Data Flow
 
-### **Dual-Destination Generation Flow**
-```
-1. User submits prompt (workspace destination)
-2. Frontend → queue-job edge function
-3. Edge function creates workspace session
-4. Edge function creates job with workspace destination
-5. Worker polls for new jobs
-6. Worker processes generation (destination-agnostic)
-7. Worker uploads result to storage
-8. Worker updates job status
-9. job-callback routes to workspace_items table
-10. Frontend receives real-time workspace updates
-11. User sees generated content in workspace
-12. User selects items to save to library
-13. Frontend → save_workspace_item_to_library RPC
-14. Item moved from workspace to permanent library
-```
-
-### **Traditional Library Generation Flow**
+### **Library-First Generation Flow**
 ```
 1. User submits prompt (library destination)
 2. Frontend → queue-job edge function
@@ -417,8 +399,10 @@ SUPABASE_ANON_KEY=your_anon_key
 6. Worker uploads result to storage
 7. Worker updates job status
 8. job-callback routes to images/videos table
-9. Frontend receives real-time updates
-10. User sees generated content in library
+9. AssetService emits library-assets-ready event
+10. Workspace listens for event and updates UI
+11. User sees generated content in workspace (today's content)
+12. User can dismiss content from workspace or delete permanently
 ```
 
 ### **Workspace Management Flow**

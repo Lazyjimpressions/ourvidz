@@ -91,13 +91,13 @@
 
 ---
 
-## 🚀 **Version 3.1.0 - Dual-Destination Implementation**
+## 🚀 **Version 3.1.0 - Library-First Event-Driven Implementation**
 
 **Release Date:** August 4, 2025  
-**Major Release:** Complete dual-destination generation system
+**Major Release:** Complete library-first event-driven generation system
 
-#### **Dual-Destination Generation System**
-- **New Architecture**: Content generated to library by default, with optional workspace routing
+#### **Library-First Event-Driven Generation System**
+- **New Architecture**: All content generated directly to library, workspace listens for events
 
 ### **🎯 Major Features**
 
