@@ -225,6 +225,11 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                             src={thumbnailItem.thumbnailUrl || thumbnailItem.url} 
                             alt="Video thumbnail"
                             className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.error('Video thumbnail failed to load:', thumbnailItem.thumbnailUrl || thumbnailItem.url);
+                              // Fallback to a video placeholder
+                              e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0yNCA0MFYyNEw0MCAzMkwyNCA0MFoiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPgo=';
+                            }}
                           />
                           
                           {/* Video Play Overlay */}
@@ -247,6 +252,11 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                           src={thumbnailItem.url} 
                           alt="Image thumbnail"
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Image thumbnail failed to load:', thumbnailItem.url);
+                            // Fallback to an image placeholder
+                            e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0xNiAxNkg0OFY0OEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yNCAyNEg0MFY0MEgyNFYyNFoiIGZpbGw9IiM2QjcyODAiLz4KPC9zdmc+Cg==';
+                          }}
                         />
                       )}
                     </>

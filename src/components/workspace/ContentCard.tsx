@@ -89,10 +89,16 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
 
   // Video-specific handlers
-  const handleVideoMouseEnter = (e: React.MouseEvent<HTMLVideoElement>) => {
+  const handleVideoMouseEnter = async (e: React.MouseEvent<HTMLVideoElement>) => {
     if (item.type === 'video') {
-      e.currentTarget.play();
-      setIsVideoPlaying(true);
+      try {
+        await e.currentTarget.play();
+        setIsVideoPlaying(true);
+      } catch (error) {
+        console.log('Video play failed:', error);
+        // Fallback: show play overlay
+        setIsVideoPlaying(false);
+      }
     }
   };
 
@@ -102,6 +108,16 @@ export const ContentCard: React.FC<ContentCardProps> = ({
       e.currentTarget.currentTime = 0;
       setIsVideoPlaying(false);
     }
+  };
+
+  const handleVideoLoad = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    // Video loaded successfully
+    console.log('Video loaded:', item.url);
+  };
+
+  const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    console.error('Video failed to load:', item.url);
+    // Fallback to poster image or show error state
   };
 
   const getSeedFromItem = (): number | undefined => {
@@ -114,6 +130,12 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
   const formatDuration = (seconds: number): string => {
     return `${seconds}s`;
+  };
+
+  // Get video poster/thumbnail
+  const getVideoPoster = (): string | undefined => {
+    // Use thumbnailUrl if available, otherwise use video URL as fallback
+    return item.thumbnailUrl || item.url;
   };
 
   const sizeClasses = {
@@ -153,9 +175,13 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             className="w-full h-full object-cover"
             muted
             loop
+            preload="metadata"
+            playsInline
             onMouseEnter={handleVideoMouseEnter}
             onMouseLeave={handleVideoMouseLeave}
-            poster={item.thumbnailUrl} // Use thumbnail as poster
+            onLoadedData={handleVideoLoad}
+            onError={handleVideoError}
+            poster={getVideoPoster()}
           />
           
           {/* Video Play Overlay - Shows when not playing */}
@@ -167,15 +193,15 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             </div>
           )}
           
-          {/* Video Duration Badge */}
+          {/* Video Duration Badge - Top Right */}
           {getVideoDuration() && (
-            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+            <div className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {formatDuration(getVideoDuration()!)}
             </div>
           )}
           
-          {/* Video Type Indicator */}
+          {/* Video Type Indicator - Top Left */}
           <div className="absolute top-2 left-2 bg-blue-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
             <VideoIcon className="w-3 h-3" />
             Video
@@ -188,9 +214,13 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             alt={`Content ${item.id}`}
             className="w-full h-full object-cover"
             loading="lazy"
+            onError={(e) => {
+              console.error('Image failed to load:', item.url);
+              // Could add fallback image here
+            }}
           />
           
-          {/* Image Type Indicator */}
+          {/* Image Type Indicator - Top Left */}
           <div className="absolute top-2 left-2 bg-green-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
             <ImageIcon className="w-3 h-3" />
             Image
