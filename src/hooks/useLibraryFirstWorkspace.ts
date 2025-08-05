@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { useToast } from '@/hooks/use-toast';
+import { GenerationFormat } from '@/types/generation';
 
 // LIBRARY-FIRST: Simplified workspace state using library assets
 export interface LibraryFirstWorkspaceState {
@@ -40,7 +41,7 @@ export interface LibraryFirstWorkspaceState {
 
 export interface LibraryFirstWorkspaceActions {
   // Actions
-  updateMode: (newMode: string) => void;
+  updateMode: (newMode: 'image' | 'video') => void;
   setPrompt: (prompt: string) => void;
   setReferenceImage: (image: File | null) => void;
   setReferenceStrength: (strength: number) => void;
@@ -271,7 +272,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
       const generationRequest = {
-        format: mode === 'image' ? 'sdxl_image_high' : 'video_high',
+        format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
         prompt: prompt.trim(),
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
@@ -373,8 +374,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         .single();
       
       if (currentItem) {
+        const currentMetadata = currentItem.metadata as Record<string, any> || {};
         const updatedMetadata = {
-          ...currentItem.metadata,
+          ...currentMetadata,
           workspace_dismissed: true,
           dismissed_at: new Date().toISOString()
         };
@@ -434,25 +436,54 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // Dismiss all today's items
       const todayStart = getTodayStart();
       
-      // Update images
-      await supabase
+      // Get today's items and update them
+      const { data: images } = await supabase
         .from('images')
-        .update({ 
-          metadata: supabase.sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{workspace_dismissed}', 'true'::jsonb)`
-        })
+        .select('id, metadata')
         .eq('user_id', user.id)
         .eq('status', 'completed')
         .gte('created_at', todayStart);
 
-      // Update videos
-      await supabase
+      const { data: videos } = await supabase
         .from('videos')
-        .update({ 
-          metadata: supabase.sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{workspace_dismissed}', 'true'::jsonb)`
-        })
+        .select('id, metadata')
         .eq('user_id', user.id)
         .eq('status', 'completed')
         .gte('created_at', todayStart);
+
+      // Update images with dismissed flag
+      if (images) {
+        for (const image of images) {
+          const currentMetadata = (image.metadata as Record<string, any>) || {};
+          await supabase
+            .from('images')
+            .update({ 
+              metadata: {
+                ...currentMetadata,
+                workspace_dismissed: true,
+                dismissed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', image.id);
+        }
+      }
+
+      // Update videos with dismissed flag
+      if (videos) {
+        for (const video of videos) {
+          const currentMetadata = (video.metadata as Record<string, any>) || {};
+          await supabase
+            .from('videos')
+            .update({ 
+              metadata: {
+                ...currentMetadata,
+                workspace_dismissed: true,
+                dismissed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', video.id);
+        }
+      }
 
       queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
       
@@ -510,16 +541,19 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         .eq('id', item.id)
         .single();
       
-      if (currentItem?.metadata?.workspace_dismissed) {
-        const updatedMetadata = {
-          ...currentItem.metadata,
-          workspace_dismissed: false
-        };
+      if (currentItem?.metadata) {
+        const currentMetadata = currentItem.metadata as Record<string, any> || {};
+        if (currentMetadata.workspace_dismissed) {
+          const updatedMetadata = {
+            ...currentMetadata,
+            workspace_dismissed: false
+          };
         
-        await supabase
-          .from(item.type === 'image' ? 'images' : 'videos')
-          .update({ metadata: updatedMetadata })
-          .eq('id', item.id);
+          await supabase
+            .from(item.type === 'image' ? 'images' : 'videos')
+            .update({ metadata: updatedMetadata })
+            .eq('id', item.id);
+        }
       }
     }
     

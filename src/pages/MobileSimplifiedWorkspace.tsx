@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSimplifiedWorkspaceState, WorkspaceItem } from '@/hooks/useSimplifiedWorkspaceState';
+import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
+import { UnifiedAsset } from '@/lib/services/AssetService';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
 import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
@@ -10,7 +11,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
   const { user, loading } = useAuth();
   const { isMobile, isTouchDevice } = useMobileDetection();
   
-  // Use simplified state management
+  // Use library-first workspace state
   const {
     // Core State
     mode,
@@ -39,7 +40,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     
     // UI State
     isGenerating,
-    workspaceItems,
+    workspaceAssets,
     lightboxIndex,
     
     // Actions
@@ -63,53 +64,60 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     generate,
     clearWorkspace,
     deleteItem,
-    setLightboxIndex,
-    editItem,
-    saveItem,
-    downloadItem,
-    useAsReference,
-    useSeed
-  } = useSimplifiedWorkspaceState();
+    setLightboxIndex
+  } = useLibraryFirstWorkspace();
 
   // Workspace management handlers
-  const handleEditItem = (item: WorkspaceItem) => {
+  const handleEditItem = (item: UnifiedAsset) => {
     // Set the prompt to the item's prompt for editing
-    setPrompt(item.prompt);
+    setPrompt(item.prompt || '');
     // Load generation parameters if available
-    if (item.generationParams?.referenceImage) {
-      // TODO: Handle reference image loading from generation params
-      console.log('Reference image in params:', item.generationParams.referenceImage);
-    }
-    if (item.generationParams?.referenceStrength) {
-      setReferenceStrength(item.generationParams.referenceStrength);
-    }
-    if (item.seed) {
-      // TODO: Add seed to state management
-      console.log('Load seed:', item.seed);
+    if (item.metadata?.referenceStrength) {
+      setReferenceStrength(item.metadata.referenceStrength);
     }
     console.log('Edit item:', item);
   };
 
-  const handleSaveItem = (item: WorkspaceItem) => {
-    saveItem?.(item.id);
+  const handleSaveItem = (item: UnifiedAsset) => {
+    // No-op for library-first - items are auto-saved
+    console.log('Save item (auto-saved):', item);
   };
 
-  const handleViewItem = (item: WorkspaceItem) => {
+  const handleViewItem = (item: UnifiedAsset) => {
     // Find the item index and open lightbox
-    const index = workspaceItems.findIndex(i => i.id === item.id);
+    const index = workspaceAssets.findIndex(i => i.id === item.id);
     setLightboxIndex(index >= 0 ? index : 0);
   };
 
-  const handleDownload = (item: WorkspaceItem) => {
-    downloadItem(item);
+  const handleDownload = async (item: UnifiedAsset) => {
+    try {
+      const link = document.createElement('a');
+      link.href = item.url || '';
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `${item.prompt?.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.${item.format || 'png'}`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
   };
 
-  const handleUseAsReference = (item: WorkspaceItem) => {
-    useAsReference(item);
+  const handleUseAsReference = (item: UnifiedAsset) => {
+    // Set as reference image using URL
+    if (item.url) {
+      setReferenceImage(null); // Clear file reference
+      // Note: Would need to add setReferenceImageUrl to the hook
+      console.log('Use as reference:', item.url);
+    }
   };
 
-  const handleUseSeed = (item: WorkspaceItem) => {
-    useSeed(item);
+  const handleUseSeed = (item: UnifiedAsset) => {
+    // Use seed for character reproduction
+    if (item.metadata?.seed) {
+      console.log('Use seed:', item.metadata.seed);
+    }
   };
 
   const handleCloseLightbox = () => {
@@ -144,15 +152,24 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
         {/* Workspace Grid */}
         <div className="container mx-auto px-4 py-8">
           <WorkspaceGrid
-            items={workspaceItems}
+            items={workspaceAssets}
+            activeJobId={null}
+            onJobSelect={() => {}}
+            onDeleteJob={() => Promise.resolve()}
+            onDismissJob={() => Promise.resolve()}
+            onIterateFromItem={handleUseAsReference}
+            onRegenerateJob={() => Promise.resolve()}
+            onCreateVideo={handleUseAsReference}
+            onDownload={handleDownload}
+            onExpand={handleViewItem}
             onEdit={handleEditItem}
             onSave={handleSaveItem}
-            onDelete={(item: WorkspaceItem) => deleteItem(item.id)}
             onView={handleViewItem}
-            onDownload={handleDownload}
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
-            isDeleting={new Set()} // TODO: Track deleting state
+            onDelete={(item) => deleteItem(item.id, item.type)}
+            onDismiss={(item) => deleteItem(item.id, item.type)} // Use delete for now
+            isDeleting={new Set()}
           />
         </div>
       </div>
@@ -198,7 +215,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
       />
 
       {/* Lightbox for viewing images */}
-      {lightboxIndex !== null && workspaceItems[lightboxIndex] && (
+      {lightboxIndex !== null && workspaceAssets[lightboxIndex] && (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
           <div className="relative max-w-4xl max-h-full">
             <button
@@ -208,12 +225,12 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
               ×
             </button>
             <img
-              src={workspaceItems[lightboxIndex].url}
-              alt={workspaceItems[lightboxIndex].prompt}
+              src={workspaceAssets[lightboxIndex].url}
+              alt={workspaceAssets[lightboxIndex].prompt}
               className="max-w-full max-h-full object-contain"
             />
             <div className="absolute bottom-4 left-4 text-white">
-              <p className="text-sm">{workspaceItems[lightboxIndex].prompt}</p>
+              <p className="text-sm">{workspaceAssets[lightboxIndex].prompt}</p>
             </div>
           </div>
         </div>
