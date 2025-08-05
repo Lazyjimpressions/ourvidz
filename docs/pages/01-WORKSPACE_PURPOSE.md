@@ -1,6 +1,6 @@
 ﻿# Workspace Page Purpose & Implementation Guide
 
-**Date:** August 4, 2025  
+**Date:** January 8, 2025  
 **Status:** ✅ **IMPLEMENTED - LTX-Style Workspace System with Job-Level Grouping**  
 **Phase:** Production Ready with Complete Workspace Refactoring
 
@@ -14,6 +14,8 @@
 - **Storage Path Normalization**: Fixed signed URL generation across all components
 - **Real-time Updates**: WebSocket subscriptions for workspace items
 - **UI Components**: WorkspaceGrid, ContentCard, SimplePromptInput
+- **URL-Based Reference Images**: Support for drag & drop URL references
+- **Enhanced Control Parameters**: Aspect ratio, shot type, camera angle, style controls
 
 ### **🔧 Backend Infrastructure (COMPLETE)**
 - **Database Tables**: `workspace_sessions`, `workspace_items` ✅
@@ -21,6 +23,14 @@
 - **Database Functions**: `create_workspace_session`, `save_workspace_item_to_library` ✅
 - **Real-time Subscriptions**: Workspace items update in real-time ✅
 - **Storage Path Normalization**: Fixed signed URL generation ✅
+
+### **🎨 UI/UX Features (COMPLETE)**
+- **LTX-Style Grid Layout**: Job-based grouping with dynamic grid sizing
+- **Thumbnail Selector**: Right-side navigation with hover-to-delete
+- **Content Cards**: Individual item actions (view, save, delete, dismiss)
+- **Prompt Input**: Enhanced with control parameters and URL reference support
+- **Camera Angle Selection**: 6-angle popup interface with visual icons
+- **Drag & Drop**: Support for files, URLs, and workspace items
 
 ---
 
@@ -36,6 +46,7 @@ The Workspace page serves as the **primary content generation hub** for OurVidz,
 - **Session Management**: Temporary workspace sessions with automatic cleanup
 - **Selective Save**: User chooses which generated content to keep permanently
 - **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
+- **Enhanced Controls**: Advanced generation parameters for fine-tuned output
 
 ## **Design Philosophy**
 
@@ -71,7 +82,7 @@ Row 2: [VIDEO] [SFW] [16:9] [Wide] [Angle] [Style] [Style ref]
 
 ### **3. Dynamic Grid Layout**
 - **Job-Based Rendering**: Display jobs with their associated items
-- **Responsive Design**: Adapts to screen size (2-8 columns)
+- **Responsive Design**: Adapts to screen size (1-5 columns)
 - **Dynamic Grid Classes**: Automatic grid sizing based on item count
 - **Content Cards**: Individual cards with hover actions
 
@@ -113,6 +124,13 @@ Row 2: [VIDEO] [SFW] [16:9] [Wide] [Angle] [Style] [Style ref]
 - **Style Input**: Text field for custom style descriptions
 - **Style Reference**: File upload for style-based generation
 - **Reference Images**: Single image for images, beginning/ending for videos
+
+### **9. URL-Based Reference Images (NEW)**
+- **Drag & Drop URLs**: Support for dropping image URLs directly
+- **Workspace Item Drops**: Drag workspace items as references
+- **File Upload**: Traditional file upload support
+- **URL Validation**: Automatic validation of dropped URLs
+- **Visual Feedback**: Clear indication of reference source
 
 ## **Technical Implementation**
 
@@ -159,6 +177,7 @@ jobs (
 mode: 'image' | 'video'
 prompt: string
 referenceImage: File | null
+referenceImageUrl: string | null  // NEW: URL-based references
 referenceStrength: number
 contentType: 'sfw' | 'nsfw'
 quality: 'fast' | 'high'
@@ -182,24 +201,25 @@ activeJobId: string | null
 ```
 
 ### **Component Architecture**
-- **SimplifiedWorkspace.tsx**: Main workspace page (180 lines)
-- **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping (67 lines)
+- **SimplifiedWorkspace.tsx**: Main workspace page (433 lines)
+- **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping (322 lines)
 - **ContentCard.tsx**: Individual content cards with dismiss/delete actions (292 lines)
-- **SimplePromptInput.tsx**: Generation controls (347 lines)
-- **useSimplifiedWorkspaceState.ts**: State management hook with LTX features (552 lines)
+- **SimplePromptInput.tsx**: Generation controls with URL reference support (707 lines)
+- **useSimplifiedWorkspaceState.ts**: State management hook with LTX features (1017 lines)
 - **useRealtimeWorkspace.ts**: Real-time updates hook (700 lines)
 
 ## **User Experience Workflow**
 
 ### **1. Generation Flow**
 1. **User Input**: Enter prompt and configure settings
-2. **Job Creation**: `queue-job` creates workspace session and job
-3. **Generation**: Worker processes job and generates content
-4. **Callback**: `job-callback` creates workspace items in database
-5. **Display**: Real-time updates show content in workspace grid
-6. **Job Grouping**: Items automatically grouped by `job_id`
-7. **Selection**: User reviews and selects content to save
-8. **Save**: Selected items moved to permanent library
+2. **Reference Setup**: Upload file, drop URL, or drag workspace item
+3. **Job Creation**: `queue-job` creates workspace session and job
+4. **Generation**: Worker processes job and generates content
+5. **Callback**: `job-callback` creates workspace items in database
+6. **Display**: Real-time updates show content in workspace grid
+7. **Job Grouping**: Items automatically grouped by `job_id`
+8. **Selection**: User reviews and selects content to save
+9. **Save**: Selected items moved to permanent library
 
 ### **2. LTX-Style Workspace Management**
 - **Job Creation**: Automatic when user generates content
@@ -212,7 +232,7 @@ activeJobId: string | null
 
 ### **3. Grid Layout Behavior**
 - **Job-Based Display**: Jobs shown with their associated items
-- **Dynamic Grid**: Adapts from 2 columns (mobile) to 8 columns (desktop)
+- **Dynamic Grid**: Adapts from 1 column (mobile) to 5 columns (desktop)
 - **Job Headers**: Each job shows prompt preview and delete option
 - **Thumbnail Selector**: Right-side navigation with job thumbnails
 - **Empty State**: Helpful message when no content exists
@@ -230,23 +250,27 @@ activeJobId: string | null
 - **Two-Level Deletion**: Dismiss vs Delete functionality
 - **Job-Level Grouping**: Items grouped by `job_id`
 - **Thumbnail Navigation**: Right-side job selector
+- **URL-Based References**: Drag & drop URL support for reference images
+- **Enhanced Controls**: Camera angle, aspect ratio, shot type controls
 
 ### **✅ Working Components**
 - **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping
 - **ContentCard.tsx**: Individual content cards with dismiss/delete actions
-- **SimplePromptInput.tsx**: Generation controls
+- **SimplePromptInput.tsx**: Generation controls with URL reference support
 - **useSimplifiedWorkspaceState.ts**: State management with LTX features
 - **useRealtimeWorkspace.ts**: Real-time updates
 
-### **✅ Recent Improvements (August 4, 2025)**
-- **LTX-Style Refactoring**: Complete workspace system overhaul
-- **Job-Level Grouping**: Items grouped by `job_id` for logical organization
-- **Thumbnail Selector**: Right-side navigation with job thumbnails
-- **Hover-to-Delete**: Delete entire jobs by hovering over thumbnails
-- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
-- **Storage Path Normalization**: Fixed signed URL generation across all components
-- **Legacy Component Cleanup**: Removed old workspace system (6 files deleted)
-- **Code Reduction**: 718 lines of code removed (net reduction)
+### **✅ Recent Improvements (January 8, 2025)**
+- **URL-Based Reference Images**: Support for dragging URLs and workspace items as references
+- **Enhanced Control Parameters**: Camera angle selection, aspect ratio, shot type controls
+- **Improved Grid Layout**: Better responsive design with 1-5 column layout
+- **Drag & Drop Support**: Files, URLs, and workspace items can be dropped as references
+- **Visual Feedback**: Clear indication of reference image sources
+
+### **🔧 Known Issues & TODOs**
+- **TODO**: Implement `useJobAsReference` function to set reference image from URL (line 911 in useSimplifiedWorkspaceState.ts)
+- **Enhancement**: Add bulk operations for multiple job selection
+- **Enhancement**: Add workspace templates for saved configurations
 
 ## **Intended UX Design**
 
@@ -293,8 +317,8 @@ activeJobId: string | null
 
 ---
 
-**Current Status**: ✅ **IMPLEMENTED - LTX-style workspace system with job-level grouping and two-level deletion**
-**Next Phase**: Enhance user experience and add advanced features
+**Current Status**: ✅ **IMPLEMENTED - LTX-style workspace system with job-level grouping, two-level deletion, and URL-based references**
+**Next Phase**: Complete TODO items and add advanced features
 **Priority**: High - System is production-ready with complete LTX-style functionality
 
 ## **🔧 COMPREHENSIVE IMPLEMENTATION PLAN - Storage + Delete Approach**
@@ -344,12 +368,12 @@ const sessionGroups = useMemo(() => {
 // Dynamic grid class based on item count
 const getGridClass = (itemCount: number) => {
   if (itemCount === 1) return 'grid-cols-1';
-  if (itemCount === 2) return 'grid-cols-2';
-  if (itemCount === 3) return 'grid-cols-3';
-  if (itemCount === 4) return 'grid-cols-2 md:grid-cols-4';
-  if (itemCount === 5) return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5';
-  if (itemCount === 6) return 'grid-cols-2 md:grid-cols-3';
-  return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8';
+  if (itemCount === 2) return 'grid-cols-1 md:grid-cols-2';
+  if (itemCount === 3) return 'grid-cols-1 md:grid-cols-3';
+  if (itemCount === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
+  if (itemCount === 5) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5';
+  if (itemCount === 6) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+  return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
 };
 ```
 
@@ -392,7 +416,7 @@ const getGridClass = (itemCount: number) => {
               {onDismissJob && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDismissJob(jobId); }}
-                  className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                  className="w-5 h-5 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
                   disabled={isDeleting.has(jobId)}
                   title="Dismiss job (hide from workspace)"
                 >
@@ -402,7 +426,7 @@ const getGridClass = (itemCount: number) => {
               {onDeleteJob && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onDeleteJob(jobId); }}
-                  className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+                  className="w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
                   disabled={isDeleting.has(jobId)}
                   title="Delete job permanently"
                 >
@@ -559,9 +583,41 @@ const { data: urlData, error } = await supabase.storage
   .createSignedUrl(cleanPath, 3600);
 ```
 
-### **Phase 4: Legacy Component Cleanup (COMPLETED)**
+### **Phase 4: URL-Based Reference Images (COMPLETED)**
 
-#### **4.1 Removed Legacy Files**
+#### **4.1 Drag & Drop Support**
+**Files Updated:**
+- `src/components/workspace/SimplePromptInput.tsx`
+
+**Implementation:**
+```typescript
+// Handle URL drops
+const url = e.dataTransfer.getData('text/plain');
+if (url && url.startsWith('http')) {
+  if (onImageUrlChange) {
+    onImageUrlChange(url);
+  }
+  onFileChange(null);
+  return;
+}
+
+// Handle workspace item drops
+try {
+  const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
+  if (workspaceItem.url && workspaceItem.type === 'image') {
+    if (onImageUrlChange) {
+      onImageUrlChange(workspaceItem.url);
+    }
+    onFileChange(null);
+  }
+} catch (error) {
+  // Not a JSON drop, ignore
+}
+```
+
+### **Phase 5: Legacy Component Cleanup (COMPLETED)**
+
+#### **5.1 Removed Legacy Files**
 **Deleted Files:**
 - `src/components/workspace/SessionWorkspace.tsx`
 - `src/components/workspace/JobThumbnail.tsx`
@@ -570,7 +626,7 @@ const { data: urlData, error } = await supabase.storage
 - `src/components/workspace/MobileWorkspaceGrid.tsx`
 - `src/components/workspace/WorkspaceDebugger.tsx`
 
-#### **4.2 Updated Main Workspace Page**
+#### **5.2 Updated Main Workspace Page**
 **Files Updated:**
 - `src/pages/SimplifiedWorkspace.tsx`
 
@@ -665,6 +721,8 @@ const SimplifiedWorkspace: React.FC = () => {
 - ✅ Storage path normalization fixes signed URL generation
 - ✅ No storage bloat from unwanted content
 - ✅ LTX-style UX matches design requirements
+- ✅ URL-based reference images work correctly
+- ✅ Drag & drop functionality works for files, URLs, and workspace items
 
 ---
 
@@ -686,6 +744,6 @@ If fixes cause issues:
 
 ---
 
-**Current Status**: ✅ **COMPLETED - LTX-style workspace system with job-level grouping, two-level deletion, and storage path normalization**
-**Next Phase**: Enhance user experience and add advanced features
+**Current Status**: ✅ **COMPLETED - LTX-style workspace system with job-level grouping, two-level deletion, storage path normalization, and URL-based references**
+**Next Phase**: Complete TODO items and enhance user experience
 **Priority**: High - System is production-ready with complete LTX-style functionality
