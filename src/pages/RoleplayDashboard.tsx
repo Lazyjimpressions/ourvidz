@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
-import { Play, Search, Filter, Star, Users, MessageSquare, Plus, Sparkles } from 'lucide-react';
+import { Play, Search, Star, Users, MessageSquare, Plus, Sparkles } from 'lucide-react';
 import { useCharacterDatabase } from '@/hooks/useCharacterDatabase';
 
 // Mock featured characters for now
