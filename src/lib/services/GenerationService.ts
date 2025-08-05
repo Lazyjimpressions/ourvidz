@@ -75,7 +75,10 @@ export class GenerationService {
           enhancedPrompt: request.enhancedPrompt,
           isPromptEnhanced: request.isPromptEnhanced,
           enhancementMetadata: request.enhancementMetadata,
-          selectedPresets: request.selectedPresets
+          selectedPresets: request.selectedPresets,
+          // Pass enhancement parameters as top-level for proper routing
+          contentType: request.metadata?.contentType || 'sfw',
+          enhancementModel: request.metadata?.enhancement_model || 'qwen_instruct'
         }
       });
 

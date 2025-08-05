@@ -83,7 +83,10 @@ serve(async (req)=>{
       enhancedPrompt,
       isPromptEnhanced,
       enhancementMetadata,
-      selectedPresets
+      selectedPresets,
+      // Extract enhancement parameters as top-level for proper template routing
+      contentType: userContentType,
+      enhancementModel: userEnhancementModel
     } = await req.json();
     console.log('📋 Creating job with STANDARDIZED worker parameters:', {
       jobType,
@@ -92,7 +95,12 @@ serve(async (req)=>{
       imageId,
       userId: user.id,
       queue: metadata?.queue,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      // DEBUG: Template routing parameters
+      userContentType,
+      userEnhancementModel,
+      metadataContentType: metadata?.contentType,
+      metadataEnhancementModel: metadata?.enhancement_model
     });
 
     // Dynamic content tier detection using cached database templates
@@ -366,7 +374,8 @@ serve(async (req)=>{
             jobType: jobType,
             format: format,
             quality: quality,
-            selectedModel: 'qwen_instruct',
+            selectedModel: userEnhancementModel || 'qwen_instruct',
+            contentType: userContentType || contentTier,
             user_id: user.id,
             // Pass regeneration flag for cache-busting
             regeneration: metadata?.regeneration || false
