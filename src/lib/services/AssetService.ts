@@ -481,9 +481,9 @@ export class AssetService {
         modelType,
         isSDXL,
         metadata: image.metadata as Record<string, any>,
-        // URLs will be populated by UnifiedUrlService
-        thumbnailUrl: undefined,
-        url: undefined,
+        // Map database URLs to UnifiedAsset properties
+        thumbnailUrl: image.thumbnail_url || undefined,
+        url: image.image_url || undefined,
         error: undefined
       };
     });
@@ -509,9 +509,9 @@ export class AssetService {
         resolution: video.resolution || undefined,
         modelType: isEnhanced ? 'Enhanced' : 'Standard',
         metadata: video.metadata as Record<string, any>,
-        // URLs will be populated by UnifiedUrlService
-        thumbnailUrl: undefined,
-        url: undefined,
+        // Map database URLs to UnifiedAsset properties
+        thumbnailUrl: video.thumbnail_url || undefined,
+        url: video.video_url || undefined,
         error: undefined
       };
     });
