@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
+import { UnifiedUrlService } from './UnifiedUrlService';
 
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
@@ -357,6 +358,132 @@ export class AssetService {
     });
     
     return allAssets;
+  }
+
+  /**
+   * Optimized getUserAssets method using UnifiedUrlService
+   * This is the new implementation that should be used going forward
+   */
+  static async getUserAssetsOptimized(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
+    console.log('🚀 OPTIMIZED: Fetching assets with UnifiedUrlService');
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
+    // Get today's date for session filtering (UTC-based)
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    
+    // Build query conditions
+    let imageQuery = supabase
+      .from('images')
+      .select(`
+        *,
+        project:projects(title)
+      `)
+      .eq('user_id', user.id);
+      
+    let videoQuery = supabase
+      .from('videos')
+      .select(`
+        *,
+        project:projects(title)
+      `)
+      .eq('user_id', user.id);
+
+    // Add session filtering if requested
+    if (sessionOnly) {
+      imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
+      videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
+      
+      // Filter out dismissed items for workspace view
+      imageQuery = imageQuery.not('metadata->workspace_dismissed', 'eq', true);
+      videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
+    }
+
+    // Fetch images and videos in parallel
+    const [imagesResult, videosResult] = await Promise.all([
+      imageQuery.order('created_at', { ascending: false }),
+      videoQuery.order('created_at', { ascending: false })
+    ]);
+
+    if (imagesResult.error) throw imagesResult.error;
+    if (videosResult.error) throw videosResult.error;
+
+    // Transform images to UnifiedAsset format
+    const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map((image) => {
+      const metadata = image.metadata as any;
+      const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+      const modelType = isSDXL ? 'SDXL' : 'WAN';
+
+      return {
+        id: image.id,
+        type: 'image' as const,
+        title: image.title || undefined,
+        prompt: image.prompt,
+        enhancedPrompt: image.enhanced_prompt || undefined,
+        status: image.status,
+        quality: image.quality || undefined,
+        format: image.format || undefined,
+        createdAt: new Date(image.created_at),
+        projectId: image.project_id || undefined,
+        projectTitle: (image.project as any)?.title,
+        modelType,
+        isSDXL,
+        metadata: image.metadata as Record<string, any>,
+        // URLs will be populated by UnifiedUrlService
+        thumbnailUrl: undefined,
+        url: undefined,
+        error: undefined
+      };
+    });
+
+    // Transform videos to UnifiedAsset format
+    const videoAssets: UnifiedAsset[] = (videosResult.data || []).map((video) => {
+      const metadata = video.metadata as any;
+      const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
+
+      return {
+        id: video.id,
+        type: 'video' as const,
+        title: video.title || undefined,
+        prompt: (video as any).prompt || '',
+        enhancedPrompt: video.enhanced_prompt || undefined,
+        status: video.status,
+        quality: (video as any).quality || undefined,
+        format: video.format || undefined,
+        createdAt: new Date(video.created_at),
+        projectId: video.project_id || undefined,
+        projectTitle: (video.project as any)?.title,
+        duration: video.duration || undefined,
+        resolution: video.resolution || undefined,
+        modelType: isEnhanced ? 'Enhanced' : 'Standard',
+        metadata: video.metadata as Record<string, any>,
+        // URLs will be populated by UnifiedUrlService
+        thumbnailUrl: undefined,
+        url: undefined,
+        error: undefined
+      };
+    });
+
+    // Combine all assets
+    const allAssets = [...imageAssets, ...videoAssets];
+
+    // Use UnifiedUrlService for batch URL generation
+    console.log(`🚀 Generating URLs for ${allAssets.length} assets using UnifiedUrlService`);
+    const assetsWithUrls = await UnifiedUrlService.generateBatchUrls(allAssets);
+
+    console.log('✅ OPTIMIZED: Asset loading completed', {
+      totalAssets: assetsWithUrls.length,
+      images: assetsWithUrls.filter(a => a.type === 'image').length,
+      videos: assetsWithUrls.filter(a => a.type === 'video').length,
+      withUrls: assetsWithUrls.filter(a => a.url).length,
+      withErrors: assetsWithUrls.filter(a => a.error).length
+    });
+
+    return assetsWithUrls;
   }
 
   static async getUserAssets(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
