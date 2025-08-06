@@ -362,19 +362,26 @@ export class AssetService {
 
   /**
    * Optimized getUserAssets method using UnifiedUrlService
-   * This is the new implementation that should be used going forward
+   * This is the primary implementation for workspace and library
    */
   static async getUserAssetsOptimized(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
-    console.log('🚀 OPTIMIZED: Fetching assets with UnifiedUrlService');
+    console.log('🚀 OPTIMIZED: Fetching assets with UTC session filtering:', { sessionOnly });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated');
     }
 
-    // Get today's date for session filtering (UTC timezone)
+    // Get today's date for session filtering (UTC timezone to match database)
     const now = new Date();
-    const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    
+    console.log('📅 UTC session filtering details:', {
+      sessionOnly,
+      startOfDay: startOfDay.toISOString(),
+      utcTime: now.toISOString(),
+      timezone: 'UTC (matching database)'
+    });
     
     // Build query conditions
     let imageQuery = supabase
@@ -395,6 +402,9 @@ export class AssetService {
 
     // Add session filtering if requested
     if (sessionOnly) {
+      console.log('🚫 Filtering out dismissed items for workspace view');
+      console.log('📅 Session filtering from:', startOfDay.toISOString());
+      
       imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
       videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
       
@@ -480,8 +490,18 @@ export class AssetService {
       images: assetsWithUrls.filter(a => a.type === 'image').length,
       videos: assetsWithUrls.filter(a => a.type === 'video').length,
       withUrls: assetsWithUrls.filter(a => a.url).length,
-      withErrors: assetsWithUrls.filter(a => a.error).length
+      withErrors: assetsWithUrls.filter(a => a.error).length,
+      completed: assetsWithUrls.filter(a => a.status === 'completed').length
     });
+
+    // Emit library-assets-ready event for real-time UI updates
+    window.dispatchEvent(new CustomEvent('library-assets-ready', {
+      detail: { 
+        assets: assetsWithUrls,
+        sessionOnly,
+        source: 'AssetService.getUserAssetsOptimized'
+      }
+    }));
 
     return assetsWithUrls;
   }

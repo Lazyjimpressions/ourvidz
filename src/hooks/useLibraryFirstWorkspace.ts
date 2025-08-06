@@ -111,56 +111,64 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
 
-  // LIBRARY-FIRST: Query library assets using AssetService for proper URL generation
-  const { data: workspaceAssets = [], isLoading: assetsLoading } = useQuery({
+  // LIBRARY-FIRST: Query library assets using optimized AssetService for proper URL generation
+  const { data: workspaceAssets = [], isLoading: assetsLoading, error: assetsError } = useQuery({
     queryKey: ['library-workspace-items'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       
-      console.log('📚 LIBRARY-FIRST: Fetching workspace assets via AssetService');
+      console.log('📚 LIBRARY-FIRST: Fetching workspace assets via AssetService (UTC session filtering)');
       
       try {
-        // Use AssetService which handles:
-        // 1. Signed URL generation
-        // 2. Event emission for real-time updates
-        // 3. Proper bucket detection
-        // 4. Session filtering
-        const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
-        
-        // Additional filtering for workspace-dismissed items
-        const workspaceAssets = allAssets.filter(asset => {
-          // Check if dismissed from workspace
-          const isDismissed = asset.metadata?.workspace_dismissed === true;
-          if (isDismissed) {
-            console.log('🚫 Filtering dismissed asset:', asset.id);
-            return false;
-          }
-          return true;
-        });
+        // Use optimized AssetService which handles:
+        // 1. UTC-based session filtering (fixing timezone mismatch)
+        // 2. Signed URL generation with proper bucket detection
+        // 3. Event emission for real-time updates
+        // 4. Workspace dismissal filtering
+        const allAssets = await AssetService.getUserAssetsOptimized(true); // sessionOnly = true (UTC-based)
         
         console.log('📚 LIBRARY-FIRST: Assets ready with signed URLs:', {
-          total: workspaceAssets.length,
-          images: workspaceAssets.filter(a => a.type === 'image').length,
-          videos: workspaceAssets.filter(a => a.type === 'video').length,
-          withUrls: workspaceAssets.filter(a => a.url).length,
-          completed: workspaceAssets.filter(a => a.status === 'completed').length
+          total: allAssets.length,
+          images: allAssets.filter(a => a.type === 'image').length,
+          videos: allAssets.filter(a => a.type === 'video').length,
+          withUrls: allAssets.filter(a => a.url).length,
+          withErrors: allAssets.filter(a => a.error).length,
+          completed: allAssets.filter(a => a.status === 'completed').length
         });
         
-        return workspaceAssets;
+        // Emit library-assets-ready event for other components
+        window.dispatchEvent(new CustomEvent('library-assets-ready', {
+          detail: { 
+            assets: allAssets,
+            sessionOnly: true,
+            source: 'workspace'
+          }
+        }));
+        
+        return allAssets;
         
       } catch (error) {
         console.error('❌ Failed to fetch workspace assets:', error);
+        toast({
+          title: "Failed to Load Assets",
+          description: "Could not load workspace content. Please refresh the page.",
+          variant: "destructive",
+        });
         return [];
       }
     },
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
     refetchInterval: false, // Disable auto-refetch, rely on real-time updates
+    retry: (failureCount, error) => {
+      console.error(`❌ Workspace assets query failed (attempt ${failureCount + 1}):`, error);
+      return failureCount < 2; // Retry up to 2 times
+    }
   });
 
-  // Helper function to get today's start (UTC-based)
-  const getTodayStart = () => {
+  // Helper function to get today's start (UTC-based to match database)
+  const getTodayStartUTC = () => {
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     return today.toISOString();
@@ -203,11 +211,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const image = payload.new as any;
           if (image.status === 'completed' && (image.image_url || image.image_urls)) {
-            console.log('📷 IMAGE COMPLETED - Instant workspace update:', image);
-            // Add delay to ensure storage URLs are ready
-            setTimeout(() => {
-              queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-            }, 1000);
+            console.log('📷 IMAGE COMPLETED - Triggering immediate workspace update:', image);
+            // Immediate invalidation - rely on AssetService URL generation
+            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            
+            // Show toast notification
+            toast({
+              title: "Image Ready",
+              description: "New image generated and ready to view",
+            });
           }
         })
         .subscribe();
@@ -241,11 +253,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const video = payload.new as any;
           if (video.status === 'completed' && video.video_url) {
-            console.log('🎥 VIDEO COMPLETED - Instant workspace update:', video);
-            // Add delay to ensure storage URLs are ready
-            setTimeout(() => {
-              queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-            }, 1000);
+            console.log('🎥 VIDEO COMPLETED - Triggering immediate workspace update:', video);
+            // Immediate invalidation - rely on AssetService URL generation
+            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            
+            // Show toast notification
+            toast({
+              title: "Video Ready",
+              description: "New video generated and ready to view",
+            });
           }
         })
         .subscribe();
@@ -541,7 +557,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       setWorkspaceCleared(true);
 
       // Dismiss all today's items
-      const todayStart = getTodayStart();
+      const todayStart = getTodayStartUTC();
       
       // Get today's items and update them
       const { data: images } = await supabase
