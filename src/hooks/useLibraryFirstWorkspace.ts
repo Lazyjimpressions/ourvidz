@@ -120,39 +120,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       
       console.log('📚 LIBRARY-FIRST: Fetching workspace assets from library');
       
-      // Query images/videos directly instead of workspace_items
-      const [imagesResult, videosResult] = await Promise.all([
-        supabase
-          .from('images')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .gte('created_at', getTodayStart()) // Only today's items for workspace
-          .order('created_at', { ascending: false }),
-        
-        supabase
-          .from('videos')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .gte('created_at', getTodayStart())
-          .order('created_at', { ascending: false })
-      ]);
-      
-      if (imagesResult.error) {
-        console.error('❌ Error fetching workspace images:', imagesResult.error);
-        return [];
-      }
-      
-      if (videosResult.error) {
-        console.error('❌ Error fetching workspace videos:', videosResult.error);
-        return [];
-      }
-      
-      // Library service already handles URL generation
+      // Use AssetService directly - it handles timezone correctly and URL generation
       const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
       
-      // Additional client-side filtering to ensure dismissed items are excluded
+      // Filter out dismissed items (handle null/undefined properly)
       const filteredAssets = allAssets.filter(asset => {
         const isDismissed = asset.metadata?.workspace_dismissed === true;
         if (isDismissed) {
@@ -175,10 +146,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     refetchOnWindowFocus: true
   });
 
-  // Helper function to get today's start
+  // Helper function to get today's start (UTC-based)
   const getTodayStart = () => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+    const now = new Date();
+    const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    return today.toISOString();
   };
 
   // LIBRARY-FIRST: Simplified real-time subscription to library tables

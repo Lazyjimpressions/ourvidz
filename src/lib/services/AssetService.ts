@@ -369,9 +369,9 @@ export class AssetService {
 
     console.log('👤 Fetching assets for user:', user.id);
 
-    // Get today's date for session filtering
-    const today = new Date();
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    // Get today's date for session filtering (UTC-based)
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     
     console.log('📅 Session filtering details:', {
       sessionOnly,
