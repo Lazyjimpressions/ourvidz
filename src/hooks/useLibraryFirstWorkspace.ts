@@ -135,11 +135,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
   // LIBRARY-FIRST: Enhanced real-time subscriptions with debouncing to prevent infinite loops
   useEffect(() => {
+    let imagesChannel: any = null;
+    let videosChannel: any = null;
+    
     const setupLibrarySubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return () => {};
 
       console.log('📡 LIBRARY-FIRST: Setting up DEBOUNCED real-time subscriptions');
+
+      // Clean up any existing channels first
+      if (imagesChannel) {
+        supabase.removeChannel(imagesChannel);
+        imagesChannel = null;
+      }
+      if (videosChannel) {
+        supabase.removeChannel(videosChannel);
+        videosChannel = null;
+      }
 
       let debounceTimer: NodeJS.Timeout | null = null;
       let pendingUpdates = new Set<string>();
@@ -165,7 +178,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       };
 
       // Enhanced Images subscription - listen for both INSERT and UPDATE
-      const imagesChannel = supabase
+      imagesChannel = supabase
         .channel('workspace-images-realtime')
         .on('postgres_changes', {
           event: 'INSERT',
@@ -208,7 +221,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         .subscribe();
 
       // Enhanced Videos subscription - listen for both INSERT and UPDATE  
-      const videosChannel = supabase
+      videosChannel = supabase
         .channel('workspace-videos-realtime')
         .on('postgres_changes', {
           event: 'INSERT',
