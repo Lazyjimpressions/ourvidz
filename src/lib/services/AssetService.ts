@@ -372,9 +372,9 @@ export class AssetService {
       throw new Error('User must be authenticated');
     }
 
-    // Get today's date for session filtering (UTC-based)
+    // Get today's date for session filtering (LOCAL timezone, not UTC)
     const now = new Date();
-    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     // Build query conditions
     let imageQuery = supabase
@@ -496,14 +496,16 @@ export class AssetService {
 
     console.log('👤 Fetching assets for user:', user.id);
 
-    // Get today's date for session filtering (UTC-based)
+    // Get today's date for session filtering (LOCAL timezone, not UTC)
     const now = new Date();
-    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     console.log('📅 Session filtering details:', {
       sessionOnly,
       startOfDay: startOfDay.toISOString(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      localStartOfDay: startOfDay.toLocaleString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      currentTime: now.toLocaleString()
     });
     
     // Build query conditions
