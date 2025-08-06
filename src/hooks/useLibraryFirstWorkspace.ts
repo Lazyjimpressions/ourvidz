@@ -118,60 +118,159 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       
-      console.log('📚 LIBRARY-FIRST: Fetching workspace assets from library');
+      console.log('📚 LIBRARY-FIRST: Fetching workspace assets directly from database');
       
-      // Use AssetService directly - it handles timezone correctly and URL generation
-      const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
+      // Get today's date for session filtering (LOCAL timezone, not UTC)
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
-      console.log('📚 LIBRARY-FIRST: Raw assets from AssetService:', {
+      console.log('📅 Session filtering details:', {
+        startOfDay: startOfDay.toISOString(),
+        localStartOfDay: startOfDay.toLocaleString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        currentTime: now.toLocaleString()
+      });
+      
+      // Direct database queries (same as LibraryV2)
+      const imageQuery = supabase
+        .from('images')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay.toISOString())
+        .not('metadata->workspace_dismissed', 'eq', true)
+        .order('created_at', { ascending: false });
+        
+      const videoQuery = supabase
+        .from('videos')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('created_at', startOfDay.toISOString())
+        .not('metadata->workspace_dismissed', 'eq', true)
+        .order('created_at', { ascending: false });
+      
+      const [imageResult, videoResult] = await Promise.all([imageQuery, videoQuery]);
+      
+      if (imageResult.error) throw imageResult.error;
+      if (videoResult.error) throw videoResult.error;
+      
+      console.log('📊 Raw database results:', {
+        images: imageResult.data?.length || 0,
+        videos: videoResult.data?.length || 0
+      });
+      
+      // Process images (following LibraryV2 pattern)
+      const allAssets: UnifiedAsset[] = [];
+      
+      if (imageResult.data) {
+        for (const image of imageResult.data) {
+          const metadata = image.metadata as any;
+          const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
+          const modelType = isSDXL ? 'SDXL' : 'WAN';
+          
+          // Handle SDXL multiple images
+          if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
+            // Create individual assets for each SDXL image
+            image.image_urls.forEach((url: string, index: number) => {
+              allAssets.push({
+                id: `${image.id}_${index}`,
+                type: 'image',
+                title: image.title || undefined,
+                prompt: image.prompt,
+                enhancedPrompt: image.enhanced_prompt || undefined,
+                status: image.status,
+                quality: image.quality || undefined,
+                format: image.format || undefined,
+                createdAt: new Date(image.created_at),
+                projectId: image.project_id || undefined,
+                modelType,
+                isSDXL: true,
+                metadata: {
+                  ...metadata,
+                  image_url: url,
+                  sdxlIndex: index,
+                  originalAssetId: image.id
+                },
+                url: url, // Direct URL from database
+                thumbnailUrl: url,
+                error: undefined
+              });
+            });
+          } else {
+            // Single image (WAN or SDXL with single image)
+            let imageUrl = null;
+            if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
+              imageUrl = image.image_urls[0];
+            } else if (image.image_url) {
+              imageUrl = image.image_url;
+            }
+            
+            allAssets.push({
+              id: image.id,
+              type: 'image',
+              title: image.title || undefined,
+              prompt: image.prompt,
+              enhancedPrompt: image.enhanced_prompt || undefined,
+              status: image.status,
+              quality: image.quality || undefined,
+              format: image.format || undefined,
+              createdAt: new Date(image.created_at),
+              projectId: image.project_id || undefined,
+              modelType,
+              isSDXL,
+              metadata: {
+                ...metadata,
+                image_url: imageUrl
+              },
+              url: imageUrl,
+              thumbnailUrl: imageUrl,
+              error: undefined
+            });
+          }
+        }
+      }
+      
+      // Process videos
+      if (videoResult.data) {
+        for (const video of videoResult.data) {
+          const metadata = video.metadata as any;
+          const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
+          
+          allAssets.push({
+            id: video.id,
+            type: 'video',
+            title: video.title || undefined,
+            prompt: (video as any).prompt || '',
+            enhancedPrompt: video.enhanced_prompt || undefined,
+            status: video.status,
+            quality: (video as any).quality || undefined,
+            format: video.format || undefined,
+            createdAt: new Date(video.created_at),
+            projectId: video.project_id || undefined,
+            duration: video.duration || undefined,
+            resolution: video.resolution || undefined,
+            modelType: isEnhanced ? 'Enhanced' : 'Standard',
+            metadata: {
+              ...metadata,
+              video_url: video.video_url
+            },
+            url: video.video_url,
+            thumbnailUrl: video.video_url,
+            error: undefined
+          });
+        }
+      }
+      
+      console.log('📚 LIBRARY-FIRST: Direct database assets loaded:', {
         total: allAssets.length,
         images: allAssets.filter(a => a.type === 'image').length,
         videos: allAssets.filter(a => a.type === 'video').length,
-        byStatus: allAssets.reduce((acc, asset) => {
-          acc[asset.status] = (acc[asset.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-        sampleJobs: allAssets.slice(0, 3).map(a => ({
-          id: a.id,
-          type: a.type,
-          status: a.status,
-          jobId: a.metadata?.job_id,
-          createdAt: a.createdAt,
-          dismissed: a.metadata?.workspace_dismissed,
-          hasUrl: !!a.url,
-          hasThumbnailUrl: !!a.thumbnailUrl,
-          error: a.error,
-          metadata: {
-            bucket: a.metadata?.bucket,
-            image_url: a.metadata?.image_url,
-            video_url: a.metadata?.video_url,
-            model_type: a.metadata?.model_type,
-            quality: a.metadata?.quality
-          }
-        }))
+        completed: allAssets.filter(a => a.status === 'completed').length,
+        generating: allAssets.filter(a => a.status === 'generating').length,
+        failed: allAssets.filter(a => a.status === 'failed').length,
+        withUrls: allAssets.filter(a => a.url).length
       });
       
-      // Filter out dismissed items (handle null/undefined properly)
-      const filteredAssets = allAssets.filter(asset => {
-        const isDismissed = asset.metadata?.workspace_dismissed === true;
-        if (isDismissed) {
-          console.log('🚫 Filtering out dismissed asset:', asset.id);
-        }
-        return !isDismissed;
-      });
-      
-      console.log('📚 LIBRARY-FIRST: Workspace assets loaded:', {
-        total: allAssets.length,
-        filtered: filteredAssets.length,
-        dismissed: allAssets.length - filteredAssets.length,
-        images: filteredAssets.filter(a => a.type === 'image').length,
-        videos: filteredAssets.filter(a => a.type === 'video').length,
-        completed: filteredAssets.filter(a => a.status === 'completed').length,
-        generating: filteredAssets.filter(a => a.status === 'generating').length,
-        failed: filteredAssets.filter(a => a.status === 'failed').length
-      });
-      
-      return filteredAssets;
+      return allAssets;
     },
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true
