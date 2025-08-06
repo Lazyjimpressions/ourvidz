@@ -111,169 +111,52 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
 
-  // LIBRARY-FIRST: Query library assets for workspace view (session only)
+  // LIBRARY-FIRST: Query library assets using AssetService for proper URL generation
   const { data: workspaceAssets = [], isLoading: assetsLoading } = useQuery({
     queryKey: ['library-workspace-items'],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
       
-      console.log('📚 LIBRARY-FIRST: Fetching workspace assets directly from database');
+      console.log('📚 LIBRARY-FIRST: Fetching workspace assets via AssetService');
       
-      // Get today's date for session filtering (UTC timezone)
-      const now = new Date();
-      const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-      
-      console.log('📅 Session filtering details:', {
-        startOfDay: startOfDay.toISOString(),
-        localStartOfDay: startOfDay.toLocaleString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        currentTime: now.toLocaleString()
-      });
-      
-      // Direct database queries (same as LibraryV2)
-      const imageQuery = supabase
-        .from('images')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString())
-        .not('metadata->workspace_dismissed', 'eq', true)
-        .order('created_at', { ascending: false });
+      try {
+        // Use AssetService which handles:
+        // 1. Signed URL generation
+        // 2. Event emission for real-time updates
+        // 3. Proper bucket detection
+        // 4. Session filtering
+        const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
         
-      const videoQuery = supabase
-        .from('videos')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString())
-        .not('metadata->workspace_dismissed', 'eq', true)
-        .order('created_at', { ascending: false });
-      
-      const [imageResult, videoResult] = await Promise.all([imageQuery, videoQuery]);
-      
-      if (imageResult.error) throw imageResult.error;
-      if (videoResult.error) throw videoResult.error;
-      
-      console.log('📊 Raw database results:', {
-        images: imageResult.data?.length || 0,
-        videos: videoResult.data?.length || 0
-      });
-      
-      // Process images (following LibraryV2 pattern)
-      const allAssets: UnifiedAsset[] = [];
-      
-      if (imageResult.data) {
-        for (const image of imageResult.data) {
-          const metadata = image.metadata as any;
-          const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
-          const modelType = isSDXL ? 'SDXL' : 'WAN';
-          
-          // Handle SDXL multiple images
-          if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
-            // Create individual assets for each SDXL image
-            image.image_urls.forEach((url: string, index: number) => {
-              allAssets.push({
-                id: `${image.id}_${index}`,
-                type: 'image',
-                title: image.title || undefined,
-                prompt: image.prompt,
-                enhancedPrompt: image.enhanced_prompt || undefined,
-                status: image.status,
-                quality: image.quality || undefined,
-                format: image.format || undefined,
-                createdAt: new Date(image.created_at),
-                projectId: image.project_id || undefined,
-                modelType,
-                isSDXL: true,
-                metadata: {
-                  ...metadata,
-                  image_url: url,
-                  sdxlIndex: index,
-                  originalAssetId: image.id
-                },
-                url: url, // Direct URL from database
-                thumbnailUrl: url,
-                error: undefined
-              });
-            });
-          } else {
-            // Single image (WAN or SDXL with single image)
-            let imageUrl = null;
-            if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
-              imageUrl = image.image_urls[0];
-            } else if (image.image_url) {
-              imageUrl = image.image_url;
-            }
-            
-            allAssets.push({
-              id: image.id,
-              type: 'image',
-              title: image.title || undefined,
-              prompt: image.prompt,
-              enhancedPrompt: image.enhanced_prompt || undefined,
-              status: image.status,
-              quality: image.quality || undefined,
-              format: image.format || undefined,
-              createdAt: new Date(image.created_at),
-              projectId: image.project_id || undefined,
-              modelType,
-              isSDXL,
-              metadata: {
-                ...metadata,
-                image_url: imageUrl
-              },
-              url: imageUrl,
-              thumbnailUrl: imageUrl,
-              error: undefined
-            });
+        // Additional filtering for workspace-dismissed items
+        const workspaceAssets = allAssets.filter(asset => {
+          // Check if dismissed from workspace
+          const isDismissed = asset.metadata?.workspace_dismissed === true;
+          if (isDismissed) {
+            console.log('🚫 Filtering dismissed asset:', asset.id);
+            return false;
           }
-        }
+          return true;
+        });
+        
+        console.log('📚 LIBRARY-FIRST: Assets ready with signed URLs:', {
+          total: workspaceAssets.length,
+          images: workspaceAssets.filter(a => a.type === 'image').length,
+          videos: workspaceAssets.filter(a => a.type === 'video').length,
+          withUrls: workspaceAssets.filter(a => a.url).length,
+          completed: workspaceAssets.filter(a => a.status === 'completed').length
+        });
+        
+        return workspaceAssets;
+        
+      } catch (error) {
+        console.error('❌ Failed to fetch workspace assets:', error);
+        return [];
       }
-      
-      // Process videos
-      if (videoResult.data) {
-        for (const video of videoResult.data) {
-          const metadata = video.metadata as any;
-          const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
-          
-          allAssets.push({
-            id: video.id,
-            type: 'video',
-            title: video.title || undefined,
-            prompt: (video as any).prompt || '',
-            enhancedPrompt: video.enhanced_prompt || undefined,
-            status: video.status,
-            quality: (video as any).quality || undefined,
-            format: video.format || undefined,
-            createdAt: new Date(video.created_at),
-            projectId: video.project_id || undefined,
-            duration: video.duration || undefined,
-            resolution: video.resolution || undefined,
-            modelType: isEnhanced ? 'Enhanced' : 'Standard',
-            metadata: {
-              ...metadata,
-              video_url: video.video_url
-            },
-            url: video.video_url,
-            thumbnailUrl: video.video_url,
-            error: undefined
-          });
-        }
-      }
-      
-      console.log('📚 LIBRARY-FIRST: Direct database assets loaded:', {
-        total: allAssets.length,
-        images: allAssets.filter(a => a.type === 'image').length,
-        videos: allAssets.filter(a => a.type === 'video').length,
-        completed: allAssets.filter(a => a.status === 'completed').length,
-        generating: allAssets.filter(a => a.status === 'generating').length,
-        failed: allAssets.filter(a => a.status === 'failed').length,
-        withUrls: allAssets.filter(a => a.url).length
-      });
-      
-      return allAssets;
     },
     staleTime: 30 * 1000,
-    refetchOnWindowFocus: true
+    refetchOnWindowFocus: true,
+    refetchInterval: false, // Disable auto-refetch, rely on real-time updates
   });
 
   // Helper function to get today's start (UTC-based)
@@ -321,7 +204,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           const image = payload.new as any;
           if (image.status === 'completed' && (image.image_url || image.image_urls)) {
             console.log('📷 IMAGE COMPLETED - Instant workspace update:', image);
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            // Add delay to ensure storage URLs are ready
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            }, 1000);
           }
         })
         .subscribe();
@@ -356,7 +242,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           const video = payload.new as any;
           if (video.status === 'completed' && video.video_url) {
             console.log('🎥 VIDEO COMPLETED - Instant workspace update:', video);
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            // Add delay to ensure storage URLs are ready
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            }, 1000);
           }
         })
         .subscribe();
