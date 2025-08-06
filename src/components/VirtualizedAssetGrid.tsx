@@ -68,7 +68,6 @@ export const VirtualizedAssetGrid: React.FC<VirtualizedAssetGridProps> = ({
             }
           }}
           selectionMode={selectionMode}
-          compact={true}
         />
       </div>
     );
@@ -122,13 +121,7 @@ export const VirtualizedAssetGrid: React.FC<VirtualizedAssetGridProps> = ({
 
   return (
     <div className={`virtualized-asset-grid ${className}`}>
-      <Grid
-        {...gridProps}
-        onError={(error) => {
-          console.error('Virtualized grid error:', error);
-          setHasError(true);
-        }}
-      >
+      <Grid {...gridProps}>
         {Cell}
       </Grid>
       

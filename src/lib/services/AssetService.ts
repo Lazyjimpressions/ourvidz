@@ -372,9 +372,9 @@ export class AssetService {
       throw new Error('User must be authenticated');
     }
 
-    // Get today's date for session filtering (LOCAL timezone, not UTC)
+    // Get today's date for session filtering (UTC timezone)
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
     
     // Build query conditions
     let imageQuery = supabase
