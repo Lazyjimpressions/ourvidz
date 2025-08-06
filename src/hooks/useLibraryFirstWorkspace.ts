@@ -283,17 +283,35 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     return today.toISOString();
   };
 
-  // LIBRARY-FIRST: Simplified real-time subscription to library tables
+  // LIBRARY-FIRST: Enhanced real-time subscriptions for instant workspace updates
   useEffect(() => {
     const setupLibrarySubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) return () => {};
 
-      console.log('📡 LIBRARY-FIRST: Setting up library subscription for workspace');
+      console.log('📡 LIBRARY-FIRST: Setting up enhanced real-time subscriptions for instant updates');
 
-      // Single subscription to library tables
-      const channel = supabase
-        .channel('library-workspace-updates')
+      // Enhanced Images subscription - listen for both INSERT and UPDATE
+      const imagesChannel = supabase
+        .channel('workspace-images-realtime')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'images',
+          filter: `user_id=eq.${user.id}`
+        }, (payload) => {
+          console.log('📷 NEW IMAGE - Instant workspace update:', payload.new);
+          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          
+          // Emit completion event for other systems
+          window.dispatchEvent(new CustomEvent('library-assets-ready', {
+            detail: { 
+              type: 'image', 
+              assetId: payload.new.id,
+              jobId: payload.new.job_id 
+            }
+          }));
+        })
         .on('postgres_changes', {
           event: 'UPDATE',
           schema: 'public',
@@ -301,10 +319,33 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           filter: `user_id=eq.${user.id}`
         }, (payload) => {
           const image = payload.new as any;
-          if (image.status === 'completed' && image.image_url) {
-            console.log('📡 LIBRARY: Image completed, invalidating workspace');
+          if (image.status === 'completed' && (image.image_url || image.image_urls)) {
+            console.log('📷 IMAGE COMPLETED - Instant workspace update:', image);
             queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
           }
+        })
+        .subscribe();
+
+      // Enhanced Videos subscription - listen for both INSERT and UPDATE  
+      const videosChannel = supabase
+        .channel('workspace-videos-realtime')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'videos',
+          filter: `user_id=eq.${user.id}`
+        }, (payload) => {
+          console.log('🎥 NEW VIDEO - Instant workspace update:', payload.new);
+          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          
+          // Emit completion event for other systems
+          window.dispatchEvent(new CustomEvent('library-assets-ready', {
+            detail: { 
+              type: 'video', 
+              assetId: payload.new.id,
+              jobId: payload.new.job_id 
+            }
+          }));
         })
         .on('postgres_changes', {
           event: 'UPDATE',
@@ -314,16 +355,27 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const video = payload.new as any;
           if (video.status === 'completed' && video.video_url) {
-            console.log('📡 LIBRARY: Video completed, invalidating workspace');
+            console.log('🎥 VIDEO COMPLETED - Instant workspace update:', video);
             queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
           }
         })
         .subscribe();
 
-      return () => supabase.removeChannel(channel);
+      return () => {
+        console.log('📡 LIBRARY-FIRST: Cleaning up enhanced real-time subscriptions');
+        supabase.removeChannel(imagesChannel);
+        supabase.removeChannel(videosChannel);
+      };
     };
 
-    setupLibrarySubscription();
+    let cleanup: () => void;
+    setupLibrarySubscription().then(cleanupFn => {
+      cleanup = cleanupFn;
+    });
+
+    return () => {
+      if (cleanup) cleanup();
+    };
   }, [queryClient]);
 
   // LIBRARY-FIRST: Listen for library events
