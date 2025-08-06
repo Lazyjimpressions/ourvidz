@@ -199,16 +199,29 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         </div>
       ) : (
         <div className="relative w-full h-full">
-          <img
-            src={item.url}
-            alt={`Content ${item.id}`}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            onError={(e) => {
-              console.error('Image failed to load:', item.url);
-              // Could add fallback image here
-            }}
-          />
+          {item.url ? (
+            <img
+              src={item.url}
+              alt={`Content ${item.id}`}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={(e) => {
+                console.error('Image failed to load:', item.url);
+                const target = e.currentTarget;
+                target.style.display = 'none';
+                const fallback = target.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+            />
+          ) : null}
+          
+          {/* Loading/Error Fallback */}
+          <div 
+            className={`absolute inset-0 bg-muted animate-pulse flex items-center justify-center ${item.url ? 'hidden' : 'flex'}`}
+            style={{ display: item.url ? 'none' : 'flex' }}
+          >
+            <div className="w-8 h-8 rounded bg-muted-foreground/20"></div>
+          </div>
           
           {/* Image Type Indicator - Top Left */}
           <div className="absolute top-2 left-2 bg-green-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">

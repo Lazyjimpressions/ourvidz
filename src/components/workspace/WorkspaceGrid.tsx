@@ -224,7 +224,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               >
                 {/* Thumbnail Container */}
                 <div className="w-16 h-16 rounded overflow-hidden bg-gray-700 relative">
-                  {thumbnailItem?.url ? (
+                   {thumbnailItem?.url ? (
                     <>
                       {/* Video Thumbnail */}
                       {thumbnailItem.type === 'video' ? (
@@ -236,8 +236,11 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               console.error('Video thumbnail failed to load:', thumbnailItem.thumbnailUrl || thumbnailItem.url);
-                              // Fallback to a video placeholder
-                              e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0yNCA0MFYyNEw0MCAzMkwyNCA0MFoiIGZpbGw9IndoaXRlIi8+Cjwvc3ZnPgo=';
+                              // Show loading state instead of broken image
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
                             }}
                           />
                           
@@ -254,24 +257,39 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                               {thumbnailItem.duration}s
                             </div>
                           )}
+                          
+                          {/* Fallback for failed loads */}
+                          <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
+                            <VideoIcon className="w-4 h-4 text-muted-foreground" />
+                          </div>
                         </div>
                       ) : (
                         /* Image Thumbnail */
-                        <img 
-                          src={thumbnailItem.url} 
-                          alt="Image thumbnail"
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.error('Image thumbnail failed to load:', thumbnailItem.url);
-                            // Fallback to an image placeholder
-                            e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiBmaWxsPSIjMzc0MTUxIi8+CjxwYXRoIGQ9Ik0xNiAxNkg0OFY0OEgxNlYxNloiIGZpbGw9IndoaXRlIi8+CjxwYXRoIGQ9Ik0yNCAyNEg0MFY0MEgyNFYyNFoiIGZpbGw9IiM2QjcyODAiLz4KPC9zdmc+Cg==';
-                          }}
-                        />
+                        <div className="relative w-full h-full">
+                          <img 
+                            src={thumbnailItem.url} 
+                            alt="Image thumbnail"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              console.error('Image thumbnail failed to load:', thumbnailItem.url);
+                              // Show loading state instead of broken image
+                              const target = e.currentTarget;
+                              target.style.display = 'none';
+                              const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }}
+                          />
+                          
+                          {/* Fallback for failed loads */}
+                          <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
+                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                        </div>
                       )}
                     </>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-4 h-4 animate-spin rounded-full border-b-2 border-gray-400" />
+                    <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
+                      <div className="w-4 h-4 rounded bg-muted-foreground/20" />
                     </div>
                   )}
                   
