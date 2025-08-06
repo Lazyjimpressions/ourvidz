@@ -122,7 +122,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   return (
     <div className="flex h-full">
       {/* Main Content Area */}
-      <div className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         {/* Job Groups */}
         {Object.entries(displayJobs).map(([jobId, jobItems]) => {
           const metadata = getJobMetadata(jobItems);
@@ -191,9 +191,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     onView={() => onView(item)}
                     onUseAsReference={() => onUseAsReference(item)}
                     onUseSeed={() => onUseSeed(item)}
-                                         // NEW: Separate iterate and regenerate actions
-                     onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
-                     onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
+                    // NEW: Separate iterate and regenerate actions
+                    onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                    onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
                     isDeleting={isDeleting.has(item.id)}
                     size="lg" // Larger size for LTX-style
                   />
@@ -204,9 +204,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         })}
       </div>
 
-      {/* LTX-style Job Thumbnail Selector */}
-      {onJobSelect && (
-        <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2">
+      {/* LTX-style Job Thumbnail Selector - Always show when there are jobs */}
+      {Object.keys(sessionGroups).length > 0 && (
+        <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2 overflow-y-auto">
           {Object.entries(sessionGroups).map(([jobId, jobItems]) => {
             const thumbnailItem = jobItems[0];
             const metadata = getJobMetadata(jobItems);
@@ -218,7 +218,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 className={`relative group cursor-pointer transition-all duration-200 ${
                   isActive ? 'ring-2 ring-blue-500' : 'hover:ring-1 hover:ring-gray-500'
                 }`}
-                onClick={() => onJobSelect(isActive ? null : jobId)}
+                onClick={() => onJobSelect?.(isActive ? null : jobId)}
                 onMouseEnter={() => setHoveredJob(jobId)}
                 onMouseLeave={() => setHoveredJob(null)}
               >

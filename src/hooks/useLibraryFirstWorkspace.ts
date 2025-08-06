@@ -123,6 +123,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // Use AssetService directly - it handles timezone correctly and URL generation
       const allAssets = await AssetService.getUserAssets(true); // sessionOnly = true
       
+      console.log('📚 LIBRARY-FIRST: Raw assets from AssetService:', {
+        total: allAssets.length,
+        images: allAssets.filter(a => a.type === 'image').length,
+        videos: allAssets.filter(a => a.type === 'video').length,
+        byStatus: allAssets.reduce((acc, asset) => {
+          acc[asset.status] = (acc[asset.status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        sampleJobs: allAssets.slice(0, 3).map(a => ({
+          id: a.id,
+          type: a.type,
+          status: a.status,
+          jobId: a.metadata?.job_id,
+          createdAt: a.createdAt,
+          dismissed: a.metadata?.workspace_dismissed
+        }))
+      });
+      
       // Filter out dismissed items (handle null/undefined properly)
       const filteredAssets = allAssets.filter(asset => {
         const isDismissed = asset.metadata?.workspace_dismissed === true;
@@ -137,7 +155,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         filtered: filteredAssets.length,
         dismissed: allAssets.length - filteredAssets.length,
         images: filteredAssets.filter(a => a.type === 'image').length,
-        videos: filteredAssets.filter(a => a.type === 'video').length
+        videos: filteredAssets.filter(a => a.type === 'video').length,
+        completed: filteredAssets.filter(a => a.status === 'completed').length,
+        generating: filteredAssets.filter(a => a.status === 'generating').length,
+        failed: filteredAssets.filter(a => a.status === 'failed').length
       });
       
       return filteredAssets;
@@ -219,9 +240,53 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       }
     };
 
+    const handleGenerationCompleted = (event: CustomEvent) => {
+      const { assetId, type, jobId } = event.detail;
+      
+      console.log('🎉 WORKSPACE: Received generation completed event:', { assetId, type, jobId });
+      
+      // Reset cleared state when new content arrives
+      setWorkspaceCleared(false);
+      
+      // Refresh workspace data to show new content
+      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+      
+      // Show toast notification
+      toast({
+        title: "New Content Ready",
+        description: `New ${type} generated and added to workspace`,
+      });
+    };
+
+    const handleGenerationBatchCompleted = (event: CustomEvent) => {
+      const { assetIds, type, jobId, totalCompleted, totalExpected } = event.detail;
+      
+      console.log('🎉 WORKSPACE: Received generation batch completed event:', { 
+        assetIds, type, jobId, totalCompleted, totalExpected 
+      });
+      
+      // Reset cleared state when new content arrives
+      setWorkspaceCleared(false);
+      
+      // Refresh workspace data to show new content
+      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+      
+      // Show toast notification
+      toast({
+        title: "New Content Ready",
+        description: `${totalCompleted} new ${type.replace('-batch', '')}${totalCompleted > 1 ? 's' : ''} generated`,
+      });
+    };
+
+    // Listen for both event types
     window.addEventListener('library-assets-ready', handleLibraryAssetsReady as EventListener);
+    window.addEventListener('generation-completed', handleGenerationCompleted as EventListener);
+    window.addEventListener('generation-batch-completed', handleGenerationBatchCompleted as EventListener);
+    
     return () => {
       window.removeEventListener('library-assets-ready', handleLibraryAssetsReady as EventListener);
+      window.removeEventListener('generation-completed', handleGenerationCompleted as EventListener);
+      window.removeEventListener('generation-batch-completed', handleGenerationBatchCompleted as EventListener);
     };
   }, [queryClient, toast]);
 
