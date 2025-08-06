@@ -341,8 +341,8 @@ export const SimplifiedWorkspace: React.FC = () => {
         </div>
       </div>
       
-      {/* Floating Footer Controls */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 p-4 z-50 shadow-lg" style={{ minHeight: '120px' }}>
+      {/* Floating Footer Controls - Enhanced positioning */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 p-4 z-[100] shadow-lg" style={{ minHeight: '120px' }}>
         <div className="max-w-7xl mx-auto">
           <SimplePromptInput
             prompt={prompt}

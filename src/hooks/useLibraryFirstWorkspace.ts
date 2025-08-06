@@ -120,9 +120,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       
       console.log('📚 LIBRARY-FIRST: Fetching workspace assets directly from database');
       
-      // Get today's date for session filtering (LOCAL timezone, not UTC)
+      // Get today's date for session filtering (UTC timezone)
       const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
       
       console.log('📅 Session filtering details:', {
         startOfDay: startOfDay.toISOString(),
@@ -438,7 +438,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         prompt: prompt.trim(),
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
-          // No destination specified - defaults to library
+          // LIBRARY-FIRST: No destination needed - always goes to library tables
+          // This ensures content appears in both library and workspace views
           user_requested_enhancement: true,
           // Reference image data
           ...((referenceImageUrl || referenceImage) && {

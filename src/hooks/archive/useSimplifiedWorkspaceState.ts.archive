@@ -1,0 +1,17 @@
+// ARCHIVED: This hook has been replaced by useLibraryFirstWorkspace.ts
+// This file is kept for reference only - DO NOT USE
+// 
+// Migration completed: 2024-01-XX
+// Reason: Moved to library-first architecture for better performance and consistency
+//
+// Replaced by: src/hooks/useLibraryFirstWorkspace.ts
+// 
+// Key changes in new hook:
+// - Direct queries to images/videos tables (no workspace_items)
+// - Simplified real-time subscriptions 
+// - Event-driven updates
+// - Better performance with single source of truth
+//
+// This file is preserved for historical reference only.
+
+// ... [original content would be here but archived for safety]
