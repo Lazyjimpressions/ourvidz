@@ -418,9 +418,9 @@ export class AssetService {
       imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
       videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
       
-      // Filter out dismissed items for workspace view
-      imageQuery = imageQuery.not('metadata->workspace_dismissed', 'eq', true);
-      videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
+      // Filter out dismissed items for workspace view (handle null values correctly)
+      imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
+      videoQuery = videoQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
     }
 
     console.log('🔍 ASSET SERVICE: Executing database queries...');
