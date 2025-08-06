@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
 import { UnifiedUrlService } from './UnifiedUrlService';
+import { AssetServiceErrorHandler } from './AssetServiceErrorHandler';
 
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
@@ -369,7 +370,15 @@ export class AssetService {
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      throw new Error('User must be authenticated');
+      console.error('❌ ASSET SERVICE: No authenticated user found');
+      const authError = AssetServiceErrorHandler.createError(
+        'AUTH_REQUIRED',
+        'No authenticated user found',
+        {},
+        'Please sign in to continue'
+      );
+      AssetServiceErrorHandler.handleError(authError);
+      throw authError;
     }
 
     // Get today's date for session filtering (UTC timezone to match database)
@@ -380,7 +389,8 @@ export class AssetService {
       sessionOnly,
       startOfDay: startOfDay.toISOString(),
       utcTime: now.toISOString(),
-      timezone: 'UTC (matching database)'
+      timezone: 'UTC (matching database)',
+      userId: user.id
     });
     
     // Build query conditions
@@ -413,14 +423,42 @@ export class AssetService {
       videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
     }
 
-    // Fetch images and videos in parallel
-    const [imagesResult, videosResult] = await Promise.all([
-      imageQuery.order('created_at', { ascending: false }),
-      videoQuery.order('created_at', { ascending: false })
-    ]);
+    console.log('🔍 ASSET SERVICE: Executing database queries...');
 
-    if (imagesResult.error) throw imagesResult.error;
-    if (videosResult.error) throw videosResult.error;
+    let imagesResult, videosResult;
+    
+    try {
+      // Fetch images and videos in parallel
+      [imagesResult, videosResult] = await Promise.all([
+        imageQuery.order('created_at', { ascending: false }),
+        videoQuery.order('created_at', { ascending: false })
+      ]);
+
+      if (imagesResult.error) {
+        console.error('❌ ASSET SERVICE: Images query failed:', imagesResult.error);
+        throw imagesResult.error;
+      }
+      if (videosResult.error) {
+        console.error('❌ ASSET SERVICE: Videos query failed:', videosResult.error);
+        throw videosResult.error;
+      }
+
+      console.log('✅ ASSET SERVICE: Database queries successful:', {
+        imagesFound: imagesResult.data?.length || 0,
+        videosFound: videosResult.data?.length || 0,
+        totalRawAssets: (imagesResult.data?.length || 0) + (videosResult.data?.length || 0)
+      });
+    } catch (error: any) {
+      const serviceError = AssetServiceErrorHandler.createError(
+        'DATABASE_QUERY_FAILED',
+        `Database query failed: ${error.message}`,
+        { sessionOnly, userId: user.id, error: error.message },
+        'Failed to load your content from the database'
+      );
+      
+      AssetServiceErrorHandler.handleError(serviceError);
+      throw serviceError;
+    }
 
     // Transform images to UnifiedAsset format
     const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map((image) => {

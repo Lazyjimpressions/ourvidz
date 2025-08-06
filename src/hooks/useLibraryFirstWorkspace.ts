@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { useToast } from '@/hooks/use-toast';
+import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
 import { GenerationFormat } from '@/types/generation';
 
 // LIBRARY-FIRST: Simplified workspace state using library assets
@@ -111,60 +112,18 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
 
-  // LIBRARY-FIRST: Query library assets using optimized AssetService for proper URL generation
-  const { data: workspaceAssets = [], isLoading: assetsLoading, error: assetsError } = useQuery({
-    queryKey: ['library-workspace-items'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
-      console.log('📚 LIBRARY-FIRST: Fetching workspace assets via AssetService (UTC session filtering)');
-      
-      try {
-        // Use optimized AssetService which handles:
-        // 1. UTC-based session filtering (fixing timezone mismatch)
-        // 2. Signed URL generation with proper bucket detection
-        // 3. Event emission for real-time updates
-        // 4. Workspace dismissal filtering
-        const allAssets = await AssetService.getUserAssetsOptimized(true); // sessionOnly = true (UTC-based)
-        
-        console.log('📚 LIBRARY-FIRST: Assets ready with signed URLs:', {
-          total: allAssets.length,
-          images: allAssets.filter(a => a.type === 'image').length,
-          videos: allAssets.filter(a => a.type === 'video').length,
-          withUrls: allAssets.filter(a => a.url).length,
-          withErrors: allAssets.filter(a => a.error).length,
-          completed: allAssets.filter(a => a.status === 'completed').length
-        });
-        
-        // Emit library-assets-ready event for other components
-        window.dispatchEvent(new CustomEvent('library-assets-ready', {
-          detail: { 
-            assets: allAssets,
-            sessionOnly: true,
-            source: 'workspace'
-          }
-        }));
-        
-        return allAssets;
-        
-      } catch (error) {
-        console.error('❌ Failed to fetch workspace assets:', error);
-        toast({
-          title: "Failed to Load Assets",
-          description: "Could not load workspace content. Please refresh the page.",
-          variant: "destructive",
-        });
-        return [];
-      }
-    },
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true,
-    refetchInterval: false, // Disable auto-refetch, rely on real-time updates
-    retry: (failureCount, error) => {
-      console.error(`❌ Workspace assets query failed (attempt ${failureCount + 1}):`, error);
-      return failureCount < 2; // Retry up to 2 times
-    }
+  // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
+  const { 
+    data: workspaceAssets = [], 
+    isLoading: assetsLoading, 
+    error: assetsError,
+    debouncedInvalidate,
+    isCircuitOpen,
+    retryCount 
+  } = useAssetsWithDebounce({ 
+    sessionOnly: true, 
+    debounceMs: 2000,
+    maxRetries: 3 
   });
 
   // Helper function to get today's start (UTC-based to match database)
@@ -174,13 +133,36 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     return today.toISOString();
   };
 
-  // LIBRARY-FIRST: Enhanced real-time subscriptions for instant workspace updates
+  // LIBRARY-FIRST: Enhanced real-time subscriptions with debouncing to prevent infinite loops
   useEffect(() => {
     const setupLibrarySubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return () => {};
 
-      console.log('📡 LIBRARY-FIRST: Setting up enhanced real-time subscriptions for instant updates');
+      console.log('📡 LIBRARY-FIRST: Setting up DEBOUNCED real-time subscriptions');
+
+      let debounceTimer: NodeJS.Timeout | null = null;
+      let pendingUpdates = new Set<string>();
+
+      const localDebouncedInvalidate = () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+
+        debounceTimer = setTimeout(() => {
+          if (pendingUpdates.size > 0) {
+            console.log('🔄 DEBOUNCED: Processing', pendingUpdates.size, 'pending updates');
+            // Use the hook's debounced invalidate method
+            if (debouncedInvalidate) {
+              debouncedInvalidate();
+            } else {
+              queryClient.invalidateQueries({ queryKey: ['assets', true] });
+            }
+            pendingUpdates.clear();
+          }
+          debounceTimer = null;
+        }, 2000); // 2 second debounce
+      };
 
       // Enhanced Images subscription - listen for both INSERT and UPDATE
       const imagesChannel = supabase
@@ -191,8 +173,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           table: 'images',
           filter: `user_id=eq.${user.id}`
         }, (payload) => {
-          console.log('📷 NEW IMAGE - Instant workspace update:', payload.new);
-          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          console.log('📷 NEW IMAGE - Adding to debounced update queue:', payload.new);
+          pendingUpdates.add(`image-insert-${payload.new.id}`);
+          localDebouncedInvalidate();
           
           // Emit completion event for other systems
           window.dispatchEvent(new CustomEvent('library-assets-ready', {
@@ -211,11 +194,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const image = payload.new as any;
           if (image.status === 'completed' && (image.image_url || image.image_urls)) {
-            console.log('📷 IMAGE COMPLETED - Triggering immediate workspace update:', image);
-            // Immediate invalidation - rely on AssetService URL generation
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            console.log('📷 IMAGE COMPLETED - Adding to debounced update queue:', image.id);
+            pendingUpdates.add(`image-update-${image.id}`);
+            localDebouncedInvalidate();
             
-            // Show toast notification
+            // Show toast notification (immediate)
             toast({
               title: "Image Ready",
               description: "New image generated and ready to view",
@@ -233,8 +216,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           table: 'videos',
           filter: `user_id=eq.${user.id}`
         }, (payload) => {
-          console.log('🎥 NEW VIDEO - Instant workspace update:', payload.new);
-          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          console.log('🎥 NEW VIDEO - Adding to debounced update queue:', payload.new);
+          pendingUpdates.add(`video-insert-${payload.new.id}`);
+          localDebouncedInvalidate();
           
           // Emit completion event for other systems
           window.dispatchEvent(new CustomEvent('library-assets-ready', {
@@ -253,11 +237,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const video = payload.new as any;
           if (video.status === 'completed' && video.video_url) {
-            console.log('🎥 VIDEO COMPLETED - Triggering immediate workspace update:', video);
-            // Immediate invalidation - rely on AssetService URL generation
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            console.log('🎥 VIDEO COMPLETED - Adding to debounced update queue:', video.id);
+            pendingUpdates.add(`video-update-${video.id}`);
+            localDebouncedInvalidate();
             
-            // Show toast notification
+            // Show toast notification (immediate)
             toast({
               title: "Video Ready",
               description: "New video generated and ready to view",
@@ -267,7 +251,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         .subscribe();
 
       return () => {
-        console.log('📡 LIBRARY-FIRST: Cleaning up enhanced real-time subscriptions');
+        console.log('📡 LIBRARY-FIRST: Cleaning up debounced real-time subscriptions');
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
         supabase.removeChannel(imagesChannel);
         supabase.removeChannel(videosChannel);
       };
@@ -298,11 +285,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         // Refresh workspace data
         queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
         
-        // Show toast notification
-        toast({
-          title: "New Content Ready",
-          description: `${assets.length} new ${assets[0]?.type}${assets.length > 1 ? 's' : ''} generated`,
-        });
+        // Show toast notification with proper undefined check
+        if (assets && assets.length > 0) {
+          toast({
+            title: "New Content Ready",
+            description: `${assets.length} new ${assets[0]?.type || 'item'}${assets.length > 1 ? 's' : ''} generated`,
+          });
+        }
       }
     };
 
