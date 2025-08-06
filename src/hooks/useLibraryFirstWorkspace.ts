@@ -137,7 +137,17 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           status: a.status,
           jobId: a.metadata?.job_id,
           createdAt: a.createdAt,
-          dismissed: a.metadata?.workspace_dismissed
+          dismissed: a.metadata?.workspace_dismissed,
+          hasUrl: !!a.url,
+          hasThumbnailUrl: !!a.thumbnailUrl,
+          error: a.error,
+          metadata: {
+            bucket: a.metadata?.bucket,
+            image_url: a.metadata?.image_url,
+            video_url: a.metadata?.video_url,
+            model_type: a.metadata?.model_type,
+            quality: a.metadata?.quality
+          }
         }))
       });
       

@@ -144,6 +144,7 @@ export class UnifiedUrlService {
     
     // Check for explicit bucket in metadata first
     if (metadata?.bucket) {
+      console.log(`🔍 Using explicit bucket from metadata: ${metadata.bucket}`);
       return metadata.bucket;
     }
     
@@ -156,22 +157,41 @@ export class UnifiedUrlService {
                        asset.modelType?.includes('7b') ||
                        asset.modelType === 'Enhanced';
     
-    const quality = asset.quality || 'fast';
+    const quality = asset.quality || metadata?.quality || 'fast';
+    
+    console.log(`🔍 Bucket determination for asset ${asset.id}:`, {
+      type: asset.type,
+      isSDXL,
+      isEnhanced,
+      quality,
+      modelType: asset.modelType,
+      metadataModelType: metadata?.model_type
+    });
     
     if (asset.type === 'video') {
       if (isEnhanced) {
-        return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+        const bucket = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+        console.log(`🎬 Video bucket determined: ${bucket}`);
+        return bucket;
       } else {
-        return quality === 'high' ? 'video_high' : 'video_fast';
+        const bucket = quality === 'high' ? 'video_high' : 'video_fast';
+        console.log(`🎬 Video bucket determined: ${bucket}`);
+        return bucket;
       }
     } else {
       // Image assets
       if (isSDXL) {
-        return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        const bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        console.log(`🖼️ SDXL image bucket determined: ${bucket}`);
+        return bucket;
       } else if (isEnhanced) {
-        return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+        const bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+        console.log(`🖼️ Enhanced image bucket determined: ${bucket}`);
+        return bucket;
       } else {
-        return quality === 'high' ? 'image_high' : 'image_fast';
+        const bucket = quality === 'high' ? 'image_high' : 'image_fast';
+        console.log(`🖼️ Standard image bucket determined: ${bucket}`);
+        return bucket;
       }
     }
   }
@@ -186,11 +206,32 @@ export class UnifiedUrlService {
       throw new Error(`No image path found for asset ${asset.id}`);
     }
     
-    console.log(`🔐 Generating signed URL: ${bucket}/${path.slice(0, 30)}...`);
+    // Clean the path - remove bucket prefix if present
+    let cleanPath = path;
+    if (cleanPath.startsWith(`${bucket}/`)) {
+      cleanPath = cleanPath.replace(`${bucket}/`, '');
+    }
     
-    const { data, error } = await getSignedUrl(bucket as any, path, 3600);
+    // Also remove any leading slashes
+    cleanPath = cleanPath.replace(/^\/+/, '');
+    
+    console.log(`🔐 Generating signed URL: ${bucket}/${cleanPath.slice(0, 50)}...`);
+    console.log(`🔍 Path details:`, {
+      originalPath: path,
+      cleanPath: cleanPath,
+      assetId: asset.id,
+      assetType: asset.type,
+      bucket: bucket
+    });
+    
+    const { data, error } = await getSignedUrl(bucket as any, cleanPath, 3600);
     
     if (error || !data?.signedUrl) {
+      console.error(`❌ Failed to generate signed URL for ${asset.id}:`, {
+        bucket,
+        path: cleanPath,
+        error: error?.message || 'No URL returned'
+      });
       throw new Error(`Failed to generate signed URL: ${error?.message || 'No URL returned'}`);
     }
     
@@ -210,17 +251,18 @@ export class UnifiedUrlService {
     
     // For SDXL images with multiple URLs
     if (asset.isSDXL && metadata?.image_urls && Array.isArray(metadata.image_urls)) {
-      const index = asset.sdxlIndex || 0;
-      return metadata.image_urls[index] || null;
+      // Use first image for now - in the future we could implement index-based selection
+      return metadata.image_urls[0] || null;
     }
     
-    // For single images
-    if (type === 'primary') {
-      return metadata?.image_url || metadata?.video_url || null;
+    // For single images - use the correct field names
+    if (asset.type === 'image') {
+      return metadata?.image_url || null;
+    } else if (asset.type === 'video') {
+      return metadata?.video_url || null;
     }
     
-    // For thumbnails and high-res, use the same path for now
-    // In the future, we could implement different paths for different qualities
+    // Fallback for thumbnails and high-res
     return metadata?.image_url || metadata?.video_url || null;
   }
 

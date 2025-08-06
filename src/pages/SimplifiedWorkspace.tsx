@@ -342,51 +342,53 @@ export const SimplifiedWorkspace: React.FC = () => {
       </div>
       
       {/* Floating Footer Controls */}
-      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 p-4 z-50">
-        <SimplePromptInput
-          prompt={prompt}
-          onPromptChange={setPrompt}
-          mode={mode}
-          contentType={contentType}
-          quality={quality}
-          onQualityChange={setQuality}
-          isGenerating={isGenerating}
-          onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
-          referenceImage={referenceImage}
-          onReferenceImageChange={setReferenceImage}
-          referenceImageUrl={referenceImageUrl}
-          onReferenceImageUrlChange={setReferenceImageUrl}
-          referenceStrength={referenceStrength}
-          onReferenceStrengthChange={setReferenceStrength}
-          onModeChange={updateMode}
-          onContentTypeChange={setContentType}
-          beginningRefImage={beginningRefImage}
-          endingRefImage={endingRefImage}
-          onBeginningRefImageChange={setBeginningRefImage}
-          onEndingRefImageChange={setEndingRefImage}
-          beginningRefImageUrl={beginningRefImageUrl}
-          endingRefImageUrl={endingRefImageUrl}
-          onBeginningRefImageUrlChange={setBeginningRefImageUrl}
-          onEndingRefImageUrlChange={setEndingRefImageUrl}
-          videoDuration={videoDuration}
-          onVideoDurationChange={setVideoDuration}
-          motionIntensity={motionIntensity}
-          onMotionIntensityChange={setMotionIntensity}
-          soundEnabled={soundEnabled}
-          onSoundToggle={setSoundEnabled}
-          aspectRatio={aspectRatio}
-          onAspectRatioChange={setAspectRatio}
-          shotType={shotType}
-          onShotTypeChange={setShotType}
-          cameraAngle={cameraAngle}
-          onCameraAngleChange={setCameraAngle}
-          style={style}
-          onStyleChange={setStyle}
-          styleRef={styleRef}
-          onStyleRefChange={setStyleRef}
-          enhancementModel={enhancementModel}
-          onEnhancementModelChange={setEnhancementModel}
-        />
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 p-4 z-50" style={{ minHeight: '120px' }}>
+        <div className="max-w-7xl mx-auto">
+          <SimplePromptInput
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            mode={mode}
+            contentType={contentType}
+            quality={quality}
+            onQualityChange={setQuality}
+            isGenerating={isGenerating}
+            onGenerate={() => generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, seedValue)}
+            referenceImage={referenceImage}
+            onReferenceImageChange={setReferenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageUrlChange={setReferenceImageUrl}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            onModeChange={updateMode}
+            onContentTypeChange={setContentType}
+            beginningRefImage={beginningRefImage}
+            endingRefImage={endingRefImage}
+            onBeginningRefImageChange={setBeginningRefImage}
+            onEndingRefImageChange={setEndingRefImage}
+            beginningRefImageUrl={beginningRefImageUrl}
+            endingRefImageUrl={endingRefImageUrl}
+            onBeginningRefImageUrlChange={setBeginningRefImageUrl}
+            onEndingRefImageUrlChange={setEndingRefImageUrl}
+            videoDuration={videoDuration}
+            onVideoDurationChange={setVideoDuration}
+            motionIntensity={motionIntensity}
+            onMotionIntensityChange={setMotionIntensity}
+            soundEnabled={soundEnabled}
+            onSoundToggle={setSoundEnabled}
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={setAspectRatio}
+            shotType={shotType}
+            onShotTypeChange={setShotType}
+            cameraAngle={cameraAngle}
+            onCameraAngleChange={setCameraAngle}
+            style={style}
+            onStyleChange={setStyle}
+            styleRef={styleRef}
+            onStyleRefChange={setStyleRef}
+            enhancementModel={enhancementModel}
+            onEnhancementModelChange={setEnhancementModel}
+          />
+        </div>
       </div>
     </div>
   );
