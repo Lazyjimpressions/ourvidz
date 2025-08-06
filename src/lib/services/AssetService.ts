@@ -381,15 +381,15 @@ export class AssetService {
       throw authError;
     }
 
-    // Get today's date for session filtering (UTC timezone to match database)
+    // Get cutoff time for session filtering (last 48 hours for better job persistence)
     const now = new Date();
-    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
     
-    console.log('📅 UTC session filtering details:', {
+    console.log('📅 Session filtering details (48h):', {
       sessionOnly,
-      startOfDay: startOfDay.toISOString(),
-      utcTime: now.toISOString(),
-      timezone: 'UTC (matching database)',
+      cutoffTime: fortyEightHoursAgo.toISOString(),
+      currentTime: now.toISOString(),
+      hoursBack: 48,
       userId: user.id
     });
     
@@ -413,10 +413,10 @@ export class AssetService {
     // Add session filtering if requested
     if (sessionOnly) {
       console.log('🚫 Filtering out dismissed items for workspace view');
-      console.log('📅 Session filtering from:', startOfDay.toISOString());
+      console.log('📅 Session filtering from (48h):', fortyEightHoursAgo.toISOString());
       
-      imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
-      videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
+      imageQuery = imageQuery.gte('created_at', fortyEightHoursAgo.toISOString());
+      videoQuery = videoQuery.gte('created_at', fortyEightHoursAgo.toISOString());
       
       // Filter out dismissed items for workspace view (handle null values correctly)
       imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
