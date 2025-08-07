@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { useToast } from '@/hooks/use-toast';
+import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
 import { GenerationFormat } from '@/types/generation';
 
 // LIBRARY-FIRST: Simplified workspace state using library assets
@@ -111,188 +112,73 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
 
-  // LIBRARY-FIRST: Query library assets for workspace view (session only)
-  const { data: workspaceAssets = [], isLoading: assetsLoading } = useQuery({
-    queryKey: ['library-workspace-items'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
-      console.log('📚 LIBRARY-FIRST: Fetching workspace assets directly from database');
-      
-      // Get today's date for session filtering (UTC timezone)
-      const now = new Date();
-      const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
-      
-      console.log('📅 Session filtering details:', {
-        startOfDay: startOfDay.toISOString(),
-        localStartOfDay: startOfDay.toLocaleString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        currentTime: now.toLocaleString()
-      });
-      
-      // Direct database queries (same as LibraryV2)
-      const imageQuery = supabase
-        .from('images')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString())
-        .not('metadata->workspace_dismissed', 'eq', true)
-        .order('created_at', { ascending: false });
-        
-      const videoQuery = supabase
-        .from('videos')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('created_at', startOfDay.toISOString())
-        .not('metadata->workspace_dismissed', 'eq', true)
-        .order('created_at', { ascending: false });
-      
-      const [imageResult, videoResult] = await Promise.all([imageQuery, videoQuery]);
-      
-      if (imageResult.error) throw imageResult.error;
-      if (videoResult.error) throw videoResult.error;
-      
-      console.log('📊 Raw database results:', {
-        images: imageResult.data?.length || 0,
-        videos: videoResult.data?.length || 0
-      });
-      
-      // Process images (following LibraryV2 pattern)
-      const allAssets: UnifiedAsset[] = [];
-      
-      if (imageResult.data) {
-        for (const image of imageResult.data) {
-          const metadata = image.metadata as any;
-          const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
-          const modelType = isSDXL ? 'SDXL' : 'WAN';
-          
-          // Handle SDXL multiple images
-          if (isSDXL && image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 1) {
-            // Create individual assets for each SDXL image
-            image.image_urls.forEach((url: string, index: number) => {
-              allAssets.push({
-                id: `${image.id}_${index}`,
-                type: 'image',
-                title: image.title || undefined,
-                prompt: image.prompt,
-                enhancedPrompt: image.enhanced_prompt || undefined,
-                status: image.status,
-                quality: image.quality || undefined,
-                format: image.format || undefined,
-                createdAt: new Date(image.created_at),
-                projectId: image.project_id || undefined,
-                modelType,
-                isSDXL: true,
-                metadata: {
-                  ...metadata,
-                  image_url: url,
-                  sdxlIndex: index,
-                  originalAssetId: image.id
-                },
-                url: url, // Direct URL from database
-                thumbnailUrl: url,
-                error: undefined
-              });
-            });
-          } else {
-            // Single image (WAN or SDXL with single image)
-            let imageUrl = null;
-            if (image.image_urls && Array.isArray(image.image_urls) && image.image_urls.length > 0) {
-              imageUrl = image.image_urls[0];
-            } else if (image.image_url) {
-              imageUrl = image.image_url;
-            }
-            
-            allAssets.push({
-              id: image.id,
-              type: 'image',
-              title: image.title || undefined,
-              prompt: image.prompt,
-              enhancedPrompt: image.enhanced_prompt || undefined,
-              status: image.status,
-              quality: image.quality || undefined,
-              format: image.format || undefined,
-              createdAt: new Date(image.created_at),
-              projectId: image.project_id || undefined,
-              modelType,
-              isSDXL,
-              metadata: {
-                ...metadata,
-                image_url: imageUrl
-              },
-              url: imageUrl,
-              thumbnailUrl: imageUrl,
-              error: undefined
-            });
-          }
-        }
-      }
-      
-      // Process videos
-      if (videoResult.data) {
-        for (const video of videoResult.data) {
-          const metadata = video.metadata as any;
-          const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
-          
-          allAssets.push({
-            id: video.id,
-            type: 'video',
-            title: video.title || undefined,
-            prompt: (video as any).prompt || '',
-            enhancedPrompt: video.enhanced_prompt || undefined,
-            status: video.status,
-            quality: (video as any).quality || undefined,
-            format: video.format || undefined,
-            createdAt: new Date(video.created_at),
-            projectId: video.project_id || undefined,
-            duration: video.duration || undefined,
-            resolution: video.resolution || undefined,
-            modelType: isEnhanced ? 'Enhanced' : 'Standard',
-            metadata: {
-              ...metadata,
-              video_url: video.video_url
-            },
-            url: video.video_url,
-            thumbnailUrl: video.video_url,
-            error: undefined
-          });
-        }
-      }
-      
-      console.log('📚 LIBRARY-FIRST: Direct database assets loaded:', {
-        total: allAssets.length,
-        images: allAssets.filter(a => a.type === 'image').length,
-        videos: allAssets.filter(a => a.type === 'video').length,
-        completed: allAssets.filter(a => a.status === 'completed').length,
-        generating: allAssets.filter(a => a.status === 'generating').length,
-        failed: allAssets.filter(a => a.status === 'failed').length,
-        withUrls: allAssets.filter(a => a.url).length
-      });
-      
-      return allAssets;
-    },
-    staleTime: 30 * 1000,
-    refetchOnWindowFocus: true
+  // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
+  const { 
+    data: workspaceAssets = [], 
+    isLoading: assetsLoading, 
+    error: assetsError,
+    debouncedInvalidate,
+    isCircuitOpen,
+    retryCount 
+  } = useAssetsWithDebounce({ 
+    sessionOnly: true, 
+    debounceMs: 2000,
+    maxRetries: 3 
   });
 
-  // Helper function to get today's start (UTC-based)
-  const getTodayStart = () => {
+  // Helper function to get today's start (UTC-based to match database)
+  const getTodayStartUTC = () => {
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
     return today.toISOString();
   };
 
-  // LIBRARY-FIRST: Enhanced real-time subscriptions for instant workspace updates
+  // LIBRARY-FIRST: Enhanced real-time subscriptions with debouncing to prevent infinite loops
   useEffect(() => {
+    let imagesChannel: any = null;
+    let videosChannel: any = null;
+    
     const setupLibrarySubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return () => {};
 
-      console.log('📡 LIBRARY-FIRST: Setting up enhanced real-time subscriptions for instant updates');
+      console.log('📡 LIBRARY-FIRST: Setting up DEBOUNCED real-time subscriptions');
+
+      // Clean up any existing channels first
+      if (imagesChannel) {
+        supabase.removeChannel(imagesChannel);
+        imagesChannel = null;
+      }
+      if (videosChannel) {
+        supabase.removeChannel(videosChannel);
+        videosChannel = null;
+      }
+
+      let debounceTimer: NodeJS.Timeout | null = null;
+      let pendingUpdates = new Set<string>();
+
+      const localDebouncedInvalidate = () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+
+        debounceTimer = setTimeout(() => {
+          if (pendingUpdates.size > 0) {
+            console.log('🔄 DEBOUNCED: Processing', pendingUpdates.size, 'pending updates');
+            // Use the hook's debounced invalidate method
+            if (debouncedInvalidate) {
+              debouncedInvalidate();
+            } else {
+              queryClient.invalidateQueries({ queryKey: ['assets', true] });
+            }
+            pendingUpdates.clear();
+          }
+          debounceTimer = null;
+        }, 2000); // 2 second debounce
+      };
 
       // Enhanced Images subscription - listen for both INSERT and UPDATE
-      const imagesChannel = supabase
+      imagesChannel = supabase
         .channel('workspace-images-realtime')
         .on('postgres_changes', {
           event: 'INSERT',
@@ -300,8 +186,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           table: 'images',
           filter: `user_id=eq.${user.id}`
         }, (payload) => {
-          console.log('📷 NEW IMAGE - Instant workspace update:', payload.new);
-          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          console.log('📷 NEW IMAGE - Adding to debounced update queue:', payload.new);
+          pendingUpdates.add(`image-insert-${payload.new.id}`);
+          localDebouncedInvalidate();
           
           // Emit completion event for other systems
           window.dispatchEvent(new CustomEvent('library-assets-ready', {
@@ -320,14 +207,21 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const image = payload.new as any;
           if (image.status === 'completed' && (image.image_url || image.image_urls)) {
-            console.log('📷 IMAGE COMPLETED - Instant workspace update:', image);
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            console.log('📷 IMAGE COMPLETED - Adding to debounced update queue:', image.id);
+            pendingUpdates.add(`image-update-${image.id}`);
+            localDebouncedInvalidate();
+            
+            // Show toast notification (immediate)
+            toast({
+              title: "Image Ready",
+              description: "New image generated and ready to view",
+            });
           }
         })
         .subscribe();
 
       // Enhanced Videos subscription - listen for both INSERT and UPDATE  
-      const videosChannel = supabase
+      videosChannel = supabase
         .channel('workspace-videos-realtime')
         .on('postgres_changes', {
           event: 'INSERT',
@@ -335,8 +229,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           table: 'videos',
           filter: `user_id=eq.${user.id}`
         }, (payload) => {
-          console.log('🎥 NEW VIDEO - Instant workspace update:', payload.new);
-          queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+          console.log('🎥 NEW VIDEO - Adding to debounced update queue:', payload.new);
+          pendingUpdates.add(`video-insert-${payload.new.id}`);
+          localDebouncedInvalidate();
           
           // Emit completion event for other systems
           window.dispatchEvent(new CustomEvent('library-assets-ready', {
@@ -355,14 +250,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, (payload) => {
           const video = payload.new as any;
           if (video.status === 'completed' && video.video_url) {
-            console.log('🎥 VIDEO COMPLETED - Instant workspace update:', video);
-            queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+            console.log('🎥 VIDEO COMPLETED - Adding to debounced update queue:', video.id);
+            pendingUpdates.add(`video-update-${video.id}`);
+            localDebouncedInvalidate();
+            
+            // Show toast notification (immediate)
+            toast({
+              title: "Video Ready",
+              description: "New video generated and ready to view",
+            });
           }
         })
         .subscribe();
 
       return () => {
-        console.log('📡 LIBRARY-FIRST: Cleaning up enhanced real-time subscriptions');
+        console.log('📡 LIBRARY-FIRST: Cleaning up debounced real-time subscriptions');
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
         supabase.removeChannel(imagesChannel);
         supabase.removeChannel(videosChannel);
       };
@@ -393,11 +298,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         // Refresh workspace data
         queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
         
-        // Show toast notification
-        toast({
-          title: "New Content Ready",
-          description: `${assets.length} new ${assets[0]?.type}${assets.length > 1 ? 's' : ''} generated`,
-        });
+        // Show toast notification with proper undefined check
+        if (assets && assets.length > 0) {
+          toast({
+            title: "New Content Ready",
+            description: `${assets.length} new ${assets[0]?.type || 'item'}${assets.length > 1 ? 's' : ''} generated`,
+          });
+        }
       }
     };
 
@@ -652,7 +559,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       setWorkspaceCleared(true);
 
       // Dismiss all today's items
-      const todayStart = getTodayStart();
+      const todayStart = getTodayStartUTC();
       
       // Get today's items and update them
       const { data: images } = await supabase

@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getSignedUrl, deleteFile } from '@/lib/storage';
 import type { Tables } from '@/integrations/supabase/types';
 import { UnifiedUrlService } from './UnifiedUrlService';
+import { AssetServiceErrorHandler } from './AssetServiceErrorHandler';
 
 type ImageRecord = Tables<'images'>;
 type VideoRecord = Tables<'videos'>;
@@ -362,19 +363,35 @@ export class AssetService {
 
   /**
    * Optimized getUserAssets method using UnifiedUrlService
-   * This is the new implementation that should be used going forward
+   * This is the primary implementation for workspace and library
    */
   static async getUserAssetsOptimized(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
-    console.log('🚀 OPTIMIZED: Fetching assets with UnifiedUrlService');
+    console.log('🚀 OPTIMIZED: Fetching assets with UTC session filtering:', { sessionOnly });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      throw new Error('User must be authenticated');
+      console.error('❌ ASSET SERVICE: No authenticated user found');
+      const authError = AssetServiceErrorHandler.createError(
+        'AUTH_REQUIRED',
+        'No authenticated user found',
+        {},
+        'Please sign in to continue'
+      );
+      AssetServiceErrorHandler.handleError(authError);
+      throw authError;
     }
 
-    // Get today's date for session filtering (UTC timezone)
+    // Get cutoff time for session filtering (last 48 hours for better job persistence)
     const now = new Date();
-    const startOfDay = new Date(now.toISOString().split('T')[0] + 'T00:00:00.000Z');
+    const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
+    
+    console.log('📅 Session filtering details (48h):', {
+      sessionOnly,
+      cutoffTime: fortyEightHoursAgo.toISOString(),
+      currentTime: now.toISOString(),
+      hoursBack: 48,
+      userId: user.id
+    });
     
     // Build query conditions
     let imageQuery = supabase
@@ -395,22 +412,53 @@ export class AssetService {
 
     // Add session filtering if requested
     if (sessionOnly) {
-      imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
-      videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
+      console.log('🚫 Filtering out dismissed items for workspace view');
+      console.log('📅 Session filtering from (48h):', fortyEightHoursAgo.toISOString());
       
-      // Filter out dismissed items for workspace view
-      imageQuery = imageQuery.not('metadata->workspace_dismissed', 'eq', true);
-      videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
+      imageQuery = imageQuery.gte('created_at', fortyEightHoursAgo.toISOString());
+      videoQuery = videoQuery.gte('created_at', fortyEightHoursAgo.toISOString());
+      
+      // Filter out dismissed items for workspace view (handle null values correctly)
+      imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
+      videoQuery = videoQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
     }
 
-    // Fetch images and videos in parallel
-    const [imagesResult, videosResult] = await Promise.all([
-      imageQuery.order('created_at', { ascending: false }),
-      videoQuery.order('created_at', { ascending: false })
-    ]);
+    console.log('🔍 ASSET SERVICE: Executing database queries...');
 
-    if (imagesResult.error) throw imagesResult.error;
-    if (videosResult.error) throw videosResult.error;
+    let imagesResult, videosResult;
+    
+    try {
+      // Fetch images and videos in parallel
+      [imagesResult, videosResult] = await Promise.all([
+        imageQuery.order('created_at', { ascending: false }),
+        videoQuery.order('created_at', { ascending: false })
+      ]);
+
+      if (imagesResult.error) {
+        console.error('❌ ASSET SERVICE: Images query failed:', imagesResult.error);
+        throw imagesResult.error;
+      }
+      if (videosResult.error) {
+        console.error('❌ ASSET SERVICE: Videos query failed:', videosResult.error);
+        throw videosResult.error;
+      }
+
+      console.log('✅ ASSET SERVICE: Database queries successful:', {
+        imagesFound: imagesResult.data?.length || 0,
+        videosFound: videosResult.data?.length || 0,
+        totalRawAssets: (imagesResult.data?.length || 0) + (videosResult.data?.length || 0)
+      });
+    } catch (error: any) {
+      const serviceError = AssetServiceErrorHandler.createError(
+        'DATABASE_QUERY_FAILED',
+        `Database query failed: ${error.message}`,
+        { sessionOnly, userId: user.id, error: error.message },
+        'Failed to load your content from the database'
+      );
+      
+      AssetServiceErrorHandler.handleError(serviceError);
+      throw serviceError;
+    }
 
     // Transform images to UnifiedAsset format
     const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map((image) => {
@@ -433,9 +481,9 @@ export class AssetService {
         modelType,
         isSDXL,
         metadata: image.metadata as Record<string, any>,
-        // URLs will be populated by UnifiedUrlService
-        thumbnailUrl: undefined,
-        url: undefined,
+        // Map database URLs to UnifiedAsset properties
+        thumbnailUrl: image.thumbnail_url || undefined,
+        url: image.image_url || undefined,
         error: undefined
       };
     });
@@ -461,9 +509,9 @@ export class AssetService {
         resolution: video.resolution || undefined,
         modelType: isEnhanced ? 'Enhanced' : 'Standard',
         metadata: video.metadata as Record<string, any>,
-        // URLs will be populated by UnifiedUrlService
-        thumbnailUrl: undefined,
-        url: undefined,
+        // Map database URLs to UnifiedAsset properties
+        thumbnailUrl: video.thumbnail_url || undefined,
+        url: video.video_url || undefined,
         error: undefined
       };
     });
@@ -480,8 +528,18 @@ export class AssetService {
       images: assetsWithUrls.filter(a => a.type === 'image').length,
       videos: assetsWithUrls.filter(a => a.type === 'video').length,
       withUrls: assetsWithUrls.filter(a => a.url).length,
-      withErrors: assetsWithUrls.filter(a => a.error).length
+      withErrors: assetsWithUrls.filter(a => a.error).length,
+      completed: assetsWithUrls.filter(a => a.status === 'completed').length
     });
+
+    // Emit library-assets-ready event for real-time UI updates
+    window.dispatchEvent(new CustomEvent('library-assets-ready', {
+      detail: { 
+        assets: assetsWithUrls,
+        sessionOnly,
+        source: 'AssetService.getUserAssetsOptimized'
+      }
+    }));
 
     return assetsWithUrls;
   }

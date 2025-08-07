@@ -33,7 +33,41 @@ export class GenerationService {
       estimatedTime: config.estimatedTime
     });
 
+    // Sanitize request to remove circular references
+    const sanitizeRequest = (obj: any): any => {
+      if (obj === null || obj === undefined) return obj;
+      if (typeof obj !== 'object') return obj;
+      
+      // Remove File objects and DOM elements
+      if (obj instanceof File || obj instanceof HTMLElement || obj.constructor?.name?.includes('HTML')) {
+        return undefined;
+      }
+      
+      // Handle arrays
+      if (Array.isArray(obj)) {
+        return obj.map(item => sanitizeRequest(item)).filter(item => item !== undefined);
+      }
+      
+      // Handle regular objects
+      const sanitized: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        const sanitizedValue = sanitizeRequest(value);
+        if (sanitizedValue !== undefined) {
+          sanitized[key] = sanitizedValue;
+        }
+      }
+      return sanitized;
+    };
+
     try {
+      // Test JSON serialization to catch circular references early
+      try {
+        JSON.stringify(request);
+      } catch (jsonError) {
+        console.error('❌ Circular reference detected in request:', jsonError);
+        throw new Error('Request contains circular references that cannot be serialized');
+      }
+
       // Phase 1: Create job first, then records with job_id (like videos)
       let videoId: string | undefined;
       let imageId: string | undefined;
@@ -42,7 +76,7 @@ export class GenerationService {
       console.log('📤 Creating job first (video table pattern)...');
       const jobBody = {
         jobType: request.format,
-        metadata: {
+        metadata: sanitizeRequest({
           ...request.metadata,
           credits: config.credits * (request.batchCount || 1),
           model_variant: config.isSDXL ? 'lustify_sdxl' : 'wan_2_1_1_3b',
@@ -60,7 +94,7 @@ export class GenerationService {
           reference_type: request.metadata?.reference_type,
           start_reference_url: request.metadata?.start_reference_url,
           end_reference_url: request.metadata?.end_reference_url
-        },
+        }),
         projectId: request.projectId,
         // Pass prompt_test_id if this is a test generation
         ...(request.metadata?.prompt_test_metadata && {
@@ -68,18 +102,28 @@ export class GenerationService {
         })
       };
 
+      const sanitizedBody = sanitizeRequest({
+        ...jobBody,
+        originalPrompt: request.originalPrompt,
+        enhancedPrompt: request.enhancedPrompt,
+        isPromptEnhanced: request.isPromptEnhanced,
+        enhancementMetadata: sanitizeRequest(request.enhancementMetadata),
+        selectedPresets: request.selectedPresets,
+        // Pass enhancement parameters as top-level for proper routing
+        contentType: request.metadata?.contentType || 'sfw',
+        enhancementModel: request.metadata?.enhancement_model || 'qwen_instruct'
+      });
+
+      // Final validation before sending
+      try {
+        JSON.stringify(sanitizedBody);
+      } catch (jsonError) {
+        console.error('❌ Sanitized request still contains circular references:', jsonError);
+        throw new Error('Unable to sanitize request for serialization');
+      }
+
       const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: {
-          ...jobBody,
-          originalPrompt: request.originalPrompt,
-          enhancedPrompt: request.enhancedPrompt,
-          isPromptEnhanced: request.isPromptEnhanced,
-          enhancementMetadata: request.enhancementMetadata,
-          selectedPresets: request.selectedPresets,
-          // Pass enhancement parameters as top-level for proper routing
-          contentType: request.metadata?.contentType || 'sfw',
-          enhancementModel: request.metadata?.enhancement_model || 'qwen_instruct'
-        }
+        body: sanitizedBody
       });
 
       if (error) {

@@ -245,13 +245,10 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
     
     updateData.metadata = updatedMetadata;
     
-    // WORKSPACE SUPPORT: Route to workspace or library based on destination
-    if (isWorkspaceJob && status === 'completed' && assets && assets.length > 0) {
-      console.log('🎯 WORKSPACE JOB: Routing to workspace items with job_id:', job_id);
-      await handleWorkspaceJobCallback(supabase, currentJob, status, assets, error_message, job_id);
-    } else if (status === 'completed' && assets && assets.length > 0) {
-      console.log('📚 LIBRARY JOB: Routing to library items');
-      // Existing library handling logic
+    // PURE LIBRARY-FIRST: Always route completed jobs to library tables
+    if (status === 'completed' && assets && assets.length > 0) {
+      console.log('📚 LIBRARY-FIRST: Always routing to library tables for workspace compatibility');
+      // Route to appropriate library table based on job type
       if (currentJob.job_type === 'image' || currentJob.job_type.includes('image')) {
         await handleImageJobCallback(supabase, currentJob, status, assets, error_message, currentJob.quality, currentJob.job_type.includes('sdxl'), currentJob.job_type.includes('enhance'));
       } else if (currentJob.job_type === 'video' || currentJob.job_type.includes('video')) {
@@ -1001,100 +998,5 @@ async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
   }
 }
 
-// WORKSPACE SUPPORT: Handle workspace-first generation (PHASE 1 FIX)
-async function handleWorkspaceJobCallback(supabase, job, status, assets, error_message, job_id) {
-  console.log('🎯 WORKSPACE CALLBACK (FIXED):', {
-    job_id: job.id,
-    job_type: job.job_type,
-    status,
-    assetsCount: assets ? assets.length : 0
-  });
-  
-  if (status === 'completed' && assets && assets.length > 0) {
-    const jobMetadata = job.metadata || {};
-    const prompt = jobMetadata.original_prompt || jobMetadata.prompt || 'Untitled';
-    const isImageJob = job.job_type === 'image' || job.job_type.includes('image');
-    
-    // PHASE 1 FIX: Ensure job_id is properly set for each workspace item
-    for (let i = 0; i < assets.length; i++) {
-      const assetUrl = assets[i];
-      
-      const workspaceItemData = {
-        session_id: job.workspace_session_id,
-        job_id: job_id, // CRITICAL FIX: Use the actual job_id parameter from callback
-        user_id: job.user_id,
-        prompt: prompt,
-        enhanced_prompt: jobMetadata.enhanced_prompt || jobMetadata.final_prompt || prompt,
-        content_type: isImageJob ? 'image' : 'video',
-        model_type: job.job_type,
-        quality: job.quality || 'fast',
-        storage_path: assetUrl,
-        bucket_name: job.job_type.startsWith('sdxl_') ? `sdxl_${job.job_type.replace('sdxl_', '')}` : (isImageJob ? 'image_high' : 'video_high'), // PHASE 1 FIX: Correct SDXL bucket
-        url: assetUrl,
-        thumbnail_url: assetUrl,
-        generation_params: {
-          seed: jobMetadata.seed,
-          original_prompt: jobMetadata.original_prompt,
-          enhanced_prompt: jobMetadata.enhanced_prompt || jobMetadata.final_prompt,
-          enhancement_strategy: jobMetadata.enhancement_strategy,
-          job_type: job.job_type
-        },
-        seed: jobMetadata.seed,
-        reference_image_url: jobMetadata.reference_image_url,
-        reference_strength: jobMetadata.reference_strength,
-        status: 'generated',
-        metadata: {
-          asset_index: i,
-          total_assets: assets.length,
-          job_type: job.job_type,
-          enhancement_strategy: jobMetadata.enhancement_strategy || 'unknown'
-        }
-      };
-      
-      console.log(`🔄 WORKSPACE (${i + 1}/${assets.length}): Creating item with job_id=${job.id}`);
-      
-      const { data: workspaceItem, error: workspaceError } = await supabase
-        .from('workspace_items')
-        .insert(workspaceItemData)
-        .select()
-        .single();
-      
-      if (workspaceError) {
-        console.error('❌ WORKSPACE: Insert failed:', workspaceError);
-      } else {
-        console.log(`✅ WORKSPACE: Item created with job_id=${workspaceItem.job_id}`);
-      }
-    }
-  } else if (status === 'failed') {
-    console.error('❌ WORKSPACE: Job failed:', {
-      job_id: job.id,
-      error_message,
-      workspace_session_id: job.workspace_session_id
-    });
-    
-    // Create failed workspace item for tracking
-    const failedItemData = {
-      session_id: job.workspace_session_id,
-      job_id: job.id,
-      user_id: job.user_id,
-      prompt: job.metadata?.prompt || 'Failed Generation',
-      content_type: job.job_type.includes('image') ? 'image' : 'video',
-      model_type: job.job_type,
-      quality: job.quality || 'fast',
-      status: 'failed',
-      metadata: {
-        error_message,
-        failed_at: new Date().toISOString(),
-        job_type: job.job_type
-      }
-    };
-    
-    const { error: failedError } = await supabase
-      .from('workspace_items')
-      .insert(failedItemData);
-    
-    if (failedError) {
-      console.error('❌ WORKSPACE: Failed to create failed item record:', failedError);
-    }
-  }
-}
+// REMOVED: handleWorkspaceJobCallback function - using pure library-first architecture
+// All content now routes to library tables (images/videos) which workspace queries directly

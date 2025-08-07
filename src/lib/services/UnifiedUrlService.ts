@@ -247,23 +247,52 @@ export class UnifiedUrlService {
    * Get the appropriate image path for an asset
    */
   private static getImagePath(asset: UnifiedAsset, type: 'primary' | 'thumbnail' | 'highres'): string | null {
-    const metadata = asset.metadata as any;
-    
-    // For SDXL images with multiple URLs
-    if (asset.isSDXL && metadata?.image_urls && Array.isArray(metadata.image_urls)) {
-      // Use first image for now - in the future we could implement index-based selection
-      return metadata.image_urls[0] || null;
+    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${type}`, {
+      assetType: asset.type,
+      isSDXL: asset.isSDXL,
+      url: asset.url,
+      thumbnailUrl: asset.thumbnailUrl,
+      metadata: asset.metadata
+    });
+
+    // For SDXL images with multiple URLs - check metadata for image_urls array
+    if (asset.isSDXL) {
+      const metadata = asset.metadata as any;
+      const imageUrls = metadata?.image_urls;
+      if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+        console.log(`✅ Found SDXL image URLs: ${imageUrls.length} images`);
+        return imageUrls[0];
+      }
     }
     
-    // For single images - use the correct field names
+    // For regular images - check asset properties first
     if (asset.type === 'image') {
+      // Check direct asset properties first
+      if (type === 'thumbnail' && asset.thumbnailUrl) {
+        return asset.thumbnailUrl;
+      }
+      if (asset.url) {
+        return asset.url;
+      }
+      
+      // Fallback to metadata if direct properties are missing
+      const metadata = asset.metadata as any;
       return metadata?.image_url || null;
-    } else if (asset.type === 'video') {
-      return metadata?.video_url || null;
+    } 
+    
+    // For videos
+    if (asset.type === 'video') {
+      if (type === 'thumbnail' && asset.thumbnailUrl) {
+        return asset.thumbnailUrl;
+      }
+      
+      // For video primary, we typically use thumbnail or video URL
+      const metadata = asset.metadata as any;
+      return asset.thumbnailUrl || metadata?.video_url || null;
     }
     
-    // Fallback for thumbnails and high-res
-    return metadata?.image_url || metadata?.video_url || null;
+    console.warn(`❌ No image path found for asset ${asset.id} of type ${asset.type}`);
+    return null;
   }
 
   /**
