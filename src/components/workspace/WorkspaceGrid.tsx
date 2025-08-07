@@ -226,6 +226,36 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     size="lg" // Larger size for LTX-style
                   />
                 ))}
+                
+                {/* Add empty placeholder slots for videos to maintain 1x3 grid */}
+                {metadata.isVideoJob && jobItems.length < 3 && (
+                  Array.from({ length: 3 - jobItems.length }, (_, index) => (
+                    <div 
+                      key={`empty-slot-${index}`} 
+                      className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
+                    >
+                      <div className="text-center text-gray-500">
+                        <VideoIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-xs">Empty Slot</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                
+                {/* Add empty placeholder slots for images if less than 3 */}
+                {!metadata.isVideoJob && jobItems.length < 3 && (
+                  Array.from({ length: 3 - jobItems.length }, (_, index) => (
+                    <div 
+                      key={`empty-slot-${index}`} 
+                      className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
+                    >
+                      <div className="text-center text-gray-500">
+                        <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-xs">Empty Slot</p>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           );
