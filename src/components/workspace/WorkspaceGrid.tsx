@@ -67,23 +67,10 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     }, {} as Record<string, UnifiedAsset[]>);
   }, [items]);
 
-  // LTX-Style Grid Class - Always 1x3 for image jobs, responsive for videos
+  // LTX-Style Grid Class - Always 1x3 for both images and videos
   const getGridClass = (jobItems: UnifiedAsset[]) => {
-    const isVideoJob = jobItems.some(item => item.type === 'video');
-    const itemCount = jobItems.length;
-    
-    // For video jobs, use responsive layout
-    if (isVideoJob) {
-      if (itemCount === 1) return 'grid-cols-1';
-      if (itemCount === 2) return 'grid-cols-1 md:grid-cols-2';
-      if (itemCount === 3) return 'grid-cols-1 md:grid-cols-3';
-      if (itemCount === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
-      if (itemCount === 5) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5';
-      if (itemCount === 6) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
-      return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
-    }
-    
-    // For image jobs, ALWAYS use 1x3 grid (3 columns)
+    // Both images and videos use fixed 1x3 grid for consistency
+    // Videos will show 1 of 3 slots, images will show up to 3
     return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
