@@ -59,12 +59,38 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
 
   // Job-level grouping
   const sessionGroups = useMemo(() => {
-    return items.reduce((acc, item) => {
+    console.log('🔍 WORKSPACE GRID: Processing items for job grouping:', {
+      totalItems: items.length,
+      items: items.map(item => ({
+        id: item.id,
+        type: item.type,
+        jobId: item.metadata?.job_id,
+        url: item.url,
+        thumbnailUrl: item.thumbnailUrl,
+        status: item.status
+      }))
+    });
+
+    const groups = items.reduce((acc, item) => {
       const jobId = item.metadata?.job_id || 'unknown';
       if (!acc[jobId]) acc[jobId] = [];
       acc[jobId].push(item);
       return acc;
     }, {} as Record<string, UnifiedAsset[]>);
+
+    console.log('🔍 WORKSPACE GRID: Job groups created:', {
+      totalJobs: Object.keys(groups).length,
+      jobGroups: Object.entries(groups).map(([jobId, jobItems]) => ({
+        jobId,
+        itemCount: jobItems.length,
+        types: jobItems.map(item => item.type),
+        hasUrls: jobItems.some(item => item.url || item.thumbnailUrl),
+        firstItemUrl: jobItems[0]?.url,
+        firstItemThumbnailUrl: jobItems[0]?.thumbnailUrl
+      }))
+    });
+
+    return groups;
   }, [items]);
 
   // LTX-Style Grid Class - Always 1x3 for both images and videos
@@ -205,6 +231,19 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
             const thumbnailItem = jobItems[0];
             const metadata = getJobMetadata(jobItems);
             const isActive = activeJobId === jobId;
+            
+            console.log('🔍 THUMBNAIL RENDERING:', {
+              jobId,
+              thumbnailItem: {
+                id: thumbnailItem?.id,
+                type: thumbnailItem?.type,
+                url: thumbnailItem?.url,
+                thumbnailUrl: thumbnailItem?.thumbnailUrl,
+                status: thumbnailItem?.status
+              },
+              isActive,
+              hasUrl: !!(thumbnailItem?.url || thumbnailItem?.thumbnailUrl)
+            });
             
             return (
               <div 
