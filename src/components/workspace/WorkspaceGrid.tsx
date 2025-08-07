@@ -67,17 +67,24 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     }, {} as Record<string, UnifiedAsset[]>);
   }, [items]);
 
-  // LTX-Style Grid Class - Larger images for desktop with clean spacing
-  const getGridClass = (itemCount: number) => {
-    // Desktop-first approach with larger images
-    if (itemCount === 1) return 'grid-cols-1';
-    if (itemCount === 2) return 'grid-cols-1 md:grid-cols-2';
-    if (itemCount === 3) return 'grid-cols-1 md:grid-cols-3';
-    if (itemCount === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
-    if (itemCount === 5) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5';
-    if (itemCount === 6) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'; // Classic 2x3 grid
-    // For larger sets, maintain elegant spacing
-    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+  // LTX-Style Grid Class - Always 1x3 for image jobs, responsive for videos
+  const getGridClass = (jobItems: UnifiedAsset[]) => {
+    const isVideoJob = jobItems.some(item => item.type === 'video');
+    const itemCount = jobItems.length;
+    
+    // For video jobs, use responsive layout
+    if (isVideoJob) {
+      if (itemCount === 1) return 'grid-cols-1';
+      if (itemCount === 2) return 'grid-cols-1 md:grid-cols-2';
+      if (itemCount === 3) return 'grid-cols-1 md:grid-cols-3';
+      if (itemCount === 4) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4';
+      if (itemCount === 5) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5';
+      if (itemCount === 6) return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+      return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+    }
+    
+    // For image jobs, ALWAYS use 1x3 grid (3 columns)
+    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
   // Get job metadata for display
@@ -173,7 +180,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               </div>
 
               {/* Content Grid */}
-              <div className={`grid gap-3 ${getGridClass(jobItems.length)}`}>
+              <div className={`grid gap-3 ${getGridClass(jobItems)}`}>
                 {jobItems.map((item) => (
                   <ContentCard
                     key={item.id}
