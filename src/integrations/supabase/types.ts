@@ -129,6 +129,7 @@ export type Database = {
           created_at: string | null
           creator_id: string | null
           description: string
+          gender: string | null
           id: string
           image_url: string | null
           interaction_count: number | null
@@ -149,6 +150,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           description: string
+          gender?: string | null
           id?: string
           image_url?: string | null
           interaction_count?: number | null
@@ -169,6 +171,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           description?: string
+          gender?: string | null
           id?: string
           image_url?: string | null
           interaction_count?: number | null

@@ -21,6 +21,7 @@ interface SavedCharacter {
   interaction_count: number;
   reference_image_url?: string;
   is_public: boolean;
+  gender?: string;
 }
 
 export const useCharacterDatabase = () => {
@@ -47,7 +48,8 @@ export const useCharacterDatabase = () => {
           persona: character.personality,
           voice_tone: 'conversational',
           mood: 'friendly',
-          is_public: true
+          is_public: true,
+          gender: character.gender || 'unspecified'
         })
         .select('id')
         .single();
@@ -91,6 +93,7 @@ export const useCharacterDatabase = () => {
         relationships: traitsObj.relationships || '',
         goals: traitsObj.goals || '',
         quirks: traitsObj.quirks || '',
+        gender: data.gender as 'male' | 'female' | 'non-binary' | 'unspecified' || 'unspecified',
       };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load character');

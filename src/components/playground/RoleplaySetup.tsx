@@ -21,6 +21,7 @@ export interface Character {
   relationships: string;
   goals: string;
   quirks: string;
+  gender?: 'male' | 'female' | 'non-binary' | 'unspecified';
 }
 
 export interface RoleplayTemplate {
@@ -249,7 +250,8 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
       visualDescription: '',
       relationships: '',
       goals: '',
-      quirks: ''
+      quirks: '',
+      gender: 'unspecified'
     };
     setCustomCharacters([...customCharacters, newCharacter]);
   };
@@ -281,7 +283,8 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
         visualDescription: dbCharacter.visualDescription,
         relationships: dbCharacter.relationships,
         goals: dbCharacter.goals,
-        quirks: dbCharacter.quirks
+        quirks: dbCharacter.quirks,
+        gender: 'unspecified'
       };
       setCustomCharacters(prev => [...prev, newCharacter]);
     }
@@ -498,6 +501,25 @@ export const RoleplaySetup: React.FC<RoleplaySetupProps> = ({ onStartRoleplay })
                           placeholder="How does this character speak?"
                           className="h-6 text-xs"
                         />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">Gender (for image generation)</label>
+                        <Select
+                          value={character.gender || 'unspecified'}
+                          onValueChange={(value: 'male' | 'female' | 'non-binary' | 'unspecified') => 
+                            updateCharacter(character.id, 'gender', value)
+                          }
+                        >
+                          <SelectTrigger className="h-6 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unspecified" className="text-xs">Unspecified</SelectItem>
+                            <SelectItem value="male" className="text-xs">Male</SelectItem>
+                            <SelectItem value="female" className="text-xs">Female</SelectItem>
+                            <SelectItem value="non-binary" className="text-xs">Non-binary</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       {showAdvanced && (
                         <div className="grid grid-cols-2 gap-2">

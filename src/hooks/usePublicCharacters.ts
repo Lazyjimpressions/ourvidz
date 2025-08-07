@@ -18,6 +18,7 @@ interface PublicCharacter {
   is_public: boolean;
   created_at: string;
   updated_at: string;
+  gender?: string;
 }
 
 export const usePublicCharacters = () => {
