@@ -20,6 +20,7 @@ interface Database {
           id: string;
           user_id: string;
           project_id: string | null;
+          character_id: string | null;
           title: string;
           conversation_type: string;
           status: string;
@@ -29,6 +30,7 @@ interface Database {
         Insert: {
           user_id: string;
           project_id?: string | null;
+          character_id?: string | null;
           title?: string;
           conversation_type?: string;
           status?: string;
