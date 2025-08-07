@@ -246,23 +246,6 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   </div>
                 ))}
                 
-                {/* Add empty placeholder slots for incomplete image jobs (only on desktop) */}
-                {!metadata.isVideoJob && metadata.itemCount < 3 && (
-                  Array.from({ length: 3 - metadata.itemCount }, (_, index) => (
-                    <div 
-                      key={`empty-slot-${index}`} 
-                      className="hidden md:block bg-gray-800/30 border-2 border-dashed border-gray-600/50 rounded-lg flex items-center justify-center min-h-[200px] relative"
-                    >
-                      <div className="absolute -top-6 left-0 text-xs text-gray-500">
-                        Image {metadata.itemCount + index + 1} of 3
-                      </div>
-                      <div className="text-center text-gray-500">
-                        <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        <p className="text-xs opacity-60">Generating...</p>
-                      </div>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
           );
