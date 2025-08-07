@@ -33,6 +33,25 @@ export class UnifiedUrlService {
     this.metrics.totalRequests++;
     
     try {
+      // Check if asset already has URLs from database
+      if (asset.url || asset.thumbnailUrl) {
+        console.log(`✅ Asset ${asset.id} already has URLs from database:`, {
+          url: asset.url,
+          thumbnailUrl: asset.thumbnailUrl
+        });
+        
+        // Check if the URLs are already signed URLs (start with https://)
+        const hasSignedUrl = asset.url?.startsWith('https://') || asset.thumbnailUrl?.startsWith('https://');
+        if (hasSignedUrl) {
+          console.log(`✅ Asset ${asset.id} already has signed URLs, skipping generation`);
+          this.metrics.cacheHits++;
+          return asset; // Return as-is, no need to regenerate
+        }
+        
+        // If we have URLs but they're not signed, we'll continue to generate signed URLs
+        console.log(`⚠️ Asset ${asset.id} has URLs but they're not signed, generating signed URLs`);
+      }
+
       // Check cache first
       const cachedUrl = this.getCachedUrl(asset.id);
       if (cachedUrl) {
@@ -267,31 +286,48 @@ export class UnifiedUrlService {
     
     // For regular images - check asset properties first
     if (asset.type === 'image') {
-      // Check direct asset properties first
+      // Check direct asset properties first (these come from database)
       if (type === 'thumbnail' && asset.thumbnailUrl) {
+        console.log(`✅ Using thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }
       if (asset.url) {
+        console.log(`✅ Using primary URL from asset: ${asset.url}`);
         return asset.url;
       }
       
       // Fallback to metadata if direct properties are missing
       const metadata = asset.metadata as any;
-      return metadata?.image_url || null;
+      if (metadata?.image_url) {
+        console.log(`✅ Using image_url from metadata: ${metadata.image_url}`);
+        return metadata.image_url;
+      }
     } 
     
     // For videos
     if (asset.type === 'video') {
       if (type === 'thumbnail' && asset.thumbnailUrl) {
+        console.log(`✅ Using video thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }
       
       // For video primary, we typically use thumbnail or video URL
       const metadata = asset.metadata as any;
-      return asset.thumbnailUrl || metadata?.video_url || null;
+      if (asset.url) {
+        console.log(`✅ Using video URL from asset: ${asset.url}`);
+        return asset.url;
+      }
+      if (metadata?.video_url) {
+        console.log(`✅ Using video_url from metadata: ${metadata.video_url}`);
+        return metadata.video_url;
+      }
     }
     
-    console.warn(`❌ No image path found for asset ${asset.id} of type ${asset.type}`);
+    console.warn(`❌ No image path found for asset ${asset.id} of type ${asset.type}`, {
+      assetUrl: asset.url,
+      assetThumbnailUrl: asset.thumbnailUrl,
+      metadata: asset.metadata
+    });
     return null;
   }
 
