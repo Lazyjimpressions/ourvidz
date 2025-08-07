@@ -65,6 +65,64 @@ export type Database = {
         }
         Relationships: []
       }
+      character_scenes: {
+        Row: {
+          character_id: string | null
+          conversation_id: string | null
+          created_at: string | null
+          generation_metadata: Json | null
+          id: string
+          image_url: string
+          job_id: string | null
+          scene_prompt: string
+          updated_at: string | null
+        }
+        Insert: {
+          character_id?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          image_url: string
+          job_id?: string | null
+          scene_prompt: string
+          updated_at?: string | null
+        }
+        Update: {
+          character_id?: string | null
+          conversation_id?: string | null
+          created_at?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          image_url?: string
+          job_id?: string | null
+          scene_prompt?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "character_scenes_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "character_scenes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "character_scenes_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       characters: {
         Row: {
           appearance_tags: string[] | null

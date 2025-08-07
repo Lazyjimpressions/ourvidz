@@ -4,6 +4,9 @@ import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { PlaygroundProvider, usePlayground } from '@/contexts/PlaygroundContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useCharacterData } from '@/hooks/useCharacterData';
+import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { useAutoSceneGeneration } from '@/hooks/useAutoSceneGeneration';
+import { useJobQueue } from '@/hooks/useJobQueue';
 import { 
   Send, Image, RotateCcw, Settings, ChevronDown, Sparkles, 
   Camera, Play, Mic, MicOff, Volume2, VolumeX, MoreHorizontal, 
@@ -43,6 +46,9 @@ const RoleplayChatInterface = () => {
   
   // Load real character data from database
   const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(characterId);
+  const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
+  const { queueJob } = useJobQueue();
+  const { generateSceneFromMessage } = useAutoSceneGeneration();
   
   // Fallback to mock data if no character loaded yet
   const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
@@ -101,6 +107,17 @@ const RoleplayChatInterface = () => {
           character_id: characterId
         }
       });
+      
+      // Auto-generate scene if enabled
+      if (generateImageForMessage && character) {
+        await generateSceneFromMessage(message, {
+          characterId: character.id,
+          conversationId: state.activeConversationId,
+          characterName: character.name,
+          referenceImageUrl: character.reference_image_url,
+          isEnabled: true
+        });
+      }
       
       if (error) {
         console.error('Error sending message:', error);
@@ -215,30 +232,37 @@ const RoleplayChatInterface = () => {
           </div>
         </div>
 
-        {/* Scene Gallery - More compact */}
+        {/* Scene Gallery - Real data from database */}
         <div className="p-3">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">Scenes</h4>
-          <div className="space-y-2">
-            {selectedCharacter.generated_images.map((image, index) => (
-              <div key={index} className="relative group">
-                <img 
-                  src={image} 
-                  alt={`Scene ${index + 1}`}
-                  className="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80"
-                />
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                  <div className="flex space-x-1">
-                    <button className="p-1 bg-black bg-opacity-60 rounded">
-                      <Copy className="w-3 h-3" />
-                    </button>
-                    <button className="p-1 bg-black bg-opacity-60 rounded">
-                      <Download className="w-3 h-3" />
-                    </button>
+          <h4 className="text-xs font-medium text-gray-400 mb-2">Scenes ({scenes.length})</h4>
+          {isLoadingScenes ? (
+            <div className="text-xs text-gray-500">Loading scenes...</div>
+          ) : scenes.length > 0 ? (
+            <div className="space-y-2">
+              {scenes.map((scene) => (
+                <div key={scene.id} className="relative group">
+                  <img 
+                    src={scene.image_url} 
+                    alt={scene.scene_prompt}
+                    className="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80"
+                    title={scene.scene_prompt}
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                    <div className="flex space-x-1">
+                      <button className="p-1 bg-black bg-opacity-60 rounded">
+                        <Copy className="w-3 h-3" />
+                      </button>
+                      <button className="p-1 bg-black bg-opacity-60 rounded">
+                        <Download className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-gray-500">No scenes generated yet</div>
+          )}
         </div>
       </div>
     </div>
@@ -354,7 +378,23 @@ const RoleplayChatInterface = () => {
                       <RotateCcw className="w-3 h-3" />
                     </button>
                     <button 
-                      onClick={() => setShowPromptModal(true)}
+                      onClick={async () => {
+                        if (character && state.activeConversationId) {
+                          const scenePrompt = `${character.name} in current scene: ${message.content}`;
+                          await queueJob({
+                            jobType: 'sdxl_image_fast',
+                            metadata: {
+                              prompt: scenePrompt,
+                              destination: 'character_gallery',
+                              reference_image_url: character.reference_image_url,
+                              reference_type: 'character',
+                              reference_strength: 0.3,
+                              character_id: character.id,
+                              conversation_id: state.activeConversationId
+                            }
+                          });
+                        }
+                      }}
                       className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs"
                     >
                       <Camera className="w-3 h-3" />
