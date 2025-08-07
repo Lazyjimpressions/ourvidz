@@ -278,7 +278,7 @@ serve(async (req) => {
 
     // Health check chat worker
     try {
-      const healthResponse = await fetch(`${chatWorkerUrl}/chat/health`, {
+      const healthResponse = await fetch(`${chatWorkerUrl}/health`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
