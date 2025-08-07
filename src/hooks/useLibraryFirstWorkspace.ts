@@ -137,12 +137,19 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   useEffect(() => {
     let imagesChannel: any = null;
     let videosChannel: any = null;
+    let isSubscribed = false;
     
     const setupLibrarySubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return () => {};
 
       console.log('📡 LIBRARY-FIRST: Setting up DEBOUNCED real-time subscriptions');
+
+      // Prevent multiple subscriptions
+      if (isSubscribed) {
+        console.log('⚠️ Already subscribed, skipping setup');
+        return () => {};
+      }
 
       // Clean up any existing channels first
       if (imagesChannel) {
@@ -177,99 +184,130 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         }, 2000); // 2 second debounce
       };
 
-      // Enhanced Images subscription - listen for both INSERT and UPDATE
-      imagesChannel = supabase
-        .channel('workspace-images-realtime')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'images',
-          filter: `user_id=eq.${user.id}`
-        }, (payload) => {
-          console.log('📷 NEW IMAGE - Adding to debounced update queue:', payload.new);
-          pendingUpdates.add(`image-insert-${payload.new.id}`);
-          localDebouncedInvalidate();
-          
-          // Emit completion event for other systems
-          window.dispatchEvent(new CustomEvent('library-assets-ready', {
-            detail: { 
-              type: 'image', 
-              assetId: payload.new.id,
-              jobId: payload.new.job_id 
-            }
-          }));
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'images',
-          filter: `user_id=eq.${user.id}`
-        }, (payload) => {
-          const image = payload.new as any;
-          if (image.status === 'completed' && (image.image_url || image.image_urls)) {
-            console.log('📷 IMAGE COMPLETED - Adding to debounced update queue:', image.id);
-            pendingUpdates.add(`image-update-${image.id}`);
+      try {
+        // Enhanced Images subscription - listen for both INSERT and UPDATE
+        imagesChannel = supabase
+          .channel(`workspace-images-realtime-${user.id}-${Date.now()}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'images',
+            filter: `user_id=eq.${user.id}`
+          }, (payload) => {
+            console.log('📷 NEW IMAGE - Adding to debounced update queue:', payload.new);
+            pendingUpdates.add(`image-insert-${payload.new.id}`);
             localDebouncedInvalidate();
             
-            // Show toast notification (immediate)
-            toast({
-              title: "Image Ready",
-              description: "New image generated and ready to view",
-            });
-          }
-        })
-        .subscribe();
+            // Emit completion event for other systems
+            window.dispatchEvent(new CustomEvent('library-assets-ready', {
+              detail: { 
+                type: 'image', 
+                assetId: payload.new.id,
+                jobId: payload.new.job_id 
+              }
+            }));
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'images',
+            filter: `user_id=eq.${user.id}`
+          }, (payload) => {
+            const image = payload.new as any;
+            if (image.status === 'completed' && (image.image_url || image.image_urls)) {
+              console.log('📷 IMAGE COMPLETED - Adding to debounced update queue:', image.id);
+              pendingUpdates.add(`image-update-${image.id}`);
+              localDebouncedInvalidate();
+              
+              // Show toast notification (immediate)
+              toast({
+                title: "Image Ready",
+                description: "New image generated and ready to view",
+              });
+            }
+          });
 
-      // Enhanced Videos subscription - listen for both INSERT and UPDATE  
-      videosChannel = supabase
-        .channel('workspace-videos-realtime')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'videos',
-          filter: `user_id=eq.${user.id}`
-        }, (payload) => {
-          console.log('🎥 NEW VIDEO - Adding to debounced update queue:', payload.new);
-          pendingUpdates.add(`video-insert-${payload.new.id}`);
-          localDebouncedInvalidate();
-          
-          // Emit completion event for other systems
-          window.dispatchEvent(new CustomEvent('library-assets-ready', {
-            detail: { 
-              type: 'video', 
-              assetId: payload.new.id,
-              jobId: payload.new.job_id 
-            }
-          }));
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'videos',
-          filter: `user_id=eq.${user.id}`
-        }, (payload) => {
-          const video = payload.new as any;
-          if (video.status === 'completed' && video.video_url) {
-            console.log('🎥 VIDEO COMPLETED - Adding to debounced update queue:', video.id);
-            pendingUpdates.add(`video-update-${video.id}`);
+        // Enhanced Videos subscription - listen for both INSERT and UPDATE  
+        videosChannel = supabase
+          .channel(`workspace-videos-realtime-${user.id}-${Date.now()}`)
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'videos',
+            filter: `user_id=eq.${user.id}`
+          }, (payload) => {
+            console.log('🎥 NEW VIDEO - Adding to debounced update queue:', payload.new);
+            pendingUpdates.add(`video-insert-${payload.new.id}`);
             localDebouncedInvalidate();
             
-            // Show toast notification (immediate)
-            toast({
-              title: "Video Ready",
-              description: "New video generated and ready to view",
-            });
-          }
-        })
-        .subscribe();
+            // Emit completion event for other systems
+            window.dispatchEvent(new CustomEvent('library-assets-ready', {
+              detail: { 
+                type: 'video', 
+                assetId: payload.new.id,
+                jobId: payload.new.job_id 
+              }
+            }));
+          })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'videos',
+            filter: `user_id=eq.${user.id}`
+          }, (payload) => {
+            const video = payload.new as any;
+            if (video.status === 'completed' && video.video_url) {
+              console.log('🎥 VIDEO COMPLETED - Adding to debounced update queue:', video.id);
+              pendingUpdates.add(`video-update-${video.id}`);
+              localDebouncedInvalidate();
+              
+              // Show toast notification (immediate)
+              toast({
+                title: "Video Ready",
+                description: "New video generated and ready to view",
+              });
+            }
+          });
+
+        // Subscribe to both channels
+        await Promise.all([
+          imagesChannel.subscribe(),
+          videosChannel.subscribe()
+        ]);
+
+        isSubscribed = true;
+        console.log('✅ LIBRARY-FIRST: Successfully subscribed to real-time channels');
+
+      } catch (error) {
+        console.error('❌ LIBRARY-FIRST: Failed to setup subscriptions:', error);
+        // Clean up on error
+        if (imagesChannel) {
+          supabase.removeChannel(imagesChannel);
+          imagesChannel = null;
+        }
+        if (videosChannel) {
+          supabase.removeChannel(videosChannel);
+          videosChannel = null;
+        }
+        isSubscribed = false;
+      }
 
       return () => {
         console.log('📡 LIBRARY-FIRST: Cleaning up debounced real-time subscriptions');
+        isSubscribed = false;
+        
         if (debounceTimer) {
           clearTimeout(debounceTimer);
         }
-        supabase.removeChannel(imagesChannel);
-        supabase.removeChannel(videosChannel);
+        
+        if (imagesChannel) {
+          supabase.removeChannel(imagesChannel);
+          imagesChannel = null;
+        }
+        if (videosChannel) {
+          supabase.removeChannel(videosChannel);
+          videosChannel = null;
+        }
       };
     };
 
@@ -281,7 +319,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     return () => {
       if (cleanup) cleanup();
     };
-  }, [queryClient]);
+  }, [queryClient, debouncedInvalidate]);
 
   // LIBRARY-FIRST: Listen for library events
   useEffect(() => {
