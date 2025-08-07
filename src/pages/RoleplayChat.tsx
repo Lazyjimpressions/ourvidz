@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { PlaygroundProvider, usePlayground } from '@/contexts/PlaygroundContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useCharacterData } from '@/hooks/useCharacterData';
 import { 
   Send, Image, RotateCcw, Settings, ChevronDown, Sparkles, 
   Camera, Play, Mic, MicOff, Volume2, VolumeX, MoreHorizontal, 
@@ -38,15 +40,21 @@ const RoleplayChatInterface = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const characterId = searchParams.get('character') || '1';
-  const selectedCharacter = mockCharacters[characterId] || mockCharacters['1'];
+  
+  // Load real character data from database
+  const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(characterId);
+  
+  // Fallback to mock data if no character loaded yet
+  const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
   
   const {
     state,
     messages,
     isLoadingMessages,
-    sendMessage,
     createConversation,
   } = usePlayground();
+
+  const supabaseClient = supabase;
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -57,7 +65,7 @@ const RoleplayChatInterface = () => {
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [generateImageForMessage, setGenerateImageForMessage] = useState(false);
-  const [characterLiked, setCharacterLiked] = useState(selectedCharacter.isLiked);
+  const [characterLiked, setCharacterLiked] = useState(false);
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -85,7 +93,18 @@ const RoleplayChatInterface = () => {
     setIsTyping(true);
 
     try {
-      await sendMessage(message);
+      // Include character_id in the message if we have one  
+      const { data, error } = await supabaseClient.functions.invoke('playground-chat', {
+        body: {
+          conversation_id: state.activeConversationId,
+          message: message,
+          character_id: characterId
+        }
+      });
+      
+      if (error) {
+        console.error('Error sending message:', error);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
     } finally {
@@ -136,13 +155,18 @@ const RoleplayChatInterface = () => {
           <div className="flex items-center justify-between mt-2">
             <div className="flex items-center space-x-1">
               <button
-                onClick={() => setCharacterLiked(!characterLiked)}
+                onClick={() => {
+                  if (!characterLiked && character) {
+                    likeCharacter(character.id);
+                    setCharacterLiked(true);
+                  }
+                }}
                 className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
                   characterLiked ? 'bg-red-600/20 text-red-400' : 'bg-gray-800 text-gray-400'
                 }`}
               >
                 <Heart className={`w-3 h-3 ${characterLiked ? 'fill-current' : ''}`} />
-                <span>{selectedCharacter.likes + (characterLiked ? 1 : 0)}</span>
+                <span>{(character?.likes_count || selectedCharacter.likes || 0) + (characterLiked ? 1 : 0)}</span>
               </button>
               <button className="p-1 bg-gray-800 rounded hover:bg-gray-700">
                 <Share className="w-3 h-3" />
@@ -150,7 +174,7 @@ const RoleplayChatInterface = () => {
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <span className="text-xs text-gray-400">{selectedCharacter.mood}</span>
+              <span className="text-xs text-gray-400">{character?.mood || selectedCharacter.mood}</span>
             </div>
           </div>
         </div>
@@ -167,7 +191,7 @@ const RoleplayChatInterface = () => {
         <div className="p-3 border-b border-gray-800">
           <h4 className="text-xs font-medium text-gray-400 mb-2">Traits</h4>
           <div className="flex flex-wrap gap-1">
-            {selectedCharacter.traits.map((trait, index) => (
+            {(character?.appearance_tags || selectedCharacter.traits || []).map((trait, index) => (
               <span key={index} className="px-2 py-1 bg-gray-800 rounded text-xs">
                 {trait}
               </span>

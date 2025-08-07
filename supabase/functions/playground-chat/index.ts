@@ -65,13 +65,66 @@ serve(async (req) => {
     message: string,
     conversationHistory: any[],
     contextType: string,
-    cache: any
+    cache: any,
+    characterData?: any
   ): Promise<string | null> {
     // Detect content tier from full conversation context
     const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
     const contentTier = detectContentTier(fullConversationText, cache);
     
-    // Check if user wants SDXL Lustify conversion
+    // For character roleplay, get character-specific template
+    if (contextType === 'character_roleplay' && characterData) {
+      let template = getChatTemplateFromCache(cache, contextType, contentTier);
+      
+      if (!template) {
+        console.log('🔄 Cache miss, fetching roleplay template from database...');
+        try {
+          const dbTemplate = await getDatabaseTemplate(
+            null,                    // target_model
+            'qwen_instruct',         // enhancer_model  
+            'chat',                  // job_type
+            'character_roleplay',    // use_case
+            contentTier              // content_mode
+          );
+          template = dbTemplate?.system_prompt;
+        } catch (error) {
+          console.error('❌ Failed to fetch roleplay template:', error);
+          return 'You are a helpful AI assistant. Please provide thoughtful and engaging responses.';
+        }
+      }
+
+      if (template) {
+        // Helper function to extract trait values
+        const extractTraitValue = (traits: string, traitName: string): string => {
+          if (!traits) return '';
+          const lines = traits.split('\n');
+          for (const line of lines) {
+            if (line.startsWith(`${traitName}: `)) {
+              return line.replace(`${traitName}: `, '');
+            }
+          }
+          return '';
+        };
+
+        // Replace character variables in the template
+        return template
+          .replace(/\{\{character_name\}\}/g, characterData.name || 'Character')
+          .replace(/\{\{character_description\}\}/g, characterData.description || '')
+          .replace(/\{\{character_personality\}\}/g, characterData.persona || '')
+          .replace(/\{\{character_background\}\}/g, characterData.description?.includes('Background:') ? 
+            characterData.description.split('Background:')[1] || '' : '')
+          .replace(/\{\{character_speaking_style\}\}/g, extractTraitValue(characterData.traits, 'Speaking Style') || '')
+          .replace(/\{\{character_goals\}\}/g, extractTraitValue(characterData.traits, 'Goals') || '')
+          .replace(/\{\{character_quirks\}\}/g, extractTraitValue(characterData.traits, 'Quirks') || '')
+          .replace(/\{\{character_relationships\}\}/g, extractTraitValue(characterData.traits, 'Relationships') || '')
+          .replace(/\{\{character_persona\}\}/g, characterData.persona || '')
+          .replace(/\{\{voice_tone\}\}/g, characterData.voice_tone || 'neutral')
+          .replace(/\{\{mood\}\}/g, characterData.mood || 'neutral')
+          .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '');
+      }
+    }
+    
+    // For general chat, use existing logic
     const isSDXLLustifyRequest = message.toLowerCase().includes('sdxl') || 
                                 message.toLowerCase().includes('lustify') || 
                                 message.toLowerCase().includes('convert') ||
@@ -120,7 +173,8 @@ serve(async (req) => {
       isSDXLLustifyRequest,
       hasSystemPrompt: !!systemPrompt,
       messageLength: message.length,
-      conversationLength: conversationHistory.length
+      conversationLength: conversationHistory.length,
+      characterLoaded: !!characterData
     });
 
     return systemPrompt;
@@ -146,13 +200,13 @@ serve(async (req) => {
       throw new Error('User not authenticated');
     }
 
-    const { conversation_id, message, project_id } = await req.json();
+    const { conversation_id, message, project_id, character_id } = await req.json();
 
     if (!conversation_id || !message) {
       throw new Error('Missing required fields: conversation_id and message');
     }
 
-    // Verify user owns the conversation
+    // Verify user owns the conversation and get character info if provided
     const { data: conversation, error: conversationError } = await supabaseClient
       .from('conversations')
       .select('*')
@@ -163,6 +217,17 @@ serve(async (req) => {
     if (conversationError || !conversation) {
       throw new Error('Conversation not found or access denied');
     }
+
+    // If character_id is provided in request, update conversation
+    if (character_id && character_id !== conversation.character_id) {
+      await supabaseClient
+        .from('conversations')
+        .update({ character_id })
+        .eq('id', conversation_id);
+    }
+
+    // Use character_id from request or conversation
+    const activeCharacterId = character_id || conversation.character_id;
 
     // Save user message to database
     const { error: messageError } = await supabaseClient
@@ -255,15 +320,41 @@ serve(async (req) => {
       }
     }
 
+    // Load character data if this is a roleplay conversation
+    let characterData = null;
+    let contextType = conversation.conversation_type || 'general';
+    
+    if (activeCharacterId) {
+      const { data: character, error: characterError } = await supabaseClient
+        .from('characters')
+        .select('*')
+        .eq('id', activeCharacterId)
+        .single();
+
+      if (character && !characterError) {
+        characterData = character;
+        contextType = 'character_roleplay';
+        
+        // Increment interaction count
+        await supabaseClient
+          .from('characters')
+          .update({ interaction_count: character.interaction_count + 1 })
+          .eq('id', activeCharacterId);
+        
+        console.log('🎭 Character loaded for roleplay:', character.name);
+      }
+    }
+
     // Load cached data for template processing
     const cache = await getCachedData();
     
-    // Get system prompt using cached templates
+    // Get system prompt using cached templates (roleplay or general)
     const systemPrompt = await getSystemPromptForChat(
       message,
       conversationHistory,
-      conversation.conversation_type || 'general',
-      cache
+      contextType,
+      cache,
+      characterData
     );
 
     // Call the chat worker with correct payload format

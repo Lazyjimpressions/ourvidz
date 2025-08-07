@@ -69,37 +69,71 @@ export type Database = {
         Row: {
           appearance_tags: string[] | null
           created_at: string | null
+          creator_id: string | null
           description: string
           id: string
           image_url: string | null
+          interaction_count: number | null
+          is_public: boolean | null
+          likes_count: number | null
+          mood: string | null
           name: string
+          persona: string | null
+          reference_image_url: string | null
+          system_prompt: string | null
           traits: string | null
           updated_at: string | null
           user_id: string | null
+          voice_tone: string | null
         }
         Insert: {
           appearance_tags?: string[] | null
           created_at?: string | null
+          creator_id?: string | null
           description: string
           id?: string
           image_url?: string | null
+          interaction_count?: number | null
+          is_public?: boolean | null
+          likes_count?: number | null
+          mood?: string | null
           name: string
+          persona?: string | null
+          reference_image_url?: string | null
+          system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
+          voice_tone?: string | null
         }
         Update: {
           appearance_tags?: string[] | null
           created_at?: string | null
+          creator_id?: string | null
           description?: string
           id?: string
           image_url?: string | null
+          interaction_count?: number | null
+          is_public?: boolean | null
+          likes_count?: number | null
+          mood?: string | null
           name?: string
+          persona?: string | null
+          reference_image_url?: string | null
+          system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
+          voice_tone?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "characters_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "characters_user_id_fkey"
             columns: ["user_id"]
@@ -150,6 +184,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          character_id: string | null
           conversation_type: string
           created_at: string
           id: string
@@ -160,6 +195,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          character_id?: string | null
           conversation_type?: string
           created_at?: string
           id?: string
@@ -170,6 +206,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          character_id?: string | null
           conversation_type?: string
           created_at?: string
           id?: string
@@ -180,6 +217,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversations_project_id_fkey"
             columns: ["project_id"]

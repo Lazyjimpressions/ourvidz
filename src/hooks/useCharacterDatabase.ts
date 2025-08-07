@@ -12,6 +12,15 @@ interface SavedCharacter {
   image_url?: string;
   created_at: string;
   updated_at: string;
+  persona?: string;
+  system_prompt?: string;
+  voice_tone?: string;
+  mood?: string;
+  creator_id?: string;
+  likes_count: number;
+  interaction_count: number;
+  reference_image_url?: string;
+  is_public: boolean;
 }
 
 export const useCharacterDatabase = () => {
@@ -30,10 +39,15 @@ export const useCharacterDatabase = () => {
         .from('characters')
         .insert({
           user_id: user.id,
+          creator_id: user.id,
           name: character.name,
           description: `${character.personality}\n\nBackground: ${character.background}`,
           traits: `Speaking Style: ${character.speakingStyle}\nGoals: ${character.goals}\nQuirks: ${character.quirks}\nRelationships: ${character.relationships}`,
           appearance_tags: character.visualDescription ? [character.visualDescription] : [],
+          persona: character.personality,
+          voice_tone: 'conversational',
+          mood: 'friendly',
+          is_public: true
         })
         .select('id')
         .single();
