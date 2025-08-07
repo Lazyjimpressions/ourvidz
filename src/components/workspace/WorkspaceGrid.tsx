@@ -112,11 +112,13 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     return groups;
   }, [items]);
 
-  // LTX-Style Grid Class - Always 1x3 for both images and videos
+  // Grid Class - Different layouts for videos vs images
   const getGridClass = (jobItems: UnifiedAsset[]) => {
-    // Both images and videos use fixed 1x3 grid for consistency
-    // Videos will show 1 of 3 slots, images will show up to 3
-    return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+    const firstItem = jobItems[0];
+    const isVideoJob = firstItem?.type === 'video';
+    
+    // Videos get full width (1 per row), images get up to 3 per row
+    return isVideoJob ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
   };
 
   // Get job metadata for display
@@ -262,20 +264,6 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   />
                 ))}
                 
-                {/* Add empty placeholder slots for videos to maintain 1x3 grid */}
-                {metadata.isVideoJob && jobItems.length < 3 && (
-                  Array.from({ length: 3 - jobItems.length }, (_, index) => (
-                    <div 
-                      key={`empty-slot-${index}`} 
-                      className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
-                    >
-                      <div className="text-center text-gray-500">
-                        <VideoIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-xs">Empty Slot</p>
-                      </div>
-                    </div>
-                  ))
-                )}
                 
                 {/* Add empty placeholder slots for images if less than 3 */}
                 {!metadata.isVideoJob && jobItems.length < 3 && (
