@@ -1,55 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
-import { Play, Search, Star, Users, MessageSquare, Plus, Sparkles } from 'lucide-react';
-import { useCharacterDatabase } from '@/hooks/useCharacterDatabase';
+import { Play, Search, Star, Users, MessageSquare, Plus, Sparkles, Heart } from 'lucide-react';
+import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 
-// Mock featured characters for now
-const featuredCharacters = [
-  {
-    id: '1',
-    name: 'Elena Voss',
-    creator: '@twilights_',
-    description: 'Mysterious vampire who runs an upscale nightclub in modern times.',
-    tags: ['vampire', 'mystery', 'modern', 'supernatural'],
-    interactions: '2.0m',
-    rating: 4.8,
-    avatar: 'https://images.unsplash.com/photo-1544725176-7c40e5a71c5e?w=150&h=150&fit=crop&crop=face',
-    isOfficial: true
-  },
-  {
-    id: '2', 
-    name: 'Captain Torres',
-    creator: '@seafarer',
-    description: 'Swashbuckling pirate captain seeking treasure and adventure.',
-    tags: ['pirate', 'adventure', 'historical', 'action'],
-    interactions: '1.5m',
-    rating: 4.6,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
-    isOfficial: false
-  },
-  {
-    id: '3',
-    name: 'Dr. Aria Chen',
-    creator: '@scifi_stories',
-    description: 'Brilliant scientist researching alien artifacts in 2087.',
-    tags: ['sci-fi', 'scientist', 'future', 'mystery'],
-    interactions: '980k',
-    rating: 4.7,
-    avatar: 'https://images.unsplash.com/photo-1494790108755-2616c4e2e8b2?w=150&h=150&fit=crop&crop=face',
-    isOfficial: true
-  }
-];
 
 const RoleplayDashboard = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const { getUserCharacters, isLoading } = useCharacterDatabase();
+  const { characters, isLoading, likeCharacter, incrementInteraction } = usePublicCharacters();
 
   const handleStartChat = (characterId: string) => {
+    incrementInteraction(characterId);
     navigate(`/roleplay/chat?character=${characterId}`);
   };
 
@@ -58,7 +23,39 @@ const RoleplayDashboard = () => {
     navigate('/roleplay/create');
   };
 
-  const filteredCharacters = featuredCharacters.filter(char => {
+  // Transform database characters to display format
+  const displayCharacters = useMemo(() => {
+    return characters.map(char => {
+      // Create tags from appearance_tags and traits
+      const tags = [
+        ...(char.appearance_tags || []),
+        ...(char.traits ? char.traits.split(',').map(t => t.trim()) : [])
+      ].filter(Boolean).slice(0, 5);
+
+      // Format interaction count
+      const formatCount = (count: number) => {
+        if (count >= 1000000) return `${(count / 1000000).toFixed(1)}m`;
+        if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+        return count.toString();
+      };
+
+      return {
+        id: char.id,
+        name: char.name,
+        creator: `Character #${char.id.slice(0, 8)}`, // Fallback creator display
+        description: char.description,
+        tags,
+        interactions: formatCount(char.interaction_count),
+        rating: Math.min(5, Math.max(3.5, 4.5 + (char.likes_count / 100))), // Synthetic rating based on likes
+        avatar: char.reference_image_url || char.image_url || `https://api.dicebear.com/7.x/personas/svg?seed=${char.name}`,
+        isOfficial: char.likes_count > 50, // Featured characters have more likes
+        likesCount: char.likes_count,
+        rawData: char
+      };
+    });
+  }, [characters]);
+
+  const filteredCharacters = displayCharacters.filter(char => {
     const matchesSearch = char.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          char.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          char.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -152,8 +149,22 @@ const RoleplayDashboard = () => {
         {/* Character Grid */}
         <div className="px-4 py-6">
           <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredCharacters.map((character) => (
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden animate-pulse">
+                    <div className="w-full h-48 bg-gray-800" />
+                    <div className="p-4 space-y-3">
+                      <div className="h-4 bg-gray-800 rounded w-3/4" />
+                      <div className="h-3 bg-gray-800 rounded w-1/2" />
+                      <div className="h-16 bg-gray-800 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredCharacters.map((character) => (
                 <div
                   key={character.id}
                   className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden hover:border-purple-500 transition-colors group"
@@ -210,10 +221,22 @@ const RoleplayDashboard = () => {
                         <MessageSquare className="w-3 h-3" />
                         {character.interactions}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                        {character.rating}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            likeCharacter(character.id);
+                          }}
+                          className="flex items-center gap-1 hover:text-red-400 transition-colors"
+                        >
+                          <Heart className="w-3 h-3" />
+                          {character.likesCount}
+                        </button>
+                        <span className="flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                          {character.rating.toFixed(1)}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Action Button */}
@@ -227,10 +250,11 @@ const RoleplayDashboard = () => {
                     </Button>
                   </div>
                 </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
-            {filteredCharacters.length === 0 && (
+            {!isLoading && filteredCharacters.length === 0 && (
               <div className="text-center py-12">
                 <div className="bg-gray-900 rounded-lg border border-gray-800 p-8 max-w-md mx-auto">
                   <h3 className="text-lg font-medium mb-2">No characters found</h3>
