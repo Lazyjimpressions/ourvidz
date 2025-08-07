@@ -398,7 +398,8 @@ export class AssetService {
       .from('images')
       .select(`
         *,
-        project:projects(title)
+        project:projects(title),
+        job:jobs!inner(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
       
@@ -406,7 +407,8 @@ export class AssetService {
       .from('videos')
       .select(`
         *,
-        project:projects(title)
+        project:projects(title),
+        job:jobs!inner(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
 
@@ -466,6 +468,15 @@ export class AssetService {
       const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
       const modelType = isSDXL ? 'SDXL' : 'WAN';
 
+      // Include job information in metadata
+      const enhancedMetadata = {
+        ...metadata,
+        job_id: (image.job as any)?.id || image.id, // Use job ID or fallback to image ID
+        job_type: (image.job as any)?.job_type,
+        job_model_type: (image.job as any)?.model_type,
+        job_metadata: (image.job as any)?.metadata
+      };
+
       return {
         id: image.id,
         type: 'image' as const,
@@ -480,7 +491,7 @@ export class AssetService {
         projectTitle: (image.project as any)?.title,
         modelType,
         isSDXL,
-        metadata: image.metadata as Record<string, any>,
+        metadata: enhancedMetadata,
         // Map database URLs to UnifiedAsset properties
         thumbnailUrl: image.thumbnail_url || undefined,
         url: image.image_url || undefined,
@@ -492,6 +503,15 @@ export class AssetService {
     const videoAssets: UnifiedAsset[] = (videosResult.data || []).map((video) => {
       const metadata = video.metadata as any;
       const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
+
+      // Include job information in metadata
+      const enhancedMetadata = {
+        ...metadata,
+        job_id: (video.job as any)?.id || video.id, // Use job ID or fallback to video ID
+        job_type: (video.job as any)?.job_type,
+        job_model_type: (video.job as any)?.model_type,
+        job_metadata: (video.job as any)?.metadata
+      };
 
       return {
         id: video.id,
@@ -508,7 +528,7 @@ export class AssetService {
         duration: video.duration || undefined,
         resolution: video.resolution || undefined,
         modelType: isEnhanced ? 'Enhanced' : 'Standard',
-        metadata: video.metadata as Record<string, any>,
+        metadata: enhancedMetadata,
         // Map database URLs to UnifiedAsset properties
         thumbnailUrl: video.thumbnail_url || undefined,
         url: video.video_url || undefined,
@@ -571,7 +591,8 @@ export class AssetService {
       .from('images')
       .select(`
         *,
-        project:projects(title)
+        project:projects(title),
+        job:jobs!inner(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
       
@@ -579,7 +600,8 @@ export class AssetService {
       .from('videos')
       .select(`
         *,
-        project:projects(title)
+        project:projects(title),
+        job:jobs!inner(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
 

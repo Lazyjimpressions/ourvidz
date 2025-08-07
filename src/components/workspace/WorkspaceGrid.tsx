@@ -65,6 +65,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         id: item.id,
         type: item.type,
         jobId: item.metadata?.job_id,
+        metadata: item.metadata, // Show full metadata structure
         url: item.url,
         thumbnailUrl: item.thumbnailUrl,
         status: item.status
@@ -72,7 +73,13 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     });
 
     const groups = items.reduce((acc, item) => {
-      const jobId = item.metadata?.job_id || 'unknown';
+      // Try multiple ways to get job ID
+      const jobId = item.metadata?.job_id || 
+                   item.metadata?.jobId || 
+                   item.metadata?.job_id || 
+                   item.id || // Fallback to item ID if no job ID
+                   'unknown';
+      
       if (!acc[jobId]) acc[jobId] = [];
       acc[jobId].push(item);
       return acc;
@@ -86,7 +93,8 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         types: jobItems.map(item => item.type),
         hasUrls: jobItems.some(item => item.url || item.thumbnailUrl),
         firstItemUrl: jobItems[0]?.url,
-        firstItemThumbnailUrl: jobItems[0]?.thumbnailUrl
+        firstItemThumbnailUrl: jobItems[0]?.thumbnailUrl,
+        metadataKeys: jobItems[0]?.metadata ? Object.keys(jobItems[0].metadata) : []
       }))
     });
 
