@@ -6,9 +6,10 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface WorkspaceHeaderProps {
   onClearWorkspace?: () => void;
+  onDismissAllJobs?: () => void;
 }
 
-export const WorkspaceHeader = ({ onClearWorkspace }: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
 
@@ -35,6 +36,16 @@ export const WorkspaceHeader = ({ onClearWorkspace }: WorkspaceHeaderProps) => {
               <span className="text-xs text-gray-400 hidden sm:block">
                 {profile?.username || user.email}
               </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onDismissAllJobs}
+                className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
+                title="Dismiss all jobs from workspace"
+              >
+                <RotateCcw className="h-3 w-3" />
+                <span className="hidden sm:inline">Dismiss All</span>
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"

@@ -293,6 +293,24 @@ export const SimplifiedWorkspace: React.FC = () => {
     selectJob(jobId);
   };
 
+  const handleDismissAllJobs = async () => {
+    try {
+      console.log('🗑️ Dismissing all jobs from workspace');
+      
+      // Get all job IDs from the session groups
+      const allJobIds = Object.keys(sessionGroups);
+      
+      // Dismiss each job
+      for (const jobId of allJobIds) {
+        await handleDismissJob(jobId);
+      }
+      
+      console.log('✅ All jobs dismissed from workspace');
+    } catch (error) {
+      console.error('❌ Error dismissing all jobs:', error);
+    }
+  };
+
   // Group assets by job_id for WorkspaceGrid
   const sessionGroups = workspaceAssets.reduce((acc, asset) => {
     const jobId = asset.metadata?.job_id || 'no_job_id';
@@ -315,6 +333,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     <div className="relative h-full bg-gray-900 text-white">
       <WorkspaceHeader
         onClearWorkspace={clearWorkspace}
+        onDismissAllJobs={handleDismissAllJobs}
       />
       <div className="flex flex-1 overflow-hidden pb-60">
         <div className="flex-1 overflow-y-auto p-4">
