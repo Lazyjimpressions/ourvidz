@@ -359,20 +359,49 @@ serve(async (req) => {
       characterData
     );
 
-    // Call the chat worker with correct payload format
+    // Convert conversation history and current message to messages array format
+    const messages = [];
+    
+    // Add system prompt as first message if available
+    if (systemPrompt) {
+      messages.push({
+        role: "system",
+        content: systemPrompt
+      });
+    }
+    
+    // Add conversation history in proper format
+    if (conversationHistory && conversationHistory.length > 0) {
+      for (const msg of conversationHistory) {
+        // Skip the current message if it's already in history (just saved)
+        if (msg.content === message && msg.sender === 'user') continue;
+        
+        messages.push({
+          role: msg.sender === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        });
+      }
+    }
+    
+    // Add current user message
+    messages.push({
+      role: "user",
+      content: message
+    });
+
+    // Call the chat worker with messages array format
     const chatPayload = {
-      message: message,
+      messages: messages,
       conversation_id: conversation_id,
       project_id: project_id,
       context_type: conversation.conversation_type || 'general',
-      conversation_history: conversationHistory,
-      project_context: projectContext,
-      ...(systemPrompt && { system_prompt: systemPrompt }) // Add system prompt for NSFW content
+      project_context: projectContext
     };
 
     console.log('Calling chat worker with payload:', {
-      ...chatPayload,
-      conversation_history: `${conversationHistory.length} messages`,
+      messages: `${messages.length} messages`,
+      conversation_id: conversation_id,
+      context_type: conversation.conversation_type || 'general',
       project_context: projectContext ? 'included' : 'none'
     });
 
