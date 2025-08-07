@@ -130,8 +130,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
   const sizeClasses = {
     sm: 'w-32 h-32',
-    md: 'w-48 h-48',
-    lg: 'w-64 h-64'
+    md: 'w-full h-48 md:h-64',
+    lg: 'w-full h-48 md:h-64'
   };
 
   // LTX-Style: Much smaller icons for subtle hover actions

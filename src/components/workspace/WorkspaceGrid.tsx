@@ -74,19 +74,23 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     });
 
     const groups = items.reduce((acc, item) => {
-      // Use job_id as the primary grouping key
-      const jobId = item.metadata?.job_id || item.id;
+      // Use job_id as the primary grouping key, only fallback to item.id if no job_id exists
+      const jobId = item.metadata?.job_id;
+      
+      // If no job_id exists, this item should be in its own group
+      const groupKey = jobId || `single-${item.id}`;
       
       console.log(`🔍 Grouping item ${item.id}:`, {
         itemId: item.id,
         jobId: jobId,
+        groupKey: groupKey,
         prompt: item.prompt,
         metadataJobId: item.metadata?.job_id,
         fallbackToItemId: !item.metadata?.job_id
       });
       
-      if (!acc[jobId]) acc[jobId] = [];
-      acc[jobId].push(item);
+      if (!acc[groupKey]) acc[groupKey] = [];
+      acc[groupKey].push(item);
       return acc;
     }, {} as Record<string, UnifiedAsset[]>);
 
@@ -117,8 +121,8 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     const firstItem = jobItems[0];
     const isVideoJob = firstItem?.type === 'video';
     
-    // Videos get full width (1 per row), images get up to 3 per row
-    return isVideoJob ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+    // Videos get full width (1 per row), images get exactly 3 per row on desktop
+    return isVideoJob ? 'grid-cols-1' : 'grid-cols-3';
   };
 
   // Get job metadata for display
@@ -238,7 +242,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               </div>
 
               {/* Content Grid */}
-              <div className={`grid gap-3 ${getGridClass(jobItems)}`}>
+              <div className={`grid gap-3 ${metadata.isVideoJob ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'}`}>
                 {jobItems.map((item) => (
                   <ContentCard
                     key={item.id}
@@ -264,13 +268,12 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   />
                 ))}
                 
-                
-                {/* Add empty placeholder slots for images if less than 3 */}
+                {/* Add empty placeholder slots for images if less than 3 (only on desktop) */}
                 {!metadata.isVideoJob && jobItems.length < 3 && (
                   Array.from({ length: 3 - jobItems.length }, (_, index) => (
                     <div 
                       key={`empty-slot-${index}`} 
-                      className="bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
+                      className="hidden md:block bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
                     >
                       <div className="text-center text-gray-500">
                         <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -295,6 +298,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
             
             console.log('🔍 THUMBNAIL RENDERING:', {
               jobId,
+              jobItemsCount: jobItems.length,
               thumbnailItem: {
                 id: thumbnailItem?.id,
                 type: thumbnailItem?.type,
@@ -303,7 +307,8 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 status: thumbnailItem?.status
               },
               isActive,
-              hasUrl: !!(thumbnailItem?.url || thumbnailItem?.thumbnailUrl)
+              hasUrl: !!(thumbnailItem?.url || thumbnailItem?.thumbnailUrl),
+              allJobItems: jobItems.map(item => ({ id: item.id, type: item.type, url: item.url }))
             });
             
             return (
