@@ -7,11 +7,12 @@ import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useAutoSceneGeneration } from '@/hooks/useAutoSceneGeneration';
 import { useJobQueue } from '@/hooks/useJobQueue';
+import { useWorkerStatus } from '@/hooks/useWorkerStatus';
 import { 
   Send, Image, RotateCcw, Settings, ChevronDown, Sparkles, 
   Camera, Play, Mic, MicOff, Volume2, VolumeX, MoreHorizontal, 
   Heart, Share, MessageSquare, Copy, Download, Menu, X, Plus,
-  Star, UserPlus, Bell, ChevronLeft, ChevronRight
+  Star, UserPlus, Bell, ChevronLeft, ChevronRight, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -49,6 +50,7 @@ const RoleplayChatInterface = () => {
   const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
+  const { chatWorker, runHealthCheck, refreshWorkerStatus } = useWorkerStatus();
   
   // Fallback to mock data if no character loaded yet
   const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
@@ -99,6 +101,12 @@ const RoleplayChatInterface = () => {
     setIsTyping(true);
 
     try {
+      console.log('🚀 Sending message to playground-chat:', {
+        conversation_id: state.activeConversationId,
+        message: message,
+        character_id: characterId
+      });
+
       // Include character_id in the message if we have one  
       const { data, error } = await supabaseClient.functions.invoke('playground-chat', {
         body: {
@@ -107,6 +115,8 @@ const RoleplayChatInterface = () => {
           character_id: characterId
         }
       });
+
+      console.log('📨 Edge function response:', { data, error });
       
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
@@ -334,6 +344,26 @@ const RoleplayChatInterface = () => {
             )}
             <h1 className="text-lg font-medium">Roleplay Chat</h1>
             <span className="px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded text-xs">Active</span>
+            
+            {/* Chat Worker Status */}
+            {!chatWorker.isHealthy && (
+              <div className="flex items-center space-x-2 px-2 py-1 bg-red-900/20 border border-red-700 rounded">
+                <AlertTriangle className="w-4 h-4 text-red-400" />
+                <span className="text-xs text-red-400">Chat worker offline</span>
+                <button
+                  onClick={runHealthCheck}
+                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+                >
+                  Check Health
+                </button>
+                <button
+                  onClick={() => refreshWorkerStatus('chat')}
+                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center space-x-1">
             <button className="p-1 hover:bg-gray-800 rounded">

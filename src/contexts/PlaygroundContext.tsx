@@ -145,6 +145,8 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async ({ conversationId, content }: { conversationId: string; content: string }) => {
+      console.log('📧 PlaygroundContext sending message:', { conversationId, content });
+      
       const { data, error } = await supabase.functions.invoke('playground-chat', {
         body: {
           conversation_id: conversationId,
@@ -152,6 +154,7 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         },
       });
 
+      console.log('📬 PlaygroundContext response:', { data, error });
       if (error) throw error;
       return data;
     },

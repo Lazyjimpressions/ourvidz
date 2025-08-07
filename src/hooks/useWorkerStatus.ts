@@ -76,6 +76,24 @@ export const useWorkerStatus = () => {
     }
   };
 
+  const runHealthCheck = async () => {
+    try {
+      console.log('🩺 Running health check...');
+      const response = await supabase.functions.invoke('health-check-workers');
+      
+      if (response.error) {
+        console.error('Health check failed:', response.error);
+        return;
+      }
+      
+      console.log('✅ Health check completed:', response.data);
+      // Refresh status after health check
+      await fetchWorkerStatus();
+    } catch (error) {
+      console.error('Error running health check:', error);
+    }
+  };
+
   useEffect(() => {
     fetchWorkerStatus();
 
@@ -107,6 +125,7 @@ export const useWorkerStatus = () => {
   return {
     ...status,
     refreshWorkerStatus,
+    runHealthCheck,
     refetch: fetchWorkerStatus
   };
 };

@@ -69,7 +69,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.health-check-workers]
-verify_jwt = true
+verify_jwt = false
 
 [functions.delete-workspace-item]
 verify_jwt = true
