@@ -669,8 +669,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
         </div>
       </div>
 
-      {/* Bottom Spacer */}
-      <div className="h-20" />
     </>
   );
 };

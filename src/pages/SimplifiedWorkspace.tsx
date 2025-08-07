@@ -312,12 +312,12 @@ export const SimplifiedWorkspace: React.FC = () => {
   const activeJobItems = activeJobId ? sessionGroups[activeJobId] : [];
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 text-white">
+    <div className="relative h-full bg-gray-900 text-white">
       <WorkspaceHeader
         onClearWorkspace={clearWorkspace}
       />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 pb-60">
+      <div className="flex flex-1 overflow-hidden pb-60">
+        <div className="flex-1 overflow-y-auto p-4">
           <WorkspaceGrid
             items={workspaceAssets}
             activeJobId={activeJobId}
@@ -341,7 +341,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         </div>
       </div>
       
-      {/* Floating Footer Controls - Enhanced positioning */}
+      {/* Floating Footer Controls - Fixed positioning */}
       <div className="fixed bottom-0 left-0 right-0 bg-gray-900/95 backdrop-blur-sm border-t border-gray-700 p-4 z-[9999] shadow-lg" style={{ minHeight: '140px' }}>
         <div className="max-w-7xl mx-auto">
           <SimplePromptInput
