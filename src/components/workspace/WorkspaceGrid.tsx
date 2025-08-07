@@ -57,7 +57,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [hoveredJob, setHoveredJob] = useState<string | null>(null);
 
-  // Job-level grouping
+  // Job-level grouping with proper sorting
   const sessionGroups = useMemo(() => {
     console.log('🔍 WORKSPACE GRID: Processing items for job grouping:', {
       totalItems: items.length,
@@ -66,10 +66,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         type: item.type,
         jobId: item.metadata?.job_id,
         prompt: item.prompt,
-        metadata: item.metadata, // Show full metadata structure
-        url: item.url,
-        thumbnailUrl: item.thumbnailUrl,
-        status: item.status
+        createdAt: item.createdAt
       }))
     });
 
@@ -80,49 +77,29 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
       // If no job_id exists, this item should be in its own group
       const groupKey = jobId || `single-${item.id}`;
       
-      console.log(`🔍 Grouping item ${item.id}:`, {
-        itemId: item.id,
-        jobId: jobId,
-        groupKey: groupKey,
-        prompt: item.prompt,
-        metadataJobId: item.metadata?.job_id,
-        fallbackToItemId: !item.metadata?.job_id
-      });
-      
       if (!acc[groupKey]) acc[groupKey] = [];
       acc[groupKey].push(item);
       return acc;
     }, {} as Record<string, UnifiedAsset[]>);
 
-    // Sort items within each job group by creation date
+    // Sort items within each job group by creation date (newest first)
     Object.keys(groups).forEach(jobId => {
       groups[jobId].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    });
-
-    console.log('🔍 WORKSPACE GRID: Job groups created:', {
-      totalJobs: Object.keys(groups).length,
-      jobGroups: Object.entries(groups).map(([jobId, jobItems]) => ({
-        jobId,
-        itemCount: jobItems.length,
-        types: jobItems.map(item => item.type),
-        prompts: jobItems.map(item => item.prompt),
-        hasUrls: jobItems.some(item => item.url || item.thumbnailUrl),
-        firstItemUrl: jobItems[0]?.url,
-        firstItemThumbnailUrl: jobItems[0]?.thumbnailUrl,
-        metadataKeys: jobItems[0]?.metadata ? Object.keys(jobItems[0].metadata) : []
-      }))
     });
 
     return groups;
   }, [items]);
 
-  // Grid Class - Different layouts for videos vs images
-  const getGridClass = (jobItems: UnifiedAsset[]) => {
-    const firstItem = jobItems[0];
-    const isVideoJob = firstItem?.type === 'video';
-    
-    // Videos get full width (1 per row), images get exactly 3 per row on desktop
-    return isVideoJob ? 'grid-cols-1' : 'grid-cols-3';
+  // Scroll to job function
+  const scrollToJob = (jobId: string) => {
+    const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
+    if (jobElement) {
+      jobElement.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start',
+        inline: 'nearest'
+      });
+    }
   };
 
   // Get job metadata for display
@@ -173,34 +150,28 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
           const metadata = getJobMetadata(jobItems);
           
           return (
-            <div key={jobId} className="job-group mb-6">
-              {/* LTX-Style Job Header - Clean and Informative */}
-              <div className="flex items-center justify-between mb-3 px-2">
+            <div key={jobId} data-job-id={jobId} className="job-group mb-8">
+              {/* Job Header with Context Indicators */}
+              <div className="flex items-center justify-between mb-4 px-2">
                 <div className="flex items-center gap-3">
-                  {/* Content Type Indicator */}
+                  {/* Job Context Indicator - Images show position */}
                   <div className="flex items-center gap-2">
-                    {metadata.mixedContent ? (
-                      <div className="flex items-center gap-1 bg-purple-600/20 text-purple-400 text-xs px-2 py-1 rounded">
-                        <ImageIcon className="w-3 h-3" />
-                        <VideoIcon className="w-3 h-3" />
-                        Mixed
-                      </div>
-                    ) : metadata.isVideoJob ? (
+                    {metadata.isVideoJob ? (
                       <div className="flex items-center gap-1 bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded">
                         <VideoIcon className="w-3 h-3" />
-                        Video
+                        Video Job
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
                         <ImageIcon className="w-3 h-3" />
-                        Image
+                        {metadata.itemCount === 3 ? 'Complete Set' : `${metadata.itemCount} of 3 Images`}
                       </div>
                     )}
                   </div>
                   
-                  {/* Item Count */}
-                  <span className="text-xs text-gray-400">
-                    {metadata.itemCount} {metadata.itemCount === 1 ? 'item' : 'items'}
+                  {/* Job ID for reference */}
+                  <span className="text-xs text-gray-500 font-mono">
+                    {jobId.startsWith('single-') ? 'Individual' : `Job ${jobId.slice(-8)}`}
                   </span>
                 </div>
                 
@@ -241,43 +212,53 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 </p>
               </div>
 
-              {/* Content Grid */}
+              {/* Content Grid - Dynamic inline display */}
               <div className={`grid gap-3 ${metadata.isVideoJob ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'}`}>
-                {jobItems.map((item) => (
-                  <ContentCard
-                    key={item.id}
-                    item={item}
-                    // LTX-Style Actions
-                    onIterate={onIterate ? () => onIterate(item) : undefined}
-                    onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
-                    onDownload={() => onDownload(item)}
-                    onExpand={onExpand ? () => onExpand(item) : undefined}
-                    // Legacy Actions (for compatibility)
-                    onEdit={() => onEdit(item)}
-                    onSave={() => onSave(item)}
-                    onDelete={() => onDelete(item)}
-                    onDismiss={() => onDismiss?.(item)}
-                    onView={() => onView(item)}
-                    onUseAsReference={() => onUseAsReference(item)}
-                    onUseSeed={() => onUseSeed(item)}
-                    // NEW: Separate iterate and regenerate actions
-                    onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
-                    onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
-                    isDeleting={isDeleting.has(item.id)}
-                    size="lg" // Larger size for LTX-style
-                  />
+                {jobItems.map((item, index) => (
+                  <div key={item.id} className="relative">
+                    {/* Individual asset context indicator for images */}
+                    {!metadata.isVideoJob && metadata.itemCount > 1 && (
+                      <div className="absolute -top-6 left-0 text-xs text-gray-500">
+                        Image {index + 1} of {metadata.itemCount}
+                      </div>
+                    )}
+                    <ContentCard
+                      item={item}
+                      // LTX-Style Actions
+                      onIterate={onIterate ? () => onIterate(item) : undefined}
+                      onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                      onDownload={() => onDownload(item)}
+                      onExpand={onExpand ? () => onExpand(item) : undefined}
+                      // Legacy Actions (for compatibility)
+                      onEdit={() => onEdit(item)}
+                      onSave={() => onSave(item)}
+                      onDelete={() => onDelete(item)}
+                      onDismiss={() => onDismiss?.(item)}
+                      onView={() => onView(item)}
+                      onUseAsReference={() => onUseAsReference(item)}
+                      onUseSeed={() => onUseSeed(item)}
+                      // NEW: Separate iterate and regenerate actions
+                      onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                      onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
+                      isDeleting={isDeleting.has(item.id)}
+                      size="lg" // Larger size for LTX-style
+                    />
+                  </div>
                 ))}
                 
-                {/* Add empty placeholder slots for images if less than 3 (only on desktop) */}
-                {!metadata.isVideoJob && jobItems.length < 3 && (
-                  Array.from({ length: 3 - jobItems.length }, (_, index) => (
+                {/* Add empty placeholder slots for incomplete image jobs (only on desktop) */}
+                {!metadata.isVideoJob && metadata.itemCount < 3 && (
+                  Array.from({ length: 3 - metadata.itemCount }, (_, index) => (
                     <div 
                       key={`empty-slot-${index}`} 
-                      className="hidden md:block bg-gray-800/50 border-2 border-dashed border-gray-600 rounded-lg flex items-center justify-center min-h-[200px]"
+                      className="hidden md:block bg-gray-800/30 border-2 border-dashed border-gray-600/50 rounded-lg flex items-center justify-center min-h-[200px] relative"
                     >
+                      <div className="absolute -top-6 left-0 text-xs text-gray-500">
+                        Image {metadata.itemCount + index + 1} of 3
+                      </div>
                       <div className="text-center text-gray-500">
-                        <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-xs">Empty Slot</p>
+                        <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-xs opacity-60">Generating...</p>
                       </div>
                     </div>
                   ))
@@ -288,28 +269,15 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         })}
       </div>
 
-      {/* LTX-style Job Thumbnail Selector - Always show when there are jobs */}
+      {/* Job Thumbnail Sidebar with Scroll-to Functionality */}
       {Object.keys(sessionGroups).length > 0 && (
         <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2 overflow-y-auto">
-          {Object.entries(sessionGroups).map(([jobId, jobItems]) => {
+          {Object.entries(sessionGroups)
+            .sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime())
+            .map(([jobId, jobItems]) => {
             const thumbnailItem = jobItems[0];
             const metadata = getJobMetadata(jobItems);
             const isActive = activeJobId === jobId;
-            
-            console.log('🔍 THUMBNAIL RENDERING:', {
-              jobId,
-              jobItemsCount: jobItems.length,
-              thumbnailItem: {
-                id: thumbnailItem?.id,
-                type: thumbnailItem?.type,
-                url: thumbnailItem?.url,
-                thumbnailUrl: thumbnailItem?.thumbnailUrl,
-                status: thumbnailItem?.status
-              },
-              isActive,
-              hasUrl: !!(thumbnailItem?.url || thumbnailItem?.thumbnailUrl),
-              allJobItems: jobItems.map(item => ({ id: item.id, type: item.type, url: item.url }))
-            });
             
             return (
               <div 
@@ -317,9 +285,14 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 className={`relative group cursor-pointer transition-all duration-200 ${
                   isActive ? 'ring-2 ring-blue-500' : 'hover:ring-1 hover:ring-gray-500'
                 }`}
-                onClick={() => onJobSelect?.(isActive ? null : jobId)}
+                onClick={() => {
+                  // Scroll to job instead of filtering
+                  scrollToJob(jobId);
+                  onJobSelect?.(jobId);
+                }}
                 onMouseEnter={() => setHoveredJob(jobId)}
                 onMouseLeave={() => setHoveredJob(null)}
+                title={`Scroll to ${metadata.isVideoJob ? 'video' : 'image'} job`}
               >
                 {/* Thumbnail Container */}
                 <div className="w-16 h-16 rounded overflow-hidden bg-gray-700 relative">
