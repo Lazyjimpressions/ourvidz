@@ -399,7 +399,7 @@ export class AssetService {
       .select(`
         *,
         project:projects(title),
-        job:jobs!inner(id, job_type, model_type, metadata)
+        jobs!jobs_image_id_fkey(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
       
@@ -408,7 +408,7 @@ export class AssetService {
       .select(`
         *,
         project:projects(title),
-        job:jobs!inner(id, job_type, model_type, metadata)
+        jobs!jobs_video_id_fkey(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
 
@@ -468,13 +468,16 @@ export class AssetService {
       const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
       const modelType = isSDXL ? 'SDXL' : 'WAN';
 
+      // Get the first job from the jobs array (most recent)
+      const jobData = (image.jobs as any[])?.[0] || null;
+
       // Include job information in metadata
       const enhancedMetadata = {
         ...metadata,
-        job_id: (image.job as any)?.id || image.id, // Use job ID or fallback to image ID
-        job_type: (image.job as any)?.job_type,
-        job_model_type: (image.job as any)?.model_type,
-        job_metadata: (image.job as any)?.metadata
+        job_id: jobData?.id || image.id, // Use job ID or fallback to image ID
+        job_type: jobData?.job_type,
+        job_model_type: jobData?.model_type,
+        job_metadata: jobData?.metadata
       };
 
       return {
@@ -504,13 +507,16 @@ export class AssetService {
       const metadata = video.metadata as any;
       const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
 
+      // Get the first job from the jobs array (most recent)
+      const jobData = (video.jobs as any[])?.[0] || null;
+
       // Include job information in metadata
       const enhancedMetadata = {
         ...metadata,
-        job_id: (video.job as any)?.id || video.id, // Use job ID or fallback to video ID
-        job_type: (video.job as any)?.job_type,
-        job_model_type: (video.job as any)?.model_type,
-        job_metadata: (video.job as any)?.metadata
+        job_id: jobData?.id || video.id, // Use job ID or fallback to video ID
+        job_type: jobData?.job_type,
+        job_model_type: jobData?.model_type,
+        job_metadata: jobData?.metadata
       };
 
       return {
@@ -592,7 +598,7 @@ export class AssetService {
       .select(`
         *,
         project:projects(title),
-        job:jobs!inner(id, job_type, model_type, metadata)
+        jobs!jobs_image_id_fkey(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
       
@@ -601,7 +607,7 @@ export class AssetService {
       .select(`
         *,
         project:projects(title),
-        job:jobs!inner(id, job_type, model_type, metadata)
+        jobs!jobs_video_id_fkey(id, job_type, model_type, metadata)
       `)
       .eq('user_id', user.id);
 
