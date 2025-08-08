@@ -208,6 +208,9 @@ export function getChatTemplateFromCache(
   else if (contextType === 'roleplay') {
     chatType = 'roleplay'; 
   }
+  else if (contextType === 'character_roleplay') {
+    chatType = 'character_roleplay';
+  }
   else if (contextType === 'admin') {
     chatType = 'admin';
   }
@@ -339,7 +342,7 @@ export async function getDatabaseNegativePrompts(
 
   const { data, error } = await supabase
     .from('negative_prompts')
-    .select('prompt_text')
+    .select('negative_prompt')
     .eq('model_type', modelType)
     .eq('content_mode', contentMode)
     .eq('is_active', true)
@@ -350,7 +353,7 @@ export async function getDatabaseNegativePrompts(
     return '';
   }
 
-  const combined = data.map(d => d.prompt_text).join(', ');
+  const combined = data.map(d => d.negative_prompt).join(', ');
   console.log(`✅ Database negative prompts loaded for ${modelType}_${contentMode}`);
   
   return combined;
