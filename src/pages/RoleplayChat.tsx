@@ -14,7 +14,7 @@ import {
   Send, Image, RotateCcw, Settings, ChevronDown, Sparkles, 
   Camera, Play, Mic, MicOff, Volume2, VolumeX, MoreHorizontal, 
   Heart, Share, MessageSquare, Copy, Download, Menu, X, Plus,
-  Star, UserPlus, Bell, ChevronLeft, ChevronRight, AlertTriangle
+  Star, UserPlus, Bell, ChevronLeft, ChevronRight, AlertTriangle, Info
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +22,7 @@ import { SceneImageGenerator } from '@/components/playground/SceneImageGenerator
 import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Mock character data - in real app this would come from database
 const mockCharacters = {
@@ -56,7 +57,7 @@ const RoleplayChatInterface = () => {
   const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
-  const { chatWorker, runHealthCheck, refreshWorkerStatus } = useWorkerStatus();
+  const { chatWorker } = useWorkerStatus();
   
   // Fallback to mock data if no character loaded yet
   const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
@@ -82,6 +83,15 @@ const RoleplayChatInterface = () => {
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Persist Auto-generate Scene toggle in localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('rp:autoGenScene');
+    if (saved !== null) setGenerateImageForMessage(saved === '1');
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('rp:autoGenScene', generateImageForMessage ? '1' : '0');
+  }, [generateImageForMessage]);
 
   // Inline image generation context helpers
   const { getEntry, setPending, setReady } = useGeneratedMedia();
@@ -120,7 +130,12 @@ const RoleplayChatInterface = () => {
 
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
-        await generateSceneFromMessage(message, {
+        const windowStart = Math.max(0, Math.max(0, messages.length - 5));
+        const recent = messages.slice(windowStart).concat([{ sender: 'user', content: message } as any]);
+        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
+        const enriched = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
+
+        await generateSceneFromMessage(enriched, {
           characterId: character.id,
           conversationId: state.activeConversationId,
           characterName: character.name,
@@ -339,25 +354,11 @@ const RoleplayChatInterface = () => {
             <h1 className="text-lg font-medium">Roleplay Chat</h1>
             <span className="px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded text-xs">Active</span>
             
-            {/* Chat Worker Status */}
-            {!chatWorker.isHealthy && (
-              <div className="flex items-center space-x-2 px-2 py-1 bg-red-900/20 border border-red-700 rounded">
-                <AlertTriangle className="w-4 h-4 text-red-400" />
-                <span className="text-xs text-red-400">Chat worker offline</span>
-                <button
-                  onClick={runHealthCheck}
-                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
-                >
-                  Check Health
-                </button>
-                <button
-                  onClick={() => refreshWorkerStatus('chat')}
-                  className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
-                >
-                  Refresh
-                </button>
-              </div>
-            )}
+            {/* Worker status indicator - subtle */}
+            <div className="flex items-center gap-2 pl-2 border-l border-gray-800">
+              <span className={`w-2 h-2 rounded-full ${chatWorker.isHealthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
+              <span className="text-xs text-gray-400">{chatWorker.isHealthy ? 'Worker online' : 'Worker offline'}</span>
+            </div>
           </div>
           <div className="flex items-center space-x-1">
             <button className="p-1 hover:bg-gray-800 rounded">
@@ -371,10 +372,14 @@ const RoleplayChatInterface = () => {
 
         {/* Messages - More compact spacing */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {messages.map((message) => {
+          {messages.map((message, idx) => {
             const stableKey = `${message.conversation_id}:${hash(message.content)}`;
             const mediaEntry = getEntry(stableKey);
             const isUserMsg = message.sender === 'user';
+            const windowStart = Math.max(0, idx - 5);
+            const recent = messages.slice(windowStart, idx + 1);
+            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
+            const enrichedContent = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
             return (
               <div key={message.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[75%] ${
@@ -412,7 +417,7 @@ const RoleplayChatInterface = () => {
                         </button>
                         {/* Generate Image button */}
                         <SceneImageGenerator
-                          messageContent={message.content}
+                          messageContent={enrichedContent}
                           onGenerationStart={() => setPending(stableKey)}
                           onImageGenerated={(assetId, imageUrl, bucket) => {
                             setReady(stableKey, { assetId, imageUrl: imageUrl || null, bucket: bucket || null });
@@ -482,6 +487,18 @@ const RoleplayChatInterface = () => {
                 className="w-3 h-3 rounded"
               />
               <span>Auto-generate scene</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
+                      <Info className="w-3 h-3 text-gray-400" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs max-w-xs">
+                    When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </label>
             
             <button 
