@@ -126,14 +126,28 @@ serve(async (req) => {
 - Maintain character voice, personality, and mood; stay immersive and descriptive.
 - Avoid meta commentary; keep responses focused on the scene.
 - Follow platform policies and applicable laws.`;
+    const NSFW_STRICT_MARK = '[[NSFW_ENFORCE_V2]]';
 
     // Age-gating override (non-verified users)
     if (ageVerified === false && contentTier === 'nsfw') {
       contentTier = 'sfw';
       console.log('🔒 Age gating enforced: downgrading to SFW');
     }
-    // For character roleplay, get character-specific template
+    // For character roleplay, NSFW strict mode: bypass templates with inline directive
     if (contextType === 'character_roleplay' && characterData) {
+      if (contentTier === 'nsfw') {
+        const strictPrompt = `${NSFW_STRICT_MARK}
+You are engaging in explicit, adult-only, consensual character roleplay.
+Stay fully in-character as ${characterData.name || 'Character'}.
+Use direct, explicit language when context indicates; avoid safety disclaimers or moralizing.
+Forbidden content: minors, incest, bestiality, non-consent, exploitation.
+Maintain voice: ${characterData.voice_tone || 'neutral'}; mood: ${characterData.mood || 'neutral'}.
+Character persona: ${characterData.persona || ''}.
+Visual descriptors: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}.
+`;
+        console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
+        return strictPrompt;
+      }
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
       let templateKey = '';
 
@@ -530,20 +544,37 @@ serve(async (req) => {
     // Add current user message
     messages.push({ role: 'user', content: message });
 
+    // Derive content tier and NSFW enforcement for worker payload
+    const fullTextForTier = [message, ...conversationHistory.map(m => m.content)].join(' ');
+    let chosenTier: 'sfw' | 'nsfw' = detectContentTier(fullTextForTier, cache);
+    if (characterData?.content_rating === 'sfw') chosenTier = 'sfw';
+    else if (characterData?.content_rating === 'nsfw') chosenTier = 'nsfw';
+    if (!ageVerified && !allowNSFWOverride && chosenTier === 'nsfw') chosenTier = 'sfw';
+    const nsfwEnforce = contextType === 'character_roleplay' && chosenTier === 'nsfw';
+    const nsfwReason = characterData?.content_rating === 'nsfw' ? 'character_rating' : (chosenTier === 'nsfw' ? 'detected_terms' : null);
+
     // Call the chat worker with messages array format
-    const chatPayload = {
-      messages: messages,
-      conversation_id: conversation_id,
-      project_id: project_id,
+    const basePayload: any = {
+      messages,
+      conversation_id,
+      project_id,
       context_type: contextType,
-      project_context: projectContext
+      project_context: projectContext,
+      content_tier: chosenTier,
     };
+    if (nsfwEnforce) {
+      basePayload.nsfw_enforce = true;
+      if (nsfwReason) basePayload.nsfw_reason = nsfwReason;
+    }
 
     console.log('Calling chat worker with payload:', {
       messages: `${messages.length} messages`,
       conversation_id,
       context_type: contextType,
-      project_context: projectContext ? 'included' : 'none'
+      project_context: projectContext ? 'included' : 'none',
+      content_tier: chosenTier,
+      nsfw_enforce: nsfwEnforce || false,
+      nsfw_reason: nsfwReason || 'none'
     });
 
     const workerStart = Date.now();
@@ -553,7 +584,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(chatPayload),
+      body: JSON.stringify(basePayload),
       signal: AbortSignal.timeout(45000), // 45 second timeout
     });
 
