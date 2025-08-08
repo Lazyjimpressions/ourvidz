@@ -34,7 +34,6 @@ export const useCharacterData = (characterId?: string) => {
         .from('characters')
         .select('*')
         .eq('id', id)
-        .eq('is_public', true) // Only load public characters for now
         .single();
 
       if (error) {

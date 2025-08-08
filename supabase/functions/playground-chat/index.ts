@@ -102,15 +102,21 @@ serve(async (req) => {
     // Detect content tier from full conversation context
     const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
     let contentTier = detectContentTier(fullConversationText, cache);
-    // Apply gating based on character rating and user age verification
+
+    // Force tier by explicit character rating when available
     if (characterData?.content_rating === 'sfw') {
       contentTier = 'sfw';
-    } else if (characterData?.content_rating === 'nsfw' && ageVerified === false) {
-      contentTier = 'sfw';
-    } else if (ageVerified === false && contentTier === 'nsfw') {
-      contentTier = 'sfw';
+      console.log('✅ Forcing SFW tier from character.content_rating');
+    } else if (characterData?.content_rating === 'nsfw') {
+      contentTier = 'nsfw';
+      console.log('🚩 Forcing NSFW tier from character.content_rating');
     }
-    
+
+    // Age-gating override (non-verified users)
+    if (ageVerified === false && contentTier === 'nsfw') {
+      contentTier = 'sfw';
+      console.log('🔒 Age gating enforced: downgrading to SFW');
+    }
     // For character roleplay, get character-specific template
     if (contextType === 'character_roleplay' && characterData) {
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
