@@ -15,6 +15,15 @@ const corsHeaders = {
 // In-memory cache for processed character roleplay prompts (per warm instance)
 const roleplayPromptCache = new Map<string, string>();
 
+// Module-level cache for system config to avoid frequent reads
+let cachedChatWorkerUrl: string | null = null;
+let cachedConfigFetchedAt = 0;
+const CONFIG_TTL_MS = 60_000;
+
+// Module-level cache for admin role checks (TTL 60s)
+const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
+const ADMIN_ROLE_TTL_MS = 60_000;
+
 interface Database {
   public: {
     Tables: {
@@ -98,17 +107,66 @@ serve(async (req) => {
     // Detect content tier from full conversation context
     const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
     let contentTier = detectContentTier(fullConversationText, cache);
-    // Apply gating based on character rating and user age verification
+
+    // Force tier by explicit character rating when available
     if (characterData?.content_rating === 'sfw') {
       contentTier = 'sfw';
-    } else if (characterData?.content_rating === 'nsfw' && ageVerified === false) {
-      contentTier = 'sfw';
-    } else if (ageVerified === false && contentTier === 'nsfw') {
-      contentTier = 'sfw';
+      console.log('✅ Forcing SFW tier from character.content_rating');
+    } else if (characterData?.content_rating === 'nsfw') {
+      contentTier = 'nsfw';
+      console.log('🚩 Forcing NSFW tier from character.content_rating');
     }
-    
-    // For character roleplay, get character-specific template
+
+    // NSFW roleplay guidance constants
+    const NSFW_GUIDANCE_MARK = '[[NSFW_ROLEPLAY_GUIDANCE_V1]]';
+    const NSFW_ROLEPLAY_GUIDANCE = `${NSFW_GUIDANCE_MARK}
+- Operate in NSFW roleplay mode with consenting adults (18+).
+- Explicit sexual content and direct language are permitted when appropriate.
+- Never include minors, incest, bestiality, or non-consensual acts.
+- Maintain character voice, personality, and mood; stay immersive and descriptive.
+- Avoid meta commentary; keep responses focused on the scene.
+- Follow platform policies and applicable laws.`;
+    const NSFW_STRICT_MARK = '[[NSFW_ENFORCE_V2]]';
+
+    // Age-gating override (non-verified users)
+    if (ageVerified === false && contentTier === 'nsfw') {
+      contentTier = 'sfw';
+      console.log('🔒 Age gating enforced: downgrading to SFW');
+    }
+    // For character roleplay, NSFW strict mode: bypass templates with inline directive
     if (contextType === 'character_roleplay' && characterData) {
+      // Lightweight scene memory from recent turns (ephemeral)
+      const buildSceneMemory = (history: Array<{ sender: string; content: string }>): string => {
+        if (!history || history.length === 0) return '';
+        const recent = history.slice(-6);
+        const lines = recent.map((m) => `${m.sender === 'user' ? 'U' : 'A'}: ${m.content}`);
+        const joined = lines.join(' \n ').replace(/\s+/g, ' ').slice(0, 500);
+        return joined;
+      };
+      const sceneMemory = buildSceneMemory(conversationHistory);
+
+      if (contentTier === 'nsfw') {
+        const strictPrompt = `${NSFW_STRICT_MARK}
+ROLE: You are ${characterData.name || 'Character'}, participating in explicit, adult-only, consensual character roleplay.
+AGE & CONSENT: All parties are 18+ and consent. Never depict or imply minors, incest, bestiality, or non-consensual acts.
+PERSONA: ${characterData.persona || ''}
+VOICE: ${characterData.voice_tone || 'neutral'} | MOOD: ${characterData.mood || 'neutral'}
+APPEARANCE: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}
+${sceneMemory ? `SCENE MEMORY (persist and continue, do not reset): ${sceneMemory}` : ''}
+STYLE GUIDE (must):
+- Stay fully in-character as ${characterData.name || 'the character'}; address the partner as "you".
+- Be concrete and sensory (touch, taste, scent, sound, sight). Show, don’t tell.
+- Use direct, explicit language when context indicates. Keep 120–220 words over 2–4 short paragraphs.
+- Maintain continuity with SCENE MEMORY. Keep pacing natural; escalate only when prompted.
+STYLE GUIDE (never):
+- No safety PSAs, moralizing, or policy mentions. No meta talk or "as an AI" disclaimers.
+- No illegal content; no minors/incest/bestiality/non-consent; no exploitation.
+FORMATTING:
+- Plain text only. No markdown unless the user uses it first. Avoid emojis unless explicitly requested.
+INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, staying immersive and consistent.`;
+        console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
+        return strictPrompt;
+      }
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
       let templateKey = '';
 
@@ -133,10 +191,17 @@ serve(async (req) => {
       }
 
       if (template) {
-        // Build cache key using template origin, character id and updated_at
-        const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
-        const cached = roleplayPromptCache.get(cacheKey);
+        // Build cache key using template origin, character id, updated_at and tier
+        const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}:tier:${contentTier}`;
+        const legacyKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
+        let cached = roleplayPromptCache.get(cacheKey) || roleplayPromptCache.get(legacyKey);
         if (cached) {
+          if (contentTier === 'nsfw' && !cached.includes(NSFW_GUIDANCE_MARK)) {
+            const upgraded = `${cached}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+            roleplayPromptCache.set(cacheKey, upgraded);
+            console.log('🔧 Upgraded cached prompt with NSFW guidance');
+            return upgraded;
+          }
           return cached;
         }
 
@@ -175,8 +240,13 @@ serve(async (req) => {
           .replace(/\{\{mood\}\}/g, characterData.mood || 'neutral')
           .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '');
 
-        roleplayPromptCache.set(cacheKey, processed);
-        return processed;
+        let processedFinal = processed;
+        if (contentTier === 'nsfw' && !processedFinal.includes(NSFW_GUIDANCE_MARK)) {
+          processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+          console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
+        }
+        roleplayPromptCache.set(cacheKey, processedFinal);
+        return processedFinal;
       }
     }
     
@@ -193,10 +263,10 @@ serve(async (req) => {
     }
 
     // Get system prompt from cache
-    const systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
+    let systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
     
-    // Fallback to database if cache fails
-    if (!systemPrompt && contentTier === 'nsfw') {
+    // Fallback to database if cache fails for both tiers
+    if (!systemPrompt) {
       try {
         console.log('🔄 Falling back to database for chat template');
         let useCase = 'chat_general';
@@ -208,16 +278,18 @@ serve(async (req) => {
           useCase = 'roleplay';
         } else if (templateContext === 'admin') {
           useCase = 'chat_admin';
+        } else if (templateContext === 'character_roleplay') {
+          useCase = 'character_roleplay';
         }
         
         const dbTemplate = await getDatabaseTemplate(
           null,                    // target_model (null in template)
           'qwen_instruct',         // enhancer_model  
           'chat',                  // job_type
-          useCase,                 // use_case ('roleplay' for roleplay context)
+          useCase,                 // use_case
           contentTier              // content_mode ('nsfw'/'sfw')
         );
-        return dbTemplate?.system_prompt || null;
+        systemPrompt = dbTemplate?.system_prompt || null;
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);
       }
@@ -233,6 +305,12 @@ serve(async (req) => {
       characterLoaded: !!characterData
     });
 
+    // Append NSFW roleplay guidance if applicable
+    if (contentTier === 'nsfw' && systemPrompt && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
+      systemPrompt = `${systemPrompt}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+      console.log('🔧 Appended NSFW roleplay guidance to system prompt (general)');
+    }
+
     return systemPrompt;
   }
 
@@ -242,6 +320,28 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
+    // Cached admin role lookup
+    const getIsAdmin = async (userId: string): Promise<boolean> => {
+      try {
+        const cached = adminRoleCache.get(userId);
+        const now = Date.now();
+        if (cached && (now - cached.ts) < ADMIN_ROLE_TTL_MS) {
+          return cached.isAdmin;
+        }
+        const { data } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('role', 'admin')
+          .maybeSingle();
+        const isAdmin = !!data;
+        adminRoleCache.set(userId, { isAdmin, ts: now });
+        return isAdmin;
+      } catch (e) {
+        console.error('Admin role check failed:', e);
+        return false;
+      }
+    };
     // Get the current user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -255,6 +355,8 @@ serve(async (req) => {
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
+
+    const isAdminPromise = getIsAdmin(user.id);
 
     const { conversation_id, message, project_id, character_id } = await req.json();
 
@@ -307,31 +409,93 @@ serve(async (req) => {
         })
     );
 
-    // Get latest 12 messages (most recent first), will reverse for chronological order
+    // Parallel DB reads for history, project, character
     const dbStart = Date.now();
-    const { data: messageHistory, error: historyError } = await supabaseClient
+    const historyPromise = supabaseClient
       .from('messages')
       .select('sender, content, created_at')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: false })
       .limit(12);
 
+    const projectPromise = conversation.project_id
+      ? supabaseClient
+          .from('projects')
+          .select('title, original_prompt, enhanced_prompt, media_type, duration, scene_count')
+          .eq('id', conversation.project_id)
+          .single()
+      : Promise.resolve({ data: null } as any);
+
+    const characterPromise = activeCharacterId
+      ? supabaseClient
+          .from('characters')
+          .select('*')
+          .eq('id', activeCharacterId)
+          .single()
+      : Promise.resolve({ data: null } as any);
+
+    const [{ data: messageHistory, error: historyError }, { data: project }, { data: character }] = await Promise.all([
+      historyPromise,
+      projectPromise,
+      characterPromise,
+    ]);
+
     if (historyError) {
       console.error('Error fetching message history:', historyError);
     }
 
-    // Get chat worker URL from system config
-    const { data: systemConfig, error: configError } = await supabaseClient
-      .from('system_config')
-      .select('config')
-      .single();
-
-    if (configError || !systemConfig?.config?.chatWorkerUrl) {
-      console.error('Failed to get chat worker URL:', configError);
-      throw new Error('Chat worker not configured');
+    // Handle character and context
+    let characterData = null;
+    let contextType = conversation.conversation_type || 'general';
+    if (character) {
+      characterData = character;
+      contextType = 'character_roleplay';
+      // Increment interaction count (background)
+      waitUntil(
+        supabaseClient
+          .from('characters')
+          .update({ interaction_count: (character.interaction_count || 0) + 1 })
+          .eq('id', activeCharacterId as string)
+          .then(({ error }) => {
+            if (error) console.error('Failed to increment interaction_count:', error);
+          })
+      );
+      console.log('🎭 Character loaded for roleplay:', character.name);
     }
 
-    const chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+    // Build project context if present
+    let projectContext = null;
+    if (project) {
+      projectContext = {
+        title: project.title || 'Untitled Project',
+        media_type: project.media_type,
+        original_prompt: project.original_prompt,
+        enhanced_prompt: project.enhanced_prompt,
+        duration: project.duration || 5,
+        scene_count: project.scene_count || 1
+      };
+    }
+
+    dbReadTime = Date.now() - dbStart;
+
+    // Resolve chat worker URL with TTL cache to avoid frequent reads
+    let chatWorkerUrl = cachedChatWorkerUrl;
+    if (!chatWorkerUrl || (Date.now() - cachedConfigFetchedAt) > CONFIG_TTL_MS) {
+      const { data: systemConfig, error: configError } = await supabaseClient
+        .from('system_config')
+        .select('config')
+        .single();
+
+      if (configError || !systemConfig?.config?.chatWorkerUrl) {
+        console.error('Failed to get chat worker URL:', configError);
+        throw new Error('Chat worker not configured');
+      }
+
+      chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+      cachedChatWorkerUrl = chatWorkerUrl;
+      cachedConfigFetchedAt = Date.now();
+    }
+
     console.log('Using chat worker URL:', chatWorkerUrl);
 
     // Get API key for chat worker
@@ -339,9 +503,6 @@ serve(async (req) => {
     if (!apiKey) {
       throw new Error('WAN_WORKER_API_KEY not configured');
     }
-
-    // Skipping synchronous health check to reduce latency; rely on worker call error handling
-    // If needed, implement cached health checks.
 
     // Prepare conversation history for chat worker (chronological)
     const conversationHistory = messageHistory
@@ -352,59 +513,16 @@ serve(async (req) => {
         }))
       : [];
 
-    // Get project context if linked
-    let projectContext = null;
-    if (conversation.project_id) {
-      const { data: project } = await supabaseClient
-        .from('projects')
-        .select('title, original_prompt, enhanced_prompt, media_type, duration, scene_count')
-        .eq('id', conversation.project_id)
-        .single();
-
-      if (project) {
-        projectContext = {
-          title: project.title || 'Untitled Project',
-          media_type: project.media_type,
-          original_prompt: project.original_prompt,
-          enhanced_prompt: project.enhanced_prompt,
-          duration: project.duration || 5,
-          scene_count: project.scene_count || 1
-        };
-      }
-    }
-
-    // Load character data if this is a roleplay conversation
-    let characterData = null;
-    let contextType = conversation.conversation_type || 'general';
-    
-    if (activeCharacterId) {
-      const { data: character, error: characterError } = await supabaseClient
-        .from('characters')
-        .select('*')
-        .eq('id', activeCharacterId)
-        .single();
-
-      if (character && !characterError) {
-        characterData = character;
-        contextType = 'character_roleplay';
-        
-        // Increment interaction count (background)
-        waitUntil(
-          supabaseClient
-            .from('characters')
-            .update({ interaction_count: (character.interaction_count || 0) + 1 })
-            .eq('id', activeCharacterId)
-            .then(({ error }) => {
-              if (error) console.error('Failed to increment interaction_count:', error);
-            })
-        );
-        
-        console.log('🎭 Character loaded for roleplay:', character.name);
-      }
-    }
-
     // Load cached data for template processing
     const cache = await getCachedData();
+    
+    // Determine admin/owner NSFW override
+    const isAdmin = await isAdminPromise.catch(() => false);
+    const isOwner = !!(characterData && characterData.user_id === user.id);
+    const allowNSFWOverride = !!(characterData?.content_rating === 'nsfw' && (isAdmin || isOwner));
+    if (allowNSFWOverride) {
+      console.log(`🛡️ NSFW override active due to ${isAdmin ? 'admin' : 'owner'} privileges`);
+    }
     
     // Get system prompt using cached templates (roleplay or general)
     dbReadTime = Date.now() - dbStart;
@@ -415,7 +533,7 @@ serve(async (req) => {
       contextType,
       cache,
       characterData,
-      ageVerified
+      ageVerified || allowNSFWOverride
     );
     promptTime = Date.now() - promptStart;
 
@@ -445,20 +563,44 @@ serve(async (req) => {
     // Add current user message
     messages.push({ role: 'user', content: message });
 
+    // Derive content tier and NSFW enforcement for worker payload
+    const fullTextForTier = [message, ...conversationHistory.map(m => m.content)].join(' ');
+    let chosenTier: 'sfw' | 'nsfw' = detectContentTier(fullTextForTier, cache);
+    if (characterData?.content_rating === 'sfw') chosenTier = 'sfw';
+    else if (characterData?.content_rating === 'nsfw') chosenTier = 'nsfw';
+    if (!ageVerified && !allowNSFWOverride && chosenTier === 'nsfw') chosenTier = 'sfw';
+    const nsfwEnforce = contextType === 'character_roleplay' && chosenTier === 'nsfw';
+    const nsfwReason = characterData?.content_rating === 'nsfw' ? 'character_rating' : (chosenTier === 'nsfw' ? 'detected_terms' : null);
+
     // Call the chat worker with messages array format
-    const chatPayload = {
-      messages: messages,
-      conversation_id: conversation_id,
-      project_id: project_id,
+    const basePayload: any = {
+      messages,
+      conversation_id,
+      project_id,
       context_type: contextType,
-      project_context: projectContext
+      project_context: projectContext,
+      content_tier: chosenTier,
     };
+    // Sampling parameters (worker may ignore unsupported keys)
+    const temperature = nsfwEnforce ? 0.95 : 0.8;
+    const top_p = 0.95;
+    const presence_penalty = 0.6;
+    const frequency_penalty = 0.25;
+    Object.assign(basePayload, { temperature, top_p, presence_penalty, frequency_penalty });
+
+    if (nsfwEnforce) {
+      basePayload.nsfw_enforce = true;
+      if (nsfwReason) basePayload.nsfw_reason = nsfwReason;
+    }
 
     console.log('Calling chat worker with payload:', {
       messages: `${messages.length} messages`,
       conversation_id,
       context_type: contextType,
-      project_context: projectContext ? 'included' : 'none'
+      project_context: projectContext ? 'included' : 'none',
+      content_tier: chosenTier,
+      nsfw_enforce: nsfwEnforce || false,
+      nsfw_reason: nsfwReason || 'none'
     });
 
     const workerStart = Date.now();
@@ -468,7 +610,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(chatPayload),
+      body: JSON.stringify(basePayload),
       signal: AbortSignal.timeout(45000), // 45 second timeout
     });
 
@@ -485,7 +627,57 @@ serve(async (req) => {
       throw new Error(chatData.error || 'Chat worker returned failure');
     }
 
-    const aiResponse = chatData.response || 'Sorry, I could not generate a response.';
+    const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
+
+    // Post-process for quality in NSFW strict roleplay
+    let aiResponse = rawResponse;
+    if (nsfwEnforce) {
+      const qaStart = Date.now();
+      const sanitizeStrictNSFWOutput = (text: string) => {
+        let removed = 0;
+        let emojis_removed = 0;
+        let truncated_words = 0;
+        // Remove common disclaimers / policy mentions
+        const patterns = [
+          /\b(as an ai|i (?:can(?:not|'t)|must|won't|will not|am unable)\b)[^.!?\n]*[.!?]?/gi,
+          /\b(content policy|guidelines?|safety|cannot provide|not able to)\b[^.!?\n]*[.!?]?/gi,
+          /\b(i'm just|i am just) an ai[^.!?\n]*[.!?]?/gi,
+        ];
+        let out = text;
+        for (const re of patterns) {
+          const before = out;
+          out = out.replace(re, () => { removed++; return ''; });
+          if (out !== before) { /* removed incremented */ }
+        }
+        // Strip emojis unless explicitly requested (simple unicode class)
+        const emojiRe = /\p{Extended_Pictographic}/gu;
+        const emojiMatches = out.match(emojiRe) || [];
+        if (emojiMatches.length) {
+          emojis_removed = emojiMatches.length;
+          out = out.replace(emojiRe, '');
+        }
+        // Enforce soft length cap ~240 words
+        const words = out.trim().split(/\s+/);
+        if (words.length > 240) {
+          out = words.slice(0, 240).join(' ');
+          truncated_words = words.length - 240;
+        }
+        // Cleanup extra spaces
+        out = out.replace(/\s{3,}/g, ' ').trim();
+        return { text: out, removed, emojis_removed, truncated_words };
+      };
+
+      const qa = sanitizeStrictNSFWOutput(rawResponse);
+      aiResponse = qa.text;
+      console.log('🧪 Output QA', {
+        len_before: rawResponse.length,
+        len_after: aiResponse.length,
+        removed_phrases: qa.removed,
+        emojis_removed: qa.emojis_removed,
+        truncated_words: qa.truncated_words,
+        qa_ms: Date.now() - qaStart,
+      });
+    }
 
     // Save AI response and update conversation in background
     const dbWriteStart = Date.now();

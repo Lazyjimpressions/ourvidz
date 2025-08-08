@@ -10,13 +10,15 @@ interface SceneImageGeneratorProps {
   roleplayTemplate?: RoleplayTemplate | null;
   mode?: string;
   onImageGenerated?: (assetId: string, imageUrl?: string, bucket?: string) => void;
+  onGenerationStart?: () => void;
 }
 
 export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   messageContent,
   roleplayTemplate,
   mode,
-  onImageGenerated
+  onImageGenerated,
+  onGenerationStart
 }) => {
   const { 
     detectScene, 
@@ -27,6 +29,8 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
   // Generate scene image
   const handleGenerateImage = useCallback(async () => {
     console.log('🎬 Scene image generation started:', { messageContent: messageContent.slice(0, 100) });
+    // Notify parent to set pending state
+    onGenerationStart?.();
     
     // Set up persistent event listener that doesn't get removed immediately
     const handleCompletion = (event: CustomEvent) => {
@@ -92,7 +96,7 @@ export const SceneImageGenerator: React.FC<SceneImageGeneratorProps> = ({
         {isGenerating ? (
           <>
             <div className="animate-spin rounded-full h-2 w-2 border border-primary border-t-transparent mr-2" />
-            Generating... 45s
+            Generating...
           </>
         ) : (
           <>

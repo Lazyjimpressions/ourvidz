@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { PlaygroundProvider, usePlayground } from '@/contexts/PlaygroundContext';
+import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
+import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
@@ -16,6 +18,10 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { SceneImageGenerator } from '@/components/playground/SceneImageGenerator';
+import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
+import { Card } from '@/components/ui/card';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 // Mock character data - in real app this would come from database
 const mockCharacters = {
@@ -60,9 +66,8 @@ const RoleplayChatInterface = () => {
     messages,
     isLoadingMessages,
     createConversation,
+    sendMessage,
   } = usePlayground();
-
-  const supabaseClient = supabase;
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -77,6 +82,17 @@ const RoleplayChatInterface = () => {
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+
+  // Inline image generation context helpers
+  const { getEntry, setPending, setReady } = useGeneratedMedia();
+  const hash = (str: string) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(36);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,26 +114,10 @@ const RoleplayChatInterface = () => {
 
     const message = inputMessage.trim();
     setInputMessage('');
-    setIsTyping(true);
 
     try {
-      console.log('🚀 Sending message to playground-chat:', {
-        conversation_id: state.activeConversationId,
-        message: message,
-        character_id: characterId
-      });
+      await sendMessage(message, { characterId: character?.id });
 
-      // Include character_id in the message if we have one  
-      const { data, error } = await supabaseClient.functions.invoke('playground-chat', {
-        body: {
-          conversation_id: state.activeConversationId,
-          message: message,
-          character_id: characterId
-        }
-      });
-
-      console.log('📨 Edge function response:', { data, error });
-      
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
         await generateSceneFromMessage(message, {
@@ -128,14 +128,8 @@ const RoleplayChatInterface = () => {
           isEnabled: true
         });
       }
-      
-      if (error) {
-        console.error('Error sending message:', error);
-      }
     } catch (error) {
       console.error('Failed to send message:', error);
-    } finally {
-      setIsTyping(false);
     }
   };
 
@@ -377,66 +371,81 @@ const RoleplayChatInterface = () => {
 
         {/* Messages - More compact spacing */}
         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {messages.map((message) => (
-            <div key={message.id} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[85%] sm:max-w-[75%] ${
-                message.sender === 'user' 
-                  ? 'bg-blue-600 rounded-2xl rounded-br-md' 
-                  : 'bg-gray-800 rounded-2xl rounded-bl-md'
-              } px-3 py-2`}>
-                {message.sender !== 'user' && (
-                  <div className="flex items-center space-x-2 mb-1">
-                    <img 
-                      src={selectedCharacter.avatar} 
-                      alt={selectedCharacter.name}
-                      className="w-4 h-4 rounded-full"
-                    />
-                    <span className="font-medium text-xs">{selectedCharacter.name}</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
+          {messages.map((message) => {
+            const stableKey = `${message.conversation_id}:${hash(message.content)}`;
+            const mediaEntry = getEntry(stableKey);
+            const isUserMsg = message.sender === 'user';
+            return (
+              <div key={message.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] sm:max-w-[75%] ${
+                  isUserMsg 
+                    ? 'bg-blue-600 rounded-2xl rounded-br-md' 
+                    : 'bg-gray-800 rounded-2xl rounded-bl-md'
+                } px-3 py-2`}>
+                  {!isUserMsg && (
+                    <div className="flex items-center space-x-2 mb-1">
+                      <img 
+                        src={selectedCharacter.avatar} 
+                        alt={selectedCharacter.name}
+                        className="w-4 h-4 rounded-full"
+                      />
+                      <span className="font-medium text-xs">{selectedCharacter.name}</span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {message.content}
                   </div>
-                )}
-                
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {message.content}
+                  
+                  {!isUserMsg && (
+                    <>
+                      {/* Actions */}
+                      <div className="flex items-center space-x-1 mt-2">
+                        <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
+                          <RotateCcw className="w-3 h-3" />
+                        </button>
+                        <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
+                          <Copy className="w-3 h-3" />
+                        </button>
+                        {/* Generate Image button */}
+                        <SceneImageGenerator
+                          messageContent={message.content}
+                          onGenerationStart={() => setPending(stableKey)}
+                          onImageGenerated={(assetId, imageUrl, bucket) => {
+                            setReady(stableKey, { assetId, imageUrl: imageUrl || null, bucket: bucket || null });
+                          }}
+                          mode="roleplay"
+                        />
+                      </div>
+
+                      {/* Inline media status and display */}
+                      {mediaEntry?.status === 'pending' && (
+                        <Card className="mt-2 p-3 max-w-xs bg-muted/30">
+                          <div className="flex items-center gap-2">
+                            <LoadingSpinner size="sm" />
+                            <span className="text-xs text-muted-foreground">Generating image...</span>
+                          </div>
+                        </Card>
+                      )}
+
+                      {mediaEntry?.status === 'ready' && mediaEntry.assetId && (
+                        <div className="mt-2">
+                          <InlineImageDisplay
+                            assetId={mediaEntry.assetId}
+                            imageUrl={mediaEntry.imageUrl || undefined}
+                            bucket={mediaEntry.bucket || undefined}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                
-                {message.sender !== 'user' && (
-                  <div className="flex items-center space-x-1 mt-2">
-                    <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
-                      <RotateCcw className="w-3 h-3" />
-                    </button>
-                    <button 
-                      onClick={async () => {
-                        if (character && state.activeConversationId) {
-                          const scenePrompt = `${character.name} in current scene: ${message.content}`;
-                          await queueJob({
-                            jobType: 'sdxl_image_fast',
-                            metadata: {
-                              prompt: scenePrompt,
-                              destination: 'character_gallery',
-                              reference_image_url: character.reference_image_url,
-                              reference_type: 'character',
-                              reference_strength: 0.3,
-                              character_id: character.id,
-                              conversation_id: state.activeConversationId
-                            }
-                          });
-                        }
-                      }}
-                      className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs"
-                    >
-                      <Camera className="w-3 h-3" />
-                    </button>
-                    <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
-                      <Copy className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           
           {(isTyping || state.isLoadingMessage) && (
             <div className="flex justify-start">
@@ -562,9 +571,11 @@ const RoleplayChat = () => {
     <div className="min-h-screen bg-black">
       <RoleplayHeader title="Roleplay Chat" backPath="/roleplay" />
       <div className="pt-12 h-screen">
-        <PlaygroundProvider>
-          <RoleplayChatInterface />
-        </PlaygroundProvider>
+        <GeneratedMediaProvider>
+          <PlaygroundProvider>
+            <RoleplayChatInterface />
+          </PlaygroundProvider>
+        </GeneratedMediaProvider>
       </div>
     </div>
   );

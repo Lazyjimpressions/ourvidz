@@ -7,6 +7,10 @@ import { ResponseTruncation } from './ResponseTruncation';
 import { SceneImageGenerator } from './SceneImageGenerator';
 import { InlineImageDisplay } from './InlineImageDisplay';
 import { ImageLightbox } from './ImageLightbox';
+import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
+import { Card } from '@/components/ui/card';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { useSceneGeneration } from '@/hooks/useSceneGeneration';
 
 interface Message {
   id: string;
@@ -49,6 +53,20 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
   });
   const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
+  // Generated media context for stable persistence keyed by conversation + message content
+  const { getEntry, setPending, setReady } = useGeneratedMedia();
+  const hash = (str: string) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i);
+      h |= 0;
+    }
+    return Math.abs(h).toString(36);
+  };
+  const stableKey = `${message.conversation_id}:${hash(message.content)}`;
+  const mediaEntry = getEntry(stableKey);
+  const { generateSceneImage, isGenerating } = useSceneGeneration();
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content);
@@ -58,9 +76,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
     }
   };
 
-  const handleRegenerate = () => {
-    // TODO: Implement regenerate functionality
-    toast.info('Regenerate feature coming soon');
+  const handleRegenerate = async () => {
+    if (isUser) return;
+    try {
+      // Mark pending in UI
+      setPending(stableKey);
+
+      // Listen for generation completion to capture asset
+      const handleCompletion = (event: CustomEvent) => {
+        if (event.detail?.assetId || event.detail?.imageId) {
+          const assetId = event.detail.assetId || event.detail.imageId;
+          const imageUrl = event.detail.imageUrl || null;
+          const bucket = event.detail.bucket || null;
+
+          setGeneratedImageId(assetId);
+          setGeneratedImageUrl(imageUrl);
+          setGeneratedImageBucket(bucket);
+          setReady(stableKey, { assetId, imageUrl, bucket });
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${storageKey}-id`, assetId);
+            if (imageUrl) localStorage.setItem(`${storageKey}-url`, imageUrl);
+            if (bucket) localStorage.setItem(`${storageKey}-bucket`, bucket);
+          }
+        }
+        window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      };
+
+      // Reset and attach listener
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      window.addEventListener('generation-completed', handleCompletion as EventListener);
+
+      await generateSceneImage(message.content, roleplayTemplate, {
+        quality: 'high',
+        style: 'lustify',
+        useCharacterReference: false
+      });
+    } catch (error) {
+      console.error('❌ Regeneration failed:', error);
+      toast.error('Failed to start regeneration');
+    }
   };
 
   return (
@@ -117,6 +172,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
               variant="ghost"
               size="sm"
               onClick={handleRegenerate}
+              disabled={isGenerating}
               className="h-5 w-5 p-0 text-gray-400 hover:text-white"
             >
               <RotateCw className="h-3 w-3" />
@@ -129,11 +185,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           <SceneImageGenerator
             messageContent={message.content}
             roleplayTemplate={roleplayTemplate}
+            onGenerationStart={() => {
+              setPending(stableKey);
+            }}
             onImageGenerated={(assetId, imageUrl, bucket) => {
               console.log('🖼️ MessageBubble received generated image:', { assetId, imageUrl, bucket });
               setGeneratedImageId(assetId);
               setGeneratedImageUrl(imageUrl || null);
               setGeneratedImageBucket(bucket || null);
+
+              setReady(stableKey, { assetId, imageUrl: imageUrl || null, bucket: bucket || null });
               
               // Persist to localStorage for this message
               if (typeof window !== 'undefined') {
@@ -152,15 +213,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
         )}
 
         {/* Inline Image Display */}
-        {generatedImageId && (
+        {mediaEntry?.status === 'pending' && (
+          <Card className="mt-2 p-3 max-w-xs bg-muted/30">
+            <div className="flex items-center gap-2">
+              <LoadingSpinner size="sm" />
+              <span className="text-xs text-muted-foreground">Generating image...</span>
+            </div>
+          </Card>
+        )}
+
+        {(mediaEntry?.status === 'ready' && mediaEntry.assetId) ? (
           <div className="mt-2">
             <InlineImageDisplay
-              assetId={generatedImageId}
-              imageUrl={generatedImageUrl}
-              bucket={generatedImageBucket}
+              assetId={mediaEntry.assetId}
+              imageUrl={mediaEntry.imageUrl || undefined}
+              bucket={mediaEntry.bucket || undefined}
               onExpand={setLightboxImageUrl}
             />
           </div>
+        ) : (
+          generatedImageId && (
+            <div className="mt-2">
+              <InlineImageDisplay
+                assetId={generatedImageId}
+                imageUrl={generatedImageUrl || undefined}
+                bucket={generatedImageBucket || undefined}
+                onExpand={setLightboxImageUrl}
+              />
+            </div>
+          )
         )}
 
         {/* Image Lightbox */}
