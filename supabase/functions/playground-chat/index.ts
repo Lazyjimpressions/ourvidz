@@ -12,6 +12,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// In-memory cache for processed character roleplay prompts (per warm instance)
+const roleplayPromptCache = new Map<string, string>();
+
 interface Database {
   public: {
     Tables: {
@@ -77,8 +80,11 @@ serve(async (req) => {
     // For character roleplay, get character-specific template
     if (contextType === 'character_roleplay' && characterData) {
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
-      
-      if (!template) {
+      let templateKey = '';
+
+      if (template) {
+        templateKey = `cache:${cache?.metadata?.refreshed_at || 'na'}:${contentTier}:character_roleplay`;
+      } else {
         console.log('🔄 Cache miss, fetching roleplay template from database...');
         try {
           const dbTemplate = await getDatabaseTemplate(
@@ -89,6 +95,7 @@ serve(async (req) => {
             contentTier              // content_mode
           );
           template = dbTemplate?.system_prompt;
+          templateKey = `db:${dbTemplate?.id || 'unknown'}:${dbTemplate?.updated_at || ''}`;
         } catch (error) {
           console.error('❌ Failed to fetch roleplay template:', error);
           return 'You are a helpful AI assistant. Please provide thoughtful and engaging responses.';
@@ -96,33 +103,50 @@ serve(async (req) => {
       }
 
       if (template) {
-        // Helper function to extract trait values
-        const extractTraitValue = (traits: string, traitName: string): string => {
-          if (!traits) return '';
+        // Build cache key using template origin, character id and updated_at
+        const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
+        const cached = roleplayPromptCache.get(cacheKey);
+        if (cached) {
+          return cached;
+        }
+
+        // Parse traits once to avoid repeated string operations
+        const parseTraits = (traits?: string): Record<string, string> => {
+          const map: Record<string, string> = {};
+          if (!traits) return map;
           const lines = traits.split('\n');
           for (const line of lines) {
-            if (line.startsWith(`${traitName}: `)) {
-              return line.replace(`${traitName}: `, '');
+            const idx = line.indexOf(':');
+            if (idx !== -1) {
+              const key = line.slice(0, idx).trim();
+              const value = line.slice(idx + 1).trim();
+              map[key] = value;
             }
           }
-          return '';
+          return map;
         };
 
-        // Replace character variables in the template
-        return template
+        const traitsMap = parseTraits(characterData.traits);
+        const extractTraitValue = (traitName: string): string => traitsMap[traitName] || '';
+
+        // Replace character variables in the template (single processing, then cache)
+        const processed = template
           .replace(/\{\{character_name\}\}/g, characterData.name || 'Character')
           .replace(/\{\{character_description\}\}/g, characterData.description || '')
           .replace(/\{\{character_personality\}\}/g, characterData.persona || '')
           .replace(/\{\{character_background\}\}/g, characterData.description?.includes('Background:') ? 
-            characterData.description.split('Background:')[1] || '' : '')
-          .replace(/\{\{character_speaking_style\}\}/g, extractTraitValue(characterData.traits, 'Speaking Style') || '')
-          .replace(/\{\{character_goals\}\}/g, extractTraitValue(characterData.traits, 'Goals') || '')
-          .replace(/\{\{character_quirks\}\}/g, extractTraitValue(characterData.traits, 'Quirks') || '')
-          .replace(/\{\{character_relationships\}\}/g, extractTraitValue(characterData.traits, 'Relationships') || '')
+            (characterData.description.split('Background:')[1] || '') : '')
+          .replace(/\{\{character_speaking_style\}\}/g, extractTraitValue('Speaking Style') || '')
+          .replace(/\{\{character_goals\}\}/g, extractTraitValue('Goals') || '')
+          .replace(/\{\{character_quirks\}\}/g, extractTraitValue('Quirks') || '')
+          .replace(/\{\{character_relationships\}\}/g, extractTraitValue('Relationships') || '')
           .replace(/\{\{character_persona\}\}/g, characterData.persona || '')
           .replace(/\{\{voice_tone\}\}/g, characterData.voice_tone || 'neutral')
           .replace(/\{\{mood\}\}/g, characterData.mood || 'neutral')
           .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '');
+
+        roleplayPromptCache.set(cacheKey, processed);
+        return processed;
       }
     }
     
