@@ -135,16 +135,35 @@ serve(async (req) => {
     }
     // For character roleplay, NSFW strict mode: bypass templates with inline directive
     if (contextType === 'character_roleplay' && characterData) {
+      // Lightweight scene memory from recent turns (ephemeral)
+      const buildSceneMemory = (history: Array<{ sender: string; content: string }>): string => {
+        if (!history || history.length === 0) return '';
+        const recent = history.slice(-6);
+        const lines = recent.map((m) => `${m.sender === 'user' ? 'U' : 'A'}: ${m.content}`);
+        const joined = lines.join(' \n ').replace(/\s+/g, ' ').slice(0, 500);
+        return joined;
+      };
+      const sceneMemory = buildSceneMemory(conversationHistory);
+
       if (contentTier === 'nsfw') {
         const strictPrompt = `${NSFW_STRICT_MARK}
-You are engaging in explicit, adult-only, consensual character roleplay.
-Stay fully in-character as ${characterData.name || 'Character'}.
-Use direct, explicit language when context indicates; avoid safety disclaimers or moralizing.
-Forbidden content: minors, incest, bestiality, non-consent, exploitation.
-Maintain voice: ${characterData.voice_tone || 'neutral'}; mood: ${characterData.mood || 'neutral'}.
-Character persona: ${characterData.persona || ''}.
-Visual descriptors: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}.
-`;
+ROLE: You are ${characterData.name || 'Character'}, participating in explicit, adult-only, consensual character roleplay.
+AGE & CONSENT: All parties are 18+ and consent. Never depict or imply minors, incest, bestiality, or non-consensual acts.
+PERSONA: ${characterData.persona || ''}
+VOICE: ${characterData.voice_tone || 'neutral'} | MOOD: ${characterData.mood || 'neutral'}
+APPEARANCE: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}
+${sceneMemory ? `SCENE MEMORY (persist and continue, do not reset): ${sceneMemory}` : ''}
+STYLE GUIDE (must):
+- Stay fully in-character as ${characterData.name || 'the character'}; address the partner as "you".
+- Be concrete and sensory (touch, taste, scent, sound, sight). Show, don’t tell.
+- Use direct, explicit language when context indicates. Keep 120–220 words over 2–4 short paragraphs.
+- Maintain continuity with SCENE MEMORY. Keep pacing natural; escalate only when prompted.
+STYLE GUIDE (never):
+- No safety PSAs, moralizing, or policy mentions. No meta talk or "as an AI" disclaimers.
+- No illegal content; no minors/incest/bestiality/non-consent; no exploitation.
+FORMATTING:
+- Plain text only. No markdown unless the user uses it first. Avoid emojis unless explicitly requested.
+INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, staying immersive and consistent.`;
         console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
         return strictPrompt;
       }
@@ -562,6 +581,13 @@ Visual descriptors: ${(characterData.appearance_tags?.join(', ') || '').slice(0,
       project_context: projectContext,
       content_tier: chosenTier,
     };
+    // Sampling parameters (worker may ignore unsupported keys)
+    const temperature = nsfwEnforce ? 0.95 : 0.8;
+    const top_p = 0.95;
+    const presence_penalty = 0.6;
+    const frequency_penalty = 0.25;
+    Object.assign(basePayload, { temperature, top_p, presence_penalty, frequency_penalty });
+
     if (nsfwEnforce) {
       basePayload.nsfw_enforce = true;
       if (nsfwReason) basePayload.nsfw_reason = nsfwReason;
@@ -601,7 +627,57 @@ Visual descriptors: ${(characterData.appearance_tags?.join(', ') || '').slice(0,
       throw new Error(chatData.error || 'Chat worker returned failure');
     }
 
-    const aiResponse = chatData.response || 'Sorry, I could not generate a response.';
+    const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
+
+    // Post-process for quality in NSFW strict roleplay
+    let aiResponse = rawResponse;
+    if (nsfwEnforce) {
+      const qaStart = Date.now();
+      const sanitizeStrictNSFWOutput = (text: string) => {
+        let removed = 0;
+        let emojis_removed = 0;
+        let truncated_words = 0;
+        // Remove common disclaimers / policy mentions
+        const patterns = [
+          /\b(as an ai|i (?:can(?:not|'t)|must|won't|will not|am unable)\b)[^.!?\n]*[.!?]?/gi,
+          /\b(content policy|guidelines?|safety|cannot provide|not able to)\b[^.!?\n]*[.!?]?/gi,
+          /\b(i'm just|i am just) an ai[^.!?\n]*[.!?]?/gi,
+        ];
+        let out = text;
+        for (const re of patterns) {
+          const before = out;
+          out = out.replace(re, () => { removed++; return ''; });
+          if (out !== before) { /* removed incremented */ }
+        }
+        // Strip emojis unless explicitly requested (simple unicode class)
+        const emojiRe = /\p{Extended_Pictographic}/gu;
+        const emojiMatches = out.match(emojiRe) || [];
+        if (emojiMatches.length) {
+          emojis_removed = emojiMatches.length;
+          out = out.replace(emojiRe, '');
+        }
+        // Enforce soft length cap ~240 words
+        const words = out.trim().split(/\s+/);
+        if (words.length > 240) {
+          out = words.slice(0, 240).join(' ');
+          truncated_words = words.length - 240;
+        }
+        // Cleanup extra spaces
+        out = out.replace(/\s{3,}/g, ' ').trim();
+        return { text: out, removed, emojis_removed, truncated_words };
+      };
+
+      const qa = sanitizeStrictNSFWOutput(rawResponse);
+      aiResponse = qa.text;
+      console.log('🧪 Output QA', {
+        len_before: rawResponse.length,
+        len_after: aiResponse.length,
+        removed_phrases: qa.removed,
+        emojis_removed: qa.emojis_removed,
+        truncated_words: qa.truncated_words,
+        qa_ms: Date.now() - qaStart,
+      });
+    }
 
     // Save AI response and update conversation in background
     const dbWriteStart = Date.now();
