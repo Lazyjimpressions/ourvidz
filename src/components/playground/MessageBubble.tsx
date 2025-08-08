@@ -10,6 +10,7 @@ import { ImageLightbox } from './ImageLightbox';
 import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { useSceneGeneration } from '@/hooks/useSceneGeneration';
 
 interface Message {
   id: string;
@@ -64,6 +65,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
   };
   const stableKey = `${message.conversation_id}:${hash(message.content)}`;
   const mediaEntry = getEntry(stableKey);
+  const { generateSceneImage, isGenerating } = useSceneGeneration();
 
   const handleCopy = async () => {
     try {
@@ -74,9 +76,46 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
     }
   };
 
-  const handleRegenerate = () => {
-    // TODO: Implement regenerate functionality
-    toast.info('Regenerate feature coming soon');
+  const handleRegenerate = async () => {
+    if (isUser) return;
+    try {
+      // Mark pending in UI
+      setPending(stableKey);
+
+      // Listen for generation completion to capture asset
+      const handleCompletion = (event: CustomEvent) => {
+        if (event.detail?.assetId || event.detail?.imageId) {
+          const assetId = event.detail.assetId || event.detail.imageId;
+          const imageUrl = event.detail.imageUrl || null;
+          const bucket = event.detail.bucket || null;
+
+          setGeneratedImageId(assetId);
+          setGeneratedImageUrl(imageUrl);
+          setGeneratedImageBucket(bucket);
+          setReady(stableKey, { assetId, imageUrl, bucket });
+
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`${storageKey}-id`, assetId);
+            if (imageUrl) localStorage.setItem(`${storageKey}-url`, imageUrl);
+            if (bucket) localStorage.setItem(`${storageKey}-bucket`, bucket);
+          }
+        }
+        window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      };
+
+      // Reset and attach listener
+      window.removeEventListener('generation-completed', handleCompletion as EventListener);
+      window.addEventListener('generation-completed', handleCompletion as EventListener);
+
+      await generateSceneImage(message.content, roleplayTemplate, {
+        quality: 'high',
+        style: 'lustify',
+        useCharacterReference: false
+      });
+    } catch (error) {
+      console.error('❌ Regeneration failed:', error);
+      toast.error('Failed to start regeneration');
+    }
   };
 
   return (
@@ -133,6 +172,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
               variant="ghost"
               size="sm"
               onClick={handleRegenerate}
+              disabled={isGenerating}
               className="h-5 w-5 p-0 text-gray-400 hover:text-white"
             >
               <RotateCw className="h-3 w-3" />
