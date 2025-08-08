@@ -472,9 +472,11 @@ export class AssetService {
       const jobData = (image.jobs as any[])?.[0] || null;
 
       // Include job information in metadata
+      const resolvedJobId = (image as any)?.job_id || jobData?.id || metadata?.job_id || null;
       const enhancedMetadata = {
         ...metadata,
-        job_id: jobData?.id || image.id, // Use job ID or fallback to image ID
+        // Prefer the database job_id; fall back to joined job id; never fall back to image id (prevents false single-item groups)
+        job_id: resolvedJobId,
         job_type: jobData?.job_type,
         job_model_type: jobData?.model_type,
         job_metadata: jobData?.metadata
@@ -511,9 +513,11 @@ export class AssetService {
       const jobData = (video.jobs as any[])?.[0] || null;
 
       // Include job information in metadata
+      const resolvedJobId = (video as any)?.job_id || jobData?.id || metadata?.job_id || null;
       const enhancedMetadata = {
         ...metadata,
-        job_id: jobData?.id || video.id, // Use job ID or fallback to video ID
+        // Prefer the database job_id; fall back to joined job id; never fall back to video id (prevents false single-item groups)
+        job_id: resolvedJobId,
         job_type: jobData?.job_type,
         job_model_type: jobData?.model_type,
         job_metadata: jobData?.metadata
