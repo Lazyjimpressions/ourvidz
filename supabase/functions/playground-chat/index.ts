@@ -15,6 +15,10 @@ const corsHeaders = {
 // In-memory cache for processed character roleplay prompts (per warm instance)
 const roleplayPromptCache = new Map<string, string>();
 
+// Module-level cache for system config to avoid frequent reads
+let cachedChatWorkerUrl: string | null = null;
+let cachedConfigFetchedAt = 0;
+const CONFIG_TTL_MS = 60_000;
 interface Database {
   public: {
     Tables: {
@@ -307,31 +311,93 @@ serve(async (req) => {
         })
     );
 
-    // Get latest 12 messages (most recent first), will reverse for chronological order
+    // Parallel DB reads for history, project, character
     const dbStart = Date.now();
-    const { data: messageHistory, error: historyError } = await supabaseClient
+    const historyPromise = supabaseClient
       .from('messages')
       .select('sender, content, created_at')
       .eq('conversation_id', conversation_id)
       .order('created_at', { ascending: false })
       .limit(12);
 
+    const projectPromise = conversation.project_id
+      ? supabaseClient
+          .from('projects')
+          .select('title, original_prompt, enhanced_prompt, media_type, duration, scene_count')
+          .eq('id', conversation.project_id)
+          .single()
+      : Promise.resolve({ data: null } as any);
+
+    const characterPromise = activeCharacterId
+      ? supabaseClient
+          .from('characters')
+          .select('*')
+          .eq('id', activeCharacterId)
+          .single()
+      : Promise.resolve({ data: null } as any);
+
+    const [{ data: messageHistory, error: historyError }, { data: project }, { data: character }] = await Promise.all([
+      historyPromise,
+      projectPromise,
+      characterPromise,
+    ]);
+
     if (historyError) {
       console.error('Error fetching message history:', historyError);
     }
 
-    // Get chat worker URL from system config
-    const { data: systemConfig, error: configError } = await supabaseClient
-      .from('system_config')
-      .select('config')
-      .single();
-
-    if (configError || !systemConfig?.config?.chatWorkerUrl) {
-      console.error('Failed to get chat worker URL:', configError);
-      throw new Error('Chat worker not configured');
+    // Handle character and context
+    let characterData = null;
+    let contextType = conversation.conversation_type || 'general';
+    if (character) {
+      characterData = character;
+      contextType = 'character_roleplay';
+      // Increment interaction count (background)
+      waitUntil(
+        supabaseClient
+          .from('characters')
+          .update({ interaction_count: (character.interaction_count || 0) + 1 })
+          .eq('id', activeCharacterId as string)
+          .then(({ error }) => {
+            if (error) console.error('Failed to increment interaction_count:', error);
+          })
+      );
+      console.log('🎭 Character loaded for roleplay:', character.name);
     }
 
-    const chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+    // Build project context if present
+    let projectContext = null;
+    if (project) {
+      projectContext = {
+        title: project.title || 'Untitled Project',
+        media_type: project.media_type,
+        original_prompt: project.original_prompt,
+        enhanced_prompt: project.enhanced_prompt,
+        duration: project.duration || 5,
+        scene_count: project.scene_count || 1
+      };
+    }
+
+    dbReadTime = Date.now() - dbStart;
+
+    // Resolve chat worker URL with TTL cache to avoid frequent reads
+    let chatWorkerUrl = cachedChatWorkerUrl;
+    if (!chatWorkerUrl || (Date.now() - cachedConfigFetchedAt) > CONFIG_TTL_MS) {
+      const { data: systemConfig, error: configError } = await supabaseClient
+        .from('system_config')
+        .select('config')
+        .single();
+
+      if (configError || !systemConfig?.config?.chatWorkerUrl) {
+        console.error('Failed to get chat worker URL:', configError);
+        throw new Error('Chat worker not configured');
+      }
+
+      chatWorkerUrl = systemConfig.config.chatWorkerUrl;
+      cachedChatWorkerUrl = chatWorkerUrl;
+      cachedConfigFetchedAt = Date.now();
+    }
+
     console.log('Using chat worker URL:', chatWorkerUrl);
 
     // Get API key for chat worker
@@ -339,9 +405,6 @@ serve(async (req) => {
     if (!apiKey) {
       throw new Error('WAN_WORKER_API_KEY not configured');
     }
-
-    // Skipping synchronous health check to reduce latency; rely on worker call error handling
-    // If needed, implement cached health checks.
 
     // Prepare conversation history for chat worker (chronological)
     const conversationHistory = messageHistory
@@ -351,57 +414,6 @@ serve(async (req) => {
           created_at: msg.created_at,
         }))
       : [];
-
-    // Get project context if linked
-    let projectContext = null;
-    if (conversation.project_id) {
-      const { data: project } = await supabaseClient
-        .from('projects')
-        .select('title, original_prompt, enhanced_prompt, media_type, duration, scene_count')
-        .eq('id', conversation.project_id)
-        .single();
-
-      if (project) {
-        projectContext = {
-          title: project.title || 'Untitled Project',
-          media_type: project.media_type,
-          original_prompt: project.original_prompt,
-          enhanced_prompt: project.enhanced_prompt,
-          duration: project.duration || 5,
-          scene_count: project.scene_count || 1
-        };
-      }
-    }
-
-    // Load character data if this is a roleplay conversation
-    let characterData = null;
-    let contextType = conversation.conversation_type || 'general';
-    
-    if (activeCharacterId) {
-      const { data: character, error: characterError } = await supabaseClient
-        .from('characters')
-        .select('*')
-        .eq('id', activeCharacterId)
-        .single();
-
-      if (character && !characterError) {
-        characterData = character;
-        contextType = 'character_roleplay';
-        
-        // Increment interaction count (background)
-        waitUntil(
-          supabaseClient
-            .from('characters')
-            .update({ interaction_count: (character.interaction_count || 0) + 1 })
-            .eq('id', activeCharacterId)
-            .then(({ error }) => {
-              if (error) console.error('Failed to increment interaction_count:', error);
-            })
-        );
-        
-        console.log('🎭 Character loaded for roleplay:', character.name);
-      }
-    }
 
     // Load cached data for template processing
     const cache = await getCachedData();

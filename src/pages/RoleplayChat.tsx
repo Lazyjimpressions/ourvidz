@@ -60,9 +60,8 @@ const RoleplayChatInterface = () => {
     messages,
     isLoadingMessages,
     createConversation,
+    sendMessage,
   } = usePlayground();
-
-  const supabaseClient = supabase;
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -98,26 +97,10 @@ const RoleplayChatInterface = () => {
 
     const message = inputMessage.trim();
     setInputMessage('');
-    setIsTyping(true);
 
     try {
-      console.log('🚀 Sending message to playground-chat:', {
-        conversation_id: state.activeConversationId,
-        message: message,
-        character_id: characterId
-      });
+      await sendMessage(message, { characterId: character?.id });
 
-      // Include character_id in the message if we have one  
-      const { data, error } = await supabaseClient.functions.invoke('playground-chat', {
-        body: {
-          conversation_id: state.activeConversationId,
-          message: message,
-          character_id: characterId
-        }
-      });
-
-      console.log('📨 Edge function response:', { data, error });
-      
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
         await generateSceneFromMessage(message, {
@@ -128,14 +111,8 @@ const RoleplayChatInterface = () => {
           isEnabled: true
         });
       }
-      
-      if (error) {
-        console.error('Error sending message:', error);
-      }
     } catch (error) {
       console.error('Failed to send message:', error);
-    } finally {
-      setIsTyping(false);
     }
   };
 

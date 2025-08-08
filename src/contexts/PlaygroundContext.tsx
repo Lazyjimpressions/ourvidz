@@ -62,7 +62,7 @@ interface PlaygroundContextType {
   isLoadingMessages: boolean;
   setActiveConversation: (id: string | null) => void;
   createConversation: (title?: string, projectId?: string, conversationType?: string) => Promise<string>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, options?: { characterId?: string }) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
 }
@@ -144,13 +144,14 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content }: { conversationId: string; content: string }) => {
-      console.log('📧 PlaygroundContext sending message:', { conversationId, content });
+    mutationFn: async ({ conversationId, content, characterId }: { conversationId: string; content: string; characterId?: string }) => {
+      console.log('📧 PlaygroundContext sending message:', { conversationId, content, characterId });
       
       const { data, error } = await supabase.functions.invoke('playground-chat', {
         body: {
           conversation_id: conversationId,
           message: content,
+          ...(characterId ? { character_id: characterId } : {}),
         },
       });
 
@@ -225,7 +226,7 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return result.id;
   }, [createConversationMutation]);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, options?: { characterId?: string }) => {
     if (!state.activeConversationId) {
       toast.error('No active conversation');
       return;
@@ -234,11 +235,32 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     dispatch({ type: 'SET_LOADING_MESSAGE', payload: true });
     dispatch({ type: 'SET_ERROR', payload: null });
 
-    await sendMessageMutation.mutateAsync({
-      conversationId: state.activeConversationId,
-      content,
+    // Optimistic UI: add user message and assistant placeholder
+    const conversationKey = ['messages', state.activeConversationId] as const;
+    const nowIso = new Date().toISOString();
+    const tempUserId = `temp-user-${Date.now()}`;
+    const tempAssistantId = `temp-assistant-${Date.now()}`;
+
+    queryClient.setQueryData<Message[]>(conversationKey as any, (old: Message[] | undefined) => {
+      const prev = old || [];
+      return [
+        ...prev,
+        { id: tempUserId, conversation_id: state.activeConversationId!, sender: 'user', content, message_type: 'text', created_at: nowIso },
+        { id: tempAssistantId, conversation_id: state.activeConversationId!, sender: 'assistant', content: '…', message_type: 'text', created_at: nowIso },
+      ];
     });
-  }, [state.activeConversationId, sendMessageMutation]);
+
+    try {
+      await sendMessageMutation.mutateAsync({
+        conversationId: state.activeConversationId,
+        content,
+        characterId: options?.characterId,
+      });
+    } finally {
+      // Always refresh to replace placeholders with real messages
+      queryClient.invalidateQueries({ queryKey: conversationKey as any });
+    }
+  }, [state.activeConversationId, sendMessageMutation, queryClient]);
 
   const deleteConversation = useCallback(async (id: string) => {
     await deleteConversationMutation.mutateAsync(id);
