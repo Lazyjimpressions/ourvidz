@@ -1,6 +1,6 @@
 # Dynamic Prompting System
 
-**Last Updated:** August 4, 2025  
+**Last Updated:** August 8, 2025  
 **Architecture:** Pure Inference Engine - No Worker Overrides  
 **Status:** ✅ Production Ready with Enhanced Logging
 
@@ -34,22 +34,24 @@ The Dynamic Prompting System uses 12 specialized, database-driven templates for 
 
 ## Template Reference
 
-### Core Templates (12 Active)
+### Active Templates (from Supabase prompt_templates)
 
-| Template Name | Model Type | Use Case | Content Mode | Token Limit |
-|---------------|------------|----------|--------------|-------------|
-| `enhancement_sdxl_sfw` | qwen_instruct | enhancement | sfw | 75 |
-| `enhancement_sdxl_nsfw` | qwen_instruct | enhancement | nsfw | 75 |
-| `enhancement_wan_sfw` | qwen_base | enhancement | sfw | 100 |
-| `enhancement_wan_nsfw` | qwen_base | enhancement | nsfw | 100 |
-| `chat_sfw` | qwen_instruct | chat | sfw | 200 |
-| `chat_nsfw` | qwen_instruct | chat | nsfw | 200 |
-| `generation_sdxl_sfw` | qwen_instruct | generation | sfw | 150 |
-| `generation_sdxl_nsfw` | qwen_instruct | generation | nsfw | 150 |
-| `generation_wan_sfw` | qwen_base | generation | sfw | 200 |
-| `generation_wan_nsfw` | qwen_base | generation | nsfw | 200 |
-| `playground_sfw` | qwen_instruct | playground | sfw | 300 |
-| `playground_nsfw` | qwen_instruct | playground | nsfw | 300 |
+- Enhancement (SDXL/WAN)
+  - SDXL Enhance (SFW/NSFW): `qwen_instruct` and `qwen_base`, token_limit 75
+  - WAN Enhance (SFW/NSFW): `qwen_instruct` and `qwen_base`, token_limit 100
+- Chat (general)
+  - Chat Assistant (SFW): `qwen_instruct`, token_limit 400
+  - Chat Assistant (NSFW): `qwen_instruct`, token_limit 600
+- Roleplay
+  - Character Roleplay (SFW): `qwen_instruct`, token_limit 300, supports variables like `{{character_name}}`, `{{character_personality}}`
+  - Character Roleplay (NSFW): `qwen_instruct`, token_limit 300, same variable set
+  - Roleplay Fantasy (NSFW long-form): `qwen_instruct`, token_limit 1000
+- Scene Generation (Roleplay → Image)
+  - Scene Generation - Character Context: `qwen_instruct` → SDXL, token_limit 512, supports variables: `{{character_name}}`, `{{mood}}`, `{{character_visual_description}}`, `{{scene_context}}`
+
+Notes
+- Templates are selected by edge functions using: `(target_model, enhancer_model, job_type, use_case, content_mode)` with fallbacks.
+- Character roleplay templates support variable substitution (performed server-side) and are cached per character to avoid repeated processing.
 
 ## Technical Implementation
 
@@ -148,10 +150,9 @@ const response = await fetch(`${chatWorkerUrl}/enhance`, {
 
 ### Token Optimization
 
-- **SDXL:** 75 token limit (prevents CLIP truncation)
-- **WAN:** 100 token limit (video generation)
-- **Chat:** 200 token limit (conversation)
-- **Automatic compression** when limits exceeded
+- Template-driven token limits (from DB) are respected end-to-end.
+- Typical limits: SDXL enhancement 75; WAN enhancement 100; Chat (SFW 400 / NSFW 600); Character roleplay 300; Scene generation 512; Long-form roleplay up to 1000.
+- Automatic compression/shortening should be applied in edge functions when the combined message context risks exceeding worker/model limits.
 
 ### Caching Strategy
 
@@ -202,43 +203,43 @@ GROUP BY template_name;
 
 ### Edge Functions
 
-- **`enhance-prompt`:** Main enhancement with pure inference
-- **`playground-chat`:** Chat interface with template routing
-- **`queue-job`:** Job queuing with template selection
+- **`enhance-prompt`**: Prompt enhancement (SDXL/WAN). Fetches template by criteria, builds `messages` and calls worker `/enhance` with pure inference payload.
+- **`playground-chat`**: Conversational/roleplay chat. Resolves context (general, roleplay, character_roleplay, admin, creative) and content tier (sfw/nsfw), loads templates from cache/DB, performs character variable substitution for `character_roleplay`, and calls worker `/chat` with constructed `messages`. Supports optional `character_id` and conversation-type routing.
+- **`queue-job`**: Job creation. Selects enhancement templates and attaches template context to jobs for downstream processing.
 
 ### Worker System
 
 **Chat Worker:** Pure inference engine
-- **Endpoint:** `/enhance` (new pure inference endpoint)
-- **Model:** Qwen Instruct
-- **Capability:** Template-driven enhancement
-- **Security:** No prompt overrides
+- Endpoints: `/chat`, `/enhance`
+- Model: Qwen Instruct
+- Capability: Executes provided `messages` only; no internal templates
 
 **WAN Worker:** Legacy format maintained
-- **Endpoint:** `/generate` (existing format)
-- **Model:** Qwen Base
-- **Capability:** Video generation enhancement
-- **Compatibility:** Backward compatible
+- Endpoint: `/generate`
+- Model: Qwen Base
+- Capability: Video generation with enhanced prompts from edge functions
 
 ### Frontend Integration
 
+Page-to-Template Mapping
+- `src/pages/RoleplayDashboard.tsx`: navigates to `RoleplayChat` with `?character=<id>`; no prompting.
+- `src/pages/RoleplayChat.tsx`: creates `roleplay` conversations and invokes `playground-chat` with optional `character_id`. Edge selects `character_roleplay_{sfw|nsfw}` templates, injects character variables, and calls worker `/chat`. Inline scene generation uses the Scene Generation template to produce SDXL prompts.
+- `src/pages/Playground.tsx` + `components/playground/ChatInterface.tsx`: supports `general`, `roleplay`, `admin`, `creative` conversation types → mapped to chat templates (`chat_*`, `roleplay`, `character_roleplay`, `admin`). SFW/NSFW determined by content-tier detection.
+- `src/pages/SimplifiedWorkspace.tsx`: calls `enhance-prompt` for SDXL/WAN prior to queueing jobs. Generation routes to library; workspace consumes via events.
+
+Example enhancement request
 ```typescript
-// Enhanced prompt request with logging
-const response = await fetch('/functions/v1/enhance-prompt', {
+const res = await fetch('/functions/v1/enhance-prompt', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
     prompt: userPrompt,
     jobType: 'sdxl_image',
     quality: 'high',
-    selectedModel: 'qwen_instruct',
-    user_id: userId
+    selectedModel: 'qwen_instruct'
   })
 });
-
-// Response includes comprehensive metadata
-const result = await response.json();
-console.log('Enhancement metadata:', result.enhancement_metadata);
+const result = await res.json();
 ```
 
 ## Troubleshooting
@@ -277,6 +278,13 @@ supabase functions logs enhance-prompt --follow
 
 ## Recent Updates
 
+### August 8, 2025: Roleplay and Scene-Gen Templates Added
+
+- Added Character Roleplay templates (SFW/NSFW) with variable substitution and caching in `playground-chat`.
+- Added Scene Generation template for roleplay-driven image prompts (token_limit 512).
+- Updated Chat Assistant templates with higher token limits (SFW 400 / NSFW 600).
+- Documentation now maps frontend pages to template selection paths.
+
 ### August 4, 2025: Enhanced Logging & Pure Inference
 
 - **Enhanced Logging:** Comprehensive logging throughout enhancement pipeline
@@ -284,3 +292,11 @@ supabase functions logs enhance-prompt --follow
 - **Template Override Elimination:** Security improvement through pure inference
 - **Performance Monitoring:** Real-time metrics and fallback tracking
 - **Error Handling:** Improved error handling with detailed logging 
+
+## Suggested Table Reference Docs
+
+Create focused docs for key tables used by the prompting system:
+
+- `docs/tables/prompt_templates.md`: schema, required fields, naming conventions, variable placeholder policy, selection algorithm (criteria + fallbacks), token_limit guidance, examples per use_case.
+- `docs/tables/system_config_cache.md`: cache shape used by edge functions (`templateCache.chat`, `negativeCache`, `nsfwTerms`, `metadata`), refresh policy, integrity hash, troubleshooting cache misses.
+- `docs/tables/conversations_messages.md`: chat flow tables (`conversations`, `messages`) and how `conversation_type` influences template selection in `playground-chat`.
