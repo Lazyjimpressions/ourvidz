@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ResponseTruncation } from './ResponseTruncation';
 import { SceneImageGenerator } from './SceneImageGenerator';
 import { InlineImageDisplay } from './InlineImageDisplay';
+import { ImageLightbox } from './ImageLightbox';
 import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
