@@ -65,17 +65,47 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  let dbReadTime = 0;
+  let promptTime = 0;
+  let workerTime = 0;
+  let dbWriteTime = 0;
+
+  // Helper to schedule background tasks without blocking
+  const waitUntil = (p: Promise<any>) => {
+    try {
+      // @ts-ignore - EdgeRuntime may not exist in types
+      if (typeof EdgeRuntime !== 'undefined' && (EdgeRuntime as any).waitUntil) {
+        // @ts-ignore
+        (EdgeRuntime as any).waitUntil(p);
+      } else {
+        p.catch((e) => console.error('Background task error:', e));
+      }
+    } catch {
+      p.catch((e) => console.error('Background task error:', e));
+    }
+  };
+
   // Dynamic system prompt helper using cached templates
   async function getSystemPromptForChat(
     message: string,
     conversationHistory: any[],
     contextType: string,
     cache: any,
-    characterData?: any
+    characterData?: any,
+    ageVerified?: boolean
   ): Promise<string | null> {
     // Detect content tier from full conversation context
     const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
-    const contentTier = detectContentTier(fullConversationText, cache);
+    let contentTier = detectContentTier(fullConversationText, cache);
+    // Apply gating based on character rating and user age verification
+    if (characterData?.content_rating === 'sfw') {
+      contentTier = 'sfw';
+    } else if (characterData?.content_rating === 'nsfw' && ageVerified === false) {
+      contentTier = 'sfw';
+    } else if (ageVerified === false && contentTier === 'nsfw') {
+      contentTier = 'sfw';
+    }
     
     // For character roleplay, get character-specific template
     if (contextType === 'character_roleplay' && characterData) {
@@ -255,26 +285,36 @@ serve(async (req) => {
     // Use character_id from request or conversation
     const activeCharacterId = character_id || conversation.character_id;
 
-    // Save user message to database
-    const { error: messageError } = await supabaseClient
-      .from('messages')
-      .insert({
-        conversation_id,
-        sender: 'user',
-        content: message,
-      });
+    // Fetch user's age verification (for content gating)
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('age_verified')
+      .eq('id', user.id)
+      .maybeSingle();
+    const ageVerified = profile?.age_verified === true;
 
-    if (messageError) {
-      throw new Error(`Failed to save user message: ${messageError.message}`);
-    }
+    // Save user message in background (non-blocking)
+    waitUntil(
+      supabaseClient
+        .from('messages')
+        .insert({
+          conversation_id,
+          sender: 'user',
+          content: message,
+        })
+        .then(({ error }) => {
+          if (error) console.error('Failed to save user message:', error);
+        })
+    );
 
-    // Get conversation history for context
+    // Get latest 12 messages (most recent first), will reverse for chronological order
+    const dbStart = Date.now();
     const { data: messageHistory, error: historyError } = await supabaseClient
       .from('messages')
       .select('sender, content, created_at')
       .eq('conversation_id', conversation_id)
-      .order('created_at', { ascending: true })
-      .limit(20);
+      .order('created_at', { ascending: false })
+      .limit(12);
 
     if (historyError) {
       console.error('Error fetching message history:', historyError);
@@ -300,30 +340,17 @@ serve(async (req) => {
       throw new Error('WAN_WORKER_API_KEY not configured');
     }
 
-    // Health check chat worker
-    try {
-      const healthResponse = await fetch(`${chatWorkerUrl}/health`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      });
+    // Skipping synchronous health check to reduce latency; rely on worker call error handling
+    // If needed, implement cached health checks.
 
-      if (!healthResponse.ok) {
-        throw new Error(`Chat worker health check failed: ${healthResponse.status}`);
-      }
-    } catch (error) {
-      console.error('Chat worker health check failed:', error);
-      throw new Error('Chat worker is not available');
-    }
-
-    // Prepare conversation history for chat worker
-    const conversationHistory = messageHistory ? messageHistory.map(msg => ({
-      sender: msg.sender,
-      content: msg.content,
-      created_at: msg.created_at
-    })) : [];
+    // Prepare conversation history for chat worker (chronological)
+    const conversationHistory = messageHistory
+      ? [...messageHistory].reverse().map((msg) => ({
+          sender: msg.sender,
+          content: msg.content,
+          created_at: msg.created_at,
+        }))
+      : [];
 
     // Get project context if linked
     let projectContext = null;
@@ -361,11 +388,16 @@ serve(async (req) => {
         characterData = character;
         contextType = 'character_roleplay';
         
-        // Increment interaction count
-        await supabaseClient
-          .from('characters')
-          .update({ interaction_count: character.interaction_count + 1 })
-          .eq('id', activeCharacterId);
+        // Increment interaction count (background)
+        waitUntil(
+          supabaseClient
+            .from('characters')
+            .update({ interaction_count: (character.interaction_count || 0) + 1 })
+            .eq('id', activeCharacterId)
+            .then(({ error }) => {
+              if (error) console.error('Failed to increment interaction_count:', error);
+            })
+        );
         
         console.log('🎭 Character loaded for roleplay:', character.name);
       }
@@ -375,60 +407,61 @@ serve(async (req) => {
     const cache = await getCachedData();
     
     // Get system prompt using cached templates (roleplay or general)
+    dbReadTime = Date.now() - dbStart;
+    const promptStart = Date.now();
     const systemPrompt = await getSystemPromptForChat(
       message,
       conversationHistory,
       contextType,
       cache,
-      characterData
+      characterData,
+      ageVerified
     );
+    promptTime = Date.now() - promptStart;
 
     // Convert conversation history and current message to messages array format
-    const messages = [];
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
     
     // Add system prompt as first message if available
     if (systemPrompt) {
       messages.push({
-        role: "system",
-        content: systemPrompt
+        role: 'system',
+        content: systemPrompt,
       });
     }
-    
+
     // Add conversation history in proper format
     if (conversationHistory && conversationHistory.length > 0) {
       for (const msg of conversationHistory) {
         // Skip the current message if it's already in history (just saved)
         if (msg.content === message && msg.sender === 'user') continue;
-        
         messages.push({
           role: msg.sender === 'user' ? 'user' : 'assistant',
-          content: msg.content
+          content: msg.content,
         });
       }
     }
     
     // Add current user message
-    messages.push({
-      role: "user",
-      content: message
-    });
+    messages.push({ role: 'user', content: message });
 
     // Call the chat worker with messages array format
     const chatPayload = {
       messages: messages,
       conversation_id: conversation_id,
       project_id: project_id,
-      context_type: conversation.conversation_type || 'general',
+      context_type: contextType,
       project_context: projectContext
     };
 
     console.log('Calling chat worker with payload:', {
       messages: `${messages.length} messages`,
-      conversation_id: conversation_id,
-      context_type: conversation.conversation_type || 'general',
+      conversation_id,
+      context_type: contextType,
       project_context: projectContext ? 'included' : 'none'
     });
 
+    const workerStart = Date.now();
     const chatResponse = await fetch(`${chatWorkerUrl}/chat`, {
       method: 'POST',
       headers: {
@@ -446,6 +479,7 @@ serve(async (req) => {
     }
 
     const chatData = await chatResponse.json();
+    workerTime = Date.now() - workerStart;
     
     if (!chatData.success) {
       throw new Error(chatData.error || 'Chat worker returned failure');
@@ -453,25 +487,37 @@ serve(async (req) => {
 
     const aiResponse = chatData.response || 'Sorry, I could not generate a response.';
 
-    // Save AI response to database
-    const { error: aiMessageError } = await supabaseClient
-      .from('messages')
-      .insert({
-        conversation_id,
-        sender: 'assistant',
-        content: aiResponse,
-      });
+    // Save AI response and update conversation in background
+    const dbWriteStart = Date.now();
+    waitUntil(
+      Promise.all([
+        supabaseClient
+          .from('messages')
+          .insert({
+            conversation_id,
+            sender: 'assistant',
+            content: aiResponse,
+          }),
+        supabaseClient
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', conversation_id),
+      ]).then(([aiInsert, convUpdate]) => {
+        if ((aiInsert as any).error) console.error('Failed to save AI message:', (aiInsert as any).error);
+        if ((convUpdate as any).error) console.error('Failed to update conversation timestamp:', (convUpdate as any).error);
+        dbWriteTime = Date.now() - dbWriteStart;
+      })
+    );
 
-    if (aiMessageError) {
-      console.error('Failed to save AI message:', aiMessageError);
-      // Continue anyway, don't fail the request
-    }
-
-    // Update conversation timestamp
-    await supabaseClient
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversation_id);
+    const totalTime = Date.now() - startTime;
+    console.log('⏱️ Performance breakdown:', {
+      conversation_id,
+      db_read_ms: dbReadTime,
+      prompt_ms: promptTime,
+      worker_ms: workerTime,
+      db_write_ms: dbWriteTime,
+      total_ms: totalTime
+    });
 
     return new Response(
       JSON.stringify({
@@ -486,11 +532,13 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error in playground-chat function:', error);
+    const totalTime = Date.now() - startTime;
+    console.error('❌ Error in playground-chat function:', error);
+    console.log('⏱️ Error timing:', { total_ms: totalTime, db_read_ms: dbReadTime, prompt_ms: promptTime, worker_ms: workerTime, db_write_ms: dbWriteTime });
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
+        error: (error as Error).message,
       }),
       {
         status: 500,
