@@ -44,12 +44,33 @@ export async function getCachedData(): Promise<CacheData | null> {
       return null;
     }
 
+    // Support both legacy and new cache locations
+    const raw = (data.config.promptCache ?? data.config) as any;
+
     // Validate cache structure
-    const cache = data.config as CacheData;
-    if (!cache.templateCache || !cache.negativeCache || !cache.metadata) {
+    if (!raw.templateCache || !raw.negativeCache || !raw.metadata) {
       console.warn('⚠️ Invalid cache structure');
       return null;
     }
+
+    // Normalize metadata shape
+    const meta = raw.metadata;
+    const refreshed_at = meta.refreshed_at || meta.lastUpdated || new Date().toISOString();
+    const template_count = meta.template_count ?? meta.templateCount ?? 0;
+    const negative_prompt_count = meta.negative_prompt_count ?? meta.negativePromptCount ?? 0;
+
+    const cache: CacheData = {
+      templateCache: raw.templateCache,
+      negativeCache: raw.negativeCache,
+      nsfwTerms: raw.nsfwTerms || [],
+      metadata: {
+        refreshed_at,
+        template_count,
+        negative_prompt_count,
+        cache_version: meta.cache_version ?? meta.version ?? '1.0.0',
+        integrity_hash: meta.integrity_hash ?? meta.integrityHash ?? ''
+      }
+    };
 
     // Check cache freshness (warn if older than 24 hours)
     const refreshTime = new Date(cache.metadata.refreshed_at);
@@ -154,10 +175,8 @@ export function getNegativePromptsFromCache(
 export function detectContentTier(prompt: string, cache: CacheData | null): 'sfw' | 'nsfw' {
   const lowerPrompt = prompt.toLowerCase();
   
-  // Use cached NSFW terms if available
+  // Use cached NSFW terms if available, else fallback
   let nsfwTerms = cache?.nsfwTerms || [];
-  
-  // Fallback to hardcoded terms if cache is empty
   if (nsfwTerms.length === 0) {
     nsfwTerms = [
       'nude', 'naked', 'topless', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 
@@ -166,13 +185,28 @@ export function detectContentTier(prompt: string, cache: CacheData | null): 'sfw
     ];
     console.warn('⚠️ Using fallback NSFW terms');
   }
+
+  // Whitelist for common false positives (word fragments)
+  const whitelist = ['pass', 'passion', 'classic', 'class', 'classy', 'bass'];
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matchedTerms: string[] = [];
+  let isNsfw = false;
+  for (const term of nsfwTerms) {
+    const wordRegex = new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i');
+    if (wordRegex.test(lowerPrompt)) {
+      // Skip if part of whitelisted words
+      if (whitelist.some(w => new RegExp(escapeRegExp(w), 'i').test(lowerPrompt))) continue;
+      matchedTerms.push(term);
+      isNsfw = true;
+      break;
+    }
+  }
   
-  const hasNsfwContent = nsfwTerms.some(term => lowerPrompt.includes(term));
-  const result = hasNsfwContent ? 'nsfw' : 'sfw';
-  
+  const result = isNsfw ? 'nsfw' : 'sfw';
   console.log(`🔍 Content detection: "${prompt.substring(0, 50)}..." -> ${result}`, {
     nsfwTermsCount: nsfwTerms.length,
-    matchedTerms: nsfwTerms.filter(term => lowerPrompt.includes(term))
+    matchedTerms
   });
   
   return result;
@@ -186,54 +220,47 @@ export function getChatTemplateFromCache(
   contextType: string,
   contentTier: 'sfw' | 'nsfw'
 ): string | null {
-  if (!cache?.templateCache?.chat?.[contentTier]) {
+  const chatBucket = cache?.templateCache?.chat?.[contentTier];
+  if (!chatBucket) {
     console.warn(`⚠️ No chat templates available for ${contentTier} content`);
     return null;
   }
 
   console.log(`🔍 Searching for template: ${contextType} in ${contentTier} tier`);
-  console.log(`📋 Available templates in ${contentTier}:`, Object.keys(cache.templateCache.chat[contentTier]));
+  console.log(`📋 Available templates in ${contentTier}:`, Object.keys(chatBucket));
 
   // Map context types to chat template types
   let chatType: string;
   
-  // Check for SDXL conversion request first
   if (contextType.includes('sdxl') || contextType.includes('conversion')) {
     chatType = 'sdxl_conversion';
-  }
-  // Map context types to template types
-  else if (contextType === 'story_development' || contextType === 'creative') {
+  } else if (contextType === 'story_development' || contextType === 'creative') {
     chatType = 'creative';
-  }
-  else if (contextType === 'roleplay') {
+  } else if (contextType === 'roleplay') {
     chatType = 'roleplay'; 
-  }
-  else if (contextType === 'character_roleplay') {
+  } else if (contextType === 'character_roleplay') {
     chatType = 'character_roleplay';
-  }
-  else if (contextType === 'admin') {
+  } else if (contextType === 'admin') {
     chatType = 'admin';
-  }
-  else {
-    chatType = 'chat'; // Changed from 'general' to 'chat' to match cache structure
+  } else {
+    chatType = 'general';
   }
 
-  const template = cache.templateCache.chat[contentTier][chatType];
+  let template = chatBucket[chatType];
   
   if (!template) {
-    // Fallback to chat template if specific one not found
-    const fallbackTemplate = cache.templateCache.chat[contentTier]['chat'];
-    if (fallbackTemplate) {
+    // Fallbacks
+    template = chatBucket['general'] || chatBucket['chat'];
+    if (template) {
       console.log(`✅ Using fallback chat template for ${contextType} (${contentTier})`);
-      return fallbackTemplate.system_prompt;
+      return (template as any).system_prompt;
     }
-    
     console.warn(`⚠️ No chat template found for ${contextType} (${contentTier})`);
     return null;
   }
 
   console.log(`✅ Chat template found: ${chatType} (${contentTier})`);
-  return template.system_prompt;
+  return (template as any).system_prompt;
 }
 
 /**

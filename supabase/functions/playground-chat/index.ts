@@ -199,8 +199,8 @@ serve(async (req) => {
     // Get system prompt from cache
     const systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
     
-    // Fallback to database if cache fails
-    if (!systemPrompt && contentTier === 'nsfw') {
+    // Fallback to database if cache fails for both tiers
+    if (!systemPrompt) {
       try {
         console.log('🔄 Falling back to database for chat template');
         let useCase = 'chat_general';
@@ -212,13 +212,15 @@ serve(async (req) => {
           useCase = 'roleplay';
         } else if (templateContext === 'admin') {
           useCase = 'chat_admin';
+        } else if (templateContext === 'character_roleplay') {
+          useCase = 'character_roleplay';
         }
         
         const dbTemplate = await getDatabaseTemplate(
           null,                    // target_model (null in template)
           'qwen_instruct',         // enhancer_model  
           'chat',                  // job_type
-          useCase,                 // use_case ('roleplay' for roleplay context)
+          useCase,                 // use_case
           contentTier              // content_mode ('nsfw'/'sfw')
         );
         return dbTemplate?.system_prompt || null;

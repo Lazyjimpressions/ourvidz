@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { PlaygroundProvider, usePlayground } from '@/contexts/PlaygroundContext';
+import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
@@ -539,9 +540,11 @@ const RoleplayChat = () => {
     <div className="min-h-screen bg-black">
       <RoleplayHeader title="Roleplay Chat" backPath="/roleplay" />
       <div className="pt-12 h-screen">
-        <PlaygroundProvider>
-          <RoleplayChatInterface />
-        </PlaygroundProvider>
+        <GeneratedMediaProvider>
+          <PlaygroundProvider>
+            <RoleplayChatInterface />
+          </PlaygroundProvider>
+        </GeneratedMediaProvider>
       </div>
     </div>
   );
