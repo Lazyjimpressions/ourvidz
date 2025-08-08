@@ -1,6 +1,6 @@
 ﻿# Workspace Page Purpose & Implementation Guide
 
-**Date:** August 5, 2025  
+**Date:** August 8, 2025  
 **Status:** ✅ **IMPLEMENTED - Library-First Event-Driven Workspace System**  
 **Phase:** Production Ready with Complete Library-First Architecture
 
@@ -286,7 +286,7 @@ activeJobId: string | null
 - **useLibraryFirstWorkspace.ts**: Library-first state management with LTX features
 - **AssetService.ts**: Asset management with event emission
 
-### **✅ Recent Improvements (August 5, 2025)**
+### **✅ Recent Improvements (August 8, 2025)**
 - **Library-First Architecture**: All content generated directly to library
 - **Event-Driven Updates**: Workspace listens for library events
 - **Unified Asset System**: Single `UnifiedAsset` type for images and videos
@@ -298,6 +298,7 @@ activeJobId: string | null
 - **Improved Grid Layout**: Better responsive design with 1-5 column layout
 - **Drag & Drop Support**: Files, URLs, and workspace items can be dropped as references
 - **Visual Feedback**: Clear indication of reference image sources
+ - **Job Grouping Fix**: Normalized `metadata.job_id` mapping in `AssetService` to prefer the database `job_id` (and joined job id as fallback), avoiding fallback to asset id. This ensures images from the same job group into a single 1x3 set instead of appearing as separate jobs.
 
 ### **🔧 Known Issues & TODOs**
 - **TODO**: Implement `useJobAsReference` function to set reference image from URL
