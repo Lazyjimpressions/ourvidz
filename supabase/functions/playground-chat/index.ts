@@ -117,6 +117,16 @@ serve(async (req) => {
       console.log('🚩 Forcing NSFW tier from character.content_rating');
     }
 
+    // NSFW roleplay guidance constants
+    const NSFW_GUIDANCE_MARK = '[[NSFW_ROLEPLAY_GUIDANCE_V1]]';
+    const NSFW_ROLEPLAY_GUIDANCE = `${NSFW_GUIDANCE_MARK}
+- Operate in NSFW roleplay mode with consenting adults (18+).
+- Explicit sexual content and direct language are permitted when appropriate.
+- Never include minors, incest, bestiality, or non-consensual acts.
+- Maintain character voice, personality, and mood; stay immersive and descriptive.
+- Avoid meta commentary; keep responses focused on the scene.
+- Follow platform policies and applicable laws.`;
+
     // Age-gating override (non-verified users)
     if (ageVerified === false && contentTier === 'nsfw') {
       contentTier = 'sfw';
@@ -190,8 +200,13 @@ serve(async (req) => {
           .replace(/\{\{mood\}\}/g, characterData.mood || 'neutral')
           .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '');
 
-        roleplayPromptCache.set(cacheKey, processed);
-        return processed;
+        let processedFinal = processed;
+        if (contentTier === 'nsfw' && !processedFinal.includes(NSFW_GUIDANCE_MARK)) {
+          processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+          console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
+        }
+        roleplayPromptCache.set(cacheKey, processedFinal);
+        return processedFinal;
       }
     }
     
@@ -208,7 +223,7 @@ serve(async (req) => {
     }
 
     // Get system prompt from cache
-    const systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
+    let systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
     
     // Fallback to database if cache fails for both tiers
     if (!systemPrompt) {
@@ -234,7 +249,7 @@ serve(async (req) => {
           useCase,                 // use_case
           contentTier              // content_mode ('nsfw'/'sfw')
         );
-        return dbTemplate?.system_prompt || null;
+        systemPrompt = dbTemplate?.system_prompt || null;
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);
       }
@@ -249,6 +264,12 @@ serve(async (req) => {
       conversationLength: conversationHistory.length,
       characterLoaded: !!characterData
     });
+
+    // Append NSFW roleplay guidance if applicable
+    if (contentTier === 'nsfw' && systemPrompt && !systemPrompt.includes(NSFW_GUIDANCE_MARK)) {
+      systemPrompt = `${systemPrompt}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+      console.log('🔧 Appended NSFW roleplay guidance to system prompt (general)');
+    }
 
     return systemPrompt;
   }
