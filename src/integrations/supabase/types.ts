@@ -126,6 +126,7 @@ export type Database = {
       characters: {
         Row: {
           appearance_tags: string[] | null
+          content_rating: string
           created_at: string | null
           creator_id: string | null
           description: string
@@ -147,6 +148,7 @@ export type Database = {
         }
         Insert: {
           appearance_tags?: string[] | null
+          content_rating?: string
           created_at?: string | null
           creator_id?: string | null
           description: string
@@ -168,6 +170,7 @@ export type Database = {
         }
         Update: {
           appearance_tags?: string[] | null
+          content_rating?: string
           created_at?: string | null
           creator_id?: string | null
           description?: string
