@@ -57,16 +57,18 @@ const RoleplayChatInterface = () => {
   const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
-  const { chatWorker } = useWorkerStatus();
+  const { chatWorker, isLoading: workerLoading, runHealthCheck, lastUpdated } = useWorkerStatus();
   
   // Fallback to mock data if no character loaded yet
   const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
   
   const {
     state,
+    conversations,
     messages,
     isLoadingMessages,
     createConversation,
+    setActiveConversation,
     sendMessage,
   } = usePlayground();
 
