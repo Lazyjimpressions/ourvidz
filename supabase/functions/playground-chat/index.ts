@@ -19,6 +19,11 @@ const roleplayPromptCache = new Map<string, string>();
 let cachedChatWorkerUrl: string | null = null;
 let cachedConfigFetchedAt = 0;
 const CONFIG_TTL_MS = 60_000;
+
+// Module-level cache for admin role checks (TTL 60s)
+const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
+const ADMIN_ROLE_TTL_MS = 60_000;
+
 interface Database {
   public: {
     Tables: {
@@ -254,6 +259,28 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
+    // Cached admin role lookup
+    const getIsAdmin = async (userId: string): Promise<boolean> => {
+      try {
+        const cached = adminRoleCache.get(userId);
+        const now = Date.now();
+        if (cached && (now - cached.ts) < ADMIN_ROLE_TTL_MS) {
+          return cached.isAdmin;
+        }
+        const { data } = await supabaseClient
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('role', 'admin')
+          .maybeSingle();
+        const isAdmin = !!data;
+        adminRoleCache.set(userId, { isAdmin, ts: now });
+        return isAdmin;
+      } catch (e) {
+        console.error('Admin role check failed:', e);
+        return false;
+      }
+    };
     // Get the current user
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -267,6 +294,8 @@ serve(async (req) => {
     if (userError || !user) {
       throw new Error('User not authenticated');
     }
+
+    const isAdminPromise = getIsAdmin(user.id);
 
     const { conversation_id, message, project_id, character_id } = await req.json();
 
@@ -426,6 +455,14 @@ serve(async (req) => {
     // Load cached data for template processing
     const cache = await getCachedData();
     
+    // Determine admin/owner NSFW override
+    const isAdmin = await isAdminPromise.catch(() => false);
+    const isOwner = !!(characterData && characterData.user_id === user.id);
+    const allowNSFWOverride = !!(characterData?.content_rating === 'nsfw' && (isAdmin || isOwner));
+    if (allowNSFWOverride) {
+      console.log(`🛡️ NSFW override active due to ${isAdmin ? 'admin' : 'owner'} privileges`);
+    }
+    
     // Get system prompt using cached templates (roleplay or general)
     dbReadTime = Date.now() - dbStart;
     const promptStart = Date.now();
@@ -435,7 +472,7 @@ serve(async (req) => {
       contextType,
       cache,
       characterData,
-      ageVerified
+      ageVerified || allowNSFWOverride
     );
     promptTime = Date.now() - promptStart;
 
