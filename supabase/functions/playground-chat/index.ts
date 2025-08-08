@@ -158,10 +158,17 @@ serve(async (req) => {
       }
 
       if (template) {
-        // Build cache key using template origin, character id and updated_at
-        const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
-        const cached = roleplayPromptCache.get(cacheKey);
+        // Build cache key using template origin, character id, updated_at and tier
+        const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}:tier:${contentTier}`;
+        const legacyKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
+        let cached = roleplayPromptCache.get(cacheKey) || roleplayPromptCache.get(legacyKey);
         if (cached) {
+          if (contentTier === 'nsfw' && !cached.includes(NSFW_GUIDANCE_MARK)) {
+            const upgraded = `${cached}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
+            roleplayPromptCache.set(cacheKey, upgraded);
+            console.log('🔧 Upgraded cached prompt with NSFW guidance');
+            return upgraded;
+          }
           return cached;
         }
 
