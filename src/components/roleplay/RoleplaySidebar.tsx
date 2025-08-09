@@ -29,11 +29,12 @@ interface RoleplaySidebarProps {
   characterId?: string;
   userCharacterId?: string;
   activeConversationId?: string;
-  onCharacterChange?: (characterId: string) => void;
-  onUserCharacterChange?: (userCharacterId: string | null) => void;
-  onConversationSelect?: (conversationId: string) => void;
-  onNewConversation?: () => void;
-  onGenerateScene?: () => void;
+  onCharacterChange: (characterId: string) => void;
+  onUserCharacterChange: (userCharacterId: string | null) => void;
+  onConversationSelect: (conversationId: string) => void;
+  onNewConversation: () => void;
+  onGenerateScene: () => void;
+  onOpenSettings: () => void;
   className?: string;
 }
 
@@ -46,6 +47,7 @@ export const RoleplaySidebar = ({
   onConversationSelect,
   onNewConversation,
   onGenerateScene,
+  onOpenSettings,
   className = ""
 }: RoleplaySidebarProps) => {
   const [expandedSections, setExpandedSections] = useState({
@@ -266,7 +268,7 @@ export const RoleplaySidebar = ({
 
       {/* Quick Actions Footer */}
       <div className="p-4 border-t border-gray-800">
-        <Button variant="ghost" size="sm" className="w-full justify-start">
+        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onOpenSettings}>
           <Settings className="w-4 h-4 mr-2" />
           Roleplay Settings
         </Button>
