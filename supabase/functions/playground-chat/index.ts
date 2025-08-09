@@ -781,6 +781,24 @@ You say: ...`;
 
     // Post-process for quality in NSFW strict roleplay
     let aiResponse = rawResponse;
+    let enforcementDiagnostics: any = { persona: null, nsfw_qa: null, format: null };
+
+    // Persona/meta sanitization before QA and format enforcement
+    if (contextType === 'character_roleplay') {
+      const name = (characterData && characterData.name) || 'Character';
+      const persona = sanitizeRoleplayPersonaViolations(aiResponse, name);
+      if (persona.applied) {
+        aiResponse = persona.text;
+      }
+      enforcementDiagnostics.persona = persona;
+      console.log('🧽 Persona sanitization', {
+        applied: persona.applied,
+        stats: persona.stats,
+        issues: persona.issues,
+        preview: aiResponse.slice(0, 120),
+      });
+    }
+
     if (nsfwEnforce) {
       const qaStart = Date.now();
       const sanitizeStrictNSFWOutput = (text: string) => {
@@ -817,10 +835,12 @@ You say: ...`;
         return { text: out, removed, emojis_removed, truncated_words };
       };
 
-      const qa = sanitizeStrictNSFWOutput(rawResponse);
+      const beforeQA = aiResponse;
+      const qa = sanitizeStrictNSFWOutput(aiResponse);
       aiResponse = qa.text;
+      enforcementDiagnostics.nsfw_qa = qa;
       console.log('🧪 Output QA', {
-        len_before: rawResponse.length,
+        len_before: beforeQA.length,
         len_after: aiResponse.length,
         removed_phrases: qa.removed,
         emojis_removed: qa.emojis_removed,
@@ -838,6 +858,12 @@ You say: ...`;
       }
       const hasCharPrefix = new RegExp(`\\*\\*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}:\\*\\*`).test(aiResponse);
       const hasNarrator = /\*\*?Narrator:?\*\*/i.test(aiResponse) || /Narrator:/.test(aiResponse);
+      enforcementDiagnostics.format = {
+        applied: enforce.applied,
+        issues: enforce.issues,
+        hasCharPrefix,
+        hasNarrator,
+      };
       console.log('🧩 Roleplay format enforcement', {
         applied: enforce.applied,
         issues: enforce.issues,
@@ -889,6 +915,7 @@ You say: ...`;
         content_tier: chosenTier,
         nsfw_enforce: nsfwEnforce || false,
         template_meta: lastPromptMeta,
+        enforcement_diagnostics: enforcementDiagnostics,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
