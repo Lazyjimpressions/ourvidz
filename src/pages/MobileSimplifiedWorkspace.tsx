@@ -148,7 +148,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
       <WorkspaceHeader onClearWorkspace={clearWorkspace} />
       
       {/* Main Content Area */}
-      <div className="pt-12">
+      <div className="pt-header">
         {/* Workspace Grid */}
         <div className="container mx-auto px-4 py-8">
           <WorkspaceGrid

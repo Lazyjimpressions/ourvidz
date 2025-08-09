@@ -31,6 +31,8 @@
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+    /* Fixed header height token */
+    --header-height: 48px;
   }
 
   .dark {
@@ -68,6 +70,15 @@
   body {
     @apply bg-background text-foreground;
     font-family: "Inter", sans-serif;
+  }
+}
+
+/* Utilities for fixed header offset and safe areas */
+@layer utilities {
+  .pt-header { padding-top: var(--header-height); }
+  @supports (padding-top: env(safe-area-inset-top)) {
+    .pt-header { padding-top: calc(var(--header-height) + env(safe-area-inset-top)); }
+    .pt-safe-top { padding-top: env(safe-area-inset-top); }
   }
 }
 
