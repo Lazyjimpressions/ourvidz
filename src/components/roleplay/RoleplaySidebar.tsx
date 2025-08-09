@@ -14,23 +14,36 @@ import {
   Plus,
   Settings,
   History,
-  Palette
+  Palette,
+  Trash2,
+  Eye
 } from 'lucide-react';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { CharacterSelector } from '@/components/roleplay/CharacterSelector';
+import { UserCharacterSelector } from '@/components/roleplay/UserCharacterSelector';
+import { ConversationManager } from '@/components/roleplay/ConversationManager';
+import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 
 interface RoleplaySidebarProps {
   characterId?: string;
+  userCharacterId?: string;
+  activeConversationId?: string;
   onCharacterChange?: (characterId: string) => void;
+  onUserCharacterChange?: (userCharacterId: string | null) => void;
+  onConversationSelect?: (conversationId: string) => void;
   onNewConversation?: () => void;
   onGenerateScene?: () => void;
   className?: string;
 }
 
 export const RoleplaySidebar = ({ 
-  characterId, 
+  characterId,
+  userCharacterId,
+  activeConversationId,
   onCharacterChange,
+  onUserCharacterChange,
+  onConversationSelect,
   onNewConversation,
   onGenerateScene,
   className = ""
@@ -42,6 +55,7 @@ export const RoleplaySidebar = ({
     conversations: true
   });
   const [showCharacterSelector, setShowCharacterSelector] = useState(false);
+  const [showSceneModal, setShowSceneModal] = useState(false);
 
   const { character } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId);
@@ -143,22 +157,11 @@ export const RoleplaySidebar = ({
             <CollapsibleContent>
               <Card className="bg-gray-800 border-gray-700">
                 <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-10 h-10">
-                        <AvatarFallback>You</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <p className="text-sm text-white">Anonymous User</p>
-                        <p className="text-xs text-gray-400">Default persona</p>
-                      </div>
-                    </div>
-                    
-                    <Button variant="outline" size="sm" className="w-full">
-                      <Plus className="w-3 h-3 mr-1" />
-                      Create Character
-                    </Button>
-                  </div>
+                  <UserCharacterSelector
+                    selectedCharacterId={userCharacterId}
+                    onCharacterSelect={onUserCharacterChange || (() => {})}
+                    aiCharacterName={character?.name}
+                  />
                 </CardContent>
               </Card>
             </CollapsibleContent>
@@ -185,7 +188,7 @@ export const RoleplaySidebar = ({
                     <Button 
                       size="sm" 
                       className="w-full"
-                      onClick={onGenerateScene}
+                      onClick={() => setShowSceneModal(true)}
                     >
                       <Palette className="w-3 h-3 mr-1" />
                       Generate Scene
@@ -203,13 +206,20 @@ export const RoleplaySidebar = ({
                           <div 
                             key={scene.id}
                             className="relative group cursor-pointer rounded overflow-hidden"
+                            title={scene.scene_prompt}
                           >
                             <img 
                               src={scene.image_url} 
                               alt="Scene"
                               className="w-full h-16 object-cover"
                             />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-white">
+                                  <Eye className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -241,23 +251,12 @@ export const RoleplaySidebar = ({
             <CollapsibleContent>
               <Card className="bg-gray-800 border-gray-700">
                 <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <Button 
-                      size="sm" 
-                      className="w-full"
-                      onClick={onNewConversation}
-                    >
-                      <Plus className="w-3 h-3 mr-1" />
-                      New Conversation
-                    </Button>
-                    
-                    <div className="space-y-2">
-                      <div className="p-2 bg-gray-700 rounded cursor-pointer hover:bg-gray-600 transition-colors">
-                        <p className="text-sm text-white truncate">Current Chat</p>
-                        <p className="text-xs text-gray-400">Active now</p>
-                      </div>
-                    </div>
-                  </div>
+                  <ConversationManager
+                    characterId={characterId}
+                    activeConversationId={activeConversationId}
+                    onConversationSelect={onConversationSelect || (() => {})}
+                    onNewConversation={onNewConversation || (() => {})}
+                  />
                 </CardContent>
               </Card>
             </CollapsibleContent>
@@ -279,6 +278,15 @@ export const RoleplaySidebar = ({
         onClose={() => setShowCharacterSelector(false)}
         onCharacterSelect={onCharacterChange || (() => {})}
         currentCharacterId={characterId}
+      />
+
+      {/* Scene Generation Modal */}
+      <SceneGenerationModal
+        isOpen={showSceneModal}
+        onClose={() => setShowSceneModal(false)}
+        characterId={characterId}
+        conversationId={activeConversationId}
+        character={character}
       />
     </div>
   );

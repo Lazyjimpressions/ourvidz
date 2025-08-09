@@ -45,7 +45,7 @@ const RoleplayChatInterface = () => {
   
   // Get character data
   const characterId = searchParams.get('character');
-  const userCharacter = searchParams.get('userCharacter');
+  const userCharacterId = searchParams.get('userCharacter');
   const contentMode = searchParams.get('mode') as 'sfw' | 'nsfw' || 'sfw';
   
   const { character, isLoading: characterLoading } = useCharacterData(characterId || undefined);
@@ -120,6 +120,20 @@ const RoleplayChatInterface = () => {
     setSearchParams(params);
   };
 
+  const handleUserCharacterChange = (newUserCharacterId: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (newUserCharacterId) {
+      params.set('userCharacter', newUserCharacterId);
+    } else {
+      params.delete('userCharacter');
+    }
+    setSearchParams(params);
+  };
+
+  const handleConversationSelect = (conversationId: string) => {
+    setActiveConversation(conversationId);
+  };
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isTyping) return;
     
@@ -170,7 +184,11 @@ const RoleplayChatInterface = () => {
       {/* Sidebar */}
       <RoleplaySidebar
         characterId={characterId || undefined}
+        userCharacterId={userCharacterId || undefined}
+        activeConversationId={state.activeConversationId || undefined}
         onCharacterChange={handleCharacterChange}
+        onUserCharacterChange={handleUserCharacterChange}
+        onConversationSelect={handleConversationSelect}
         onNewConversation={handleNewConversation}
         onGenerateScene={() => setShowSceneGenerator(true)}
         className={`${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 lg:translate-x-0`}
