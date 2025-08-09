@@ -443,7 +443,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             generationParams: asset.metadata,
             seed: asset.metadata?.seed,
             originalAssetId: asset.metadata?.original_asset_id,
-            timestamp: new Date(asset.createdAt)
+            timestamp: (typeof asset.createdAt === 'string' ? asset.createdAt : asset.createdAt?.toISOString()) || new Date().toISOString()
           }))}
           currentIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
@@ -453,30 +453,29 @@ export const SimplifiedWorkspace: React.FC = () => {
             const fullAsset = workspaceAssets.find(a => a.id === item.id);
             if (fullAsset) handleEditItem(fullAsset);
           }}
-          onSave={(item) => {
-            // Find the full asset by ID to pass to handler
-            const fullAsset = workspaceAssets.find(a => a.id === item.id);
-            if (fullAsset) handleSaveItem(fullAsset);
-          }}
           onDelete={(item) => deleteItem(item.id, item.type as 'image' | 'video')}
           onDownload={(item) => {
             // Find the full asset by ID to pass to handler
             const fullAsset = workspaceAssets.find(a => a.id === item.id);
             if (fullAsset) handleDownload(fullAsset);
           }}
-          onSendToControlBox={(item) => {
+          onSendToWorkspace={(item) => {
             // Set the prompt in the control box with all generation parameters
             setPrompt(item.prompt);
             // Close modal after sending
             setLightboxIndex(null);
           }}
-          onRegenerate={async (item) => {
-            // Trigger regeneration using current settings
-            try {
-              await generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, item.seed || item.generationParams?.seed);
-            } catch (error) {
-              console.error('Failed to regenerate:', error);
+          onRegenerateMore={async (item) => {
+            // Find the full asset by ID to pass to handler
+            const fullAsset = workspaceAssets.find(a => a.id === item.id);
+            if (fullAsset && fullAsset.metadata?.job_id) {
+              await handleRegenerateJob(fullAsset.metadata.job_id);
             }
+          }}
+          onCreateVideo={(item) => {
+            // Find the full asset by ID to pass to handler
+            const fullAsset = workspaceAssets.find(a => a.id === item.id);
+            if (fullAsset) handleCreateVideo(fullAsset);
           }}
           isRegenerating={isGenerating}
         />

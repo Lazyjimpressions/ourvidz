@@ -1,49 +1,60 @@
-import React, { useEffect, useCallback, useState, useRef } from 'react';
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { PillButton } from "@/components/ui/pill-button";
-import { 
-  X, ChevronLeft, ChevronRight, Edit, Copy, RotateCcw, Heart, Download, Trash2,
-  ChevronDown, Settings, Sliders, Palette, Clock, Layers, PanelLeft, PanelRight,
-  Play, Pause, Volume2, VolumeX
-} from "lucide-react";
-import { toast } from "sonner";
-import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
-import { useImageRegeneration } from "@/hooks/useImageRegeneration";
+import React, { useState, useEffect, useRef } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { PillButton } from '@/components/ui/pill-button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 
-interface WorkspaceItem {
+import { useToast } from '@/hooks/use-toast';
+import { 
+  X, 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronDown, 
+  Copy, 
+  Play, 
+  Pause, 
+  Volume2, 
+  VolumeX,
+  PanelLeft,
+  PanelRight,
+  Download,
+  Edit,
+  Trash2,
+  Wand2,
+  Send,
+  RefreshCw
+} from 'lucide-react';
+
+export interface WorkspaceItem {
   id: string;
-  url: string;
+  url?: string;
   prompt: string;
-  type: 'image' | 'video';
-  thumbnailUrl?: string;
-  timestamp: Date;
-  quality: 'fast' | 'high';
-  modelType?: string;
-  duration?: number;
   enhancedPrompt?: string;
-  seed?: number;
-  generationParams?: Record<string, any>;
-  // Video-specific properties
-  resolution?: string;
-  format?: string;
-  // Optional originalAssetId for compatibility
+  negativePrompt?: string;
+  type: 'image' | 'video';
+  quality?: 'fast' | 'high';
+  aspectRatio?: string;
+  modelType?: string;
+  timestamp?: string;
+  status?: string;
   originalAssetId?: string;
+  seed?: string;
+  generationTime?: string;
+  referenceStrength?: number;
+  metadata?: Record<string, any>;
 }
 
-interface SimpleLightboxProps {
+export interface SimpleLightboxProps {
   items: WorkspaceItem[];
   currentIndex: number;
   onClose: () => void;
   onIndexChange: (index: number) => void;
   onEdit?: (item: WorkspaceItem) => void;
-  onSave?: (item: WorkspaceItem) => void;
   onDelete?: (item: WorkspaceItem) => void;
   onDownload?: (item: WorkspaceItem) => void;
-  onSendToControlBox?: (item: WorkspaceItem) => void;
-  onRegenerate?: (item: WorkspaceItem) => void;
+  onSendToWorkspace?: (item: WorkspaceItem) => void;
+  onRegenerateMore?: (item: WorkspaceItem) => void;
   onCreateVideo?: (item: WorkspaceItem) => void;
   isDeleting?: boolean;
   isRegenerating?: boolean;
@@ -55,11 +66,10 @@ export function SimpleLightbox({
   onClose,
   onIndexChange,
   onEdit,
-  onSave,
   onDelete,
   onDownload,
-  onSendToControlBox,
-  onRegenerate,
+  onSendToWorkspace,
+  onRegenerateMore,
   onCreateVideo,
   isDeleting = false,
   isRegenerating = false
@@ -68,127 +78,39 @@ export function SimpleLightbox({
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
-  
-  const currentItem = items[currentIndex];
-  
-  if (!currentItem) return null;
-
-  // Video control states
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  
-  // Fetch detailed image information
-  const { fetchDetails, loading: detailsLoading, details, reset } = useFetchImageDetails();
-  
-  // Setup regeneration functionality
-  const { regenerateImage, isGenerating } = useImageRegeneration(
-    {
-      id: currentItem?.id || '',
-      originalAssetId: currentItem?.originalAssetId || currentItem?.id || '',
-      type: currentItem?.type === 'video' ? 'video' : 'image',
-      url: currentItem?.url || '',
-      prompt: currentItem?.prompt || '',
-      timestamp: new Date(currentItem?.timestamp || Date.now()),
-      quality: currentItem?.quality || 'fast',
-      modelType: currentItem?.modelType,
-      seed: currentItem?.seed || currentItem?.generationParams?.seed,
-      enhancedPrompt: currentItem?.prompt,
-      generationParams: currentItem?.generationParams
-    },
-    {
-      seed: currentItem?.seed || currentItem?.generationParams?.seed,
-      negativePrompt: details?.negativePrompt,
-      originalPrompt: currentItem?.prompt
+  const { toast } = useToast();
+
+  const currentItem = items[currentIndex];
+
+  // Fetch image details for the current item
+  const { fetchDetails, loading: loadingDetails, details } = useFetchImageDetails();
+
+  useEffect(() => {
+    if (currentItem?.type === 'image' && currentItem.id) {
+      fetchDetails(currentItem.id);
     }
-  );
+  }, [currentItem?.id, currentItem?.type, fetchDetails]);
 
-  // Video handlers
-  const handlePlayPause = () => {
-    if (videoRef.current && currentItem.type === 'video') {
-      if (isVideoPlaying) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play();
-      }
-      setIsVideoPlaying(!isVideoPlaying);
-    }
-  };
-
-  const handleToggleMute = () => {
-    if (videoRef.current && currentItem.type === 'video') {
-      videoRef.current.muted = !isMuted;
-      setIsMuted(!isMuted);
-    }
-  };
-
-  const handleVideoEnded = () => {
-    setIsVideoPlaying(false);
-  };
-
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    switch (e.key) {
-      case 'Escape':
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
         onClose();
-        break;
-      case 'ArrowLeft':
-        if (currentIndex > 0) {
-          onIndexChange(currentIndex - 1);
-        }
-        break;
-      case 'ArrowRight':
-        if (currentIndex < items.length - 1) {
-          onIndexChange(currentIndex + 1);
-        }
-        break;
-      case '[':
-        setLeftPanelCollapsed(!leftPanelCollapsed);
-        break;
-      case ']':
+      } else if (e.key === 'ArrowLeft') {
+        handlePrevious();
+      } else if (e.key === 'ArrowRight') {
+        handleNext();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
         setRightPanelCollapsed(!rightPanelCollapsed);
-        break;
-      case '\\':
-        if (leftPanelCollapsed || rightPanelCollapsed) {
-          setLeftPanelCollapsed(false);
-          setRightPanelCollapsed(false);
-        } else {
-          setLeftPanelCollapsed(true);
-          setRightPanelCollapsed(true);
-        }
-        break;
-    }
-  }, [currentIndex, items.length, onClose, onIndexChange, leftPanelCollapsed, rightPanelCollapsed]);
-
-  useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    document.body.style.overflow = 'hidden';
-    
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      }
     };
-  }, [handleKeyDown]);
 
-  // Fetch details when item changes
-  useEffect(() => {
-    const imageId = currentItem?.originalAssetId || currentItem?.id;
-    if (imageId && currentItem.type === 'image') {
-      // Reset previous details first
-      reset();
-      fetchDetails(imageId);
-    }
-    
-    // Cleanup function to cancel pending requests when switching images
-    return () => {
-      reset();
-    };
-  }, [currentItem?.originalAssetId, currentItem?.id, currentItem?.type, fetchDetails, reset]);
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [onClose, currentIndex, rightPanelCollapsed]);
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
@@ -202,41 +124,110 @@ export function SimpleLightbox({
     }
   };
 
-  const copyToClipboard = (text: string, type: string) => {
-    navigator.clipboard.writeText(text);
-    toast.success(`${type} copied to clipboard`);
-  };
-
-  const handleSendToControlBox = () => {
-    if (onSendToControlBox && currentItem) {
-      onSendToControlBox(currentItem);
-      toast.success('Prompt sent to control box');
+  const handleVideoPlay = () => {
+    if (videoRef.current) {
+      if (isVideoPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsVideoPlaying(!isVideoPlaying);
     }
   };
 
-  const handleRegenerate = async () => {
+  const handleVideoMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isVideoMuted;
+      setIsVideoMuted(!isVideoMuted);
+    }
+  };
+
+  const copyToClipboard = async (text: string) => {
     try {
-      await regenerateImage();
-    } catch (error) {
-      console.error('Regeneration failed:', error);
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: "Copied to clipboard",
+        description: "Text has been copied to your clipboard.",
+      });
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+      toast({
+        title: "Copy failed",
+        description: "Unable to copy text to clipboard.",
+        variant: "destructive",
+      });
     }
   };
 
-  const formatDate = (timestamp: string | Date) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getModelDisplayName = (modelType?: string, quality?: string) => {
-    if (!modelType) return quality === 'high' ? 'SDXL High' : 'SDXL Fast';
-    return modelType.includes('sdxl') 
-      ? `SDXL ${quality === 'high' ? 'High' : 'Fast'}`
+  const formatDate = (timestamp?: string): string => {
+    if (!timestamp) return 'Unknown';
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'Invalid date';
+    }
+  };
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  if (!currentItem) {
+    return null;
+  }
+
+  const handleEditPrompt = () => {
+    if (onEdit) {
+      onEdit(currentItem);
+      onClose();
+    }
+  };
+
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete(currentItem);
+    }
+  };
+
+  const handleDownload = () => {
+    if (onDownload) {
+      onDownload(currentItem);
+    }
+  };
+
+  const handleSendToWorkspace = () => {
+    if (onSendToWorkspace) {
+      onSendToWorkspace(currentItem);
+    }
+  };
+
+  const handleRegenerateMore = () => {
+    if (onRegenerateMore) {
+      onRegenerateMore(currentItem);
+    }
+  };
+
+  const handleCreateVideo = () => {
+    if (onCreateVideo) {
+      onCreateVideo(currentItem);
+    }
+  };
+
+  const getModelDisplayName = (modelType?: string, quality?: string): string => {
+    if (!modelType) return 'Unknown';
+    return quality === 'high' 
+      ? `${modelType.toUpperCase()} HD`
       : modelType.toUpperCase();
   };
 
@@ -246,7 +237,7 @@ export function SimpleLightbox({
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-4 right-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-50"
+        className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
         onClick={onClose}
         aria-label="Close lightbox"
       >
@@ -288,101 +279,88 @@ export function SimpleLightbox({
                   <ChevronDown className="w-3 h-3" />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent className="mt-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                    {currentItem.prompt}
-                  </p>
-                  <button
-                    className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
-                    onClick={() => copyToClipboard(currentItem.prompt, 'Original Prompt')}
+              <CollapsibleContent className="pt-1">
+                <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
+                  {currentItem.prompt}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
+                    onClick={() => copyToClipboard(currentItem.prompt)}
+                    aria-label="Copy original prompt"
                   >
                     <Copy className="w-2.5 h-2.5" />
-                  </button>
+                  </Button>
                 </div>
               </CollapsibleContent>
             </Collapsible>
 
-            {currentItem.enhancedPrompt && currentItem.enhancedPrompt !== currentItem.prompt && (
-              <Collapsible open={false}>
+            {/* Enhanced Prompt - only for images */}
+            {currentItem.type === 'image' && currentItem.enhancedPrompt && (
+              <Collapsible>
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
                     Enhanced Prompt
                     <ChevronDown className="w-3 h-3" />
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-1.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                      {currentItem.enhancedPrompt}
-                    </p>
-                    <button
-                      className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
-                      onClick={() => copyToClipboard(currentItem.enhancedPrompt || '', 'Enhanced Prompt')}
+                <CollapsibleContent className="pt-1">
+                  <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
+                    {currentItem.enhancedPrompt}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
+                      onClick={() => copyToClipboard(currentItem.enhancedPrompt || '')}
+                      aria-label="Copy enhanced prompt"
                     >
                       <Copy className="w-2.5 h-2.5" />
-                    </button>
+                    </Button>
                   </div>
                 </CollapsibleContent>
               </Collapsible>
             )}
 
-              {/* Seed - Images only */}
-              {currentItem.type === 'image' && (currentItem.seed || currentItem.generationParams?.seed) && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-foreground">Seed</h3>
-                    <button
-                      className="opacity-60 hover:opacity-100 transition-opacity"
-                      onClick={() => copyToClipboard(
-                        String(currentItem.seed || currentItem.generationParams?.seed), 
-                        'Seed'
-                      )}
+            {/* Negative Prompt - only if present */}
+            {currentItem.negativePrompt && (
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
+                    Negative Prompt
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-1">
+                  <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
+                    {currentItem.negativePrompt}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
+                      onClick={() => copyToClipboard(currentItem.negativePrompt || '')}
+                      aria-label="Copy negative prompt"
                     >
                       <Copy className="w-2.5 h-2.5" />
-                    </button>
+                    </Button>
                   </div>
-                  <p className="text-xs font-mono bg-muted/50 px-1.5 py-0.5 rounded text-muted-foreground">
-                    {currentItem.seed || currentItem.generationParams?.seed}
-                  </p>
-                </div>
-              )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
-              {/* Basic Info */}
-              <div className="space-y-1">
-                <h3 className="text-xs font-medium text-foreground">Details</h3>
-                <div className="space-y-0.5">
-                  <p className="text-xs text-muted-foreground">
-                    Quality: <span className="text-foreground">{currentItem.quality}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Type: <span className="text-foreground">{currentItem.type}</span>
-                  </p>
-                  {currentItem.type === 'video' && (
-                    <>
-                      {currentItem.duration && (
-                        <p className="text-xs text-muted-foreground">
-                          Duration: <span className="text-foreground">{currentItem.duration}s</span>
-                        </p>
-                      )}
-                      {currentItem.resolution && (
-                        <p className="text-xs text-muted-foreground">
-                          Resolution: <span className="text-foreground">{currentItem.resolution}</span>
-                        </p>
-                      )}
-                      {currentItem.format && (
-                        <p className="text-xs text-muted-foreground">
-                          Format: <span className="text-foreground">{currentItem.format}</span>
-                        </p>
-                      )}
-                    </>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Model: <span className="text-foreground">{getModelDisplayName(currentItem.modelType, currentItem.quality)}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Created: <span className="text-foreground">{formatDate(currentItem.timestamp)}</span>
-                  </p>
+            {/* Basic metadata always visible */}
+            <div className="space-y-1 text-xs border-t border-border/20 pt-3">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-16">Size:</span>
+                <span className="text-foreground">{currentItem.aspectRatio || 'Unknown'}</span>
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-16">Model:</span>
+                  <span className="text-foreground">{getModelDisplayName(currentItem.modelType, currentItem.quality)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground w-16">Created:</span>
+                  <span className="text-foreground">{formatDate(currentItem.timestamp)}</span>
                 </div>
               </div>
             </div>
@@ -399,82 +377,77 @@ export function SimpleLightbox({
                     <ChevronDown className={`w-3 h-3 transition-transform ${showGenerationDetails ? 'rotate-180' : ''}`} />
                   </Button>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="space-y-2 mt-1.5">
-                  {detailsLoading ? (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <div className="animate-spin rounded-full h-2.5 w-2.5 border-b border-current"></div>
-                      Loading details...
+                <CollapsibleContent className="pt-2">
+                  <div className="space-y-2 text-xs">
+                    {details && (
+                      <>
+                        {details.seed && (
+                          <div>
+                            <h4 className="text-xs font-medium text-foreground mb-0.5">Seed</h4>
+                            <p className="text-xs font-mono text-muted-foreground">{details.seed}</p>
+                          </div>
+                        )}
+                        {details.generationTime && (
+                          <div>
+                            <h4 className="text-xs font-medium text-foreground mb-0.5">Generation Time</h4>
+                            <p className="text-xs text-muted-foreground">{details.generationTime}</p>
+                          </div>
+                        )}
+                        {details.referenceStrength !== undefined && (
+                          <div>
+                            <h4 className="text-xs font-medium text-foreground mb-0.5">Reference Strength</h4>
+                            <p className="text-xs text-muted-foreground">{details.referenceStrength}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div>
+                      <h4 className="text-xs font-medium text-foreground mb-0.5">Asset ID</h4>
+                      <p className="text-xs font-mono text-muted-foreground break-all">
+                        {currentItem.originalAssetId || currentItem.id}
+                      </p>
                     </div>
-                  ) : (
-                    <>
-                      {details?.generationTime && (
-                        <div>
-                          <h4 className="text-xs font-medium text-foreground mb-0.5">Generation Time</h4>
-                          <p className="text-xs text-muted-foreground">
-                            {Math.round(details.generationTime)}ms
-                          </p>
-                        </div>
-                      )}
-                      
-                      {details?.negativePrompt && (
-                        <div>
-                          <h4 className="text-xs font-medium text-foreground mb-0.5">Negative Prompt</h4>
-                          <p className="text-xs text-muted-foreground break-words">
-                            {details.negativePrompt}
-                          </p>
-                        </div>
-                      )}
-
-                      {details?.referenceStrength && (
-                        <div>
-                          <h4 className="text-xs font-medium text-foreground mb-0.5">Reference Strength</h4>
-                          <p className="text-xs text-muted-foreground">
-                            {(details.referenceStrength * 100).toFixed(0)}%
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             )}
 
-            {/* Template & Technical Details */}
-            {/* Template */}
-            <div className="space-y-1 mt-2">
-              <h3 className="text-xs font-medium text-foreground">Template</h3>
-              <div className="space-y-0.5">
-                <p className="text-xs text-muted-foreground">
-                  Template: <span className="text-foreground">{currentItem.generationParams?.template || 'None'}</span>
-                </p>
-                {currentItem.generationParams?.fallback && (
-                  <p className="text-xs text-muted-foreground">
-                    Fallback: <span className="text-foreground">{currentItem.generationParams.fallback}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Technical Details */}
-            <Collapsible open={showTechnicalDetails} onOpenChange={setShowTechnicalDetails}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent"
-                >
-                  Technical Details
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showTechnicalDetails ? 'rotate-180' : ''}`} />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 mt-1.5">
-                <div>
-                  <h4 className="text-xs font-medium text-foreground mb-0.5">Asset ID</h4>
-                  <p className="text-xs font-mono text-muted-foreground break-all">
-                    {currentItem.originalAssetId || currentItem.id}
-                  </p>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Video-specific metadata */}
+            {currentItem.type === 'video' && (
+              <Collapsible open={showTechnicalDetails} onOpenChange={setShowTechnicalDetails}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent"
+                  >
+                    Video Details
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showTechnicalDetails ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <div className="space-y-2 text-xs">
+                    {currentItem.metadata?.duration && (
+                      <div>
+                        <h4 className="text-xs font-medium text-foreground mb-0.5">Duration</h4>
+                        <p className="text-xs text-muted-foreground">{formatDuration(currentItem.metadata.duration)}</p>
+                      </div>
+                    )}
+                    {currentItem.metadata?.resolution && (
+                      <div>
+                        <h4 className="text-xs font-medium text-foreground mb-0.5">Resolution</h4>
+                        <p className="text-xs text-muted-foreground">{currentItem.metadata.resolution}</p>
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="text-xs font-medium text-foreground mb-0.5">Asset ID</h4>
+                      <p className="text-xs font-mono text-muted-foreground break-all">
+                        {currentItem.originalAssetId || currentItem.id}
+                      </p>
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
           </div>
         )}
       </div>
@@ -487,112 +460,89 @@ export function SimpleLightbox({
             <Button
               variant="ghost"
               size="sm"
-              className="absolute left-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white disabled:opacity-50 z-10"
+              className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-30"
               onClick={handlePrevious}
               disabled={currentIndex === 0}
+              aria-label="Previous item"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-5 h-5" />
             </Button>
-            
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white disabled:opacity-50 z-10"
+              className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-30"
               onClick={handleNext}
               disabled={currentIndex === items.length - 1}
+              aria-label="Next item"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-5 h-5" />
             </Button>
           </>
         )}
 
-        <div className="relative max-w-full max-h-full">
-          {/* Media Container */}
-          <div className="relative rounded-lg overflow-hidden shadow-2xl">
-            {currentItem.type === 'video' ? (
-              <div className="relative">
-                <video
-                  ref={videoRef}
-                  src={currentItem.url}
-                  className="max-w-full max-h-[80vh] object-contain"
-                  poster={currentItem.thumbnailUrl}
-                  onEnded={handleVideoEnded}
-                  onPlay={() => setIsVideoPlaying(true)}
-                  onPause={() => setIsVideoPlaying(false)}
-                  muted={isMuted}
-                  loop
-                />
-                
-                {/* Video Controls Overlay */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {/* Play/Pause Button */}
-                      <button
-                        onClick={handlePlayPause}
-                        className="bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-colors"
-                      >
-                        {isVideoPlaying ? (
-                          <Pause className="w-5 h-5" />
-                        ) : (
-                          <Play className="w-5 h-5" />
-                        )}
-                      </button>
-                      
-                      {/* Mute/Unmute Button */}
-                      <button
-                        onClick={handleToggleMute}
-                        className="bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-colors"
-                      >
-                        {isMuted ? (
-                          <VolumeX className="w-5 h-5" />
-                        ) : (
-                          <Volume2 className="w-5 h-5" />
-                        )}
-                      </button>
-                      
-                      {/* Duration */}
-                      {currentItem.duration && (
-                        <span className="text-white text-sm">
-                          {formatDuration(currentItem.duration)}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Video Info */}
-                    <div className="text-white text-sm opacity-80">
-                      Video
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <img
+        {/* Media Content */}
+        <div className="max-w-full max-h-full flex items-center justify-center">
+          {currentItem.type === 'image' ? (
+            <img
+              src={currentItem.url}
+              alt={currentItem.prompt}
+              className="max-w-full max-h-[90vh] object-contain rounded"
+              style={{ maxHeight: 'calc(100vh - 120px)' }}
+            />
+          ) : (
+            <div className="relative">
+              <video
+                ref={videoRef}
                 src={currentItem.url}
-                alt={currentItem.prompt}
-                className="max-w-full max-h-[80vh] object-contain"
-                onLoad={() => console.log('Image loaded successfully')}
-                onError={(e) => console.error('Image failed to load:', e)}
+                className="max-w-full max-h-[90vh] object-contain rounded"
+                style={{ maxHeight: 'calc(100vh - 120px)' }}
+                controls={false}
+                muted={isVideoMuted}
+                onPlay={() => setIsVideoPlaying(true)}
+                onPause={() => setIsVideoPlaying(false)}
+                onClick={handleVideoPlay}
               />
-            )}
-          </div>
-
-          {/* Navigation indicator */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1">
-            <div className="text-xs text-muted-foreground">
-              {currentIndex + 1} of {items.length}
+              
+              {/* Video Controls Overlay */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-12 w-12 p-0 bg-background/20 hover:bg-background/40 text-white rounded-full"
+                  onClick={handleVideoPlay}
+                  aria-label={isVideoPlaying ? 'Pause video' : 'Play video'}
+                >
+                  {isVideoPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6" />}
+                </Button>
+              </div>
+              
+              {/* Volume Control */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute bottom-4 right-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white"
+                onClick={handleVideoMute}
+                aria-label={isVideoMuted ? 'Unmute video' : 'Mute video'}
+              >
+                {isVideoMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </Button>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* Media Info Overlay */}
+        <div className="absolute bottom-4 left-4 bg-background/20 backdrop-blur-sm rounded px-2 py-1 text-white text-xs">
+          {currentIndex + 1} / {items.length}
         </div>
       </div>
 
       {/* Right Sidebar - Actions Panel */}
-      <div className={`${rightPanelCollapsed ? 'w-6' : 'w-56'} bg-background/95 backdrop-blur-sm border-l border-border/20 overflow-y-auto transition-all duration-200`}>
-        {/* Right Panel Toggle - repositioned above pills */}
+      <div className={`${rightPanelCollapsed ? 'w-6' : 'w-48'} bg-background/95 backdrop-blur-sm border-l border-border/20 transition-all duration-200`}>
+        {/* Right Panel Toggle */}
         <Button
           variant="ghost"
           size="sm"
-          className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
+          className="absolute right-4 top-16 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
           onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
           aria-label={rightPanelCollapsed ? 'Expand right panel' : 'Collapse right panel'}
         >
@@ -600,103 +550,87 @@ export function SimpleLightbox({
         </Button>
 
         {!rightPanelCollapsed && (
-          <div className="p-4 space-y-3 pt-16">
-            <div className="flex flex-col gap-2">
-              {/* Send to Control Box - Primary action for images */}
-              {currentItem.type === 'image' && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <PillButton 
-                        onClick={handleSendToControlBox} 
-                        size="sm" 
-                        variant="default"
-                        disabled={!currentItem.url}
-                      >
-                        <Edit className="w-3 h-3 mr-1" />
-                        Send to Control Box
-                      </PillButton>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Use this image as reference for new generation</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-
-              {/* Generate 3 More - For images only */}
-              {currentItem.type === 'image' && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <PillButton 
-                        onClick={handleRegenerate} 
-                        size="sm" 
-                        variant="secondary"
-                        disabled={isGenerating}
-                      >
-                        <RotateCcw className="w-3 h-3 mr-1" />
-                        Generate 3 More
-                      </PillButton>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Generate 3 more images like this one</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-
-              {/* Create Video - For images only */}
-              {currentItem.type === 'image' && (
-                <PillButton 
-                  onClick={() => onCreateVideo?.(currentItem)} 
-                  size="sm" 
-                  variant="default"
+          <div className="h-full overflow-y-auto p-4 pt-14">
+            <div className="space-y-2">
+              {/* Send to Workspace */}
+              {onSendToWorkspace && (
+                <PillButton
+                  onClick={handleSendToWorkspace}
+                  variant="accent"
+                  size="sm"
+                  className="w-full justify-start gap-2"
                 >
-                  <Play className="w-3 h-3 mr-1" />
+                  <Send className="w-3 h-3" />
+                  Send to Control Box
+                </PillButton>
+              )}
+
+              {/* Generate More - Images only */}
+              {currentItem.type === 'image' && onRegenerateMore && (
+                <PillButton
+                  onClick={handleRegenerateMore}
+                  variant="default"
+                  size="sm" 
+                  className="w-full justify-start gap-2"
+                  disabled={isRegenerating}
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRegenerating ? 'animate-spin' : ''}`} />
+                  Generate 3 More
+                </PillButton>
+              )}
+
+              {/* Create Video - Images only */}
+              {currentItem.type === 'image' && onCreateVideo && (
+                <PillButton
+                  onClick={handleCreateVideo}
+                  variant="secondary"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                >
+                  <Wand2 className="w-3 h-3" />
                   Create Video
                 </PillButton>
               )}
 
-              {/* Save */}
-              <PillButton 
-                onClick={() => onSave?.(currentItem)} 
-                size="sm" 
-                variant="ghost"
-              >
-                <Heart className="w-3 h-3 mr-1" />
-                Save
-              </PillButton>
-
               {/* Download */}
-              <PillButton 
-                onClick={() => onDownload?.(currentItem)} 
-                size="sm" 
-                variant="ghost"
-              >
-                <Download className="w-3 h-3 mr-1" />
-                Download
-              </PillButton>
+              {onDownload && (
+                <PillButton
+                  onClick={handleDownload}
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                >
+                  <Download className="w-3 h-3" />
+                  Download
+                </PillButton>
+              )}
 
               {/* Edit Prompt */}
-              <PillButton 
-                onClick={() => onEdit?.(currentItem)} 
-                size="sm" 
-                variant="outline"
-              >
-                <Edit className="w-3 h-3 mr-1" />
-                Edit Prompt
-              </PillButton>
+              {onEdit && (
+                <PillButton
+                  onClick={handleEditPrompt}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                >
+                  <Edit className="w-3 h-3" />
+                  Edit Prompt
+                </PillButton>
+              )}
 
-              {/* Remove */}
-              <PillButton 
-                onClick={() => onDelete?.(currentItem)} 
-                size="sm" 
-                variant="destructive"
-              >
-                <Trash2 className="w-3 h-3 mr-1" />
-                Remove
-              </PillButton>
+              {/* Delete */}
+              {onDelete && (
+                <PillButton
+                  onClick={handleDelete}
+                  variant="destructive"
+                  size="sm"
+                  className="w-full justify-start gap-2"
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Remove
+                </PillButton>
+              )}
             </div>
           </div>
         )}
