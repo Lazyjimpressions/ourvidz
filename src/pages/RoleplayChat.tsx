@@ -61,9 +61,18 @@ const RoleplayChatInterface = () => {
   const { generateSceneFromMessage } = useAutoSceneGeneration();
   const { chatWorker, isLoading: workerLoading, runHealthCheck, lastUpdated } = useWorkerStatus();
   
-  // Fallback to mock data if no character loaded yet
-  const selectedCharacter = character || mockCharacters['1'];
+  // Fallbacks for UI display while character loads
   const mock = mockCharacters['1'];
+  const displayName = character?.name ?? mock.name;
+  const displayAvatar = character?.image_url ?? mock.avatar;
+  const displayCreator = character?.creator_id ?? mock.creator;
+  const displayLikes = character?.likes_count ?? mock.likes;
+  const displayMood = character?.mood ?? mock.mood;
+  const displayTraits = Array.isArray(character?.appearance_tags)
+    ? (character!.appearance_tags as string[])
+    : (typeof character?.traits === 'string' && character?.traits)
+      ? character!.traits.split(',').map(t => t.trim()).filter(Boolean)
+      : mock.traits;
   
   const {
     state,
@@ -125,35 +134,32 @@ const RoleplayChatInterface = () => {
 
   // Initialize or restore character-scoped conversation (robust, no loops)
   useEffect(() => {
-    if (!selectedCharacter?.id) return;
+    // Only proceed when a valid character is loaded from DB
+    if (!effectiveCharacterId || !character?.id) return;
+    const charId = character.id;
 
-    // If we already have an active conversation, ensure it's the correct one
     const active = conversations?.find(c => c.id === state.activeConversationId);
     if (active) {
-      // If it's the right character/type, we're done
-      if (active.character_id === selectedCharacter.id && active.conversation_type === 'character_roleplay') {
+      if (active.character_id === charId && active.conversation_type === 'character_roleplay') {
         return;
       }
     }
 
-    // Try to find an existing character_roleplay conversation for this character
     const existing = conversations?.find(c => (
-      c.character_id === selectedCharacter.id && c.conversation_type === 'character_roleplay'
+      c.character_id === charId && c.conversation_type === 'character_roleplay'
     ));
 
     if (existing) {
-      // Only update if different to avoid unnecessary renders
       if (state.activeConversationId !== existing.id) {
         setActiveConversation(existing.id);
       }
       return;
     }
 
-    // If we have no active and no existing, create a new one
     if (!state.activeConversationId) {
-      createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'character_roleplay', selectedCharacter.id);
+      createConversation(`Roleplay: ${character.name}`, undefined, 'character_roleplay', charId);
     }
-  }, [selectedCharacter?.id, selectedCharacter?.name, conversations, state.activeConversationId]);
+  }, [effectiveCharacterId, character?.id, character?.name, conversations, state.activeConversationId, setActiveConversation, createConversation]);
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !state.activeConversationId) return;
 
@@ -161,14 +167,14 @@ const RoleplayChatInterface = () => {
     setInputMessage('');
 
     try {
-      await sendMessage(message, { characterId: selectedCharacter?.id });
+      await sendMessage(message, { characterId: character?.id });
 
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
         const windowStart = Math.max(0, Math.max(0, messages.length - 5));
         const recent = messages.slice(windowStart).concat([{ sender: 'user', content: message } as any]);
-        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
-        const enriched = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
+        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
+        const enriched = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
 
         await generateSceneFromMessage(enriched, {
           characterId: character.id,
@@ -205,13 +211,13 @@ const RoleplayChatInterface = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img 
-                src={selectedCharacter.avatar} 
-                alt={selectedCharacter.name}
+                src={displayAvatar}
+                alt={displayName}
                 className="w-8 h-8 rounded-full border border-purple-500"
               />
               <div className="min-w-0 flex-1">
-                <h3 className="font-medium text-sm truncate">{selectedCharacter.name}</h3>
-                <p className="text-xs text-gray-400 truncate">{selectedCharacter.creator}</p>
+                <h3 className="font-medium text-sm truncate">{displayName}</h3>
+                <p className="text-xs text-gray-400 truncate">{displayCreator}</p>
               </div>
             </div>
             <button
@@ -237,7 +243,7 @@ const RoleplayChatInterface = () => {
                 }`}
               >
                 <Heart className={`w-3 h-3 ${characterLiked ? 'fill-current' : ''}`} />
-                <span>{(character?.likes_count || selectedCharacter.likes || 0) + (characterLiked ? 1 : 0)}</span>
+                <span>{displayLikes + (characterLiked ? 1 : 0)}</span>
               </button>
               <button className="p-1 bg-gray-800 rounded hover:bg-gray-700">
                 <Share className="w-3 h-3" />
@@ -245,7 +251,7 @@ const RoleplayChatInterface = () => {
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <span className="text-xs text-gray-400">{character?.mood || selectedCharacter.mood}</span>
+              <span className="text-xs text-gray-400">{displayMood}</span>
             </div>
           </div>
         </div>
@@ -262,7 +268,7 @@ const RoleplayChatInterface = () => {
         <div className="p-3 border-b border-gray-800">
           <h4 className="text-xs font-medium text-gray-400 mb-2">Traits</h4>
           <div className="flex flex-wrap gap-1">
-            {(character?.appearance_tags || selectedCharacter.traits || []).map((trait, index) => (
+            {displayTraits.map((trait, index) => (
               <span key={index} className="px-2 py-1 bg-gray-800 rounded text-xs">
                 {trait}
               </span>
@@ -360,11 +366,11 @@ const RoleplayChatInterface = () => {
           
           <div className="flex items-center space-x-2">
             <img 
-              src={selectedCharacter.avatar} 
-              alt={selectedCharacter.name}
+              src={displayAvatar}
+              alt={displayName}
               className="w-6 h-6 rounded-full"
             />
-            <span className="font-medium text-sm">{selectedCharacter.name}</span>
+            <span className="font-medium text-sm">{displayName}</span>
           </div>
           
           <button 
@@ -416,8 +422,8 @@ const RoleplayChatInterface = () => {
             const isUserMsg = message.sender === 'user';
             const windowStart = Math.max(0, idx - 5);
             const recent = messages.slice(windowStart, idx + 1);
-            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
-            const enrichedContent = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
+            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
+            const enrichedContent = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
             return (
               <div key={message.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[75%] ${
@@ -428,11 +434,11 @@ const RoleplayChatInterface = () => {
                   {!isUserMsg && (
                     <div className="flex items-center space-x-2 mb-1">
                       <img 
-                        src={selectedCharacter.avatar} 
-                        alt={selectedCharacter.name}
+                        src={displayAvatar}
+                        alt={displayName}
                         className="w-4 h-4 rounded-full"
                       />
-                      <span className="font-medium text-xs">{selectedCharacter.name}</span>
+                      <span className="font-medium text-xs">{displayName}</span>
                       <span className="text-xs text-gray-400">
                         {new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </span>
@@ -495,11 +501,11 @@ const RoleplayChatInterface = () => {
               <div className="bg-gray-800 rounded-2xl rounded-bl-md px-3 py-2 max-w-[85%] sm:max-w-[75%]">
                 <div className="flex items-center space-x-2 mb-1">
                   <img 
-                    src={selectedCharacter.avatar} 
-                    alt={selectedCharacter.name}
+                    src={displayAvatar}
+                    alt={displayName}
                     className="w-4 h-4 rounded-full"
                   />
-                  <span className="font-medium text-xs">{selectedCharacter.name}</span>
+                  <span className="font-medium text-xs">{displayName}</span>
                   <span className="text-xs text-gray-400">typing...</span>
                 </div>
                 <div className="flex space-x-1">
@@ -555,7 +561,7 @@ const RoleplayChatInterface = () => {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={`Message ${selectedCharacter.name}...`}
+                placeholder={`Message ${displayName}...`}
                 className="w-full bg-gray-800 rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm min-h-[40px] max-h-[100px] px-3 py-2"
                 disabled={isTyping || state.isLoadingMessage}
               />
