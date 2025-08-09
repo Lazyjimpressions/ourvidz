@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
+import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
@@ -409,6 +410,43 @@ export const SimplifiedWorkspace: React.FC = () => {
           />
         </div>
       </div>
+      
+      {/* SimpleLightbox Modal */}
+      {lightboxIndex !== null && workspaceAssets[lightboxIndex] && (
+        <SimpleLightbox
+          items={workspaceAssets.map(asset => ({
+            id: asset.id,
+            url: asset.url,
+            prompt: asset.prompt,
+            type: asset.type,
+            modelType: asset.metadata?.model_type,
+            quality: (asset.quality as 'fast' | 'high') || 'high',
+            generationParams: asset.metadata,
+            seed: asset.metadata?.seed,
+            originalAssetId: asset.metadata?.original_asset_id,
+            timestamp: asset.createdAt.toString()
+          }))}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onEdit={(item) => {
+            // Find the full asset by ID to pass to handler
+            const fullAsset = workspaceAssets.find(a => a.id === item.id);
+            if (fullAsset) handleEditItem(fullAsset);
+          }}
+          onSave={(item) => {
+            // Find the full asset by ID to pass to handler
+            const fullAsset = workspaceAssets.find(a => a.id === item.id);
+            if (fullAsset) handleSaveItem(fullAsset);
+          }}
+          onDelete={(item) => deleteItem(item.id, item.type as 'image' | 'video')}
+          onDownload={(item) => {
+            // Find the full asset by ID to pass to handler
+            const fullAsset = workspaceAssets.find(a => a.id === item.id);
+            if (fullAsset) handleDownload(fullAsset);
+          }}
+        />
+      )}
     </div>
   );
 };

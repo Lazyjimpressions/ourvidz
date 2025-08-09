@@ -18,6 +18,16 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: Workspac
     navigate("/");
   };
 
+  const handleDeleteAll = async () => {
+    // Implement proper delete all functionality
+    if (onClearWorkspace) {
+      await onClearWorkspace();
+    }
+    if (onDismissAllJobs) {
+      await onDismissAllJobs();
+    }
+  };
+
   return (
     <header className="fixed top-0 w-full pt-safe-top bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
       <div className="flex items-center justify-between h-12 px-4">
@@ -49,9 +59,9 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: Workspac
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onClearWorkspace}
+                onClick={handleDeleteAll}
                 className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
-                title="Delete all workspace items"
+                title="Delete all workspace items permanently"
               >
                 <RotateCcw className="h-3 w-3" />
                 <span className="hidden sm:inline">Delete All</span>

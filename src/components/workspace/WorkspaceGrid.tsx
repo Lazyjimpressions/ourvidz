@@ -145,107 +145,85 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     <div className="flex h-full">
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto">
-        {/* Job Groups */}
+        {/* Job Groups - 1x3 Layout */}
         {Object.entries(displayJobs).map(([jobId, jobItems]) => {
           const metadata = getJobMetadata(jobItems);
           
+          // Create 1x3 grid: always 3 tiles per job
+          const displayItems = [...jobItems];
+          // For image jobs, pad to 3 items if needed
+          if (!metadata.isVideoJob) {
+            while (displayItems.length < 3) {
+              displayItems.push(null); // Empty slots
+            }
+            // Limit to 3 items maximum
+            displayItems.splice(3);
+          } else {
+            // For video jobs, only show the first item, pad with empty slots
+            displayItems.splice(1);
+            while (displayItems.length < 3) {
+              displayItems.push(null);
+            }
+          }
+          
           return (
-            <div key={jobId} data-job-id={jobId} className="job-group mb-8">
-              {/* Job Header with Context Indicators */}
-              <div className="flex items-center justify-between mb-4 px-2">
-                <div className="flex items-center gap-3">
-                  {/* Job Context Indicator - Images show position */}
-                  <div className="flex items-center gap-2">
-                    {metadata.isVideoJob ? (
-                      <div className="flex items-center gap-1 bg-blue-600/20 text-blue-400 text-xs px-2 py-1 rounded">
-                        <VideoIcon className="w-3 h-3" />
-                        Video Job
-                      </div>
+            <div key={jobId} data-job-id={jobId} className="job-group mb-6 relative group">
+              {/* 1x3 Grid Layout - Fixed 3 columns */}
+              <div className="grid grid-cols-3 gap-1 w-full">
+                {displayItems.map((item, index) => (
+                  <div key={item?.id || `empty-${index}`} className="aspect-square">
+                    {item ? (
+                      <ContentCard
+                        item={item}
+                        // LTX-Style Actions
+                        onIterate={onIterate ? () => onIterate(item) : undefined}
+                        onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                        onDownload={() => onDownload(item)}
+                        onExpand={onExpand ? () => onExpand(item) : () => onView(item)}
+                        // Legacy Actions (for compatibility)
+                        onEdit={() => onEdit(item)}
+                        onSave={() => onSave(item)}
+                        onDelete={() => onDelete(item)}
+                        onDismiss={() => onDismiss?.(item)}
+                        onView={() => onView(item)}
+                        onUseAsReference={() => onUseAsReference(item)}
+                        onUseSeed={() => onUseSeed(item)}
+                        // NEW: Separate iterate and regenerate actions
+                        onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                        onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
+                        isDeleting={isDeleting.has(item.id)}
+                        size="lg"
+                      />
                     ) : (
-                      <div className="flex items-center gap-1 bg-green-600/20 text-green-400 text-xs px-2 py-1 rounded">
-                        <ImageIcon className="w-3 h-3" />
-                        {metadata.itemCount === 3 ? 'Complete Set' : `${metadata.itemCount} of 3 Images`}
+                      // Empty slot for incomplete jobs
+                      <div className="w-full h-full bg-gray-800/30 border border-gray-700/50 rounded-lg flex items-center justify-center">
+                        <div className="text-gray-600 text-xs">Empty</div>
                       </div>
                     )}
-                  </div>
-                  
-                  {/* Job ID for reference */}
-                  <span className="text-xs text-gray-500 font-mono">
-                    {jobId.startsWith('single-') ? 'Individual' : `Job ${jobId.slice(-8)}`}
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {/* Timestamp */}
-                  <span className="text-xs text-gray-500">
-                    {metadata.timestamp ? new Date(metadata.timestamp).toLocaleTimeString() : ''}
-                  </span>
-                  
-                  {/* Job-level Action Buttons */}
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => onDismissJob?.(jobId)}
-                      className="p-1 text-gray-400 hover:text-yellow-400 hover:bg-yellow-400/10 rounded transition-colors"
-                      title="Dismiss job from workspace"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => onDeleteJob?.(jobId)}
-                      className="p-1 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
-                      title="Delete entire job"
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Prompt Preview */}
-              <div className="mb-3 px-2">
-                <p className="text-sm text-gray-300 line-clamp-2">
-                  {metadata.prompt}
-                </p>
-              </div>
-
-              {/* Content Grid - Clean, maximized layout */}
-              <div className={`grid gap-2 grid-cols-1 md:grid-cols-4 lg:grid-cols-6`}>
-                {jobItems.map((item, index) => (
-                  <div key={item.id} className="relative">
-                    {/* Individual asset context indicator for images */}
-                    {!metadata.isVideoJob && metadata.itemCount > 1 && (
-                      <div className="absolute -top-6 left-0 text-xs text-gray-500">
-                        Image {index + 1} of {metadata.itemCount}
-                      </div>
-                    )}
-                    <ContentCard
-                      item={item}
-                      // LTX-Style Actions
-                      onIterate={onIterate ? () => onIterate(item) : undefined}
-                      onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
-                      onDownload={() => onDownload(item)}
-                      onExpand={onExpand ? () => onExpand(item) : undefined}
-                      // Legacy Actions (for compatibility)
-                      onEdit={() => onEdit(item)}
-                      onSave={() => onSave(item)}
-                      onDelete={() => onDelete(item)}
-                      onDismiss={() => onDismiss?.(item)}
-                      onView={() => onView(item)}
-                      onUseAsReference={() => onUseAsReference(item)}
-                      onUseSeed={() => onUseSeed(item)}
-                      // NEW: Separate iterate and regenerate actions
-                      onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
-                      onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
-                      isDeleting={isDeleting.has(item.id)}
-                      size="lg" // Larger size for LTX-style
-                    />
                   </div>
                 ))}
-                
+              </div>
+              
+              {/* Hover Delete Actions for Job */}
+              <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                {onDismissJob && (
+                  <button
+                    onClick={() => onDismissJob(jobId)}
+                    className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
+                    title="Dismiss job from workspace"
+                  >
+                    ×
+                  </button>
+                )}
+                {onDeleteJob && (
+                  <button
+                    onClick={() => onDeleteJob(jobId)}
+                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
+                    title="Delete job permanently"
+                  >
+                    🗑
+                  </button>
+                )}
               </div>
             </div>
           );
