@@ -3,7 +3,7 @@
 **Date:** August 8, 2025  
 **Status:** ✅ **IMPLEMENTED - Library-First Event-Driven Workspace System**  
 **Phase:** Production Ready with Complete Library-First Architecture  
-**Last Updated:** August 8, 2025 - Current implementation status verified
+**Last Updated:** August 8, 2025 - Current implementation status verified and updated with latest changes
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
@@ -290,6 +290,8 @@ activeJobId: string | null
 - **AssetService.ts**: Asset management with event emission
 - **SimplifiedWorkspace.tsx**: Main workspace page component (416 lines)
 - **WorkspaceHeader.tsx**: Page header with clear workspace functionality
+- **SimpleLightbox.tsx**: Enhanced lightbox modal with collapsible panels (658 lines)
+- **PillButton.tsx**: New UI component for action buttons (50 lines)
 
 ### **✅ Recent Improvements (August 8, 2025)**
 - **Library-First Architecture**: All content generated directly to library
@@ -306,9 +308,13 @@ activeJobId: string | null
 - **Job Grouping Fix**: Normalized `metadata.job_id` mapping in `AssetService` to prefer the database `job_id` (and joined job id as fallback), avoiding fallback to asset id. This ensures images from the same job group into a single 1x3 set instead of appearing as separate jobs.
 - **Component Size Verification**: All core components have been verified and documented with line counts
 - **State Management Optimization**: Streamlined state management with clear separation of concerns
+- **Enhanced Lightbox Modal**: Major upgrade with collapsible panels, improved UI, and new PillButton component
+- **Advanced Image Details**: Integration with useFetchImageDetails and useImageRegeneration hooks
+- **Improved Video Controls**: Enhanced video playback controls with mute/unmute functionality
 
 ### **🔧 Known Issues & TODOs**
 - **TODO**: Implement `useJobAsReference` function to set reference image from URL (currently placeholder)
+- **UX/UI Issues**: Lightbox modal needs UI cleanup and layout improvements
 - **Enhancement**: Add bulk operations for multiple job selection
 - **Enhancement**: Add workspace templates for saved configurations
 - **Enhancement**: Implement advanced search and filtering capabilities
@@ -927,13 +933,21 @@ If fixes cause issues:
 
 ## **📋 IMMEDIATE DEVELOPMENT PRIORITIES**
 
-### **Priority 1: Complete TODO Items (This Week)**
+### **Priority 1: Complete TODO Items & UX/UI Improvements (This Week)**
 1. **Implement `useJobAsReference` Function**
    - Complete the placeholder implementation in `useLibraryFirstWorkspace.ts`
    - Add functionality to set reference image from job URL
    - Integrate with existing URL-based reference system
 
-2. **Performance Optimizations**
+2. **Lightbox Modal UX/UI Improvements**
+   - Clean up UI layout and spacing issues
+   - Fix button positioning conflicts (X and collapse buttons overlapping)
+   - Improve pill button layout and text presentation
+   - Make left pane scrollable to reveal all information
+   - Add template information display (template name, fallback used)
+   - Separate original and enhanced prompts in collapsible boxes
+
+3. **Performance Optimizations**
    - Implement virtual scrolling for large asset collections
    - Add progressive image loading
    - Optimize database queries for better performance
@@ -1724,3 +1738,205 @@ This comprehensive plan provides a clear roadmap for the next 8 weeks of develop
 **Next Phase**: Complete TODO items and implement advanced features  
 **Priority**: High - System is stable and ready for enhancement  
 **Risk Level**: Low - Solid foundation with clear development path
+
+---
+
+## **🎨 LIGHTBOX MODAL UX/UI IMPROVEMENTS - DETAILED PLAN**
+
+### **Current State Analysis**
+The `SimpleLightbox.tsx` component (658 lines) has been significantly enhanced but requires UI cleanup and layout improvements based on user feedback.
+
+### **Identified Issues**
+1. **Button Positioning Conflicts**
+   - X button and collapse button overlapping
+   - Pill buttons on right side blocking collapse button
+   - Poor spacing and layout in action panels
+
+2. **Information Display Issues**
+   - Left pane not scrollable to reveal all information
+   - Missing template information (template name, fallback used)
+   - Original and enhanced prompts not properly separated
+   - Colors not necessary for pill buttons
+
+3. **Layout and Spacing Problems**
+   - Poor text presentation in pill buttons
+   - Inconsistent spacing and alignment
+   - Information hierarchy not clear
+
+### **Implementation Plan**
+
+#### **Day 1-2: Button Layout & Positioning Fixes**
+1. **Fix Button Positioning**
+   ```typescript
+   // Current problematic layout in SimpleLightbox.tsx:247-260
+   // Issues: X button at top-right, collapse button conflicts
+   
+   // Solution: Reposition buttons with proper spacing
+   <Button
+     variant="ghost"
+     size="sm"
+     className="absolute top-4 right-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-20"
+     onClick={onClose}
+   >
+     <X className="w-4 h-4" />
+   </Button>
+   
+   // Left panel collapse button - move to avoid overlap
+   <Button
+     variant="ghost"
+     size="sm"
+     className="absolute left-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-20"
+     onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
+   >
+     {leftPanelCollapsed ? <PanelLeft className="w-3 h-3" /> : <PanelLeft className="w-3 h-3 rotate-180" />}
+   </Button>
+   ```
+
+2. **Fix Right Panel Layout**
+   ```typescript
+   // Current right panel issues: pills blocking collapse button
+   // Solution: Reposition right panel collapse button
+   <Button
+     variant="ghost"
+     size="sm"
+     className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-20"
+     onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+   >
+     {rightPanelCollapsed ? <PanelRight className="w-3 h-3" /> : <PanelRight className="w-3 h-3 rotate-180" />}
+   </Button>
+   ```
+
+#### **Day 2-3: Information Display Improvements**
+1. **Make Left Pane Scrollable**
+   ```typescript
+   // Current left panel: overflow-y-auto but needs better scrolling
+   <div className={`${leftPanelCollapsed ? 'w-6' : 'w-64'} bg-background/95 backdrop-blur-sm border-r border-border/20 transition-all duration-200`}>
+     {!leftPanelCollapsed && (
+       <div className="h-full overflow-y-auto">
+         <div className="p-4 space-y-4 pt-16"> {/* Increased padding and spacing */}
+           {/* Content here */}
+         </div>
+       </div>
+     )}
+   </div>
+   ```
+
+2. **Separate Original and Enhanced Prompts**
+   ```typescript
+   // Add collapsible sections for prompts
+   <Collapsible open={showOriginalPrompt} onOpenChange={setShowOriginalPrompt}>
+     <CollapsibleTrigger asChild>
+       <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium">
+         Original Prompt
+         <ChevronDown className={`w-3 h-3 transition-transform ${showOriginalPrompt ? 'rotate-180' : ''}`} />
+       </Button>
+     </CollapsibleTrigger>
+     <CollapsibleContent className="space-y-2 mt-1.5">
+       <p className="text-xs text-muted-foreground leading-relaxed break-words">
+         {currentItem.prompt}
+       </p>
+     </CollapsibleContent>
+   </Collapsible>
+   
+   {currentItem.enhancedPrompt && currentItem.enhancedPrompt !== currentItem.prompt && (
+     <Collapsible open={showEnhancedPrompt} onOpenChange={setShowEnhancedPrompt}>
+       <CollapsibleTrigger asChild>
+         <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium">
+           Enhanced Prompt
+           <ChevronDown className={`w-3 h-3 transition-transform ${showEnhancedPrompt ? 'rotate-180' : ''}`} />
+         </Button>
+       </CollapsibleTrigger>
+       <CollapsibleContent className="space-y-2 mt-1.5">
+         <p className="text-xs text-muted-foreground leading-relaxed break-words">
+           {currentItem.enhancedPrompt}
+         </p>
+       </CollapsibleContent>
+     </Collapsible>
+   )}
+   ```
+
+3. **Add Template Information Display**
+   ```typescript
+   // Add template information section
+   <div className="space-y-1">
+     <h3 className="text-xs font-medium text-foreground">Template</h3>
+     <div className="space-y-0.5">
+       <p className="text-xs text-muted-foreground">
+         Template: <span className="text-foreground">
+           {currentItem.generationParams?.template || 'None'}
+         </span>
+       </p>
+       {currentItem.generationParams?.fallback && (
+         <p className="text-xs text-muted-foreground">
+           Fallback: <span className="text-foreground">
+             {currentItem.generationParams.fallback}
+           </span>
+         </p>
+       )}
+     </div>
+   </div>
+   ```
+
+#### **Day 3-4: Pill Button Improvements**
+1. **Remove Unnecessary Colors**
+   ```typescript
+   // Update PillButton variants to remove colors
+   const pillButtonVariants = cva(
+     "inline-flex items-center justify-center rounded-full text-xs font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+     {
+       variants: {
+         variant: {
+           default: "bg-background/80 text-foreground hover:bg-background/90 backdrop-blur-sm border border-border/50",
+           secondary: "bg-background/60 text-foreground hover:bg-background/80 backdrop-blur-sm border border-border/30",
+           destructive: "bg-destructive/80 text-destructive-foreground hover:bg-destructive/90 backdrop-blur-sm",
+           outline: "border border-input bg-background/80 hover:bg-accent hover:text-accent-foreground backdrop-blur-sm",
+           ghost: "bg-background/40 hover:bg-accent/80 hover:text-accent-foreground backdrop-blur-sm",
+           accent: "bg-accent/80 text-accent-foreground hover:bg-accent/90 backdrop-blur-sm"
+         },
+         // ... rest of variants
+       }
+     }
+   );
+   ```
+
+2. **Improve Text Presentation**
+   ```typescript
+   // Better pill button layout with improved text
+   <div className="flex flex-col gap-2">
+     <PillButton 
+       onClick={handleSendToControlBox} 
+       size="sm" 
+       variant="default"
+       className="justify-start text-left"
+     >
+       <Edit className="w-3 h-3 mr-2 flex-shrink-0" />
+       <span className="truncate">Send to Control Box</span>
+     </PillButton>
+   </div>
+   ```
+
+#### **Day 4-5: Final Polish & Testing**
+1. **Spacing and Alignment Fixes**
+   - Consistent padding and margins throughout
+   - Proper alignment of all elements
+   - Better visual hierarchy
+
+2. **Responsive Design**
+   - Ensure modal works well on different screen sizes
+   - Test collapsible panels on mobile
+   - Verify scrolling behavior
+
+3. **Accessibility Improvements**
+   - Proper focus management
+   - Keyboard navigation
+   - Screen reader compatibility
+
+### **Success Criteria**
+- ✅ No overlapping buttons
+- ✅ Left pane fully scrollable
+- ✅ Template information displayed
+- ✅ Original and enhanced prompts separated
+- ✅ Pill buttons without unnecessary colors
+- ✅ Improved text presentation
+- ✅ Consistent spacing and alignment
+- ✅ Better overall user experience

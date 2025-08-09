@@ -99,6 +99,24 @@ export const SimplifiedWorkspace: React.FC = () => {
   const [seedValue, setSeedValue] = useState<number | null>(null);
 
   // LTX-Style Workspace Management Handlers
+  // Listen for job-as-reference event to set URL reference centrally
+  React.useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ jobId: string; url: string; assetId: string; type: string }>;
+      const { url } = custom.detail || {}; 
+      if (!url) return;
+      if (mode === 'image') {
+        setReferenceImageUrl(url);
+        setReferenceImage(null);
+        setReferenceStrength(0.7);
+      } else if (mode === 'video') {
+        setBeginningRefImageUrl(url);
+        setBeginningRefImage(null);
+      }
+    };
+    window.addEventListener('workspace-use-job-as-reference', handler as EventListener);
+    return () => window.removeEventListener('workspace-use-job-as-reference', handler as EventListener);
+  }, [mode, setReferenceStrength]);
 
   /**
    * NEW: Use item as reference for iteration (img2img)
@@ -418,6 +436,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             id: asset.id,
             url: asset.url,
             prompt: asset.prompt,
+            enhancedPrompt: asset.enhancedPrompt || asset.metadata?.enhanced_prompt,
             type: asset.type,
             modelType: asset.metadata?.model_type,
             quality: (asset.quality as 'fast' | 'high') || 'high',

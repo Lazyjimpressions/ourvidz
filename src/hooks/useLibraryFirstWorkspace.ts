@@ -726,9 +726,48 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   }, [workspaceAssets, queryClient]);
 
   const useJobAsReference = useCallback((jobId: string) => {
-    // TODO: Implement job as reference functionality
-    console.log('TODO: Set reference image from job:', jobId);
-  }, []);
+    try {
+      // Find completed image assets for the given job
+      const jobAssets = workspaceAssets
+        .filter(asset => asset.metadata?.job_id === jobId)
+        .filter(asset => asset.type === 'image')
+        .filter(asset => asset.status === 'completed' && !!asset.url);
+
+      if (jobAssets.length === 0) {
+        toast({
+          title: 'No Reference Found',
+          description: 'No completed images found in this job to use as reference',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Pick the earliest created image as the canonical reference
+      const bestImage = jobAssets.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
+
+      // Dispatch an event so page-level components can consume and set URL-based reference
+      window.dispatchEvent(new CustomEvent('workspace-use-job-as-reference', {
+        detail: {
+          jobId,
+          url: bestImage.url,
+          assetId: bestImage.id,
+          type: 'image'
+        }
+      }));
+
+      toast({
+        title: 'Reference Set',
+        description: 'Job image set as reference for next generation'
+      });
+    } catch (error) {
+      console.error('useJobAsReference failed', error);
+      toast({
+        title: 'Failed to Set Reference',
+        description: 'Please try again',
+        variant: 'destructive'
+      });
+    }
+  }, [workspaceAssets, toast]);
 
   // Helper functions
   const getJobStats = useCallback(() => {

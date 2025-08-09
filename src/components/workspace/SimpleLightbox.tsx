@@ -242,30 +242,32 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/95 z-50 flex">
-      {/* Close Button */}
+      {/* Close Button - elevated to avoid overlaps */}
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
+        className="absolute top-4 right-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-50"
         onClick={onClose}
+        aria-label="Close lightbox"
       >
-        <X className="w-3 h-3" />
+        <X className="w-4 h-4" />
       </Button>
 
       {/* Left Sidebar - Information Panel */}
-      <div className={`${leftPanelCollapsed ? 'w-6' : 'w-64'} bg-background/95 backdrop-blur-sm border-r border-border/20 overflow-y-auto transition-all duration-200`}>
-        {/* Left Panel Toggle */}
+      <div className={`${leftPanelCollapsed ? 'w-6' : 'w-64'} bg-background/95 backdrop-blur-sm border-r border-border/20 transition-all duration-200`}>
+        {/* Left Panel Toggle - repositioned */}
         <Button
           variant="ghost"
           size="sm"
-          className="absolute left-2 top-2 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
+          className="absolute left-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
           onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
+          aria-label={leftPanelCollapsed ? 'Expand left panel' : 'Collapse left panel'}
         >
-          {leftPanelCollapsed ? <PanelLeft className="w-2.5 h-2.5" /> : <PanelLeft className="w-2.5 h-2.5 rotate-180" />}
+          {leftPanelCollapsed ? <PanelLeft className="w-3 h-3" /> : <PanelLeft className="w-3 h-3 rotate-180" />}
         </Button>
 
         {!leftPanelCollapsed && (
-          <div className="p-3 space-y-3 pt-10">
+          <div className="h-full overflow-y-auto p-4 space-y-3 pt-14">
             {/* Header with type and quality badges */}
             <div className="flex items-center gap-1.5">
               <Badge variant={currentItem.type === 'video' ? 'default' : 'secondary'} className="text-xs">
@@ -278,23 +280,52 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
               )}
             </div>
 
-            {/* Always Visible Information */}
-            <div className="space-y-2">
-              {/* Original Prompt */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-foreground">Prompt</h3>
+            {/* Original and Enhanced Prompts as collapsibles */}
+            <Collapsible open={true}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
+                  Original Prompt
+                  <ChevronDown className="w-3 h-3" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
+                    {currentItem.prompt}
+                  </p>
                   <button
-                    className="opacity-60 hover:opacity-100 transition-opacity"
-                    onClick={() => copyToClipboard(currentItem.prompt, 'Prompt')}
+                    className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
+                    onClick={() => copyToClipboard(currentItem.prompt, 'Original Prompt')}
                   >
                     <Copy className="w-2.5 h-2.5" />
                   </button>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                  {currentItem.prompt}
-                </p>
-              </div>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {currentItem.enhancedPrompt && currentItem.enhancedPrompt !== currentItem.prompt && (
+              <Collapsible open={false}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
+                    Enhanced Prompt
+                    <ChevronDown className="w-3 h-3" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs text-muted-foreground leading-relaxed break-words">
+                      {currentItem.enhancedPrompt}
+                    </p>
+                    <button
+                      className="opacity-60 hover:opacity-100 transition-opacity flex-shrink-0"
+                      onClick={() => copyToClipboard(currentItem.enhancedPrompt || '', 'Enhanced Prompt')}
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
               {/* Seed - Images only */}
               {currentItem.type === 'image' && (currentItem.seed || currentItem.generationParams?.seed) && (
@@ -408,7 +439,23 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
               </Collapsible>
             )}
 
-            {/* Collapsible Technical Details */}
+            {/* Template & Technical Details */}
+            {/* Template */}
+            <div className="space-y-1 mt-2">
+              <h3 className="text-xs font-medium text-foreground">Template</h3>
+              <div className="space-y-0.5">
+                <p className="text-xs text-muted-foreground">
+                  Template: <span className="text-foreground">{currentItem.generationParams?.template || 'None'}</span>
+                </p>
+                {currentItem.generationParams?.fallback && (
+                  <p className="text-xs text-muted-foreground">
+                    Fallback: <span className="text-foreground">{currentItem.generationParams.fallback}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Technical Details */}
             <Collapsible open={showTechnicalDetails} onOpenChange={setShowTechnicalDetails}>
               <CollapsibleTrigger asChild>
                 <Button
@@ -540,20 +587,21 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
       </div>
 
       {/* Right Sidebar - Actions Panel */}
-      <div className={`${rightPanelCollapsed ? 'w-6' : 'w-48'} bg-background/95 backdrop-blur-sm border-l border-border/20 overflow-y-auto transition-all duration-200`}>
-        {/* Right Panel Toggle */}
+      <div className={`${rightPanelCollapsed ? 'w-6' : 'w-56'} bg-background/95 backdrop-blur-sm border-l border-border/20 overflow-y-auto transition-all duration-200`}>
+        {/* Right Panel Toggle - repositioned above pills */}
         <Button
           variant="ghost"
           size="sm"
-          className="absolute right-2 top-8 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
+          className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
           onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+          aria-label={rightPanelCollapsed ? 'Expand right panel' : 'Collapse right panel'}
         >
-          {rightPanelCollapsed ? <PanelRight className="w-2.5 h-2.5" /> : <PanelRight className="w-2.5 h-2.5 rotate-180" />}
+          {rightPanelCollapsed ? <PanelRight className="w-3 h-3" /> : <PanelRight className="w-3 h-3 rotate-180" />}
         </Button>
 
         {!rightPanelCollapsed && (
-          <div className="p-3 space-y-2 pt-12">
-            <div className="flex flex-col gap-1.5">
+          <div className="p-4 space-y-3 pt-16">
+            <div className="flex flex-col gap-2">
               {/* Send to Control Box - Primary action for images */}
               {currentItem.type === 'image' && (
                 <TooltipProvider>
@@ -603,7 +651,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
                 <PillButton 
                   onClick={() => onCreateVideo?.(currentItem)} 
                   size="sm" 
-                  variant="accent"
+                  variant="default"
                 >
                   <Play className="w-3 h-3 mr-1" />
                   Create Video
