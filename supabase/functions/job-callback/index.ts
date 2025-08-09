@@ -214,7 +214,8 @@ serve(async (req)=>{
     }
     
     // PHASE 1 FIX: Extract enhancement metadata from worker response
-    if (workerMetadata.original_prompt) {
+    // Preserve original user prompt from job metadata, don't overwrite with worker version
+    if (workerMetadata.original_prompt && !updatedMetadata.original_prompt) {
       updatedMetadata.original_prompt = workerMetadata.original_prompt;
     }
     if (workerMetadata.final_prompt) {
@@ -256,8 +257,9 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
       }
     }
     
-    // PHASE 2 FIX: Update job table with enhancement fields - with numeric validation
-    if (updatedMetadata.original_prompt) {
+    // PHASE 2 FIX: Update job table with enhancement fields - preserve original user prompt
+    // Only set original_prompt if it doesn't exist in the job, to preserve user input
+    if (updatedMetadata.original_prompt && !currentJob.original_prompt) {
       updateData.original_prompt = updatedMetadata.original_prompt;
     }
     if (updatedMetadata.enhanced_prompt) {
@@ -265,6 +267,10 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
     }
     if (updatedMetadata.enhancement_strategy) {
       updateData.enhancement_strategy = updatedMetadata.enhancement_strategy;
+    }
+    // PHASE 4 FIX: Add template name tracking
+    if (updatedMetadata.template_name) {
+      updateData.template_name = updatedMetadata.template_name;
     }
     if (updatedMetadata.qwen_expansion_percentage) {
       // Validate and cap numeric values to prevent overflow
@@ -444,8 +450,7 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
     });
   }
 });
-// REMOVED: Path normalization - workers now upload with correct paths
-// No longer needed as all workers upload to standardized paths
+// Enhanced image callback with original prompt preservation
 async function handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced) {
   console.log('🖼️ IMAGE CALLBACK PROCESSING (SIMPLIFIED):', {
     job_id: job.id,
@@ -735,8 +740,10 @@ async function handleVideoJobCallback(supabase, job, status, assets, error_messa
     const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Video';
     const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
 
-    // Generate placeholder thumbnail URL for videos
-    const placeholderThumbnailUrl = `system_assets/video-placeholder-thumbnail.png`;
+    // Generate thumbnail URL based on video URL
+    // TODO: Implement server-side thumbnail generation
+    // For now, use video frame at 20% duration as thumbnail fallback
+    const placeholderThumbnailUrl = `system_assets/video-thumbnail-placeholder.png`;
     
     console.log('📹 Setting video thumbnail:', {
       videoId: job.video_id,

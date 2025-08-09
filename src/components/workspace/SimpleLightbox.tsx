@@ -237,7 +237,7 @@ export function SimpleLightbox({
       <Button
         variant="ghost"
         size="sm"
-        className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
+        className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
         onClick={onClose}
         aria-label="Close lightbox"
       >
@@ -250,7 +250,7 @@ export function SimpleLightbox({
         <Button
           variant="ghost"
           size="sm"
-          className="absolute left-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
+          className="absolute left-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
           onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
           aria-label={leftPanelCollapsed ? 'Expand left panel' : 'Collapse left panel'}
         >
@@ -281,12 +281,13 @@ export function SimpleLightbox({
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-1">
                 <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
-                  {currentItem.prompt}
+                  {/* Display the actual original prompt, or fall back to current prompt */}
+                  {details?.originalPrompt || currentItem.prompt}
                   <Button
                     variant="ghost"
                     size="sm"
                     className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
-                    onClick={() => copyToClipboard(currentItem.prompt)}
+                    onClick={() => copyToClipboard(details?.originalPrompt || currentItem.prompt)}
                     aria-label="Copy original prompt"
                   >
                     <Copy className="w-2.5 h-2.5" />
@@ -362,6 +363,13 @@ export function SimpleLightbox({
                   <span className="text-muted-foreground w-16">Created:</span>
                   <span className="text-foreground">{formatDate(currentItem.timestamp)}</span>
                 </div>
+                {/* Template Name - if available */}
+                {details?.templateName && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground w-16">Template:</span>
+                    <span className="text-foreground text-xs">{details.templateName}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -460,7 +468,7 @@ export function SimpleLightbox({
             <Button
               variant="ghost"
               size="sm"
-              className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-30"
+              className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
               onClick={handlePrevious}
               disabled={currentIndex === 0}
               aria-label="Previous item"
@@ -470,7 +478,7 @@ export function SimpleLightbox({
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-30"
+              className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
               onClick={handleNext}
               disabled={currentIndex === items.length - 1}
               aria-label="Next item"
@@ -538,11 +546,11 @@ export function SimpleLightbox({
 
       {/* Right Sidebar - Actions Panel */}
       <div className={`${rightPanelCollapsed ? 'w-6' : 'w-48'} bg-background/95 backdrop-blur-sm border-l border-border/20 transition-all duration-200`}>
-        {/* Right Panel Toggle */}
+        {/* Right Panel Toggle - repositioned */}
         <Button
           variant="ghost"
           size="sm"
-          className="absolute right-4 top-16 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-40"
+          className="absolute right-14 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
           onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
           aria-label={rightPanelCollapsed ? 'Expand right panel' : 'Collapse right panel'}
         >
@@ -550,7 +558,9 @@ export function SimpleLightbox({
         </Button>
 
         {!rightPanelCollapsed && (
-          <div className="h-full overflow-y-auto p-4 pt-14">
+          <div className="h-full overflow-y-auto p-4 space-y-3 pt-14">
+            <div className="text-xs text-muted-foreground font-medium mb-3">Actions</div>
+            
             <div className="space-y-2">
               {/* Send to Workspace */}
               {onSendToWorkspace && (

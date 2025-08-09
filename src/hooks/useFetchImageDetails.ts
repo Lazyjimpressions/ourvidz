@@ -9,6 +9,8 @@ interface ImageDetails {
   negativePrompt?: string;
   modelType?: string;
   referenceStrength?: number;
+  templateName?: string;
+  originalPrompt?: string;
 }
 
 // Simple cache to prevent redundant requests
@@ -59,7 +61,7 @@ export const useFetchImageDetails = () => {
       
       const { data, error } = await supabase
         .from('images')
-        .select('metadata')
+        .select('metadata, original_prompt')
         .eq('id', imageId)
         .abortSignal(abortControllerRef.current.signal)
         .single();
@@ -89,6 +91,8 @@ export const useFetchImageDetails = () => {
           negativePrompt: metadata.negative_prompt || undefined,
           modelType: metadata.model_type || metadata.job_type || undefined,
           referenceStrength: metadata.reference_strength ? parseFloat(metadata.reference_strength.toString()) : undefined,
+          templateName: metadata.template_name || undefined,
+          originalPrompt: data.original_prompt || metadata.original_prompt || undefined,
         };
 
         console.log('✅ Parsed details:', parsedDetails);

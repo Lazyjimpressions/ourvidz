@@ -261,7 +261,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                    {thumbnailItem?.type === 'video' ? (
                      <div className="relative w-full h-full">
                        <img
-                         src={thumbnailItem.thumbnailUrl || '/video-placeholder.svg'}
+                         src={thumbnailItem.thumbnailUrl || '/video-thumbnail-placeholder.svg'}
                          alt="Video thumbnail"
                          className="w-full h-full object-cover"
                          onError={(e) => {

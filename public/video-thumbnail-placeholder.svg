@@ -1,0 +1,5 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="360" fill="hsl(var(--muted))"/>
+  <circle cx="320" cy="180" r="40" fill="hsl(var(--muted-foreground))"/>
+  <polygon points="310,165 335,180 310,195" fill="hsl(var(--background))"/>
+</svg>
