@@ -68,8 +68,8 @@ export const RoleplaySidebar = ({
   };
 
   return (
-    <div className={`w-80 bg-gray-900 border-r border-gray-800 flex flex-col ${className}`}>
-      <ScrollArea className="flex-1 p-4">
+    <div className={`w-80 bg-gray-900 border-r border-gray-800 flex flex-col h-screen ${className}`}>
+      <ScrollArea className="flex-1 p-4 h-0">
         <div className="space-y-4">
           {/* Current AI Character Section */}
           <Collapsible 
