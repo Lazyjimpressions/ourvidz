@@ -49,7 +49,7 @@ interface SimpleLightboxProps {
   isRegenerating?: boolean;
 }
 
-export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
+export function SimpleLightbox({
   items,
   currentIndex,
   onClose,
@@ -63,7 +63,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
   onCreateVideo,
   isDeleting = false,
   isRegenerating = false
-}) => {
+}: SimpleLightboxProps): React.ReactElement | null {
   const [showGenerationDetails, setShowGenerationDetails] = useState(false);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
@@ -240,7 +240,8 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
       : modelType.toUpperCase();
   };
 
-  const body = (<div className="fixed inset-0 bg-black/95 z-50 flex">
+  return (
+    <div className="fixed inset-0 bg-black/95 z-50 flex">
       {/* Close Button - elevated to avoid overlaps */}
       <Button
         variant="ghost"
@@ -700,7 +701,6 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           </div>
         )}
       </div>
-    </div>);
-
-  return body;
-};
+    </div>
+  );
+}
