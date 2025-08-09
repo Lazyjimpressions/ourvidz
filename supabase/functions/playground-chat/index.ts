@@ -580,7 +580,7 @@ You say: ...`;
       tierReason = 'age_gated_sfw';
     }
     
-    console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified}, explicitTier: ${explicitTier})`);
+    console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified})`);
     
     // Get system prompt using cached templates (roleplay or general)
     dbReadTime = Date.now() - dbStart;
