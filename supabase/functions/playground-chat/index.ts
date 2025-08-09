@@ -24,6 +24,18 @@ const CONFIG_TTL_MS = 60_000;
 const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
 const ADMIN_ROLE_TTL_MS = 60_000;
 
+type PromptMeta = {
+  origin: 'inline.strict_nsfw' | 'cache' | 'database' | 'none';
+  context_type: string;
+  content_tier: 'sfw' | 'nsfw';
+  nsfw_strict: boolean;
+  template_key?: string;
+  cache_refreshed_at?: string;
+  character_id?: string | null;
+  character_name?: string | null;
+};
+let lastPromptMeta: PromptMeta | null = null;
+
 interface Database {
   public: {
     Tables: {
@@ -165,6 +177,14 @@ FORMATTING:
 - Plain text only. No markdown unless the user uses it first. Avoid emojis unless explicitly requested.
 INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, staying immersive and consistent.`;
         console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
+        lastPromptMeta = {
+          origin: 'inline.strict_nsfw',
+          context_type: contextType,
+          content_tier: contentTier,
+          nsfw_strict: true,
+          character_id: characterData.id || null,
+          character_name: characterData.name || null,
+        };
         return strictPrompt;
       }
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
@@ -191,6 +211,16 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
       }
 
       if (template) {
+        lastPromptMeta = {
+          origin: templateKey.startsWith('cache:') ? 'cache' : 'database',
+          context_type: contextType,
+          content_tier: contentTier,
+          nsfw_strict: false,
+          template_key: templateKey,
+          cache_refreshed_at: cache?.metadata?.refreshed_at || undefined,
+          character_id: characterData.id || null,
+          character_name: characterData.name || null,
+        };
         // Build cache key using template origin, character id, updated_at and tier
         const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}:tier:${contentTier}`;
         const legacyKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
@@ -262,8 +292,9 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
       templateContext = 'sdxl_conversion';
     }
 
-    // Get system prompt from cache
+    // Get system prompt from cache and track origin
     let systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
+    let origin: 'cache' | 'database' | 'none' = systemPrompt ? 'cache' : 'none';
     
     // Fallback to database if cache fails for both tiers
     if (!systemPrompt) {
@@ -290,6 +321,7 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
           contentTier              // content_mode ('nsfw'/'sfw')
         );
         systemPrompt = dbTemplate?.system_prompt || null;
+        if (systemPrompt) origin = 'database';
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);
       }
@@ -717,6 +749,10 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
         response: aiResponse,
         conversation_id,
         generation_time: chatData.generation_time || 0,
+        context_type: contextType,
+        content_tier: chosenTier,
+        nsfw_enforce: nsfwEnforce || false,
+        template_meta: lastPromptMeta,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

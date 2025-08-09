@@ -23,6 +23,7 @@ import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Mock character data - in real app this would come from database
 const mockCharacters = {
@@ -83,6 +84,7 @@ const RoleplayChatInterface = () => {
     setActiveConversation,
     sendMessage,
   } = usePlayground();
+  const { isAdmin } = useAuth();
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -394,6 +396,17 @@ const RoleplayChatInterface = () => {
             )}
             <h1 className="text-lg font-medium">Roleplay Chat</h1>
             <span className="px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded text-xs">Active</span>
+            {/* Admin: Template/Tier Badges */}
+            {isAdmin && state.lastResponseMeta?.content_tier && (
+              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
+                Tier: {String(state.lastResponseMeta.content_tier).toUpperCase()}
+              </span>
+            )}
+            {isAdmin && state.lastResponseMeta?.template_meta?.origin && (
+              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
+                Origin: {state.lastResponseMeta.template_meta.origin}
+              </span>
+            )}
             
             {/* Worker status indicator - subtle */}
             <div className="flex items-center gap-2 pl-2 border-l border-gray-800">

@@ -307,6 +307,18 @@ Please help me with this creative project.`;
             </Button>
           )}
 
+          {/* Admin: Template/Tier Badges */}
+          {isAdmin && state.lastResponseMeta?.content_tier && (
+            <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
+              Tier: {String(state.lastResponseMeta.content_tier).toUpperCase()}
+            </span>
+          )}
+          {isAdmin && state.lastResponseMeta?.template_meta?.origin && (
+            <span className="text-xs bg-muted px-2 py-1 rounded text-muted-foreground">
+              Origin: {state.lastResponseMeta.template_meta.origin}
+            </span>
+          )}
+
           {/* Character Details Button - only show in roleplay mode with active template */}
           {currentMode === 'roleplay' && currentRoleplayTemplate && (
             <CharacterDetailsPanel 

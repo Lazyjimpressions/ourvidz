@@ -29,17 +29,20 @@ interface PlaygroundState {
   activeConversationId: string | null;
   isLoadingMessage: boolean;
   error: string | null;
+  lastResponseMeta: any | null;
 }
 
 type PlaygroundAction = 
   | { type: 'SET_ACTIVE_CONVERSATION'; payload: string | null }
   | { type: 'SET_LOADING_MESSAGE'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string | null };
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_LAST_RESPONSE_META'; payload: any | null };
 
 const initialState: PlaygroundState = {
   activeConversationId: null,
   isLoadingMessage: false,
   error: null,
+  lastResponseMeta: null,
 };
 
 const playgroundReducer = (state: PlaygroundState, action: PlaygroundAction): PlaygroundState => {
@@ -50,6 +53,8 @@ const playgroundReducer = (state: PlaygroundState, action: PlaygroundAction): Pl
       return { ...state, isLoadingMessage: action.payload };
     case 'SET_ERROR':
       return { ...state, error: action.payload };
+    case 'SET_LAST_RESPONSE_META':
+      return { ...state, lastResponseMeta: action.payload };
     default:
       return state;
   }
@@ -163,7 +168,9 @@ const createConversationMutation = useMutation({
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Store latest template/tier meta for admin UI
+      dispatch({ type: 'SET_LAST_RESPONSE_META', payload: data });
       queryClient.invalidateQueries({ queryKey: ['messages', state.activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },

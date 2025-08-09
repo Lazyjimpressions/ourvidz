@@ -182,15 +182,38 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           </Button>
           
           {!isUser && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRegenerate}
-              disabled={isGenerating}
-              className="h-5 w-5 p-0 text-gray-400 hover:text-white"
-            >
-              <RotateCw className="h-3 w-3" />
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRegenAssistant}
+                className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                title="Regenerate AI reply"
+              >
+                <RefreshCcw className="h-3 w-3" />
+              </Button>
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRegenAssistantFresh}
+                  className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                  title="Regenerate with fresh templates"
+                >
+                  <Sparkles className="h-3 w-3" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRegenerate}
+                disabled={isGenerating}
+                className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                title="Generate scene image"
+              >
+                <RotateCw className="h-3 w-3" />
+              </Button>
+            </>
           )}
         </div>
 
