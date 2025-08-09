@@ -11,6 +11,7 @@ interface ImageDetails {
   referenceStrength?: number;
   templateName?: string;
   originalPrompt?: string;
+  tokenCount?: number;
 }
 
 // Simple cache to prevent redundant requests
@@ -91,8 +92,9 @@ export const useFetchImageDetails = () => {
           negativePrompt: metadata.negative_prompt || undefined,
           modelType: metadata.model_type || metadata.job_type || undefined,
           referenceStrength: metadata.reference_strength ? parseFloat(metadata.reference_strength.toString()) : undefined,
-          templateName: metadata.template_name || undefined,
+          templateName: metadata.template_name || metadata.enhancement_strategy || undefined,
           originalPrompt: data.original_prompt || metadata.original_prompt || undefined,
+          tokenCount: metadata.token_count ? parseInt(metadata.token_count.toString()) : undefined,
         };
 
         console.log('✅ Parsed details:', parsedDetails);

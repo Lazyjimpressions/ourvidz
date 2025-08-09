@@ -211,6 +211,16 @@ class DynamicEnhancementOrchestrator {
    * Enhance using template (database or cached) - FIXED for pure inference worker
    */
   private async enhanceWithTemplate(request: any, template: any, contentMode: string) {
+    // Calculate UI control token usage from metadata
+    const uiControlTokens = this.calculateUIControlTokens(request.metadata);
+    const adjustedTokenLimit = (template.token_limit || 75) - uiControlTokens;
+    
+    console.log('🎯 Template enhancement with UI control consideration:', {
+      templateName: template.template_name,
+      originalTokenLimit: template.token_limit || 75,
+      uiControlTokens,
+      adjustedTokenLimit
+    });
     // Use selectedModel directly from request, fallback to preferences
     const selectedModel = request.selectedModel || request.preferences?.enhancement_style
     const workerType = this.selectWorkerType(template.enhancer_model || template.model_type, selectedModel)
@@ -234,9 +244,9 @@ class DynamicEnhancementOrchestrator {
         result = await this.enhanceWithWanWorker(request, template)
       }
 
-      // Apply model-specific token optimization
+      // Apply model-specific token optimization with UI control consideration
       const modelType = this.getModelTypeFromJobType(request.job_type)
-      const optimized = this.optimizeTokens(result.enhanced_prompt, modelType)
+      const optimized = this.optimizeTokens(result.enhanced_prompt, modelType, adjustedTokenLimit)
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,
@@ -509,9 +519,42 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Token optimization for different model types
+   * Calculate UI control token usage from metadata
    */
-  private optimizeTokens(prompt: string, modelType: string) {
+  private calculateUIControlTokens(metadata: any): number {
+    if (!metadata) return 0;
+    
+    let tokenCount = 0;
+    
+    // Shot type (if not default 'wide')
+    if (metadata.shot_type && metadata.shot_type !== 'wide' && metadata.shot_type !== 'none') {
+      tokenCount += 1; // e.g., "medium", "close"
+    }
+    
+    // Camera angle (if not default 'eye_level')  
+    if (metadata.camera_angle && metadata.camera_angle !== 'eye_level' && metadata.camera_angle !== 'none') {
+      tokenCount += metadata.camera_angle.replace('_', ' ').split(' ').length; // e.g., "low angle" = 2 tokens
+    }
+    
+    // Style (count actual tokens in style text)
+    if (metadata.style && metadata.style.trim()) {
+      tokenCount += this.estimateTokens(metadata.style);
+    }
+    
+    console.log('🎨 UI Control tokens calculated:', {
+      shotType: metadata.shot_type,
+      cameraAngle: metadata.camera_angle,
+      style: metadata.style,
+      totalTokens: tokenCount
+    });
+    
+    return tokenCount;
+  }
+
+  /**
+   * Token optimization for different model types with UI control consideration
+   */
+  private optimizeTokens(prompt: string, modelType: string, customLimit?: number) {
     let optimized = prompt;
     let compressed = false;
     
@@ -523,21 +566,47 @@ class DynamicEnhancementOrchestrator {
       'qwen_base': 150
     };
     
-    const targetLimit = limits[modelType] || 75;
+    const targetLimit = customLimit || limits[modelType] || 75;
     const estimatedTokens = this.estimateTokens(prompt);
     
+    console.log('🔧 Token optimization:', {
+      modelType,
+      originalTokens: estimatedTokens,
+      targetLimit,
+      customLimitUsed: !!customLimit,
+      needsOptimization: estimatedTokens > targetLimit
+    });
+    
     if (estimatedTokens > targetLimit) {
-      // Simple token optimization - truncate and compress
-      const wordsPerToken = 0.75; // Approximate ratio
-      const targetWords = Math.floor(targetLimit * wordsPerToken);
-      const words = prompt.split(' ');
+      // Improved token optimization - character-based truncation with meaning preservation
+      const avgCharsPerToken = 4; // More accurate than word-based estimation
+      const targetChars = Math.floor(targetLimit * avgCharsPerToken);
       
-      if (words.length > targetWords) {
-        optimized = words.slice(0, targetWords).join(' ');
+      if (prompt.length > targetChars) {
+        // Find last complete sentence or phrase before limit
+        let cutoff = targetChars;
+        const lastComma = prompt.lastIndexOf(',', cutoff);
+        const lastPeriod = prompt.lastIndexOf('.', cutoff);
+        const lastSpace = prompt.lastIndexOf(' ', cutoff);
+        
+        // Prefer natural break points
+        if (lastComma > cutoff * 0.8) {
+          cutoff = lastComma;
+        } else if (lastPeriod > cutoff * 0.8) {
+          cutoff = lastPeriod + 1;
+        } else if (lastSpace > cutoff * 0.9) {
+          cutoff = lastSpace;
+        }
+        
+        optimized = prompt.substring(0, cutoff).trim();
         compressed = true;
         
-        // Add ellipsis to indicate compression
-        optimized += '...';
+        console.log('✂️ Token optimization applied:', {
+          originalLength: prompt.length,
+          optimizedLength: optimized.length,
+          cutoffPosition: cutoff,
+          preservedMeaning: cutoff > targetChars * 0.8
+        });
       }
     }
     
@@ -551,16 +620,20 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Estimate token count from text (rough approximation)
+   * Estimate token count from text (more accurate approximation)
    */
   private estimateTokens(text: string): number {
     if (!text) return 0;
     
-    // Rough estimation: 1 token ≈ 0.75 words for English text
-    const words = text.split(/\s+/).length;
-    const tokens = Math.ceil(words / 0.75);
+    // More accurate estimation considering punctuation and special characters
+    // Average of ~4 characters per token for CLIP tokenizer
+    const charCount = text.length;
+    const punctuationCount = (text.match(/[.,!?;:'"(){}[\]]/g) || []).length;
     
-    return tokens;
+    // Adjust for punctuation (each punctuation mark typically adds a token)
+    const estimatedTokens = Math.ceil(charCount / 4) + Math.ceil(punctuationCount * 0.5);
+    
+    return estimatedTokens;
   }
 
   /**

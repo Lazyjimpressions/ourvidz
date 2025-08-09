@@ -462,8 +462,42 @@ serve(async (req)=>{
       }
     }
     
-    // Use enhanced prompt for job creation
-    const finalPrompt = workingPrompt;
+    // Apply UI controls to working prompt to create final prompt
+    function applyUIControlsToPrompt(prompt: string, metadata: any): string {
+      if (!metadata) return prompt;
+      
+      const uiControlParts = [];
+      
+      // Shot type (if not default 'wide')
+      if (metadata.shot_type && metadata.shot_type !== 'wide' && metadata.shot_type !== 'none') {
+        uiControlParts.push(metadata.shot_type);
+      }
+      
+      // Camera angle (if not default 'eye_level')
+      if (metadata.camera_angle && metadata.camera_angle !== 'eye_level' && metadata.camera_angle !== 'none') {
+        uiControlParts.push(metadata.camera_angle.replace('_', ' '));
+      }
+      
+      // Style (if provided)
+      if (metadata.style && metadata.style.trim()) {
+        uiControlParts.push(metadata.style);
+      }
+      
+      // Combine enhanced prompt with UI controls
+      const finalPrompt = [prompt, ...uiControlParts].filter(Boolean).join(', ');
+      
+      console.log('🎨 UI Controls applied to prompt:', {
+        originalPrompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
+        uiControls: uiControlParts,
+        finalPrompt: finalPrompt.substring(0, 150) + (finalPrompt.length > 150 ? '...' : ''),
+        addedTokens: uiControlParts.join(', ').split(' ').length,
+        finalTokenCount: finalPrompt.split(' ').length
+      });
+      
+      return finalPrompt;
+    }
+    
+    const finalPrompt = applyUIControlsToPrompt(workingPrompt, metadata);
 
     // CRITICAL FIX: Generate negative prompt BEFORE creating job record
     let negativePrompt = '';

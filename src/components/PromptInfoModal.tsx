@@ -241,6 +241,18 @@ export const PromptInfoModal = ({
                 <span className="text-muted-foreground">Job ID:</span>
                 <span className="ml-2 font-mono text-xs">{itemId}</span>
               </div>
+              {details?.templateName && (
+                <div>
+                  <span className="text-muted-foreground">Template:</span>
+                  <span className="ml-2">{details.templateName}</span>
+                </div>
+              )}
+              {details?.tokenCount && (
+                <div>
+                  <span className="text-muted-foreground">Tokens:</span>
+                  <span className="ml-2">{details.tokenCount}/75</span>
+                </div>
+              )}
               {details?.seed !== undefined && (
                 <div>
                   <span className="text-muted-foreground">Seed:</span>

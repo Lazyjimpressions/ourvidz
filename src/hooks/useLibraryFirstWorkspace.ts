@@ -99,8 +99,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Control Parameters
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '1:1' | '9:16'>('16:9');
   const [shotType, setShotType] = useState<'wide' | 'medium' | 'close'>('wide');
-  const [cameraAngle, setCameraAngle] = useState<'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye'>('none');
-  const [style, setStyle] = useState('');
+  const [cameraAngle, setCameraAngle] = useState<'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye'>('eye_level');
+  const [style, setStyle] = useState('cinematic lighting, film grain, dramatic composition');
   const [styleRef, setStyleRef] = useState<File | null>(null);
   
   // UI State
