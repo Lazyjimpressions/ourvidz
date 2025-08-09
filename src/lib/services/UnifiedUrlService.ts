@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+
 import { getSignedUrl } from '@/lib/storage';
 import type { UnifiedAsset } from './AssetService';
 
@@ -304,8 +304,8 @@ export class UnifiedUrlService {
   /**
    * Get the appropriate image path for an asset
    */
-  private static getImagePath(asset: UnifiedAsset, type: 'primary' | 'thumbnail' | 'highres'): string | null {
-    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${type}`, {
+  static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
+    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${pathType}`, {
       assetType: asset.type,
       isSDXL: asset.isSDXL,
       url: asset.url,
@@ -326,7 +326,7 @@ export class UnifiedUrlService {
     // For regular images - check asset properties first
     if (asset.type === 'image') {
       // Check direct asset properties first (these come from database)
-      if (type === 'thumbnail' && asset.thumbnailUrl) {
+      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         console.log(`✅ Using thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }
@@ -345,7 +345,7 @@ export class UnifiedUrlService {
     
     // For videos
     if (asset.type === 'video') {
-      if (type === 'thumbnail' && asset.thumbnailUrl) {
+      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         console.log(`✅ Using video thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }
