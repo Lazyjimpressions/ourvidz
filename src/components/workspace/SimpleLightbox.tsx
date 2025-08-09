@@ -240,8 +240,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
       : modelType.toUpperCase();
   };
 
-  const body = (
-    <div className="fixed inset-0 bg-black/95 z-50 flex">
+  const body = (<div className="fixed inset-0 bg-black/95 z-50 flex">
       {/* Close Button - elevated to avoid overlaps */}
       <Button
         variant="ghost"
@@ -701,8 +700,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           </div>
         )}
       </div>
-    </div>
-  );
+    </div>);
 
   return body;
 };
