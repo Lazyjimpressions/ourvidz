@@ -14,6 +14,8 @@ import { AdminTools } from './AdminTools';
 import { CreativeTools } from './CreativeTools';
 import { PromptCounter } from './PromptCounter';
 import { CharacterDetailsPanel } from './CharacterDetailsPanel';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 export const ChatInterface = () => {
   const {
@@ -226,24 +228,31 @@ Please help me with this creative project.`;
             <h1 className="text-sm font-medium">AI Playground</h1>
           </div>
           
-          {/* Conversation History Panel */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="h-7 w-7 p-0"
-              >
-                <MessageSquare className="h-3 w-3" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 bg-background border-border p-0">
-              <SheetHeader className="p-3 border-b border-border">
-                <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
-              </SheetHeader>
-              <ConversationList />
-            </SheetContent>
-          </Sheet>
+          {/* Controls: SFW toggle + Conversation History */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <Label htmlFor="sfw-toggle-empty" className="text-xs text-muted-foreground">SFW</Label>
+              <Switch id="sfw-toggle-empty" checked={sfwMode} onCheckedChange={setSfwMode} />
+            </div>
+            {/* Conversation History Panel */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                >
+                  <MessageSquare className="h-3 w-3" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 bg-background border-border p-0">
+                <SheetHeader className="p-3 border-b border-border">
+                  <SheetTitle className="text-left text-sm">Conversations</SheetTitle>
+                </SheetHeader>
+                <ConversationList />
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
 
         {/* Mode Selector */}
@@ -295,19 +304,23 @@ Please help me with this creative project.`;
           </span>
         </div>
         
-        <div className="flex items-center gap-1">
-          {/* Admin: Refresh Templates */}
-          {isAdmin && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={refreshPromptCache}
-              className="h-7 w-7 p-0"
-              title="Refresh templates"
-            >
-              <Sparkles className="h-3 w-3" />
-            </Button>
-          )}
+<div className="flex items-center gap-1">
+  <div className="flex items-center gap-1 mr-2">
+    <Label htmlFor="sfw-toggle" className="text-xs text-muted-foreground">SFW</Label>
+    <Switch id="sfw-toggle" checked={sfwMode} onCheckedChange={setSfwMode} />
+  </div>
+  {/* Admin: Refresh Templates */}
+  {isAdmin && (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={refreshPromptCache}
+      className="h-7 w-7 p-0"
+      title="Refresh templates"
+    >
+      <Sparkles className="h-3 w-3" />
+    </Button>
+  )}
 
           {/* Admin: Template/Tier Badges */}
           {isAdmin && state.lastResponseMeta?.content_tier && (
