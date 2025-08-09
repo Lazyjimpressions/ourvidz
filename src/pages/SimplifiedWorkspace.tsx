@@ -445,6 +445,21 @@ export const SimplifiedWorkspace: React.FC = () => {
             const fullAsset = workspaceAssets.find(a => a.id === item.id);
             if (fullAsset) handleDownload(fullAsset);
           }}
+          onSendToControlBox={(item) => {
+            // Set the prompt in the control box with all generation parameters
+            setPrompt(item.prompt);
+            // Close modal after sending
+            setLightboxIndex(null);
+          }}
+          onRegenerate={async (item) => {
+            // Trigger regeneration using current settings
+            try {
+              await generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, item.seed || item.generationParams?.seed);
+            } catch (error) {
+              console.error('Failed to regenerate:', error);
+            }
+          }}
+          isRegenerating={isGenerating}
         />
       )}
     </div>
