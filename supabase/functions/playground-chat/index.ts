@@ -680,6 +680,79 @@ You say: ...`;
 
     const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
 
+    // Sanitize persona/meta violations before strict formatting
+    function sanitizeRoleplayPersonaViolations(text: string, characterName: string) {
+      const original = text;
+      let out = text;
+      const issues: string[] = [];
+      let removed_meta = 0;
+      let user_lines_removed = 0;
+      let stage_dir_converted = 0;
+      let narrator_normalized = 0;
+      let first_line_prefixed = false;
+      let emojis_removed = 0;
+
+      const lines = out.split('\n');
+      const cleanedLines: string[] = [];
+      for (let line of lines) {
+        // Remove explicit AI/system prefixes
+        if (/^\s*(AI|Assistant|System)\s*:/i.test(line)) {
+          line = line.replace(/^\s*(AI|Assistant|System)\s*:/i, '').trim();
+          removed_meta++;
+          if (!line) continue;
+        }
+        // Remove lines that speak for the user
+        if (/^\s*(You|User)\s*:/i.test(line)) {
+          user_lines_removed++;
+          continue;
+        }
+        // Convert parenthetical stage directions at start
+        if (/^\s*\((?:me|i|user|you)[^)]*\)\s*/i.test(line)) {
+          line = line.replace(/^\s*\((?:me|i|user|you)[^)]*\)\s*/i, '').trim();
+          if (line) {
+            line = `**Narrator:** ${line}`;
+            stage_dir_converted++;
+          } else {
+            continue;
+          }
+        }
+        cleanedLines.push(line);
+      }
+      out = cleanedLines.join('\n');
+
+      // Normalize narrator label to bold form
+      out = out.replace(/(^|\n)\s*\*\*?\s*Narrator\s*:?\s*\*\*?\s*/gi, (_m, p1) => {
+        narrator_normalized++;
+        return `${p1}**Narrator:** `;
+      });
+      out = out.replace(/(^|\n)\s*Narrator\s*:\s*/gi, (_m, p1) => {
+        narrator_normalized++;
+        return `${p1}**Narrator:** `;
+      });
+
+      // Ensure first block has a speaker prefix
+      const trimmedOut = out.trim();
+      if (trimmedOut) {
+        const firstBlock = trimmedOut.split(/\n{2,}/)[0].trim();
+        if (!/^(\*\*[^*]+:\*\*|\*\*Narrator:\*\*)/.test(firstBlock)) {
+          out = `**${characterName}:** ${trimmedOut}`;
+          first_line_prefixed = true;
+        }
+      }
+
+      // Strip emojis
+      const emojiRe = /\p{Extended_Pictographic}/gu;
+      const emojiMatches = out.match(emojiRe);
+      if (emojiMatches && emojiMatches.length) {
+        out = out.replace(emojiRe, '');
+        emojis_removed = emojiMatches.length;
+        issues.push('emoji_removed');
+      }
+
+      const applied = out.trim() !== original.trim();
+      return { text: out.trim(), applied, issues, stats: { removed_meta, user_lines_removed, stage_dir_converted, narrator_normalized, first_line_prefixed, emojis_removed } };
+    }
+
     // Enforce roleplay output format (post-processing repair)
     function enforceRoleplayFormat(text: string, characterName: string) {
       const before = text;
