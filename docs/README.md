@@ -165,7 +165,7 @@ Chat Worker:
 
 ## **📁 Documentation Structure**
 
-### **Current Documentation (12 Files)**
+### **Current Documentation (16 Files)**
 ```markdown
 docs/
 ├── README.md                    # Main project overview & current status
@@ -179,7 +179,11 @@ docs/
 ├── updated_implementation_guide.md # Current sprint: prompt enhancement features
 ├── worker_api.md                # Shared worker API (cross-repo)
 ├── DEPLOYMENT.md                # Deployment guides
-└── CHANGELOG.md                 # Version history
+├── CHANGELOG.md                 # Version history
+├── 12-SDXL_PROMPTING_GUIDE.md   # Comprehensive SDXL image generation guide
+├── 13-WAN_PROMPTING_GUIDE.md    # Comprehensive WAN video generation guide
+├── 14-PROMPT_BUILDER_USAGE_GUIDE.md # AI prompt builder assistant usage guide
+└── 15-PROMPT_BUILDER_ENHANCEMENT_SUMMARY.md # Summary of prompt builder improvements
 ```
 
 ### **Key File Purposes**
