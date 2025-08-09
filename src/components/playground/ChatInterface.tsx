@@ -23,6 +23,8 @@ export const ChatInterface = () => {
     sendMessage,
     createConversation,
     refreshPromptCache,
+    sfwMode,
+    setSfwMode,
   } = usePlayground();
 
   const { isAdmin } = useAuth();

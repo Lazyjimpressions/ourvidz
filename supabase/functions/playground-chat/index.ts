@@ -2,7 +2,6 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { 
   getCachedData, 
-  detectContentTier, 
   getChatTemplateFromCache,
   getDatabaseTemplate 
 } from '../_shared/cache-utils.ts';
@@ -114,21 +113,13 @@ serve(async (req) => {
     contextType: string,
     cache: any,
     characterData?: any,
-    ageVerified?: boolean
+    ageVerified?: boolean,
+    requestedTier?: 'sfw' | 'nsfw'
   ): Promise<string | null> {
-    // Detect content tier from full conversation context
-    const fullConversationText = [message, ...conversationHistory.map(msg => msg.content)].join(' ');
-    let contentTier = detectContentTier(fullConversationText, cache);
+    // Tier is explicitly determined by caller (NSFW-first model)
+    let contentTier: 'sfw' | 'nsfw' = requestedTier || 'nsfw';
 
     // Force tier by explicit character rating when available
-    if (characterData?.content_rating === 'sfw') {
-      contentTier = 'sfw';
-      console.log('✅ Forcing SFW tier from character.content_rating');
-    } else if (characterData?.content_rating === 'nsfw') {
-      contentTier = 'nsfw';
-      console.log('🚩 Forcing NSFW tier from character.content_rating');
-    }
-
     // NSFW roleplay guidance constants
     const NSFW_GUIDANCE_MARK = '[[NSFW_ROLEPLAY_GUIDANCE_V1]]';
     const NSFW_ROLEPLAY_GUIDANCE = `${NSFW_GUIDANCE_MARK}
@@ -400,7 +391,9 @@ You say: ...`;
 
     const isAdminPromise = getIsAdmin(user.id);
 
-    const { conversation_id, message, project_id, character_id } = await req.json();
+    const body = await req.json();
+
+    const { conversation_id, message, project_id, character_id, content_tier } = body;
 
     if (!conversation_id || !message) {
       throw new Error('Missing required fields: conversation_id and message');
@@ -565,6 +558,17 @@ You say: ...`;
     if (allowNSFWOverride) {
       console.log(`🛡️ NSFW override active due to ${isAdmin ? 'admin' : 'owner'} privileges`);
     }
+
+    // Resolve final content tier (NSFW-first)
+    const explicitTier = (typeof content_tier === 'string' && (content_tier === 'sfw' || content_tier === 'nsfw')) ? content_tier as 'sfw' | 'nsfw' : null;
+    let finalTier: 'sfw' | 'nsfw';
+    if (!ageVerified && !isAdmin) {
+      finalTier = 'sfw';
+    } else if (explicitTier) {
+      finalTier = explicitTier;
+    } else {
+      finalTier = 'nsfw';
+    }
     
     // Get system prompt using cached templates (roleplay or general)
     dbReadTime = Date.now() - dbStart;
@@ -575,7 +579,8 @@ You say: ...`;
       contextType,
       cache,
       characterData,
-      ageVerified || allowNSFWOverride
+      ageVerified || allowNSFWOverride,
+      finalTier
     );
     promptTime = Date.now() - promptStart;
 
@@ -615,13 +620,9 @@ You say: ...`;
     messages.push({ role: 'user', content: message });
 
     // Derive content tier and NSFW enforcement for worker payload
-    const fullTextForTier = [message, ...conversationHistory.map(m => m.content)].join(' ');
-    let chosenTier: 'sfw' | 'nsfw' = detectContentTier(fullTextForTier, cache);
-    if (characterData?.content_rating === 'sfw') chosenTier = 'sfw';
-    else if (characterData?.content_rating === 'nsfw') chosenTier = 'nsfw';
-    if (!ageVerified && !allowNSFWOverride && chosenTier === 'nsfw') chosenTier = 'sfw';
+    const chosenTier: 'sfw' | 'nsfw' = finalTier;
     const nsfwEnforce = contextType === 'character_roleplay' && chosenTier === 'nsfw';
-    const nsfwReason = characterData?.content_rating === 'nsfw' ? 'character_rating' : (chosenTier === 'nsfw' ? 'detected_terms' : null);
+    const nsfwReason = explicitTier ? 'explicit_request' : (isAdmin ? 'admin_default' : (ageVerified ? 'age_verified_default' : 'age_gate'));
 
     // Call the chat worker with messages array format
     const basePayload: any = {
