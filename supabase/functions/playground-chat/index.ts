@@ -140,11 +140,7 @@ serve(async (req) => {
   - Use **Narrator:** for scene description and transitions
 - Do not speak for the user's character unless they provide a line.`;
 
-    // Age-gating override (non-verified users)
-    if (ageVerified === false && contentTier === 'nsfw') {
-      contentTier = 'sfw';
-      console.log('🔒 Age gating enforced: downgrading to SFW');
-    }
+    // Age-gating is handled by caller tier resolution - no override here
     // For character roleplay, NSFW strict mode: bypass templates with inline directive
     if (contextType === 'character_roleplay' && characterData) {
       // Lightweight scene memory from recent turns (ephemeral)
@@ -562,13 +558,27 @@ You say: ...`;
     // Resolve final content tier (NSFW-first)
     const explicitTier = (typeof content_tier === 'string' && (content_tier === 'sfw' || content_tier === 'nsfw')) ? content_tier as 'sfw' | 'nsfw' : null;
     let finalTier: 'sfw' | 'nsfw';
-    if (!ageVerified && !isAdmin) {
+    let tierReason: string;
+    
+    if (isAdmin) {
+      // Admin users respect explicit tier or default to NSFW
+      finalTier = explicitTier || 'nsfw';
+      tierReason = explicitTier ? 'admin_explicit' : 'admin_default_nsfw';
+    } else if (!ageVerified) {
+      // Non-verified users are always SFW regardless of request
       finalTier = 'sfw';
+      tierReason = 'age_gated_sfw';
     } else if (explicitTier) {
+      // Age-verified users respect explicit tier
       finalTier = explicitTier;
+      tierReason = 'verified_explicit';
     } else {
+      // Age-verified users default to NSFW
       finalTier = 'nsfw';
+      tierReason = 'verified_default_nsfw';
     }
+    
+    console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified}, explicitTier: ${explicitTier})`);
     
     // Get system prompt using cached templates (roleplay or general)
     dbReadTime = Date.now() - dbStart;
@@ -621,8 +631,9 @@ You say: ...`;
 
     // Derive content tier and NSFW enforcement for worker payload
     const chosenTier: 'sfw' | 'nsfw' = finalTier;
-    const nsfwEnforce = contextType === 'character_roleplay' && chosenTier === 'nsfw';
-    const nsfwReason = explicitTier ? 'explicit_request' : (isAdmin ? 'admin_default' : (ageVerified ? 'age_verified_default' : 'age_gate'));
+    const nsfwEnforce = chosenTier === 'nsfw'; // Apply to ALL contexts, not just character_roleplay
+    
+    console.log(`🚀 Worker payload: tier=${chosenTier}, nsfwEnforce=${nsfwEnforce}, tierReason=${tierReason}`);
 
     // Call the chat worker with messages array format
     const basePayload: any = {
