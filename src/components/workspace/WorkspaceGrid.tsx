@@ -213,7 +213,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               </div>
 
               {/* Content Grid - Dynamic inline display */}
-              <div className={`grid gap-3 ${metadata.isVideoJob ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'}`}>
+              <div className={`grid gap-3 grid-cols-1 md:grid-cols-3`}>
                 {jobItems.map((item, index) => (
                   <div key={item.id} className="relative">
                     {/* Individual asset context indicator for images */}
@@ -279,84 +279,71 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               >
                 {/* Thumbnail Container */}
                 <div className="w-16 h-16 rounded overflow-hidden bg-gray-700 relative">
-                   {thumbnailItem?.url ? (
-                    <>
-                      {/* Video Thumbnail */}
-                      {thumbnailItem.type === 'video' ? (
-                        <div className="relative w-full h-full">
-                          {/* Use thumbnail URL if available, otherwise video poster */}
-                          <img 
-                            src={thumbnailItem.thumbnailUrl || thumbnailItem.url} 
-                            alt="Video thumbnail"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              console.error('Video thumbnail failed to load:', thumbnailItem.thumbnailUrl || thumbnailItem.url);
-                              // Show loading state instead of broken image
-                              const target = e.currentTarget;
-                              target.style.display = 'none';
-                              const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                          
-                          {/* Video Play Overlay */}
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                            <div className="bg-black/60 rounded-full p-1">
-                              <Play className="w-4 h-4 text-white" fill="white" />
-                            </div>
-                          </div>
-                          
-                          {/* Video Duration */}
-                          {thumbnailItem.duration && (
-                            <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">
-                              {thumbnailItem.duration}s
-                            </div>
-                          )}
-                          
-                          {/* Fallback for failed loads */}
-                          <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
-                            <VideoIcon className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      ) : (
-                        /* Image Thumbnail */
-                        <div className="relative w-full h-full">
-                          <img 
-                            src={thumbnailItem.url} 
-                            alt="Image thumbnail"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              console.error('Image thumbnail failed to load:', thumbnailItem.url);
-                              // Show loading state instead of broken image
-                              const target = e.currentTarget;
-                              target.style.display = 'none';
-                              const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                          
-                          {/* Fallback for failed loads */}
-                          <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
-                            <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
-                      <div className="w-4 h-4 rounded bg-muted-foreground/20" />
-                    </div>
-                  )}
-                  
-                  {/* Content Type Indicator */}
-                  <div className="absolute top-1 left-1">
-                    {metadata.isVideoJob ? (
-                      <VideoIcon className="w-3 h-3 text-blue-400" />
-                    ) : (
-                      <ImageIcon className="w-3 h-3 text-green-400" />
-                    )}
-                  </div>
-                </div>
+                   {/* Sidebar thumbnail - always show an image (real thumbnail for video if available, else placeholder) */}
+                   {thumbnailItem?.type === 'video' ? (
+                     <div className="relative w-full h-full">
+                       <img
+                         src={thumbnailItem.thumbnailUrl || '/video-placeholder.svg'}
+                         alt="Video thumbnail"
+                         className="w-full h-full object-cover"
+                         onError={(e) => {
+                           const target = e.currentTarget;
+                           target.style.display = 'none';
+                           const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
+                           if (fallback) fallback.style.display = 'flex';
+                         }}
+                       />
+                       {/* Video Play Overlay */}
+                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                         <div className="bg-black/60 rounded-full p-1">
+                           <Play className="w-4 h-4 text-white" fill="white" />
+                         </div>
+                       </div>
+                       {/* Video Duration */}
+                       {thumbnailItem.duration && (
+                         <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">
+                           {thumbnailItem.duration}s
+                         </div>
+                       )}
+                       {/* Fallback for failed loads */}
+                       <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
+                         <VideoIcon className="w-4 h-4 text-muted-foreground" />
+                       </div>
+                     </div>
+                   ) : thumbnailItem?.url ? (
+                     /* Image Thumbnail */
+                     <div className="relative w-full h-full">
+                       <img
+                         src={thumbnailItem.url}
+                         alt="Image thumbnail"
+                         className="w-full h-full object-cover"
+                         onError={(e) => {
+                           const target = e.currentTarget;
+                           target.style.display = 'none';
+                           const fallback = target.parentElement?.querySelector('.fallback-placeholder') as HTMLElement;
+                           if (fallback) fallback.style.display = 'flex';
+                         }}
+                       />
+                       {/* Fallback for failed loads */}
+                       <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
+                         <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                       </div>
+                     </div>
+                   ) : (
+                     <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
+                       <div className="w-4 h-4 rounded bg-muted-foreground/20" />
+                     </div>
+                   )}
+                   
+                   {/* Content Type Indicator */}
+                   <div className="absolute top-1 left-1">
+                     {metadata.isVideoJob ? (
+                       <VideoIcon className="w-3 h-3 text-blue-400" />
+                     ) : (
+                       <ImageIcon className="w-3 h-3 text-green-400" />
+                     )}
+                   </div>
+                 </div>
 
                 {/* Hover Delete/Dismiss Buttons - Small, clean like LTX */}
                 {hoveredJob === jobId && (onDeleteJob || onDismissJob) && (
