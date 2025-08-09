@@ -72,7 +72,7 @@ export type Database = {
           created_at: string | null
           generation_metadata: Json | null
           id: string
-          image_url: string
+          image_url: string | null
           job_id: string | null
           scene_prompt: string
           updated_at: string | null
@@ -83,7 +83,7 @@ export type Database = {
           created_at?: string | null
           generation_metadata?: Json | null
           id?: string
-          image_url: string
+          image_url?: string | null
           job_id?: string | null
           scene_prompt: string
           updated_at?: string | null
@@ -94,7 +94,7 @@ export type Database = {
           created_at?: string | null
           generation_metadata?: Json | null
           id?: string
-          image_url?: string
+          image_url?: string | null
           job_id?: string | null
           scene_prompt?: string
           updated_at?: string | null

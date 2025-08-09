@@ -555,27 +555,18 @@ You say: ...`;
       console.log(`🛡️ NSFW override active due to ${isAdmin ? 'admin' : 'owner'} privileges`);
     }
 
-    // Resolve final content tier (NSFW-first)
-    const explicitTier = (typeof content_tier === 'string' && (content_tier === 'sfw' || content_tier === 'nsfw')) ? content_tier as 'sfw' | 'nsfw' : null;
+    // Simplified NSFW-first content tier logic
     let finalTier: 'sfw' | 'nsfw';
     let tierReason: string;
     
-    if (isAdmin) {
-      // Admin users respect explicit tier or default to NSFW
-      finalTier = explicitTier || 'nsfw';
-      tierReason = explicitTier ? 'admin_explicit' : 'admin_default_nsfw';
-    } else if (!ageVerified) {
-      // Non-verified users are always SFW regardless of request
+    if (isAdmin || ageVerified) {
+      // Admin and age-verified users get NSFW by default
+      finalTier = 'nsfw';
+      tierReason = isAdmin ? 'admin_nsfw_default' : 'verified_nsfw_default';
+    } else {
+      // Non-verified users are restricted to SFW
       finalTier = 'sfw';
       tierReason = 'age_gated_sfw';
-    } else if (explicitTier) {
-      // Age-verified users respect explicit tier
-      finalTier = explicitTier;
-      tierReason = 'verified_explicit';
-    } else {
-      // Age-verified users default to NSFW
-      finalTier = 'nsfw';
-      tierReason = 'verified_default_nsfw';
     }
     
     console.log(`🎯 Content tier resolved: ${finalTier} (reason: ${tierReason}, admin: ${isAdmin}, ageVerified: ${ageVerified}, explicitTier: ${explicitTier})`);

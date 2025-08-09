@@ -24,6 +24,8 @@ import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
+import { ConversationHistory } from '@/components/ConversationHistory';
+import { MessageBubble } from '@/components/playground/MessageBubble';
 
 // Mock character data - in real app this would come from database
 const mockCharacters = {
@@ -89,7 +91,7 @@ const RoleplayChatInterface = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showCharacterPanel, setShowCharacterPanel] = useState(false); // Changed to false by default
+  const [showCharacterPanel, setShowCharacterPanel] = useState(true); // Show by default for better UX
   const [showPromptModal, setShowPromptModal] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState("A mysterious woman in an elegant nightclub, dramatic lighting, cinematic composition");
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
@@ -97,471 +99,255 @@ const RoleplayChatInterface = () => {
   const [generateImageForMessage, setGenerateImageForMessage] = useState(false);
   const [characterLiked, setCharacterLiked] = useState(false);
   
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-  const initRef = useRef<{ charId?: string; attempted: boolean }>({ attempted: false });
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { getEntry } = useGeneratedMedia();
 
-  // Persist Auto-generate Scene toggle in localStorage
+  // Auto scroll to bottom on new messages
   useEffect(() => {
-    const saved = localStorage.getItem('rp:autoGenScene');
-    if (saved !== null) setGenerateImageForMessage(saved === '1');
-  }, []);
-  useEffect(() => {
-    localStorage.setItem('rp:autoGenScene', generateImageForMessage ? '1' : '0');
-  }, [generateImageForMessage]);
-
-  // Inline image generation context helpers
-  const { getEntry, setPending, setReady } = useGeneratedMedia();
-  const hash = (str: string) => {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) {
-      h = (h << 5) - h + str.charCodeAt(i);
-      h |= 0;
-    }
-    return Math.abs(h).toString(36);
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Kick off a health check once on mount to populate status
+  // Auto-focus input on mount
   useEffect(() => {
-    runHealthCheck();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    inputRef.current?.focus();
   }, []);
 
-  // Initialize or restore character-scoped conversation (robust, no loops)
-  useEffect(() => {
-    // Only proceed when a valid character is loaded from DB
-    if (!effectiveCharacterId || !character?.id) return;
-    const charId = character.id;
-
-    // Reset attempt tracking if character changes
-    if (initRef.current.charId !== charId) {
-      initRef.current = { charId, attempted: false };
-    }
-
-    const active = conversations?.find(c => c.id === state.activeConversationId);
-    if (active && active.character_id === charId && active.conversation_type === 'character_roleplay') {
-      return;
-    }
-
-    const existing = conversations?.find(c => (
-      c.character_id === charId && c.conversation_type === 'character_roleplay'
-    ));
-
-    if (existing) {
-      if (state.activeConversationId !== existing.id) {
-        setActiveConversation(existing.id);
-      }
-      return;
-    }
-
-    if (!state.activeConversationId && !initRef.current.attempted) {
-      initRef.current.attempted = true;
-      createConversation(`Roleplay: ${character.name}`, undefined, 'character_roleplay', charId);
-    }
-  }, [effectiveCharacterId, character?.id, character?.name, conversations, state.activeConversationId, setActiveConversation, createConversation]);
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !state.activeConversationId) return;
-
-    const message = inputMessage.trim();
-    setInputMessage('');
-
+    if (!inputMessage.trim() || isTyping) return;
+    
+    setIsTyping(true);
     try {
-      await sendMessage(message, { characterId: character?.id });
-
-      // Auto-generate scene if enabled
-      if (generateImageForMessage && character) {
-        const windowStart = Math.max(0, Math.max(0, messages.length - 5));
-        const recent = messages.slice(windowStart).concat([{ sender: 'user', content: message } as any]);
-        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
-        const enriched = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
-
-        await generateSceneFromMessage(enriched, {
-          characterId: character.id,
-          conversationId: state.activeConversationId,
-          characterName: character.name,
-          referenceImageUrl: character.reference_image_url,
-          isEnabled: true
-        });
-      }
+      await sendMessage(inputMessage, { 
+        characterId: effectiveCharacterId,
+        conversationId: state.activeConversationId 
+      });
+      setInputMessage('');
+      inputRef.current?.focus();
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setIsTyping(false);
     }
   };
 
-  const handleKeyPress = (e) => {
+  const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
-  // Collapsible Character Panel Component - Much more compact
-  const CharacterPanel = () => (
-    <div className={`
-      ${showCharacterPanel ? 'w-72' : 'w-0'} 
-      transition-all duration-300 ease-in-out overflow-hidden
-      bg-gray-950 border-r border-gray-800 flex-shrink-0
-      lg:relative lg:block
-      ${showCharacterPanel ? 'block' : 'hidden lg:block'}
-    `}>
-      <div className="h-full overflow-y-auto">
-        {/* Compact Header */}
-        <div className="p-3 border-b border-gray-800">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <img 
-                src={displayAvatar}
-                alt={displayName}
-                className="w-8 h-8 rounded-full border border-purple-500"
-              />
-              <div className="min-w-0 flex-1">
-                <h3 className="font-medium text-sm truncate">{displayName}</h3>
-                <p className="text-xs text-gray-400 truncate">{displayCreator}</p>
+  const handleToggleLike = async () => {
+    setCharacterLiked(!characterLiked);
+    if (character?.id) {
+      await likeCharacter(character.id);
+    }
+  };
+
+  const handleCreateConversation = async () => {
+    try {
+      await createConversation('New Chat', undefined, 'character_roleplay', effectiveCharacterId);
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+    }
+  };
+
+  const CharacterPanel = ({ 
+    character, displayName, displayAvatar, displayCreator, 
+    displayLikes, displayMood, displayTraits, characterLiked, 
+    onToggleLike, onTogglePanel, isLoadingCharacter, isLoadingScenes, scenes,
+    conversations, activeConversationId, onCreateConversation, onSelectConversation
+  }) => {
+    return (
+      <div className="p-4 space-y-4">
+        {/* Header with close button */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Chat & Character</h2>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onTogglePanel}
+            className="text-gray-400 hover:text-white h-8 w-8"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Chat History Section */}
+        <ConversationHistory
+          conversations={conversations || []}
+          activeConversationId={activeConversationId}
+          onCreateConversation={onCreateConversation}
+          onSelectConversation={onSelectConversation}
+        />
+
+        {/* Separator */}
+        <div className="border-t border-gray-700"></div>
+
+        {/* Character Info */}
+        <div className="space-y-3">
+          <h3 className="text-md font-semibold text-gray-300">Character Details</h3>
+          <div className="flex items-center space-x-3">
+            <img 
+              src={displayAvatar} 
+              alt={displayName}
+              className="w-16 h-16 rounded-full object-cover"
+            />
+            <div>
+              <h4 className="font-semibold text-lg">{displayName}</h4>
+              <p className="text-sm text-gray-400">{displayCreator}</p>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className="text-xs text-gray-500">{displayLikes} likes</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onToggleLike}
+                  className={`p-1 h-6 w-6 ${characterLiked ? 'text-red-500' : 'text-gray-400'}`}
+                >
+                  <Heart className={`w-3 h-3 ${characterLiked ? 'fill-current' : ''}`} />
+                </Button>
               </div>
             </div>
-            <button
-              onClick={() => setShowCharacterPanel(false)}
-              className="p-1 hover:bg-gray-800 rounded lg:hidden"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
-          
-          {/* Compact Actions */}
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={() => {
-                  if (!characterLiked && character) {
-                    likeCharacter(character.id);
-                    setCharacterLiked(true);
-                  }
-                }}
-                className={`flex items-center space-x-1 px-2 py-1 rounded text-xs ${
-                  characterLiked ? 'bg-red-600/20 text-red-400' : 'bg-gray-800 text-gray-400'
-                }`}
-              >
-                <Heart className={`w-3 h-3 ${characterLiked ? 'fill-current' : ''}`} />
-                <span>{displayLikes + (characterLiked ? 1 : 0)}</span>
-              </button>
-              <button className="p-1 bg-gray-800 rounded hover:bg-gray-700">
-                <Share className="w-3 h-3" />
-              </button>
-            </div>
-            <div className="flex items-center space-x-1">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <span className="text-xs text-gray-400">{displayMood}</span>
+
+          {/* Character traits */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-300">Mood: <span className="text-purple-400">{displayMood}</span></p>
+            <div className="flex flex-wrap gap-1">
+              {displayTraits.map((trait, idx) => (
+                <span key={idx} className="px-2 py-1 bg-gray-800 text-xs rounded-full text-gray-300">
+                  {trait}
+                </span>
+              ))}
             </div>
           </div>
-        </div>
 
-        {/* New Chat Button - Smaller */}
-        <div className="p-3 border-b border-gray-800">
-          <button className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 rounded text-sm font-medium flex items-center justify-center space-x-1">
-            <Plus className="w-3 h-3" />
-            <span>New chat</span>
-          </button>
-        </div>
-
-        {/* Compact Traits */}
-        <div className="p-3 border-b border-gray-800">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">Traits</h4>
-          <div className="flex flex-wrap gap-1">
-            {displayTraits.map((trait, index) => (
-              <span key={index} className="px-2 py-1 bg-gray-800 rounded text-xs">
-                {trait}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Voice Controls - Compact */}
-        <div className="p-3 border-b border-gray-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400">Voice</span>
-            <div className="flex items-center space-x-1">
-              <button 
-                onClick={() => setIsVoiceEnabled(!isVoiceEnabled)}
-                className={`p-1 rounded ${isVoiceEnabled ? 'bg-purple-600' : 'bg-gray-700'}`}
-              >
-                {isVoiceEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
-              </button>
-              <span className="text-xs text-gray-500">Default</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Scene Gallery - Real data from database */}
-        <div className="p-3">
-          <h4 className="text-xs font-medium text-gray-400 mb-2">Scenes ({scenes.length})</h4>
-          {isLoadingScenes ? (
-            <div className="text-xs text-gray-500">Loading scenes...</div>
-          ) : scenes.length > 0 ? (
+          {/* Character description */}
+          {character?.description && (
             <div className="space-y-2">
-              {scenes.map((scene) => (
-                <div key={scene.id} className="relative group">
-                  <img 
-                    src={scene.image_url} 
-                    alt={scene.scene_prompt}
-                    className="w-full h-24 object-cover rounded cursor-pointer hover:opacity-80"
-                    title={scene.scene_prompt}
-                  />
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
-                    <div className="flex space-x-1">
-                      <button className="p-1 bg-black bg-opacity-60 rounded">
-                        <Copy className="w-3 h-3" />
-                      </button>
-                      <button className="p-1 bg-black bg-opacity-60 rounded">
-                        <Download className="w-3 h-3" />
-                      </button>
+              <p className="text-sm font-medium text-gray-300">About</p>
+              <p className="text-xs text-gray-400 leading-relaxed">{character.description}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Scenes Gallery */}
+        {scenes && scenes.length > 0 && (
+          <div className="space-y-3">
+            <h3 className="text-md font-semibold text-gray-300">Character Scenes</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {scenes.slice(0, 4).map((scene, idx) => (
+                <div key={idx} className="aspect-square bg-gray-800 rounded-lg overflow-hidden">
+                  {scene.image_url ? (
+                    <img 
+                      src={scene.image_url} 
+                      alt={`Scene ${idx + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                      <Camera className="w-6 h-6" />
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="text-xs text-gray-500">No scenes generated yet</div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="flex h-screen bg-black text-white">
-      {/* Desktop Character Panel - Now collapsible */}
-      <div className="hidden lg:flex">
-        <CharacterPanel />
-        {/* Toggle Button for Desktop */}
-        {!showCharacterPanel && (
-          <button
-            onClick={() => setShowCharacterPanel(true)}
-            className="w-8 bg-gray-950 border-r border-gray-800 flex items-center justify-center hover:bg-gray-900"
-          >
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </button>
+          </div>
         )}
       </div>
+    );
+  };
 
-      {/* Mobile Character Panel Overlay */}
-      {showCharacterPanel && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black bg-opacity-50">
-          <div className="w-72 h-full bg-gray-950">
-            <CharacterPanel />
-          </div>
-        </div>
-      )}
+  return (
+    <div className="flex h-screen bg-black text-white relative overflow-hidden">
+      <RoleplayHeader title={displayName} />
+      
+      {/* Character Panel - Fixed z-index and padding for header */}
+      <div className={`${showCharacterPanel ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 fixed left-0 top-16 bottom-0 w-80 bg-gray-900 border-r border-gray-700 z-30 overflow-y-auto`}>
+        <CharacterPanel 
+          character={character}
+          displayName={displayName}
+          displayAvatar={displayAvatar}
+          displayCreator={displayCreator}
+          displayLikes={displayLikes}
+          displayMood={displayMood}
+          displayTraits={displayTraits}
+          characterLiked={characterLiked}
+          onToggleLike={handleToggleLike}
+          onTogglePanel={() => setShowCharacterPanel(false)}
+          isLoadingCharacter={isLoadingCharacter}
+          isLoadingScenes={isLoadingScenes}
+          scenes={scenes}
+          conversations={conversations}
+          activeConversationId={state.activeConversationId}
+          onCreateConversation={handleCreateConversation}
+          onSelectConversation={setActiveConversation}
+        />
+      </div>
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Compact Mobile Header */}
-        <div className="lg:hidden px-3 py-2 border-b border-gray-800 flex items-center justify-between">
-          <button 
-            onClick={() => navigate('/roleplay')}
-            className="p-1 hover:bg-gray-800 rounded"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          
-          <div className="flex items-center space-x-2">
-            <img 
-              src={displayAvatar}
-              alt={displayName}
-              className="w-6 h-6 rounded-full"
-            />
-            <span className="font-medium text-sm">{displayName}</span>
-          </div>
-          
-          <button 
+      {/* Main Chat Area - Fixed padding for header */}
+      <div className={`flex-1 flex flex-col transition-all duration-300 pt-16 ${showCharacterPanel ? 'ml-80' : 'ml-0'}`}>
+        {/* Toggle button for character panel */}
+        {!showCharacterPanel && (
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setShowCharacterPanel(true)}
-            className="p-1 hover:bg-gray-800 rounded"
+            className="fixed left-4 top-20 z-20 bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700"
           >
-            <Settings className="w-4 h-4" />
-          </button>
-        </div>
+            <Menu className="w-4 h-4 mr-1" />
+            Character
+          </Button>
+        )}
 
-        {/* Compact Desktop Header */}
-        <div className="hidden lg:flex px-4 py-2 border-b border-gray-800 items-center justify-between">
-          <div className="flex items-center space-x-2">
-            {showCharacterPanel && (
-              <button
-                onClick={() => setShowCharacterPanel(false)}
-                className="p-1 hover:bg-gray-800 rounded"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-            )}
-            <h1 className="text-lg font-medium">Roleplay Chat</h1>
-            <span className="px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded text-xs">Active</span>
-            {/* Admin: Template/Tier Badges */}
-            {isAdmin && state.lastResponseMeta?.content_tier && (
-              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
-                Tier: {String(state.lastResponseMeta.content_tier).toUpperCase()}
-              </span>
-            )}
-            {isAdmin && state.lastResponseMeta?.template_meta?.origin && (
-              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
-                Origin: {state.lastResponseMeta.template_meta.origin}
-              </span>
-            )}
-            
-            {/* Worker status indicator - subtle */}
-            <div className="flex items-center gap-2 pl-2 border-l border-gray-800">
-              <span className={`w-2 h-2 rounded-full ${workerLoading ? 'bg-gray-500' : (chatWorker?.isHealthy ? 'bg-green-500' : 'bg-gray-500')}`}></span>
-              <span className="text-xs text-gray-400">{workerLoading ? 'Checking worker...' : (chatWorker?.isHealthy ? 'Worker online' : 'Worker status')}</span>
-              <button onClick={runHealthCheck} className="p-1 hover:bg-gray-800 rounded" title="Refresh worker status">
-                <RotateCcw className="w-3 h-3 text-gray-400" />
-              </button>
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 pb-20 space-y-4">
+          {/* Chat content */}
+          {messages.length === 0 ? (
+            <div className="text-center text-gray-400 mt-20">
+              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg mb-2">Start your conversation with {displayName}</p>
+              <p className="text-sm">Share your thoughts, ask questions, or begin a roleplay scenario.</p>
             </div>
-          </div>
-          <div className="flex items-center space-x-1">
-            <button className="p-1 hover:bg-gray-800 rounded">
-              <Share className="w-4 h-4" />
-            </button>
-            <button className="p-1 hover:bg-gray-800 rounded">
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Messages - More compact spacing */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3">
-          {messages.map((message, idx) => {
-            const stableKey = `${message.conversation_id}:${hash(message.content)}`;
-            const mediaEntry = getEntry(stableKey);
-            const isUserMsg = message.sender === 'user';
-            const windowStart = Math.max(0, idx - 5);
-            const recent = messages.slice(windowStart, idx + 1);
-            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
-            const enrichedContent = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
-            return (
-              <div key={message.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] sm:max-w-[75%] ${
-                  isUserMsg 
-                    ? 'bg-blue-600 rounded-2xl rounded-br-md' 
-                    : 'bg-gray-800 rounded-2xl rounded-bl-md'
-                } px-3 py-2`}>
-                  {!isUserMsg && (
-                    <div className="flex items-center space-x-2 mb-1">
-                      <img 
-                        src={displayAvatar}
-                        alt={displayName}
-                        className="w-4 h-4 rounded-full"
-                      />
-                      <span className="font-medium text-xs">{displayName}</span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </span>
-                    </div>
-                  )}
-                  
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {message.content}
-                  </div>
-                  
-                  {!isUserMsg && (
-                    <>
-                      {/* Actions */}
-                      <div className="flex items-center space-x-1 mt-2">
-                        <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
-                          <RotateCcw className="w-3 h-3" />
-                        </button>
-                        <button className="flex items-center space-x-1 p-1 hover:bg-gray-700 rounded text-xs">
-                          <Copy className="w-3 h-3" />
-                        </button>
-                        {/* Generate Image button */}
-                        <SceneImageGenerator
-                          messageContent={enrichedContent}
-                          onGenerationStart={() => setPending(stableKey)}
-                          onImageGenerated={(assetId, imageUrl, bucket) => {
-                            setReady(stableKey, { assetId, imageUrl: imageUrl || null, bucket: bucket || null });
-                          }}
-                          mode="roleplay"
-                        />
-                      </div>
-
-                      {/* Inline media status and display */}
-                      {mediaEntry?.status === 'pending' && (
-                        <Card className="mt-2 p-3 max-w-xs bg-muted/30">
-                          <div className="flex items-center gap-2">
-                            <LoadingSpinner size="sm" />
-                            <span className="text-xs text-muted-foreground">Generating image...</span>
-                          </div>
-                        </Card>
-                      )}
-
-                      {mediaEntry?.status === 'ready' && mediaEntry.assetId && (
-                        <div className="mt-2">
-                          <InlineImageDisplay
-                            assetId={mediaEntry.assetId}
-                            imageUrl={mediaEntry.imageUrl || undefined}
-                            bucket={mediaEntry.bucket || undefined}
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
+          ) : (
+            <>
+              {messages.map((message) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  mode="roleplay"
+                  roleplayTemplate={true}
+                />
+              ))}
+            </>
+          )}
+          {isTyping && (
+            <div className="flex items-center space-x-2 text-gray-400">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
-            );
-          })}
-          
-          {(isTyping || state.isLoadingMessage) && (
-            <div className="flex justify-start">
-              <div className="bg-gray-800 rounded-2xl rounded-bl-md px-3 py-2 max-w-[85%] sm:max-w-[75%]">
-                <div className="flex items-center space-x-2 mb-1">
-                  <img 
-                    src={displayAvatar}
-                    alt={displayName}
-                    className="w-4 h-4 rounded-full"
-                  />
-                  <span className="font-medium text-xs">{displayName}</span>
-                  <span className="text-xs text-gray-400">typing...</span>
-                </div>
-                <div className="flex space-x-1">
-                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"></div>
-                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                </div>
-              </div>
+              <span className="text-sm">{displayName} is typing...</span>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Compact Input Area */}
-        <div className="p-3 border-t border-gray-800">
-          {/* Quick Options - Smaller */}
-          <div className="flex items-center space-x-2 mb-2">
-            <label className="flex items-center space-x-1 text-xs">
-              <input 
-                type="checkbox" 
+        {/* Input Area - Fixed at bottom */}
+        <div className="bg-gray-900 border-t border-gray-700 p-4 space-y-3">
+          {/* Controls Row */}
+          <div className="flex items-center justify-between text-xs">
+            <label className="flex items-center space-x-2 text-gray-400">
+              <input
+                type="checkbox"
                 checked={generateImageForMessage}
                 onChange={(e) => setGenerateImageForMessage(e.target.checked)}
-                className="w-3 h-3 rounded"
+                className="rounded border-gray-600 bg-gray-800 text-purple-600"
               />
               <span>Auto-generate scene</span>
             </label>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
-                    <Info className="w-3 h-3 text-gray-400" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent className="text-xs max-w-xs">
-                  When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
             
             <button 
               onClick={() => setIsListening(!isListening)}
@@ -571,7 +357,7 @@ const RoleplayChatInterface = () => {
             </button>
           </div>
           
-          {/* Input Row - More compact */}
+          {/* Input Row */}
           <div className="flex space-x-2">
             <div className="flex-1 relative">
               <Textarea
@@ -604,7 +390,7 @@ const RoleplayChatInterface = () => {
         </div>
       </div>
 
-      {/* Prompt Modal - Slightly more compact */}
+      {/* Prompt Modal */}
       {showPromptModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 rounded-lg p-4 w-full max-w-xl max-h-[90vh] overflow-y-auto">
@@ -648,14 +434,11 @@ const RoleplayChatInterface = () => {
 const RoleplayChat = () => {
   return (
     <div className="min-h-screen bg-black">
-      <RoleplayHeader title="Roleplay Chat" backPath="/roleplay" />
-      <div className="pt-12 h-screen">
-        <GeneratedMediaProvider>
-          <PlaygroundProvider>
-            <RoleplayChatInterface />
-          </PlaygroundProvider>
-        </GeneratedMediaProvider>
-      </div>
+      <GeneratedMediaProvider>
+        <PlaygroundProvider>
+          <RoleplayChatInterface />
+        </PlaygroundProvider>
+      </GeneratedMediaProvider>
     </div>
   );
 };

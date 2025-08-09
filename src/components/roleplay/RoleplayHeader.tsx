@@ -24,7 +24,7 @@ export const RoleplayHeader = ({
 
   return (
     <header className="fixed top-0 w-full bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
-      <div className="flex items-center justify-between h-12 px-4">
+      <div className="flex items-center justify-between h-16 px-4">
         {showBackButton ? (
           <Button
             variant="ghost"
