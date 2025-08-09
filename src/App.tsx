@@ -20,7 +20,6 @@ import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
 import Playground from "@/pages/Playground";
 import RoleplayDashboard from "@/pages/RoleplayDashboard";
-import RoleplayCharacterSelection from "@/pages/RoleplayCharacterSelection";
 import RoleplayChat from "@/pages/RoleplayChat";
 import NotFound from "@/pages/NotFound";
 import { useMobileDetection } from "@/hooks/useMobileDetection";
@@ -55,9 +54,8 @@ function App() {
               <Route path="/auth" element={<Auth />} />
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
-              <Route path="/roleplay" element={<ProtectedRoute><RoleplayDashboard /></ProtectedRoute>} />
-              <Route path="/roleplay/select" element={<ProtectedRoute><RoleplayCharacterSelection /></ProtectedRoute>} />
-              <Route path="/roleplay/chat" element={<ProtectedRoute><RoleplayChat /></ProtectedRoute>} />
+            <Route path="/roleplay" element={<ProtectedRoute><RoleplayDashboard /></ProtectedRoute>} />
+            <Route path="/roleplay/chat" element={<ProtectedRoute><RoleplayChat /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
