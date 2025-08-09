@@ -76,12 +76,12 @@ export const UserCharacterSelector = ({
       )}
       
       <div className="flex gap-2">
-        <Select value={selectedCharacterId || ""} onValueChange={(value) => onCharacterSelect(value || null)}>
+        <Select value={selectedCharacterId || "anonymous"} onValueChange={(value) => onCharacterSelect(value === "anonymous" ? null : value)}>
           <SelectTrigger className="flex-1 bg-gray-800 border-gray-700">
             <SelectValue placeholder="Select character" />
           </SelectTrigger>
           <SelectContent className="bg-gray-800 border-gray-700">
-            <SelectItem value="">Anonymous User</SelectItem>
+            <SelectItem value="anonymous">Anonymous User</SelectItem>
             {characters.map((character) => (
               <SelectItem key={character.id} value={character.id}>
                 {character.name}
