@@ -140,6 +140,15 @@ serve(async (req) => {
 - Follow platform policies and applicable laws.`;
     const NSFW_STRICT_MARK = '[[NSFW_ENFORCE_V2]]';
 
+    // Roleplay formatting rules to enforce consistent output structure
+    const ROLEPLAY_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V1]]';
+    const ROLEPLAY_FORMAT_RULES = `${ROLEPLAY_FORMAT_MARK}
+- Use Markdown formatting:
+  - **CharacterName:** for character dialogue
+  - *italics* for internal thoughts
+  - Use **Narrator:** for scene description and transitions
+- Do not speak for the user's character unless they provide a line.`;
+
     // Age-gating override (non-verified users)
     if (ageVerified === false && contentTier === 'nsfw') {
       contentTier = 'sfw';
@@ -158,34 +167,9 @@ serve(async (req) => {
       const sceneMemory = buildSceneMemory(conversationHistory);
 
       if (contentTier === 'nsfw') {
-        const strictPrompt = `${NSFW_STRICT_MARK}
-ROLE: You are ${characterData.name || 'Character'}, participating in explicit, adult-only, consensual character roleplay.
-AGE & CONSENT: All parties are 18+ and consent. Never depict or imply minors, incest, bestiality, or non-consensual acts.
-PERSONA: ${characterData.persona || ''}
-VOICE: ${characterData.voice_tone || 'neutral'} | MOOD: ${characterData.mood || 'neutral'}
-APPEARANCE: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}
-${sceneMemory ? `SCENE MEMORY (persist and continue, do not reset): ${sceneMemory}` : ''}
-STYLE GUIDE (must):
-- Stay fully in-character as ${characterData.name || 'the character'}; address the partner as "you".
-- Be concrete and sensory (touch, taste, scent, sound, sight). Show, don’t tell.
-- Use direct, explicit language when context indicates. Keep 120–220 words over 2–4 short paragraphs.
-- Maintain continuity with SCENE MEMORY. Keep pacing natural; escalate only when prompted.
-STYLE GUIDE (never):
-- No safety PSAs, moralizing, or policy mentions. No meta talk or "as an AI" disclaimers.
-- No illegal content; no minors/incest/bestiality/non-consent; no exploitation.
-FORMATTING:
-- Plain text only. No markdown unless the user uses it first. Avoid emojis unless explicitly requested.
-INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, staying immersive and consistent.`;
-        console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
-        lastPromptMeta = {
-          origin: 'inline.strict_nsfw',
-          context_type: contextType,
-          content_tier: contentTier,
-          nsfw_strict: true,
-          character_id: characterData.id || null,
-          character_name: characterData.name || null,
-        };
-        return strictPrompt;
+        console.log('🔥 NSFW strict preference detected; using template-based roleplay prompt');
+        // Fall through to template-based character_roleplay prompt; strict formatting
+        // and NSFW guidance will be appended to the selected template below.
       }
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
       let templateKey = '';
@@ -274,6 +258,10 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
         if (contentTier === 'nsfw' && !processedFinal.includes(NSFW_GUIDANCE_MARK)) {
           processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
           console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
+        }
+        if (!processedFinal.includes(ROLEPLAY_FORMAT_MARK)) {
+          processedFinal = `${processedFinal}\n\n${ROLEPLAY_FORMAT_RULES}`;
+          console.log('🔧 Appended roleplay format rules to system prompt');
         }
         roleplayPromptCache.set(cacheKey, processedFinal);
         return processedFinal;
