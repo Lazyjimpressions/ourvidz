@@ -305,9 +305,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   ];
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border px-2 py-1 z-50">
+    <div className="fixed bottom-4 left-4 right-4 z-50">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-muted/50 border border-border rounded-lg px-2 py-1.5">
+        <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2">
           <div className="space-y-1.5">
             {/* Row 1: IMAGE button + Reference Images + Prompt Input */}
             <div className="flex items-center gap-1.5">
@@ -363,8 +363,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     value={prompt}
                     onChange={(e) => onPromptChange(e.target.value)}
                     placeholder="A close-up of a woman talking on the phone..."
-                    className="flex-1 h-9 py-1.5 px-2 bg-background border border-input rounded text-foreground placeholder-muted-foreground text-xs focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                    rows={2}
+                    className="flex-1 h-16 py-2 px-3 bg-background border border-input rounded text-foreground placeholder-muted-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                    rows={3}
                     disabled={isGenerating}
                   />
                   
@@ -372,12 +372,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <button
                     type="submit"
                     disabled={isGenerating || !prompt.trim()}
-                    className="h-9 w-9 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                    className="h-16 w-16 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {isGenerating ? (
-                      <div className="w-3 h-3 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" />
+                      <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" />
                     ) : (
-                      <Play size={12} />
+                      <Play size={16} />
                     )}
                   </button>
                 </form>

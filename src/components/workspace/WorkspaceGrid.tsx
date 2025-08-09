@@ -212,8 +212,8 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 </p>
               </div>
 
-              {/* Content Grid - Dynamic inline display */}
-              <div className={`grid gap-3 grid-cols-1 md:grid-cols-3`}>
+              {/* Content Grid - Clean, maximized layout */}
+              <div className={`grid gap-2 grid-cols-1 md:grid-cols-4 lg:grid-cols-6`}>
                 {jobItems.map((item, index) => (
                   <div key={item.id} className="relative">
                     {/* Individual asset context indicator for images */}

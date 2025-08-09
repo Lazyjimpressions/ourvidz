@@ -190,11 +190,6 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             </div>
           )}
           
-          {/* Video Type Indicator - Top Left */}
-          <div className="absolute top-2 left-2 bg-blue-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-            <VideoIcon className="w-3 h-3" />
-            Video
-          </div>
         </div>
       ) : (
         <div className="relative w-full h-full">
@@ -222,11 +217,6 @@ export const ContentCard: React.FC<ContentCardProps> = ({
             <div className="w-8 h-8 rounded bg-muted-foreground/20"></div>
           </div>
           
-          {/* Image Type Indicator - Top Left */}
-          <div className="absolute top-2 left-2 bg-green-600/80 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
-            <ImageIcon className="w-3 h-3" />
-            Image
-          </div>
         </div>
       )}
 
