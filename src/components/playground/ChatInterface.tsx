@@ -63,7 +63,7 @@ export const ChatInterface = () => {
     setIsSubmitting(true);
 
     try {
-      await sendMessage(message);
+      await sendMessage(message, { conversationId });
     } catch (error) {
       console.error('Failed to send message:', error);
     } finally {
@@ -115,13 +115,13 @@ ${characterDescriptions}
 
 Begin the roleplay naturally, embodying the character fully with all their traits, speaking style, and background.`;
     
-    await sendMessage(message);
+    await sendMessage(message, { conversationId });
   };
 
   // Handle admin tool start
   const handleStartAdminTool = async (tool: any, context: any) => {
     try {
-      await createConversation(`Admin: ${tool.name}`, undefined, 'admin');
+      const convId = await createConversation(`Admin: ${tool.name}`, undefined, 'admin');
 
       const userMessage = `I want to use the ${tool.name} tool.
 Target Model: ${context.targetModel || 'Not specified'}
@@ -129,7 +129,7 @@ Purpose: ${context.purpose || 'Not specified'}
 
 Please help me with this admin task.`;
 
-      await sendMessage(userMessage);
+      await sendMessage(userMessage, { conversationId: convId });
     } catch (error) {
       console.error('Error starting admin tool:', error);
     }
@@ -138,7 +138,7 @@ Please help me with this admin task.`;
   // Handle creative tool start
   const handleStartCreativeTool = async (tool: any, context: any) => {
     try {
-      await createConversation(`Creative: ${tool.name}`, undefined, 'creative');
+      const convId = await createConversation(`Creative: ${tool.name}`, undefined, 'creative');
 
       const userMessage = `I want to use the ${tool.name} tool for creative development.
 Project Type: ${context.projectType || 'Not specified'}
@@ -146,7 +146,7 @@ Goal: ${context.goal || 'Not specified'}
 
 Please help me with this creative project.`;
 
-      await sendMessage(userMessage);
+      await sendMessage(userMessage, { conversationId: convId });
     } catch (error) {
       console.error('Error starting creative tool:', error);
     }

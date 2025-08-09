@@ -68,7 +68,7 @@ interface PlaygroundContextType {
   isLoadingMessages: boolean;
   setActiveConversation: (id: string | null) => void;
   createConversation: (title?: string, projectId?: string, conversationType?: string, characterId?: string) => Promise<string>;
-  sendMessage: (content: string, options?: { characterId?: string }) => Promise<void>;
+  sendMessage: (content: string, options?: { characterId?: string; conversationId?: string }) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   refreshPromptCache: () => Promise<void>;
@@ -169,10 +169,8 @@ const createConversationMutation = useMutation({
       return data;
     },
     onSuccess: (data) => {
-      // Store latest template/tier meta for admin UI
+      // Store latest template/tier meta for admin UI (do not refetch immediately)
       dispatch({ type: 'SET_LAST_RESPONSE_META', payload: data });
-      queryClient.invalidateQueries({ queryKey: ['messages', state.activeConversationId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
     onError: (error) => {
       console.error('Failed to send message:', error);
@@ -237,8 +235,9 @@ const createConversation = useCallback(async (title?: string, projectId?: string
   return result.id;
 }, [createConversationMutation]);
 
-  const sendMessage = useCallback(async (content: string, options?: { characterId?: string }) => {
-    if (!state.activeConversationId) {
+  const sendMessage = useCallback(async (content: string, options?: { characterId?: string; conversationId?: string }) => {
+    const targetConversationId = options?.conversationId || state.activeConversationId;
+    if (!targetConversationId) {
       toast.error('No active conversation');
       return;
     }
@@ -247,7 +246,7 @@ const createConversation = useCallback(async (title?: string, projectId?: string
     dispatch({ type: 'SET_ERROR', payload: null });
 
     // Optimistic UI: add user message and assistant placeholder
-    const conversationKey = ['messages', state.activeConversationId] as const;
+    const conversationKey = ['messages', targetConversationId] as const;
     const nowIso = new Date().toISOString();
     const tempUserId = `temp-user-${Date.now()}`;
     const tempAssistantId = `temp-assistant-${Date.now()}`;
@@ -256,20 +255,47 @@ const createConversation = useCallback(async (title?: string, projectId?: string
       const prev = old || [];
       return [
         ...prev,
-        { id: tempUserId, conversation_id: state.activeConversationId!, sender: 'user', content, message_type: 'text', created_at: nowIso },
-        { id: tempAssistantId, conversation_id: state.activeConversationId!, sender: 'assistant', content: '…', message_type: 'text', created_at: nowIso },
+        { id: tempUserId, conversation_id: targetConversationId, sender: 'user', content, message_type: 'text', created_at: nowIso },
+        { id: tempAssistantId, conversation_id: targetConversationId, sender: 'assistant', content: '…', message_type: 'text', created_at: nowIso },
       ];
     });
 
     try {
-      await sendMessageMutation.mutateAsync({
-        conversationId: state.activeConversationId,
+      const data: any = await sendMessageMutation.mutateAsync({
+        conversationId: targetConversationId,
         content,
         characterId: options?.characterId,
       });
+
+      // Patch assistant placeholder with actual response immediately
+      if (data?.response) {
+        queryClient.setQueryData<Message[]>(conversationKey as any, (old: Message[] | undefined) => {
+          const prev = old || [];
+          const updated = prev.map((m) =>
+            m.id === tempAssistantId ? { ...m, content: data.response } : m
+          );
+          const hasPatched = updated.some((m) => m.id === tempAssistantId && m.content === data.response);
+          return hasPatched ? updated : [
+            ...updated,
+            { id: `assistant-${Date.now()}`, conversation_id: targetConversationId, sender: 'assistant', content: data.response, message_type: 'text', created_at: new Date().toISOString() },
+          ];
+        });
+      }
+
+      // Delay refetch slightly to allow DB writes to settle
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: conversationKey as any });
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      }, 600);
+    } catch (e) {
+      // Roll back optimistic assistant if request failed
+      queryClient.setQueryData<Message[]>(conversationKey as any, (old: Message[] | undefined) => {
+        const prev = old || [];
+        return prev.filter((m) => m.id !== tempUserId && m.id !== tempAssistantId);
+      });
+      throw e;
     } finally {
-      // Always refresh to replace placeholders with real messages
-      queryClient.invalidateQueries({ queryKey: conversationKey as any });
+      dispatch({ type: 'SET_LOADING_MESSAGE', payload: false });
     }
   }, [state.activeConversationId, sendMessageMutation, queryClient]);
 
