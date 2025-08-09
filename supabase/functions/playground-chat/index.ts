@@ -261,7 +261,29 @@ serve(async (req) => {
         }
         if (!processedFinal.includes(ROLEPLAY_FORMAT_MARK)) {
           processedFinal = `${processedFinal}\n\n${ROLEPLAY_FORMAT_RULES}`;
-          console.log('🔧 Appended roleplay format rules to system prompt');
+        }
+        const STRICT_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V2]]';
+        if (!processedFinal.includes(STRICT_FORMAT_MARK)) {
+          const STRICT_FORMAT_RULES = `${STRICT_FORMAT_MARK}
+Strict roleplay output format (no exceptions):
+- Speakers:
+  - **${characterData.name || 'Character'}:** for the character you play
+  - **Narrator:** for scene descriptions, actions, and transitions
+- Internal thoughts must be italicized inside the speaker line, e.g., *I shouldn't say that out loud.*
+- Do NOT write lines for the user's character unless the user provides them.
+- No emojis, no safety disclaimers, no meta commentary.
+
+Examples:
+Correct:
+**${characterData.name || 'Character'}:** I lean closer, letting my fingers trace the cool tile. *This feels daring.*
+**Narrator:** The water ripples as a soft breeze brushes the surface.
+
+Incorrect (do not do):
+AI: Sure, here's what we could do...
+(Me) walks over to you
+You say: ...`;
+          processedFinal = `${processedFinal}\n\n${STRICT_FORMAT_RULES}`;
+          console.log('🔧 Appended STRICT roleplay format rules to system prompt');
         }
         roleplayPromptCache.set(cacheKey, processedFinal);
         return processedFinal;
@@ -557,6 +579,15 @@ serve(async (req) => {
     );
     promptTime = Date.now() - promptStart;
 
+    // Log a small system prompt snippet and markers for diagnostics
+    if (systemPrompt) {
+      console.log('🧱 System prompt snippet:', {
+        has_format_mark: /\[\[ROLEPLAY_FORMAT_RULES_/i.test(systemPrompt),
+        has_nsfw_mark: /\[\[NSFW_ROLEPLAY_GUIDANCE_/i.test(systemPrompt),
+        snippet: systemPrompt.slice(0, 220),
+      });
+    }
+
     // Convert conversation history and current message to messages array format
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
     
@@ -649,6 +680,32 @@ serve(async (req) => {
 
     const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
 
+    // Enforce roleplay output format (post-processing repair)
+    function enforceRoleplayFormat(text: string, characterName: string) {
+      const before = text;
+      const issues: string[] = [];
+      // Strip emojis
+      const emojiRe = /\p{Extended_Pictographic}/gu;
+      if (emojiRe.test(text)) {
+        text = text.replace(emojiRe, '');
+        issues.push('emoji_removed');
+      }
+      const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+      const fixed = blocks.map((b) => {
+        if (/^(\*\*[^*]+:\*\*|Narrator:|\*\*Narrator:\*\*)/i.test(b)) {
+          return b;
+        }
+        if (/^\*.*\*$/.test(b)) {
+          const cleaned = b.replace(/^\*+|\*+$/g, '').trim();
+          return `**Narrator:** *${cleaned}*`;
+        }
+        return `**${characterName}:** ${b}`;
+      });
+      const out = fixed.join('\n\n').replace(/\s{3,}/g, ' ').trim();
+      const applied = out !== before;
+      return { text: out, applied, issues };
+    }
+
     // Post-process for quality in NSFW strict roleplay
     let aiResponse = rawResponse;
     if (nsfwEnforce) {
@@ -696,6 +753,24 @@ serve(async (req) => {
         emojis_removed: qa.emojis_removed,
         truncated_words: qa.truncated_words,
         qa_ms: Date.now() - qaStart,
+      });
+    }
+
+    // Enforce roleplay formatting for character_roleplay
+    if (contextType === 'character_roleplay') {
+      const name = (characterData && characterData.name) || 'Character';
+      const enforce = enforceRoleplayFormat(aiResponse, name);
+      if (enforce.applied) {
+        aiResponse = enforce.text;
+      }
+      const hasCharPrefix = new RegExp(`\\*\\*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}:\\*\\*`).test(aiResponse);
+      const hasNarrator = /\*\*?Narrator:?\*\*/i.test(aiResponse) || /Narrator:/.test(aiResponse);
+      console.log('🧩 Roleplay format enforcement', {
+        applied: enforce.applied,
+        issues: enforce.issues,
+        hasCharPrefix,
+        hasNarrator,
+        preview: aiResponse.slice(0, 120),
       });
     }
 
