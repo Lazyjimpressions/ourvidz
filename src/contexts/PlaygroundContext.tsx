@@ -66,6 +66,8 @@ interface PlaygroundContextType {
   sendMessage: (content: string, options?: { characterId?: string }) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
+  refreshPromptCache: () => Promise<void>;
+  regenerateAssistantMessage: (messageId: string, options?: { refreshTemplates?: boolean; characterId?: string }) => Promise<void>;
 }
 
 const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undefined);
@@ -272,6 +274,59 @@ const createConversation = useCallback(async (title?: string, projectId?: string
     await updateTitleMutation.mutateAsync({ id, title });
   }, [updateTitleMutation]);
 
+  const refreshPromptCache = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('refresh-prompt-cache', { body: {} });
+      if (error) throw error;
+      console.log('✅ Prompt templates cache refreshed', data);
+      toast.success('Templates refreshed');
+    } catch (e) {
+      console.error('Failed to refresh templates:', e);
+      toast.error('Failed to refresh templates');
+    }
+  }, []);
+
+  const regenerateAssistantMessage = useCallback(async (
+    messageId: string,
+    options?: { refreshTemplates?: boolean; characterId?: string }
+  ) => {
+    if (!state.activeConversationId) {
+      toast.error('No active conversation');
+      return;
+    }
+
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) {
+      toast.error('Message not found');
+      return;
+    }
+
+    // Find the nearest previous user message
+    let userIdx = -1;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].sender === 'user') {
+        userIdx = i;
+        break;
+      }
+    }
+    if (userIdx === -1) {
+      toast.error('No prior user message to regenerate');
+      return;
+    }
+
+    const userContent = messages[userIdx].content;
+
+    try {
+      if (options?.refreshTemplates) {
+        await refreshPromptCache();
+      }
+      await sendMessage(userContent, { characterId: options?.characterId });
+    } catch (err) {
+      console.error('Failed to regenerate assistant message:', err);
+      toast.error('Failed to regenerate');
+    }
+  }, [messages, state.activeConversationId, sendMessage, refreshPromptCache]);
+
   const value: PlaygroundContextType = {
     state,
     conversations,
@@ -283,6 +338,8 @@ const createConversation = useCallback(async (title?: string, projectId?: string
     sendMessage,
     deleteConversation,
     updateConversationTitle,
+    refreshPromptCache,
+    regenerateAssistantMessage,
   };
 
   return (

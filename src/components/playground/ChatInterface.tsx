@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, MessageSquare, RotateCcw } from 'lucide-react';
+import { Send, Bot, MessageSquare, RotateCcw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { usePlayground } from '@/contexts/PlaygroundContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { MessageBubble } from './MessageBubble';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ConversationList } from './ConversationList';
@@ -21,7 +22,10 @@ export const ChatInterface = () => {
     isLoadingMessages,
     sendMessage,
     createConversation,
+    refreshPromptCache,
   } = usePlayground();
+
+  const { isAdmin } = useAuth();
 
   const [inputMessage, setInputMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -290,6 +294,19 @@ Please help me with this creative project.`;
         </div>
         
         <div className="flex items-center gap-1">
+          {/* Admin: Refresh Templates */}
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={refreshPromptCache}
+              className="h-7 w-7 p-0"
+              title="Refresh templates"
+            >
+              <Sparkles className="h-3 w-3" />
+            </Button>
+          )}
+
           {/* Character Details Button - only show in roleplay mode with active template */}
           {currentMode === 'roleplay' && currentRoleplayTemplate && (
             <CharacterDetailsPanel 

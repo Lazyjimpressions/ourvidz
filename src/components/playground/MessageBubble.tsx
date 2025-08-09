@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, User, Copy, RotateCw } from 'lucide-react';
+import { Bot, User, Copy, RotateCw, RefreshCcw, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -11,6 +11,8 @@ import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { useSceneGeneration } from '@/hooks/useSceneGeneration';
+import { usePlayground } from '@/contexts/PlaygroundContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Message {
   id: string;
@@ -66,6 +68,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
   const stableKey = `${message.conversation_id}:${hash(message.content)}`;
   const mediaEntry = getEntry(stableKey);
   const { generateSceneImage, isGenerating } = useSceneGeneration();
+  const { regenerateAssistantMessage, refreshPromptCache } = usePlayground();
+  const { isAdmin } = useAuth();
 
   const handleCopy = async () => {
     try {
@@ -116,6 +120,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
       console.error('❌ Regeneration failed:', error);
       toast.error('Failed to start regeneration');
     }
+  };
+
+  const handleRegenAssistant = async () => {
+    if (isUser) return;
+    await regenerateAssistantMessage(message.id);
+  };
+
+  const handleRegenAssistantFresh = async () => {
+    if (isUser) return;
+    await regenerateAssistantMessage(message.id, { refreshTemplates: true });
   };
 
   return (
