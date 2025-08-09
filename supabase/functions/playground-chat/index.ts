@@ -653,7 +653,7 @@ You say: ...`;
 
     if (nsfwEnforce) {
       basePayload.nsfw_enforce = true;
-      if (nsfwReason) basePayload.nsfw_reason = nsfwReason;
+      if (tierReason) basePayload.nsfw_reason = tierReason;
     }
 
     console.log('Calling chat worker with payload:', {
@@ -663,7 +663,7 @@ You say: ...`;
       project_context: projectContext ? 'included' : 'none',
       content_tier: chosenTier,
       nsfw_enforce: nsfwEnforce || false,
-      nsfw_reason: nsfwReason || 'none'
+      nsfw_reason: tierReason || 'none'
     });
 
     const workerStart = Date.now();
