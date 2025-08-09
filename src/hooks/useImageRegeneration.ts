@@ -1,5 +1,5 @@
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useGeneration } from '@/hooks/useGeneration';
 import { GenerationRequest } from '@/types/generation';
 import { MediaTile } from '@/types/workspace';
@@ -16,26 +16,34 @@ interface RegenerationState {
 export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: { seed?: number; negativePrompt?: string; originalPrompt?: string }) => {
   const { generateContent, isGenerating } = useGeneration();
   
-  // Use original prompt for regeneration if available, otherwise fall back to current prompt
-  const basePrompt = originalDetails?.originalPrompt || currentTile.prompt;
+  // Memoize values to prevent unnecessary re-renders
+  const basePrompt = useMemo(() => 
+    originalDetails?.originalPrompt || currentTile.prompt, 
+    [originalDetails?.originalPrompt, currentTile.prompt]
+  );
   
-  const [state, setState] = useState<RegenerationState>({
+  const defaultNegativePrompt = useMemo(() => 
+    originalDetails?.negativePrompt || '', 
+    [originalDetails?.negativePrompt]
+  );
+  
+  const [state, setState] = useState<RegenerationState>(() => ({
     positivePrompt: basePrompt,
-    negativePrompt: originalDetails?.negativePrompt || '',
+    negativePrompt: defaultNegativePrompt,
     keepSeed: true,
     referenceStrength: 0.7,
     isModified: false
-  });
+  }));
 
   const updatePrompts = useCallback((updates: Partial<Pick<RegenerationState, 'positivePrompt' | 'negativePrompt'>>) => {
     setState(prev => ({
       ...prev,
       ...updates,
       isModified: updates.positivePrompt !== basePrompt || 
-                 updates.negativePrompt !== (originalDetails?.negativePrompt || '') ||
+                 updates.negativePrompt !== defaultNegativePrompt ||
                  prev.isModified
     }));
-  }, [basePrompt, originalDetails?.negativePrompt]);
+  }, [basePrompt, defaultNegativePrompt]);
 
   const updateSettings = useCallback((updates: Partial<Pick<RegenerationState, 'keepSeed' | 'referenceStrength'>>) => {
     setState(prev => ({ ...prev, ...updates }));
@@ -44,12 +52,12 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
   const resetToOriginal = useCallback(() => {
     setState({
       positivePrompt: basePrompt,
-      negativePrompt: originalDetails?.negativePrompt || '',
+      negativePrompt: defaultNegativePrompt,
       keepSeed: true,
       referenceStrength: 0.7,
       isModified: false
     });
-  }, [basePrompt, originalDetails?.negativePrompt]);
+  }, [basePrompt, defaultNegativePrompt]);
 
   const regenerateImage = useCallback(async () => {
     if (!state.positivePrompt.trim()) {

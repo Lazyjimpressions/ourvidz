@@ -58,7 +58,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   
   // Fetch detailed image information
-  const { fetchDetails, loading: detailsLoading, details } = useFetchImageDetails();
+  const { fetchDetails, loading: detailsLoading, details, reset } = useFetchImageDetails();
   
   // Setup regeneration functionality
   const { regenerateImage, isGenerating } = useImageRegeneration(
@@ -112,10 +112,18 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
 
   // Fetch details when item changes
   useEffect(() => {
-    if (currentItem?.originalAssetId || currentItem?.id) {
-      fetchDetails(currentItem.originalAssetId || currentItem.id);
+    const imageId = currentItem?.originalAssetId || currentItem?.id;
+    if (imageId) {
+      // Reset previous details first
+      reset();
+      fetchDetails(imageId);
     }
-  }, [currentItem?.originalAssetId, currentItem?.id, fetchDetails]);
+    
+    // Cleanup function to cancel pending requests when switching images
+    return () => {
+      reset();
+    };
+  }, [currentItem?.originalAssetId, currentItem?.id, fetchDetails, reset]);
 
   const handlePrevious = () => {
     if (currentIndex > 0) {

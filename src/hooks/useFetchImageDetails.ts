@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -11,11 +11,17 @@ interface ImageDetails {
   referenceStrength?: number;
 }
 
+// Simple cache to prevent redundant requests
+const detailsCache = new Map<string, { data: ImageDetails | null; timestamp: number }>();
+const CACHE_DURATION = 60000; // 1 minute
+
 export const useFetchImageDetails = () => {
   const [loading, setLoading] = useState(false);
   const [details, setDetails] = useState<ImageDetails | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequestRef = useRef<string | null>(null);
 
-  const fetchDetails = async (imageId: string) => {
+  const fetchDetails = useCallback(async (imageId: string) => {
     console.log('🔍 FETCHING IMAGE DETAILS:', { imageId });
     
     if (!imageId) {
@@ -24,7 +30,30 @@ export const useFetchImageDetails = () => {
       return;
     }
 
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Check if this is a duplicate request
+    if (currentRequestRef.current === imageId) {
+      console.log('🔄 Request already in progress for:', imageId);
+      return;
+    }
+
+    // Check cache first
+    const cached = detailsCache.get(imageId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('💾 Using cached details for:', imageId);
+      setDetails(cached.data);
+      return;
+    }
+
+    // Set up new request
+    currentRequestRef.current = imageId;
+    abortControllerRef.current = new AbortController();
     setLoading(true);
+
     try {
       console.log('📡 Making database query for imageId:', imageId);
       
@@ -32,6 +61,7 @@ export const useFetchImageDetails = () => {
         .from('images')
         .select('metadata')
         .eq('id', imageId)
+        .abortSignal(abortControllerRef.current.signal)
         .single();
 
       console.log('📊 Database response:', { data, error });
@@ -63,25 +93,46 @@ export const useFetchImageDetails = () => {
 
         console.log('✅ Parsed details:', parsedDetails);
         setDetails(parsedDetails);
+        
+        // Cache the result
+        detailsCache.set(imageId, { data: parsedDetails, timestamp: Date.now() });
+        
         toast.success('Generation details loaded successfully');
       } else {
         console.log('⚠️ No metadata found for image:', imageId);
-        toast.info('No generation details found for this image');
         setDetails(null);
+        
+        // Cache null result to prevent repeated queries
+        detailsCache.set(imageId, { data: null, timestamp: Date.now() });
+        
+        toast.info('No generation details found for this image');
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Don't show error for aborted requests
+      if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+        console.log('🛑 Request aborted for:', imageId);
+        return;
+      }
+      
       console.error('💥 Error fetching image details:', error);
       toast.error('Failed to load generation details');
       setDetails(null);
     } finally {
+      currentRequestRef.current = null;
       setLoading(false);
     }
-  };
+  }, []);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     console.log('🔄 Resetting image details');
+    
+    // Cancel any pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    currentRequestRef.current = null;
     setDetails(null);
-  };
+  }, []);
 
   return { fetchDetails, loading, details, reset };
 };
