@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -66,6 +66,8 @@ interface PlaygroundContextType {
   messages: Message[];
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
+  sfwMode: boolean;
+  setSfwMode: (v: boolean) => void;
   setActiveConversation: (id: string | null) => void;
   createConversation: (title?: string, projectId?: string, conversationType?: string, characterId?: string) => Promise<string>;
   sendMessage: (content: string, options?: { characterId?: string; conversationId?: string }) => Promise<void>;
@@ -81,6 +83,7 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(playgroundReducer, initialState);
+  const [sfwMode, setSfwMode] = useState(false);
 
   // Fetch conversations
   const {
@@ -160,6 +163,7 @@ const createConversationMutation = useMutation({
         body: {
           conversation_id: conversationId,
           message: content,
+          content_tier: sfwMode ? 'sfw' : 'nsfw',
           ...(characterId ? { character_id: characterId } : {}),
         },
       });
@@ -366,6 +370,8 @@ const createConversation = useCallback(async (title?: string, projectId?: string
     messages,
     isLoadingConversations,
     isLoadingMessages,
+    sfwMode,
+    setSfwMode,
     setActiveConversation,
     createConversation,
     sendMessage,

@@ -248,9 +248,9 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           </div>
         </div>
 
-        {/* Info Panel */}
-        <div className="absolute top-4 left-4 bg-background/80 backdrop-blur-sm rounded-lg p-4 max-w-md">
-          <div className="space-y-2">
+        {/* Enhanced Info Panel with scrollable content */}
+        <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-4 max-w-md max-h-[60vh] overflow-y-auto">
+          <div className="space-y-3">
             <div className="flex items-center gap-2">
               <div className={`px-2 py-1 rounded text-xs font-medium ${
                 currentItem.type === 'video' 
@@ -271,14 +271,14 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
             </div>
             
             <div className="text-sm">
-              <p className="font-medium">Prompt:</p>
-              <p className="text-muted-foreground break-words">{currentItem.prompt}</p>
+              <p className="font-medium text-foreground mb-1">Prompt:</p>
+              <p className="text-muted-foreground break-words leading-relaxed">{currentItem.prompt}</p>
             </div>
 
             {(currentItem.generationParams?.seed || currentItem.seed) && (
               <div className="text-sm">
-                <p className="font-medium">Seed:</p>
-                <p className="text-muted-foreground font-mono">
+                <p className="font-medium text-foreground mb-1">Seed:</p>
+                <p className="text-muted-foreground font-mono text-xs bg-muted/50 px-2 py-1 rounded">
                   {currentItem.generationParams?.seed || currentItem.seed}
                 </p>
               </div>
@@ -286,8 +286,26 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
 
             {currentItem.modelType && (
               <div className="text-sm">
-                <p className="font-medium">Model:</p>
+                <p className="font-medium text-foreground mb-1">Model:</p>
                 <p className="text-muted-foreground">{currentItem.modelType}</p>
+              </div>
+            )}
+
+            {currentItem.generationParams?.timestamp && (
+              <div className="text-sm">
+                <p className="font-medium text-foreground mb-1">Generated:</p>
+                <p className="text-muted-foreground text-xs">
+                  {new Date(currentItem.generationParams.timestamp).toLocaleString()}
+                </p>
+              </div>
+            )}
+
+            {currentItem.generationParams?.originalAssetId && (
+              <div className="text-sm">
+                <p className="font-medium text-foreground mb-1">Reference Asset:</p>
+                <p className="text-muted-foreground font-mono text-xs">
+                  {currentItem.generationParams.originalAssetId}
+                </p>
               </div>
             )}
           </div>
