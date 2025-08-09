@@ -838,15 +838,11 @@ You say: ...`;
           emojis_removed = emojiMatches.length;
           out = out.replace(emojiRe, '');
         }
-        // Enforce soft length cap ~240 words
-        const words = out.trim().split(/\s+/);
-        if (words.length > 240) {
-          out = words.slice(0, 240).join(' ');
-          truncated_words = words.length - 240;
-        }
+        // REMOVED: Artificial 240-word truncation for natural-length responses
+        // Allow natural response length guided by system prompt instead
         // Cleanup extra spaces
         out = out.replace(/\s{3,}/g, ' ').trim();
-        return { text: out, removed, emojis_removed, truncated_words };
+        return { text: out, removed, emojis_removed, truncated_words: 0 };
       };
 
       const beforeQA = aiResponse;
@@ -858,7 +854,7 @@ You say: ...`;
         len_after: aiResponse.length,
         removed_phrases: qa.removed,
         emojis_removed: qa.emojis_removed,
-        truncated_words: qa.truncated_words,
+        truncated_words: 0, // REMOVED: No longer truncating responses
         qa_ms: Date.now() - qaStart,
       });
     }

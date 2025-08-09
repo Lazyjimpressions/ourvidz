@@ -519,10 +519,13 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Calculate UI control token usage from metadata
+   * Calculate UI control token usage from metadata - FIXED to include default style tokens
    */
   private calculateUIControlTokens(metadata: any): number {
-    if (!metadata) return 0;
+    if (!metadata) {
+      // FIXED: Include default style tokens when no metadata provided
+      return this.estimateTokens("cinematic lighting, film grain, dramatic composition");
+    }
     
     let tokenCount = 0;
     
@@ -536,15 +539,17 @@ class DynamicEnhancementOrchestrator {
       tokenCount += metadata.camera_angle.replace('_', ' ').split(' ').length; // e.g., "low angle" = 2 tokens
     }
     
-    // Style (count actual tokens in style text)
-    if (metadata.style && metadata.style.trim()) {
-      tokenCount += this.estimateTokens(metadata.style);
-    }
+    // Style tokens - FIXED: Always include default if no custom style
+    const styleTokens = metadata.style && metadata.style.trim() 
+      ? this.estimateTokens(metadata.style)
+      : this.estimateTokens("cinematic lighting, film grain, dramatic composition"); // Default: ~6 tokens
+    tokenCount += styleTokens;
     
     console.log('🎨 UI Control tokens calculated:', {
       shotType: metadata.shot_type,
       cameraAngle: metadata.camera_angle,
-      style: metadata.style,
+      style: metadata.style || 'default_style',
+      styleTokens,
       totalTokens: tokenCount
     });
     
@@ -620,20 +625,14 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Estimate token count from text (more accurate approximation)
+   * Estimate token count from text - IMPROVED character-based approximation
    */
   private estimateTokens(text: string): number {
-    if (!text) return 0;
+    if (!text || typeof text !== 'string') return 0;
     
-    // More accurate estimation considering punctuation and special characters
-    // Average of ~4 characters per token for CLIP tokenizer
-    const charCount = text.length;
-    const punctuationCount = (text.match(/[.,!?;:'"(){}[\]]/g) || []).length;
-    
-    // Adjust for punctuation (each punctuation mark typically adds a token)
-    const estimatedTokens = Math.ceil(charCount / 4) + Math.ceil(punctuationCount * 0.5);
-    
-    return estimatedTokens;
+    // Character-based estimation more accurate for CLIP tokenizer
+    // Average: 4.2 characters per token (accounts for punctuation and special chars)
+    return Math.ceil(text.length / 4.2);
   }
 
   /**
