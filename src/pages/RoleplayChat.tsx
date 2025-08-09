@@ -23,6 +23,7 @@ import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
 import { Card } from '@/components/ui/card';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Mock character data - in real app this would come from database
 const mockCharacters = {
@@ -50,25 +51,40 @@ const mockCharacters = {
 const RoleplayChatInterface = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const characterId = searchParams.get('character') || '1';
+  const characterParam = searchParams.get('character');
+  const isUuid = (s?: string | null) => !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+  const effectiveCharacterId = isUuid(characterParam) ? (characterParam as string) : undefined;
   
-  // Load real character data from database
-  const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(characterId);
-  const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
+  // Load real character data from database (only if we have a valid UUID)
+  const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(effectiveCharacterId);
+  const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(effectiveCharacterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
-  const { chatWorker } = useWorkerStatus();
+  const { chatWorker, isLoading: workerLoading, runHealthCheck, lastUpdated } = useWorkerStatus();
   
-  // Fallback to mock data if no character loaded yet
-  const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
+  // Fallbacks for UI display while character loads
+  const mock = mockCharacters['1'];
+  const displayName = character?.name ?? mock.name;
+  const displayAvatar = character?.image_url ?? mock.avatar;
+  const displayCreator = character?.creator_id ?? mock.creator;
+  const displayLikes = character?.likes_count ?? mock.likes;
+  const displayMood = character?.mood ?? mock.mood;
+  const displayTraits = Array.isArray(character?.appearance_tags)
+    ? (character!.appearance_tags as string[])
+    : (typeof character?.traits === 'string' && character?.traits)
+      ? character!.traits.split(',').map(t => t.trim()).filter(Boolean)
+      : mock.traits;
   
   const {
     state,
+    conversations,
     messages,
     isLoadingMessages,
     createConversation,
+    setActiveConversation,
     sendMessage,
   } = usePlayground();
+  const { isAdmin } = useAuth();
 
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -83,6 +99,7 @@ const RoleplayChatInterface = () => {
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const initRef = useRef<{ charId?: string; attempted: boolean }>({ attempted: false });
 
   // Persist Auto-generate Scene toggle in localStorage
   useEffect(() => {
@@ -112,13 +129,44 @@ const RoleplayChatInterface = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Initialize conversation on mount
+  // Kick off a health check once on mount to populate status
   useEffect(() => {
-    if (!state.activeConversationId) {
-      createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'roleplay');
-    }
+    runHealthCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Initialize or restore character-scoped conversation (robust, no loops)
+  useEffect(() => {
+    // Only proceed when a valid character is loaded from DB
+    if (!effectiveCharacterId || !character?.id) return;
+    const charId = character.id;
+
+    // Reset attempt tracking if character changes
+    if (initRef.current.charId !== charId) {
+      initRef.current = { charId, attempted: false };
+    }
+
+    const active = conversations?.find(c => c.id === state.activeConversationId);
+    if (active && active.character_id === charId && active.conversation_type === 'character_roleplay') {
+      return;
+    }
+
+    const existing = conversations?.find(c => (
+      c.character_id === charId && c.conversation_type === 'character_roleplay'
+    ));
+
+    if (existing) {
+      if (state.activeConversationId !== existing.id) {
+        setActiveConversation(existing.id);
+      }
+      return;
+    }
+
+    if (!state.activeConversationId && !initRef.current.attempted) {
+      initRef.current.attempted = true;
+      createConversation(`Roleplay: ${character.name}`, undefined, 'character_roleplay', charId);
+    }
+  }, [effectiveCharacterId, character?.id, character?.name, conversations, state.activeConversationId, setActiveConversation, createConversation]);
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !state.activeConversationId) return;
 
@@ -132,8 +180,8 @@ const RoleplayChatInterface = () => {
       if (generateImageForMessage && character) {
         const windowStart = Math.max(0, Math.max(0, messages.length - 5));
         const recent = messages.slice(windowStart).concat([{ sender: 'user', content: message } as any]);
-        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
-        const enriched = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
+        const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
+        const enriched = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message}`;
 
         await generateSceneFromMessage(enriched, {
           characterId: character.id,
@@ -170,13 +218,13 @@ const RoleplayChatInterface = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <img 
-                src={selectedCharacter.avatar} 
-                alt={selectedCharacter.name}
+                src={displayAvatar}
+                alt={displayName}
                 className="w-8 h-8 rounded-full border border-purple-500"
               />
               <div className="min-w-0 flex-1">
-                <h3 className="font-medium text-sm truncate">{selectedCharacter.name}</h3>
-                <p className="text-xs text-gray-400 truncate">{selectedCharacter.creator}</p>
+                <h3 className="font-medium text-sm truncate">{displayName}</h3>
+                <p className="text-xs text-gray-400 truncate">{displayCreator}</p>
               </div>
             </div>
             <button
@@ -202,7 +250,7 @@ const RoleplayChatInterface = () => {
                 }`}
               >
                 <Heart className={`w-3 h-3 ${characterLiked ? 'fill-current' : ''}`} />
-                <span>{(character?.likes_count || selectedCharacter.likes || 0) + (characterLiked ? 1 : 0)}</span>
+                <span>{displayLikes + (characterLiked ? 1 : 0)}</span>
               </button>
               <button className="p-1 bg-gray-800 rounded hover:bg-gray-700">
                 <Share className="w-3 h-3" />
@@ -210,7 +258,7 @@ const RoleplayChatInterface = () => {
             </div>
             <div className="flex items-center space-x-1">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <span className="text-xs text-gray-400">{character?.mood || selectedCharacter.mood}</span>
+              <span className="text-xs text-gray-400">{displayMood}</span>
             </div>
           </div>
         </div>
@@ -227,7 +275,7 @@ const RoleplayChatInterface = () => {
         <div className="p-3 border-b border-gray-800">
           <h4 className="text-xs font-medium text-gray-400 mb-2">Traits</h4>
           <div className="flex flex-wrap gap-1">
-            {(character?.appearance_tags || selectedCharacter.traits || []).map((trait, index) => (
+            {displayTraits.map((trait, index) => (
               <span key={index} className="px-2 py-1 bg-gray-800 rounded text-xs">
                 {trait}
               </span>
@@ -325,11 +373,11 @@ const RoleplayChatInterface = () => {
           
           <div className="flex items-center space-x-2">
             <img 
-              src={selectedCharacter.avatar} 
-              alt={selectedCharacter.name}
+              src={displayAvatar}
+              alt={displayName}
               className="w-6 h-6 rounded-full"
             />
-            <span className="font-medium text-sm">{selectedCharacter.name}</span>
+            <span className="font-medium text-sm">{displayName}</span>
           </div>
           
           <button 
@@ -353,11 +401,25 @@ const RoleplayChatInterface = () => {
             )}
             <h1 className="text-lg font-medium">Roleplay Chat</h1>
             <span className="px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded text-xs">Active</span>
+            {/* Admin: Template/Tier Badges */}
+            {isAdmin && state.lastResponseMeta?.content_tier && (
+              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
+                Tier: {String(state.lastResponseMeta.content_tier).toUpperCase()}
+              </span>
+            )}
+            {isAdmin && state.lastResponseMeta?.template_meta?.origin && (
+              <span className="px-2 py-0.5 bg-gray-800 text-gray-300 rounded text-xs">
+                Origin: {state.lastResponseMeta.template_meta.origin}
+              </span>
+            )}
             
             {/* Worker status indicator - subtle */}
             <div className="flex items-center gap-2 pl-2 border-l border-gray-800">
-              <span className={`w-2 h-2 rounded-full ${chatWorker.isHealthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className="text-xs text-gray-400">{chatWorker.isHealthy ? 'Worker online' : 'Worker offline'}</span>
+              <span className={`w-2 h-2 rounded-full ${workerLoading ? 'bg-gray-500' : (chatWorker?.isHealthy ? 'bg-green-500' : 'bg-gray-500')}`}></span>
+              <span className="text-xs text-gray-400">{workerLoading ? 'Checking worker...' : (chatWorker?.isHealthy ? 'Worker online' : 'Worker status')}</span>
+              <button onClick={runHealthCheck} className="p-1 hover:bg-gray-800 rounded" title="Refresh worker status">
+                <RotateCcw className="w-3 h-3 text-gray-400" />
+              </button>
             </div>
           </div>
           <div className="flex items-center space-x-1">
@@ -378,8 +440,8 @@ const RoleplayChatInterface = () => {
             const isUserMsg = message.sender === 'user';
             const windowStart = Math.max(0, idx - 5);
             const recent = messages.slice(windowStart, idx + 1);
-            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : selectedCharacter.name}: ${m.content}`).join('\n');
-            const enrichedContent = `Character: ${selectedCharacter.name}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
+            const convoContext = recent.map(m => `${m.sender === 'user' ? 'User' : displayName}: ${m.content}`).join('\n');
+            const enrichedContent = `Character: ${displayName}\nRecent conversation:\n${convoContext}\nFocus:\n${message.content}`;
             return (
               <div key={message.id} className={`flex ${isUserMsg ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] sm:max-w-[75%] ${
@@ -390,11 +452,11 @@ const RoleplayChatInterface = () => {
                   {!isUserMsg && (
                     <div className="flex items-center space-x-2 mb-1">
                       <img 
-                        src={selectedCharacter.avatar} 
-                        alt={selectedCharacter.name}
+                        src={displayAvatar}
+                        alt={displayName}
                         className="w-4 h-4 rounded-full"
                       />
-                      <span className="font-medium text-xs">{selectedCharacter.name}</span>
+                      <span className="font-medium text-xs">{displayName}</span>
                       <span className="text-xs text-gray-400">
                         {new Date(message.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                       </span>
@@ -457,11 +519,11 @@ const RoleplayChatInterface = () => {
               <div className="bg-gray-800 rounded-2xl rounded-bl-md px-3 py-2 max-w-[85%] sm:max-w-[75%]">
                 <div className="flex items-center space-x-2 mb-1">
                   <img 
-                    src={selectedCharacter.avatar} 
-                    alt={selectedCharacter.name}
+                    src={displayAvatar}
+                    alt={displayName}
                     className="w-4 h-4 rounded-full"
                   />
-                  <span className="font-medium text-xs">{selectedCharacter.name}</span>
+                  <span className="font-medium text-xs">{displayName}</span>
                   <span className="text-xs text-gray-400">typing...</span>
                 </div>
                 <div className="flex space-x-1">
@@ -487,19 +549,19 @@ const RoleplayChatInterface = () => {
                 className="w-3 h-3 rounded"
               />
               <span>Auto-generate scene</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
-                      <Info className="w-3 h-3 text-gray-400" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs max-w-xs">
-                    When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
+                    <Info className="w-3 h-3 text-gray-400" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">
+                  When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
             <button 
               onClick={() => setIsListening(!isListening)}
@@ -517,7 +579,7 @@ const RoleplayChatInterface = () => {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={`Message ${selectedCharacter.name}...`}
+                placeholder={`Message ${displayName}...`}
                 className="w-full bg-gray-800 rounded-xl resize-none focus:outline-none focus:ring-1 focus:ring-purple-500 text-sm min-h-[40px] max-h-[100px] px-3 py-2"
                 disabled={isTyping || state.isLoadingMessage}
               />

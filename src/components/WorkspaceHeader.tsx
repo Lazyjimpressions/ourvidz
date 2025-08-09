@@ -19,7 +19,7 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: Workspac
   };
 
   return (
-    <header className="fixed top-0 w-full bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
+    <header className="fixed top-0 w-full pt-safe-top bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
       <div className="flex items-center justify-between h-12 px-4">
         <Button
           variant="ghost"

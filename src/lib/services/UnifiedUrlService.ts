@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+
 import { getSignedUrl } from '@/lib/storage';
 import type { UnifiedAsset } from './AssetService';
 
@@ -44,6 +44,23 @@ export class UnifiedUrlService {
         const hasSignedUrl = asset.url?.startsWith('https://') || asset.thumbnailUrl?.startsWith('https://');
         if (hasSignedUrl) {
           console.log(`✅ Asset ${asset.id} already has signed URLs, skipping generation`);
+          // For videos, ensure we still provide a valid thumbnail image
+          if (asset.type === 'video') {
+            let thumb = asset.thumbnailUrl;
+            if (!thumb) {
+              thumb = '/video-placeholder.svg';
+            } else if (!thumb.startsWith('https://') && !thumb.startsWith('http://')) {
+              try {
+                const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
+                const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
+                thumb = thumbData?.signedUrl || '/video-placeholder.svg';
+              } catch (e) {
+                thumb = '/video-placeholder.svg';
+              }
+            }
+            this.metrics.cacheHits++;
+            return { ...asset, thumbnailUrl: thumb };
+          }
           this.metrics.cacheHits++;
           return asset; // Return as-is, no need to regenerate
         }
@@ -256,6 +273,28 @@ export class UnifiedUrlService {
     
     console.log(`✅ Generated signed URL successfully for: ${asset.id}`);
     
+    // Special handling for videos: ensure we return a valid image thumbnail
+    if (asset.type === 'video') {
+      let thumb = asset.thumbnailUrl;
+      if (thumb && (thumb.startsWith('https://') || thumb.startsWith('http://'))) {
+        // already absolute URL
+      } else if (thumb) {
+        try {
+          const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
+          const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
+          thumb = thumbData?.signedUrl || '/video-placeholder.svg';
+        } catch (e) {
+          thumb = '/video-placeholder.svg';
+        }
+      } else {
+        thumb = '/video-placeholder.svg';
+      }
+      return {
+        url: data.signedUrl,
+        thumbnailUrl: thumb
+      };
+    }
+    
     return {
       url: data.signedUrl,
       thumbnailUrl: data.signedUrl
@@ -265,8 +304,8 @@ export class UnifiedUrlService {
   /**
    * Get the appropriate image path for an asset
    */
-  private static getImagePath(asset: UnifiedAsset, type: 'primary' | 'thumbnail' | 'highres'): string | null {
-    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${type}`, {
+  static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
+    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${pathType}`, {
       assetType: asset.type,
       isSDXL: asset.isSDXL,
       url: asset.url,
@@ -287,7 +326,7 @@ export class UnifiedUrlService {
     // For regular images - check asset properties first
     if (asset.type === 'image') {
       // Check direct asset properties first (these come from database)
-      if (type === 'thumbnail' && asset.thumbnailUrl) {
+      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         console.log(`✅ Using thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }
@@ -306,7 +345,7 @@ export class UnifiedUrlService {
     
     // For videos
     if (asset.type === 'video') {
-      if (type === 'thumbnail' && asset.thumbnailUrl) {
+      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         console.log(`✅ Using video thumbnail URL from asset: ${asset.thumbnailUrl}`);
         return asset.thumbnailUrl;
       }

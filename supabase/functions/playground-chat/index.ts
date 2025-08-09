@@ -24,6 +24,18 @@ const CONFIG_TTL_MS = 60_000;
 const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
 const ADMIN_ROLE_TTL_MS = 60_000;
 
+type PromptMeta = {
+  origin: 'inline.strict_nsfw' | 'cache' | 'database' | 'none';
+  context_type: string;
+  content_tier: 'sfw' | 'nsfw';
+  nsfw_strict: boolean;
+  template_key?: string;
+  cache_refreshed_at?: string;
+  character_id?: string | null;
+  character_name?: string | null;
+};
+let lastPromptMeta: PromptMeta | null = null;
+
 interface Database {
   public: {
     Tables: {
@@ -128,6 +140,15 @@ serve(async (req) => {
 - Follow platform policies and applicable laws.`;
     const NSFW_STRICT_MARK = '[[NSFW_ENFORCE_V2]]';
 
+    // Roleplay formatting rules to enforce consistent output structure
+    const ROLEPLAY_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V1]]';
+    const ROLEPLAY_FORMAT_RULES = `${ROLEPLAY_FORMAT_MARK}
+- Use Markdown formatting:
+  - **CharacterName:** for character dialogue
+  - *italics* for internal thoughts
+  - Use **Narrator:** for scene description and transitions
+- Do not speak for the user's character unless they provide a line.`;
+
     // Age-gating override (non-verified users)
     if (ageVerified === false && contentTier === 'nsfw') {
       contentTier = 'sfw';
@@ -146,26 +167,9 @@ serve(async (req) => {
       const sceneMemory = buildSceneMemory(conversationHistory);
 
       if (contentTier === 'nsfw') {
-        const strictPrompt = `${NSFW_STRICT_MARK}
-ROLE: You are ${characterData.name || 'Character'}, participating in explicit, adult-only, consensual character roleplay.
-AGE & CONSENT: All parties are 18+ and consent. Never depict or imply minors, incest, bestiality, or non-consensual acts.
-PERSONA: ${characterData.persona || ''}
-VOICE: ${characterData.voice_tone || 'neutral'} | MOOD: ${characterData.mood || 'neutral'}
-APPEARANCE: ${(characterData.appearance_tags?.join(', ') || '').slice(0, 200)}
-${sceneMemory ? `SCENE MEMORY (persist and continue, do not reset): ${sceneMemory}` : ''}
-STYLE GUIDE (must):
-- Stay fully in-character as ${characterData.name || 'the character'}; address the partner as "you".
-- Be concrete and sensory (touch, taste, scent, sound, sight). Show, don’t tell.
-- Use direct, explicit language when context indicates. Keep 120–220 words over 2–4 short paragraphs.
-- Maintain continuity with SCENE MEMORY. Keep pacing natural; escalate only when prompted.
-STYLE GUIDE (never):
-- No safety PSAs, moralizing, or policy mentions. No meta talk or "as an AI" disclaimers.
-- No illegal content; no minors/incest/bestiality/non-consent; no exploitation.
-FORMATTING:
-- Plain text only. No markdown unless the user uses it first. Avoid emojis unless explicitly requested.
-INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, staying immersive and consistent.`;
-        console.log('🔥 NSFW_STRICT_MODE_ACTIVATED', { tier: contentTier, character: characterData.name, prompt_len: strictPrompt.length });
-        return strictPrompt;
+        console.log('🔥 NSFW strict preference detected; using template-based roleplay prompt');
+        // Fall through to template-based character_roleplay prompt; strict formatting
+        // and NSFW guidance will be appended to the selected template below.
       }
       let template = getChatTemplateFromCache(cache, contextType, contentTier);
       let templateKey = '';
@@ -191,6 +195,16 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
       }
 
       if (template) {
+        lastPromptMeta = {
+          origin: templateKey.startsWith('cache:') ? 'cache' : 'database',
+          context_type: contextType,
+          content_tier: contentTier,
+          nsfw_strict: false,
+          template_key: templateKey,
+          cache_refreshed_at: cache?.metadata?.refreshed_at || undefined,
+          character_id: characterData.id || null,
+          character_name: characterData.name || null,
+        };
         // Build cache key using template origin, character id, updated_at and tier
         const cacheKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}:tier:${contentTier}`;
         const legacyKey = `${templateKey}:char:${characterData.id}:${characterData.updated_at || ''}`;
@@ -245,6 +259,32 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
           processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
           console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
         }
+        if (!processedFinal.includes(ROLEPLAY_FORMAT_MARK)) {
+          processedFinal = `${processedFinal}\n\n${ROLEPLAY_FORMAT_RULES}`;
+        }
+        const STRICT_FORMAT_MARK = '[[ROLEPLAY_FORMAT_RULES_V2]]';
+        if (!processedFinal.includes(STRICT_FORMAT_MARK)) {
+          const STRICT_FORMAT_RULES = `${STRICT_FORMAT_MARK}
+Strict roleplay output format (no exceptions):
+- Speakers:
+  - **${characterData.name || 'Character'}:** for the character you play
+  - **Narrator:** for scene descriptions, actions, and transitions
+- Internal thoughts must be italicized inside the speaker line, e.g., *I shouldn't say that out loud.*
+- Do NOT write lines for the user's character unless the user provides them.
+- No emojis, no safety disclaimers, no meta commentary.
+
+Examples:
+Correct:
+**${characterData.name || 'Character'}:** I lean closer, letting my fingers trace the cool tile. *This feels daring.*
+**Narrator:** The water ripples as a soft breeze brushes the surface.
+
+Incorrect (do not do):
+AI: Sure, here's what we could do...
+(Me) walks over to you
+You say: ...`;
+          processedFinal = `${processedFinal}\n\n${STRICT_FORMAT_RULES}`;
+          console.log('🔧 Appended STRICT roleplay format rules to system prompt');
+        }
         roleplayPromptCache.set(cacheKey, processedFinal);
         return processedFinal;
       }
@@ -262,8 +302,9 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
       templateContext = 'sdxl_conversion';
     }
 
-    // Get system prompt from cache
+    // Get system prompt from cache and track origin
     let systemPrompt = getChatTemplateFromCache(cache, templateContext, contentTier);
+    let origin: 'cache' | 'database' | 'none' = systemPrompt ? 'cache' : 'none';
     
     // Fallback to database if cache fails for both tiers
     if (!systemPrompt) {
@@ -290,6 +331,7 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
           contentTier              // content_mode ('nsfw'/'sfw')
         );
         systemPrompt = dbTemplate?.system_prompt || null;
+        if (systemPrompt) origin = 'database';
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);
       }
@@ -537,6 +579,15 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
     );
     promptTime = Date.now() - promptStart;
 
+    // Log a small system prompt snippet and markers for diagnostics
+    if (systemPrompt) {
+      console.log('🧱 System prompt snippet:', {
+        has_format_mark: /\[\[ROLEPLAY_FORMAT_RULES_/i.test(systemPrompt),
+        has_nsfw_mark: /\[\[NSFW_ROLEPLAY_GUIDANCE_/i.test(systemPrompt),
+        snippet: systemPrompt.slice(0, 220),
+      });
+    }
+
     // Convert conversation history and current message to messages array format
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
     
@@ -629,6 +680,105 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
 
     const rawResponse = chatData.response || 'Sorry, I could not generate a response.';
 
+    // Sanitize persona/meta violations before strict formatting
+    function sanitizeRoleplayPersonaViolations(text: string, characterName: string) {
+      const original = text;
+      let out = text;
+      const issues: string[] = [];
+      let removed_meta = 0;
+      let user_lines_removed = 0;
+      let stage_dir_converted = 0;
+      let narrator_normalized = 0;
+      let first_line_prefixed = false;
+      let emojis_removed = 0;
+
+      const lines = out.split('\n');
+      const cleanedLines: string[] = [];
+      for (let line of lines) {
+        // Remove explicit AI/system prefixes
+        if (/^\s*(AI|Assistant|System)\s*:/i.test(line)) {
+          line = line.replace(/^\s*(AI|Assistant|System)\s*:/i, '').trim();
+          removed_meta++;
+          if (!line) continue;
+        }
+        // Remove lines that speak for the user
+        if (/^\s*(You|User)\s*:/i.test(line)) {
+          user_lines_removed++;
+          continue;
+        }
+        // Convert parenthetical stage directions at start
+        if (/^\s*\((?:me|i|user|you)[^)]*\)\s*/i.test(line)) {
+          line = line.replace(/^\s*\((?:me|i|user|you)[^)]*\)\s*/i, '').trim();
+          if (line) {
+            line = `**Narrator:** ${line}`;
+            stage_dir_converted++;
+          } else {
+            continue;
+          }
+        }
+        cleanedLines.push(line);
+      }
+      out = cleanedLines.join('\n');
+
+      // Normalize narrator label to bold form
+      out = out.replace(/(^|\n)\s*\*\*?\s*Narrator\s*:?\s*\*\*?\s*/gi, (_m, p1) => {
+        narrator_normalized++;
+        return `${p1}**Narrator:** `;
+      });
+      out = out.replace(/(^|\n)\s*Narrator\s*:\s*/gi, (_m, p1) => {
+        narrator_normalized++;
+        return `${p1}**Narrator:** `;
+      });
+
+      // Ensure first block has a speaker prefix
+      const trimmedOut = out.trim();
+      if (trimmedOut) {
+        const firstBlock = trimmedOut.split(/\n{2,}/)[0].trim();
+        if (!/^(\*\*[^*]+:\*\*|\*\*Narrator:\*\*)/.test(firstBlock)) {
+          out = `**${characterName}:** ${trimmedOut}`;
+          first_line_prefixed = true;
+        }
+      }
+
+      // Strip emojis
+      const emojiRe = /\p{Extended_Pictographic}/gu;
+      const emojiMatches = out.match(emojiRe);
+      if (emojiMatches && emojiMatches.length) {
+        out = out.replace(emojiRe, '');
+        emojis_removed = emojiMatches.length;
+        issues.push('emoji_removed');
+      }
+
+      const applied = out.trim() !== original.trim();
+      return { text: out.trim(), applied, issues, stats: { removed_meta, user_lines_removed, stage_dir_converted, narrator_normalized, first_line_prefixed, emojis_removed } };
+    }
+
+    // Enforce roleplay output format (post-processing repair)
+    function enforceRoleplayFormat(text: string, characterName: string) {
+      const before = text;
+      const issues: string[] = [];
+      // Strip emojis
+      const emojiRe = /\p{Extended_Pictographic}/gu;
+      if (emojiRe.test(text)) {
+        text = text.replace(emojiRe, '');
+        issues.push('emoji_removed');
+      }
+      const blocks = text.split(/\n{2,}/).map(b => b.trim()).filter(Boolean);
+      const fixed = blocks.map((b) => {
+        if (/^(\*\*[^*]+:\*\*|Narrator:|\*\*Narrator:\*\*)/i.test(b)) {
+          return b;
+        }
+        if (/^\*.*\*$/.test(b)) {
+          const cleaned = b.replace(/^\*+|\*+$/g, '').trim();
+          return `**Narrator:** *${cleaned}*`;
+        }
+        return `**${characterName}:** ${b}`;
+      });
+      const out = fixed.join('\n\n').replace(/\s{3,}/g, ' ').trim();
+      const applied = out !== before;
+      return { text: out, applied, issues };
+    }
+
     // Post-process for quality in NSFW strict roleplay
     let aiResponse = rawResponse;
     if (nsfwEnforce) {
@@ -679,6 +829,24 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
       });
     }
 
+    // Enforce roleplay formatting for character_roleplay
+    if (contextType === 'character_roleplay') {
+      const name = (characterData && characterData.name) || 'Character';
+      const enforce = enforceRoleplayFormat(aiResponse, name);
+      if (enforce.applied) {
+        aiResponse = enforce.text;
+      }
+      const hasCharPrefix = new RegExp(`\\*\\*${name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}:\\*\\*`).test(aiResponse);
+      const hasNarrator = /\*\*?Narrator:?\*\*/i.test(aiResponse) || /Narrator:/.test(aiResponse);
+      console.log('🧩 Roleplay format enforcement', {
+        applied: enforce.applied,
+        issues: enforce.issues,
+        hasCharPrefix,
+        hasNarrator,
+        preview: aiResponse.slice(0, 120),
+      });
+    }
+
     // Save AI response and update conversation in background
     const dbWriteStart = Date.now();
     waitUntil(
@@ -717,6 +885,10 @@ INSTRUCTION: Continue the scene from SCENE MEMORY and the latest user message, s
         response: aiResponse,
         conversation_id,
         generation_time: chatData.generation_time || 0,
+        context_type: contextType,
+        content_tier: chosenTier,
+        nsfw_enforce: nsfwEnforce || false,
+        template_meta: lastPromptMeta,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

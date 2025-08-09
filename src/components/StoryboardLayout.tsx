@@ -11,7 +11,7 @@ export const StoryboardLayout = ({ children }: StoryboardLayoutProps) => {
       <WorkspaceHeader />
 
       {/* Main Content */}
-      <main className="flex-1 pt-12">
+      <main className="flex-1 pt-header">
         {children}
       </main>
     </div>

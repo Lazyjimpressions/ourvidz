@@ -13,6 +13,7 @@ interface Conversation {
   status: string;
   created_at: string;
   updated_at: string;
+  character_id?: string | null;
 }
 
 interface Message {
@@ -28,17 +29,20 @@ interface PlaygroundState {
   activeConversationId: string | null;
   isLoadingMessage: boolean;
   error: string | null;
+  lastResponseMeta: any | null;
 }
 
 type PlaygroundAction = 
   | { type: 'SET_ACTIVE_CONVERSATION'; payload: string | null }
   | { type: 'SET_LOADING_MESSAGE'; payload: boolean }
-  | { type: 'SET_ERROR'; payload: string | null };
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_LAST_RESPONSE_META'; payload: any | null };
 
 const initialState: PlaygroundState = {
   activeConversationId: null,
   isLoadingMessage: false,
   error: null,
+  lastResponseMeta: null,
 };
 
 const playgroundReducer = (state: PlaygroundState, action: PlaygroundAction): PlaygroundState => {
@@ -49,6 +53,8 @@ const playgroundReducer = (state: PlaygroundState, action: PlaygroundAction): Pl
       return { ...state, isLoadingMessage: action.payload };
     case 'SET_ERROR':
       return { ...state, error: action.payload };
+    case 'SET_LAST_RESPONSE_META':
+      return { ...state, lastResponseMeta: action.payload };
     default:
       return state;
   }
@@ -61,10 +67,12 @@ interface PlaygroundContextType {
   isLoadingConversations: boolean;
   isLoadingMessages: boolean;
   setActiveConversation: (id: string | null) => void;
-  createConversation: (title?: string, projectId?: string, conversationType?: string) => Promise<string>;
+  createConversation: (title?: string, projectId?: string, conversationType?: string, characterId?: string) => Promise<string>;
   sendMessage: (content: string, options?: { characterId?: string }) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
+  refreshPromptCache: () => Promise<void>;
+  regenerateAssistantMessage: (messageId: string, options?: { refreshTemplates?: boolean; characterId?: string }) => Promise<void>;
 }
 
 const PlaygroundContext = createContext<PlaygroundContextType | undefined>(undefined);
@@ -114,33 +122,34 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     enabled: !!state.activeConversationId,
   });
 
-  // Create conversation mutation
-  const createConversationMutation = useMutation({
-    mutationFn: async ({ title, projectId, conversationType }: { title?: string; projectId?: string; conversationType?: string }) => {
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: user?.id!,
-          title: title || 'New Conversation',
-          project_id: projectId || null,
-          conversation_type: conversationType || (projectId ? 'story_development' : 'general'),
-        })
-        .select()
-        .single();
+// Create conversation mutation
+const createConversationMutation = useMutation({
+  mutationFn: async ({ title, projectId, conversationType, characterId }: { title?: string; projectId?: string; conversationType?: string; characterId?: string }) => {
+    const { data, error } = await supabase
+      .from('conversations')
+      .insert({
+        user_id: user?.id!,
+        title: title || 'New Conversation',
+        project_id: projectId || null,
+        conversation_type: conversationType || (projectId ? 'story_development' : 'general'),
+        character_id: characterId || null,
+      })
+      .select()
+      .single();
 
-      if (error) throw error;
-      return data as Conversation;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      dispatch({ type: 'SET_ACTIVE_CONVERSATION', payload: data.id });
-      toast.success('New conversation created');
-    },
-    onError: (error) => {
-      console.error('Failed to create conversation:', error);
-      toast.error('Failed to create conversation');
-    },
-  });
+    if (error) throw error;
+    return data as Conversation;
+  },
+  onSuccess: (data) => {
+    queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    dispatch({ type: 'SET_ACTIVE_CONVERSATION', payload: data.id });
+    toast.success('New conversation created');
+  },
+  onError: (error) => {
+    console.error('Failed to create conversation:', error);
+    toast.error('Failed to create conversation');
+  },
+});
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -159,7 +168,9 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Store latest template/tier meta for admin UI
+      dispatch({ type: 'SET_LAST_RESPONSE_META', payload: data });
       queryClient.invalidateQueries({ queryKey: ['messages', state.activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     },
@@ -221,10 +232,10 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     dispatch({ type: 'SET_ERROR', payload: null });
   }, []);
 
-  const createConversation = useCallback(async (title?: string, projectId?: string, conversationType?: string): Promise<string> => {
-    const result = await createConversationMutation.mutateAsync({ title, projectId, conversationType });
-    return result.id;
-  }, [createConversationMutation]);
+const createConversation = useCallback(async (title?: string, projectId?: string, conversationType?: string, characterId?: string): Promise<string> => {
+  const result = await createConversationMutation.mutateAsync({ title, projectId, conversationType, characterId });
+  return result.id;
+}, [createConversationMutation]);
 
   const sendMessage = useCallback(async (content: string, options?: { characterId?: string }) => {
     if (!state.activeConversationId) {
@@ -270,6 +281,59 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     await updateTitleMutation.mutateAsync({ id, title });
   }, [updateTitleMutation]);
 
+  const refreshPromptCache = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('refresh-prompt-cache', { body: {} });
+      if (error) throw error;
+      console.log('✅ Prompt templates cache refreshed', data);
+      toast.success('Templates refreshed');
+    } catch (e) {
+      console.error('Failed to refresh templates:', e);
+      toast.error('Failed to refresh templates');
+    }
+  }, []);
+
+  const regenerateAssistantMessage = useCallback(async (
+    messageId: string,
+    options?: { refreshTemplates?: boolean; characterId?: string }
+  ) => {
+    if (!state.activeConversationId) {
+      toast.error('No active conversation');
+      return;
+    }
+
+    const idx = messages.findIndex((m) => m.id === messageId);
+    if (idx === -1) {
+      toast.error('Message not found');
+      return;
+    }
+
+    // Find the nearest previous user message
+    let userIdx = -1;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].sender === 'user') {
+        userIdx = i;
+        break;
+      }
+    }
+    if (userIdx === -1) {
+      toast.error('No prior user message to regenerate');
+      return;
+    }
+
+    const userContent = messages[userIdx].content;
+
+    try {
+      if (options?.refreshTemplates) {
+        await refreshPromptCache();
+      }
+      await sendMessage(userContent, { characterId: options?.characterId });
+    } catch (err) {
+      console.error('Failed to regenerate assistant message:', err);
+      toast.error('Failed to regenerate');
+    }
+  }, [messages, state.activeConversationId, sendMessage, refreshPromptCache]);
+
   const value: PlaygroundContextType = {
     state,
     conversations,
@@ -281,6 +345,8 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     sendMessage,
     deleteConversation,
     updateConversationTitle,
+    refreshPromptCache,
+    regenerateAssistantMessage,
   };
 
   return (
