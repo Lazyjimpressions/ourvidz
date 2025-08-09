@@ -114,13 +114,36 @@ const RoleplayChatInterface = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Initialize conversation on mount
+  // Kick off a health check once on mount to populate status
   useEffect(() => {
-    if (!state.activeConversationId) {
-      createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'roleplay');
-    }
+    runHealthCheck();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Initialize or restore character-scoped conversation
+  useEffect(() => {
+    if (!selectedCharacter?.id) return;
+
+    // If current active conversation already matches this character and type, keep it
+    const active = conversations?.find(c => c.id === state.activeConversationId);
+    if (active && (active.character_id === selectedCharacter.id) && (active.conversation_type === 'character_roleplay')) {
+      return;
+    }
+
+    // Try to find an existing character_roleplay conversation for this character
+    const existing = conversations?.find(c => 
+      (c.character_id === selectedCharacter.id) && 
+      (c.conversation_type === 'character_roleplay')
+    );
+
+    if (existing) {
+      setActiveConversation(existing.id);
+      return;
+    }
+
+    // Otherwise create a new one with character_id set so NSFW/SFW template routing works
+    createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'character_roleplay', selectedCharacter.id);
+  }, [selectedCharacter?.id, selectedCharacter?.name, conversations]);
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !state.activeConversationId) return;
 
@@ -128,7 +151,7 @@ const RoleplayChatInterface = () => {
     setInputMessage('');
 
     try {
-      await sendMessage(message, { characterId: character?.id });
+      await sendMessage(message, { characterId: selectedCharacter?.id });
 
       // Auto-generate scene if enabled
       if (generateImageForMessage && character) {
@@ -358,8 +381,11 @@ const RoleplayChatInterface = () => {
             
             {/* Worker status indicator - subtle */}
             <div className="flex items-center gap-2 pl-2 border-l border-gray-800">
-              <span className={`w-2 h-2 rounded-full ${chatWorker.isHealthy ? 'bg-green-500' : 'bg-red-500'}`}></span>
-              <span className="text-xs text-gray-400">{chatWorker.isHealthy ? 'Worker online' : 'Worker offline'}</span>
+              <span className={`w-2 h-2 rounded-full ${workerLoading ? 'bg-gray-500' : (chatWorker?.isHealthy ? 'bg-green-500' : 'bg-gray-500')}`}></span>
+              <span className="text-xs text-gray-400">{workerLoading ? 'Checking worker...' : (chatWorker?.isHealthy ? 'Worker online' : 'Worker status')}</span>
+              <button onClick={runHealthCheck} className="p-1 hover:bg-gray-800 rounded" title="Refresh worker status">
+                <RotateCcw className="w-3 h-3 text-gray-400" />
+              </button>
             </div>
           </div>
           <div className="flex items-center space-x-1">
