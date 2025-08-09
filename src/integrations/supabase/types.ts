@@ -140,6 +140,7 @@ export type Database = {
           name: string
           persona: string | null
           reference_image_url: string | null
+          role: string | null
           system_prompt: string | null
           traits: string | null
           updated_at: string | null
@@ -162,6 +163,7 @@ export type Database = {
           name: string
           persona?: string | null
           reference_image_url?: string | null
+          role?: string | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
@@ -184,6 +186,7 @@ export type Database = {
           name?: string
           persona?: string | null
           reference_image_url?: string | null
+          role?: string | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
@@ -256,6 +259,7 @@ export type Database = {
           status: string
           title: string
           updated_at: string
+          user_character_id: string | null
           user_id: string
         }
         Insert: {
@@ -267,6 +271,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          user_character_id?: string | null
           user_id: string
         }
         Update: {
@@ -278,6 +283,7 @@ export type Database = {
           status?: string
           title?: string
           updated_at?: string
+          user_character_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -293,6 +299,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_user_character_id_fkey"
+            columns: ["user_character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
             referencedColumns: ["id"]
           },
         ]

@@ -13,12 +13,15 @@ interface PublicCharacter {
   voice_tone?: string;
   mood?: string;
   creator_id?: string;
+  user_id?: string;
   likes_count: number;
   interaction_count: number;
   is_public: boolean;
   created_at: string;
   updated_at: string;
   gender?: string;
+  content_rating?: string;
+  role?: string;
 }
 
 export const usePublicCharacters = () => {

@@ -54,11 +54,15 @@ const RoleplayChatInterface = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const characterParam = searchParams.get('character');
+  const userCharacterParam = searchParams.get('userCharacter');
+  const contentMode = searchParams.get('mode') as 'sfw' | 'nsfw' || 'sfw';
   const isUuid = (s?: string | null) => !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
   const effectiveCharacterId = isUuid(characterParam) ? (characterParam as string) : undefined;
+  const userCharacterId = isUuid(userCharacterParam) ? (userCharacterParam as string) : undefined;
   
   // Load real character data from database (only if we have a valid UUID)
   const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(effectiveCharacterId);
+  const { character: userCharacter } = useCharacterData(userCharacterId);
   const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(effectiveCharacterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
@@ -147,7 +151,15 @@ const RoleplayChatInterface = () => {
 
   const handleCreateConversation = async () => {
     try {
-      await createConversation('New Chat', undefined, 'character_roleplay', effectiveCharacterId);
+      const conversationId = await createConversation('New Chat', undefined, 'character_roleplay', effectiveCharacterId);
+      
+      // Update conversation with user character if available
+      if (userCharacterId && conversationId) {
+        await supabase
+          .from('conversations')
+          .update({ user_character_id: userCharacterId })
+          .eq('id', conversationId);
+      }
     } catch (error) {
       console.error('Failed to create conversation:', error);
     }

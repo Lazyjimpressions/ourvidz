@@ -15,7 +15,7 @@ const RoleplayDashboard = () => {
 
   const handleStartChat = (characterId: string) => {
     incrementInteraction(characterId);
-    navigate(`/roleplay/chat?character=${characterId}`);
+    navigate(`/roleplay/select?character=${characterId}`);
   };
 
   const handleCreateCharacter = () => {

@@ -44,6 +44,7 @@ interface Database {
           user_id: string;
           project_id: string | null;
           character_id: string | null;
+          user_character_id: string | null;
           title: string;
           conversation_type: string;
           status: string;
@@ -54,6 +55,7 @@ interface Database {
           user_id: string;
           project_id?: string | null;
           character_id?: string | null;
+          user_character_id?: string | null;
           title?: string;
           conversation_type?: string;
           status?: string;
@@ -465,10 +467,19 @@ You say: ...`;
           .single()
       : Promise.resolve({ data: null } as any);
 
-    const [{ data: messageHistory, error: historyError }, { data: project }, { data: character }] = await Promise.all([
+    const userCharacterPromise = conversation.user_character_id
+      ? supabaseClient
+          .from('characters')
+          .select('*')
+          .eq('id', conversation.user_character_id)
+          .single()
+      : Promise.resolve({ data: null } as any);
+
+    const [{ data: messageHistory, error: historyError }, { data: project }, { data: character }, { data: userCharacter }] = await Promise.all([
       historyPromise,
       projectPromise,
       characterPromise,
+      userCharacterPromise,
     ]);
 
     if (historyError) {
