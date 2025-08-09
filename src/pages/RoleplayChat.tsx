@@ -99,6 +99,7 @@ const RoleplayChatInterface = () => {
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const initRef = useRef<{ charId?: string; attempted: boolean }>({ attempted: false });
 
   // Persist Auto-generate Scene toggle in localStorage
   useEffect(() => {
@@ -140,11 +141,14 @@ const RoleplayChatInterface = () => {
     if (!effectiveCharacterId || !character?.id) return;
     const charId = character.id;
 
+    // Reset attempt tracking if character changes
+    if (initRef.current.charId !== charId) {
+      initRef.current = { charId, attempted: false };
+    }
+
     const active = conversations?.find(c => c.id === state.activeConversationId);
-    if (active) {
-      if (active.character_id === charId && active.conversation_type === 'character_roleplay') {
-        return;
-      }
+    if (active && active.character_id === charId && active.conversation_type === 'character_roleplay') {
+      return;
     }
 
     const existing = conversations?.find(c => (
@@ -158,7 +162,8 @@ const RoleplayChatInterface = () => {
       return;
     }
 
-    if (!state.activeConversationId) {
+    if (!state.activeConversationId && !initRef.current.attempted) {
+      initRef.current.attempted = true;
       createConversation(`Roleplay: ${character.name}`, undefined, 'character_roleplay', charId);
     }
   }, [effectiveCharacterId, character?.id, character?.name, conversations, state.activeConversationId, setActiveConversation, createConversation]);
@@ -544,19 +549,19 @@ const RoleplayChatInterface = () => {
                 className="w-3 h-3 rounded"
               />
               <span>Auto-generate scene</span>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
-                      <Info className="w-3 h-3 text-gray-400" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs max-w-xs">
-                    When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </label>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button className="p-0.5 rounded hover:bg-gray-700" aria-label="Auto-generate scene info">
+                    <Info className="w-3 h-3 text-gray-400" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs">
+                  When enabled, the app builds a short context from recent messages and auto-creates a scene image after you send a message.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             
             <button 
               onClick={() => setIsListening(!isListening)}
