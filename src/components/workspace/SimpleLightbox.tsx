@@ -1,8 +1,14 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { Button } from "@/components/ui/button";
-import { X, ChevronLeft, ChevronRight, Download, Save, Edit, Trash2, Copy, RefreshCw, Upload, Info, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PillButton } from "@/components/ui/pill-button";
+import { 
+  X, ChevronLeft, ChevronRight, Edit, Copy, RotateCcw, Heart, Download, Trash2,
+  ChevronDown, Settings, Sliders, Palette, Clock, Layers, PanelLeft, PanelRight,
+  Play, Pause, Volume2, VolumeX
+} from "lucide-react";
 import { toast } from "sonner";
 import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
 import { useImageRegeneration } from "@/hooks/useImageRegeneration";
@@ -12,16 +18,19 @@ interface WorkspaceItem {
   url: string;
   prompt: string;
   type: 'image' | 'video';
+  thumbnailUrl?: string;
+  timestamp: Date;
+  quality: 'fast' | 'high';
   modelType?: string;
-  quality?: 'fast' | 'high';
-  generationParams?: {
-    seed?: number;
-    originalAssetId?: string;
-    timestamp?: string;
-  };
+  duration?: number;
+  enhancedPrompt?: string;
   seed?: number;
+  generationParams?: Record<string, any>;
+  // Video-specific properties
+  resolution?: string;
+  format?: string;
+  // Optional originalAssetId for compatibility
   originalAssetId?: string;
-  timestamp?: string;
 }
 
 interface SimpleLightboxProps {
@@ -35,6 +44,7 @@ interface SimpleLightboxProps {
   onDownload?: (item: WorkspaceItem) => void;
   onSendToControlBox?: (item: WorkspaceItem) => void;
   onRegenerate?: (item: WorkspaceItem) => void;
+  onCreateVideo?: (item: WorkspaceItem) => void;
   isDeleting?: boolean;
   isRegenerating?: boolean;
 }
@@ -50,14 +60,23 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
   onDownload,
   onSendToControlBox,
   onRegenerate,
+  onCreateVideo,
   isDeleting = false,
   isRegenerating = false
 }) => {
-  const currentItem = items[currentIndex];
   const [showGenerationDetails, setShowGenerationDetails] = useState(false);
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
+  
+  const currentItem = items[currentIndex];
+  
+  if (!currentItem) return null;
+
+  // Video control states
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   // Fetch detailed image information
   const { fetchDetails, loading: detailsLoading, details, reset } = useFetchImageDetails();
@@ -83,6 +102,35 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
       originalPrompt: currentItem?.prompt
     }
   );
+
+  // Video handlers
+  const handlePlayPause = () => {
+    if (videoRef.current && currentItem.type === 'video') {
+      if (isVideoPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsVideoPlaying(!isVideoPlaying);
+    }
+  };
+
+  const handleToggleMute = () => {
+    if (videoRef.current && currentItem.type === 'video') {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
+  };
+
+  const handleVideoEnded = () => {
+    setIsVideoPlaying(false);
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     switch (e.key) {
@@ -130,7 +178,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
   // Fetch details when item changes
   useEffect(() => {
     const imageId = currentItem?.originalAssetId || currentItem?.id;
-    if (imageId) {
+    if (imageId && currentItem.type === 'image') {
       // Reset previous details first
       reset();
       fetchDetails(imageId);
@@ -140,7 +188,7 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
     return () => {
       reset();
     };
-  }, [currentItem?.originalAssetId, currentItem?.id, fetchDetails, reset]);
+  }, [currentItem?.originalAssetId, currentItem?.id, currentItem?.type, fetchDetails, reset]);
 
   const handlePrevious = () => {
     if (currentIndex > 0) {
@@ -152,11 +200,6 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
     if (currentIndex < items.length - 1) {
       onIndexChange(currentIndex + 1);
     }
-  };
-
-  const handleActionClick = (e: React.MouseEvent, action: () => void) => {
-    e.stopPropagation();
-    action();
   };
 
   const copyToClipboard = (text: string, type: string) => {
@@ -197,17 +240,13 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
       : modelType.toUpperCase();
   };
 
-  if (!currentItem) {
-    return null;
-  }
-
   return (
     <div className="fixed inset-0 bg-black/95 z-50 flex">
       {/* Close Button */}
       <Button
         variant="ghost"
         size="sm"
-        className="absolute top-2 right-2 h-7 w-7 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
+        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
         onClick={onClose}
       >
         <X className="w-3 h-3" />
@@ -222,28 +261,20 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           className="absolute left-2 top-2 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
           onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
         >
-          {leftPanelCollapsed ? <PanelLeftOpen className="w-2.5 h-2.5" /> : <PanelLeftClose className="w-2.5 h-2.5" />}
+          {leftPanelCollapsed ? <PanelLeft className="w-2.5 h-2.5" /> : <PanelLeft className="w-2.5 h-2.5 rotate-180" />}
         </Button>
 
         {!leftPanelCollapsed && (
           <div className="p-3 space-y-3 pt-10">
             {/* Header with type and quality badges */}
             <div className="flex items-center gap-1.5">
-              <div className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                currentItem.type === 'video' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-green-600 text-white'
-              }`}>
+              <Badge variant={currentItem.type === 'video' ? 'default' : 'secondary'} className="text-xs">
                 {currentItem.type.toUpperCase()}
-              </div>
+              </Badge>
               {currentItem.quality && (
-                <div className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                  currentItem.quality === 'high' 
-                    ? 'bg-purple-600 text-white' 
-                    : 'bg-orange-600 text-white'
-                }`}>
+                <Badge variant={currentItem.quality === 'high' ? 'default' : 'outline'} className="text-xs">
                   {currentItem.quality.toUpperCase()}
-                </div>
+                </Badge>
               )}
             </div>
 
@@ -252,10 +283,10 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
               {/* Original Prompt */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-foreground">Original Prompt</h3>
+                  <h3 className="text-xs font-medium text-foreground">Prompt</h3>
                   <button
                     className="opacity-60 hover:opacity-100 transition-opacity"
-                    onClick={() => copyToClipboard(currentItem.prompt, 'Original prompt')}
+                    onClick={() => copyToClipboard(currentItem.prompt, 'Prompt')}
                   >
                     <Copy className="w-2.5 h-2.5" />
                   </button>
@@ -265,26 +296,8 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
                 </p>
               </div>
 
-              {/* Enhanced Prompt */}
-              {currentItem.prompt && (
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-medium text-foreground">Enhanced Prompt</h3>
-                    <button
-                      className="opacity-60 hover:opacity-100 transition-opacity"
-                      onClick={() => copyToClipboard(currentItem.prompt, 'Enhanced prompt')}
-                    >
-                      <Copy className="w-2.5 h-2.5" />
-                    </button>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed break-words">
-                    {currentItem.prompt}
-                  </p>
-                </div>
-              )}
-
-              {/* Seed */}
-              {(currentItem.seed || currentItem.generationParams?.seed) && (
+              {/* Seed - Images only */}
+              {currentItem.type === 'image' && (currentItem.seed || currentItem.generationParams?.seed) && (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-medium text-foreground">Seed</h3>
@@ -304,64 +317,96 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
                 </div>
               )}
 
-              {/* Model Used */}
+              {/* Basic Info */}
               <div className="space-y-1">
-                <h3 className="text-xs font-medium text-foreground">Model Used</h3>
-                <p className="text-xs text-muted-foreground">
-                  {getModelDisplayName(currentItem.modelType, currentItem.quality)}
-                </p>
+                <h3 className="text-xs font-medium text-foreground">Details</h3>
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground">
+                    Quality: <span className="text-foreground">{currentItem.quality}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Type: <span className="text-foreground">{currentItem.type}</span>
+                  </p>
+                  {currentItem.type === 'video' && (
+                    <>
+                      {currentItem.duration && (
+                        <p className="text-xs text-muted-foreground">
+                          Duration: <span className="text-foreground">{currentItem.duration}s</span>
+                        </p>
+                      )}
+                      {currentItem.resolution && (
+                        <p className="text-xs text-muted-foreground">
+                          Resolution: <span className="text-foreground">{currentItem.resolution}</span>
+                        </p>
+                      )}
+                      {currentItem.format && (
+                        <p className="text-xs text-muted-foreground">
+                          Format: <span className="text-foreground">{currentItem.format}</span>
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Model: <span className="text-foreground">{getModelDisplayName(currentItem.modelType, currentItem.quality)}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Created: <span className="text-foreground">{formatDate(currentItem.timestamp)}</span>
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Collapsible Generation Details */}
-            <Collapsible open={showGenerationDetails} onOpenChange={setShowGenerationDetails}>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent"
-                >
-                  Generation Details
-                  {showGenerationDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="space-y-2 mt-1.5">
-                {detailsLoading ? (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <div className="animate-spin rounded-full h-2.5 w-2.5 border-b border-current"></div>
-                    Loading details...
-                  </div>
-                ) : (
-                  <>
-                    {details?.generationTime && (
-                      <div>
-                        <h4 className="text-xs font-medium text-foreground mb-0.5">Generation Time</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {Math.round(details.generationTime)}ms
-                        </p>
-                      </div>
-                    )}
-                    
-                    {details?.negativePrompt && (
-                      <div>
-                        <h4 className="text-xs font-medium text-foreground mb-0.5">Negative Prompt</h4>
-                        <p className="text-xs text-muted-foreground break-words">
-                          {details.negativePrompt}
-                        </p>
-                      </div>
-                    )}
+            {/* Collapsible Generation Details - Images only */}
+            {currentItem.type === 'image' && (
+              <Collapsible open={showGenerationDetails} onOpenChange={setShowGenerationDetails}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent"
+                  >
+                    Generation Details
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showGenerationDetails ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-2 mt-1.5">
+                  {detailsLoading ? (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <div className="animate-spin rounded-full h-2.5 w-2.5 border-b border-current"></div>
+                      Loading details...
+                    </div>
+                  ) : (
+                    <>
+                      {details?.generationTime && (
+                        <div>
+                          <h4 className="text-xs font-medium text-foreground mb-0.5">Generation Time</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {Math.round(details.generationTime)}ms
+                          </p>
+                        </div>
+                      )}
+                      
+                      {details?.negativePrompt && (
+                        <div>
+                          <h4 className="text-xs font-medium text-foreground mb-0.5">Negative Prompt</h4>
+                          <p className="text-xs text-muted-foreground break-words">
+                            {details.negativePrompt}
+                          </p>
+                        </div>
+                      )}
 
-                    {details?.referenceStrength && (
-                      <div>
-                        <h4 className="text-xs font-medium text-foreground mb-0.5">Reference Strength</h4>
-                        <p className="text-xs text-muted-foreground">
-                          {(details.referenceStrength * 100).toFixed(0)}%
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
+                      {details?.referenceStrength && (
+                        <div>
+                          <h4 className="text-xs font-medium text-foreground mb-0.5">Reference Strength</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {(details.referenceStrength * 100).toFixed(0)}%
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
 
             {/* Collapsible Technical Details */}
             <Collapsible open={showTechnicalDetails} onOpenChange={setShowTechnicalDetails}>
@@ -371,35 +416,24 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
                   className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent"
                 >
                   Technical Details
-                  {showTechnicalDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showTechnicalDetails ? 'rotate-180' : ''}`} />
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="space-y-2 mt-1.5">
-                {currentItem.timestamp && (
-                  <div>
-                    <h4 className="text-xs font-medium text-foreground mb-0.5">Created</h4>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDate(currentItem.timestamp)}
-                    </p>
-                  </div>
-                )}
-                
-                {(currentItem.originalAssetId || currentItem.id) && (
-                  <div>
-                    <h4 className="text-xs font-medium text-foreground mb-0.5">Asset ID</h4>
-                    <p className="text-xs font-mono text-muted-foreground break-all">
-                      {currentItem.originalAssetId || currentItem.id}
-                    </p>
-                  </div>
-                )}
+                <div>
+                  <h4 className="text-xs font-medium text-foreground mb-0.5">Asset ID</h4>
+                  <p className="text-xs font-mono text-muted-foreground break-all">
+                    {currentItem.originalAssetId || currentItem.id}
+                  </p>
+                </div>
               </CollapsibleContent>
             </Collapsible>
           </div>
         )}
       </div>
 
-      {/* Center - Image Display */}
-      <div className="flex-1 flex items-center justify-center relative">
+      {/* Center - Media Display */}
+      <div className="flex-1 flex items-center justify-center p-3 relative">
         {/* Navigation Buttons */}
         {items.length > 1 && (
           <>
@@ -425,29 +459,82 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           </>
         )}
 
-        {/* Media */}
-        <div className="max-w-full max-h-[90vh] mx-4">
-          {currentItem.type === 'video' ? (
-            <video
-              src={currentItem.url}
-              className="max-w-full max-h-full object-contain rounded-lg"
-              controls
-              autoPlay
-              loop
-            />
-          ) : (
-            <img
-              src={currentItem.url}
-              alt={`Content ${currentItem.id}`}
-              className="max-w-full max-h-full object-contain rounded-lg"
-            />
-          )}
-        </div>
+        <div className="relative max-w-full max-h-full">
+          {/* Media Container */}
+          <div className="relative rounded-lg overflow-hidden shadow-2xl">
+            {currentItem.type === 'video' ? (
+              <div className="relative">
+                <video
+                  ref={videoRef}
+                  src={currentItem.url}
+                  className="max-w-full max-h-[80vh] object-contain"
+                  poster={currentItem.thumbnailUrl}
+                  onEnded={handleVideoEnded}
+                  onPlay={() => setIsVideoPlaying(true)}
+                  onPause={() => setIsVideoPlaying(false)}
+                  muted={isMuted}
+                  loop
+                />
+                
+                {/* Video Controls Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      {/* Play/Pause Button */}
+                      <button
+                        onClick={handlePlayPause}
+                        className="bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-colors"
+                      >
+                        {isVideoPlaying ? (
+                          <Pause className="w-5 h-5" />
+                        ) : (
+                          <Play className="w-5 h-5" />
+                        )}
+                      </button>
+                      
+                      {/* Mute/Unmute Button */}
+                      <button
+                        onClick={handleToggleMute}
+                        className="bg-white/20 hover:bg-white/30 text-white rounded-full p-2 transition-colors"
+                      >
+                        {isMuted ? (
+                          <VolumeX className="w-5 h-5" />
+                        ) : (
+                          <Volume2 className="w-5 h-5" />
+                        )}
+                      </button>
+                      
+                      {/* Duration */}
+                      {currentItem.duration && (
+                        <span className="text-white text-sm">
+                          {formatDuration(currentItem.duration)}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Video Info */}
+                    <div className="text-white text-sm opacity-80">
+                      Video
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <img
+                src={currentItem.url}
+                alt={currentItem.prompt}
+                className="max-w-full max-h-[80vh] object-contain"
+                onLoad={() => console.log('Image loaded successfully')}
+                onError={(e) => console.error('Image failed to load:', e)}
+              />
+            )}
+          </div>
 
-        {/* Navigation indicator */}
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1">
-          <div className="text-xs text-muted-foreground">
-            {currentIndex + 1} of {items.length}
+          {/* Navigation indicator */}
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-background/80 backdrop-blur-sm rounded-lg px-2 py-1">
+            <div className="text-xs text-muted-foreground">
+              {currentIndex + 1} of {items.length}
+            </div>
           </div>
         </div>
       </div>
@@ -461,100 +548,107 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
           className="absolute right-2 top-8 h-6 w-6 p-0 bg-background/20 hover:bg-background/40 text-white z-10"
           onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
         >
-          {rightPanelCollapsed ? <PanelRightOpen className="w-2.5 h-2.5" /> : <PanelRightClose className="w-2.5 h-2.5" />}
+          {rightPanelCollapsed ? <PanelRight className="w-2.5 h-2.5" /> : <PanelRight className="w-2.5 h-2.5 rotate-180" />}
         </Button>
 
         {!rightPanelCollapsed && (
           <div className="p-3 space-y-2 pt-12">
-            <h3 className="text-xs font-medium text-foreground mb-2">Actions</h3>
-            
-            {/* Send to Control Box */}
-            {onSendToControlBox && (
-              <Button
-                onClick={handleSendToControlBox}
-                className="w-full justify-start gap-1.5 text-xs h-7"
-                variant="secondary"
+            <div className="flex flex-col gap-1.5">
+              {/* Send to Control Box - Primary action for images */}
+              {currentItem.type === 'image' && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PillButton 
+                        onClick={handleSendToControlBox} 
+                        size="sm" 
+                        variant="default"
+                        disabled={!currentItem.url}
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        Send to Control Box
+                      </PillButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Use this image as reference for new generation</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+
+              {/* Generate 3 More - For images only */}
+              {currentItem.type === 'image' && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <PillButton 
+                        onClick={handleRegenerate} 
+                        size="sm" 
+                        variant="secondary"
+                        disabled={isGenerating}
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Generate 3 More
+                      </PillButton>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Generate 3 more images like this one</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+
+              {/* Create Video - For images only */}
+              {currentItem.type === 'image' && (
+                <PillButton 
+                  onClick={() => onCreateVideo?.(currentItem)} 
+                  size="sm" 
+                  variant="accent"
+                >
+                  <Play className="w-3 h-3 mr-1" />
+                  Create Video
+                </PillButton>
+              )}
+
+              {/* Save */}
+              <PillButton 
+                onClick={() => onSave?.(currentItem)} 
+                size="sm" 
+                variant="ghost"
               >
-                <Upload className="w-3 h-3" />
-                Send to Control Box
-              </Button>
-            )}
+                <Heart className="w-3 h-3 mr-1" />
+                Save
+              </PillButton>
 
-            {/* Generate 3 More */}
-            <Button
-              onClick={handleRegenerate}
-              disabled={isGenerating || isRegenerating}
-              className="w-full justify-start gap-1.5 text-xs h-7"
-              variant="default"
-            >
-              {isGenerating || isRegenerating ? (
-                <>
-                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-3 h-3" />
-                  Generate 3 More
-                </>
-              )}
-            </Button>
+              {/* Download */}
+              <PillButton 
+                onClick={() => onDownload?.(currentItem)} 
+                size="sm" 
+                variant="ghost"
+              >
+                <Download className="w-3 h-3 mr-1" />
+                Download
+              </PillButton>
 
-            <div className="border-t border-border/20 pt-2 space-y-1">
-              {/* Traditional Actions */}
-              {onSave && (
-                <Button
-                  onClick={() => onSave(currentItem)}
-                  className="w-full justify-start gap-1.5 text-xs h-7"
-                  variant="outline"
-                >
-                  <Save className="w-3 h-3" />
-                  Save to Library
-                </Button>
-              )}
+              {/* Edit Prompt */}
+              <PillButton 
+                onClick={() => onEdit?.(currentItem)} 
+                size="sm" 
+                variant="outline"
+              >
+                <Edit className="w-3 h-3 mr-1" />
+                Edit Prompt
+              </PillButton>
 
-              {onDownload && (
-                <Button
-                  onClick={() => onDownload(currentItem)}
-                  className="w-full justify-start gap-1.5 text-xs h-7"
-                  variant="outline"
-                >
-                  <Download className="w-3 h-3" />
-                  Download
-                </Button>
-              )}
-
-              {onEdit && (
-                <Button
-                  onClick={() => onEdit(currentItem)}
-                  className="w-full justify-start gap-1.5 text-xs h-7"
-                  variant="outline"
-                >
-                  <Edit className="w-3 h-3" />
-                  Edit Prompt
-                </Button>
-              )}
-
-              {onDelete && (
-                <Button
-                  onClick={() => onDelete(currentItem)}
-                  disabled={isDeleting}
-                  className="w-full justify-start gap-1.5 text-xs h-7"
-                  variant="destructive"
-                >
-                  {isDeleting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-3 h-3" />
-                      Remove from Workspace
-                    </>
-                  )}
-                </Button>
-              )}
+              {/* Remove */}
+              <PillButton 
+                onClick={() => onDelete?.(currentItem)} 
+                size="sm" 
+                variant="destructive"
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Remove
+              </PillButton>
             </div>
           </div>
         )}

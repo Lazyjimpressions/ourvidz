@@ -195,9 +195,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                         size="lg"
                       />
                     ) : (
-                      // Empty slot for incomplete jobs
-                      <div className="w-full h-full bg-gray-800/30 border border-gray-700/50 rounded-lg flex items-center justify-center">
-                        <div className="text-gray-600 text-xs">Empty</div>
+                      // Empty slot for incomplete jobs - match ContentCard sizing
+                      <div className="w-full aspect-square bg-muted/30 border border-border/50 rounded-lg flex items-center justify-center">
+                        <div className="text-muted-foreground text-xs">Empty</div>
                       </div>
                     )}
                   </div>
@@ -313,14 +313,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                      </div>
                    )}
                    
-                   {/* Content Type Indicator */}
-                   <div className="absolute top-1 left-1">
-                     {metadata.isVideoJob ? (
-                       <VideoIcon className="w-3 h-3 text-blue-400" />
-                     ) : (
-                       <ImageIcon className="w-3 h-3 text-green-400" />
-                     )}
-                   </div>
+                    {/* Content Type Indicator - Removed redundant icons, keeping only play button for videos */}
                  </div>
 
                 {/* Hover Delete/Dismiss Buttons - Small, clean like LTX */}

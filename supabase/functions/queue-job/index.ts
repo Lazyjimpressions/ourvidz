@@ -354,8 +354,8 @@ serve(async (req)=>{
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    // CRITICAL FIX: Preserve actual user input from metadata.prompt
-    const preservedOriginalPrompt = metadata?.prompt || prompt;
+    // CRITICAL FIX: Preserve actual user input from metadata.prompt - separate original vs enhanced
+    const preservedOriginalPrompt = originalPrompt || metadata?.prompt || prompt;
     let workingPrompt = enhancedPrompt || prompt; // Use enhanced if provided, fallback to original
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;

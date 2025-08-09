@@ -129,8 +129,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
   const sizeClasses = {
     sm: 'w-32 h-32',
-    md: 'w-full h-48 md:h-64',
-    lg: 'w-full h-48 md:h-64'
+    md: 'w-full aspect-square', // Ensure consistent aspect ratio for grid layout
+    lg: 'w-full aspect-square'  // Videos and images both use square aspect ratio
   };
 
   // LTX-Style: Much smaller icons for subtle hover actions
@@ -189,6 +189,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
               {formatDuration(getVideoDuration()!)}
             </div>
           )}
+          
+          {/* Video aspect ratio matches grid layout */}
           
         </div>
       ) : (

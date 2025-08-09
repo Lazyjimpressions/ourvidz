@@ -424,7 +424,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             generationParams: asset.metadata,
             seed: asset.metadata?.seed,
             originalAssetId: asset.metadata?.original_asset_id,
-            timestamp: asset.createdAt.toString()
+            timestamp: new Date(asset.createdAt)
           }))}
           currentIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
