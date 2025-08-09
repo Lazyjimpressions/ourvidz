@@ -41,7 +41,7 @@ function App() {
           <Toaster />
           <Sonner />
           <AuthProvider>
-          <BrowserRouter>
+            <BrowserRouter>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -58,8 +58,8 @@ function App() {
             <Route path="/roleplay/chat" element={<ProtectedRoute><RoleplayChat /></ProtectedRoute>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
-        </AuthProvider>
+            </BrowserRouter>
+          </AuthProvider>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
