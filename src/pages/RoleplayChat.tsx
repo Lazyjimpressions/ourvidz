@@ -50,17 +50,20 @@ const mockCharacters = {
 const RoleplayChatInterface = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const characterId = searchParams.get('character') || '1';
+  const characterParam = searchParams.get('character');
+  const isUuid = (s?: string | null) => !!s && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+  const effectiveCharacterId = isUuid(characterParam) ? (characterParam as string) : undefined;
   
-  // Load real character data from database
-  const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(characterId);
-  const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(characterId);
+  // Load real character data from database (only if we have a valid UUID)
+  const { character, isLoading: isLoadingCharacter, likeCharacter } = useCharacterData(effectiveCharacterId);
+  const { scenes, isLoading: isLoadingScenes } = useCharacterScenes(effectiveCharacterId);
   const { queueJob } = useJobQueue();
   const { generateSceneFromMessage } = useAutoSceneGeneration();
   const { chatWorker, isLoading: workerLoading, runHealthCheck, lastUpdated } = useWorkerStatus();
   
   // Fallback to mock data if no character loaded yet
-  const selectedCharacter = character || mockCharacters[characterId] || mockCharacters['1'];
+  const selectedCharacter = character || mockCharacters['1'];
+  const mock = mockCharacters['1'];
   
   const {
     state,
@@ -120,30 +123,37 @@ const RoleplayChatInterface = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Initialize or restore character-scoped conversation
+  // Initialize or restore character-scoped conversation (robust, no loops)
   useEffect(() => {
     if (!selectedCharacter?.id) return;
 
-    // If current active conversation already matches this character and type, keep it
+    // If we already have an active conversation, ensure it's the correct one
     const active = conversations?.find(c => c.id === state.activeConversationId);
-    if (active && (active.character_id === selectedCharacter.id) && (active.conversation_type === 'character_roleplay')) {
-      return;
+    if (active) {
+      // If it's the right character/type, we're done
+      if (active.character_id === selectedCharacter.id && active.conversation_type === 'character_roleplay') {
+        return;
+      }
     }
 
     // Try to find an existing character_roleplay conversation for this character
-    const existing = conversations?.find(c => 
-      (c.character_id === selectedCharacter.id) && 
-      (c.conversation_type === 'character_roleplay')
-    );
+    const existing = conversations?.find(c => (
+      c.character_id === selectedCharacter.id && c.conversation_type === 'character_roleplay'
+    ));
 
     if (existing) {
-      setActiveConversation(existing.id);
+      // Only update if different to avoid unnecessary renders
+      if (state.activeConversationId !== existing.id) {
+        setActiveConversation(existing.id);
+      }
       return;
     }
 
-    // Otherwise create a new one with character_id set so NSFW/SFW template routing works
-    createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'character_roleplay', selectedCharacter.id);
-  }, [selectedCharacter?.id, selectedCharacter?.name, conversations]);
+    // If we have no active and no existing, create a new one
+    if (!state.activeConversationId) {
+      createConversation(`Roleplay: ${selectedCharacter.name}`, undefined, 'character_roleplay', selectedCharacter.id);
+    }
+  }, [selectedCharacter?.id, selectedCharacter?.name, conversations, state.activeConversationId]);
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !state.activeConversationId) return;
 
