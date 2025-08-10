@@ -46,6 +46,7 @@ export interface LibraryFirstWorkspaceState {
   
   // Enhancement Model Selection
   enhancementModel: 'qwen_base' | 'qwen_instruct' | 'none';
+  userPreferredModel: 'qwen_base' | 'qwen_instruct' | 'none';
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -67,6 +68,7 @@ export interface LibraryFirstWorkspaceActions {
   setStyle: (style: string) => void;
   setStyleRef: (ref: File | null) => void;
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
+  updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -128,6 +130,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
+  const [userPreferredModel, setUserPreferredModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
 
   // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -555,7 +558,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           shot_type: finalShotType,
           camera_angle: finalCameraAngle,
           style: finalStyle,
-          enhancement_model: enhancementModel,
+          enhancement_model: exactCopyMode ? 'none' : enhancementModel,
           contentType: contentType,
           // Skip enhancement in exact copy mode
           user_requested_enhancement: exactCopyMode ? false : (enhancementModel !== 'none'),
@@ -984,6 +987,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     lightboxIndex,
     referenceMetadata,
     enhancementModel,
+    userPreferredModel,
     exactCopyMode,
     useOriginalParams,
     lockSeed,
@@ -1018,9 +1022,27 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,
-    setExactCopyMode,
+    setExactCopyMode: (on: boolean) => {
+      setExactCopyMode(on);
+      // Auto-set enhancement model based on exact copy mode
+      if (on) {
+        // Save current model as user preference and set to 'none'
+        setUserPreferredModel(enhancementModel);
+        setEnhancementModel('none');
+      } else {
+        // Restore user's preferred model
+        setEnhancementModel(userPreferredModel);
+      }
+    },
     setUseOriginalParams,
     setLockSeed,
+    updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => {
+      if (!exactCopyMode) {
+        // Only update user preference when not in exact copy mode
+        setUserPreferredModel(model);
+        setEnhancementModel(model);
+      }
+    },
     setReferenceMetadata,
     getJobStats,
     getActiveJob,

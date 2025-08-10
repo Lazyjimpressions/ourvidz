@@ -130,7 +130,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         });
         
         const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
-        const metadata = extractReferenceMetadata(asset);
+        const metadata = await extractReferenceMetadata(asset);
         
         console.log('🎯 METADATA EXTRACTION RESULT:', {
           extracted: !!metadata,
@@ -140,7 +140,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         });
         
         if (metadata) {
-          state.setReferenceMetadata(metadata);
+          setReferenceMetadata(metadata);
           console.log('🎯 Reference metadata extracted and set:', metadata);
           
           // Auto-enable exact copy mode when metadata is available
@@ -183,22 +183,24 @@ export const SimplifiedWorkspace: React.FC = () => {
     });
     
     // Extract metadata for exact copy functionality
-    const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
-    const metadata = extractReferenceMetadata(item);
-    
-    console.log('🎯 ITERATE METADATA EXTRACTION:', {
-      extracted: !!metadata,
-      metadataKeys: metadata ? Object.keys(metadata) : 'none',
-      originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
-      originalSeed: metadata?.originalSeed
-    });
-    
-    if (metadata) {
-      state.setReferenceMetadata(metadata);
-      console.log('🎯 ITERATE: Reference metadata set for exact copy');
-    } else {
-      console.warn('⚠️ ITERATE: Failed to extract metadata for exact copy');
-    }
+    (async () => {
+      const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+      const metadata = await extractReferenceMetadata(item);
+      
+      console.log('🎯 ITERATE METADATA EXTRACTION:', {
+        extracted: !!metadata,
+        metadataKeys: metadata ? Object.keys(metadata) : 'none',
+        originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+        originalSeed: metadata?.originalSeed
+      });
+      
+      if (metadata) {
+        setReferenceMetadata(metadata);
+        console.log('🎯 ITERATE: Reference metadata set for exact copy');
+      } else {
+        console.warn('⚠️ ITERATE: Failed to extract metadata for exact copy');
+      }
+    })();
     
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);
@@ -502,7 +504,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             styleRef={styleRef}
             onStyleRefChange={setStyleRef}
             enhancementModel={enhancementModel}
-            onEnhancementModelChange={setEnhancementModel}
+            onEnhancementModelChange={state.updateEnhancementModel}
             exactCopyMode={exactCopyMode}
             onExactCopyModeChange={setExactCopyMode}
             useOriginalParams={useOriginalParams}

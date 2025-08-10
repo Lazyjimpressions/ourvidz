@@ -503,13 +503,21 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <select
                     value={enhancementModel}
                     onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
-                    className="px-1.5 py-0.5 bg-muted text-muted-foreground border border-border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-ring appearance-none pr-5"
+                    disabled={exactCopyMode}
+                    className={`px-1.5 py-0.5 border border-border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-ring appearance-none pr-5 ${
+                      exactCopyMode 
+                        ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed' 
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                    title={exactCopyMode ? "Enhancement disabled in Exact Copy mode" : "AI prompt enhancement model"}
                   >
                     <option value="qwen_instruct">Instruct</option>
                     <option value="qwen_base">Base</option>
                     <option value="none">None</option>
                   </select>
-                  <ChevronDown size={8} className="absolute right-1 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                  <ChevronDown size={8} className={`absolute right-1 top-1/2 transform -translate-y-1/2 pointer-events-none ${
+                    exactCopyMode ? 'text-muted-foreground/50' : 'text-muted-foreground'
+                  }`} />
                 </div>
 
                  {/* Mode-specific controls - Disable in exact copy mode */}
