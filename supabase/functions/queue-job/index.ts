@@ -684,11 +684,12 @@ serve(async (req)=>{
         ...metadata?.seed && {
           seed: metadata.seed
         },
-        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config
+        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config with exact copy mode handling
         ...metadata?.reference_image && {
           reference_image_url: metadata.reference_url,
-          reference_strength: metadata.reference_strength || 0.85,
-          reference_type: metadata.reference_type || 'character'
+          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+          reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
+          exact_copy_mode: metadata.exact_copy_mode || false
         },
         // ✅ COMPEL SUPPORT: Extract Compel configuration from metadata
         compel_enabled: metadata?.compel_enabled || false,
@@ -712,11 +713,12 @@ serve(async (req)=>{
         ...metadata?.seed && {
           seed: metadata.seed
         },
-        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config
+        // REFERENCE IMAGE SUPPORT: Pass reference data to worker config with exact copy mode handling
         ...metadata?.reference_image && {
           reference_image_url: metadata.reference_url,
-          reference_strength: metadata.reference_strength || 0.85,
-          reference_type: metadata.reference_type || 'character',
+          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+          reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
+          exact_copy_mode: metadata.exact_copy_mode || false,
           // VIDEO REFERENCE SUPPORT: Add start/end frame references for video generation
           ...(format === 'video' && metadata?.start_reference_url && {
             first_frame: metadata.start_reference_url
@@ -749,11 +751,11 @@ serve(async (req)=>{
         compel_enabled: metadata?.compel_enabled || false,
         compel_weights: metadata?.compel_weights || undefined
       },
-      // 🎯 REFERENCE IMAGE FIX: Include reference image parameters at root level for worker
+      // 🎯 REFERENCE IMAGE FIX: Include reference image parameters at root level for worker with exact copy mode
       ...metadata?.reference_image && {
         reference_image_url: metadata.reference_url,
-        reference_strength: metadata.reference_strength || 0.85,
-        reference_type: metadata.reference_type || 'character',
+        reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+        reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
         exact_copy_mode: metadata.exact_copy_mode || false
       },
       // VIDEO REFERENCE SUPPORT: Include start/end frame references at root level

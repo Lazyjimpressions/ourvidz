@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, Cog, X, Palette } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, Cog, X, Palette, Copy, Edit3 } from 'lucide-react';
 
 // Compact reference upload component
 const ReferenceImageUpload: React.FC<{
@@ -382,14 +382,29 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               {/* Prompt Input - Wider like LTX */}
               <div className="flex-1">
                 <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
-                  <textarea
-                    value={prompt}
-                    onChange={(e) => onPromptChange(e.target.value)}
-                    placeholder="A close-up of a woman talking on the phone..."
-                    className="flex-1 h-16 py-2 px-3 bg-background border border-input rounded text-foreground placeholder-muted-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none"
-                    rows={3}
-                    disabled={isGenerating}
-                  />
+                  <div className="relative flex-1">
+                    <textarea
+                      value={prompt}
+                      onChange={(e) => onPromptChange(e.target.value)}
+                      placeholder={exactCopyMode ? "Type modifications like 'change outfit to bikini' or leave empty to copy exactly..." : "A close-up of a woman talking on the phone..."}
+                      className={`flex-1 h-16 py-2 px-3 bg-background border rounded text-foreground placeholder-muted-foreground text-sm focus:outline-none focus:ring-1 focus:ring-ring resize-none w-full ${
+                        exactCopyMode ? 'border-primary/50' : 'border-input'
+                      }`}
+                      rows={3}
+                      disabled={isGenerating}
+                    />
+                    {exactCopyMode && (
+                      <div className="absolute top-1 right-1 flex items-center gap-1 text-xs text-primary">
+                        <Copy size={10} />
+                        <span className="text-[10px] font-medium">Exact Copy</span>
+                      </div>
+                    )}
+                    {exactCopyMode && prompt.length === 0 && (
+                      <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
+                        Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Generate Button */}
                   <button

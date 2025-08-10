@@ -56,34 +56,52 @@ serve(async (req) => {
       promptLength: prompt.length
     })
 
-    // FIXED: Proper exact copy mode handling for image-to-image references
+    // FIXED: Enhanced exact copy mode handling for image-to-image references
     if (exactCopyMode) {
-      console.log('🎯 EXACT COPY MODE: Bypassing enhancement completely for image-to-image reference')
+      console.log('🎯 EXACT COPY MODE: Using subject preservation enhancement for image-to-image reference')
       
-      // For exact copy mode, use minimal prompt to avoid interference with reference image
-      const minimalPrompt = prompt.trim() || 'high quality image'
+      // Detect if this is a modification prompt (change, add, remove, etc.)
+      const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
+      const isModificationPrompt = modificationKeywords.some(keyword => 
+        prompt.toLowerCase().includes(keyword)
+      )
+      
+      let enhancedPrompt: string
+      
+      if (isModificationPrompt && prompt.trim().length > 3) {
+        // This is a modification request - enhance while preserving subject
+        console.log('🔄 Processing modification prompt in exact copy mode')
+        
+        // Create subject-preserving enhancement
+        const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition`
+        
+        enhancedPrompt = subjectPreservationPrompt
+      } else {
+        // Empty or minimal prompt - just preserve the subject exactly
+        enhancedPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, high quality'
+      }
       
       return new Response(JSON.stringify({
         success: true,
         original_prompt: prompt,
-        enhanced_prompt: minimalPrompt,
-        enhancement_strategy: 'exact_copy_bypass',
+        enhanced_prompt: enhancedPrompt,
+        enhancement_strategy: 'exact_copy_subject_preservation',
         enhancement_metadata: {
           original_length: prompt.length,
-          enhanced_length: minimalPrompt.length,
-          expansion_percentage: '0.0',
+          enhanced_length: enhancedPrompt.length,
+          expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
           job_type: jobType,
           format,
           quality,
           content_mode: contentType || 'nsfw',
-          template_name: 'exact_copy_bypass',
-          model_used: 'bypass',
-          token_count: Math.ceil(minimalPrompt.length / 4),
+          template_name: 'exact_copy_subject_preservation',
+          model_used: 'subject_preservation',
+          token_count: Math.ceil(enhancedPrompt.length / 4),
           compression_applied: false,
           fallback_level: 0,
           exact_copy_mode: true,
-          execution_time_ms: 2,
-          bypass_reason: 'image_to_image_reference_mode'
+          is_modification_prompt: isModificationPrompt,
+          execution_time_ms: 5
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
