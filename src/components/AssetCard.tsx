@@ -150,9 +150,9 @@ export const AssetCard = ({
         </div>
       )}
 
-      {/* Media Container */}
+      {/* Media Container - Larger like workspace */}
       <div 
-        className="aspect-square cursor-pointer relative overflow-hidden bg-gray-800"
+        className="aspect-[4/3] cursor-pointer relative overflow-hidden bg-gray-800"
         onClick={onPreview}
       >
         {/* Loading State */}
@@ -333,8 +333,8 @@ export const AssetCard = ({
         )}
       </div>
 
-      {/* Asset Info */}
-      <div className="p-3 space-y-2">
+      {/* Asset Info - Reduced padding */}
+      <div className="p-2 space-y-1.5">
         {/* Prompt/Title */}
         <h3 
           className="text-sm font-medium text-white line-clamp-2 leading-tight" 
@@ -351,11 +351,11 @@ export const AssetCard = ({
         )}
 
         {/* Status and Quality Row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <Badge 
               variant="outline" 
-              className={cn("text-xs px-2 py-0.5", getStatusColor(asset.status))}
+              className={cn("text-xs px-1.5 py-0.5", getStatusColor(asset.status))}
             >
               {asset.status}
             </Badge>
@@ -363,7 +363,7 @@ export const AssetCard = ({
             {asset.quality && (
               <Badge 
                 variant="outline" 
-                className={cn("text-xs px-2 py-0.5", getQualityColor(asset.quality))}
+                className={cn("text-xs px-1.5 py-0.5", getQualityColor(asset.quality))}
               >
                 {asset.quality === 'high' ? 'HD' : 'Fast'}
               </Badge>

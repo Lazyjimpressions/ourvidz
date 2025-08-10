@@ -13,6 +13,7 @@ import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AssetGridSkeleton } from "./AssetSkeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useMobileDetection } from "@/hooks/useMobileDetection";
 
 import { sessionCache } from "@/lib/cache/SessionCache";
@@ -709,6 +710,29 @@ export const OptimizedLibrary = () => {
             />
           ) : (
             <div className="space-y-6">
+              {/* Select All Header Row */}
+              {transformedAssets.length > 0 && (
+                <div className="flex items-center gap-2 p-2 bg-card/50 rounded-lg border border-border/50">
+                  <Checkbox
+                    checked={selectedAssets.size === transformedAssets.length && transformedAssets.length > 0}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        // Select all visible assets
+                        const allAssetIds = new Set(transformedAssets.map(asset => asset.id));
+                        setSelectedAssets(allAssetIds);
+                      } else {
+                        // Clear selection
+                        setSelectedAssets(new Set());
+                      }
+                    }}
+                    className="data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    Select All ({transformedAssets.length} items)
+                  </span>
+                </div>
+              )}
+              
               <div className={`grid gap-4 ${
                 isMobile 
                   ? 'grid-cols-1 sm:grid-cols-2' 
