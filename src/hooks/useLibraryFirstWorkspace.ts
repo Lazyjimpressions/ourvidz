@@ -75,6 +75,7 @@ export interface LibraryFirstWorkspaceActions {
   dismissJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
+  applyAssetParamsFromItem: (item: UnifiedAsset) => void;
   setExactCopyMode: (on: boolean) => void;
   setUseOriginalParams: (on: boolean) => void;
   setLockSeed: (on: boolean) => void;
@@ -781,6 +782,59 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     }
   }, [workspaceAssets, toast]);
 
+  // Apply original generation parameters from an asset's metadata
+  const applyAssetParamsFromItem = useCallback((item: UnifiedAsset) => {
+    try {
+      const gen = (item.metadata as any)?.generationParams || (item.metadata as any) || {};
+
+      // Seed
+      const seedFromItem: number | undefined = gen.seed ?? (item as any).seed ?? undefined;
+      if (seedFromItem !== undefined && seedFromItem !== null) {
+        // Lock seed if available; consume when generate() is called via passed seed parameter
+        setLockSeed(true);
+      } else {
+        setLockSeed(false);
+      }
+
+      // Aspect ratio mapping from width/height or explicit aspect
+      let nextAspect: '16:9' | '1:1' | '9:16' = aspectRatio;
+      if (gen.aspectRatio) {
+        if (gen.aspectRatio === '16:9' || gen.aspectRatio === '1:1' || gen.aspectRatio === '9:16') {
+          nextAspect = gen.aspectRatio;
+        }
+      } else if (gen.width && gen.height) {
+        const w = Number(gen.width), h = Number(gen.height);
+        if (w && h) {
+          const r = w / h;
+          if (Math.abs(r - 16/9) < 0.05) nextAspect = '16:9';
+          else if (Math.abs(r - 9/16) < 0.05) nextAspect = '9:16';
+          else if (Math.abs(r - 1) < 0.05) nextAspect = '1:1';
+        }
+      }
+      setAspectRatio(nextAspect);
+
+      // Quality/content type
+      if (item.quality === 'high' || item.quality === 'fast') setQuality(item.quality as any);
+      if ((item.metadata as any)?.contentType === 'sfw' || (item.metadata as any)?.contentType === 'nsfw') {
+        setContentType((item.metadata as any).contentType);
+      }
+
+      // Shot / angle / style
+      if (gen.shotType) setShotType(gen.shotType);
+      if (gen.cameraAngle) setCameraAngle(gen.cameraAngle);
+      if (gen.style) setStyle(gen.style);
+
+      // Reference strength for exact copy
+      setReferenceStrength(0.1);
+      setExactCopyMode(true);
+      setUseOriginalParams(true);
+      // Ensure image mode
+      setMode('image');
+    } catch (e) {
+      console.warn('applyAssetParamsFromItem failed', e);
+    }
+  }, [aspectRatio, setAspectRatio, setQuality, setContentType, setShotType, setCameraAngle, setStyle]);
+
   // Helper functions
   const getJobStats = useCallback(() => {
     const jobs = new Map<string, UnifiedAsset[]>();
@@ -869,6 +923,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     dismissJob,
     saveJob,
     useJobAsReference,
+    applyAssetParamsFromItem,
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
