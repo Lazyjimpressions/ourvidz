@@ -6,6 +6,16 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useSceneNarrative } from '@/hooks/useSceneNarrative';
 import { useToast } from '@/hooks/use-toast';
+import { CharacterMultiSelector } from './CharacterMultiSelector';
+
+interface CharacterParticipant {
+  id: string;
+  name: string;
+  role: 'ai' | 'user' | 'narrator';
+  image_url?: string;
+  reference_image_url?: string;
+  description?: string;
+}
 
 interface SceneGenerationModalProps {
   isOpen: boolean;
@@ -25,6 +35,20 @@ export const SceneGenerationModal = ({
   const [prompt, setPrompt] = useState('');
   const [includeNarrator, setIncludeNarrator] = useState(true);
   const [includeUserCharacter, setIncludeUserCharacter] = useState(true);
+  const [selectedCharacters, setSelectedCharacters] = useState<CharacterParticipant[]>(() => {
+    // Initialize with the primary character if provided
+    if (character) {
+      return [{
+        id: character.id,
+        name: character.name,
+        role: 'ai',
+        image_url: character.image_url,
+        reference_image_url: character.reference_image_url,
+        description: character.description
+      }];
+    }
+    return [];
+  });
   const { generateSceneNarrative, isGenerating } = useSceneNarrative();
   const { toast } = useToast();
 
@@ -32,11 +56,19 @@ export const SceneGenerationModal = ({
     if (!prompt.trim()) return;
 
     try {
-      await generateSceneNarrative(prompt, character, {
+      // Build character list for the scene
+      const characterNames = selectedCharacters.map(c => c.name).join(', ');
+      const participants = [];
+      if (includeNarrator) participants.push('narrator');
+      if (includeUserCharacter) participants.push('user');
+      participants.push(...selectedCharacters.map(c => c.name));
+
+      await generateSceneNarrative(prompt, selectedCharacters, {
         includeNarrator,
         includeUserCharacter,
         characterId,
-        conversationId
+        conversationId,
+        characterNames
       });
 
       onClose();
@@ -86,7 +118,7 @@ export const SceneGenerationModal = ({
               Scene Participants
             </label>
             
-            <div className="space-y-2 text-sm">
+            <div className="space-y-2 text-sm mb-4">
               <div className="flex items-center space-x-2">
                 <Checkbox 
                   id="narrator" 
@@ -108,16 +140,15 @@ export const SceneGenerationModal = ({
                   Include User Character
                 </label>
               </div>
-              
-              {character && (
-                <div className="flex items-center space-x-2">
-                  <Checkbox checked={true} disabled />
-                  <label className="text-sm font-medium text-muted-foreground">
-                    {character.name} (AI Character)
-                  </label>
-                </div>
-              )}
             </div>
+
+            <CharacterMultiSelector
+              primaryCharacterId={characterId}
+              selectedCharacters={selectedCharacters}
+              onCharactersChange={setSelectedCharacters}
+              maxCharacters={3}
+              className="border border-border rounded-lg p-3"
+            />
           </div>
 
           <div>

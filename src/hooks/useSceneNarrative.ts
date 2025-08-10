@@ -2,11 +2,21 @@ import { useCallback } from 'react';
 import { usePlayground } from '@/contexts/PlaygroundContext';
 import { toast } from 'sonner';
 
+interface CharacterParticipant {
+  id: string;
+  name: string;
+  role: 'ai' | 'user' | 'narrator';
+  image_url?: string;
+  reference_image_url?: string;
+  description?: string;
+}
+
 interface SceneNarrativeOptions {
   includeNarrator?: boolean;
   includeUserCharacter?: boolean;
   characterId?: string;
   conversationId?: string;
+  characterNames?: string;
 }
 
 export const useSceneNarrative = () => {
@@ -14,7 +24,7 @@ export const useSceneNarrative = () => {
 
   const generateSceneNarrative = useCallback(async (
     scenePrompt: string,
-    character?: any,
+    characters: CharacterParticipant[] = [],
     options: SceneNarrativeOptions = {}
   ) => {
     if (!scenePrompt.trim()) {
@@ -23,19 +33,21 @@ export const useSceneNarrative = () => {
     }
 
     try {
-      // Build the enhanced scene prompt for narrative generation
-      let enhancedPrompt = `Generate a scene: ${scenePrompt}`;
+      // Build the enhanced scene prompt with proper markers for detection
+      let enhancedPrompt = `[SCENE_GENERATION] ${scenePrompt}`;
       
-      if (character) {
-        enhancedPrompt += ` [Character: ${character.name}]`;
+      // Add character information
+      if (characters.length > 0) {
+        const characterNames = characters.map(c => c.name).join(', ');
+        enhancedPrompt += ` [CHARACTERS: ${characterNames}]`;
       }
       
-      if (options.includeNarrator) {
-        enhancedPrompt += ` [Include narrator perspective]`;
-      }
-      
-      if (options.includeUserCharacter) {
-        enhancedPrompt += ` [Include user character interaction]`;
+      // Add context information
+      const context = [];
+      if (options.includeNarrator) context.push('narrator');
+      if (options.includeUserCharacter) context.push('user');
+      if (context.length > 0) {
+        enhancedPrompt += ` [CONTEXT: ${context.join(',')}]`;
       }
 
       // Send the scene generation request

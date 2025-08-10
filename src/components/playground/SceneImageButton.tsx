@@ -36,7 +36,14 @@ export const SceneImageButton: React.FC<SceneImageButtonProps> = ({
   }, [messageContent, generateSceneImage, character]);
 
   // Only show the button if the content appears to be a scene description
-  if (!detectScene(messageContent)) {
+  // Also check for narrative text patterns (narrator style content)
+  const isNarrativeContent = messageContent.includes('**Narrator:**') || 
+                           messageContent.includes('*The ') ||
+                           messageContent.includes('The room') ||
+                           messageContent.includes('candlelight') ||
+                           messageContent.includes('atmosphere');
+  
+  if (!detectScene(messageContent) && !isNarrativeContent) {
     return null;
   }
 

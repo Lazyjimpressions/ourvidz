@@ -286,8 +286,9 @@ You say: ...`;
                                 message.toLowerCase().includes('prompt') ||
                                 message.toLowerCase().includes('optimize');
 
-    // Check for scene generation request
-    const isSceneGenerationRequest = message.toLowerCase().includes('generate a scene:') ||
+    // Check for scene generation request (updated detection)
+    const isSceneGenerationRequest = message.includes('[SCENE_GENERATION]') ||
+                                   message.toLowerCase().includes('generate a scene:') ||
                                    message.toLowerCase().includes('[include narrator') ||
                                    message.toLowerCase().includes('[character:');
     
