@@ -115,14 +115,18 @@ export const SimplifiedWorkspace: React.FC = () => {
       const { url, assetId } = custom.detail || {}; 
       if (!url) return;
       
+      
       // Extract reference metadata for exact copy functionality
       const asset = workspaceAssets.find(a => a.id === assetId);
-      if (asset && exactCopyMode) {
+      if (asset) {
         const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
         const metadata = extractReferenceMetadata(asset);
         if (metadata) {
           state.setReferenceMetadata(metadata);
           console.log('🎯 Reference metadata extracted:', metadata);
+          
+          // Auto-enable exact copy mode when metadata is available
+          setExactCopyMode(true);
         }
       }
       

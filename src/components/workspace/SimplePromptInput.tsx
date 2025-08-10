@@ -177,6 +177,8 @@ interface SimplePromptInputProps {
   onUseOriginalParamsChange?: (on: boolean) => void;
   lockSeed?: boolean;
   onLockSeedChange?: (on: boolean) => void;
+  referenceMetadata?: any;
+  onReferenceMetadataChange?: (metadata: any) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
