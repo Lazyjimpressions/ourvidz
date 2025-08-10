@@ -71,28 +71,30 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
   };
 
   return (
-    <div className="bg-white/95 backdrop-blur-sm border-t border-gray-200">
+    <div className="bg-white/80 backdrop-blur-md border-t border-gray-200/50 shadow-lg">
       {/* Main Input Row */}
-      <form onSubmit={handleSubmit} className="flex items-center gap-2 p-2">
-        <div className="flex-1">
-          <Textarea
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder={`Message ${characterName}...`}
-            className="min-h-[32px] max-h-[80px] resize-none bg-white border border-gray-200 rounded-full px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-            disabled={isDisabled}
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="p-3">
+        <div className="flex items-end gap-2 max-w-2xl mx-auto">
+          <div className="flex-1">
+            <Textarea
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder={`Message ${characterName}...`}
+              className="min-h-[36px] max-h-[100px] resize-none bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+              disabled={isDisabled}
+            />
+          </div>
 
-        <Button
-          type="submit"
-          disabled={!value.trim() || isDisabled}
-          size="sm"
-          className="h-8 w-8 p-0 rounded-full bg-blue-500 hover:bg-blue-600 text-white"
-        >
-          <Send className="w-3 h-3" />
-        </Button>
+          <Button
+            type="submit"
+            disabled={!value.trim() || isDisabled}
+            size="sm"
+            className="h-9 w-9 p-0 rounded-lg bg-blue-500 hover:bg-blue-600 text-white shadow-sm"
+          >
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
       </form>
     </div>
   );
