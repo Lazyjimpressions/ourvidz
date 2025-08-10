@@ -151,8 +151,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
       <div className={`flex-1 w-full ${isUser ? 'flex flex-col items-end' : ''}`}>
         <div className={`rounded-lg p-3 ${
           isUser 
-            ? 'bg-green-600 text-white rounded-tr-md'
-            : 'bg-gray-800 text-white rounded-tl-md'
+            ? 'bg-primary text-primary-foreground rounded-tr-md'
+            : 'bg-muted text-foreground rounded-tl-md'
         }`}>
           {isUser ? (
             <div className="whitespace-pre-wrap break-words overflow-wrap-anywhere text-sm leading-relaxed max-w-none">
@@ -170,13 +170,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
         <div className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${
           isUser ? 'flex-row-reverse' : ''
         }`}>
-          <span className="text-xs text-gray-500 mr-2">{timeAgo}</span>
+          <span className="text-xs text-muted-foreground mr-2">{timeAgo}</span>
           
           <Button
             variant="ghost"
             size="sm"
             onClick={handleCopy}
-            className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+            className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
+            title="Copy message"
           >
             <Copy className="h-3 w-3" />
           </Button>
@@ -187,7 +188,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
                 variant="ghost"
                 size="sm"
                 onClick={handleRegenAssistant}
-                className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
                 title="Regenerate AI reply"
               >
                 <RefreshCcw className="h-3 w-3" />
@@ -197,7 +198,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
                   variant="ghost"
                   size="sm"
                   onClick={handleRegenAssistantFresh}
-                  className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
                   title="Regenerate with fresh templates"
                 >
                   <Sparkles className="h-3 w-3" />
@@ -208,7 +209,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
                 size="sm"
                 onClick={handleRegenerate}
                 disabled={isGenerating}
-                className="h-5 w-5 p-0 text-gray-400 hover:text-white"
+                className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
                 title="Generate scene image"
               >
                 <RotateCw className="h-3 w-3" />

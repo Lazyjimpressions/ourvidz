@@ -277,40 +277,46 @@ const RoleplayChatInterface = () => {
           />
         )}
 
-        {/* Compact Action Bar */}
-        <div className="h-10 border-b border-border flex items-center justify-between px-3 flex-shrink-0">
-          <div className="flex items-center gap-1">
+        {/* Action Bar */}
+        <div className="border-b border-border flex items-center justify-between px-3 py-2 flex-shrink-0 bg-muted/30">
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowLeftSidebar(!showLeftSidebar)}
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              className="h-8 px-2 gap-1 text-xs"
+              title="Toggle character list"
             >
-              <Menu className="w-3 h-3" />
+              <Menu className="w-4 h-4" />
+              <span className="hidden sm:inline">Characters</span>
             </Button>
             
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={() => setShowAddCharacter(true)}
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              className="h-8 px-3 gap-1 text-xs"
+              title="Add character to conversation"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-4 h-4" />
+              <span>Add Character</span>
             </Button>
           </div>
           
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowRightPane(!showRightPane)}
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+              className="h-8 px-2 gap-1 text-xs"
+              title="Character details"
             >
               {showRightPane ? (
-                <PanelRightClose className="w-3 h-3" />
+                <PanelRightClose className="w-4 h-4" />
               ) : (
-                <PanelRightOpen className="w-3 h-3" />
+                <PanelRightOpen className="w-4 h-4" />
               )}
+              <span className="hidden sm:inline">Details</span>
             </Button>
           </div>
         </div>

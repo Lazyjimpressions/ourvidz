@@ -71,7 +71,7 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur-md border-t border-gray-200/50 shadow-lg">
+    <div className="bg-background/95 backdrop-blur-sm border-t border-border shadow-sm">
       {/* Main Input Row */}
       <form onSubmit={handleSubmit} className="p-3">
         <div className="flex items-end gap-2 max-w-2xl mx-auto">
@@ -81,7 +81,7 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder={`Message ${characterName}...`}
-              className="min-h-[36px] max-h-[100px] resize-none bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+              className="min-h-[36px] max-h-[100px] resize-none bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:border-transparent shadow-sm"
               disabled={isDisabled}
             />
           </div>
@@ -90,7 +90,8 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
             type="submit"
             disabled={!value.trim() || isDisabled}
             size="sm"
-            className="h-9 w-9 p-0 rounded-lg bg-blue-500 hover:bg-blue-600 text-white shadow-sm"
+            className="h-9 w-9 p-0 rounded-lg shadow-sm"
+            title="Send message"
           >
             <Send className="w-4 h-4" />
           </Button>
