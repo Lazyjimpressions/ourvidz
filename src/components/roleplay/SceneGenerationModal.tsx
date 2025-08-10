@@ -153,7 +153,7 @@ export const SceneGenerationModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl">
+      <DialogContent className="bg-background border-border text-foreground max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Palette className="w-5 h-5" />
@@ -162,7 +162,7 @@ export const SceneGenerationModal = ({
         </DialogHeader>
 
         <Tabs value={sceneType} onValueChange={(value) => setSceneType(value as any)} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="single" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               Single Character
@@ -175,14 +175,14 @@ export const SceneGenerationModal = ({
 
           <TabsContent value="single" className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-2 block">
+              <label className="text-sm font-medium mb-2 block">
                 Scene Description
               </label>
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder={`Describe a scene with ${character?.name || 'the character'}...`}
-                className="bg-gray-800 border-gray-700 min-h-[100px]"
+                className="min-h-[100px]"
               />
             </div>
           </TabsContent>
@@ -193,32 +193,32 @@ export const SceneGenerationModal = ({
               selectedCharacters={selectedCharacters}
               onCharactersChange={setSelectedCharacters}
               maxCharacters={3}
-              className="bg-gray-800 border border-gray-700 rounded-lg p-4"
+              className="border rounded-lg p-4"
             />
             
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-2 block">
+              <label className="text-sm font-medium mb-2 block">
                 Multi-Character Scene Description
               </label>
               <Textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe the scene with multiple characters..."
-                className="bg-gray-800 border-gray-700 min-h-[100px]"
+                className="min-h-[100px]"
               />
             </div>
           </TabsContent>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-2 block">
+              <label className="text-sm font-medium mb-2 block">
                 Style
               </label>
               <Select value={style} onValueChange={(value) => setStyle(value as any)}>
-                <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
+                <SelectContent>
                   <SelectItem value="lustify">Lustify</SelectItem>
                   <SelectItem value="anime">Anime</SelectItem>
                   <SelectItem value="realistic">Realistic</SelectItem>
@@ -228,14 +228,14 @@ export const SceneGenerationModal = ({
             </div>
 
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-2 block">
+              <label className="text-sm font-medium mb-2 block">
                 Quality
               </label>
               <Select value={quality} onValueChange={(value) => setQuality(value as any)}>
-                <SelectTrigger className="bg-gray-800 border-gray-700">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-800 border-gray-700">
+                <SelectContent>
                   <SelectItem value="fast">Fast</SelectItem>
                   <SelectItem value="high">High Quality</SelectItem>
                 </SelectContent>
@@ -244,8 +244,8 @@ export const SceneGenerationModal = ({
           </div>
 
           {selectedCharacters.some(char => char.reference_image_url) && (
-            <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
-              <div className="flex items-center gap-2 text-sm text-gray-300">
+            <div className="p-3 bg-muted rounded-lg border">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Camera className="w-4 h-4" />
                 <span>Character references will be used for consistency</span>
               </div>
@@ -253,7 +253,7 @@ export const SceneGenerationModal = ({
           )}
 
           <div>
-            <label className="text-sm font-medium text-gray-300 mb-2 block">
+            <label className="text-sm font-medium mb-2 block">
               Quick Scene Ideas
             </label>
             <div className="flex flex-wrap gap-2">
@@ -261,7 +261,7 @@ export const SceneGenerationModal = ({
                 <Badge
                   key={idx}
                   variant="outline"
-                  className="cursor-pointer hover:bg-gray-700 text-xs"
+                  className="cursor-pointer hover:bg-muted text-xs"
                   onClick={() => setPrompt(scenePrompt)}
                 >
                   {scenePrompt.slice(0, 30)}...
@@ -282,11 +282,11 @@ export const SceneGenerationModal = ({
             <Button
               onClick={handleGenerateScene}
               disabled={!prompt.trim() || selectedCharacters.length === 0 || isGenerating}
-              className="flex-1 bg-purple-600 hover:bg-purple-700"
+              className="flex-1"
             >
               {isGenerating ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border border-white border-t-transparent mr-2" />
+                  <div className="animate-spin rounded-full h-4 w-4 border border-primary border-t-transparent mr-2" />
                   Generating...
                 </>
               ) : (

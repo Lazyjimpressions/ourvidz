@@ -23,6 +23,7 @@ import { MessageBubble } from '@/components/playground/MessageBubble';
 import { RoleplayPromptInput } from '@/components/roleplay/RoleplayPromptInput';
 import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/RoleplaySettingsModal';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
+import { SceneContextHeader } from '@/components/roleplay/SceneContextHeader';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -53,10 +54,15 @@ const RoleplayChatInterface = () => {
     messageFrequency: 5
   });
   
-  // Get character data
+  // Get character and scene data from URL
   const characterId = searchParams.get('character');
   const userCharacterId = searchParams.get('userCharacter');
+  const sceneId = searchParams.get('scene');
+  const participantsParam = searchParams.get('participants');
   const contentMode = searchParams.get('mode') as 'sfw' | 'nsfw' || 'sfw';
+  
+  // Parse participants from URL
+  const participantIds = participantsParam ? participantsParam.split(',') : [];
   
   const { character, isLoading: characterLoading } = useCharacterData(characterId || undefined);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId || undefined);
@@ -89,6 +95,14 @@ const RoleplayChatInterface = () => {
     }
   }, [character, state.activeConversationId, conversations]);
 
+  // Handle scene navigation
+  useEffect(() => {
+    if (sceneId && character) {
+      // Auto-start conversation with scene context
+      handleNewConversation();
+    }
+  }, [sceneId, character]);
+
   // Auto scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -103,16 +117,22 @@ const RoleplayChatInterface = () => {
     if (!character) return;
     
     try {
+      const title = sceneId 
+        ? `Scene with ${character.name}${participantIds.length > 1 ? ' & others' : ''}`
+        : `Chat with ${character.name}`;
+      
       await createConversation(
-        `Chat with ${character.name}`,
+        title,
         undefined, // no project
         'character_roleplay',
         character.id
       );
       
       toast({
-        title: "New conversation started",
-        description: `Ready to chat with ${character.name}`,
+        title: sceneId ? "Scene conversation started" : "New conversation started",
+        description: sceneId 
+          ? `Ready to roleplay the scene with ${character.name}`
+          : `Ready to chat with ${character.name}`,
       });
     } catch (error) {
       console.error('Failed to create conversation:', error);
@@ -223,6 +243,29 @@ const RoleplayChatInterface = () => {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Scene Context Header (if in scene mode) */}
+        {sceneId && character && (
+          <SceneContextHeader
+            sceneId={sceneId}
+            title={`Scene with ${character.name}`}
+            participants={[
+              {
+                id: character.id,
+                name: character.name,
+                role: 'ai' as const,
+                image_url: character.reference_image_url || character.image_url
+              }
+            ]}
+            onClose={() => {
+              const params = new URLSearchParams(searchParams);
+              params.delete('scene');
+              params.delete('participants');
+              setSearchParams(params);
+            }}
+            onRegenerateScene={() => setShowSceneGenerator(true)}
+          />
+        )}
+
         {/* Header */}
         <div className="h-12 border-b border-gray-200 flex items-center justify-between px-3 flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -234,8 +277,13 @@ const RoleplayChatInterface = () => {
                   className="w-6 h-6 rounded-full object-cover"
                 />
                 <div>
-                  <h1 className="font-medium text-gray-900 text-sm">{character.name}</h1>
-                  <p className="text-xs text-gray-500">AI Character</p>
+                  <h1 className="font-medium text-gray-900 text-sm">
+                    {character.name}
+                    {sceneId && <span className="text-gray-500 ml-1">• Scene Mode</span>}
+                  </h1>
+                  <p className="text-xs text-gray-500">
+                    {sceneId ? `Scene with ${participantIds.length > 1 ? `${participantIds.length} participants` : 'character'}` : 'AI Character'}
+                  </p>
                 </div>
               </>
             )}
