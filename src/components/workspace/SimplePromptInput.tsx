@@ -240,6 +240,16 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
+  // Scenario 2: When a user uploads a reference image file, auto-enable Exact Copy and set low strength
+  const handleReferenceFileChange = (file: File | null) => {
+    onReferenceImageChange(file);
+    if (file) {
+      onExactCopyModeChange?.(true);
+      onReferenceStrengthChange(0.1);
+      onModeChange('image');
+    }
+  };
+
   // LTX-Style Control Handlers
   const handleAspectRatioToggle = () => {
     const ratios: ('16:9' | '1:1' | '9:16')[] = ['16:9', '1:1', '9:16'];
@@ -344,7 +354,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 {mode === 'image' ? (
                   <ReferenceImageUpload
                     file={referenceImage}
-                    onFileChange={onReferenceImageChange}
+                    onFileChange={handleReferenceFileChange}
                     imageUrl={referenceImageUrl}
                     onImageUrlChange={onReferenceImageUrlChange}
                     label="Ref"
@@ -384,7 +394,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   {/* Generate Button */}
                   <button
                     type="submit"
-                    disabled={isGenerating || !prompt.trim()}
+                    disabled={isGenerating || (!prompt.trim() && !exactCopyMode)}
                     className="h-16 w-16 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
                   >
                     {isGenerating ? (
