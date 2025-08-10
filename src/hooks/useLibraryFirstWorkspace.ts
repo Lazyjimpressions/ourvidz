@@ -462,6 +462,20 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       let finalCameraAngle: string = cameraAngle;
       let finalShotType: string = shotType;
       
+      // 🎯 DEBUG: Add comprehensive logging for exact copy troubleshooting
+      console.log('🎯 EXACT COPY DEBUG - State Check:', {
+        exactCopyMode,
+        hasReferenceMetadata: !!referenceMetadata,
+        referenceMetadataKeys: referenceMetadata ? Object.keys(referenceMetadata) : 'none',
+        referenceImageUrl: !!referenceImageUrl,
+        referenceImage: !!referenceImage,
+        prompt: prompt.trim(),
+        style,
+        cameraAngle,
+        shotType,
+        enhancementModel
+      });
+      
       if (exactCopyMode && referenceMetadata) {
         // Use original enhanced prompt as base
         finalPrompt = referenceMetadata.originalEnhancedPrompt;
@@ -479,16 +493,30 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         finalCameraAngle = referenceMetadata.originalCameraAngle || 'eye_level';
         finalShotType = referenceMetadata.originalShotType || 'wide';
         
-        console.log('🎯 EXACT COPY MODE:', {
+        console.log('🎯 EXACT COPY MODE - ACTIVE:', {
           originalPrompt: referenceMetadata.originalEnhancedPrompt,
           modifiedPrompt: finalPrompt,
           originalSeed: finalSeed,
-          styleDisabled: true
+          originalStyle: referenceMetadata.originalStyle,
+          originalCameraAngle: referenceMetadata.originalCameraAngle,
+          originalShotType: referenceMetadata.originalShotType,
+          styleDisabled: true,
+          finalStyle,
+          finalCameraAngle,
+          finalShotType
         });
       } else {
         // Normal generation flow
         finalPrompt = prompt.trim() || '';
         finalSeed = lockSeed && seed ? seed : undefined;
+        
+        console.log('🎯 NORMAL GENERATION MODE:', {
+          finalPrompt,
+          finalSeed,
+          style,
+          cameraAngle,
+          shotType
+        });
       }
 
       const generationRequest = {

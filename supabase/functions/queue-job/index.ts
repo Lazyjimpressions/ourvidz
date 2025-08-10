@@ -789,7 +789,19 @@ serve(async (req)=>{
         payloadRefUrl: jobPayload.reference_image_url,
         payloadRefStrength: jobPayload.reference_strength,
         payloadRefType: jobPayload.reference_type,
-        payloadExactCopy: jobPayload.exact_copy_mode
+        payloadExactCopy: jobPayload.exact_copy_mode,
+        // 🎯 EXACT COPY DEBUG: Additional logging for exact copy troubleshooting
+        finalPrompt: finalPrompt,
+        promptLength: finalPrompt?.length || 0,
+        originalPrompt: metadata?.original_prompt,
+        enhancedPrompt: metadata?.enhanced_prompt,
+        hasSeed: !!metadata?.seed,
+        seedValue: metadata?.seed,
+        styleValue: metadata?.style,
+        cameraAngleValue: metadata?.camera_angle,
+        shotTypeValue: metadata?.shot_type,
+        skipEnhancement: metadata?.skip_enhancement,
+        userRequestedEnhancement: metadata?.user_requested_enhancement
       });
     }
 

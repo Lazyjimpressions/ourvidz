@@ -119,15 +119,35 @@ export const SimplifiedWorkspace: React.FC = () => {
       // Extract reference metadata for exact copy functionality
       const asset = workspaceAssets.find(a => a.id === assetId);
       if (asset) {
+        console.log('🎯 ASSET FOUND FOR METADATA EXTRACTION:', {
+          assetId,
+          assetUrl: asset.url,
+          assetMetadata: asset.metadata,
+          assetEnhancedPrompt: asset.enhancedPrompt,
+          assetPrompt: asset.prompt
+        });
+        
         const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
         const metadata = extractReferenceMetadata(asset);
+        
+        console.log('🎯 METADATA EXTRACTION RESULT:', {
+          extracted: !!metadata,
+          metadataKeys: metadata ? Object.keys(metadata) : 'none',
+          originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+          originalSeed: metadata?.originalSeed
+        });
+        
         if (metadata) {
           state.setReferenceMetadata(metadata);
-          console.log('🎯 Reference metadata extracted:', metadata);
+          console.log('🎯 Reference metadata extracted and set:', metadata);
           
           // Auto-enable exact copy mode when metadata is available
           setExactCopyMode(true);
+        } else {
+          console.warn('⚠️ METADATA EXTRACTION FAILED: No metadata extracted from asset');
         }
+      } else {
+        console.warn('⚠️ ASSET NOT FOUND: Could not find asset with ID:', assetId);
       }
       
       if (mode === 'image') {
@@ -149,6 +169,34 @@ export const SimplifiedWorkspace: React.FC = () => {
    */
   const handleIterateFromItem = (item: UnifiedAsset) => {
     console.log('🔄 ITERATE FROM ITEM: Setting up img2img reference:', item);
+    
+    // 🎯 DEBUG: Check item metadata for exact copy
+    console.log('🎯 ITEM METADATA FOR EXACT COPY:', {
+      itemId: item.id,
+      itemUrl: item.url,
+      itemMetadata: item.metadata,
+      itemEnhancedPrompt: item.enhancedPrompt,
+      itemPrompt: item.prompt,
+      itemSeed: item.metadata?.seed
+    });
+    
+    // Extract metadata for exact copy functionality
+    const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
+    const metadata = extractReferenceMetadata(item);
+    
+    console.log('🎯 ITERATE METADATA EXTRACTION:', {
+      extracted: !!metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : 'none',
+      originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+      originalSeed: metadata?.originalSeed
+    });
+    
+    if (metadata) {
+      state.setReferenceMetadata(metadata);
+      console.log('🎯 ITERATE: Reference metadata set for exact copy');
+    } else {
+      console.warn('⚠️ ITERATE: Failed to extract metadata for exact copy');
+    }
     
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);

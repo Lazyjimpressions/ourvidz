@@ -45,15 +45,19 @@ serve(async (req) => {
       })
     }
 
-    console.log('🎯 Dynamic enhance prompt request:', {
+    console.log('🎯 ENHANCE-PROMPT DEBUG:', {
       prompt: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt,
       jobType,
       format,
       quality,
-      selectedModel,
       contentType,
       exactCopyMode,
-      promptLength: prompt.length
+      promptLength: prompt.length,
+      // 🎯 EXACT COPY DEBUG: Additional logging for exact copy troubleshooting
+      hasExactCopyMode: !!exactCopyMode,
+      exactCopyModeValue: exactCopyMode,
+      modificationKeywords: ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to'],
+      isModificationPrompt: exactCopyMode ? prompt.toLowerCase().includes('change') || prompt.toLowerCase().includes('modify') || prompt.toLowerCase().includes('replace') : 'N/A'
     })
 
     // FIXED: Enhanced exact copy mode handling for image-to-image references
