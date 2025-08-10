@@ -442,7 +442,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       };
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
-      const preserveStrength = 0.1;
+      const preserveStrength = 0.8; // High strength for exact copying
       const generationRequest = {
         format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
         prompt: (prompt.trim() || ''),

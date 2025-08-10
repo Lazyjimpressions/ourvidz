@@ -111,7 +111,12 @@ export class GenerationService {
         selectedPresets: request.selectedPresets,
         // Pass enhancement parameters as top-level for proper routing
         contentType: request.metadata?.contentType || 'sfw',
-        enhancementModel: request.metadata?.enhancement_model || 'qwen_instruct'
+        enhancementModel: request.metadata?.enhancement_model || 'qwen_instruct',
+        // Pass exact copy mode for enhancement bypass
+        metadata: {
+          ...sanitizeRequest(request.metadata),
+          exact_copy_mode: request.metadata?.exact_copy_mode
+        }
       });
 
       // Final validation before sending
