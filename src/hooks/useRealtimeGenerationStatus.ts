@@ -72,8 +72,10 @@ export const useRealtimeGenerationStatus = (
 
     console.log('🔔 Setting up realtime subscription for job:', jobId);
     
+    // Create unique channel name to prevent multiple subscription errors
+    const channelName = `job-status-updates-${jobId}-${Date.now()}`;
     const channel = supabase
-      .channel('job-status-updates')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -121,7 +123,7 @@ export const useRealtimeGenerationStatus = (
       .subscribe();
 
     return () => {
-      console.log('🔕 Cleaning up realtime subscription');
+      console.log(`🔕 Cleaning up realtime subscription: ${channelName}`);
       supabase.removeChannel(channel);
     };
   }, [jobId, format, enabled, toast]);

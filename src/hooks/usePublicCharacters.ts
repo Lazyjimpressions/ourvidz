@@ -134,9 +134,10 @@ export const usePublicCharacters = () => {
   useEffect(() => {
     loadPublicCharacters();
 
-    // Set up real-time subscription for character updates
+    // Set up real-time subscription for character updates with unique channel name
+    const channelName = `public-characters-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const channel = supabase
-      .channel('public-characters')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -153,9 +154,10 @@ export const usePublicCharacters = () => {
       .subscribe();
 
     return () => {
+      console.log(`🔕 Cleaning up channel: ${channelName}`);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, []); // Empty dependency array to prevent re-subscriptions
 
   return {
     characters,

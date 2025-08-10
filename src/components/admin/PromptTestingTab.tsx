@@ -217,10 +217,11 @@ export function PromptTestingTab() {
     loadTestResults();
   }, []);
 
-  // Add realtime subscription for test results
+  // Add realtime subscription for test results with unique channel name
   useEffect(() => {
+    const channelName = `model-test-results-changes-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const channel = supabase
-      .channel('model-test-results-changes')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -236,6 +237,7 @@ export function PromptTestingTab() {
       .subscribe();
 
     return () => {
+      console.log(`🔕 Cleaning up test results channel: ${channelName}`);
       supabase.removeChannel(channel);
     };
   }, []);

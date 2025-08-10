@@ -97,9 +97,10 @@ export const useWorkerStatus = () => {
   useEffect(() => {
     fetchWorkerStatus();
 
-    // Set up real-time updates for system_config changes
+    // Set up real-time updates for system_config changes with unique channel name
+    const channelName = `worker-status-updates-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const channel = supabase
-      .channel('worker-status-updates')
+      .channel(channelName)
       .on(
         'postgres_changes',
         {
@@ -117,8 +118,9 @@ export const useWorkerStatus = () => {
     const interval = setInterval(fetchWorkerStatus, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
+      console.log(`🔕 Cleaning up worker status channel: ${channelName}`);
       clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, []);
 
