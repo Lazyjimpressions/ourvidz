@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Search, 
   Plus, 
@@ -11,10 +12,11 @@ import {
   Calendar,
   MessageSquare,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useConversations } from '@/hooks/useConversations';
+import { useCharacterSessions } from '@/hooks/useCharacterSessions';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 
 interface RoleplayLeftSidebarProps {
@@ -31,20 +33,20 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
     thisMonth: true
   });
   
-  const { conversations, isLoading } = useConversations();
+  const { sessions, isLoading } = useCharacterSessions();
 
-  // Memoize filtered conversations to prevent infinite re-renders
-  const { thisWeekConversations, thisMonthConversations } = useMemo(() => {
-    const thisWeek = conversations.filter(conv => 
-      isThisWeek(new Date(conv.updated_at))
+  // Memoize filtered sessions to prevent infinite re-renders
+  const { thisWeekSessions, thisMonthSessions } = useMemo(() => {
+    const thisWeek = sessions.filter(session => 
+      isThisWeek(new Date(session.last_updated))
     );
     
-    const thisMonth = conversations.filter(conv => 
-      isThisMonth(new Date(conv.updated_at)) && !isThisWeek(new Date(conv.updated_at))
+    const thisMonth = sessions.filter(session => 
+      isThisMonth(new Date(session.last_updated)) && !isThisWeek(new Date(session.last_updated))
     );
 
-    return { thisWeekConversations: thisWeek, thisMonthConversations: thisMonth };
-  }, [conversations]);
+    return { thisWeekSessions: thisWeek, thisMonthSessions: thisMonth };
+  }, [sessions]);
 
   const toggleSection = (section: 'thisWeek' | 'thisMonth') => {
     setExpandedSections(prev => ({
@@ -53,21 +55,28 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
     }));
   };
 
-  const renderConversationItem = (conversation: any) => (
+  const renderSessionItem = (session: any) => (
     <button
-      key={conversation.id}
-      onClick={() => navigate(`/roleplay/chat?character=${conversation.character_id}`)}
-      className="w-full text-left p-2 rounded-lg hover:bg-muted/50 transition-colors group"
+      key={session.character_id}
+      onClick={() => navigate(`/roleplay/chat?character=${session.character_id}`)}
+      className="w-full text-left p-1.5 rounded-md hover:bg-gray-100 transition-colors group"
     >
       <div className="flex items-center gap-2">
-        <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <Avatar className="w-6 h-6 flex-shrink-0">
+          <AvatarImage src={session.character_image_url} alt={session.character_name} />
+          <AvatarFallback className="text-xs">
+            <User className="w-3 h-3" />
+          </AvatarFallback>
+        </Avatar>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground truncate group-hover:text-primary">
-            {conversation.title}
+          <p className="text-xs font-medium text-gray-700 truncate group-hover:text-blue-600">
+            {session.character_name}
           </p>
-          <p className="text-xs text-muted-foreground">
-            {format(new Date(conversation.updated_at), 'MMM d, HH:mm')}
-          </p>
+          <div className="flex items-center gap-1 text-xs text-gray-500">
+            <span>{session.total_messages} messages</span>
+            <span>•</span>
+            <span>{format(new Date(session.last_updated), 'MMM d, HH:mm')}</span>
+          </div>
         </div>
       </div>
     </button>
@@ -133,7 +142,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
       <ScrollArea className="flex-1 px-3">
         <div className="space-y-3">
           {/* This Week */}
-          {thisWeekConversations.length > 0 && (
+          {thisWeekSessions.length > 0 && (
             <div>
               <button
                 onClick={() => toggleSection('thisWeek')}
@@ -145,38 +154,20 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
                   <ChevronRight className="w-3 h-3" />
                 )}
                 <span className="text-xs font-medium text-gray-600">
-                  This Week ({thisWeekConversations.length})
+                  This Week ({thisWeekSessions.length})
                 </span>
               </button>
               
               {expandedSections.thisWeek && (
                 <div className="space-y-0.5 ml-4">
-                  {thisWeekConversations.map((conversation) => (
-                    <button
-                      key={conversation.id}
-                      onClick={() => navigate(`/roleplay/chat?character=${conversation.character_id}`)}
-                      className="w-full text-left p-1.5 rounded-md hover:bg-gray-100 transition-colors group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <MessageSquare className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-700 truncate group-hover:text-blue-600">
-                            {conversation.title}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {format(new Date(conversation.updated_at), 'MMM d, HH:mm')}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                  {thisWeekSessions.map(renderSessionItem)}
                 </div>
               )}
             </div>
           )}
 
           {/* This Month */}
-          {thisMonthConversations.length > 0 && (
+          {thisMonthSessions.length > 0 && (
             <div>
               <button
                 onClick={() => toggleSection('thisMonth')}
@@ -188,38 +179,20 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
                   <ChevronRight className="w-3 h-3" />
                 )}
                 <span className="text-xs font-medium text-gray-600">
-                  This Month ({thisMonthConversations.length})
+                  This Month ({thisMonthSessions.length})
                 </span>
               </button>
               
               {expandedSections.thisMonth && (
                 <div className="space-y-0.5 ml-4">
-                  {thisMonthConversations.map((conversation) => (
-                    <button
-                      key={conversation.id}
-                      onClick={() => navigate(`/roleplay/chat?character=${conversation.character_id}`)}
-                      className="w-full text-left p-1.5 rounded-md hover:bg-gray-100 transition-colors group"
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <MessageSquare className="w-3 h-3 text-gray-400 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-gray-700 truncate group-hover:text-blue-600">
-                            {conversation.title}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {format(new Date(conversation.updated_at), 'MMM d, HH:mm')}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                  {thisMonthSessions.map(renderSessionItem)}
                 </div>
               )}
             </div>
           )}
 
           {/* Empty State */}
-          {conversations.length === 0 && !isLoading && (
+          {sessions.length === 0 && !isLoading && (
             <div className="text-center py-6">
               <MessageSquare className="w-6 h-6 text-gray-400 mx-auto mb-1.5" />
               <p className="text-xs text-gray-500">No conversations yet</p>
