@@ -427,7 +427,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     setIsGenerating(true);
 
     try {
-      // Upload reference images if provided
+      // Upload reference images if provided and return full public URL
       const uploadReferenceImage = async (file: File): Promise<string> => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
@@ -438,7 +438,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           .upload(`${user.id}/${fileName}`, file);
 
         if (error) throw error;
-        return data.path;
+        
+        // Return full public URL for reference image
+        const { data: urlData } = supabase.storage
+          .from('reference-images')
+          .getPublicUrl(data.path);
+        
+        return urlData.publicUrl;
       };
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
@@ -457,9 +463,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           // LIBRARY-FIRST: No destination needed - always goes to library tables
           // This ensures content appears in both library and workspace views
           user_requested_enhancement: true,
-          // Reference image data
+          // Reference image data - FIXED: Use reference_url instead of reference_image for queue-job compatibility
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
+            reference_url: referenceImageUrl || (referenceImage ? await uploadReferenceImage(referenceImage) : undefined),
             reference_strength: exactCopyMode ? preserveStrength : referenceStrength,
             reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
             exact_copy_mode: exactCopyMode
@@ -482,11 +489,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           // Exact copy hint to edge/worker
           ...(exactCopyMode ? { exact_copy: true } : {})
         },
-        // Reference image URLs
-        ...(referenceImageUrl ? 
-          { referenceImageUrl } : 
-          referenceImage ? { referenceImageUrl: await uploadReferenceImage(referenceImage) } : {}
-        ),
+        // Reference image URLs - REMOVED: This was duplicating data, now handled in metadata.reference_url
         ...(mode === 'video' && beginningRefImageUrl ? 
           { startReferenceImageUrl: beginningRefImageUrl } :
           mode === 'video' && beginningRefImage ? { startReferenceImageUrl: await uploadReferenceImage(beginningRefImage) } : {}
@@ -497,6 +500,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         )
       };
       
+      // DEBUG: Log reference image handling
+      console.log('🎯 Reference image debug:', {
+        referenceImage: !!referenceImage,
+        referenceImageUrl: !!referenceImageUrl,
+        exactCopyMode,
+        hasReferenceData: !!(referenceImageUrl || referenceImage),
+        referenceMetadata: generationRequest.metadata?.reference_url ? 'URL set' : 'No URL'
+      });
+
       // Use existing GenerationService (simplified)
       const { GenerationService } = await import('@/lib/services/GenerationService');
       const result = await GenerationService.queueGeneration(generationRequest);
