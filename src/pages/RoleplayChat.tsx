@@ -5,7 +5,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Sparkles,
   PanelRightOpen,
-  PanelRightClose
+  PanelRightClose,
+  Plus,
+  Settings,
+  Menu
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePlayground, PlaygroundProvider } from '@/contexts/PlaygroundContext';
@@ -19,6 +22,7 @@ import { CharacterDetailPane } from '@/components/roleplay/CharacterDetailPane';
 import { MessageBubble } from '@/components/playground/MessageBubble';
 import { RoleplayPromptInput } from '@/components/roleplay/RoleplayPromptInput';
 import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/RoleplaySettingsModal';
+import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,12 +31,14 @@ const RoleplayChatInterface = () => {
   const { user, signOut } = useAuth();
   
   // UI State
+  const [showLeftSidebar, setShowLeftSidebar] = useState(false);
   const [showRightPane, setShowRightPane] = useState(false);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showSceneGenerator, setShowSceneGenerator] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
   
   // Roleplay Settings
@@ -175,6 +181,19 @@ const RoleplayChatInterface = () => {
     // Don't clear input in case user wants to modify the prompt
   };
 
+  const handleCharacterAdded = (newCharacter: any) => {
+    // Navigate to the new character
+    const params = new URLSearchParams(searchParams);
+    params.set('character', newCharacter.id);
+    setSearchParams(params);
+    setShowAddCharacter(false);
+    
+    toast({
+      title: "Character Added",
+      description: `${newCharacter.name} has been added to your collection!`,
+    });
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -200,7 +219,7 @@ const RoleplayChatInterface = () => {
   return (
     <div className="h-screen bg-white flex overflow-hidden">
       {/* Left Sidebar */}
-      <RoleplayLeftSidebar />
+      {showLeftSidebar && <RoleplayLeftSidebar />}
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
@@ -226,6 +245,24 @@ const RoleplayChatInterface = () => {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setShowLeftSidebar(!showLeftSidebar)}
+              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+            >
+              <Menu className="w-3 h-3" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowAddCharacter(true)}
+              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+            >
+              <Plus className="w-3 h-3" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowRightPane(!showRightPane)}
               className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
             >
@@ -234,6 +271,15 @@ const RoleplayChatInterface = () => {
               ) : (
                 <PanelRightOpen className="w-3 h-3" />
               )}
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSettingsModal(true)}
+              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+            >
+              <Settings className="w-3 h-3" />
             </Button>
           </div>
         </div>
@@ -329,6 +375,12 @@ const RoleplayChatInterface = () => {
         onClose={() => setShowSettingsModal(false)}
         settings={roleplaySettings}
         onSettingsChange={setRoleplaySettings}
+      />
+
+      <AddCharacterModal
+        isOpen={showAddCharacter}
+        onClose={() => setShowAddCharacter(false)}
+        onCharacterAdded={handleCharacterAdded}
       />
     </div>
   );

@@ -13,12 +13,16 @@ import {
   User, 
   Sparkles,
   Image as ImageIcon,
-  Play
+  Play,
+  Edit,
+  Wand2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { SceneCard } from './SceneCard';
+import { SceneGenerationModal } from './SceneGenerationModal';
+import { CharacterEditModal } from './CharacterEditModal';
 
 interface CharacterDetailPaneProps {
   characterId: string;
@@ -36,6 +40,8 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   className
 }) => {
   const [activeTab, setActiveTab] = useState<'details' | 'scenes' | 'voice' | 'history'>('details');
+  const [showSceneModal, setShowSceneModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const { character, isLoading, likeCharacter } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId);
 
@@ -297,8 +303,13 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="font-medium text-gray-900 text-sm">Scenes</h4>
-                  <Button size="sm" variant="outline" className="h-7 text-xs">
-                    <Sparkles className="w-3 h-3 mr-1" />
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="h-6 text-xs"
+                    onClick={() => setShowSceneModal(true)}
+                  >
+                    <Wand2 className="w-3 h-3 mr-1" />
                     Generate
                   </Button>
                 </div>
@@ -383,16 +394,43 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
           Start Conversation
         </Button>
         <div className="flex gap-1">
-          <Button variant="outline" size="sm" className="flex-1 h-6 text-xs">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 h-5 text-xs"
+            onClick={() => setShowSceneModal(true)}
+          >
             <Palette className="w-2.5 h-2.5 mr-1" />
-            Customize
+            Scene
           </Button>
-          <Button variant="outline" size="sm" className="flex-1 h-6 text-xs">
-            <User className="w-2.5 h-2.5 mr-1" />
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 h-5 text-xs"
+            onClick={() => setShowEditModal(true)}
+          >
+            <Edit className="w-2.5 h-2.5 mr-1" />
             Edit
           </Button>
         </div>
       </div>
+
+      {/* Modals */}
+      <SceneGenerationModal
+        isOpen={showSceneModal}
+        onClose={() => setShowSceneModal(false)}
+        characterId={characterId}
+        character={character}
+      />
+      
+      <CharacterEditModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        character={character}
+        onCharacterUpdated={(updatedCharacter) => {
+          console.log('Character updated:', updatedCharacter);
+        }}
+      />
     </div>
   );
 };
