@@ -42,7 +42,7 @@ export interface LibraryFirstWorkspaceState {
   lockSeed: boolean;
   
   // Enhancement Model Selection
-  enhancementModel: 'qwen_base' | 'qwen_instruct';
+  enhancementModel: 'qwen_base' | 'qwen_instruct' | 'none';
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -63,7 +63,7 @@ export interface LibraryFirstWorkspaceActions {
   setCameraAngle: (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => void;
   setStyle: (style: string) => void;
   setStyleRef: (ref: File | null) => void;
-  setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct') => void;
+  setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
@@ -122,7 +122,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [lockSeed, setLockSeed] = useState<boolean>(false);
   
   // Enhancement Model Selection
-  const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
+  const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
 
   // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -462,7 +462,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
           // This ensures content appears in both library and workspace views
-          user_requested_enhancement: true,
+          user_requested_enhancement: enhancementModel !== 'none',
+          skip_enhancement: enhancementModel === 'none',
           // Reference image data - FIXED: Use reference_url instead of reference_image for queue-job compatibility
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,

@@ -84,8 +84,8 @@ interface MobileSimplePromptInputProps {
   styleRef?: File | null;
   onStyleRefChange?: (file: File | null) => void;
   // Enhancement model selection
-  enhancementModel?: 'qwen_base' | 'qwen_instruct';
-  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct') => void;
+  enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
+  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
@@ -298,11 +298,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         <div className="relative">
           <select
             value={enhancementModel}
-            onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct')}
+            onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
             className="w-full py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm appearance-none"
           >
             <option value="qwen_instruct">Instruct</option>
             <option value="qwen_base">Base</option>
+            <option value="none">None</option>
           </select>
           <ChevronDown size={12} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
         </div>

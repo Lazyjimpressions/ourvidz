@@ -167,8 +167,8 @@ interface SimplePromptInputProps {
   styleRef?: File | null;
   onStyleRefChange?: (file: File | null) => void;
   // Enhancement model selection
-  enhancementModel?: 'qwen_base' | 'qwen_instruct';
-  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct') => void;
+  enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
+  onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   // Exact copy workflow
   exactCopyMode?: boolean;
   onExactCopyModeChange?: (on: boolean) => void;
@@ -481,11 +481,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <div className="relative">
                   <select
                     value={enhancementModel}
-                    onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct')}
+                    onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
                     className="px-1.5 py-0.5 bg-muted text-muted-foreground border border-border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-ring appearance-none pr-5"
                   >
                     <option value="qwen_instruct">Instruct</option>
                     <option value="qwen_base">Base</option>
+                    <option value="none">None</option>
                   </select>
                   <ChevronDown size={8} className="absolute right-1 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </div>
