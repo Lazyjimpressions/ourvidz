@@ -240,12 +240,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Scenario 2: When a user uploads a reference image file, auto-enable Exact Copy and set low strength
+  // Scenario 2: When a user uploads a reference image file, auto-enable Exact Copy with high strength
   const handleReferenceFileChange = (file: File | null) => {
     onReferenceImageChange(file);
     if (file) {
       onExactCopyModeChange?.(true);
-      onReferenceStrengthChange(0.1);
+      onReferenceStrengthChange(0.8); // High strength for exact copying
       onModeChange('image');
     }
   };

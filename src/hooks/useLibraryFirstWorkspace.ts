@@ -455,7 +455,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
             reference_strength: exactCopyMode ? preserveStrength : referenceStrength,
-            reference_type: 'character' as const
+            reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
+            exact_copy_mode: exactCopyMode
           }),
           // Seed for character reproduction
           ...(((lockSeed && seed) ? { seed } : {})),

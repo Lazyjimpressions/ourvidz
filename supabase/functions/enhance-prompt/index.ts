@@ -33,6 +33,7 @@ serve(async (req) => {
     const regeneration = requestBody.regeneration
     const selectedPresets = requestBody.selectedPresets || []
     const contentType = requestBody.contentType // Extract contentType from request
+    const exactCopyMode = requestBody.metadata?.exact_copy_mode || false
 
     if (!prompt || typeof prompt !== 'string') {
       return new Response(JSON.stringify({
@@ -51,8 +52,38 @@ serve(async (req) => {
       quality,
       selectedModel,
       contentType,
+      exactCopyMode,
       promptLength: prompt.length
     })
+
+    // Skip heavy enhancement for exact copy mode
+    if (exactCopyMode && prompt.trim()) {
+      console.log('🎯 EXACT COPY MODE: Minimal enhancement applied')
+      return new Response(JSON.stringify({
+        success: true,
+        original_prompt: prompt,
+        enhanced_prompt: prompt, // Use original prompt with minimal changes
+        enhancement_strategy: 'exact_copy_minimal',
+        enhancement_metadata: {
+          original_length: prompt.length,
+          enhanced_length: prompt.length,
+          expansion_percentage: '0.0',
+          job_type: jobType,
+          format,
+          quality,
+          content_mode: contentType || 'nsfw',
+          template_name: 'exact_copy_bypass',
+          model_used: 'bypass',
+          token_count: prompt.length / 4, // Rough token estimate
+          compression_applied: false,
+          fallback_level: 0,
+          exact_copy_mode: true,
+          execution_time_ms: 5
+        }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     // Initialize Dynamic Enhancement Orchestrator
     const orchestrator = new DynamicEnhancementOrchestrator()
