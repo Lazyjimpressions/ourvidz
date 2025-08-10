@@ -59,7 +59,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
     <button
       key={session.character_id}
       onClick={() => navigate(`/roleplay/chat?character=${session.character_id}`)}
-      className="w-full text-left p-1.5 rounded-md hover:bg-gray-100 transition-colors group"
+      className="w-full text-left p-1.5 rounded-md hover:bg-muted transition-colors group"
     >
       <div className="flex items-center gap-2">
         <Avatar className="w-6 h-6 flex-shrink-0">
@@ -69,10 +69,10 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-gray-700 truncate group-hover:text-blue-600">
+          <p className="text-xs font-medium text-foreground truncate group-hover:text-primary">
             {session.character_name}
           </p>
-          <div className="flex items-center gap-1 text-xs text-gray-500">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <span>{session.total_messages} messages</span>
             <span>•</span>
             <span>{format(new Date(session.last_updated), 'MMM d, HH:mm')}</span>
@@ -84,16 +84,23 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
 
   return (
     <div className={cn(
-      "w-64 h-screen bg-white border-r border-gray-200 flex flex-col",
+      "w-64 h-full bg-background border-r border-border flex flex-col",
       className
     )}>
       {/* Header */}
-      <div className="p-3 border-b border-gray-200">
+      <div className="p-3 border-b border-border">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-6 h-6 bg-blue-500 rounded-md flex items-center justify-center">
-            <Bot className="w-3 h-3 text-white" />
-          </div>
-          <span className="font-medium text-gray-900 text-sm">Character.AI</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            className="h-8 px-2 text-muted-foreground hover:text-foreground justify-start"
+          >
+            <div className="w-4 h-4 bg-primary rounded-sm flex items-center justify-center mr-2">
+              <Bot className="w-2 h-2 text-primary-foreground" />
+            </div>
+            OurVidz
+          </Button>
         </div>
         
         {/* Search */}
@@ -103,7 +110,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-7 text-xs bg-gray-50 border-gray-200 rounded-md"
+            className="pl-8 h-7 text-xs bg-muted border-border rounded-md"
           />
         </div>
       </div>
@@ -112,7 +119,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
       <div className="p-3 space-y-1">
         <Button
           variant="ghost"
-          className="w-full justify-start h-7 text-xs font-normal text-gray-700 hover:bg-gray-100"
+          className="w-full justify-start h-7 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => navigate('/roleplay/create')}
         >
           <Plus className="w-3 h-3 mr-2" />
@@ -121,7 +128,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
         
         <Button
           variant="ghost"
-          className="w-full justify-start h-7 text-xs font-normal text-gray-700 hover:bg-gray-100"
+          className="w-full justify-start h-7 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => navigate('/roleplay')}
         >
           <Sparkles className="w-3 h-3 mr-2" />
@@ -130,7 +137,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
         
         <Button
           variant="ghost"
-          className="w-full justify-start h-7 text-xs font-normal text-gray-700 hover:bg-gray-100"
+          className="w-full justify-start h-7 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => navigate('/roleplay/avatars')}
         >
           <Bot className="w-3 h-3 mr-2" />
@@ -146,14 +153,14 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
             <div>
               <button
                 onClick={() => toggleSection('thisWeek')}
-                className="flex items-center gap-1.5 w-full text-left mb-1.5 hover:text-blue-600 transition-colors"
+                className="flex items-center gap-1.5 w-full text-left mb-1.5 hover:text-primary transition-colors"
               >
                 {expandedSections.thisWeek ? (
                   <ChevronDown className="w-3 h-3" />
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
-                <span className="text-xs font-medium text-gray-600">
+                <span className="text-xs font-medium text-muted-foreground">
                   This Week ({thisWeekSessions.length})
                 </span>
               </button>
@@ -171,14 +178,14 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
             <div>
               <button
                 onClick={() => toggleSection('thisMonth')}
-                className="flex items-center gap-1.5 w-full text-left mb-1.5 hover:text-blue-600 transition-colors"
+                className="flex items-center gap-1.5 w-full text-left mb-1.5 hover:text-primary transition-colors"
               >
                 {expandedSections.thisMonth ? (
                   <ChevronDown className="w-3 h-3" />
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
-                <span className="text-xs font-medium text-gray-600">
+                <span className="text-xs font-medium text-muted-foreground">
                   This Month ({thisMonthSessions.length})
                 </span>
               </button>
@@ -194,9 +201,9 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
           {/* Empty State */}
           {sessions.length === 0 && !isLoading && (
             <div className="text-center py-6">
-              <MessageSquare className="w-6 h-6 text-gray-400 mx-auto mb-1.5" />
-              <p className="text-xs text-gray-500">No conversations yet</p>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <MessageSquare className="w-6 h-6 text-muted-foreground mx-auto mb-1.5" />
+              <p className="text-xs text-muted-foreground">No conversations yet</p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
                 Start chatting with a character
               </p>
             </div>

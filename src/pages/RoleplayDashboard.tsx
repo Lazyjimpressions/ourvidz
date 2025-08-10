@@ -7,6 +7,7 @@ import { HorizontalScroll } from '@/components/roleplay/HorizontalScroll';
 import { MinimalCharacterCard } from '@/components/roleplay/MinimalCharacterCard';
 import { SceneCard } from '@/components/roleplay/SceneCard';
 import { PillFilter } from '@/components/ui/pill-filter';
+import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { Search, Plus } from 'lucide-react';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
@@ -99,27 +100,19 @@ const RoleplayDashboard = () => {
   }, [filteredCharacters]);
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left Sidebar */}
-      <RoleplayLeftSidebar />
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <RoleplayHeader 
+        title="Discover Characters"
+        subtitle="Chat with AI characters or create your own"
+      />
       
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        {/* Minimal Hero Section */}
-        <div className="border-b border-border/60">
-          <div className="px-6 py-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-medium text-foreground mb-1">
-                  Discover Characters
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Chat with AI characters or create your own
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        <RoleplayLeftSidebar />
+        
+        {/* Main Content */}
+        <main className="flex-1 overflow-auto">
 
         {/* Filters */}
         <div className="border-b border-border/60">
@@ -327,7 +320,8 @@ const RoleplayDashboard = () => {
             </div>
           )}
         </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 };

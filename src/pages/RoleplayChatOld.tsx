@@ -648,7 +648,7 @@ const RoleplayChatInterface = () => {
 const RoleplayChat = () => {
   return (
     <div className="min-h-screen bg-black">
-      <RoleplayHeader title="Roleplay Chat" backPath="/roleplay" />
+      <RoleplayHeader title="Roleplay Chat" />
       <div className="pt-12 h-screen">
         <GeneratedMediaProvider>
           <PlaygroundProvider>

@@ -24,6 +24,7 @@ import { RoleplayPromptInput } from '@/components/roleplay/RoleplayPromptInput';
 import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/RoleplaySettingsModal';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { SceneContextHeader } from '@/components/roleplay/SceneContextHeader';
+import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -224,10 +225,10 @@ const RoleplayChatInterface = () => {
   // Redirect to character selection if no character is selected
   if (!characterId && !characterLoading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-bold mb-4">No Character Selected</h2>
-          <p className="text-gray-400 mb-6">Please select a character to start chatting.</p>
+          <p className="text-muted-foreground mb-6">Please select a character to start chatting.</p>
           <Button onClick={() => navigate('/roleplay')}>
             Select Character
           </Button>
@@ -237,12 +238,22 @@ const RoleplayChatInterface = () => {
   }
 
   return (
-    <div className="h-screen bg-white flex overflow-hidden">
-      {/* Left Sidebar */}
-      {showLeftSidebar && <RoleplayLeftSidebar />}
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
+      {/* Header */}
+      <RoleplayHeader 
+        characterName={character?.name}
+        characterImage={character?.reference_image_url || character?.image_url}
+        title={sceneId ? "Scene Mode" : undefined}
+        subtitle={sceneId ? `Scene with ${participantIds.length > 1 ? `${participantIds.length} participants` : 'character'}` : undefined}
+        onSettingsClick={() => setShowSettingsModal(true)}
+      />
+      
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Sidebar */}
+        {showLeftSidebar && <RoleplayLeftSidebar />}
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Scene Context Header (if in scene mode) */}
         {sceneId && character && (
           <SceneContextHeader
@@ -266,35 +277,14 @@ const RoleplayChatInterface = () => {
           />
         )}
 
-        {/* Header */}
-        <div className="h-12 border-b border-gray-200 flex items-center justify-between px-3 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            {character && (
-              <>
-                <img
-                  src={character.reference_image_url || character.image_url || `https://api.dicebear.com/7.x/personas/svg?seed=${character.name}`}
-                  alt={character.name}
-                  className="w-6 h-6 rounded-full object-cover"
-                />
-                <div>
-                  <h1 className="font-medium text-gray-900 text-sm">
-                    {character.name}
-                    {sceneId && <span className="text-gray-500 ml-1">• Scene Mode</span>}
-                  </h1>
-                  <p className="text-xs text-gray-500">
-                    {sceneId ? `Scene with ${participantIds.length > 1 ? `${participantIds.length} participants` : 'character'}` : 'AI Character'}
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-          
+        {/* Compact Action Bar */}
+        <div className="h-10 border-b border-border flex items-center justify-between px-3 flex-shrink-0">
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowLeftSidebar(!showLeftSidebar)}
-              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             >
               <Menu className="w-3 h-3" />
             </Button>
@@ -303,16 +293,18 @@ const RoleplayChatInterface = () => {
               variant="ghost"
               size="sm"
               onClick={() => setShowAddCharacter(true)}
-              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             >
               <Plus className="w-3 h-3" />
             </Button>
-
+          </div>
+          
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowRightPane(!showRightPane)}
-              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
             >
               {showRightPane ? (
                 <PanelRightClose className="w-3 h-3" />
@@ -320,34 +312,25 @@ const RoleplayChatInterface = () => {
                 <PanelRightOpen className="w-3 h-3" />
               )}
             </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSettingsModal(true)}
-              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
-            >
-              <Settings className="w-3 h-3" />
-            </Button>
           </div>
         </div>
 
         {/* Chat Messages Area - Fixed height with padding for floating input */}
         <div className="flex-1 relative overflow-hidden">
           <ScrollArea className="h-full">
-            <div className="p-3 pb-20">
-              <div className="max-w-2xl mx-auto space-y-2">
-                {messages.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 max-w-md mx-auto">
-                      <h3 className="text-base font-medium mb-2 text-gray-900">
-                        Start chatting with {character?.name || 'your character'}
-                      </h3>
-                      <p className="text-gray-600 text-sm mb-3">
-                        Share your thoughts, ask questions, or begin a roleplay scenario.
-                      </p>
-                    </div>
+          <div className="p-3 pb-20">
+            <div className="max-w-2xl mx-auto space-y-2">
+              {messages.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="bg-card border border-border rounded-lg p-6 max-w-md mx-auto">
+                    <h3 className="text-base font-medium mb-2 text-card-foreground">
+                      Start chatting with {character?.name || 'your character'}
+                    </h3>
+                    <p className="text-muted-foreground text-sm mb-3">
+                      Share your thoughts, ask questions, or begin a roleplay scenario.
+                    </p>
                   </div>
+                </div>
                 ) : (
                   <>
                     {messages.map((message) => (
@@ -361,16 +344,16 @@ const RoleplayChatInterface = () => {
                   </>
                 )}
                 
-                {isTyping && (
-                  <div className="flex items-center space-x-2 text-gray-500 text-sm">
-                    <div className="flex space-x-1">
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
-                    <span className="text-xs">{character?.name} is typing...</span>
+              {isTyping && (
+                <div className="flex items-center space-x-2 text-muted-foreground text-sm">
+                  <div className="flex space-x-1">
+                    <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
-                )}
+                  <span className="text-xs">{character?.name} is typing...</span>
+                </div>
+              )}
                 <div ref={messagesEndRef} />
               </div>
             </div>
@@ -390,6 +373,7 @@ const RoleplayChatInterface = () => {
               onModeChange={setInputMode}
             />
           </div>
+        </div>
         </div>
       </div>
 
@@ -439,7 +423,7 @@ const RoleplayChat = () => {
   return (
     <GeneratedMediaProvider>
       <PlaygroundProvider>
-        <div className="bg-white">
+        <div className="bg-background">
           <RoleplayChatInterface />
         </div>
       </PlaygroundProvider>

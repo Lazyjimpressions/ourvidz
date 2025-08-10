@@ -1,72 +1,109 @@
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, User, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ChevronLeft, Bot, User, Settings } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface RoleplayHeaderProps {
-  title?: string;
   showBackButton?: boolean;
-  backPath?: string;
+  title?: string;
+  subtitle?: string;
+  characterName?: string;
+  characterImage?: string;
+  onSettingsClick?: () => void;
+  className?: string;
 }
 
-export const RoleplayHeader = ({ 
-  title = "Roleplay", 
+export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
   showBackButton = true,
-  backPath = "/roleplay"
-}: RoleplayHeaderProps) => {
+  title,
+  subtitle,
+  characterName,
+  characterImage,
+  onSettingsClick,
+  className
+}) => {
   const navigate = useNavigate();
-  const { user, profile, signOut } = useAuth();
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate("/");
-  };
+  const { user } = useAuth();
 
   return (
-    <header className="fixed top-0 w-full bg-black/80 backdrop-blur-sm border-b border-gray-800 z-50">
-      <div className="flex items-center justify-between h-16 px-4">
-        {showBackButton ? (
+    <header className={cn(
+      "h-12 border-b border-border bg-background flex items-center justify-between px-4 flex-shrink-0",
+      className
+    )}>
+      {/* Left Section */}
+      <div className="flex items-center gap-3">
+        {showBackButton && (
           <Button
             variant="ghost"
-            size="icon"
-            onClick={() => navigate(backPath)}
-            className="text-gray-400 hover:text-white h-8 w-8"
+            size="sm"
+            onClick={() => navigate('/dashboard')}
+            className="h-8 px-2 text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4 mr-1" />
+            Dashboard
           </Button>
-        ) : (
-          <div className="w-8" />
         )}
         
-        <h1 className="text-lg font-bold text-white">{title}</h1>
-        
+        {/* Brand/Title */}
         <div className="flex items-center gap-2">
-          {user && (
-            <>
-              <span className="text-xs text-gray-400 hidden sm:block">
-                {profile?.username || user.email}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate("/profile")}
-                className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
-              >
-                <User className="h-3 w-3" />
-                <span className="hidden sm:inline">Profile</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSignOut}
-                className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
-              >
-                <LogOut className="h-3 w-3" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </Button>
-            </>
-          )}
+          <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
+            <Bot className="w-3 h-3 text-primary-foreground" />
+          </div>
+          <div>
+            {title ? (
+              <div>
+                <h1 className="font-medium text-foreground text-sm">{title}</h1>
+                {subtitle && (
+                  <p className="text-xs text-muted-foreground">{subtitle}</p>
+                )}
+              </div>
+            ) : (
+              <span className="font-medium text-foreground text-sm">Roleplay</span>
+            )}
+          </div>
         </div>
+
+        {/* Character Info (if present) */}
+        {characterName && (
+          <>
+            <div className="w-px h-4 bg-border mx-2" />
+            <div className="flex items-center gap-2">
+              <Avatar className="w-6 h-6">
+                <AvatarImage src={characterImage} alt={characterName} />
+                <AvatarFallback className="text-xs">
+                  <User className="w-3 h-3" />
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-sm text-foreground font-medium">{characterName}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Right Section */}
+      <div className="flex items-center gap-2">
+        {onSettingsClick && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onSettingsClick}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          >
+            <Settings className="w-4 h-4" />
+          </Button>
+        )}
+        
+        {user && (
+          <Avatar className="w-7 h-7">
+            <AvatarImage src={user.user_metadata?.avatar_url} alt={user.email} />
+            <AvatarFallback className="text-xs">
+              {user.email?.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        )}
       </div>
     </header>
   );
