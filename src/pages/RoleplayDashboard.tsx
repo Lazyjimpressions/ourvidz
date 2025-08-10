@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
-import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { RoleplayLeftSidebar } from '@/components/roleplay/RoleplayLeftSidebar';
 import { SectionHeader } from '@/components/roleplay/SectionHeader';
 import { HorizontalScroll } from '@/components/roleplay/HorizontalScroll';
 import { MinimalCharacterCard } from '@/components/roleplay/MinimalCharacterCard';
@@ -73,33 +73,16 @@ const RoleplayDashboard = () => {
     return matchesSearch;
   });
 
-  // Sample scenes data with gradients
-  const sampleScenes = [
-    {
-      id: '1',
-      title: 'Medieval Castle',
-      characterNames: ['Sir Arthur', 'Lady Eleanor'],
-      gradient: 'bg-gradient-to-br from-orange-500 to-red-600'
-    },
-    {
-      id: '2', 
-      title: 'Space Station',
-      characterNames: ['Captain Nova', 'AI-7'],
-      gradient: 'bg-gradient-to-br from-blue-500 to-purple-600'
-    },
-    {
-      id: '3',
-      title: 'Magic Academy',
-      characterNames: ['Professor Zen', 'Luna'],
-      gradient: 'bg-gradient-to-br from-purple-500 to-pink-600'
-    },
-    {
-      id: '4',
-      title: 'Cyberpunk City',
-      characterNames: ['Ghost', 'Neon'],
-      gradient: 'bg-gradient-to-br from-green-500 to-cyan-600'
-    }
-  ];
+  // Transform scenes data for display
+  const displayScenes = useMemo(() => {
+    return scenes.map(scene => ({
+      id: scene.id,
+      title: scene.scene_prompt || 'Untitled Scene',
+      characterNames: [], // We'll need to fetch character names based on character_id
+      backgroundImage: scene.image_url,
+      gradient: 'bg-gradient-to-br from-primary/20 to-primary/10'
+    }));
+  }, [scenes]);
 
   // Group characters by category
   const categorizedCharacters = useMemo(() => {
@@ -116,13 +99,15 @@ const RoleplayDashboard = () => {
   }, [filteredCharacters]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <RoleplayHeader title="Roleplay" showBackButton={false} />
+    <div className="min-h-screen bg-background flex">
+      {/* Left Sidebar */}
+      <RoleplayLeftSidebar />
       
-      <main className="pt-header">
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
         {/* Minimal Hero Section */}
         <div className="border-b border-border/60">
-          <div className="max-w-6xl mx-auto px-4 py-6">
+          <div className="px-6 py-6">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-medium text-foreground mb-1">
@@ -132,73 +117,57 @@ const RoleplayDashboard = () => {
                   Chat with AI characters or create your own
                 </p>
               </div>
-              <button 
-                onClick={handleCreateCharacter}
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
-              >
-                <Plus className="w-4 h-4 inline mr-1" />
-                Create
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Filters */}
         <div className="border-b border-border/60">
-          <div className="max-w-6xl mx-auto px-4 py-4">
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search characters..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-9 text-sm"
-                />
-              </div>
-              
-              <div className="flex gap-2">
-                <PillFilter
-                  active={selectedFilter === 'all'}
-                  onClick={() => setSelectedFilter('all')}
-                >
-                  All
-                </PillFilter>
-                <PillFilter
-                  active={selectedFilter === 'official'}
-                  onClick={() => setSelectedFilter('official')}
-                >
-                  Featured
-                </PillFilter>
-                <PillFilter
-                  active={selectedFilter === 'community'}
-                  onClick={() => setSelectedFilter('community')}
-                >
-                  Community
-                </PillFilter>
-              </div>
+          <div className="px-6 py-4">
+            <div className="flex gap-2">
+              <PillFilter
+                active={selectedFilter === 'all'}
+                onClick={() => setSelectedFilter('all')}
+              >
+                All
+              </PillFilter>
+              <PillFilter
+                active={selectedFilter === 'official'}
+                onClick={() => setSelectedFilter('official')}
+              >
+                Featured
+              </PillFilter>
+              <PillFilter
+                active={selectedFilter === 'community'}
+                onClick={() => setSelectedFilter('community')}
+              >
+                Community
+              </PillFilter>
             </div>
           </div>
         </div>
 
         {/* Content Sections */}
-        <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
+        <div className="px-6 py-6 space-y-8">
           {/* Scenes Section */}
-          <section>
-            <SectionHeader title="Scenes" count={sampleScenes.length} className="mb-4" />
-            <HorizontalScroll>
-              {sampleScenes.map((scene) => (
-                <SceneCard
-                  key={scene.id}
-                  id={scene.id}
-                  title={scene.title}
-                  characterNames={scene.characterNames}
-                  gradient={scene.gradient}
-                  onClick={() => console.log('Scene clicked:', scene.id)}
-                />
-              ))}
-            </HorizontalScroll>
-          </section>
+          {displayScenes.length > 0 && (
+            <section>
+              <SectionHeader title="Scenes" count={displayScenes.length} className="mb-4" />
+              <HorizontalScroll>
+                {displayScenes.map((scene) => (
+                  <SceneCard
+                    key={scene.id}
+                    id={scene.id}
+                    title={scene.title}
+                    characterNames={scene.characterNames}
+                    backgroundImage={scene.backgroundImage}
+                    gradient={scene.gradient}
+                    onClick={() => console.log('Scene clicked:', scene.id)}
+                  />
+                ))}
+              </HorizontalScroll>
+            </section>
+          )}
 
           {/* For You Section */}
           {!isLoading && categorizedCharacters.forYou.length > 0 && (

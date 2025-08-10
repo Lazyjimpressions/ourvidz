@@ -33,7 +33,7 @@ export const MinimalCharacterCard: React.FC<MinimalCharacterCardProps> = ({
   return (
     <div
       className={cn(
-        "bg-card rounded-lg border border-border/60 hover:border-border transition-colors cursor-pointer overflow-hidden shadow-sm hover:shadow-md",
+        "bg-card rounded-lg border border-border/60 hover:border-border transition-colors cursor-pointer overflow-hidden shadow-sm hover:shadow-md h-48 flex flex-col",
         className
       )}
       onClick={onClick}
@@ -61,8 +61,8 @@ export const MinimalCharacterCard: React.FC<MinimalCharacterCardProps> = ({
       </div>
 
       {/* Description */}
-      <div className="px-3 pb-2">
-        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+      <div className="px-3 pb-2 flex-1">
+        <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
           {description}
         </p>
       </div>
