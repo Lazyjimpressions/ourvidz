@@ -164,6 +164,7 @@ serve(async (req) => {
       let templateKey = '';
 
       if (template) {
+        console.log('✅ Chat template found: character_roleplay (' + contentTier + ')');
         templateKey = `cache:${cache?.metadata?.refreshed_at || 'na'}:${contentTier}:character_roleplay`;
       } else {
         console.log('🔄 Cache miss, fetching roleplay template from database...');
@@ -592,6 +593,14 @@ You say: ...`;
     // Load cached data for template processing
     const cache = await getCachedData();
     
+    console.log('✅ Cache loaded:', {
+      templateCount: cache?.metadata?.templateCount || 0,
+      negativePromptCount: cache?.metadata?.negativePromptCount || 0,
+      nsfwTermCount: cache?.nsfwTerms?.length || 0,
+      ageHours: cache?.metadata?.lastUpdated ? 
+        ((Date.now() - new Date(cache.metadata.lastUpdated).getTime()) / (1000 * 60 * 60)).toFixed(1) : 'unknown'
+    });
+    
     // Determine admin/owner NSFW override
     const isAdmin = await isAdminPromise.catch(() => false);
     const isOwner = !!(characterData && characterData.user_id === user.id);
@@ -600,12 +609,20 @@ You say: ...`;
       console.log(`🛡️ NSFW override active due to ${isAdmin ? 'admin' : 'owner'} privileges`);
     }
 
-    // Simplified NSFW-first content tier logic
+    // NSFW-first content tier logic with explicit override support
     let finalTier: 'sfw' | 'nsfw';
     let tierReason: string;
     
-    if (isAdmin || ageVerified) {
-      // Admin and age-verified users get NSFW by default
+    // Check for explicit frontend override (user deliberately chose SFW)
+    const explicitTier = req.body?.content_tier as 'sfw' | 'nsfw' | undefined;
+    
+    if (explicitTier === 'sfw') {
+      // User explicitly requested SFW mode
+      finalTier = 'sfw';
+      tierReason = 'explicit_sfw_request';
+      console.log('🎯 User explicitly requested SFW mode');
+    } else if (isAdmin || ageVerified) {
+      // Admin and age-verified users get NSFW by default (NSFW-first)
       finalTier = 'nsfw';
       tierReason = isAdmin ? 'admin_nsfw_default' : 'verified_nsfw_default';
     } else {

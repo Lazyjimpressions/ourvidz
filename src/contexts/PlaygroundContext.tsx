@@ -163,7 +163,9 @@ const createConversationMutation = useMutation({
         body: {
           conversation_id: conversationId,
           message: content,
-          content_tier: sfwMode ? 'sfw' : 'nsfw',
+          // Let the backend determine content tier based on user status and content
+          // Only override if user explicitly chose SFW mode
+          ...(sfwMode ? { content_tier: 'sfw' } : {}),
           ...(characterId ? { character_id: characterId } : {}),
         },
       });
