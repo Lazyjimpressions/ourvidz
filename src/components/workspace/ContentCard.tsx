@@ -227,18 +227,22 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         isHovered ? 'opacity-100' : 'opacity-0'
       }`}>
         
-        {/* Top-Right Corner Actions - Small, Clean Icons */}
-        <div className="absolute top-2 right-2 flex gap-1">
-          {/* Dismiss Button (X) */}
+        {/* Top-Right Corner - Single Minimal Hide Button */}
+        <div className="absolute top-1 right-1">
           {onDismiss && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    className="w-5 h-5 bg-background/80 hover:bg-background border border-border/50 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm"
                     onClick={(e) => handleActionClick(e, onDismiss)}
+                    disabled={isDeleting}
                   >
-                    <X className={iconSize[size]} />
+                    {isDeleting ? (
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
+                    ) : (
+                      <X className="w-3 h-3 text-muted-foreground" />
+                    )}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -247,28 +251,6 @@ export const ContentCard: React.FC<ContentCardProps> = ({
               </Tooltip>
             </TooltipProvider>
           )}
-
-          {/* Delete Button */}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className={`${buttonSize[size]} bg-red-500/80 hover:bg-red-600/90 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
-                  onClick={(e) => handleActionClick(e, onDelete)}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <div className="animate-spin rounded-full border-b-2 border-white" style={{ width: iconSize[size], height: iconSize[size] }}></div>
-                  ) : (
-                    <Trash2 className={iconSize[size]} />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Delete permanently</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
 
         {/* Bottom-Right Corner Actions - LTX-Style Small Icons */}

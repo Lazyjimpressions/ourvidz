@@ -204,24 +204,20 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 ))}
               </div>
               
-              {/* Hover Delete Actions for Job */}
-              <div className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+              {/* Minimal Job Action - Single Hide Button */}
+              <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 {onDismissJob && (
                   <button
                     onClick={() => onDismissJob(jobId)}
-                    className="w-6 h-6 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
-                    title="Dismiss job from workspace"
+                    className="w-5 h-5 bg-background/80 hover:bg-background border border-border rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
+                    title="Hide from workspace"
+                    disabled={isDeleting.has(jobId)}
                   >
-                    ×
-                  </button>
-                )}
-                {onDeleteJob && (
-                  <button
-                    onClick={() => onDeleteJob(jobId)}
-                    className="w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs transition-colors"
-                    title="Delete job permanently"
-                  >
-                    🗑
+                    {isDeleting.has(jobId) ? (
+                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
+                    ) : (
+                      <span className="text-muted-foreground">×</span>
+                    )}
                   </button>
                 )}
               </div>
@@ -316,35 +312,24 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     {/* Content Type Indicator - Removed redundant icons, keeping only play button for videos */}
                  </div>
 
-                {/* Hover Delete/Dismiss Buttons - Small, clean like LTX */}
-                {hoveredJob === jobId && (onDeleteJob || onDismissJob) && (
-                  <div className="absolute -top-1 -right-1 flex gap-1">
-                    {onDismissJob && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDismissJob(jobId);
-                        }}
-                        className="w-5 h-5 bg-gray-500 hover:bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-                        disabled={isDeleting.has(jobId)}
-                        title="Dismiss job (hide from workspace)"
-                      >
-                        {isDeleting.has(jobId) ? '...' : '×'}
-                      </button>
-                    )}
-                    {onDeleteJob && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteJob(jobId);
-                        }}
-                        className="w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-                        disabled={isDeleting.has(jobId)}
-                        title="Delete job permanently"
-                      >
-                        {isDeleting.has(jobId) ? '...' : '🗑'}
-                      </button>
-                    )}
+                {/* Minimal Sidebar Action - Single Hide Button */}
+                {hoveredJob === jobId && onDismissJob && (
+                  <div className="absolute -top-1 -right-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDismissJob(jobId);
+                      }}
+                      className="w-4 h-4 bg-background/90 hover:bg-background border border-border rounded-full flex items-center justify-center transition-all shadow-sm"
+                      disabled={isDeleting.has(jobId)}
+                      title="Hide from workspace"
+                    >
+                      {isDeleting.has(jobId) ? (
+                        <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-pulse" />
+                      ) : (
+                        <span className="text-xs text-muted-foreground leading-none">×</span>
+                      )}
+                    </button>
                   </div>
                 )}
 

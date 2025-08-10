@@ -3,6 +3,8 @@ import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
 import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
+import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
+import { OptimizedDeleteModal } from '@/components/workspace/OptimizedDeleteModal';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 
@@ -23,9 +25,28 @@ import { WorkspaceHeader } from '@/components/WorkspaceHeader';
  */
 export const SimplifiedWorkspace: React.FC = () => {
   const state = useLibraryFirstWorkspace();
+  const {
+    deletingItems,
+    deletingJobs,
+    hideFromWorkspace,
+    deleteItemPermanently,
+    hideJobFromWorkspace,
+    deleteJobPermanently,
+    clearWorkspace: optimizedClearWorkspace,
+  } = useOptimizedWorkspace();
   
-  // Job selection state
-  const [deletingJobs, setDeletingJobs] = useState<Set<string>>(new Set());
+  // Modal state for confirmations
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmAction: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    confirmAction: () => {},
+  });
   
   const {
     // Core State
@@ -343,48 +364,49 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   };
 
-  // Job-level deletion handler
-  const handleDeleteJob = async (jobId: string) => {
-    setDeletingJobs(prev => new Set(prev).add(jobId));
+  // Optimized job handlers
+  const handleHideJob = async (jobId: string) => {
+    await hideJobFromWorkspace(jobId);
     
-    try {
-      await deleteJob(jobId);
-      
-      // Clear active job if it was deleted
-      if (activeJobId === jobId) {
-        selectJob(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete job:', error);
-    } finally {
-      setDeletingJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
+    // Clear active job if it was hidden
+    if (activeJobId === jobId) {
+      selectJob(null);
     }
   };
 
-  // Job-level dismiss handler
-  const handleDismissJob = async (jobId: string) => {
-    setDeletingJobs(prev => new Set(prev).add(jobId));
-    
-    try {
-      await dismissJob(jobId);
-      
-      // Clear active job if it was dismissed
-      if (activeJobId === jobId) {
-        selectJob(null);
-      }
-    } catch (error) {
-      console.error('Failed to dismiss job:', error);
-    } finally {
-      setDeletingJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(jobId);
-        return newSet;
-      });
-    }
+  const handleDeleteJob = (jobId: string) => {
+    setDeleteModal({
+      isOpen: true,
+      title: 'Delete Job Permanently?',
+      description: 'This will permanently delete all images/videos in this job and cannot be undone.',
+      confirmAction: async () => {
+        await deleteJobPermanently(jobId);
+        
+        // Clear active job if it was deleted
+        if (activeJobId === jobId) {
+          selectJob(null);
+        }
+        
+        setDeleteModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
+  };
+
+  // Optimized item handlers
+  const handleHideItem = async (item: UnifiedAsset) => {
+    await hideFromWorkspace(item.id, item.type);
+  };
+
+  const handleDeleteItem = (item: UnifiedAsset) => {
+    setDeleteModal({
+      isOpen: true,
+      title: 'Delete Permanently?',
+      description: `This will permanently delete this ${item.type} and cannot be undone.`,
+      confirmAction: async () => {
+        await deleteItemPermanently(item.id, item.type);
+        setDeleteModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Job selection handler
@@ -392,22 +414,16 @@ export const SimplifiedWorkspace: React.FC = () => {
     selectJob(jobId);
   };
 
-  const handleDismissAllJobs = async () => {
-    try {
-      console.log('🗑️ Dismissing all jobs from workspace');
-      
-      // Get all job IDs from the session groups
-      const allJobIds = Object.keys(sessionGroups);
-      
-      // Dismiss each job
-      for (const jobId of allJobIds) {
-        await handleDismissJob(jobId);
-      }
-      
-      console.log('✅ All jobs dismissed from workspace');
-    } catch (error) {
-      console.error('❌ Error dismissing all jobs:', error);
-    }
+  const handleClearWorkspace = async () => {
+    setDeleteModal({
+      isOpen: true,
+      title: 'Clear Workspace?',
+      description: 'This will hide all items from your workspace. You can still access them in your library.',
+      confirmAction: async () => {
+        await optimizedClearWorkspace();
+        setDeleteModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Group assets by job_id for WorkspaceGrid
@@ -429,10 +445,10 @@ export const SimplifiedWorkspace: React.FC = () => {
   const activeJobItems = activeJobId ? sessionGroups[activeJobId] : [];
 
   return (
-    <div className="relative h-full bg-gray-900 text-white">
+    <div className="relative h-full bg-background text-foreground">
       <WorkspaceHeader
-        onClearWorkspace={clearWorkspace}
-        onDismissAllJobs={handleDismissAllJobs}
+        onClearWorkspace={handleClearWorkspace}
+        onDismissAllJobs={handleClearWorkspace}
       />
       <div className="flex flex-1 overflow-hidden pb-60 pt-header">
         <div className="flex-1 overflow-y-auto p-4">
@@ -441,7 +457,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             activeJobId={activeJobId}
             onJobSelect={handleJobSelect}
             onDeleteJob={handleDeleteJob}
-            onDismissJob={handleDismissJob}
+            onDismissJob={handleHideJob}
             onIterateFromItem={handleIterateFromItem}
             onRegenerateJob={handleRegenerateJob}
             onCreateVideo={handleCreateVideo}
@@ -452,9 +468,9 @@ export const SimplifiedWorkspace: React.FC = () => {
             onView={handleViewItem}
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
-            onDelete={(item) => deleteItem(item.id, item.type)}
-            onDismiss={(item) => dismissItem(item.id, item.type)}
-            isDeleting={deletingJobs}
+            onDelete={handleDeleteItem}
+            onDismiss={handleHideItem}
+            isDeleting={new Set([...deletingItems, ...deletingJobs])}
           />
         </div>
       </div>
@@ -568,6 +584,17 @@ export const SimplifiedWorkspace: React.FC = () => {
           isRegenerating={isGenerating}
         />
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <OptimizedDeleteModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={deleteModal.confirmAction}
+        title={deleteModal.title}
+        description={deleteModal.description}
+        confirmText="Delete"
+        isLoading={deletingItems.size > 0 || deletingJobs.size > 0}
+      />
     </div>
   );
 };
