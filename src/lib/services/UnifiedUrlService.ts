@@ -48,14 +48,14 @@ export class UnifiedUrlService {
           if (asset.type === 'video') {
             let thumb = asset.thumbnailUrl;
             if (!thumb) {
-              thumb = '/video-placeholder.svg';
+              thumb = '/video-thumbnail-placeholder.svg';
             } else if (!thumb.startsWith('https://') && !thumb.startsWith('http://')) {
               try {
                 const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
                 const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
-                thumb = thumbData?.signedUrl || '/video-placeholder.svg';
+                thumb = thumbData?.signedUrl || '/video-thumbnail-placeholder.svg';
               } catch (e) {
-                thumb = '/video-placeholder.svg';
+                thumb = '/video-thumbnail-placeholder.svg';
               }
             }
             this.metrics.cacheHits++;
@@ -282,12 +282,12 @@ export class UnifiedUrlService {
         try {
           const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
           const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
-          thumb = thumbData?.signedUrl || '/video-placeholder.svg';
+          thumb = thumbData?.signedUrl || '/video-thumbnail-placeholder.svg';
         } catch (e) {
-          thumb = '/video-placeholder.svg';
+          thumb = '/video-thumbnail-placeholder.svg';
         }
       } else {
-        thumb = '/video-placeholder.svg';
+        thumb = '/video-thumbnail-placeholder.svg';
       }
       return {
         url: data.signedUrl,

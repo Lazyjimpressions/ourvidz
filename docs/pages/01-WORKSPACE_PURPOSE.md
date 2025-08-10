@@ -3,7 +3,7 @@
 **Date:** August 8, 2025  
 **Status:** ✅ **IMPLEMENTED - Library-First Event-Driven Workspace System**  
 **Phase:** Production Ready with Complete Library-First Architecture  
-**Last Updated:** August 8, 2025 - Current implementation status verified and updated with latest changes
+**Last Updated:** August 9, 2025 - Implementation updated: useJobAsReference implemented, Lightbox UX/UI finalized, video thumbnails unified
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
@@ -311,10 +311,13 @@ activeJobId: string | null
 - **Enhanced Lightbox Modal**: Major upgrade with collapsible panels, improved UI, and new PillButton component
 - **Advanced Image Details**: Integration with useFetchImageDetails and useImageRegeneration hooks
 - **Improved Video Controls**: Enhanced video playback controls with mute/unmute functionality
+ - **useJobAsReference Implemented (Aug 9)**: Added job-as-reference workflow via `workspace-use-job-as-reference` event and UI wiring in `SimplifiedWorkspace`
+ - **Lightbox UX/UI Finalization (Aug 9)**: Repositioned close/collapse buttons, scrollable left pane, collapsible original/enhanced prompts, added template info
+ - **Video Thumbnails Unified (Aug 9)**: Frontend consistently uses `videos.thumbnail_url` for posters; standardized fallback to `/video-thumbnail-placeholder.svg`; ensured signing of relative thumbnail paths
 
 ### **🔧 Known Issues & TODOs**
-- **TODO**: Implement `useJobAsReference` function to set reference image from URL (currently placeholder)
-- **UX/UI Issues**: Lightbox modal needs UI cleanup and layout improvements
+- **useJobAsReference**: Completed (Aug 9, 2025)
+- **Lightbox UX/UI**: Completed (Aug 9, 2025). Minor polish only if new feedback arises
 - **Enhancement**: Add bulk operations for multiple job selection
 - **Enhancement**: Add workspace templates for saved configurations
 - **Enhancement**: Implement advanced search and filtering capabilities
@@ -934,23 +937,26 @@ If fixes cause issues:
 ## **📋 IMMEDIATE DEVELOPMENT PRIORITIES**
 
 ### **Priority 1: Complete TODO Items & UX/UI Improvements (This Week)**
-1. **Implement `useJobAsReference` Function**
-   - Complete the placeholder implementation in `useLibraryFirstWorkspace.ts`
-   - Add functionality to set reference image from job URL
-   - Integrate with existing URL-based reference system
+1. **Implement `useJobAsReference` Function** — ✅ Completed (Aug 9)
+   - Implemented in `useLibraryFirstWorkspace.ts` with event dispatch `workspace-use-job-as-reference`
+   - Wired in `SimplifiedWorkspace.tsx` to set URL references (image/video aware)
+   - Integrated with existing URL-based reference system
 
-2. **Lightbox Modal UX/UI Improvements**
-   - Clean up UI layout and spacing issues
-   - Fix button positioning conflicts (X and collapse buttons overlapping)
-   - Improve pill button layout and text presentation
-   - Make left pane scrollable to reveal all information
-   - Add template information display (template name, fallback used)
-   - Separate original and enhanced prompts in collapsible boxes
+2. **Lightbox Modal UX/UI Improvements** — ✅ Completed (Aug 9)
+   - Repositioned X/collapse buttons; resolved overlap and pill interference
+   - Left pane fully scrollable; improved spacing
+   - Original and enhanced prompts in collapsible sections with copy actions
+   - Template information rendered (name/fallback)
 
-3. **Performance Optimizations**
-   - Implement virtual scrolling for large asset collections
-   - Add progressive image loading
-   - Optimize database queries for better performance
+3. **Video Thumbnails Consistency** — ✅ Completed (Aug 9)
+   - Unified fallback path `/video-thumbnail-placeholder.svg`
+   - Ensure signing for relative thumbnail paths in `UnifiedUrlService`
+   - Tiles/job thumbnails/posters now consistently display video images
+
+4. **Performance Optimizations** — In Progress
+   - Virtual scrolling: planned
+   - Progressive image loading: planned
+   - Query tuning: ongoing
 
 ### **Priority 2: Advanced Features (Next 2 Weeks)**
 1. **Advanced Search and Filtering**
@@ -1639,18 +1645,11 @@ This comprehensive plan provides a clear roadmap for the next 8 weeks of develop
 
 ### **🔧 IMMEDIATE DEVELOPMENT NEEDS**
 
-#### **Priority 1: Complete TODO Items (This Week)**
-1. **Implement `useJobAsReference` Function**
-   ```typescript
-   // Current placeholder in useLibraryFirstWorkspace.ts:727
-   const useJobAsReference = useCallback((jobId: string) => {
-     // TODO: Implement job as reference functionality
-     console.log('TODO: Set reference image from job:', jobId);
-   }, []);
-   ```
-   **Action Required**: Complete implementation to set reference image from job URL
+#### **Priority 1: Current Status**
+1. **`useJobAsReference`** — ✅ Implemented (Aug 9)
+   - Event-based integration; UI wired in `SimplifiedWorkspace`
 
-2. **Performance Optimizations**
+2. **Performance Optimizations** — In Progress
    - Add virtual scrolling for large collections
    - Implement progressive image loading
    - Optimize database queries
