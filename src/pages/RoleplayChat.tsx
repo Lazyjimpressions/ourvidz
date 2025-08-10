@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -89,20 +89,33 @@ const RoleplayChatInterface = () => {
     }
   }, [characterId, character, characterLoading]);
 
-  // Initialize conversation when character is loaded
+  // Initialize conversation when character is loaded (only once per character)
   useEffect(() => {
-    if (character && !state.activeConversationId && conversations.length === 0) {
-      handleNewConversation();
+    if (character && !state.activeConversationId && conversations.length === 0 && !state.isLoadingMessage) {
+      // Add a small delay to prevent immediate re-triggers
+      const timer = setTimeout(() => {
+        if (!state.activeConversationId && conversations.length === 0) {
+          handleNewConversation();
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [character, state.activeConversationId, conversations]);
+  }, [character?.id, state.activeConversationId, conversations.length]); // Use character.id instead of character object
 
-  // Handle scene navigation
+  // Handle scene navigation (only when scene changes)
   useEffect(() => {
-    if (sceneId && character) {
-      // Auto-start conversation with scene context
-      handleNewConversation();
+    if (sceneId && character && !state.isLoadingMessage) {
+      // Auto-start conversation with scene context only if no active conversation
+      if (!state.activeConversationId) {
+        const timer = setTimeout(() => {
+          handleNewConversation();
+        }, 100);
+        
+        return () => clearTimeout(timer);
+      }
     }
-  }, [sceneId, character]);
+  }, [sceneId, character?.id]); // Use character.id to prevent character object changes
 
   // Auto scroll to bottom on new messages
   useEffect(() => {
@@ -114,8 +127,14 @@ const RoleplayChatInterface = () => {
     inputRef.current?.focus();
   }, []);
 
-  const handleNewConversation = async () => {
-    if (!character) return;
+  const handleNewConversation = useCallback(async () => {
+    if (!character || state.isLoadingMessage) return;
+    
+    // Prevent multiple simultaneous conversation creations
+    if (state.activeConversationId || conversations.length > 0) {
+      console.log('Conversation already exists, skipping creation');
+      return;
+    }
     
     try {
       const title = sceneId 
@@ -143,14 +162,14 @@ const RoleplayChatInterface = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [character?.id, sceneId, participantIds.length, state.activeConversationId, state.isLoadingMessage, conversations.length, createConversation]);
 
   // Auto-start conversation when no active conversation exists
-  const handleStartConversation = async () => {
+  const handleStartConversation = useCallback(async () => {
     if (!state.activeConversationId) {
       await handleNewConversation();
     }
-  };
+  }, [state.activeConversationId, handleNewConversation]);
 
   const handleCharacterChange = (newCharacterId: string) => {
     const params = new URLSearchParams(searchParams);
