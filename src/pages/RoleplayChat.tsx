@@ -118,6 +118,13 @@ const RoleplayChatInterface = () => {
     }
   };
 
+  // Auto-start conversation when no active conversation exists
+  const handleStartConversation = async () => {
+    if (!state.activeConversationId) {
+      await handleNewConversation();
+    }
+  };
+
   const handleCharacterChange = (newCharacterId: string) => {
     const params = new URLSearchParams(searchParams);
     params.set('character', newCharacterId);
@@ -298,6 +305,7 @@ const RoleplayChatInterface = () => {
           characterId={characterId}
           isOpen={showRightPane}
           onClose={() => setShowRightPane(false)}
+          onStartConversation={handleStartConversation}
         />
       )}
 
