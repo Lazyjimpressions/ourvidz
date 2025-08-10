@@ -56,17 +56,21 @@ serve(async (req) => {
       promptLength: prompt.length
     })
 
-    // Skip heavy enhancement for exact copy mode
-    if (exactCopyMode && prompt.trim()) {
-      console.log('🎯 EXACT COPY MODE: Minimal enhancement applied')
+    // FIXED: Proper exact copy mode handling for image-to-image references
+    if (exactCopyMode) {
+      console.log('🎯 EXACT COPY MODE: Bypassing enhancement completely for image-to-image reference')
+      
+      // For exact copy mode, use minimal prompt to avoid interference with reference image
+      const minimalPrompt = prompt.trim() || 'high quality image'
+      
       return new Response(JSON.stringify({
         success: true,
         original_prompt: prompt,
-        enhanced_prompt: prompt, // Use original prompt with minimal changes
-        enhancement_strategy: 'exact_copy_minimal',
+        enhanced_prompt: minimalPrompt,
+        enhancement_strategy: 'exact_copy_bypass',
         enhancement_metadata: {
           original_length: prompt.length,
-          enhanced_length: prompt.length,
+          enhanced_length: minimalPrompt.length,
           expansion_percentage: '0.0',
           job_type: jobType,
           format,
@@ -74,11 +78,12 @@ serve(async (req) => {
           content_mode: contentType || 'nsfw',
           template_name: 'exact_copy_bypass',
           model_used: 'bypass',
-          token_count: prompt.length / 4, // Rough token estimate
+          token_count: Math.ceil(minimalPrompt.length / 4),
           compression_applied: false,
           fallback_level: 0,
           exact_copy_mode: true,
-          execution_time_ms: 5
+          execution_time_ms: 2,
+          bypass_reason: 'image_to_image_reference_mode'
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

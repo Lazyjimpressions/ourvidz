@@ -443,9 +443,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
       const preserveStrength = 0.8; // High strength for exact copying
+      
+      // For exact copy mode with reference images, use minimal prompt interference
+      const finalPrompt = exactCopyMode && (referenceImage || referenceImageUrl)
+        ? (prompt.trim() || 'high quality image')  // Minimal prompt for image-to-image
+        : (prompt.trim() || '');
+
       const generationRequest = {
         format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
-        prompt: (prompt.trim() || ''),
+        prompt: finalPrompt,
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
