@@ -37,7 +37,7 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const { character, isLoading, likeCharacter } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId);
 
-  if (!isOpen) return null;
+  // Don't return null - let the parent handle conditional rendering
 
   const tabs = [
     { id: 'details', label: 'Details', icon: User },
@@ -54,6 +54,7 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   return (
     <div className={cn(
       "w-64 h-full bg-white border-l border-gray-200 flex flex-col",
+      !isOpen && "hidden",
       className
     )}>
       {/* Header */}

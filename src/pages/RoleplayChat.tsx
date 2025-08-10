@@ -293,7 +293,7 @@ const RoleplayChatInterface = () => {
       </div>
 
       {/* Right Character Detail Pane */}
-      {characterId && showRightPane && (
+      {characterId && (
         <CharacterDetailPane
           characterId={characterId}
           isOpen={showRightPane}
