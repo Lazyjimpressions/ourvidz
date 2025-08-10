@@ -1,10 +1,15 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
-import { Play, Search, Star, Users, MessageSquare, Plus, Sparkles, Heart } from 'lucide-react';
+import { SectionHeader } from '@/components/roleplay/SectionHeader';
+import { HorizontalScroll } from '@/components/roleplay/HorizontalScroll';
+import { MinimalCharacterCard } from '@/components/roleplay/MinimalCharacterCard';
+import { SceneCard } from '@/components/roleplay/SceneCard';
+import { PillFilter } from '@/components/ui/pill-filter';
+import { Search, Plus } from 'lucide-react';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 
 
 const RoleplayDashboard = () => {
@@ -12,6 +17,7 @@ const RoleplayDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const { characters, isLoading, likeCharacter, incrementInteraction } = usePublicCharacters();
+  const { scenes } = useCharacterScenes();
 
   const handleStartChat = (characterId: string) => {
     incrementInteraction(characterId);
@@ -67,208 +73,290 @@ const RoleplayDashboard = () => {
     return matchesSearch;
   });
 
+  // Sample scenes data with gradients
+  const sampleScenes = [
+    {
+      id: '1',
+      title: 'Medieval Castle',
+      characterNames: ['Sir Arthur', 'Lady Eleanor'],
+      gradient: 'bg-gradient-to-br from-orange-500 to-red-600'
+    },
+    {
+      id: '2', 
+      title: 'Space Station',
+      characterNames: ['Captain Nova', 'AI-7'],
+      gradient: 'bg-gradient-to-br from-blue-500 to-purple-600'
+    },
+    {
+      id: '3',
+      title: 'Magic Academy',
+      characterNames: ['Professor Zen', 'Luna'],
+      gradient: 'bg-gradient-to-br from-purple-500 to-pink-600'
+    },
+    {
+      id: '4',
+      title: 'Cyberpunk City',
+      characterNames: ['Ghost', 'Neon'],
+      gradient: 'bg-gradient-to-br from-green-500 to-cyan-600'
+    }
+  ];
+
+  // Group characters by category
+  const categorizedCharacters = useMemo(() => {
+    const forYou = filteredCharacters.slice(0, 8);
+    const featured = filteredCharacters.filter(char => char.isOfficial).slice(0, 8);
+    const popular = [...filteredCharacters]
+      .sort((a, b) => b.likesCount - a.likesCount)
+      .slice(0, 8);
+    const trending = [...filteredCharacters]
+      .sort((a, b) => parseInt(b.interactions.replace(/[^\d]/g, '')) - parseInt(a.interactions.replace(/[^\d]/g, '')))
+      .slice(0, 8);
+
+    return { forYou, featured, popular, trending };
+  }, [filteredCharacters]);
+
   return (
-    <div className="min-h-screen bg-black text-white">
-      <RoleplayHeader title="Roleplay Characters" showBackButton={false} />
+    <div className="min-h-screen bg-background">
+      <RoleplayHeader title="Roleplay" showBackButton={false} />
       
-      <main className="pt-12">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-purple-900/20 to-pink-900/20 border-b border-gray-800">
-          <div className="absolute inset-0 opacity-50"></div>
-          
-          <div className="relative px-4 py-8 text-center">
-            <h1 className="text-3xl md:text-4xl font-bold mb-4">
-              Immersive AI Roleplay
-            </h1>
-            <p className="text-gray-300 text-lg mb-6 max-w-2xl mx-auto">
-              Chat with intelligent characters in rich, interactive storylines. Create your own characters or explore our featured collection.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
-              <Button 
+      <main className="pt-header">
+        {/* Minimal Hero Section */}
+        <div className="border-b border-border/60">
+          <div className="max-w-6xl mx-auto px-4 py-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-medium text-foreground mb-1">
+                  Discover Characters
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Chat with AI characters or create your own
+                </p>
+              </div>
+              <button 
                 onClick={handleCreateCharacter}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Character
-              </Button>
-              <Button variant="outline" className="border-gray-600 text-gray-300 hover:bg-gray-800">
-                <Sparkles className="w-4 h-4 mr-2" />
-                Browse Featured
-              </Button>
+                <Plus className="w-4 h-4 inline mr-1" />
+                Create
+              </button>
             </div>
           </div>
         </div>
 
         {/* Search and Filters */}
-        <div className="px-4 py-6 border-b border-gray-800">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex flex-col md:flex-row gap-4 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+        <div className="border-b border-border/60">
+          <div className="max-w-6xl mx-auto px-4 py-4">
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
-                  placeholder="Search characters, stories, or tags..."
+                  placeholder="Search characters..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 bg-gray-900 border-gray-700 text-white placeholder-gray-400"
+                  className="pl-10 h-9 text-sm"
                 />
               </div>
               
               <div className="flex gap-2">
-                <Button
-                  variant={selectedFilter === 'all' ? 'default' : 'outline'}
-                  size="sm"
+                <PillFilter
+                  active={selectedFilter === 'all'}
                   onClick={() => setSelectedFilter('all')}
-                  className="h-10"
                 >
                   All
-                </Button>
-                <Button
-                  variant={selectedFilter === 'official' ? 'default' : 'outline'}
-                  size="sm"
+                </PillFilter>
+                <PillFilter
+                  active={selectedFilter === 'official'}
                   onClick={() => setSelectedFilter('official')}
-                  className="h-10"
                 >
-                  <Star className="w-3 h-3 mr-1" />
                   Featured
-                </Button>
-                <Button
-                  variant={selectedFilter === 'community' ? 'default' : 'outline'}
-                  size="sm"
+                </PillFilter>
+                <PillFilter
+                  active={selectedFilter === 'community'}
                   onClick={() => setSelectedFilter('community')}
-                  className="h-10"
                 >
-                  <Users className="w-3 h-3 mr-1" />
                   Community
-                </Button>
+                </PillFilter>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Character Grid */}
-        <div className="px-4 py-6">
-          <div className="max-w-6xl mx-auto">
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <div key={i} className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden animate-pulse">
-                    <div className="w-full h-48 bg-gray-800" />
-                    <div className="p-4 space-y-3">
-                      <div className="h-4 bg-gray-800 rounded w-3/4" />
-                      <div className="h-3 bg-gray-800 rounded w-1/2" />
-                      <div className="h-16 bg-gray-800 rounded" />
-                    </div>
-                  </div>
+        {/* Content Sections */}
+        <div className="max-w-6xl mx-auto px-4 py-6 space-y-8">
+          {/* Scenes Section */}
+          <section>
+            <SectionHeader title="Scenes" count={sampleScenes.length} className="mb-4" />
+            <HorizontalScroll>
+              {sampleScenes.map((scene) => (
+                <SceneCard
+                  key={scene.id}
+                  id={scene.id}
+                  title={scene.title}
+                  characterNames={scene.characterNames}
+                  gradient={scene.gradient}
+                  onClick={() => console.log('Scene clicked:', scene.id)}
+                />
+              ))}
+            </HorizontalScroll>
+          </section>
+
+          {/* For You Section */}
+          {!isLoading && categorizedCharacters.forYou.length > 0 && (
+            <section>
+              <SectionHeader title="For You" count={categorizedCharacters.forYou.length} className="mb-4" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {categorizedCharacters.forYou.map((character) => (
+                  <MinimalCharacterCard
+                    key={character.id}
+                    id={character.id}
+                    name={character.name}
+                    creator={character.creator}
+                    description={character.description}
+                    tags={character.tags}
+                    interactions={character.interactions}
+                    avatar={character.avatar}
+                    likesCount={character.likesCount}
+                    isOfficial={character.isOfficial}
+                    onClick={() => handleStartChat(character.id)}
+                    onLike={(e) => {
+                      e.stopPropagation();
+                      likeCharacter(character.id);
+                    }}
+                  />
                 ))}
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredCharacters.map((character) => (
-                <div
-                  key={character.id}
-                  className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden hover:border-purple-500 transition-colors group"
+            </section>
+          )}
+
+          {/* Featured Section */}
+          {!isLoading && categorizedCharacters.featured.length > 0 && (
+            <section>
+              <SectionHeader title="Featured" count={categorizedCharacters.featured.length} className="mb-4" />
+              <HorizontalScroll>
+                {categorizedCharacters.featured.map((character) => (
+                  <MinimalCharacterCard
+                    key={character.id}
+                    id={character.id}
+                    name={character.name}
+                    creator={character.creator}
+                    description={character.description}
+                    tags={character.tags}
+                    interactions={character.interactions}
+                    avatar={character.avatar}
+                    likesCount={character.likesCount}
+                    isOfficial={character.isOfficial}
+                    onClick={() => handleStartChat(character.id)}
+                    onLike={(e) => {
+                      e.stopPropagation();
+                      likeCharacter(character.id);
+                    }}
+                    className="w-64"
+                  />
+                ))}
+              </HorizontalScroll>
+            </section>
+          )}
+
+          {/* Popular Section */}
+          {!isLoading && categorizedCharacters.popular.length > 0 && (
+            <section>
+              <SectionHeader title="Popular" count={categorizedCharacters.popular.length} className="mb-4" />
+              <HorizontalScroll>
+                {categorizedCharacters.popular.map((character) => (
+                  <MinimalCharacterCard
+                    key={character.id}
+                    id={character.id}
+                    name={character.name}
+                    creator={character.creator}
+                    description={character.description}
+                    tags={character.tags}
+                    interactions={character.interactions}
+                    avatar={character.avatar}
+                    likesCount={character.likesCount}
+                    isOfficial={character.isOfficial}
+                    onClick={() => handleStartChat(character.id)}
+                    onLike={(e) => {
+                      e.stopPropagation();
+                      likeCharacter(character.id);
+                    }}
+                    className="w-64"
+                  />
+                ))}
+              </HorizontalScroll>
+            </section>
+          )}
+
+          {/* Trending Section */}
+          {!isLoading && categorizedCharacters.trending.length > 0 && (
+            <section>
+              <SectionHeader title="Trending" count={categorizedCharacters.trending.length} className="mb-4" />
+              <HorizontalScroll>
+                {categorizedCharacters.trending.map((character) => (
+                  <MinimalCharacterCard
+                    key={character.id}
+                    id={character.id}
+                    name={character.name}
+                    creator={character.creator}
+                    description={character.description}
+                    tags={character.tags}
+                    interactions={character.interactions}
+                    avatar={character.avatar}
+                    likesCount={character.likesCount}
+                    isOfficial={character.isOfficial}
+                    onClick={() => handleStartChat(character.id)}
+                    onLike={(e) => {
+                      e.stopPropagation();
+                      likeCharacter(character.id);
+                    }}
+                    className="w-64"
+                  />
+                ))}
+              </HorizontalScroll>
+            </section>
+          )}
+
+          {/* Loading State */}
+          {isLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="bg-card rounded-lg border border-border/60 overflow-hidden animate-pulse">
+                  <div className="p-3">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 bg-muted rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3 bg-muted rounded w-24" />
+                        <div className="h-2 bg-muted rounded w-16" />
+                      </div>
+                    </div>
+                    <div className="space-y-2 mb-3">
+                      <div className="h-2 bg-muted rounded" />
+                      <div className="h-2 bg-muted rounded w-3/4" />
+                    </div>
+                    <div className="h-6 bg-muted rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {!isLoading && filteredCharacters.length === 0 && (
+            <div className="text-center py-12">
+              <div className="bg-card rounded-lg border border-border/60 p-8 max-w-md mx-auto">
+                <h3 className="text-lg font-medium mb-2">No characters found</h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Try adjusting your search or create a new character.
+                </p>
+                <button 
+                  onClick={handleCreateCharacter}
+                  className="text-sm text-primary hover:text-primary/80 transition-colors"
                 >
-                  {/* Character Avatar */}
-                  <div className="relative">
-                    <img
-                      src={character.avatar}
-                      alt={character.name}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    
-                    {character.isOfficial && (
-                      <div className="absolute top-3 right-3">
-                        <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">
-                          Featured
-                        </span>
-                      </div>
-                    )}
-                    
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <h3 className="font-bold text-lg text-white mb-1">{character.name}</h3>
-                      <p className="text-gray-300 text-xs">by {character.creator}</p>
-                    </div>
-                  </div>
-
-                  {/* Character Info */}
-                  <div className="p-4">
-                    <p className="text-gray-300 text-sm mb-3 overflow-hidden text-ellipsis" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>
-                      {character.description}
-                    </p>
-                    
-                    {/* Tags */}
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {character.tags.slice(0, 3).map((tag) => (
-                        <span
-                          key={tag}
-                          className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {character.tags.length > 3 && (
-                        <span className="text-gray-400 text-xs px-2 py-1">
-                          +{character.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Stats */}
-                    <div className="flex items-center justify-between text-xs text-gray-400 mb-4">
-                      <span className="flex items-center gap-1">
-                        <MessageSquare className="w-3 h-3" />
-                        {character.interactions}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            likeCharacter(character.id);
-                          }}
-                          className="flex items-center gap-1 hover:text-red-400 transition-colors"
-                        >
-                          <Heart className="w-3 h-3" />
-                          {character.likesCount}
-                        </button>
-                        <span className="flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                          {character.rating.toFixed(1)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <Button
-                      onClick={() => handleStartChat(character.id)}
-                      className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                      size="sm"
-                    >
-                      <Play className="w-3 h-3 mr-2" />
-                      Start Chat
-                    </Button>
-                  </div>
-                </div>
-                ))}
+                  <Plus className="w-4 h-4 inline mr-1" />
+                  Create Character
+                </button>
               </div>
-            )}
-
-            {!isLoading && filteredCharacters.length === 0 && (
-              <div className="text-center py-12">
-                <div className="bg-gray-900 rounded-lg border border-gray-800 p-8 max-w-md mx-auto">
-                  <h3 className="text-lg font-medium mb-2">No characters found</h3>
-                  <p className="text-gray-400 mb-4">
-                    Try adjusting your search or create a new character.
-                  </p>
-                  <Button onClick={handleCreateCharacter} variant="outline">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Character
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
