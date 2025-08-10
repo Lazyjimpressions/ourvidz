@@ -29,6 +29,9 @@ import { SceneImageGenerator } from '@/components/playground/SceneImageGenerator
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleplaySidebar } from '@/components/roleplay/RoleplaySidebar';
 import { MessageBubble } from '@/components/playground/MessageBubble';
+import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { RoleplayPromptInput } from '@/components/roleplay/RoleplayPromptInput';
+import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/RoleplaySettingsModal';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,6 +45,20 @@ const RoleplayChatInterface = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showSceneGenerator, setShowSceneGenerator] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
+  
+  // Roleplay Settings
+  const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
+    contentMode: 'sfw',
+    responseStyle: 'detailed',
+    responseLength: 'medium',
+    autoSceneGeneration: false,
+    voiceModel: 'none',
+    enhancementModel: 'qwen_instruct',
+    sceneQuality: 'fast',
+    messageFrequency: 5
+  });
   
   // Get character data
   const characterId = searchParams.get('character');
@@ -144,7 +161,6 @@ const RoleplayChatInterface = () => {
         conversationId: state.activeConversationId 
       });
       setInputMessage('');
-      inputRef.current?.focus();
     } catch (error) {
       console.error('Failed to send message:', error);
       toast({
@@ -155,6 +171,14 @@ const RoleplayChatInterface = () => {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  const handleGenerateScene = async () => {
+    if (!inputMessage.trim() || isTyping) return;
+    
+    // Trigger scene generation with the current input
+    setShowSceneGenerator(true);
+    // Don't clear input in case user wants to modify the prompt
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -180,154 +204,113 @@ const RoleplayChatInterface = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex">
-      {/* Sidebar */}
-      <RoleplaySidebar
-        characterId={characterId || undefined}
-        userCharacterId={userCharacterId || undefined}
-        activeConversationId={state.activeConversationId || undefined}
-        onCharacterChange={handleCharacterChange}
-        onUserCharacterChange={handleUserCharacterChange}
-        onConversationSelect={handleConversationSelect}
-        onNewConversation={handleNewConversation}
-        onGenerateScene={() => setShowSceneGenerator(true)}
-        className={`${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 lg:translate-x-0`}
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      {/* Fixed Header */}
+      <RoleplayHeader 
+        title={character?.name ? `Chat with ${character.name}` : 'Roleplay Chat'}
+        showBackButton={true}
+        backPath="/roleplay"
       />
 
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800 bg-gray-900">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="lg:hidden"
-            >
-              {showSidebar ? <SidebarClose className="w-4 h-4" /> : <SidebarOpen className="w-4 h-4" />}
-            </Button>
-            
-            {character && (
-              <>
-                <Avatar className="w-8 h-8">
-                  <AvatarImage 
-                    src={character.reference_image_url || character.image_url} 
-                    alt={character.name}
-                  />
-                  <AvatarFallback>{character.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-medium">{character.name}</h3>
-                  <p className="text-xs text-gray-400">
-                    {isTyping ? 'Typing...' : 'Online'}
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setShowSceneGenerator(true)}
-            >
-              <ImageIcon className="w-4 h-4" />
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="icon"
-              onClick={() => navigate('/roleplay')}
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+      {/* Main Content Area with proper top padding for fixed header */}
+      <div className="flex flex-1 pt-16">
+        {/* Sidebar */}
+        <RoleplaySidebar
+          characterId={characterId || undefined}
+          userCharacterId={userCharacterId || undefined}
+          activeConversationId={state.activeConversationId || undefined}
+          onCharacterChange={handleCharacterChange}
+          onUserCharacterChange={handleUserCharacterChange}
+          onConversationSelect={handleConversationSelect}
+          onNewConversation={handleNewConversation}
+          onGenerateScene={() => setShowSceneGenerator(true)}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          className={`${showSidebar ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 lg:translate-x-0`}
+        />
 
-        {/* Chat Messages */}
-        <ScrollArea className="flex-1 p-4">
-          <div className="space-y-4">
-            {messages.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="bg-gray-900 rounded-lg border border-gray-800 p-8 max-w-md mx-auto">
-                  <h3 className="text-lg font-medium mb-2">
-                    Start chatting with {character?.name || 'your character'}
-                  </h3>
-                  <p className="text-gray-400 mb-4">
-                    Share your thoughts, ask questions, or begin a roleplay scenario.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => inputRef.current?.focus()}
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Start Conversation
-                  </Button>
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          {/* Chat Messages - with bottom padding for floating input */}
+          <ScrollArea className="flex-1 p-4 pb-32">
+            <div className="space-y-4">
+              {messages.length === 0 ? (
+                <div className="text-center py-12">
+                  <Card className="bg-card border border-border p-8 max-w-md mx-auto">
+                    <h3 className="text-lg font-medium mb-2">
+                      Start chatting with {character?.name || 'your character'}
+                    </h3>
+                    <p className="text-muted-foreground mb-4">
+                      Share your thoughts, ask questions, or begin a roleplay scenario.
+                    </p>
+                    <Button variant="outline">
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Start Conversation
+                    </Button>
+                  </Card>
                 </div>
-              </div>
-            ) : (
-              <>
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    mode="roleplay"
-                    roleplayTemplate={true}
-                  />
-                ))}
-              </>
-            )}
-            
-            {isTyping && (
-              <div className="flex items-center space-x-2 text-gray-400">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              ) : (
+                <>
+                  {messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      mode="roleplay"
+                      roleplayTemplate={true}
+                    />
+                  ))}
+                </>
+              )}
+              
+              {isTyping && (
+                <div className="flex items-center space-x-2 text-muted-foreground">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  </div>
+                  <span className="text-sm">{character?.name} is typing...</span>
                 </div>
-                <span className="text-sm">{character?.name} is typing...</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-
-        {/* Input Area */}
-        <div className="p-4 border-t border-gray-800 bg-gray-900">
-          <div className="flex gap-2">
-            <Textarea
-              ref={inputRef}
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={`Message ${character?.name || 'character'}...`}
-              className="flex-1 min-h-[40px] max-h-[120px] bg-gray-800 border-gray-700 resize-none"
-              disabled={isTyping || state.isLoadingMessage}
-            />
-            <Button
-              onClick={handleSendMessage}
-              disabled={!inputMessage.trim() || isTyping || state.isLoadingMessage}
-              className="bg-purple-600 hover:bg-purple-700 px-4"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
         </div>
       </div>
 
-      {/* Scene Generator Modal */}
+      {/* Floating Prompt Input */}
+      <RoleplayPromptInput
+        value={inputMessage}
+        onChange={setInputMessage}
+        onSend={handleSendMessage}
+        onGenerateScene={handleGenerateScene}
+        onOpenSettings={() => setShowSettingsModal(true)}
+        isDisabled={isTyping || state.isLoadingMessage}
+        characterName={character?.name}
+        mode={inputMode}
+        onModeChange={setInputMode}
+      />
+
+      {/* Modals */}
       {showSceneGenerator && (
         <SceneImageGenerator
-          messageContent={`Generate a scene for ${character?.name || 'character'}`}
+          messageContent={inputMessage || `Generate a scene for ${character?.name || 'character'}`}
           mode="roleplay"
           onImageGenerated={(assetId, imageUrl, bucket) => {
             console.log('Scene generated:', { assetId, imageUrl, bucket });
             setShowSceneGenerator(false);
+            // Clear input after successful scene generation
+            setInputMessage('');
           }}
           onGenerationStart={() => console.log('Scene generation started')}
         />
       )}
+
+      <RoleplaySettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        settings={roleplaySettings}
+        onSettingsChange={setRoleplaySettings}
+      />
     </div>
   );
 };

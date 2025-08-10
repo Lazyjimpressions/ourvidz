@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -31,39 +31,61 @@ export const SceneGenerationModal = ({
   const { createScene } = useCharacterScenes(characterId);
   const { toast } = useToast();
 
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationComplete = async (event: CustomEvent) => {
+      const { assetId, imageUrl, type } = event.detail;
+      
+      if (type === 'image' && assetId && imageUrl && characterId) {
+        try {
+          // Save to character_scenes table when generation completes
+          await createScene({
+            character_id: characterId,
+            conversation_id: conversationId || null,
+            image_url: imageUrl,
+            scene_prompt: prompt,
+            generation_metadata: {
+              style,
+              quality,
+              model: 'sdxl',
+              assetId,
+              timestamp: new Date().toISOString()
+            }
+          });
+
+          toast({
+            title: "Scene Saved!",
+            description: "Your scene has been generated and saved to the gallery",
+          });
+
+          onClose();
+          setPrompt('');
+        } catch (error) {
+          console.error('Failed to save scene:', error);
+          toast({
+            title: "Scene Generated",
+            description: "Image created but failed to save to gallery",
+            variant: "destructive",
+          });
+        }
+      }
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    return () => window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+  }, [characterId, conversationId, prompt, style, quality, createScene, toast, onClose]);
+
   const handleGenerateScene = async () => {
     if (!prompt.trim() || !characterId) return;
 
     try {
-      const result = await generateSceneImage(prompt, null, {
+      await generateSceneImage(prompt, null, {
         style,
         quality,
         useCharacterReference: !!character?.reference_image_url
       });
 
-      if (result) {
-        // Save to character_scenes table
-        await createScene({
-          character_id: characterId,
-          conversation_id: conversationId || null,
-          image_url: typeof result === 'string' ? result : (result as any)?.imageUrl || '',
-          scene_prompt: prompt,
-          generation_metadata: {
-            style,
-            quality,
-            model: 'sdxl',
-            timestamp: new Date().toISOString()
-          }
-        });
-
-        toast({
-          title: "Scene Generated!",
-          description: "Your scene has been created and saved",
-        });
-
-        onClose();
-        setPrompt('');
-      }
+      // Scene will be saved automatically when generation completes via event listener
     } catch (error) {
       console.error('Scene generation failed:', error);
       toast({

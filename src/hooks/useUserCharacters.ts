@@ -7,10 +7,20 @@ export interface UserCharacter {
   user_id: string;
   name: string;
   description: string;
-  personality?: string;
-  background?: string;
+  traits?: string;
   appearance_tags?: string[];
   image_url?: string;
+  persona?: string;
+  voice_tone?: string;
+  mood?: string;
+  creator_id?: string;
+  likes_count: number;
+  interaction_count: number;
+  reference_image_url?: string;
+  is_public: boolean;
+  role: string;
+  content_rating: string;
+  gender?: string;
   created_at: string;
   updated_at: string;
 }
@@ -46,7 +56,7 @@ export const useUserCharacters = () => {
     }
   };
 
-  const createUserCharacter = async (characterData: Omit<UserCharacter, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  const createUserCharacter = async (characterData: Pick<UserCharacter, 'name' | 'description' | 'traits' | 'appearance_tags' | 'persona' | 'image_url' | 'gender'>) => {
     if (!user?.id) throw new Error('User not authenticated');
     
     try {
@@ -56,7 +66,10 @@ export const useUserCharacters = () => {
           ...characterData,
           user_id: user.id,
           role: 'user',
-          is_public: false
+          is_public: false,
+          likes_count: 0,
+          interaction_count: 0,
+          content_rating: 'sfw'
         })
         .select()
         .single();
