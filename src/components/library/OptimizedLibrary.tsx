@@ -22,7 +22,7 @@ import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
 import { toast } from "sonner";
 
 export const OptimizedLibrary = () => {
-  console.log('🔍 OptimizedLibrary component rendering...');
+  console.log('🔍 OptimizedLibrary component rendering - v2...');
   const queryClient = useQueryClient();
   const { isMobile } = useMobileDetection();
   
