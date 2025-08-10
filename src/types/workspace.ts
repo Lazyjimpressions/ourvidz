@@ -15,6 +15,17 @@ export interface ReferenceImage {
   generationParams?: Record<string, any>;
 }
 
+// Reference metadata for exact copy functionality
+export interface ReferenceMetadata {
+  originalEnhancedPrompt: string;
+  originalSeed?: number;
+  originalGenerationParams?: any;
+  originalStyle?: string;
+  originalCameraAngle?: string;
+  originalShotType?: string;
+  aspectRatio?: string;
+}
+
 export interface VideoReferenceImages {
   start?: ReferenceImage;
   end?: ReferenceImage;

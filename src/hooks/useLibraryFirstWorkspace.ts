@@ -5,6 +5,8 @@ import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { useToast } from '@/hooks/use-toast';
 import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
 import { GenerationFormat } from '@/types/generation';
+import { ReferenceMetadata } from '@/types/workspace';
+import { modifyOriginalPrompt } from '@/utils/promptModification';
 
 // LIBRARY-FIRST: Simplified workspace state using library assets
 export interface LibraryFirstWorkspaceState {
@@ -35,6 +37,7 @@ export interface LibraryFirstWorkspaceState {
   workspaceAssets: UnifiedAsset[];
   activeJobId: string | null;
   lightboxIndex: number | null;
+  referenceMetadata: ReferenceMetadata | null;
   workspaceCleared: boolean;
   // Exact copy workflow
   exactCopyMode: boolean;
@@ -79,6 +82,7 @@ export interface LibraryFirstWorkspaceActions {
   setExactCopyMode: (on: boolean) => void;
   setUseOriginalParams: (on: boolean) => void;
   setLockSeed: (on: boolean) => void;
+  setReferenceMetadata: (metadata: ReferenceMetadata | null) => void;
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => any | null;
@@ -118,6 +122,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [workspaceCleared, setWorkspaceCleared] = useState(false);
   // Exact copy workflow state
   const [exactCopyMode, setExactCopyMode] = useState<boolean>(false);
+  const [referenceMetadata, setReferenceMetadata] = useState<ReferenceMetadata | null>(null);
   const [useOriginalParams, setUseOriginalParams] = useState<boolean>(false);
   const [lockSeed, setLockSeed] = useState<boolean>(false);
   
@@ -450,10 +455,41 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // LIBRARY-FIRST: Create generation request (always goes to library)
       const preserveStrength = 0.8; // High strength for exact copying
       
-      // For exact copy mode with reference images, use minimal prompt interference
-      const finalPrompt = exactCopyMode && (referenceImage || referenceImageUrl)
-        ? (prompt.trim() || 'high quality image')  // Minimal prompt for image-to-image
-        : (prompt.trim() || '');
+      // EXACT COPY MODE: Use original enhanced prompt as base
+      let finalPrompt: string;
+      let finalSeed: number | undefined;
+      let finalStyle: string = style;
+      let finalCameraAngle: string = cameraAngle;
+      let finalShotType: string = shotType;
+      
+      if (exactCopyMode && referenceMetadata) {
+        // Use original enhanced prompt as base
+        finalPrompt = referenceMetadata.originalEnhancedPrompt;
+        
+        // Apply user modification if provided
+        if (prompt.trim()) {
+          finalPrompt = modifyOriginalPrompt(finalPrompt, prompt.trim());
+        }
+        
+        // Use original seed
+        finalSeed = referenceMetadata.originalSeed;
+        
+        // Disable style controls - use original values
+        finalStyle = referenceMetadata.originalStyle || '';
+        finalCameraAngle = referenceMetadata.originalCameraAngle || 'eye_level';
+        finalShotType = referenceMetadata.originalShotType || 'wide';
+        
+        console.log('🎯 EXACT COPY MODE:', {
+          originalPrompt: referenceMetadata.originalEnhancedPrompt,
+          modifiedPrompt: finalPrompt,
+          originalSeed: finalSeed,
+          styleDisabled: true
+        });
+      } else {
+        // Normal generation flow
+        finalPrompt = prompt.trim() || '';
+        finalSeed = lockSeed && seed ? seed : undefined;
+      }
 
       const generationRequest = {
         format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
@@ -462,31 +498,32 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
           // This ensures content appears in both library and workspace views
-          user_requested_enhancement: enhancementModel !== 'none',
-          skip_enhancement: enhancementModel === 'none',
           // Reference image data - FIXED: Use reference_url instead of reference_image for queue-job compatibility
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
             reference_url: referenceImageUrl || (referenceImage ? await uploadReferenceImage(referenceImage) : undefined),
-            reference_strength: exactCopyMode ? preserveStrength : referenceStrength,
+            reference_strength: exactCopyMode ? 0.9 : referenceStrength,
             reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
             exact_copy_mode: exactCopyMode
           }),
           // Seed for character reproduction
-          ...(((lockSeed && seed) ? { seed } : {})),
+          ...(finalSeed && { seed: finalSeed }),
           // Video-specific parameters
           ...(mode === 'video' && {
             duration: videoDuration,
             motion_intensity: motionIntensity,
             sound_enabled: soundEnabled
           }),
-          // Control parameters
+          // Control parameters (disabled in exact copy mode)
           aspect_ratio: aspectRatio,
-          shot_type: shotType,
-          camera_angle: cameraAngle,
-          style: style,
+          shot_type: finalShotType,
+          camera_angle: finalCameraAngle,
+          style: finalStyle,
           enhancement_model: enhancementModel,
           contentType: contentType,
+          // Skip enhancement in exact copy mode
+          user_requested_enhancement: exactCopyMode ? false : (enhancementModel !== 'none'),
+          skip_enhancement: exactCopyMode ? true : (enhancementModel === 'none'),
           // Exact copy hint to edge/worker
           ...(exactCopyMode ? { exact_copy: true } : {})
         },
@@ -909,6 +946,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     workspaceAssets,
     activeJobId,
     lightboxIndex,
+    referenceMetadata,
     enhancementModel,
     exactCopyMode,
     useOriginalParams,
@@ -947,6 +985,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
+    setReferenceMetadata,
     getJobStats,
     getActiveJob,
     getJobById

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, Cog, X, Palette, Copy, Edit3 } from 'lucide-react';
+import { modifyOriginalPrompt } from '@/utils/promptModification';
 
 // Compact reference upload component
 const ReferenceImageUpload: React.FC<{
@@ -226,7 +227,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   useOriginalParams = false,
   onUseOriginalParamsChange,
   lockSeed = false,
-  onLockSeedChange
+  onLockSeedChange,
+  referenceMetadata = null,
+  onReferenceMetadataChange
 }) => {
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
@@ -399,11 +402,27 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <span className="text-[10px] font-medium">Exact Copy</span>
                       </div>
                     )}
-                    {exactCopyMode && prompt.length === 0 && (
-                      <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
-                        Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
-                      </div>
-                    )}
+                     {exactCopyMode && referenceMetadata && (
+                       <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
+                         <div className="font-medium text-foreground">Original Prompt:</div>
+                         <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
+                           {referenceMetadata.originalEnhancedPrompt}
+                         </div>
+                         {prompt.trim() && (
+                           <>
+                             <div className="font-medium text-foreground">Final Prompt:</div>
+                             <div className="text-primary text-[10px] max-h-8 overflow-y-auto">
+                               {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
+                             </div>
+                           </>
+                         )}
+                       </div>
+                     )}
+                     {exactCopyMode && !referenceMetadata && prompt.length === 0 && (
+                       <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
+                         Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
+                       </div>
+                     )}
                   </div>
                   
                   {/* Generate Button */}
@@ -491,8 +510,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <ChevronDown size={8} className="absolute right-1 top-1/2 transform -translate-y-1/2 text-muted-foreground pointer-events-none" />
                 </div>
 
-                {/* Mode-specific controls */}
-                {mode === 'image' ? (
+                 {/* Mode-specific controls - Disable in exact copy mode */}
+                 {mode === 'image' && !exactCopyMode ? (
                   <>
                     {/* Aspect Ratio Button */}
                     <button
@@ -693,23 +712,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </button>
                     
                     {/* Motion Intensity Button */}
-                    <button
-                      onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
-                      className={`p-0.5 rounded transition-colors ${
-                        motionIntensity > 0.5
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      <Zap size={10} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+                      <button
+                        onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
+                        className={`p-0.5 rounded transition-colors ${
+                          motionIntensity > 0.5
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        <Zap size={10} />
+                      </button>
+                    </>
+                  )}
+                  {exactCopyMode && mode === 'video' && (
+                    <div className="text-xs text-muted-foreground">
+                      Style controls disabled in exact copy mode
+                    </div>
+                  )}
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
+     </div>
+   );
 };

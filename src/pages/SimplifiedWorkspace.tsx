@@ -84,6 +84,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
+    setReferenceMetadata,
     applyAssetParamsFromItem,
     generate,
     clearWorkspace,
@@ -111,8 +112,20 @@ export const SimplifiedWorkspace: React.FC = () => {
   React.useEffect(() => {
     const handler = (e: Event) => {
       const custom = e as CustomEvent<{ jobId: string; url: string; assetId: string; type: string }>;
-      const { url } = custom.detail || {}; 
+      const { url, assetId } = custom.detail || {}; 
       if (!url) return;
+      
+      // Extract reference metadata for exact copy functionality
+      const asset = workspaceAssets.find(a => a.id === assetId);
+      if (asset && exactCopyMode) {
+        const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
+        const metadata = extractReferenceMetadata(asset);
+        if (metadata) {
+          setReferenceMetadata(metadata);
+          console.log('🎯 Reference metadata extracted:', metadata);
+        }
+      }
+      
       if (mode === 'image') {
         setReferenceImageUrl(url);
         setReferenceImage(null);
@@ -442,6 +455,8 @@ export const SimplifiedWorkspace: React.FC = () => {
             onUseOriginalParamsChange={setUseOriginalParams}
             lockSeed={lockSeed}
             onLockSeedChange={setLockSeed}
+          referenceMetadata={referenceMetadata}
+          onReferenceMetadataChange={setReferenceMetadata}
           />
         </div>
       </div>
