@@ -3,7 +3,7 @@
 **Date:** August 8, 2025  
 **Status:** ✅ **IMPLEMENTED - Library-First Event-Driven Workspace System**  
 **Phase:** Production Ready with Complete Library-First Architecture  
-**Last Updated:** August 9, 2025 - Implementation updated: useJobAsReference implemented, Lightbox UX/UI finalized, video thumbnails unified
+**Last Updated:** August 9, 2025 - `SimplifiedWorkspace` updated with Exact Copy wiring, job-as-reference listener; Lightbox finalized; video thumbnails unified
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
@@ -223,7 +223,7 @@ activeJobId: string | null
 ```
 
 ### **Component Architecture**
-- **SimplifiedWorkspace.tsx**: Main workspace page (433 lines)
+- **SimplifiedWorkspace.tsx**: Main workspace page (~504 lines) — floating footer controls, job-as-reference listener, Exact Copy wiring
 - **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping (322 lines)
 - **ContentCard.tsx**: Individual content cards with dismiss/delete actions (292 lines)
 - **SimplePromptInput.tsx**: Generation controls with URL reference support (707 lines)
@@ -234,7 +234,7 @@ activeJobId: string | null
 
 ### **1. Generation Flow**
 1. **User Input**: Enter prompt and configure settings
-2. **Reference Setup**: Upload file, drop URL, or drag workspace item
+2. **Reference Setup**: Upload file, drop URL, or drag workspace item; job-as-reference listener updates control box automatically
 3. **Job Creation**: `queue-job` creates job (defaults to library)
 4. **Generation**: Worker processes job and generates content
 5. **Library Storage**: Content stored directly in `images`/`videos` tables
@@ -242,7 +242,7 @@ activeJobId: string | null
 7. **Workspace Update**: Workspace listens for event and updates UI
 8. **Job Grouping**: Items automatically grouped by `job_id`
 9. **Display**: Content appears in workspace (today's content only)
-10. **Management**: User can dismiss content from workspace or delete permanently
+10. **Management**: User can dismiss content from workspace or delete permanently; Exact Copy img2img flow supported
 
 ### **2. Library-First Architecture**
 - **Single Destination**: All content goes to library tables
@@ -261,7 +261,7 @@ activeJobId: string | null
 - **Workspace Display**: Jobs shown with their associated items (today's content only)
 - **Dynamic Grid**: Adapts from 1 column (mobile) to 5 columns (desktop)
 - **Job Headers**: Each workspace job shows prompt preview and delete option
-- **Thumbnail Selector**: Right-side navigation with workspace job thumbnails
+- **Thumbnail Selector**: Right-side navigation with workspace job thumbnails (click-to-focus, hover-to-delete)
 - **Empty State**: Helpful message when no content exists
 
 ## **Current Implementation Status**
@@ -285,15 +285,15 @@ activeJobId: string | null
 ### **✅ Working Components**
 - **WorkspaceGrid.tsx**: LTX-style grid layout with job grouping (391 lines)
 - **ContentCard.tsx**: Individual content cards with dismiss/delete actions (292 lines)
-- **SimplePromptInput.tsx**: Generation controls with URL reference support (654 lines)
+- **SimplePromptInput.tsx**: Generation controls with URL reference support (654–707 lines depending on branch)
 - **useLibraryFirstWorkspace.ts**: Library-first state management with LTX features (822 lines)
 - **AssetService.ts**: Asset management with event emission
-- **SimplifiedWorkspace.tsx**: Main workspace page component (416 lines)
+- **SimplifiedWorkspace.tsx**: Main workspace page (~504 lines) — floating footer controls, job-as-reference listener, Exact Copy wiring
 - **WorkspaceHeader.tsx**: Page header with clear workspace functionality
 - **SimpleLightbox.tsx**: Enhanced lightbox modal with collapsible panels (658 lines)
 - **PillButton.tsx**: New UI component for action buttons (50 lines)
 
-### **✅ Recent Improvements (August 8, 2025)**
+### **✅ Recent Improvements (August 8–9, 2025)**
 - **Library-First Architecture**: All content generated directly to library
 - **Event-Driven Updates**: Workspace listens for library events
 - **Unified Asset System**: Single `UnifiedAsset` type for images and videos
@@ -311,8 +311,8 @@ activeJobId: string | null
 - **Enhanced Lightbox Modal**: Major upgrade with collapsible panels, improved UI, and new PillButton component
 - **Advanced Image Details**: Integration with useFetchImageDetails and useImageRegeneration hooks
 - **Improved Video Controls**: Enhanced video playback controls with mute/unmute functionality
- - **useJobAsReference Implemented (Aug 9)**: Added job-as-reference workflow via `workspace-use-job-as-reference` event and UI wiring in `SimplifiedWorkspace`
- - **Lightbox UX/UI Finalization (Aug 9)**: Repositioned close/collapse buttons, scrollable left pane, collapsible original/enhanced prompts, added template info
+ - **useJobAsReference Implemented (Aug 9)**: Added job-as-reference workflow via `workspace-use-job-as-reference` event and UI wiring in `SimplifiedWorkspace` (sets URL, clears file ref, mode-aware)
+ - **Lightbox UX/UI Finalization (Aug 9)**: Repositioned close/collapse buttons, scrollable left pane, collapsible original/enhanced prompts, added template info, pill layout polish
  - **Video Thumbnails Unified (Aug 9)**: Frontend consistently uses `videos.thumbnail_url` for posters; standardized fallback to `/video-thumbnail-placeholder.svg`; ensured signing of relative thumbnail paths
 
 ### **🔧 Known Issues & TODOs**
@@ -939,8 +939,8 @@ If fixes cause issues:
 ### **Priority 1: Complete TODO Items & UX/UI Improvements (This Week)**
 1. **Implement `useJobAsReference` Function** — ✅ Completed (Aug 9)
    - Implemented in `useLibraryFirstWorkspace.ts` with event dispatch `workspace-use-job-as-reference`
-   - Wired in `SimplifiedWorkspace.tsx` to set URL references (image/video aware)
-   - Integrated with existing URL-based reference system
+   - Wired in `SimplifiedWorkspace.tsx` to set URL references (image/video aware) and clear file refs
+   - Integrated with existing URL-based reference system; default ref strength set
 
 2. **Lightbox Modal UX/UI Improvements** — ✅ Completed (Aug 9)
    - Repositioned X/collapse buttons; resolved overlap and pill interference
@@ -1650,9 +1650,9 @@ This comprehensive plan provides a clear roadmap for the next 8 weeks of develop
    - Event-based integration; UI wired in `SimplifiedWorkspace`
 
 2. **Performance Optimizations** — In Progress
-   - Add virtual scrolling for large collections
-   - Implement progressive image loading
-   - Optimize database queries
+   - Virtual scrolling for large collections (planned)
+   - Progressive image loading (planned)
+   - Query tuning (ongoing)
 
 #### **Priority 2: Advanced Features (Next 2 Weeks)**
 1. **Advanced Search and Filtering**
