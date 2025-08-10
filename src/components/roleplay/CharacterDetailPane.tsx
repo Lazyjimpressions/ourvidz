@@ -20,7 +20,9 @@ import {
 import { cn } from '@/lib/utils';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { useSceneNavigation } from '@/hooks/useSceneNavigation';
 import { SceneCard } from './SceneCard';
+import { MultiCharacterSceneCard } from './MultiCharacterSceneCard';
 import { SceneGenerationModal } from './SceneGenerationModal';
 import { CharacterEditModal } from './CharacterEditModal';
 
@@ -44,6 +46,7 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const { character, isLoading, likeCharacter } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId);
+  const { startSceneChat } = useSceneNavigation();
 
   // Don't return null - let the parent handle conditional rendering
 
@@ -54,9 +57,13 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
     { id: 'history', label: 'History', icon: History },
   ] as const;
 
-  const handleSceneClick = (sceneId: string) => {
-    console.log('Scene clicked:', sceneId);
-    // Handle scene selection/generation
+  const handleSceneClick = (sceneId: string, participants?: any[]) => {
+    if (participants && participants.length > 0) {
+      startSceneChat(sceneId, participants);
+    } else {
+      // Single character scene
+      startSceneChat(sceneId, [{ id: characterId, name: character?.name }]);
+    }
   };
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -320,22 +327,39 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
                       <div key={i} className="bg-gray-100 rounded-lg aspect-[4/3] animate-pulse" />
                     ))}
                   </div>
-                ) : scenes.length > 0 ? (
-                  <div className="space-y-2">
-                    {scenes.map((scene) => (
-                      <div key={scene.id} className="w-full">
-                        <SceneCard
-                          id={scene.id}
-                          title={scene.scene_prompt || 'Untitled Scene'}
-                          characterNames={[character?.name || 'Character']}
-                          backgroundImage={scene.image_url}
-                          gradient="bg-gradient-to-br from-primary/20 to-primary/10"
-                          onClick={() => handleSceneClick(scene.id)}
-                          className="w-full"
-                        />
-                      </div>
-                    ))}
-                  </div>
+                 ) : scenes.length > 0 ? (
+                   <div className="space-y-2">
+                     {scenes.map((scene) => {
+                       const sceneMetadata = scene.generation_metadata || {};
+                       const isMultiCharacter = sceneMetadata.sceneType === 'multi' && sceneMetadata.participants?.length > 1;
+                       
+                       return (
+                         <div key={scene.id} className="w-full">
+                           {isMultiCharacter ? (
+                             <MultiCharacterSceneCard
+                               id={scene.id}
+                               title={scene.scene_prompt || 'Untitled Scene'}
+                               participants={sceneMetadata.participants || []}
+                               backgroundImage={scene.image_url}
+                               onClick={() => handleSceneClick(scene.id, sceneMetadata.participants)}
+                               onStartChat={() => handleSceneClick(scene.id, sceneMetadata.participants)}
+                               className="w-full"
+                             />
+                           ) : (
+                             <SceneCard
+                               id={scene.id}
+                               title={scene.scene_prompt || 'Untitled Scene'}
+                               characterNames={[character?.name || 'Character']}
+                               backgroundImage={scene.image_url}
+                               gradient="bg-gradient-to-br from-primary/20 to-primary/10"
+                               onClick={() => handleSceneClick(scene.id)}
+                               className="w-full"
+                             />
+                           )}
+                         </div>
+                       );
+                     })}
+                   </div>
                 ) : (
                   <div className="text-center py-6">
                     <ImageIcon className="w-6 h-6 text-gray-400 mx-auto mb-1" />

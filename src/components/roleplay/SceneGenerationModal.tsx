@@ -4,10 +4,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSceneGeneration } from '@/hooks/useSceneGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useToast } from '@/hooks/use-toast';
-import { Palette, Camera, Sparkles, Wand2 } from 'lucide-react';
+import { Palette, Camera, Sparkles, Wand2, Users, User } from 'lucide-react';
+import { CharacterMultiSelector } from './CharacterMultiSelector';
+
+interface CharacterParticipant {
+  id: string;
+  name: string;
+  role: 'ai' | 'user' | 'narrator';
+  image_url?: string;
+  reference_image_url?: string;
+  description?: string;
+}
 
 interface SceneGenerationModalProps {
   isOpen: boolean;
@@ -27,9 +38,25 @@ export const SceneGenerationModal = ({
   const [prompt, setPrompt] = useState('');
   const [style, setStyle] = useState<'lustify' | 'realistic' | 'artistic' | 'anime'>('lustify');
   const [quality, setQuality] = useState<'high' | 'fast'>('high');
+  const [sceneType, setSceneType] = useState<'single' | 'multi'>('single');
+  const [selectedCharacters, setSelectedCharacters] = useState<CharacterParticipant[]>([]);
   const { generateSceneImage, isGenerating } = useSceneGeneration();
   const { createScene } = useCharacterScenes(characterId);
   const { toast } = useToast();
+
+  // Initialize with primary character if provided
+  useEffect(() => {
+    if (character && selectedCharacters.length === 0) {
+      setSelectedCharacters([{
+        id: character.id,
+        name: character.name,
+        role: character.role === 'user' ? 'user' : 'ai',
+        image_url: character.image_url,
+        reference_image_url: character.reference_image_url,
+        description: character.description
+      }]);
+    }
+  }, [character, selectedCharacters.length]);
 
   // Listen for generation completion events
   useEffect(() => {
@@ -49,7 +76,14 @@ export const SceneGenerationModal = ({
               quality,
               model: 'sdxl',
               assetId,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              sceneType,
+              participants: selectedCharacters.map(char => ({
+                id: char.id,
+                name: char.name,
+                role: char.role
+              })),
+              primaryCharacter: characterId
             }
           });
 
@@ -73,16 +107,26 @@ export const SceneGenerationModal = ({
 
     window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
     return () => window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
-  }, [characterId, conversationId, prompt, style, quality, createScene, toast, onClose]);
+  }, [characterId, conversationId, prompt, style, quality, sceneType, selectedCharacters, createScene, toast, onClose]);
 
   const handleGenerateScene = async () => {
-    if (!prompt.trim() || !characterId) return;
+    if (!prompt.trim() || selectedCharacters.length === 0) return;
 
     try {
-      await generateSceneImage(prompt, null, {
+      // Build enhanced prompt with character information
+      let enhancedPrompt = prompt;
+      
+      if (sceneType === 'multi' && selectedCharacters.length > 1) {
+        const characterDescriptions = selectedCharacters
+          .map(char => `${char.name} (${char.role})`)
+          .join(', ');
+        enhancedPrompt = `${prompt} featuring ${characterDescriptions}`;
+      }
+
+      await generateSceneImage(enhancedPrompt, null, {
         style,
         quality,
-        useCharacterReference: !!character?.reference_image_url
+        useCharacterReference: selectedCharacters.some(char => !!char.reference_image_url)
       });
 
       // Scene will be saved automatically when generation completes via event listener
@@ -109,26 +153,61 @@ export const SceneGenerationModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg">
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Palette className="w-5 h-5" />
-            Generate Scene with {character?.name || 'Character'}
+            Generate Scene
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-gray-300 mb-2 block">
-              Scene Description
-            </label>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe the scene you want to generate..."
-              className="bg-gray-800 border-gray-700 min-h-[100px]"
+        <Tabs value={sceneType} onValueChange={(value) => setSceneType(value as any)} className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
+            <TabsTrigger value="single" className="flex items-center gap-2">
+              <User className="w-4 h-4" />
+              Single Character
+            </TabsTrigger>
+            <TabsTrigger value="multi" className="flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Multi-Character
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="single" className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-300 mb-2 block">
+                Scene Description
+              </label>
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder={`Describe a scene with ${character?.name || 'the character'}...`}
+                className="bg-gray-800 border-gray-700 min-h-[100px]"
+              />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="multi" className="space-y-4">
+            <CharacterMultiSelector
+              primaryCharacterId={characterId}
+              selectedCharacters={selectedCharacters}
+              onCharactersChange={setSelectedCharacters}
+              maxCharacters={3}
+              className="bg-gray-800 border border-gray-700 rounded-lg p-4"
             />
-          </div>
+            
+            <div>
+              <label className="text-sm font-medium text-gray-300 mb-2 block">
+                Multi-Character Scene Description
+              </label>
+              <Textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe the scene with multiple characters..."
+                className="bg-gray-800 border-gray-700 min-h-[100px]"
+              />
+            </div>
+          </TabsContent>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -164,11 +243,11 @@ export const SceneGenerationModal = ({
             </div>
           </div>
 
-          {character?.reference_image_url && (
+          {selectedCharacters.some(char => char.reference_image_url) && (
             <div className="p-3 bg-gray-800 rounded-lg border border-gray-700">
               <div className="flex items-center gap-2 text-sm text-gray-300">
                 <Camera className="w-4 h-4" />
-                <span>Character reference will be used for consistency</span>
+                <span>Character references will be used for consistency</span>
               </div>
             </div>
           )}
@@ -202,7 +281,7 @@ export const SceneGenerationModal = ({
             </Button>
             <Button
               onClick={handleGenerateScene}
-              disabled={!prompt.trim() || isGenerating}
+              disabled={!prompt.trim() || selectedCharacters.length === 0 || isGenerating}
               className="flex-1 bg-purple-600 hover:bg-purple-700"
             >
               {isGenerating ? (
@@ -218,7 +297,7 @@ export const SceneGenerationModal = ({
               )}
             </Button>
           </div>
-        </div>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
