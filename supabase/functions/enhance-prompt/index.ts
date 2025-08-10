@@ -308,7 +308,7 @@ class DynamicEnhancementOrchestrator {
 
       return {
         enhanced_prompt: optimized.enhanced_prompt,
-        strategy: `${template.template_name}_${workerType}`,
+        strategy: template.template_name, // Store original template name, not with _chat suffix
         template_name: template.template_name || 'dynamic',
         model_used: workerType === 'chat' ? 'qwen_instruct' : 'qwen_base',
         token_count: optimized.token_count,

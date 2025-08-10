@@ -351,8 +351,8 @@ export function SimpleLightbox({
             {/* Basic metadata always visible */}
             <div className="space-y-1 text-xs border-t border-border/20 pt-3">
               <div className="flex items-center gap-2">
-                <span className="text-muted-foreground w-16">Size:</span>
-                <span className="text-foreground">{currentItem.aspectRatio || 'Unknown'}</span>
+                <span className="text-muted-foreground w-16">Aspect Ratio:</span>
+                <span className="text-foreground">{currentItem.aspectRatio || currentItem.metadata?.aspect_ratio || 'Unknown'}</span>
               </div>
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
