@@ -169,6 +169,13 @@ interface SimplePromptInputProps {
   // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct') => void;
+  // Exact copy workflow
+  exactCopyMode?: boolean;
+  onExactCopyModeChange?: (on: boolean) => void;
+  useOriginalParams?: boolean;
+  onUseOriginalParamsChange?: (on: boolean) => void;
+  lockSeed?: boolean;
+  onLockSeedChange?: (on: boolean) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -213,7 +220,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   styleRef = null,
   onStyleRefChange,
   enhancementModel = 'qwen_instruct',
-  onEnhancementModelChange
+  onEnhancementModelChange,
+  exactCopyMode = false,
+  onExactCopyModeChange,
+  useOriginalParams = false,
+  onUseOriginalParamsChange,
+  lockSeed = false,
+  onLockSeedChange
 }) => {
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
@@ -222,7 +235,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isGenerating && prompt.trim()) {
+    if (!isGenerating && (prompt.trim() || exactCopyMode)) {
       onGenerate();
     }
   };
@@ -416,6 +429,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 >
                   SFW
                 </button>
+
+                {/* Exact Copy & Params Toggles (shown when reference is set) */}
+                {(referenceImage || referenceImageUrl) && (
+                  <div className="flex items-center gap-2 ml-2">
+                    <label className="flex items-center gap-1 text-[11px] text-foreground">
+                      <input type="checkbox" checked={exactCopyMode} onChange={(e) => onExactCopyModeChange?.(e.target.checked)} />
+                      Exact Copy
+                    </label>
+                    {referenceImageUrl !== null && (
+                      <>
+                        <label className="flex items-center gap-1 text-[11px] text-foreground">
+                          <input type="checkbox" checked={useOriginalParams} onChange={(e) => onUseOriginalParamsChange?.(e.target.checked)} />
+                          Use params
+                        </label>
+                        <label className="flex items-center gap-1 text-[11px] text-foreground">
+                          <input type="checkbox" checked={lockSeed} onChange={(e) => onLockSeedChange?.(e.target.checked)} />
+                          Lock seed
+                        </label>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Enhancement Model Dropdown */}
                 <div className="relative">

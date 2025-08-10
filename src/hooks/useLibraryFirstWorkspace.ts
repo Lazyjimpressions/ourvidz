@@ -36,6 +36,10 @@ export interface LibraryFirstWorkspaceState {
   activeJobId: string | null;
   lightboxIndex: number | null;
   workspaceCleared: boolean;
+  // Exact copy workflow
+  exactCopyMode: boolean;
+  useOriginalParams: boolean;
+  lockSeed: boolean;
   
   // Enhancement Model Selection
   enhancementModel: 'qwen_base' | 'qwen_instruct';
@@ -71,6 +75,9 @@ export interface LibraryFirstWorkspaceActions {
   dismissJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
+  setExactCopyMode: (on: boolean) => void;
+  setUseOriginalParams: (on: boolean) => void;
+  setLockSeed: (on: boolean) => void;
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => any | null;
@@ -108,6 +115,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [workspaceCleared, setWorkspaceCleared] = useState(false);
+  // Exact copy workflow state
+  const [exactCopyMode, setExactCopyMode] = useState<boolean>(false);
+  const [useOriginalParams, setUseOriginalParams] = useState<boolean>(false);
+  const [lockSeed, setLockSeed] = useState<boolean>(false);
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct'>('qwen_instruct');
@@ -403,7 +414,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     endingRefImageUrl?: string | null,
     seed?: number | null
   ) => {
-    if (!prompt.trim()) {
+    if (!prompt.trim() && !exactCopyMode) {
       toast({
         title: "Prompt Required",
         description: "Please enter a prompt to generate content",
@@ -430,9 +441,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       };
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
+      const preserveStrength = 0.1;
       const generationRequest = {
         format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
-        prompt: prompt.trim(),
+        prompt: (prompt.trim() || ''),
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
@@ -441,13 +453,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           // Reference image data
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
-            reference_strength: referenceStrength,
+            reference_strength: exactCopyMode ? preserveStrength : referenceStrength,
             reference_type: 'character' as const
           }),
           // Seed for character reproduction
-          ...(seed && {
-            seed: seed
-          }),
+          ...(((lockSeed && seed) ? { seed } : {})),
           // Video-specific parameters
           ...(mode === 'video' && {
             duration: videoDuration,
@@ -460,7 +470,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           camera_angle: cameraAngle,
           style: style,
           enhancement_model: enhancementModel,
-          contentType: contentType
+          contentType: contentType,
+          // Exact copy hint to edge/worker
+          ...(exactCopyMode ? { exact_copy: true } : {})
         },
         // Reference image URLs
         ...(referenceImageUrl ? 
@@ -824,6 +836,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     activeJobId,
     lightboxIndex,
     enhancementModel,
+    exactCopyMode,
+    useOriginalParams,
+    lockSeed,
     
     // Actions
     updateMode: setMode,
@@ -854,6 +869,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     dismissJob,
     saveJob,
     useJobAsReference,
+    setExactCopyMode,
+    setUseOriginalParams,
+    setLockSeed,
     getJobStats,
     getActiveJob,
     getJobById

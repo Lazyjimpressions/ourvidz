@@ -77,6 +77,13 @@ export const SimplifiedWorkspace: React.FC = () => {
     setStyle,
     setStyleRef,
     setEnhancementModel,
+    // Exact copy workflow
+    exactCopyMode,
+    useOriginalParams,
+    lockSeed,
+    setExactCopyMode,
+    setUseOriginalParams,
+    setLockSeed,
     generate,
     clearWorkspace,
     deleteItem,
@@ -127,7 +134,11 @@ export const SimplifiedWorkspace: React.FC = () => {
     
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);
-    setReferenceStrength(0.7); // Default strength for img2img
+    // Exact copy defaults
+    setReferenceStrength(0.1);
+    setExactCopyMode(true);
+    setUseOriginalParams(true);
+    if (item.metadata?.seed) setLockSeed(true);
     
     // Set the seed for character reproduction
     if (item.metadata?.seed) {
