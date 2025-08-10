@@ -346,27 +346,30 @@ serve(async (req)=>{
       }
     }
 
-    // Use prompt from metadata if no project prompt available
-    if (!prompt && metadata?.prompt) {
-      prompt = metadata.prompt;
-      console.log('📝 Using metadata prompt');
+    // CRITICAL FIX: Use originalPrompt first, then metadata.prompt, never UI controls as main prompt
+    if (!prompt) {
+      prompt = originalPrompt || metadata?.prompt || '';
+      console.log('📝 Using provided prompt:', {
+        source: originalPrompt ? 'originalPrompt' : 'metadata.prompt',
+        length: prompt.length
+      });
     }
 
-    // Detect content tier for dynamic negative prompt selection
-    const contentTier = await detectContentTier(prompt);
+    // Detect content tier for dynamic negative prompt selection - use actual user prompt, not UI controls
+    const contentTier = await detectContentTier(originalPrompt || metadata?.prompt || prompt);
 
     // **PHASE 1 IMPLEMENTATION**: Call enhance-prompt before job submission
     let enhancementResult = null;
-    // CRITICAL FIX: Preserve actual user input from metadata.prompt - separate original vs enhanced
+    // CRITICAL FIX: Preserve actual user input - NEVER use UI controls as original prompt
     const preservedOriginalPrompt = originalPrompt || metadata?.prompt || prompt;
-    let workingPrompt = enhancedPrompt || prompt; // Use enhanced if provided, fallback to original
+    let workingPrompt = enhancedPrompt || (originalPrompt || metadata?.prompt || prompt); // Use enhanced if provided, fallback to actual user prompt
     let enhancementStrategy = 'none';
     let enhancementTimeMs = 0;
     let qwenExpansionPercentage = null;
     let qualityImprovement = null;
     
-    // Only enhance if user explicitly requested enhancement
-    if (prompt && metadata?.user_requested_enhancement === true) {
+    // Only enhance if user explicitly requested enhancement and we have a valid prompt
+    if (preservedOriginalPrompt && preservedOriginalPrompt.trim() && metadata?.user_requested_enhancement === true) {
       try {
         console.log('🚀 Calling enhance-prompt function for job:', jobType);
         const enhancementStartTime = Date.now();
@@ -467,6 +470,12 @@ serve(async (req)=>{
     
     // Apply UI controls to working prompt to create final prompt
     function applyUIControlsToPrompt(prompt: string, metadata: any): string {
+      // CRITICAL FIX: Only apply UI controls if we have a valid prompt
+      if (!prompt || !prompt.trim()) {
+        console.log('⚠️ No valid prompt provided for UI controls');
+        return '';
+      }
+      
       if (!metadata) return prompt;
       
       const uiControlParts = [];
@@ -486,15 +495,19 @@ serve(async (req)=>{
         uiControlParts.push(metadata.style);
       }
       
-      // Combine enhanced prompt with UI controls
-      const finalPrompt = [prompt, ...uiControlParts].filter(Boolean).join(', ');
+      // CRITICAL FIX: Ensure we append to the enhanced/original prompt, never replace it
+      const finalPrompt = uiControlParts.length > 0 
+        ? [prompt.trim(), ...uiControlParts].filter(Boolean).join(', ')
+        : prompt.trim();
       
       console.log('🎨 UI Controls applied to prompt:', {
         originalPrompt: prompt.substring(0, 100) + (prompt.length > 100 ? '...' : ''),
         uiControls: uiControlParts,
         finalPrompt: finalPrompt.substring(0, 150) + (finalPrompt.length > 150 ? '...' : ''),
         addedTokens: uiControlParts.join(', ').split(' ').length,
-        finalTokenCount: finalPrompt.split(' ').length
+        finalTokenCount: finalPrompt.split(' ').length,
+        promptWasEmpty: !prompt.trim(),
+        controlsAdded: uiControlParts.length
       });
       
       return finalPrompt;

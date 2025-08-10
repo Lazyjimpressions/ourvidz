@@ -102,7 +102,8 @@ export class GenerationService {
 
       const sanitizedBody = sanitizeRequest({
         ...jobBody,
-        originalPrompt: request.originalPrompt,
+        // CRITICAL FIX: Ensure originalPrompt is sent correctly
+        originalPrompt: request.originalPrompt || request.prompt,
         enhancedPrompt: request.enhancedPrompt,
         isPromptEnhanced: request.isPromptEnhanced,
         enhancementMetadata: sanitizeRequest(request.enhancementMetadata),
@@ -113,6 +114,8 @@ export class GenerationService {
         // Pass exact copy mode for enhancement bypass
         metadata: {
           ...sanitizeRequest(request.metadata),
+          // CRITICAL FIX: Ensure prompt is also in metadata as fallback
+          prompt: request.originalPrompt || request.prompt,
           exact_copy_mode: request.metadata?.exact_copy_mode
         }
       });
