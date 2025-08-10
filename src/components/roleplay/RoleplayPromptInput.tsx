@@ -71,161 +71,29 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
   };
 
   return (
-    <Card className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-4xl bg-background/95 backdrop-blur-sm border border-border shadow-lg">
-      <div className="p-3">
-        {/* Mode Toggle & Controls Row */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            {/* Mode Toggle */}
-            <div className="flex rounded-md border border-border overflow-hidden">
-              <Button
-                variant={mode === 'chat' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => onModeChange?.('chat')}
-                className="rounded-none h-7 px-3"
-              >
-                <MessageCircle className="w-3 h-3 mr-1" />
-                Chat
-              </Button>
-              <Button
-                variant={mode === 'scene' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => onModeChange?.('scene')}
-                className="rounded-none h-7 px-3"
-              >
-                <ImageIcon className="w-3 h-3 mr-1" />
-                Scene
-              </Button>
-            </div>
-
-            {/* Quick Scene Ideas */}
-            {mode === 'scene' && (
-              <div className="flex gap-1">
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs cursor-pointer hover:bg-secondary/80"
-                  onClick={() => onChange(`${characterName} in a cozy coffee shop, warm lighting`)}
-                >
-                  Coffee Shop
-                </Badge>
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs cursor-pointer hover:bg-secondary/80"
-                  onClick={() => onChange(`${characterName} walking through a mystical forest at sunset`)}
-                >
-                  Forest
-                </Badge>
-                <Badge 
-                  variant="secondary" 
-                  className="text-xs cursor-pointer hover:bg-secondary/80"
-                  onClick={() => onChange(`${characterName} in an elegant ballroom, dramatic lighting`)}
-                >
-                  Ballroom
-                </Badge>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            {/* Reference Upload Toggle */}
-            <Button
-              variant={showReferences ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setShowReferences(!showReferences)}
-              className="h-7 px-2"
-            >
-              <Camera className="w-3 h-3" />
-            </Button>
-
-            {/* Settings */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onOpenSettings}
-              className="h-7 px-2"
-            >
-              <Settings className="w-3 h-3" />
-            </Button>
-          </div>
+    <div className="bg-white/95 backdrop-blur-sm border-t border-gray-200">
+      {/* Main Input Row */}
+      <form onSubmit={handleSubmit} className="flex items-center gap-2 p-2">
+        <div className="flex-1">
+          <Textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyPress}
+            placeholder={`Message ${characterName}...`}
+            className="min-h-[32px] max-h-[80px] resize-none bg-white border border-gray-200 rounded-full px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            disabled={isDisabled}
+          />
         </div>
 
-        {/* Reference Upload Area */}
-        {showReferences && (
-          <div className="mb-2 p-2 border border-border rounded-md bg-muted/50">
-            <div className="flex items-center gap-2">
-              {referenceImage ? (
-                <div className="relative">
-                  <img
-                    src={URL.createObjectURL(referenceImage)}
-                    alt="Reference"
-                    className="w-12 h-12 object-cover rounded border"
-                  />
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={clearReference}
-                    className="absolute -top-1 -right-1 h-4 w-4 p-0 rounded-full"
-                  >
-                    <X className="w-2 h-2" />
-                  </Button>
-                </div>
-              ) : (
-                <label className="cursor-pointer flex items-center justify-center w-12 h-12 border border-dashed border-border rounded hover:bg-muted/80">
-                  <Upload className="w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {mode === 'scene' ? 'Reference image for scene generation' : 'Reference image for context'}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Main Input Row */}
-        <form onSubmit={handleSubmit} className="flex items-end gap-2">
-          <div className="flex-1">
-            <Textarea
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={
-                mode === 'chat' 
-                  ? `Message ${characterName}...` 
-                  : `Describe a scene with ${characterName}...`
-              }
-              className="min-h-[60px] max-h-[120px] resize-none bg-background border-border"
-              disabled={isDisabled}
-            />
-            
-            {/* Prompt Counter */}
-            <div className="mt-1">
-              <PromptCounter 
-                text={value} 
-                mode="roleplay" 
-                className="text-right"
-              />
-            </div>
-          </div>
-
-          <Button
-            type="submit"
-            disabled={!value.trim() || isDisabled}
-            className="h-16 w-16 flex-shrink-0"
-          >
-            {mode === 'chat' ? (
-              <Send className="w-4 h-4" />
-            ) : (
-              <ImageIcon className="w-4 h-4" />
-            )}
-          </Button>
-        </form>
-      </div>
-    </Card>
+        <Button
+          type="submit"
+          disabled={!value.trim() || isDisabled}
+          size="sm"
+          className="h-8 w-8 p-0 rounded-full bg-blue-500 hover:bg-blue-600 text-white"
+        >
+          <Send className="w-3 h-3" />
+        </Button>
+      </form>
+    </div>
   );
 };

@@ -206,63 +206,63 @@ const RoleplayChatInterface = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex">
+    <div className="min-h-screen bg-white flex">
       {/* Left Sidebar */}
       <RoleplayLeftSidebar />
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Header */}
-        <div className="h-14 border-b border-border flex items-center justify-between px-4">
-          <div className="flex items-center gap-3">
+        <div className="h-12 border-b border-gray-200 flex items-center justify-between px-3">
+          <div className="flex items-center gap-2">
             {character && (
               <>
                 <img
                   src={character.reference_image_url || character.image_url || `https://api.dicebear.com/7.x/personas/svg?seed=${character.name}`}
                   alt={character.name}
-                  className="w-8 h-8 rounded-full object-cover"
+                  className="w-6 h-6 rounded-full object-cover"
                 />
                 <div>
-                  <h1 className="font-medium text-foreground">{character.name}</h1>
-                  <p className="text-xs text-muted-foreground">AI Character</p>
+                  <h1 className="font-medium text-gray-900 text-sm">{character.name}</h1>
+                  <p className="text-xs text-gray-500">AI Character</p>
                 </div>
               </>
             )}
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowRightPane(!showRightPane)}
-              className="h-8 w-8 p-0"
+              className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
             >
               {showRightPane ? (
-                <PanelRightClose className="w-4 h-4" />
+                <PanelRightClose className="w-3 h-3" />
               ) : (
-                <PanelRightOpen className="w-4 h-4" />
+                <PanelRightOpen className="w-3 h-3" />
               )}
             </Button>
           </div>
         </div>
 
-        {/* Chat Messages - with bottom padding for floating input */}
-        <ScrollArea className="flex-1 p-4 pb-32">
-          <div className="max-w-4xl mx-auto space-y-4">
+        {/* Chat Messages - with bottom padding for input */}
+        <ScrollArea className="flex-1 p-3 pb-16">
+          <div className="max-w-2xl mx-auto space-y-2">
             {messages.length === 0 ? (
-              <div className="text-center py-12">
-                <Card className="bg-card border border-border p-8 max-w-md mx-auto">
-                  <h3 className="text-lg font-medium mb-2">
+              <div className="text-center py-8">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 max-w-md mx-auto">
+                  <h3 className="text-base font-medium mb-2 text-gray-900">
                     Start chatting with {character?.name || 'your character'}
                   </h3>
-                  <p className="text-muted-foreground mb-4">
+                  <p className="text-gray-600 text-sm mb-3">
                     Share your thoughts, ask questions, or begin a roleplay scenario.
                   </p>
-                  <Button variant="outline">
-                    <Sparkles className="w-4 h-4 mr-2" />
+                  <Button variant="outline" size="sm" className="text-xs">
+                    <Sparkles className="w-3 h-3 mr-1" />
                     Start Conversation
                   </Button>
-                </Card>
+                </div>
               </div>
             ) : (
               <>
@@ -278,13 +278,13 @@ const RoleplayChatInterface = () => {
             )}
             
             {isTyping && (
-              <div className="flex items-center space-x-2 text-muted-foreground">
+              <div className="flex items-center space-x-2 text-gray-500 text-sm">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
-                <span className="text-sm">{character?.name} is typing...</span>
+                <span className="text-xs">{character?.name} is typing...</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -293,7 +293,7 @@ const RoleplayChatInterface = () => {
       </div>
 
       {/* Right Character Detail Pane */}
-      {characterId && (
+      {characterId && showRightPane && (
         <CharacterDetailPane
           characterId={characterId}
           isOpen={showRightPane}
@@ -301,21 +301,19 @@ const RoleplayChatInterface = () => {
         />
       )}
 
-      {/* Floating Prompt Input */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-sm border-t border-border">
-        <div className="max-w-4xl mx-auto">
-          <RoleplayPromptInput
-            value={inputMessage}
-            onChange={setInputMessage}
-            onSend={handleSendMessage}
-            onGenerateScene={handleGenerateScene}
-            onOpenSettings={() => setShowSettingsModal(true)}
-            isDisabled={isTyping || state.isLoadingMessage}
-            characterName={character?.name}
-            mode={inputMode}
-            onModeChange={setInputMode}
-          />
-        </div>
+      {/* Fixed Input Footer */}
+      <div className="absolute bottom-0 left-64 right-0">
+        <RoleplayPromptInput
+          value={inputMessage}
+          onChange={setInputMessage}
+          onSend={handleSendMessage}
+          onGenerateScene={handleGenerateScene}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          isDisabled={isTyping || state.isLoadingMessage}
+          characterName={character?.name}
+          mode={inputMode}
+          onModeChange={setInputMode}
+        />
       </div>
 
       {/* Modals */}
@@ -348,7 +346,7 @@ const RoleplayChat = () => {
   return (
     <GeneratedMediaProvider>
       <PlaygroundProvider>
-        <div className="bg-background">
+        <div className="bg-white">
           <RoleplayChatInterface />
         </div>
       </PlaygroundProvider>
