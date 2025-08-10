@@ -13,46 +13,59 @@ export const extractReferenceMetadata = async (asset: UnifiedAsset): Promise<Ref
       hasMetadata: !!asset.metadata,
       metadataKeys: asset.metadata ? Object.keys(asset.metadata) : 'none',
       hasEnhancedPrompt: !!asset.enhancedPrompt,
-      hasPrompt: !!asset.prompt
+      hasPrompt: !!asset.prompt,
+      jobIdLocation: (asset as any).job_id ? 'direct' : (asset.metadata?.job_id ? 'metadata' : 'none')
     });
     
     const metadata = asset.metadata as any;
     
-    // Extract enhanced prompt (try multiple sources and check job data)
-    let originalEnhancedPrompt = 
-      metadata?.enhanced_prompt || 
-      asset.enhancedPrompt || 
-      metadata?.prompt ||
-      asset.prompt;
+    // PRIORITY 1: Look for enhanced prompt in asset first (proper camelCase)
+    let originalEnhancedPrompt = asset.enhancedPrompt;
     
-    // If we have a job_id but no enhanced prompt, try to get it from the job
-    if (!originalEnhancedPrompt && (asset as any).job_id) {
-      console.log('🎯 No enhanced prompt found in asset, checking job data...');
+    // PRIORITY 2: Check metadata for enhanced_prompt (snake_case from DB)
+    if (!originalEnhancedPrompt) {
+      originalEnhancedPrompt = metadata?.enhanced_prompt;
+    }
+    
+    // PRIORITY 3: Fallback to regular prompt if no enhanced prompt
+    if (!originalEnhancedPrompt) {
+      originalEnhancedPrompt = asset.prompt || metadata?.prompt;
+    }
+    
+    // PRIORITY 4: Job table fallback - check all possible job_id locations
+    const jobId = (asset as any).job_id || metadata?.job_id || metadata?.job_metadata?.id;
+    
+    if (!originalEnhancedPrompt && jobId) {
+      console.log('🎯 No enhanced prompt found in asset, checking job data with ID:', jobId);
       
       try {
         const { data: jobData } = await supabase
           .from('jobs')
-          .select('metadata')
-          .eq('id', (asset as any).job_id)
+          .select('enhanced_prompt, metadata, original_prompt')
+          .eq('id', jobId)
           .single();
         
-        if (jobData?.metadata) {
-          const jobMetadata = jobData.metadata as any;
+        if (jobData) {
+          // Try direct fields first, then metadata
           originalEnhancedPrompt = 
-            jobMetadata?.enhanced_prompt ||
-            jobMetadata?.prompt ||
-            jobMetadata?.original_prompt;
+            jobData.enhanced_prompt ||
+            (jobData.metadata as any)?.enhanced_prompt ||
+            jobData.original_prompt ||
+            (jobData.metadata as any)?.prompt;
           
-          console.log('🎯 Found enhanced prompt from job metadata:', {
-            jobId: (asset as any).job_id,
-            enhancedPrompt: jobMetadata?.enhanced_prompt,
-            prompt: jobMetadata?.prompt,
-            originalPrompt: jobMetadata?.original_prompt,
+          console.log('🎯 Found enhanced prompt from job table:', {
+            jobId,
+            directEnhanced: jobData.enhanced_prompt,
+            metadataEnhanced: (jobData.metadata as any)?.enhanced_prompt,
+            directOriginal: jobData.original_prompt,
+            metadataPrompt: (jobData.metadata as any)?.prompt,
             finalEnhancedPrompt: originalEnhancedPrompt
           });
+        } else {
+          console.warn('🎯 No job data found for ID:', jobId);
         }
       } catch (error) {
-        console.warn('🎯 Failed to fetch job data:', error);
+        console.warn('🎯 Failed to fetch job data for ID:', jobId, error);
       }
     }
     

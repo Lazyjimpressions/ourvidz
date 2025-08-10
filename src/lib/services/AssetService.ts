@@ -471,7 +471,7 @@ export class AssetService {
       // Get the first job from the jobs array (most recent)
       const jobData = (image.jobs as any[])?.[0] || null;
 
-      // Include job information in metadata
+      // Include job information in metadata with enhanced prompt fallback
       const resolvedJobId = (image as any)?.job_id || jobData?.id || metadata?.job_id || null;
       const enhancedMetadata = {
         ...metadata,
@@ -479,7 +479,12 @@ export class AssetService {
         job_id: resolvedJobId,
         job_type: jobData?.job_type,
         job_model_type: jobData?.model_type,
-        job_metadata: jobData?.metadata
+        job_metadata: {
+          ...jobData?.metadata,
+          // Ensure enhanced_prompt is available in job metadata for exact copy
+          enhanced_prompt: jobData?.metadata?.enhanced_prompt || image.enhanced_prompt,
+          original_prompt: jobData?.metadata?.original_prompt || image.prompt
+        }
       };
 
       return {
