@@ -297,6 +297,18 @@ You say: ...`;
       templateContext = 'sdxl_conversion';
     } else if (isSceneGenerationRequest) {
       templateContext = 'scene_narrative_generation';
+      console.log('🎬 Scene generation detected, using scene_narrative_generation context');
+      
+      // Extract scene details for better context
+      const sceneMatch = message.match(/\[SCENE_GENERATION\]\s*(.*?)(?:\s*\[|$)/);
+      const charactersMatch = message.match(/\[CHARACTERS:\s*(.*?)\]/);
+      const contextMatch = message.match(/\[CONTEXT:\s*(.*?)\]/);
+      
+      console.log('Scene details:', {
+        scene: sceneMatch?.[1],
+        characters: charactersMatch?.[1],
+        context: contextMatch?.[1]
+      });
     }
 
     // Get system prompt from cache and track origin
@@ -342,6 +354,10 @@ You say: ...`;
         .replace(/\{\{character_name\}\}/g, characterData.name || 'Character')
         .replace(/\{\{character_description\}\}/g, characterData.description || '')
         .replace(/\{\{character_personality\}\}/g, characterData.persona || '');
+      
+      // Add scene generation specific instruction
+      systemPrompt += '\n\nYou are now setting the scene as a narrator. Begin with "**Narrator:**" and describe the scene in vivid detail, setting the atmosphere and context for the roleplay.';
+      console.log('🎭 Added scene generation instruction to system prompt');
     }
 
     console.log('Dynamic System Prompt Selection:', {

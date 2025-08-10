@@ -16,7 +16,7 @@ interface SceneNarrativeOptions {
   includeUserCharacter?: boolean;
   characterId?: string;
   conversationId?: string;
-  characterNames?: string;
+  userCharacterId?: string;
 }
 
 export const useSceneNarrative = () => {
@@ -50,14 +50,16 @@ export const useSceneNarrative = () => {
         enhancedPrompt += ` [CONTEXT: ${context.join(',')}]`;
       }
 
+      console.log('Sending scene generation prompt:', enhancedPrompt);
+
       // Send the scene generation request
       await sendMessage(enhancedPrompt, {
         characterId: options.characterId,
         conversationId: options.conversationId
       });
 
-      toast.success('Scene description generated!', {
-        description: 'The scene narrative has been added to your conversation'
+      toast.success('Scene narrative being generated...', {
+        description: 'The scene will appear in your conversation shortly'
       });
 
     } catch (error) {
