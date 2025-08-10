@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
   Search, 
   Plus, 
-  Bot, 
+  MessageCircle, 
   Sparkles, 
   Calendar,
   MessageSquare,
@@ -97,9 +97,9 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
             className="h-8 px-2 text-muted-foreground hover:text-foreground justify-start"
           >
             <div className="w-4 h-4 bg-primary rounded-sm flex items-center justify-center mr-2">
-              <Bot className="w-2 h-2 text-primary-foreground" />
+              <MessageCircle className="w-2 h-2 text-primary-foreground" />
             </div>
-            OurVidz
+            Back to OurVidz
           </Button>
         </div>
         
@@ -140,7 +140,7 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
           className="w-full justify-start h-7 text-xs font-normal text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => navigate('/roleplay/avatars')}
         >
-          <Bot className="w-3 h-3 mr-2" />
+          <MessageCircle className="w-3 h-3 mr-2" />
           AvatarFX
         </Button>
       </div>

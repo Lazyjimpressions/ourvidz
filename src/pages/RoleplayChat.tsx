@@ -238,7 +238,7 @@ const RoleplayChatInterface = () => {
   }
 
   return (
-    <div className="h-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-screen bg-background text-foreground flex flex-col overflow-hidden">
       {/* Header */}
       <RoleplayHeader 
         characterName={character?.name}

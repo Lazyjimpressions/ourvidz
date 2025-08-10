@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronLeft, Bot, User, Settings } from 'lucide-react';
+import { ChevronLeft, MessageCircle, User, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -47,11 +47,17 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
           </Button>
         )}
         
-        {/* Brand/Title */}
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
-            <Bot className="w-3 h-3 text-primary-foreground" />
+        {/* OurVidz Brand/Title */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center">
+              <MessageCircle className="w-3 h-3 text-primary-foreground" />
+            </div>
+            <span className="font-medium text-foreground text-sm">OurVidz</span>
           </div>
+          
+          <div className="w-px h-4 bg-border" />
+          
           <div>
             {title ? (
               <div>

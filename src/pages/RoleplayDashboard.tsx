@@ -100,7 +100,7 @@ const RoleplayDashboard = () => {
   }, [filteredCharacters]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Header */}
       <RoleplayHeader 
         title="Discover Characters"
