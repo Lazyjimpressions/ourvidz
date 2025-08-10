@@ -1,24 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSceneGeneration } from '@/hooks/useSceneGeneration';
-import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useSceneNarrative } from '@/hooks/useSceneNarrative';
 import { useToast } from '@/hooks/use-toast';
-import { Palette, Camera, Sparkles, Wand2, Users, User } from 'lucide-react';
-import { CharacterMultiSelector } from './CharacterMultiSelector';
-
-interface CharacterParticipant {
-  id: string;
-  name: string;
-  role: 'ai' | 'user' | 'narrator';
-  image_url?: string;
-  reference_image_url?: string;
-  description?: string;
-}
 
 interface SceneGenerationModalProps {
   isOpen: boolean;
@@ -36,100 +23,24 @@ export const SceneGenerationModal = ({
   character 
 }: SceneGenerationModalProps) => {
   const [prompt, setPrompt] = useState('');
-  const [style, setStyle] = useState<'lustify' | 'realistic' | 'artistic' | 'anime'>('lustify');
-  const [quality, setQuality] = useState<'high' | 'fast'>('high');
-  const [sceneType, setSceneType] = useState<'single' | 'multi'>('single');
-  const [selectedCharacters, setSelectedCharacters] = useState<CharacterParticipant[]>([]);
-  const { generateSceneImage, isGenerating } = useSceneGeneration();
-  const { createScene } = useCharacterScenes(characterId);
+  const [includeNarrator, setIncludeNarrator] = useState(true);
+  const [includeUserCharacter, setIncludeUserCharacter] = useState(true);
+  const { generateSceneNarrative, isGenerating } = useSceneNarrative();
   const { toast } = useToast();
 
-  // Initialize with primary character if provided
-  useEffect(() => {
-    if (character && selectedCharacters.length === 0) {
-      setSelectedCharacters([{
-        id: character.id,
-        name: character.name,
-        role: character.role === 'user' ? 'user' : 'ai',
-        image_url: character.image_url,
-        reference_image_url: character.reference_image_url,
-        description: character.description
-      }]);
-    }
-  }, [character, selectedCharacters.length]);
-
-  // Listen for generation completion events
-  useEffect(() => {
-    const handleGenerationComplete = async (event: CustomEvent) => {
-      const { assetId, imageUrl, type } = event.detail;
-      
-      if (type === 'image' && assetId && imageUrl && characterId) {
-        try {
-          // Save to character_scenes table when generation completes
-          await createScene({
-            character_id: characterId,
-            conversation_id: conversationId || null,
-            image_url: imageUrl,
-            scene_prompt: prompt,
-            generation_metadata: {
-              style,
-              quality,
-              model: 'sdxl',
-              assetId,
-              timestamp: new Date().toISOString(),
-              sceneType,
-              participants: selectedCharacters.map(char => ({
-                id: char.id,
-                name: char.name,
-                role: char.role
-              })),
-              primaryCharacter: characterId
-            }
-          });
-
-          toast({
-            title: "Scene Saved!",
-            description: "Your scene has been generated and saved to the gallery",
-          });
-
-          onClose();
-          setPrompt('');
-        } catch (error) {
-          console.error('Failed to save scene:', error);
-          toast({
-            title: "Scene Generated",
-            description: "Image created but failed to save to gallery",
-            variant: "destructive",
-          });
-        }
-      }
-    };
-
-    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
-    return () => window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
-  }, [characterId, conversationId, prompt, style, quality, sceneType, selectedCharacters, createScene, toast, onClose]);
-
   const handleGenerateScene = async () => {
-    if (!prompt.trim() || selectedCharacters.length === 0) return;
+    if (!prompt.trim()) return;
 
     try {
-      // Build enhanced prompt with character information
-      let enhancedPrompt = prompt;
-      
-      if (sceneType === 'multi' && selectedCharacters.length > 1) {
-        const characterDescriptions = selectedCharacters
-          .map(char => `${char.name} (${char.role})`)
-          .join(', ');
-        enhancedPrompt = `${prompt} featuring ${characterDescriptions}`;
-      }
-
-      await generateSceneImage(enhancedPrompt, null, {
-        style,
-        quality,
-        useCharacterReference: selectedCharacters.some(char => !!char.reference_image_url)
+      await generateSceneNarrative(prompt, character, {
+        includeNarrator,
+        includeUserCharacter,
+        characterId,
+        conversationId
       });
 
-      // Scene will be saved automatically when generation completes via event listener
+      onClose();
+      setPrompt('');
     } catch (error) {
       console.error('Scene generation failed:', error);
       toast({
@@ -140,131 +51,88 @@ export const SceneGenerationModal = ({
     }
   };
 
+
   const scenePrompts = [
-    "A romantic candlelit dinner in an elegant restaurant",
-    "Walking together through a beautiful garden at sunset", 
-    "Sitting by a cozy fireplace on a winter evening",
-    "Dancing under the stars on a moonlit beach",
-    "Having coffee together at a quaint café",
-    "Exploring an ancient castle or ruins",
-    "Watching the sunrise from a mountain peak",
-    "Relaxing in a luxurious spa or hot springs"
+    "A cozy evening conversation by the fireplace",
+    "Meeting at a quiet café for the first time", 
+    "Walking together through a moonlit garden",
+    "Relaxing together in a comfortable living room",
+    "Having an intimate dinner at home",
+    "Spending a lazy morning in bed talking"
   ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="bg-background border-border text-foreground max-w-2xl">
+      <DialogContent className="bg-background border-border text-foreground max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Palette className="w-5 h-5" />
-            Generate Scene
-          </DialogTitle>
+          <DialogTitle>Generate Scene</DialogTitle>
         </DialogHeader>
 
-        <Tabs value={sceneType} onValueChange={(value) => setSceneType(value as any)} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="single" className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              Single Character
-            </TabsTrigger>
-            <TabsTrigger value="multi" className="flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Multi-Character
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="single" className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Scene Description
-              </label>
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={`Describe a scene with ${character?.name || 'the character'}...`}
-                className="min-h-[100px]"
-              />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="multi" className="space-y-4">
-            <CharacterMultiSelector
-              primaryCharacterId={characterId}
-              selectedCharacters={selectedCharacters}
-              onCharactersChange={setSelectedCharacters}
-              maxCharacters={3}
-              className="border rounded-lg p-4"
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-2 block">
+              Scene Description
+            </label>
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={`Describe the scene you want to create with ${character?.name || 'the character'}...`}
+              className="min-h-[100px]"
             />
-            
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Multi-Character Scene Description
-              </label>
-              <Textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the scene with multiple characters..."
-                className="min-h-[100px]"
-              />
-            </div>
-          </TabsContent>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Style
-              </label>
-              <Select value={style} onValueChange={(value) => setStyle(value as any)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="lustify">Lustify</SelectItem>
-                  <SelectItem value="anime">Anime</SelectItem>
-                  <SelectItem value="realistic">Realistic</SelectItem>
-                  <SelectItem value="artistic">Artistic</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                Quality
-              </label>
-              <Select value={quality} onValueChange={(value) => setQuality(value as any)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fast">Fast</SelectItem>
-                  <SelectItem value="high">High Quality</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
-          {selectedCharacters.some(char => char.reference_image_url) && (
-            <div className="p-3 bg-muted rounded-lg border">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Camera className="w-4 h-4" />
-                <span>Character references will be used for consistency</span>
+          <div className="space-y-3">
+            <label className="text-sm font-medium block">
+              Scene Participants
+            </label>
+            
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="narrator" 
+                  checked={includeNarrator}
+                  onCheckedChange={(checked) => setIncludeNarrator(checked === true)}
+                />
+                <label htmlFor="narrator" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Include Narrator (sets the scene)
+                </label>
               </div>
+              
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="user" 
+                  checked={includeUserCharacter}
+                  onCheckedChange={(checked) => setIncludeUserCharacter(checked === true)}
+                />
+                <label htmlFor="user" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  Include User Character
+                </label>
+              </div>
+              
+              {character && (
+                <div className="flex items-center space-x-2">
+                  <Checkbox checked={true} disabled />
+                  <label className="text-sm font-medium text-muted-foreground">
+                    {character.name} (AI Character)
+                  </label>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           <div>
             <label className="text-sm font-medium mb-2 block">
               Quick Scene Ideas
             </label>
             <div className="flex flex-wrap gap-2">
-              {scenePrompts.slice(0, 4).map((scenePrompt, idx) => (
+              {scenePrompts.map((scenePrompt, idx) => (
                 <Badge
                   key={idx}
                   variant="outline"
                   className="cursor-pointer hover:bg-muted text-xs"
                   onClick={() => setPrompt(scenePrompt)}
                 >
-                  {scenePrompt.slice(0, 30)}...
+                  {scenePrompt}
                 </Badge>
               ))}
             </div>
@@ -281,23 +149,13 @@ export const SceneGenerationModal = ({
             </Button>
             <Button
               onClick={handleGenerateScene}
-              disabled={!prompt.trim() || selectedCharacters.length === 0 || isGenerating}
+              disabled={!prompt.trim() || isGenerating}
               className="flex-1"
             >
-              {isGenerating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border border-primary border-t-transparent mr-2" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Generate Scene
-                </>
-              )}
+              {isGenerating ? 'Generating...' : 'Generate Scene'}
             </Button>
           </div>
-        </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   );

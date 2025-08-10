@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { ResponseTruncation } from './ResponseTruncation';
-import { SceneImageGenerator } from './SceneImageGenerator';
+import { SceneImageButton } from './SceneImageButton';
 import { InlineImageDisplay } from './InlineImageDisplay';
 import { ImageLightbox } from './ImageLightbox';
 import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
@@ -218,36 +218,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           )}
         </div>
 
-        {/* Scene Image Generator - Only for AI messages in roleplay mode */}
+        {/* Scene Image Button - Only for AI messages in roleplay mode */}
         {!isUser && mode === 'roleplay' && (
-          <SceneImageGenerator
-            messageContent={message.content}
-            roleplayTemplate={roleplayTemplate}
-            onGenerationStart={() => {
-              setPending(stableKey);
-            }}
-            onImageGenerated={(assetId, imageUrl, bucket) => {
-              console.log('🖼️ MessageBubble received generated image:', { assetId, imageUrl, bucket });
-              setGeneratedImageId(assetId);
-              setGeneratedImageUrl(imageUrl || null);
-              setGeneratedImageBucket(bucket || null);
-
-              setReady(stableKey, { assetId, imageUrl: imageUrl || null, bucket: bucket || null });
-              
-              // Persist to localStorage for this message
-              if (typeof window !== 'undefined') {
-                localStorage.setItem(`${storageKey}-id`, assetId);
-                if (imageUrl) {
-                  localStorage.setItem(`${storageKey}-url`, imageUrl);
-                }
-                if (bucket) {
-                  localStorage.setItem(`${storageKey}-bucket`, bucket);
-                }
-              }
-              
-              toast.success('Scene image generated!');
-            }}
-          />
+          <div className="mt-2">
+            <SceneImageButton
+              messageContent={message.content}
+              characterId={roleplayTemplate?.characters?.[0]?.id}
+              conversationId={message.conversation_id}
+              character={roleplayTemplate?.characters?.[0]}
+              className="text-xs"
+            />
+          </div>
         )}
 
         {/* Inline Image Display */}

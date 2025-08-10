@@ -285,10 +285,17 @@ You say: ...`;
                                 message.toLowerCase().includes('convert') ||
                                 message.toLowerCase().includes('prompt') ||
                                 message.toLowerCase().includes('optimize');
+
+    // Check for scene generation request
+    const isSceneGenerationRequest = message.toLowerCase().includes('generate a scene:') ||
+                                   message.toLowerCase().includes('[include narrator') ||
+                                   message.toLowerCase().includes('[character:');
     
     let templateContext = contextType;
     if (isSDXLLustifyRequest) {
       templateContext = 'sdxl_conversion';
+    } else if (isSceneGenerationRequest) {
+      templateContext = 'scene_narrative_generation';
     }
 
     // Get system prompt from cache and track origin
@@ -302,6 +309,8 @@ You say: ...`;
         let useCase = 'chat_general';
         if (isSDXLLustifyRequest) {
           useCase = 'chat_sdxl_conversion';
+        } else if (isSceneGenerationRequest) {
+          useCase = 'scene_narrative_generation';
         } else if (templateContext === 'story_development') {
           useCase = 'chat_creative';
         } else if (templateContext === 'roleplay') {
@@ -324,6 +333,14 @@ You say: ...`;
       } catch (error) {
         console.warn('⚠️ Database fallback failed:', error);
       }
+    }
+
+    // Replace character variables for scene generation
+    if (isSceneGenerationRequest && systemPrompt && characterData) {
+      systemPrompt = systemPrompt
+        .replace(/\{\{character_name\}\}/g, characterData.name || 'Character')
+        .replace(/\{\{character_description\}\}/g, characterData.description || '')
+        .replace(/\{\{character_personality\}\}/g, characterData.persona || '');
     }
 
     console.log('Dynamic System Prompt Selection:', {
