@@ -230,6 +230,12 @@ serve(async (req)=>{
       updatedMetadata.enhancement_strategy = 'template_based';
     }
 
+    // PHASE 4 FIX: Extract and preserve actual template name from enhancement_strategy_source
+    if (updatedMetadata.debug?.enhancement_strategy_source) {
+      updatedMetadata.template_name = updatedMetadata.debug.enhancement_strategy_source;
+      console.log('📋 Template name extracted from source:', updatedMetadata.template_name);
+    }
+
     // Add enhanced logging after metadata extraction
     logEnhancementVerification(updatedMetadata, job_id);
     logTemplateTracking(updatedMetadata, job_id);
