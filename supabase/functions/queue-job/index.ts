@@ -733,6 +733,20 @@ serve(async (req)=>{
         compel_enabled: metadata?.compel_enabled || false,
         compel_weights: metadata?.compel_weights || undefined
       },
+      // 🎯 REFERENCE IMAGE FIX: Include reference image parameters at root level for worker
+      ...metadata?.reference_image && {
+        reference_image_url: metadata.reference_url,
+        reference_strength: metadata.reference_strength || 0.85,
+        reference_type: metadata.reference_type || 'character',
+        exact_copy_mode: metadata.exact_copy_mode || false
+      },
+      // VIDEO REFERENCE SUPPORT: Include start/end frame references at root level
+      ...(format === 'video' && metadata?.start_reference_url && {
+        start_reference_url: metadata.start_reference_url
+      }),
+      ...(format === 'video' && metadata?.end_reference_url && {
+        end_reference_url: metadata.end_reference_url
+      }),
       // Additional metadata - use same structure as database
       video_id: videoId,
       image_id: imageId,
@@ -741,6 +755,24 @@ serve(async (req)=>{
       bucket: metadata?.bucket || (isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`),
       metadata: jobMetadata
     };
+
+    // 🎯 REFERENCE IMAGE DEBUG: Enhanced logging for reference image data flow
+    if (metadata?.reference_image) {
+      console.log('🎯 REFERENCE IMAGE PROCESSING:', {
+        hasReferenceImage: !!metadata?.reference_image,
+        referenceUrl: metadata?.reference_url,
+        referenceStrength: metadata?.reference_strength,
+        referenceType: metadata?.reference_type,
+        exactCopyMode: metadata?.exact_copy_mode,
+        configIncludesRef: !!(jobPayload.reference_image_url),
+        payloadIncludesRef: !!(jobPayload.reference_image_url),
+        configRefUrl: config.reference_image_url,
+        payloadRefUrl: jobPayload.reference_image_url,
+        payloadRefStrength: jobPayload.reference_strength,
+        payloadRefType: jobPayload.reference_type,
+        payloadExactCopy: jobPayload.exact_copy_mode
+      });
+    }
 
     console.log('📤 Pushing FIXED job to Redis queue with correct SDXL parameter names:', {
       jobId: job.id,
@@ -768,6 +800,12 @@ serve(async (req)=>{
       negativePromptWordCount: isSDXL ? negativePrompt.split(' ').length : 0,
       negativePromptError: negativePromptError,
       payloadSize: JSON.stringify(jobPayload).length,
+      // 🎯 REFERENCE IMAGE: Root level payload validation
+      payloadReferenceImage: !!jobPayload.reference_image_url,
+      payloadReferenceUrl: jobPayload.reference_image_url?.substring(0, 50) + '...',
+      payloadReferenceStrength: jobPayload.reference_strength,
+      payloadReferenceType: jobPayload.reference_type,
+      payloadExactCopyMode: jobPayload.exact_copy_mode,
       // ✅ PARAMETER MAPPING FIX: Log correct parameter names
       sdxlParameterNames: isSDXL ? ['width', 'height', 'num_inference_steps', 'guidance_scale', 'scheduler'] : 'N/A',
       wanParameterNames: !isSDXL ? ['size', 'sample_steps', 'sample_guide_scale', 'sample_solver', 'sample_shift'] : 'N/A'
