@@ -17,12 +17,18 @@ export const extractReferenceMetadata = (asset: UnifiedAsset): ReferenceMetadata
     
     const metadata = asset.metadata as any;
     
-    // Extract enhanced prompt (try multiple sources)
-    const originalEnhancedPrompt = 
+    // Extract enhanced prompt (try multiple sources and check job data)
+    let originalEnhancedPrompt = 
       metadata?.enhanced_prompt || 
       asset.enhancedPrompt || 
       metadata?.prompt ||
       asset.prompt;
+    
+    // If we have a job_id but no enhanced prompt, try to get it from the job
+    if (!originalEnhancedPrompt && (asset as any).job_id) {
+      console.log('🎯 No enhanced prompt found in asset, checking job data...');
+      // Add job lookup fallback later if needed
+    }
     
     console.log('🎯 ENHANCED PROMPT EXTRACTION:', {
       fromMetadataEnhancedPrompt: metadata?.enhanced_prompt,

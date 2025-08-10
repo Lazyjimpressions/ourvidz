@@ -477,12 +477,20 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       });
       
       if (exactCopyMode && referenceMetadata) {
+        console.log('🎯 EXACT COPY MODE: Using reference metadata:', {
+          originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt,
+          userModification: prompt.trim(),
+          originalSeed: referenceMetadata.originalSeed
+        });
+        
         // Use original enhanced prompt as base
         finalPrompt = referenceMetadata.originalEnhancedPrompt;
         
         // Apply user modification if provided
         if (prompt.trim()) {
+          console.log('🎯 EXACT COPY: Applying modification to original prompt');
           finalPrompt = modifyOriginalPrompt(finalPrompt, prompt.trim());
+          console.log('🎯 EXACT COPY: Modified prompt result:', finalPrompt);
         }
         
         // Use original seed

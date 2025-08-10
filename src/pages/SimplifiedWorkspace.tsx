@@ -110,7 +110,7 @@ export const SimplifiedWorkspace: React.FC = () => {
   // LTX-Style Workspace Management Handlers
   // Listen for job-as-reference event to set URL reference centrally
   React.useEffect(() => {
-    const handler = (e: Event) => {
+    const handler = async (e: Event) => {
       const custom = e as CustomEvent<{ jobId: string; url: string; assetId: string; type: string }>;
       const { url, assetId } = custom.detail || {}; 
       if (!url) return;
@@ -124,10 +124,12 @@ export const SimplifiedWorkspace: React.FC = () => {
           assetUrl: asset.url,
           assetMetadata: asset.metadata,
           assetEnhancedPrompt: asset.enhancedPrompt,
-          assetPrompt: asset.prompt
+          assetPrompt: asset.prompt,
+          jobId: (asset as any).job_id,
+          fullAsset: asset
         });
         
-        const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
+        const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
         const metadata = extractReferenceMetadata(asset);
         
         console.log('🎯 METADATA EXTRACTION RESULT:', {
