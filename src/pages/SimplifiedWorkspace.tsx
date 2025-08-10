@@ -121,7 +121,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
         const metadata = extractReferenceMetadata(asset);
         if (metadata) {
-          setReferenceMetadata(metadata);
+          state.setReferenceMetadata(metadata);
           console.log('🎯 Reference metadata extracted:', metadata);
         }
       }
@@ -455,8 +455,8 @@ export const SimplifiedWorkspace: React.FC = () => {
             onUseOriginalParamsChange={setUseOriginalParams}
             lockSeed={lockSeed}
             onLockSeedChange={setLockSeed}
-          referenceMetadata={referenceMetadata}
-          onReferenceMetadataChange={setReferenceMetadata}
+            referenceMetadata={state.referenceMetadata}
+            onReferenceMetadataChange={state.setReferenceMetadata}
           />
         </div>
       </div>
