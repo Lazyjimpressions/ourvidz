@@ -218,12 +218,21 @@ export const OptimizedLibrary = () => {
       let data = [];
       
       if (typeFilter === 'image') {
-        // Get total count for images
-        const { count } = await supabase
+        // Get total count for images with same filters as main query
+        let countQuery = supabase
           .from('images')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          countQuery = countQuery.eq('status', statusFilter);
+        }
         
+        if (debouncedSearchTerm) {
+          countQuery = countQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
+        }
+        
+        const { count } = await countQuery;
         totalCount = count || 0;
         
         // Build image query
@@ -270,12 +279,19 @@ export const OptimizedLibrary = () => {
         data = imageData || [];
         
       } else {
-        // Get total count for videos
-        const { count } = await supabase
+        // Get total count for videos with same filters as main query  
+        let countQuery = supabase
           .from('videos')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
+          
+        if (statusFilter !== 'all') {
+          countQuery = countQuery.eq('status', statusFilter);
+        }
         
+        // Note: Videos don't have prompt field for search filtering
+        
+        const { count } = await countQuery;
         totalCount = count || 0;
         
         // Build video query
@@ -561,9 +577,17 @@ export const OptimizedLibrary = () => {
 
     setDeletingAssets(prev => new Set(prev).add(asset.id));
     
-    // Optimistic update - remove from UI immediately
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
-      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => a.id !== asset.id) || [] } : oldData
+    // Optimistic update - remove from UI immediately and update count
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize, sortBy, sortOrder], 
+      (oldData: any) => {
+        if (!oldData) return oldData;
+        const filteredAssets = oldData.assets?.filter((a: UnifiedAsset) => a.id !== asset.id) || [];
+        return { 
+          ...oldData, 
+          assets: filteredAssets,
+          totalCount: Math.max(0, (oldData.totalCount || 0) - 1)
+        };
+      }
     );
     
     if (selectedAssets.has(asset.id)) {
@@ -582,17 +606,24 @@ export const OptimizedLibrary = () => {
       await OptimizedAssetService.deleteAssetCompletely(assetIdToDelete, asset.type);
       toast.success(`${asset.type} deleted completely`, { id: asset.id });
       
+      // Invalidate all library queries to refresh counts
+      queryClient.invalidateQueries({ 
+        queryKey: ['library-assets'],
+        exact: false 
+      });
+      
     } catch (error) {
       console.error('❌ Deletion failed for:', asset.id, error);
       
       // Restore asset on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize, sortBy, sortOrder], 
         (oldData: any) => {
           if (!oldData) return oldData;
           const restored = [...(oldData.assets || []), asset];
           return { 
             ...oldData, 
-            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+            totalCount: (oldData.totalCount || 0) + 1
           };
         }
       );
@@ -613,8 +644,16 @@ export const OptimizedLibrary = () => {
     
     // Optimistic updates
     const selectedIds = new Set(selectedAssetList.map(a => a.id));
-    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
-      (oldData: any) => oldData ? { ...oldData, assets: oldData.assets?.filter((a: UnifiedAsset) => !selectedIds.has(a.id)) || [] } : oldData
+    queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize, sortBy, sortOrder], 
+      (oldData: any) => {
+        if (!oldData) return oldData;
+        const filteredAssets = oldData.assets?.filter((a: UnifiedAsset) => !selectedIds.has(a.id)) || [];
+        return { 
+          ...oldData, 
+          assets: filteredAssets,
+          totalCount: Math.max(0, (oldData.totalCount || 0) - selectedAssetList.length)
+        };
+      }
     );
     setSelectedAssets(new Set());
     setShowBulkDelete(false);
@@ -637,17 +676,24 @@ export const OptimizedLibrary = () => {
         toast.success(`${result.success} assets deleted successfully`, { id: 'bulk-delete' });
       }
       
+      // Invalidate all library queries to refresh counts
+      queryClient.invalidateQueries({ 
+        queryKey: ['library-assets'],
+        exact: false 
+      });
+      
     } catch (error) {
       console.error('❌ Bulk deletion failed:', error);
       
       // Restore all assets on error
-      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize], 
+      queryClient.setQueryData(['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize, sortBy, sortOrder], 
         (oldData: any) => {
           if (!oldData) return oldData;
           const restored = [...(oldData.assets || []), ...selectedAssetList];
           return { 
             ...oldData, 
-            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()) 
+            assets: restored.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+            totalCount: (oldData.totalCount || 0) + selectedAssetList.length
           };
         }
       );
