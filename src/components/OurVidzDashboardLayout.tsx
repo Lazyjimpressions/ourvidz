@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Home, FileText, Play, Image, Library, Settings, User, LogOut, Brain, Users } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import LibraryVersionToggle from "@/components/LibraryVersionToggle";
+
 
 interface OurVidzDashboardLayoutProps {
   children: React.ReactNode;
@@ -185,12 +185,7 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
       <div className="flex-1 flex flex-col">
         {/* Simplified Top Header */}
         <header className="bg-[#111111] border-b border-gray-800 px-6 py-4">
-          <div className="flex justify-between items-center">
-            {/* Library Version Toggle - only show on library pages */}
-            {(location.pathname === '/library' || location.pathname === '/library-v2') && (
-              <LibraryVersionToggle />
-            )}
-            
+          <div className="flex justify-end items-center">
             <div className="flex items-center gap-4">
               <Button
                 variant="outline"

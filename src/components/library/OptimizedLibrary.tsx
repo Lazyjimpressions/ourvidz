@@ -12,6 +12,8 @@ import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
 import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { AssetGridSkeleton } from "./AssetSkeleton";
+import { useMobileDetection } from "@/hooks/useMobileDetection";
 
 import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
@@ -19,9 +21,10 @@ import { progressiveEnhancement } from "@/lib/cache/ProgressiveEnhancement";
 import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
 import { toast } from "sonner";
 
-const OptimizedLibrary = () => {
+export const OptimizedLibrary = () => {
   console.log('🔍 OptimizedLibrary component rendering...');
   const queryClient = useQueryClient();
+  const { isMobile } = useMobileDetection();
   
   // Phase 3: Initialize performance monitoring
   useEffect(() => {
@@ -608,10 +611,22 @@ const OptimizedLibrary = () => {
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
-        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-          <div className="text-center">
-            <LoadingSpinner size="lg" />
-            <p className="text-gray-400 mt-4">Loading your library...</p>
+        <div className="min-h-screen bg-[#0a0a0a] p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="space-y-2">
+                  <div className="h-8 w-48 bg-gray-800 rounded animate-pulse"></div>
+                  <div className="h-5 w-32 bg-gray-800 rounded animate-pulse"></div>
+                </div>
+                <div className="flex gap-2">
+                  <div className="h-8 w-16 bg-gray-800 rounded animate-pulse"></div>
+                  <div className="h-8 w-20 bg-gray-800 rounded animate-pulse"></div>
+                </div>
+              </div>
+              <div className="h-10 w-64 bg-gray-800 rounded animate-pulse"></div>
+            </div>
+            <AssetGridSkeleton count={isMobile ? 6 : 12} />
           </div>
         </div>
       </OurVidzDashboardLayout>
@@ -694,7 +709,11 @@ const OptimizedLibrary = () => {
             />
           ) : (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+              <div className={`grid gap-4 ${
+                isMobile 
+                  ? 'grid-cols-1 sm:grid-cols-2' 
+                  : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'
+              }`}>
                 {transformedAssets.map((asset) => (
                   <AssetCard
                     key={asset.id}
@@ -806,4 +825,3 @@ const OptimizedLibrary = () => {
   );
 };
 
-export default OptimizedLibrary;

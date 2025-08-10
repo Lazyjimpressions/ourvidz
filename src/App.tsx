@@ -11,7 +11,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
-import LibraryV2 from "@/pages/LibraryV2";
+import { OptimizedLibrary } from "@/components/library/OptimizedLibrary";
 import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
 import Admin from "@/pages/Admin";
@@ -46,8 +46,8 @@ function App() {
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
-              <Route path="/library" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
-              <Route path="/library-v2" element={<ProtectedRoute><LibraryV2 /></ProtectedRoute>} />
+              <Route path="/library" element={<ProtectedRoute><OptimizedLibrary /></ProtectedRoute>} />
+              <Route path="/library-v2" element={<ProtectedRoute><OptimizedLibrary /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/pricing" element={<ProtectedRoute><Pricing /></ProtectedRoute>} />
