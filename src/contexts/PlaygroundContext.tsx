@@ -83,7 +83,7 @@ export const PlaygroundProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(playgroundReducer, initialState);
-  const [sfwMode, setSfwMode] = useState(false);
+  const [sfwMode, setSfwMode] = useState(false); // Default to NSFW-first
 
   // Fetch conversations
   const {
