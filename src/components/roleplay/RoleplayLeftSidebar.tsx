@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -33,14 +33,18 @@ export const RoleplayLeftSidebar: React.FC<RoleplayLeftSidebarProps> = ({
   
   const { conversations, isLoading } = useConversations();
 
-  // Filter conversations by date
-  const thisWeekConversations = conversations.filter(conv => 
-    isThisWeek(new Date(conv.updated_at))
-  );
-  
-  const thisMonthConversations = conversations.filter(conv => 
-    isThisMonth(new Date(conv.updated_at)) && !isThisWeek(new Date(conv.updated_at))
-  );
+  // Memoize filtered conversations to prevent infinite re-renders
+  const { thisWeekConversations, thisMonthConversations } = useMemo(() => {
+    const thisWeek = conversations.filter(conv => 
+      isThisWeek(new Date(conv.updated_at))
+    );
+    
+    const thisMonth = conversations.filter(conv => 
+      isThisMonth(new Date(conv.updated_at)) && !isThisWeek(new Date(conv.updated_at))
+    );
+
+    return { thisWeekConversations: thisWeek, thisMonthConversations: thisMonth };
+  }, [conversations]);
 
   const toggleSection = (section: 'thisWeek' | 'thisMonth') => {
     setExpandedSections(prev => ({
