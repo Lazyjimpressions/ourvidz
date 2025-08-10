@@ -106,29 +106,32 @@ serve(async (req)=>{
     // Dynamic content tier detection using cached database templates
     async function detectContentTier(prompt: string): Promise<'sfw' | 'nsfw'> {
       try {
-        // Get cached NSFW detection terms from system_config
+        // Get cached SFW detection terms from system_config (INVERTED LOGIC: Look for SFW terms to go SFW)
         const { data: systemConfig } = await supabase
           .from('system_config')
           .select('config')
           .single();
 
-        if (systemConfig?.config?.nsfwTerms && Array.isArray(systemConfig.config.nsfwTerms)) {
-          const nsfwTerms = systemConfig.config.nsfwTerms;
+        if (systemConfig?.config?.sfwTerms && Array.isArray(systemConfig.config.sfwTerms)) {
+          const sfwTerms = systemConfig.config.sfwTerms;
           const lowerPrompt = prompt.toLowerCase();
-          return nsfwTerms.some(term => lowerPrompt.includes(term.toLowerCase())) ? 'nsfw' : 'sfw';
+          // 🔄 FIXED: Default to NSFW, only go SFW if explicit SFW terms found
+          return sfwTerms.some(term => lowerPrompt.includes(term.toLowerCase())) ? 'sfw' : 'nsfw';
         }
       } catch (error) {
-        console.warn('⚠️ Failed to load NSFW terms from cache, using fallback:', error);
+        console.warn('⚠️ Failed to load SFW terms from cache, using fallback:', error);
       }
 
-      // Fallback NSFW detection terms
-      const fallbackNsfwTerms = [
-        'naked', 'nude', 'topless', 'undressed', 'nsfw', 'adult', 'erotic', 'sexual', 'sex', 
-        'porn', 'xxx', 'seductive', 'intimate', 'passionate', 'explicit', 'hardcore'
+      // 🔄 FIXED: Fallback SFW detection terms - only these go to SFW, everything else defaults to NSFW
+      const fallbackSfwTerms = [
+        'landscape', 'nature', 'portrait', 'family', 'children', 'kids', 'workplace', 'office',
+        'business', 'professional', 'corporate', 'academic', 'educational', 'art', 'abstract',
+        'flowers', 'animals', 'pets', 'food', 'cooking', 'architecture', 'buildings', 'city'
       ];
       
       const lowerPrompt = prompt.toLowerCase();
-      return fallbackNsfwTerms.some(term => lowerPrompt.includes(term)) ? 'nsfw' : 'sfw';
+      // 🔄 FIXED: Default to NSFW unless explicit SFW terms are found
+      return fallbackSfwTerms.some(term => lowerPrompt.includes(term)) ? 'sfw' : 'nsfw';
     }
 
     // Dynamic negative prompt generation using cached templates
