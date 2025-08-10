@@ -15,6 +15,7 @@ import { Pagination, PaginationContent, PaginationItem, PaginationLink, Paginati
 import { AssetGridSkeleton } from "./AssetSkeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useMobileDetection } from "@/hooks/useMobileDetection";
+import { SortableGridHeader } from "./SortableGridHeader";
 
 import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
@@ -73,6 +74,16 @@ export const OptimizedLibrary = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [selectedAssetIndex, setSelectedAssetIndex] = useState<number>(-1);
+  
+  // Sorting states
+  const [sortBy, setSortBy] = useState<'date' | 'prompt' | 'status' | 'quality'>(() => {
+    const saved = localStorage.getItem('library-sort-by');
+    return (saved as any) || 'date';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const saved = localStorage.getItem('library-sort-order');
+    return (saved as any) || 'desc';
+  });
   console.log('🔍 selectedAssetIndex state:', selectedAssetIndex);
 
   // Modal states  
@@ -101,6 +112,22 @@ export const OptimizedLibrary = () => {
   useEffect(() => {
     localStorage.setItem('library-page-size', pageSize.toString());
   }, [pageSize]);
+
+  // Save sort preferences
+  useEffect(() => {
+    localStorage.setItem('library-sort-by', sortBy);
+    localStorage.setItem('library-sort-order', sortOrder);
+  }, [sortBy, sortOrder]);
+
+  // Sort handler
+  const handleSortChange = (column: 'date' | 'prompt' | 'status' | 'quality') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('desc');
+    }
+  };
 
   // Calculate pagination
   const offset = (currentPage - 1) * pageSize;
@@ -175,7 +202,7 @@ export const OptimizedLibrary = () => {
 
   // Fixed pagination with proper asset limiting
   const { data: assetsData, isLoading, error } = useQuery({
-    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize],
+    queryKey: ['library-assets', typeFilter, statusFilter, debouncedSearchTerm, currentPage, pageSize, sortBy, sortOrder],
     queryFn: async () => {
       performanceMonitor.markStart('assets-fetch');
       
@@ -223,8 +250,20 @@ export const OptimizedLibrary = () => {
           imageQuery = imageQuery.ilike('prompt', `%${debouncedSearchTerm}%`);
         }
         
+        // Apply sorting
+        let orderColumn = 'created_at';
+        let ascending = sortOrder === 'asc';
+        
+        if (sortBy === 'prompt') {
+          orderColumn = 'prompt';
+        } else if (sortBy === 'status') {
+          orderColumn = 'status';
+        } else if (sortBy === 'quality') {
+          orderColumn = 'quality';
+        }
+        
         const { data: imageData, error } = await imageQuery
-          .order('created_at', { ascending: false })
+          .order(orderColumn, { ascending })
           .range(offset, offset + pageSize - 1);
           
         if (error) throw error;
@@ -257,8 +296,16 @@ export const OptimizedLibrary = () => {
           videoQuery = videoQuery.eq('status', statusFilter);
         }
         
+        // Apply sorting for videos
+        let orderColumn = 'created_at';
+        let ascending = sortOrder === 'asc';
+        
+        if (sortBy === 'status') {
+          orderColumn = 'status';
+        }
+        
         const { data: videoData, error } = await videoQuery
-          .order('created_at', { ascending: false })
+          .order(orderColumn, { ascending })
           .range(offset, offset + pageSize - 1);
           
         if (error) throw error;
@@ -710,6 +757,14 @@ export const OptimizedLibrary = () => {
             />
           ) : (
             <div className="space-y-6">
+              {/* Sortable Header */}
+              <SortableGridHeader
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSortChange={handleSortChange}
+                typeFilter={typeFilter}
+              />
+
               {/* Select All Header Row */}
               {transformedAssets.length > 0 && (
                 <div className="flex items-center gap-2 p-2 bg-card/50 rounded-lg border border-border/50">
@@ -756,45 +811,49 @@ export const OptimizedLibrary = () => {
                 ))}
               </div>
 
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex justify-center mt-8">
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious 
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                      
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        const page = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                        if (page > totalPages) return null;
-                        
-                        return (
-                          <PaginationItem key={page}>
-                            <PaginationLink
-                              onClick={() => setCurrentPage(page)}
-                              isActive={page === currentPage}
-                              className="cursor-pointer"
-                            >
-                              {page}
-                            </PaginationLink>
-                          </PaginationItem>
-                        );
-                      })}
-                      
-                      <PaginationItem>
-                        <PaginationNext 
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+              {/* Pagination Controls and Result Info */}
+              <div className="flex flex-col items-center gap-4 mt-8">
+                {/* Result Count */}
+                <div className="text-sm text-muted-foreground">
+                  Showing {Math.min((currentPage - 1) * pageSize + 1, totalCount)}-{Math.min(currentPage * pageSize, totalCount)} of {totalCount} {typeFilter}s
                 </div>
-              )}
+                
+                {/* Pagination - Always Show */}
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious 
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                    
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const page = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
+                      if (page > totalPages) return null;
+                      
+                      return (
+                        <PaginationItem key={page}>
+                          <PaginationLink
+                            onClick={() => setCurrentPage(page)}
+                            isActive={page === currentPage}
+                            className="cursor-pointer"
+                          >
+                            {page}
+                          </PaginationLink>
+                        </PaginationItem>
+                      );
+                    })}
+                    
+                    <PaginationItem>
+                      <PaginationNext 
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
             </div>
           )}
         </div>
