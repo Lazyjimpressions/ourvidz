@@ -88,5 +88,21 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
-  }
+  },
+  "description": "**Status:** 🚀 Production Ready - Library-First Event-Driven Architecture   **Last Updated:** August 5, 2025   **System:** Triple Worker (SDXL + WAN + Chat) on RTX 6000 ADA (48GB VRAM)",
+  "main": "debug-exact-copy.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lazyjimpressions/ourvidz.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Lazyjimpressions/ourvidz/issues"
+  },
+  "homepage": "https://github.com/Lazyjimpressions/ourvidz#readme"
 }
