@@ -650,6 +650,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           dismissed_at: new Date().toISOString()
         };
         
+        console.log('🚫 WORKSPACE: Dismissing item:', id, 'type:', type, 'with metadata:', updatedMetadata);
+        
         await supabase
           .from(type === 'image' ? 'images' : 'videos')
           .update({ metadata: updatedMetadata })
@@ -697,7 +699,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // LIBRARY-FIRST: Clear workspace = dismiss all today's items
   const clearWorkspace = useCallback(async () => {
     try {
-      console.log('🧹 WORKSPACE: Clearing workspace');
+      console.log('🧹 LIBRARY-FIRST: Clearing workspace (dismissing all today\'s items)');
       
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');

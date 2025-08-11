@@ -421,8 +421,10 @@ export class AssetService {
       videoQuery = videoQuery.gte('created_at', fortyEightHoursAgo.toISOString());
       
       // Filter out dismissed items for workspace view (handle null values correctly)
-      imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
-      videoQuery = videoQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
+      imageQuery = imageQuery.or('metadata->workspace_dismissed.is.null,metadata->workspace_dismissed.neq.true');
+      videoQuery = videoQuery.or('metadata->workspace_dismissed.is.null,metadata->workspace_dismissed.neq.true');
+      
+      console.log('🚫 WORKSPACE FILTER: Excluding dismissed items from workspace view');
     }
 
     console.log('🔍 ASSET SERVICE: Executing database queries...');
@@ -630,9 +632,9 @@ export class AssetService {
     // Filter out dismissed items for workspace view
     if (sessionOnly) {
       // For workspace view, exclude items that have been dismissed
-      imageQuery = imageQuery.not('metadata->workspace_dismissed', 'eq', true);
-      videoQuery = videoQuery.not('metadata->workspace_dismissed', 'eq', true);
-      console.log('🚫 Filtering out dismissed items for workspace view');
+      imageQuery = imageQuery.or('metadata->workspace_dismissed.is.null,metadata->workspace_dismissed.neq.true');
+      videoQuery = videoQuery.or('metadata->workspace_dismissed.is.null,metadata->workspace_dismissed.neq.true');
+      console.log('🚫 WORKSPACE FILTER: Excluding dismissed items from workspace view');
     }
 
     // Fetch images and videos in parallel

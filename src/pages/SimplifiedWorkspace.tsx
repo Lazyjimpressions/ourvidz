@@ -32,7 +32,6 @@ export const SimplifiedWorkspace: React.FC = () => {
     deleteItemPermanently,
     hideJobFromWorkspace,
     deleteJobPermanently,
-    clearWorkspace: optimizedClearWorkspace,
     deleteAllWorkspace,
   } = useOptimizedWorkspace();
   
@@ -429,8 +428,15 @@ export const SimplifiedWorkspace: React.FC = () => {
       title: 'Clear Workspace?',
       description: 'This will hide all items from your workspace. You can still access them in your library.',
       confirmAction: async () => {
-        await optimizedClearWorkspace();
+        console.log('🧹 WORKSPACE: Starting clear workspace action');
+        await clearWorkspace();
         setDeleteModal(prev => ({ ...prev, isOpen: false }));
+        
+        // Force refresh the workspace assets after clear
+        setTimeout(() => {
+          // The workspace will automatically refresh due to the database changes
+          window.location.reload();
+        }, 500);
       },
     });
   };
