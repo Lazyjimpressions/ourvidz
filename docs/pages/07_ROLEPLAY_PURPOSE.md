@@ -26,10 +26,13 @@ Provide an immersive, Character.ai-inspired roleplay experience with real-time c
 - **User Character Selection**: ✅ Integrated user character selection in modal
 - **Scene Integration**: ✅ Connected character cards with available scenes
 
-### ✅ **Phase 2: Scene Discovery & Selection (COMPLETED)**
-- **Scene Selection Modal**: ✅ Integrated into character preview modal
-- **Enhanced Scene Cards**: ✅ Better visual design with context
-- **Scene Context Setup**: ✅ Configure scene before starting
+### ✅ **Phase 2: Scene Management System (COMPLETED)**
+- **Scene Management Hook**: ✅ Created useSceneManagement for centralized scene control
+- **Scene State Management**: ✅ Active, paused, generating, and visibility states
+- **Scene Controls**: ✅ Start, pause, reset, and visibility toggle functions
+- **Scene Context Header**: ✅ Enhanced with scene status and controls
+- **Scene Narration Integration**: ✅ Proper scene initialization with narration
+- **Error Handling**: ✅ Comprehensive error management and user feedback
 
 ### ✅ **Phase 3: Narration Prompt Integration (COMPLETED)**
 - **Conversation Start**: ✅ Proper scene initialization with narration
@@ -43,7 +46,6 @@ Provide an immersive, Character.ai-inspired roleplay experience with real-time c
 - **Performance**: ✅ Optimized loading and interactions
 
 ### 🔄 **Phase 5: Advanced Features (IN PROGRESS)**
-- **Scene Management**: 🔄 Enhanced scene controls and visibility
 - **Settings Integration**: 🔄 Advanced roleplay settings
 - **User Experience**: 🔄 Improved workflow and feedback
 
@@ -56,11 +58,12 @@ Provide an immersive, Character.ai-inspired roleplay experience with real-time c
 4. **User Character**: Optional user character selection
 5. **Start Chat**: Begin conversation with proper scene setup
 
-### **Scene Integration**
-- **Scene Preview**: Shows available scenes on character cards
-- **Scene Selection**: Modal interface for browsing scenes
+### **Scene Management System**
+- **Scene State**: Active, paused, generating, and visibility states
+- **Scene Controls**: Start, pause, reset, and visibility toggle
 - **Scene Context**: Header showing active scene and controls
-- **Narration**: Automatic scene setup with narrator prompts
+- **Scene Narration**: Automatic scene setup with narrator prompts
+- **Error Handling**: Comprehensive error management and user feedback
 
 ### **Mobile Optimization**
 - **Touch-Friendly**: Large touch targets and gestures
@@ -74,24 +77,28 @@ Provide an immersive, Character.ai-inspired roleplay experience with real-time c
 - `MinimalCharacterCard`: Enhanced character cards with scene previews
 - `SceneContextHeader`: Scene status and controls
 - `useSceneNarration`: Scene initialization and narration
+- `useSceneManagement`: Centralized scene state and operations
 
 ### **Data Flow**
 1. Character selection → Preview modal
 2. Scene selection → Scene context setup
 3. Conversation start → Narration prompt
 4. Scene activation → Visual feedback
+5. Scene management → State updates and controls
 
 ### **Integration Points**
 - Character database integration
 - Scene generation system
 - Conversation management
 - User character system
+- Scene state management
 
 ## 📊 **Current Metrics & Performance**
 
 ### **User Experience**
 - **Character Selection**: Improved with preview modal
 - **Scene Discovery**: Enhanced with visual previews
+- **Scene Management**: Comprehensive controls and feedback
 - **Conversation Start**: Streamlined with proper narration
 - **Mobile Usage**: Optimized for touch interactions
 
@@ -105,9 +112,9 @@ Provide an immersive, Character.ai-inspired roleplay experience with real-time c
 
 ### **Immediate Priorities (Week 1-2)**
 1. **Complete Mobile Optimization**: Finalize touch interactions and responsive design
-2. **Advanced Scene Controls**: Implement scene pause, reset, and visibility toggles
-3. **Settings Integration**: Connect advanced roleplay settings with scene generation
-4. **User Feedback**: Add more detailed progress indicators and status updates
+2. **Settings Integration**: Connect advanced roleplay settings with scene generation
+3. **User Feedback**: Add more detailed progress indicators and status updates
+4. **Testing**: Comprehensive testing of scene management workflow
 
 ### **Medium Term (Week 3-4)**
 1. **Scene Analytics**: Track scene usage and user engagement
@@ -168,10 +175,11 @@ I've created a comprehensive 5-week plan to correct the critical UX issues in th
 - **Enhanced Character Cards**: Add scene previews and quick actions
 - **Proper Navigation**: Replace direct chat navigation with modal flow
 
-**2. Scene Discovery & Selection (Week 2) - ✅ COMPLETED**
-- **Scene Selection Modal**: Browse and select scenes with descriptions
-- **Enhanced Scene Cards**: Better visual design with context
-- **Scene Context Setup**: Configure scene before starting
+**2. Scene Management System (Week 2) - ✅ COMPLETED**
+- **Scene Management Hook**: Centralized scene state and operations
+- **Scene Controls**: Start, pause, reset, and visibility toggle
+- **Scene Context Header**: Enhanced with scene status and controls
+- **Error Handling**: Comprehensive error management and user feedback
 
 **3. Narration Prompt Integration (Week 3) - ✅ COMPLETED**
 - **Conversation Start**: Proper scene initialization with narration
@@ -185,7 +193,6 @@ I've created a comprehensive 5-week plan to correct the critical UX issues in th
 - **Performance**: Optimize loading and interactions
 
 **5. Advanced Features (Week 5) - 🔄 IN PROGRESS**
-- **Scene Management**: Enhanced scene controls and visibility
 - **Settings Integration**: Advanced roleplay settings
 - **User Experience**: Improved workflow and feedback
 
@@ -193,9 +200,10 @@ I've created a comprehensive 5-week plan to correct the critical UX issues in th
 
 1. **Character Preview Modal**: Users now see character details and available scenes before starting
 2. **Enhanced Character Cards**: Scene previews and quick action buttons for better UX
-3. **Scene Integration**: Proper scene selection and context setup
-4. **Narration System**: Automatic scene setup with narrator prompts
-5. **Mobile Optimization**: Touch-friendly interactions and responsive design
+3. **Scene Management System**: Comprehensive scene state management and controls
+4. **Scene Integration**: Proper scene selection and context setup
+5. **Narration System**: Automatic scene setup with narrator prompts
+6. **Mobile Optimization**: Touch-friendly interactions and responsive design
 
 ### **📱 Mobile-First Approach**
 

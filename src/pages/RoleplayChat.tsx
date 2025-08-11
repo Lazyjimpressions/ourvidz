@@ -15,6 +15,7 @@ import { usePlayground, PlaygroundProvider } from '@/contexts/PlaygroundContext'
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useSceneNarration } from '@/hooks/useSceneNarration';
+import { useSceneManagement } from '@/hooks/useSceneManagement';
 import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 import { SceneImageGenerator } from '@/components/playground/SceneImageGenerator';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,8 +44,6 @@ const RoleplayChatInterface = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
-  const [sceneInitialized, setSceneInitialized] = useState(false);
-  
   // Roleplay Settings
   const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
     contentMode: 'sfw',
@@ -81,6 +80,24 @@ const RoleplayChatInterface = () => {
     setActiveConversation,
     sendMessage,
   } = usePlayground();
+
+  const [sceneInitialized, setSceneInitialized] = useState(false);
+  
+  // Scene Management
+  const {
+    sceneState,
+    setCurrentScene,
+    startScene,
+    pauseScene,
+    resetScene,
+    toggleSceneVisibility,
+    clearScene
+  } = useSceneManagement({
+    conversationId: state.activeConversationId,
+    characterName: character?.name,
+    userCharacterId: userCharacterId || undefined,
+    contentMode: roleplaySettings.contentMode
+  });
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -119,27 +136,26 @@ const RoleplayChatInterface = () => {
     }
   }, [state.activeConversationId, sceneId, character, sceneInitialized, messages.length]);
 
+  // Update scene state when sceneId changes
+  useEffect(() => {
+    if (sceneId && scenes.length > 0) {
+      const currentScene = scenes.find(scene => scene.id === sceneId);
+      setCurrentScene(currentScene || null);
+    } else {
+      setCurrentScene(null);
+    }
+  }, [sceneId, scenes, setCurrentScene]);
+
   const handleSceneInitialization = useCallback(async () => {
     if (!state.activeConversationId || !sceneId || !character) return;
 
     try {
       setSceneInitialized(true);
       
-      // Start scene with narration
-      await startSceneWithNarration(
-        state.activeConversationId,
-        sceneId,
-        character.name,
-        {
-          userCharacterId: userCharacterId || undefined,
-          contentMode: roleplaySettings.contentMode
-        }
-      );
-
-      toast({
-        title: "Scene Started",
-        description: `Narrator is setting the scene with ${character.name}`,
-      });
+      const currentScene = scenes.find(scene => scene.id === sceneId);
+      if (currentScene) {
+        await startScene(currentScene);
+      }
 
     } catch (error) {
       console.error('Failed to initialize scene:', error);
@@ -149,19 +165,18 @@ const RoleplayChatInterface = () => {
         variant: "destructive",
       });
     }
-  }, [state.activeConversationId, sceneId, character, userCharacterId, roleplaySettings.contentMode, startSceneWithNarration, toast]);
+  }, [state.activeConversationId, sceneId, character, scenes, startScene, toast]);
 
   const handleNewConversation = useCallback(async () => {
     if (!character) return;
 
     try {
-      const conversationId = await createConversation({
-        title: `Chat with ${character.name}`,
-        characterId: character.id,
-        userCharacterId: userCharacterId || undefined,
-        sceneId: sceneId || undefined,
-        settings: roleplaySettings
-      });
+      const conversationId = await createConversation(
+        `Chat with ${character.name}`,
+        undefined, // projectId
+        'character_roleplay', // conversationType
+        character.id // characterId
+      );
 
       setActiveConversation(conversationId);
       
@@ -178,7 +193,9 @@ const RoleplayChatInterface = () => {
         variant: "destructive",
       });
     }
-  }, [character, userCharacterId, sceneId, roleplaySettings, createConversation, setActiveConversation, searchParams, setSearchParams, toast]);
+  }, [character, createConversation, setActiveConversation, searchParams, setSearchParams, toast]);
+
+
 
   // Auto-start conversation when no active conversation exists
   const handleStartConversation = useCallback(async () => {
@@ -290,25 +307,17 @@ const RoleplayChatInterface = () => {
         {/* Main Chat Area */}
         <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Scene Context Header (if in scene mode) */}
-        {sceneId && character && (
+        {sceneState.currentScene && sceneState.isVisible && (
           <SceneContextHeader
-            sceneId={sceneId}
-            title={`Scene with ${character.name}`}
-            participants={[
-              {
-                id: character.id,
-                name: character.name,
-                role: 'ai' as const,
-                image_url: character.reference_image_url || character.image_url
-              }
-            ]}
-            onClose={() => {
-              const params = new URLSearchParams(searchParams);
-              params.delete('scene');
-              params.delete('participants');
-              setSearchParams(params);
-            }}
-            onRegenerateScene={() => setShowSceneGenerator(true)}
+            scene={sceneState.currentScene}
+            characterName={character?.name}
+            isActive={sceneState.isActive}
+            isGenerating={sceneState.isGenerating}
+            onStartScene={() => sceneState.currentScene && startScene(sceneState.currentScene)}
+            onPauseScene={pauseScene}
+            onResetScene={resetScene}
+            onToggleSceneVisibility={toggleSceneVisibility}
+            onOpenSettings={() => setShowSettingsModal(true)}
           />
         )}
 
