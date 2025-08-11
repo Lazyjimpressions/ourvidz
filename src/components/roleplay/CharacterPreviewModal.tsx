@@ -178,7 +178,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                   <SelectValue placeholder="Choose your character (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Anonymous User</SelectItem>
+                  <SelectItem value="anonymous">Anonymous User</SelectItem>
                   {userCharacters.map((userChar) => (
                     <SelectItem key={userChar.id} value={userChar.id}>
                       {userChar.name}
