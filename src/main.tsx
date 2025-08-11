@@ -1,9 +1,17 @@
+console.log('🚀 MAIN.TSX: Script loaded, starting imports...');
+
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+
+console.log('🚀 MAIN.TSX: Basic imports successful, importing App...');
+
 import App from './App.tsx'
+
+console.log('🚀 MAIN.TSX: App imported, importing CSS...');
+
 import './index.css'
 
-console.log('🚀 MAIN.TSX: Starting application...');
+console.log('🚀 MAIN.TSX: All imports successful, starting application...');
 
 const rootElement = document.getElementById("root");
 console.log('🎯 MAIN.TSX: Root element found:', !!rootElement);
