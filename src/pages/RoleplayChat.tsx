@@ -132,7 +132,14 @@ const RoleplayChatInterface = () => {
       !sceneInitialized && 
       messages.length === 0
     ) {
-      handleSceneInitialization();
+      // Add a small delay to ensure conversation is fully established
+      const timer = setTimeout(() => {
+        if (state.activeConversationId && sceneId && character && !sceneInitialized) {
+          handleSceneInitialization();
+        }
+      }, 200);
+
+      return () => clearTimeout(timer);
     }
   }, [state.activeConversationId, sceneId, character, sceneInitialized, messages.length]);
 
@@ -147,14 +154,33 @@ const RoleplayChatInterface = () => {
   }, [sceneId, scenes, setCurrentScene]);
 
   const handleSceneInitialization = useCallback(async () => {
-    if (!state.activeConversationId || !sceneId || !character) return;
+    console.log('Handling scene initialization:', { 
+      activeConversationId: state.activeConversationId, 
+      sceneId, 
+      character: character?.name,
+      sceneInitialized 
+    });
+    
+    if (!state.activeConversationId || !sceneId || !character) {
+      console.log('Missing required data for scene initialization');
+      return;
+    }
 
     try {
       setSceneInitialized(true);
       
       const currentScene = scenes.find(scene => scene.id === sceneId);
+      console.log('Found scene:', currentScene);
+      
       if (currentScene) {
         await startScene(currentScene);
+      } else {
+        console.error('Scene not found:', sceneId);
+        toast({
+          title: "Error",
+          description: "Scene not found",
+          variant: "destructive",
+        });
       }
 
     } catch (error) {
@@ -168,6 +194,8 @@ const RoleplayChatInterface = () => {
   }, [state.activeConversationId, sceneId, character, scenes, startScene, toast]);
 
   const handleNewConversation = useCallback(async () => {
+    console.log('Creating new conversation:', { character: character?.name, sceneId });
+    
     if (!character) return;
 
     try {
@@ -178,12 +206,27 @@ const RoleplayChatInterface = () => {
         character.id // characterId
       );
 
+      console.log('Conversation created:', conversationId);
       setActiveConversation(conversationId);
       
       // Update URL with conversation ID
       const newParams = new URLSearchParams(searchParams);
       newParams.set('conversation', conversationId);
       setSearchParams(newParams);
+
+      // If there's a scene specified, trigger scene initialization after conversation is created
+      if (sceneId) {
+        console.log('Scene specified, will initialize after conversation is ready');
+        // Small delay to ensure conversation is fully established
+        setTimeout(() => {
+          const currentScene = scenes.find(scene => scene.id === sceneId);
+          console.log('Looking for scene:', { sceneId, currentScene, sceneInitialized });
+          if (currentScene && !sceneInitialized) {
+            console.log('Triggering scene initialization');
+            handleSceneInitialization();
+          }
+        }, 300);
+      }
 
     } catch (error) {
       console.error('Failed to create conversation:', error);
@@ -193,7 +236,7 @@ const RoleplayChatInterface = () => {
         variant: "destructive",
       });
     }
-  }, [character, createConversation, setActiveConversation, searchParams, setSearchParams, toast]);
+  }, [character, sceneId, scenes, sceneInitialized, createConversation, setActiveConversation, searchParams, setSearchParams, handleSceneInitialization, toast]);
 
 
 

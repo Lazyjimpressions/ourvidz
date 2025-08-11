@@ -24,9 +24,12 @@ export const useSceneNarration = () => {
     characterName: string,
     options: SceneNarrationOptions = {}
   ) => {
+    console.log('Starting scene narration:', { conversationId, sceneId, characterName, options });
+    
     try {
       // Build the scene narration prompt
       const narrationPrompt = buildNarrationPrompt(sceneId, characterName, options);
+      console.log('Narration prompt:', narrationPrompt);
       
       // Send the narration message
       await sendMessage(narrationPrompt, { 

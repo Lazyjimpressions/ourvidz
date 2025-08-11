@@ -47,7 +47,10 @@ export const useSceneManagement = (options: SceneManagementOptions = {}) => {
   }, []);
 
   const startScene = useCallback(async (scene: Scene) => {
+    console.log('Starting scene:', { scene, options });
+    
     if (!options.conversationId || !options.characterName) {
+      console.error('Missing conversation or character information:', { options });
       toast({
         title: "Error",
         description: "Missing conversation or character information",
