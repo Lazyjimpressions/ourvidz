@@ -159,10 +159,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
               {message.content}
             </div>
           ) : (
-            <ResponseTruncation 
-              content={message.content} 
-              mode={mode}
-            />
+            <div className={`${
+              message.content.includes('**Narrator:**') || message.content.startsWith('**Narrator:**')
+                ? 'border-l-4 border-purple-500 pl-3 bg-purple-50/50 dark:bg-purple-950/30'
+                : ''
+            }`}>
+              <ResponseTruncation 
+                content={message.content} 
+                mode={mode}
+              />
+            </div>
           )}
         </div>
 

@@ -91,9 +91,13 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
             disabled={!value.trim() || isDisabled}
             size="sm"
             className="h-9 w-9 p-0 rounded-lg shadow-sm"
-            title="Send message"
+            title={mode === 'chat' ? 'Send message' : 'Generate scene narrative'}
           >
-            <Send className="w-4 h-4" />
+            {mode === 'chat' ? (
+              <Send className="w-4 h-4" />
+            ) : (
+              <Palette className="w-4 h-4" />
+            )}
           </Button>
         </div>
       </form>

@@ -18,6 +18,7 @@ import { useSceneNarration } from '@/hooks/useSceneNarration';
 import { useSceneManagement } from '@/hooks/useSceneManagement';
 import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 import { SceneImageGenerator } from '@/components/playground/SceneImageGenerator';
+import { SceneGenerationModal } from '@/components/roleplay/SceneGenerationModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { RoleplayLeftSidebar } from '@/components/roleplay/RoleplayLeftSidebar';
 import { CharacterDetailPane } from '@/components/roleplay/CharacterDetailPane';
@@ -41,6 +42,7 @@ const RoleplayChatInterface = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showSceneGenerator, setShowSceneGenerator] = useState(false);
+  const [showSceneNarrativeModal, setShowSceneNarrativeModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
@@ -290,11 +292,10 @@ const RoleplayChatInterface = () => {
   };
 
   const handleGenerateScene = async () => {
-    if (!inputMessage.trim() || isTyping) return;
+    if (isTyping) return;
     
-    // Trigger scene generation with the current input
-    setShowSceneGenerator(true);
-    // Don't clear input in case user wants to modify the prompt
+    // Open scene narrative modal for text-based scene generation
+    setShowSceneNarrativeModal(true);
   };
 
   const handleCharacterAdded = (newCharacter: any) => {
@@ -494,6 +495,14 @@ const RoleplayChatInterface = () => {
           onGenerationStart={() => console.log('Scene generation started')}
         />
       )}
+
+      <SceneGenerationModal
+        isOpen={showSceneNarrativeModal}
+        onClose={() => setShowSceneNarrativeModal(false)}
+        characterId={characterId || undefined}
+        conversationId={state.activeConversationId || undefined}
+        character={character}
+      />
 
       <RoleplaySettingsModal
         isOpen={showSettingsModal}
