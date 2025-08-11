@@ -138,20 +138,6 @@ const RoleplayDashboard = () => {
         subtitle="Chat with AI characters or create your own"
       />
       
-      {/* Test Link - Remove in production */}
-      <div className="px-6 py-2 bg-yellow-50 border-b border-yellow-200">
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-yellow-800">🧪 Testing Mode</span>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => navigate('/roleplay/test')}
-            className="text-xs"
-          >
-            Test Scene Workflow
-          </Button>
-        </div>
-      </div>
       
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
