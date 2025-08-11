@@ -7,9 +7,10 @@ import { useAuth } from "@/contexts/AuthContext";
 interface WorkspaceHeaderProps {
   onClearWorkspace?: () => void;
   onDismissAllJobs?: () => void;
+  onDeleteAllWorkspace?: () => void;
 }
 
-export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAllWorkspace }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
 
@@ -19,12 +20,8 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs }: Workspac
   };
 
   const handleDeleteAll = async () => {
-    // Implement proper delete all functionality
-    if (onClearWorkspace) {
-      await onClearWorkspace();
-    }
-    if (onDismissAllJobs) {
-      await onDismissAllJobs();
+    if (onDeleteAllWorkspace) {
+      await onDeleteAllWorkspace();
     }
   };
 

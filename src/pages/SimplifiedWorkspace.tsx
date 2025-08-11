@@ -32,7 +32,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     deleteItemPermanently,
     hideJobFromWorkspace,
     deleteJobPermanently,
-    clearWorkspace: optimizedClearWorkspace,
+    deleteAllWorkspace,
   } = useOptimizedWorkspace();
   
   // Modal state for confirmations
@@ -428,7 +428,8 @@ export const SimplifiedWorkspace: React.FC = () => {
       title: 'Clear Workspace?',
       description: 'This will hide all items from your workspace. You can still access them in your library.',
       confirmAction: async () => {
-        await optimizedClearWorkspace();
+        console.log('🧹 WORKSPACE: Starting clear workspace action');
+        await clearWorkspace();
         setDeleteModal(prev => ({ ...prev, isOpen: false }));
       },
     });
@@ -457,6 +458,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       <WorkspaceHeader
         onClearWorkspace={handleClearWorkspace}
         onDismissAllJobs={handleClearWorkspace}
+        onDeleteAllWorkspace={deleteAllWorkspace}
       />
       <div className="flex flex-1 overflow-hidden pb-60 pt-header">
         <div className="flex-1 overflow-y-auto p-4">

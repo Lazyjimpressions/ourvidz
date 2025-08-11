@@ -181,30 +181,142 @@ export const useOptimizedWorkspace = () => {
     );
   }, [withOptimisticUpdate]);
 
-  // Clear all workspace (hide all items)
+  // Clear all workspace (hide all items) - Fixed to use correct data model
   const clearWorkspace = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
     try {
-      const { error } = await supabase
-        .from('workspace_items')
-        .update({ status: 'hidden' })
+      console.log('🧹 OPTIMIZED: Clearing workspace via metadata.workspace_dismissed');
+      
+      // Get today's start (UTC-based to match database)
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      
+      // Update images with dismissed flag
+      const { data: images } = await supabase
+        .from('images')
+        .select('id, metadata')
         .eq('user_id', user.id)
-        .eq('status', 'generated');
+        .eq('status', 'completed')
+        .gte('created_at', todayStart.toISOString());
 
-      if (error) throw error;
+      if (images) {
+        for (const image of images) {
+          const currentMetadata = (image.metadata as Record<string, any>) || {};
+          await supabase
+            .from('images')
+            .update({ 
+              metadata: {
+                ...currentMetadata,
+                workspace_dismissed: true,
+                dismissed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', image.id);
+        }
+        console.log(`✅ Dismissed ${images.length} images from workspace`);
+      }
+
+      // Update videos with dismissed flag
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('id, metadata')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('created_at', todayStart.toISOString());
+
+      if (videos) {
+        for (const video of videos) {
+          const currentMetadata = (video.metadata as Record<string, any>) || {};
+          await supabase
+            .from('videos')
+            .update({ 
+              metadata: {
+                ...currentMetadata,
+                workspace_dismissed: true,
+                dismissed_at: new Date().toISOString()
+              }
+            })
+            .eq('id', video.id);
+        }
+        console.log(`✅ Dismissed ${videos.length} videos from workspace`);
+      }
 
       // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ['workspace-items-all'] });
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
-      queryClient.invalidateQueries({ queryKey: ['media-grid-workspace-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
 
       toast.success('Workspace cleared');
       return true;
     } catch (error) {
       console.error('Failed to clear workspace:', error);
       toast.error('Failed to clear workspace');
+      return false;
+    }
+  }, [queryClient]);
+
+  // Delete all workspace items permanently
+  const deleteAllWorkspace = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    try {
+      console.log('🗑️ OPTIMIZED: Deleting all workspace items permanently');
+      
+      // Get today's start (UTC-based to match database)
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      
+      // Get today's items to delete
+      const { data: images } = await supabase
+        .from('images')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('created_at', todayStart.toISOString());
+
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .gte('created_at', todayStart.toISOString());
+
+      // Delete images permanently
+      if (images && images.length > 0) {
+        const { error: deleteImagesError } = await supabase
+          .from('images')
+          .delete()
+          .in('id', images.map(img => img.id))
+          .eq('user_id', user.id);
+        
+        if (deleteImagesError) throw deleteImagesError;
+        console.log(`✅ Deleted ${images.length} images permanently`);
+      }
+
+      // Delete videos permanently
+      if (videos && videos.length > 0) {
+        const { error: deleteVideosError } = await supabase
+          .from('videos')
+          .delete()
+          .in('id', videos.map(vid => vid.id))
+          .eq('user_id', user.id);
+        
+        if (deleteVideosError) throw deleteVideosError;
+        console.log(`✅ Deleted ${videos.length} videos permanently`);
+      }
+
+      // Invalidate queries
+      queryClient.invalidateQueries({ queryKey: ['assets'] });
+      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+
+      const totalDeleted = (images?.length || 0) + (videos?.length || 0);
+      toast.success(`${totalDeleted} items deleted permanently`);
+      return true;
+    } catch (error) {
+      console.error('Failed to delete all workspace items:', error);
+      toast.error('Failed to delete all items');
       return false;
     }
   }, [queryClient]);
@@ -217,5 +329,6 @@ export const useOptimizedWorkspace = () => {
     hideJobFromWorkspace,
     deleteJobPermanently,
     clearWorkspace,
+    deleteAllWorkspace,
   };
 };
