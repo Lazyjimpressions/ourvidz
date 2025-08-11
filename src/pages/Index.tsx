@@ -6,6 +6,7 @@ import { AuthHeader } from "@/components/AuthHeader";
 import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
+  console.log('🏠 INDEX: Index page rendering...');
   const { user } = useAuth();
   const navigate = useNavigate();
 

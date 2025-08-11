@@ -34,6 +34,8 @@ const WorkspaceWithMobileDetection = () => {
 };
 
 function App() {
+  console.log('🚀 APP.TSX: App component rendering...');
+  
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
