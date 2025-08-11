@@ -30,8 +30,7 @@ export const useSceneNarration = () => {
       
       // Send the narration message
       await sendMessage(narrationPrompt, { 
-        conversationId,
-        isNarrator: true 
+        conversationId
       });
 
       toast({

@@ -146,7 +146,7 @@ export const SceneGenerationModal = ({
                   <SelectValue placeholder="Select user character" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {userCharacters.map((char) => (
                     <SelectItem key={char.id} value={char.id}>
                       {char.name}
@@ -165,7 +165,7 @@ export const SceneGenerationModal = ({
                   <SelectValue placeholder="Select AI character" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {aiCharacters.map((char) => (
                     <SelectItem key={char.id} value={char.id}>
                       {char.name}
@@ -184,7 +184,7 @@ export const SceneGenerationModal = ({
                   <SelectValue placeholder="Select second AI character" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="none">None</SelectItem>
                   {aiCharacters.filter(char => char.id !== selectedAICharacter1).map((char) => (
                     <SelectItem key={char.id} value={char.id}>
                       {char.name}
