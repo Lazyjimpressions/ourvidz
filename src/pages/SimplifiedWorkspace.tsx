@@ -33,6 +33,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     hideJobFromWorkspace,
     deleteJobPermanently,
     clearWorkspace: optimizedClearWorkspace,
+    deleteAllWorkspace,
   } = useOptimizedWorkspace();
   
   // Modal state for confirmations
@@ -457,6 +458,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       <WorkspaceHeader
         onClearWorkspace={handleClearWorkspace}
         onDismissAllJobs={handleClearWorkspace}
+        onDeleteAllWorkspace={deleteAllWorkspace}
       />
       <div className="flex flex-1 overflow-hidden pb-60 pt-header">
         <div className="flex-1 overflow-y-auto p-4">
