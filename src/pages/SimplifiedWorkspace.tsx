@@ -203,35 +203,43 @@ export const SimplifiedWorkspace: React.FC = () => {
       itemSeed: item.metadata?.seed
     });
     
-    // Extract metadata for exact copy functionality
-    (async () => {
-      const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
-      const metadata = await extractReferenceMetadata(item);
+    // ✅ FIXED: Extract metadata synchronously for exact copy functionality
+    const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
+    const metadata = extractReferenceMetadata(item);
+    
+    console.log('🎯 ITERATE METADATA EXTRACTION:', {
+      extracted: !!metadata,
+      metadataKeys: metadata ? Object.keys(metadata) : 'none',
+      originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+      originalSeed: metadata?.originalSeed
+    });
+    
+    // Set reference metadata and enable exact copy mode
+    if (metadata) {
+      setReferenceMetadata(metadata);
+      console.log('🎯 ITERATE: Reference metadata set for exact copy');
       
-      console.log('🎯 ITERATE METADATA EXTRACTION:', {
-        extracted: !!metadata,
-        metadataKeys: metadata ? Object.keys(metadata) : 'none',
-        originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
-        originalSeed: metadata?.originalSeed
-      });
-      
-      if (metadata) {
-        setReferenceMetadata(metadata);
-        console.log('🎯 ITERATE: Reference metadata set for exact copy');
-      } else {
-        console.warn('⚠️ ITERATE: Failed to extract metadata for exact copy');
-      }
-    })();
+      // ✅ CRITICAL FIX: Enable exact copy mode when metadata is available
+      setExactCopyMode(true);
+      console.log('🎯 ITERATE: Exact copy mode enabled');
+    } else {
+      console.warn('⚠️ ITERATE: Failed to extract metadata for exact copy');
+    }
     
     // Set the image as reference for image-to-image generation using URL
     setReferenceImageUrl(item.url);
-    // Exact copy defaults and apply original parameters
-    setReferenceStrength(0.1);
+    
+    // ✅ FIXED: Use proper reference strength for exact copy (0.9 instead of 0.1)
+    const referenceStrength = metadata ? 0.9 : 0.1;
+    setReferenceStrength(referenceStrength);
+    console.log('🎯 ITERATE: Reference strength set to:', referenceStrength);
+    
+    // Apply original parameters from the asset
     applyAssetParamsFromItem(item);
-    if (item.metadata?.seed) setLockSeed(true);
     
     // Set the seed for character reproduction
     if (item.metadata?.seed) {
+      setLockSeed(true);
       console.log('🌱 ITERATE: Using seed for character reproduction:', item.metadata.seed);
     }
     
