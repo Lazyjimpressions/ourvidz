@@ -48,55 +48,17 @@ export const AssetCard = ({
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const { getSignedUrl } = useSignedImageUrls();
 
-  // Enhanced URL resolution with proper error handling
+  // Simplified URL resolution - URLs should be pre-populated by AssetService
   useEffect(() => {
-    const resolveImageUrl = async () => {
-      try {
-        // Try multiple URL sources in order of preference
-        let url = asset.url;
-        
-        // For SDXL images that have multiple URLs
-        if (!url && asset.signedUrls && Array.isArray(asset.signedUrls) && asset.signedUrls.length > 0) {
-          url = asset.signedUrls[0];
-        }
-        
-        // If we still don't have a URL and asset has bucketHint, try to generate a signed URL
-        if (!url && asset.id && asset.bucketHint) {
-          console.log(`🔄 Attempting to generate signed URL for asset ${asset.id} using bucket: ${asset.bucketHint}`);
-          
-          // Try different path formats for better resolution
-          const pathsToTry = [
-            asset.id + '.png',
-            asset.id + '.jpg', 
-            asset.id + '.webp',
-            asset.id
-          ];
-          
-          for (const path of pathsToTry) {
-            const signedUrl = await getSignedUrl(path, asset.bucketHint);
-            if (signedUrl) {
-              url = signedUrl;
-              console.log(`✅ Generated signed URL for asset ${asset.id} with path: ${path}`);
-              break;
-            }
-          }
-        }
-
-        if (url) {
-          setDisplayUrl(url);
-          console.log(`🖼️ Asset ${asset.id} resolved to URL: ${url.substring(0, 100)}...`);
-        } else {
-          console.warn(`⚠️ No URL found for asset ${asset.id}`);
-          setImageError(true);
-        }
-      } catch (error) {
-        console.error(`❌ Error resolving URL for asset ${asset.id}:`, error);
-        setImageError(true);
-      }
-    };
-
-    resolveImageUrl();
-  }, [asset, getSignedUrl]);
+    // Use pre-populated URL from AssetService
+    if (asset.url) {
+      setDisplayUrl(asset.url);
+      console.log(`🖼️ Asset ${asset.id} using pre-populated URL`);
+    } else {
+      console.warn(`⚠️ No pre-populated URL found for asset ${asset.id}`);
+      setImageError(true);
+    }
+  }, [asset]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
