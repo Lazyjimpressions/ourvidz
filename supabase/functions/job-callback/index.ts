@@ -250,6 +250,23 @@ console.log('🎯 WORKSPACE DESTINATION CHECK:', {
   currentJobId: currentJob.id
 });
     
+    // Normalize SDXL parameter fields and exact copy behavior before persisting metadata
+    const isSDXLJob = (currentJob.job_type || '').startsWith('sdxl_');
+    if (isSDXLJob) {
+      if (updatedMetadata.sample_guide_scale && !updatedMetadata.guidance_scale) {
+        updatedMetadata.guidance_scale = updatedMetadata.sample_guide_scale;
+      }
+      if (updatedMetadata.sample_steps && !updatedMetadata.num_inference_steps) {
+        updatedMetadata.num_inference_steps = updatedMetadata.sample_steps;
+      }
+      delete updatedMetadata.sample_guide_scale;
+      delete updatedMetadata.sample_steps;
+      delete updatedMetadata.sample_solver;
+      delete updatedMetadata.sample_shift;
+    }
+    if (updatedMetadata.exact_copy_mode) {
+      updatedMetadata.negative_prompt = '';
+    }
     updateData.metadata = updatedMetadata;
     
     // PURE LIBRARY-FIRST: Always route completed jobs to library tables
@@ -914,98 +931,49 @@ async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
   try {
     // Only track completed jobs with enhancement data
     if (status !== 'completed') return;
-    
+
     const jobMetadata = job.metadata || {};
     const hasEnhancement = jobMetadata.enhancement_strategy && jobMetadata.enhancement_strategy !== 'none';
-    
     if (!hasEnhancement) {
       console.log('📊 Skipping analytics tracking - no enhancement detected');
       return;
     }
-    
-    console.log('📊 PHASE 4: Tracking enhancement analytics:', {
-      jobId: job.id,
-      enhancement_strategy: jobMetadata.enhancement_strategy,
-      original_prompt: !!jobMetadata.original_prompt,
-      enhanced_prompt: !!jobMetadata.enhanced_prompt,
-      qwen_expansion: jobMetadata.qwen_expansion_percentage,
-      hasImages
-    });
-    
+
     // Calculate token expansion if available
-    let tokenExpansion = null;
+    let tokenExpansion: number | null = null;
     if (jobMetadata.original_prompt && jobMetadata.enhanced_prompt) {
       const originalLength = jobMetadata.original_prompt.length;
       const enhancedLength = jobMetadata.enhanced_prompt.length;
       tokenExpansion = originalLength > 0 ? ((enhancedLength - originalLength) / originalLength) * 100 : 0;
     }
-    
-    // Insert into job_enhancement_analysis table
-    const analyticsData = {
-      id: job.id, // Use job ID as primary key
+
+    // Store lightweight analytics in user_activity_log to avoid missing-table errors
+    const activityPayload = {
       user_id: job.user_id,
-      job_type: job.job_type,
-      model_type: jobMetadata.model_type || 'unknown',
-      status: job.status,
-      original_prompt: jobMetadata.original_prompt,
-      enhanced_prompt: jobMetadata.enhanced_prompt,
-      enhancement_strategy: jobMetadata.enhancement_strategy,
-      enhancement_time_ms: jobMetadata.enhancement_time_ms || null,
-      qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || null,
-      quality_improvement: jobMetadata.quality_improvement || null,
-      quality_rating: jobMetadata.quality_rating || null,
-      generation_time_seconds: jobMetadata.generation_time || null,
-      created_at: job.created_at,
-      completed_at: job.completed_at,
-      enhancement_display_name: `${jobMetadata.enhancement_strategy} (${job.job_type})`
-    };
-    
-    const { error: analyticsError } = await supabase
-      .from('job_enhancement_analysis')
-      .upsert(analyticsData, { onConflict: 'id' });
-    
-    if (analyticsError) {
-      console.error('❌ PHASE 4: Error inserting enhancement analytics:', analyticsError);
-    } else {
-      console.log('✅ PHASE 4: Enhancement analytics tracked successfully:', {
-        jobId: job.id,
-        strategy: jobMetadata.enhancement_strategy,
-        tokenExpansion,
-        generationTime: jobMetadata.generation_time
-      });
-    }
-    
-    // Also track in image-specific analytics if this is an image job
-    if (job.job_type.includes('image') && hasImages) {
-      const imageAnalyticsData = {
-        id: job.id, // Use job ID as primary key
-        user_id: job.user_id,
-        prompt: jobMetadata.original_prompt,
-        enhanced_prompt: jobMetadata.enhanced_prompt,
-        format: jobMetadata.format || 'png',
-        quality: job.quality || 'fast',
+      action: 'job_enhancement_analytics',
+      resource_type: 'job',
+      resource_id: job.id,
+      metadata: {
+        job_type: job.job_type,
         status: job.status,
         enhancement_strategy: jobMetadata.enhancement_strategy,
         enhancement_time_ms: jobMetadata.enhancement_time_ms || null,
-        qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || null,
-        compel_weights: jobMetadata.compel_weights || null,
+        qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || tokenExpansion,
         quality_improvement: jobMetadata.quality_improvement || null,
-        quality_rating: jobMetadata.quality_rating || null,
-        created_at: job.created_at,
-        enhancement_display_name: `${jobMetadata.enhancement_strategy} (${job.job_type})`
-      };
-      
-      const { error: imageAnalyticsError } = await supabase
-        .from('image_enhancement_analysis')
-        .upsert(imageAnalyticsData, { onConflict: 'id' });
-      
-      if (imageAnalyticsError) {
-        console.error('❌ PHASE 4: Error inserting image enhancement analytics:', imageAnalyticsError);
-      } else {
-        console.log('✅ PHASE 4: Image enhancement analytics tracked successfully');
+        has_images: hasImages,
+        generation_time_seconds: jobMetadata.generation_time || null
       }
+    };
+
+    const { error: activityError } = await supabase
+      .from('user_activity_log')
+      .insert(activityPayload);
+
+    if (activityError) {
+      console.error('❌ PHASE 4: Failed to log enhancement analytics activity:', activityError);
+    } else {
+      console.log('✅ PHASE 4: Enhancement analytics activity logged');
     }
-    
   } catch (error) {
     console.error('❌ PHASE 4: Error in enhancement analytics tracking:', error);
   }

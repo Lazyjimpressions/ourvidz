@@ -719,14 +719,19 @@ serve(async (req)=>{
     let negativePromptError = null;
 
     if (isSDXL) {
-      try {
-        negativePrompt = await generateNegativePromptForSDXL(metadata?.userNegativePrompt || '', contentTier);
-        console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
-      } catch (error) {
-        negativePromptError = error.message;
-        console.error('❌ Error generating negative prompt:', error);
-        // Fallback to basic negative prompt
-        negativePrompt = "bad anatomy, extra limbs, deformed, missing limbs, worst quality, low quality, normal quality, lowres, text, watermark, logo, signature";
+      if (metadata?.exact_copy_mode) {
+        console.log('🎯 EXACT COPY MODE: Skipping negative prompt generation for SDXL');
+        negativePrompt = '';
+      } else {
+        try {
+          negativePrompt = await generateNegativePromptForSDXL(metadata?.userNegativePrompt || '', contentTier);
+          console.log('🚫 Generated SDXL negative prompt:', negativePrompt);
+        } catch (error) {
+          negativePromptError = error.message;
+          console.error('❌ Error generating negative prompt:', error);
+          // Fallback to basic negative prompt
+          negativePrompt = "bad anatomy, extra limbs, deformed, missing limbs, worst quality, low quality, normal quality, lowres, text, watermark, logo, signature";
+        }
       }
     } else {
       console.log('🚫 WAN job detected - NO negative prompt (not supported by WAN 2.1)');
@@ -772,10 +777,17 @@ serve(async (req)=>{
         (format === 'video' ? (quality === 'high' ? 240 : 195) : (quality === 'high' ? 100 : 85)) :
         (format === 'video' ? (quality === 'high' ? 180 : 135) : (quality === 'high' ? 40 : 25)),
       // Quality settings
-      sample_steps: quality === 'high' ? 50 : 25,
-      sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
-      sample_solver: 'unipc',
-      sample_shift: 5.0,
+      // Parameter mapping normalization: SDXL uses guidance_scale/num_inference_steps; WAN uses sample_*
+      ...(isSDXL ? {
+        num_inference_steps: quality === 'high' ? 50 : 25,
+        guidance_scale: quality === 'high' ? 7.5 : 6.5,
+        scheduler: 'unipc'
+      } : {
+        sample_steps: quality === 'high' ? 50 : 25,
+        sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
+        sample_solver: 'unipc',
+        sample_shift: 5.0
+      }),
       // User-controlled batch settings
       num_images: metadata?.num_images || (isSDXL ? 1 : 1), // Default to 1, user can select 1, 3, or 6
       batch_count: metadata?.batch_count || 1,
