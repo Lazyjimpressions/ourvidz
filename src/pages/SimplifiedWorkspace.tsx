@@ -186,7 +186,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     return () => window.removeEventListener('workspace-use-job-as-reference', handler as EventListener);
   }, [mode, setReferenceStrength, workspaceAssets]);
 
-  // NEW: Listen for drag-drop metadata extraction events
+  // NEW: Listen for drag-drop metadata extraction events - FIXED TIMING
   React.useEffect(() => {
     const handleDragDropMetadata = async (e: Event) => {
       const custom = e as CustomEvent<{ workspaceItem: any }>;
@@ -200,35 +200,39 @@ export const SimplifiedWorkspace: React.FC = () => {
       });
       
       if (!workspaceItem?.id) {
-        console.warn('⚠️ DRAG-DROP: No workspace item ID provided');
+        console.warn('⚠️ DRAG-DROP: No workspace item ID found');
         return;
       }
       
-      // Find the full asset in workspace
+      // Find asset by ID and extract metadata immediately
       const asset = workspaceAssets.find(a => a.id === workspaceItem.id);
-      if (!asset) {
-        console.warn('⚠️ DRAG-DROP: Asset not found in workspace:', workspaceItem.id);
-        return;
-      }
-      
-      // Extract reference metadata for exact copy functionality
-      const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
-      const metadata = await extractReferenceMetadata(asset);
-      
-      console.log('🎯 DRAG-DROP METADATA EXTRACTION:', {
-        extracted: !!metadata,
-        metadataKeys: metadata ? Object.keys(metadata) : 'none',
-        originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
-        originalSeed: metadata?.originalSeed
-      });
-      
-      if (metadata) {
-        setReferenceMetadata(metadata);
-        setExactCopyMode(true);
-        setReferenceStrength(0.9); // High strength for exact copy
-        console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata:', metadata);
+      if (asset) {
+        console.log('🎯 DRAG-DROP: Found asset for metadata extraction:', {
+          assetId: asset.id,
+          assetUrl: asset.url,
+          assetMetadata: asset.metadata,
+          assetEnhancedPrompt: asset.enhancedPrompt
+        });
+        
+        const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+        const metadata = await extractReferenceMetadata(asset);
+        
+        console.log('🎯 DRAG-DROP: Metadata extraction result:', {
+          extracted: !!metadata,
+          metadataKeys: metadata ? Object.keys(metadata) : 'none',
+          originalEnhancedPrompt: metadata?.originalEnhancedPrompt
+        });
+        
+        if (metadata) {
+          setReferenceMetadata(metadata);
+          setExactCopyMode(true);
+          setReferenceStrength(0.9); // High strength for exact copy
+          console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata via drag-drop');
+        } else {
+          console.error('❌ DRAG-DROP: Metadata extraction failed');
+        }
       } else {
-        console.warn('⚠️ DRAG-DROP: Failed to extract metadata');
+        console.warn('⚠️ DRAG-DROP: Asset not found with ID:', workspaceItem.id);
       }
     };
     

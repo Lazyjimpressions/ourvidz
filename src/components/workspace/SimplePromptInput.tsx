@@ -278,13 +278,31 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Scenario 2: When a user uploads a reference image file, auto-enable Exact Copy with high strength
+  // Auto-enable exact copy when reference image is set
   const handleReferenceFileChange = (file: File | null) => {
     onReferenceImageChange(file);
     if (file) {
       onExactCopyModeChange?.(true);
       onReferenceStrengthChange(0.8); // High strength for exact copying
       onModeChange('image');
+    } else {
+      // Clear exact copy mode when reference is removed
+      onExactCopyModeChange?.(false);
+      onReferenceMetadataChange?.(null);
+    }
+  };
+
+  // Handle reference image URL changes (for drag-and-drop)
+  const handleReferenceUrlChange = (url: string | null) => {
+    onReferenceImageUrlChange?.(url);
+    if (url) {
+      onExactCopyModeChange?.(true);
+      onReferenceStrengthChange(0.8);
+      onModeChange('image');
+    } else {
+      // Clear exact copy mode when reference is removed
+      onExactCopyModeChange?.(false);
+      onReferenceMetadataChange?.(null);
     }
   };
 
@@ -394,7 +412,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     file={referenceImage}
                     onFileChange={handleReferenceFileChange}
                     imageUrl={referenceImageUrl}
-                    onImageUrlChange={onReferenceImageUrlChange}
+                    onImageUrlChange={handleReferenceUrlChange}
                     label="Ref"
                   />
                 ) : (
@@ -437,22 +455,18 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <span className="text-[10px] font-medium">Exact Copy</span>
                       </div>
                     )}
-                     {exactCopyMode && referenceMetadata && (
-                       <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
-                         <div className="font-medium text-foreground">Original Prompt:</div>
-                         <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
-                           {referenceMetadata.originalEnhancedPrompt}
-                         </div>
-                         {prompt.trim() && (
-                           <>
-                             <div className="font-medium text-foreground">Final Prompt:</div>
-                             <div className="text-primary text-[10px] max-h-8 overflow-y-auto">
-                               {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
-                             </div>
-                           </>
-                         )}
-                       </div>
-                     )}
+                     {exactCopyMode && referenceMetadata && prompt.trim() && (
+                        <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
+                          <div className="font-medium text-foreground">Original Prompt:</div>
+                          <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
+                            {referenceMetadata.originalEnhancedPrompt}
+                          </div>
+                          <div className="font-medium text-foreground">Final Prompt:</div>
+                          <div className="text-primary text-[10px] max-h-8 overflow-y-auto">
+                            {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
+                          </div>
+                        </div>
+                      )}
                      {exactCopyMode && !referenceMetadata && prompt.length === 0 && (
                        <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
                          Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
