@@ -165,6 +165,11 @@ export const SimplifiedWorkspace: React.FC = () => {
           setReferenceMetadata(metadata);
           setExactCopyMode(true);
           setReferenceStrength(0.9); // High strength for exact copy
+          
+          // CRITICAL FIX: Clear prompt to show as exact copy
+          setPrompt(''); // Clear current prompt to show as exact copy
+          console.log('✅ USE AS REFERENCE: Cleared prompt for exact copy mode');
+          
           console.log('✅ USE AS REFERENCE: Exact copy mode enabled with metadata:', metadata);
         } else {
           console.error('❌ USE AS REFERENCE: Metadata extraction failed - no enhanced prompt found');
@@ -227,6 +232,11 @@ export const SimplifiedWorkspace: React.FC = () => {
           setReferenceMetadata(metadata);
           setExactCopyMode(true);
           setReferenceStrength(0.9); // High strength for exact copy
+          
+          // CRITICAL FIX: Clear prompt to show as exact copy
+          setPrompt(''); // Clear current prompt to show as exact copy
+          console.log('✅ DRAG-DROP: Cleared prompt for exact copy mode');
+          
           console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata via drag-drop');
         } else {
           console.error('❌ DRAG-DROP: Metadata extraction failed');
