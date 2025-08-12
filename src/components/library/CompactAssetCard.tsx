@@ -81,18 +81,37 @@ export const CompactAssetCard = ({
       >
         {asset.url && asset.status === 'completed' && !imageError ? (
           <>
-            <img
-              src={asset.url}
-              alt={asset.prompt}
-              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-              onError={handleImageError}
-            />
-            {asset.type === 'video' && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                <div className="bg-background/80 rounded-full p-2 backdrop-blur-sm">
-                  <Play className="h-4 w-4 fill-current" />
+            {asset.type === 'video' ? (
+              <div className="relative w-full h-full">
+                {asset.thumbnailUrl ? (
+                  <img
+                    src={asset.thumbnailUrl}
+                    alt="Video thumbnail"
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    onError={handleImageError}
+                  />
+                ) : (
+                  <video
+                    src={asset.url}
+                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    muted
+                    preload="metadata"
+                    onError={handleImageError}
+                  />
+                )}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                  <div className="bg-background/80 rounded-full p-2 backdrop-blur-sm">
+                    <Play className="h-4 w-4 fill-current" />
+                  </div>
                 </div>
               </div>
+            ) : (
+              <img
+                src={asset.url}
+                alt={asset.prompt}
+                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                onError={handleImageError}
+              />
             )}
           </>
         ) : (

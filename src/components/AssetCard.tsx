@@ -13,7 +13,8 @@ import {
   Clock,
   Calendar,
   Loader2,
-  ImageIcon
+  ImageIcon,
+  Play
 } from "lucide-react";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { UnifiedUrlService } from "@/lib/services/UnifiedUrlService";
@@ -128,32 +129,60 @@ export const AssetCard = ({
           </div>
         ) : asset.type === 'video' ? (
           displayUrl ? (
-            <video
-              src={displayUrl}
-              className="w-full h-full object-cover"
-              muted
-              preload="metadata"
-              onMouseEnter={(e) => {
-                const video = e.currentTarget;
-                video.currentTime = 0;
-                video.play().catch(() => {
-                  // Ignore play errors - some videos might not be ready
-                });
-              }}
-              onMouseLeave={(e) => {
-                const video = e.currentTarget;
-                video.pause();
-                video.currentTime = 0;
-              }}
-              onLoad={() => {
-                setImageLoaded(true);
-                console.log(`✅ Video loaded successfully for asset ${asset.id}`);
-              }}
-              onError={(e) => {
-                setImageError(true);
-                console.error(`❌ Video failed to load for asset ${asset.id}:`, e);
-              }}
-            />
+            <div className="relative w-full h-full">
+              {asset.thumbnailUrl ? (
+                <img
+                  src={asset.thumbnailUrl}
+                  alt="Video thumbnail"
+                  className={`w-full h-full object-cover transition-all duration-300 ${
+                    !imageLoaded ? 'opacity-0' : 'opacity-100'
+                  } ${imageError ? 'hidden' : ''}`}
+                  onLoad={() => {
+                    setImageLoaded(true);
+                    console.log(`✅ Video thumbnail loaded successfully for asset ${asset.id}`);
+                  }}
+                  onError={(e) => {
+                    setImageError(true);
+                    console.error(`❌ Video thumbnail failed to load for asset ${asset.id}:`, e);
+                  }}
+                />
+              ) : (
+                <video
+                  src={displayUrl}
+                  className={`w-full h-full object-cover transition-all duration-300 ${
+                    !imageLoaded ? 'opacity-0' : 'opacity-100'
+                  } ${imageError ? 'hidden' : ''}`}
+                  muted
+                  preload="metadata"
+                  onMouseEnter={(e) => {
+                    const video = e.currentTarget;
+                    video.currentTime = 0;
+                    video.play().catch(() => {
+                      // Ignore play errors - some videos might not be ready
+                    });
+                  }}
+                  onMouseLeave={(e) => {
+                    const video = e.currentTarget;
+                    video.pause();
+                    video.currentTime = 0;
+                  }}
+                  onCanPlay={() => {
+                    setImageLoaded(true);
+                    console.log(`✅ Video loaded successfully for asset ${asset.id}`);
+                  }}
+                  onError={(e) => {
+                    setImageError(true);
+                    console.error(`❌ Video failed to load for asset ${asset.id}:`, e);
+                  }}
+                />
+              )}
+              {/* Play button overlay for videos */}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="bg-black/70 rounded-full p-3">
+                  <Play className="w-6 h-6 text-white fill-white" />
+                </div>
+              </div>
+            </div>
           ) : (
             <div className="w-full h-full bg-muted flex items-center justify-center">
               <Video className="w-8 h-8 text-muted-foreground" />
