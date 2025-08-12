@@ -18,6 +18,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [isLoading, setIsLoading] = useState(true);
+  const [fitMode, setFitMode] = useState<'fill' | 'fit'>('fill');
   const touchStartY = useRef<number | null>(null);
   const touchDeltaY = useRef<number>(0);
   const closing = useRef(false);
@@ -126,6 +127,15 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
           )}
           <Button
             size="sm"
+            variant="secondary"
+            className="h-8"
+            onClick={() => setFitMode(fitMode === 'fill' ? 'fit' : 'fill')}
+            aria-label={fitMode === 'fill' ? 'Switch to Fit' : 'Switch to Fill'}
+          >
+            {fitMode === 'fill' ? 'Fit' : 'Fill'}
+          </Button>
+          <Button
+            size="sm"
             variant="ghost"
             className="h-8 w-8 p-0"
             onClick={onClose}
@@ -138,7 +148,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
 
       {/* Media area */}
       <div
-        className="w-full h-full flex items-center justify-center px-4 touch-none select-none"
+        className="w-[100vw] h-[100dvh] flex items-center justify-center touch-none select-none overflow-hidden"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
@@ -154,7 +164,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
             <img
               src={currentAsset.url}
               alt={currentAsset.prompt}
-              className="max-h-full max-w-full object-contain"
+              className={fitMode === 'fill' ? 'w-full h-full object-cover' : 'max-h-full max-w-full object-contain'}
               onLoad={() => setIsLoading(false)}
               onError={() => setIsLoading(false)}
               loading="eager"
@@ -163,7 +173,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
           ) : (
             <video
               src={currentAsset.url}
-              className="max-h-full max-w-full object-contain"
+              className="w-full h-full object-contain"
               poster={currentAsset.thumbnailUrl || undefined}
               controls
               playsInline
