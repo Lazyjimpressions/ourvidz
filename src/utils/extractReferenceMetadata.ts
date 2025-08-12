@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Extract metadata from a reference image for exact copy functionality
+ * ENHANCED VERSION: Better fallback logic, validation, and error handling
  */
 export const extractReferenceMetadata = async (asset: UnifiedAsset): Promise<ReferenceMetadata | null> => {
   try {
@@ -19,69 +20,113 @@ export const extractReferenceMetadata = async (asset: UnifiedAsset): Promise<Ref
     });
     
     const metadata = asset.metadata as any;
+    let originalEnhancedPrompt: string | null = null;
+    let extractionSource = '';
     
-    // PRIORITY 1: Look for enhanced prompt in asset first (proper camelCase)
-    let originalEnhancedPrompt = asset.enhancedPrompt;
+    // ENHANCED EXTRACTION: Multiple fallback paths with validation
     
-    // PRIORITY 2: Check metadata for enhanced_prompt (snake_case from DB)
-    if (!originalEnhancedPrompt) {
-      originalEnhancedPrompt = metadata?.enhanced_prompt;
+    // PATH 1: Direct asset enhanced prompt (camelCase)
+    if (asset.enhancedPrompt && typeof asset.enhancedPrompt === 'string' && asset.enhancedPrompt.trim().length > 0) {
+      originalEnhancedPrompt = asset.enhancedPrompt.trim();
+      extractionSource = 'asset.enhancedPrompt';
     }
     
-    // PRIORITY 3: Fallback to regular prompt if no enhanced prompt
-    if (!originalEnhancedPrompt) {
-      originalEnhancedPrompt = asset.prompt || metadata?.prompt;
+    // PATH 2: Metadata enhanced prompt (snake_case from DB)
+    if (!originalEnhancedPrompt && metadata?.enhanced_prompt && typeof metadata.enhanced_prompt === 'string' && metadata.enhanced_prompt.trim().length > 0) {
+      originalEnhancedPrompt = metadata.enhanced_prompt.trim();
+      extractionSource = 'metadata.enhanced_prompt';
     }
     
-    // PRIORITY 4: Job table fallback - check all possible job_id locations
-    const jobId = (asset as any).job_id || metadata?.job_id || metadata?.job_metadata?.id;
+    // PATH 3: Direct asset prompt
+    if (!originalEnhancedPrompt && asset.prompt && typeof asset.prompt === 'string' && asset.prompt.trim().length > 0) {
+      originalEnhancedPrompt = asset.prompt.trim();
+      extractionSource = 'asset.prompt';
+    }
+    
+    // PATH 4: Metadata prompt
+    if (!originalEnhancedPrompt && metadata?.prompt && typeof metadata.prompt === 'string' && metadata.prompt.trim().length > 0) {
+      originalEnhancedPrompt = metadata.prompt.trim();
+      extractionSource = 'metadata.prompt';
+    }
+    
+    // PATH 5: Job table lookup with comprehensive search
+    const jobId = (asset as any).job_id || metadata?.job_id || metadata?.job_metadata?.id || asset.id;
     
     if (!originalEnhancedPrompt && jobId) {
-      console.log('🎯 No enhanced prompt found in asset, checking job data with ID:', jobId);
+      console.log('🎯 FALLBACK: Checking job table for enhanced prompt, job ID:', jobId);
       
       try {
-        const { data: jobData } = await supabase
-          .from('jobs')
-          .select('enhanced_prompt, metadata, original_prompt')
-          .eq('id', jobId)
-          .single();
+        // Try images table first (might be faster)
+        const { data: imageData } = await supabase
+          .from('images')
+          .select('enhanced_prompt, prompt, metadata')
+          .eq('id', asset.id)
+          .maybeSingle();
         
-        if (jobData) {
-          // Try direct fields first, then metadata
-          originalEnhancedPrompt = 
-            jobData.enhanced_prompt ||
-            (jobData.metadata as any)?.enhanced_prompt ||
-            jobData.original_prompt ||
-            (jobData.metadata as any)?.prompt;
-          
-          console.log('🎯 Found enhanced prompt from job table:', {
-            jobId,
-            directEnhanced: jobData.enhanced_prompt,
-            metadataEnhanced: (jobData.metadata as any)?.enhanced_prompt,
-            directOriginal: jobData.original_prompt,
-            metadataPrompt: (jobData.metadata as any)?.prompt,
-            finalEnhancedPrompt: originalEnhancedPrompt
-          });
-        } else {
-          console.warn('🎯 No job data found for ID:', jobId);
+        if (imageData) {
+          if (imageData.enhanced_prompt && typeof imageData.enhanced_prompt === 'string' && imageData.enhanced_prompt.trim().length > 0) {
+            originalEnhancedPrompt = imageData.enhanced_prompt.trim();
+            extractionSource = 'images.enhanced_prompt';
+          } else if (imageData.prompt && typeof imageData.prompt === 'string' && imageData.prompt.trim().length > 0) {
+            originalEnhancedPrompt = imageData.prompt.trim();
+            extractionSource = 'images.prompt';
+          } else if ((imageData.metadata as any)?.enhanced_prompt) {
+            originalEnhancedPrompt = (imageData.metadata as any).enhanced_prompt.trim();
+            extractionSource = 'images.metadata.enhanced_prompt';
+          }
         }
+        
+        // If still not found, try jobs table
+        if (!originalEnhancedPrompt) {
+          const { data: jobData } = await supabase
+            .from('jobs')
+            .select('enhanced_prompt, metadata, original_prompt')
+            .eq('id', jobId)
+            .maybeSingle();
+          
+          if (jobData) {
+            if (jobData.enhanced_prompt && typeof jobData.enhanced_prompt === 'string' && jobData.enhanced_prompt.trim().length > 0) {
+              originalEnhancedPrompt = jobData.enhanced_prompt.trim();
+              extractionSource = 'jobs.enhanced_prompt';
+            } else if (jobData.original_prompt && typeof jobData.original_prompt === 'string' && jobData.original_prompt.trim().length > 0) {
+              originalEnhancedPrompt = jobData.original_prompt.trim();
+              extractionSource = 'jobs.original_prompt';
+            } else if ((jobData.metadata as any)?.enhanced_prompt) {
+              originalEnhancedPrompt = (jobData.metadata as any).enhanced_prompt.trim();
+              extractionSource = 'jobs.metadata.enhanced_prompt';
+            } else if ((jobData.metadata as any)?.prompt) {
+              originalEnhancedPrompt = (jobData.metadata as any).prompt.trim();
+              extractionSource = 'jobs.metadata.prompt';
+            }
+          }
+        }
+        
+        console.log('🎯 DATABASE LOOKUP RESULT:', {
+          jobId,
+          imageDataFound: !!imageData,
+          extractedPrompt: originalEnhancedPrompt,
+          extractionSource
+        });
+        
       } catch (error) {
-        console.warn('🎯 Failed to fetch job data for ID:', jobId, error);
+        console.error('🎯 DATABASE LOOKUP FAILED:', error);
       }
     }
     
     console.log('🎯 ENHANCED PROMPT EXTRACTION COMPLETE:', {
-      fromMetadataEnhancedPrompt: metadata?.enhanced_prompt,
-      fromAssetEnhancedPrompt: asset.enhancedPrompt,
-      fromMetadataPrompt: metadata?.prompt,
-      fromAssetPrompt: asset.prompt,
+      extractionSource,
       finalOriginalEnhancedPrompt: originalEnhancedPrompt,
       extractionSuccess: !!originalEnhancedPrompt,
-      promptLength: originalEnhancedPrompt?.length || 0
+      promptLength: originalEnhancedPrompt?.length || 0,
+      isValidPrompt: !!(originalEnhancedPrompt && originalEnhancedPrompt.length >= 10) // Minimum viable prompt length
     });
     
-    if (!originalEnhancedPrompt) {
-      console.warn('⚠️ No enhanced prompt found in reference asset');
+    // VALIDATION: Ensure we have a meaningful prompt
+    if (!originalEnhancedPrompt || originalEnhancedPrompt.length < 10) {
+      console.warn('⚠️ VALIDATION FAILED: Enhanced prompt too short or missing', {
+        promptLength: originalEnhancedPrompt?.length || 0,
+        extractionSource
+      });
       return null;
     }
     

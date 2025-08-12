@@ -455,7 +455,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <span className="text-[10px] font-medium">Exact Copy</span>
                       </div>
                     )}
-                     {exactCopyMode && referenceMetadata && prompt.trim() && (
+                     {exactCopyMode && referenceMetadata?.originalEnhancedPrompt && prompt.trim() && (
                         <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
                           <div className="font-medium text-foreground">Original Prompt:</div>
                           <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
@@ -466,10 +466,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                             {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
                           </div>
                         </div>
-                      )}
-                     {exactCopyMode && !referenceMetadata && prompt.length === 0 && (
-                       <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
-                         Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
+                       )}
+                      {exactCopyMode && !referenceMetadata?.originalEnhancedPrompt && (
+                        <div className="absolute bottom-1 left-3 text-[10px] text-destructive">
+                          ⚠️ No metadata found - exact copy unavailable
+                        </div>
+                       )}
+                      {exactCopyMode && referenceMetadata?.originalEnhancedPrompt && prompt.length === 0 && (
+                        <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
+                          Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
                        </div>
                      )}
                   </div>

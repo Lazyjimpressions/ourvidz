@@ -7,6 +7,7 @@ import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { OptimizedDeleteModal } from '@/components/workspace/OptimizedDeleteModal';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
+import { toast } from 'sonner';
 
 /**
  * Library-first workspace page component
@@ -151,31 +152,45 @@ export const SimplifiedWorkspace: React.FC = () => {
           fullAsset: asset
         });
         
-        const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
-        const metadata = await extractReferenceMetadata(asset);
-        
-        console.log('🎯 METADATA EXTRACTION RESULT:', {
-          extracted: !!metadata,
-          metadataKeys: metadata ? Object.keys(metadata) : 'none',
-          originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
-          originalSeed: metadata?.originalSeed
-        });
-        
-        if (metadata) {
-          setReferenceMetadata(metadata);
-          setExactCopyMode(true);
-          setReferenceStrength(0.9); // High strength for exact copy
+        try {
+          const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+          const metadata = await extractReferenceMetadata(asset);
           
-          // CRITICAL FIX: Clear prompt to show as exact copy
-          setPrompt(''); // Clear current prompt to show as exact copy
-          console.log('✅ USE AS REFERENCE: Cleared prompt for exact copy mode');
+          console.log('🎯 METADATA EXTRACTION RESULT:', {
+            extracted: !!metadata,
+            metadataKeys: metadata ? Object.keys(metadata) : 'none',
+            originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+            originalSeed: metadata?.originalSeed
+          });
           
-          console.log('✅ USE AS REFERENCE: Exact copy mode enabled with metadata:', metadata);
-        } else {
-          console.error('❌ USE AS REFERENCE: Metadata extraction failed - no enhanced prompt found');
+          if (metadata && metadata.originalEnhancedPrompt) {
+            setReferenceMetadata(metadata);
+            setExactCopyMode(true);
+            setReferenceStrength(0.9); // High strength for exact copy
+            
+            // CRITICAL FIX: Clear prompt to show as exact copy
+            setPrompt(''); // Clear current prompt to show as exact copy
+            console.log('✅ USE AS REFERENCE: Exact copy mode enabled with metadata');
+            
+            // Show success feedback
+            toast.success('Reference image set for exact copy mode');
+          } else {
+            console.error('❌ USE AS REFERENCE: Metadata extraction failed - no enhanced prompt found');
+            
+            // FALLBACK: Still set as reference image but show warning
+            setExactCopyMode(false);
+            setReferenceMetadata(null);
+            toast.error('Could not extract metadata from reference image. Using as style reference instead.');
+          }
+        } catch (error) {
+          console.error('❌ USE AS REFERENCE: Metadata extraction error:', error);
+          setExactCopyMode(false);
+          setReferenceMetadata(null);
+          toast.error('Failed to extract metadata from reference image');
         }
       } else {
         console.warn('⚠️ ASSET NOT FOUND: Could not find asset with ID:', assetId);
+        toast.error('Reference image not found in workspace');
       }
       
       if (mode === 'image') {
@@ -191,7 +206,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     return () => window.removeEventListener('workspace-use-job-as-reference', handler as EventListener);
   }, [mode, setReferenceStrength, workspaceAssets]);
 
-  // NEW: Listen for drag-drop metadata extraction events - FIXED TIMING
+  // NEW: Listen for drag-drop metadata extraction events - ENHANCED VERSION
   React.useEffect(() => {
     const handleDragDropMetadata = async (e: Event) => {
       const custom = e as CustomEvent<{ workspaceItem: any }>;
@@ -206,6 +221,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       
       if (!workspaceItem?.id) {
         console.warn('⚠️ DRAG-DROP: No workspace item ID found');
+        toast.error('Invalid drag and drop - no item ID found');
         return;
       }
       
@@ -219,30 +235,44 @@ export const SimplifiedWorkspace: React.FC = () => {
           assetEnhancedPrompt: asset.enhancedPrompt
         });
         
-        const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
-        const metadata = await extractReferenceMetadata(asset);
-        
-        console.log('🎯 DRAG-DROP: Metadata extraction result:', {
-          extracted: !!metadata,
-          metadataKeys: metadata ? Object.keys(metadata) : 'none',
-          originalEnhancedPrompt: metadata?.originalEnhancedPrompt
-        });
-        
-        if (metadata) {
-          setReferenceMetadata(metadata);
-          setExactCopyMode(true);
-          setReferenceStrength(0.9); // High strength for exact copy
+        try {
+          const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+          const metadata = await extractReferenceMetadata(asset);
           
-          // CRITICAL FIX: Clear prompt to show as exact copy
-          setPrompt(''); // Clear current prompt to show as exact copy
-          console.log('✅ DRAG-DROP: Cleared prompt for exact copy mode');
+          console.log('🎯 DRAG-DROP: Metadata extraction result:', {
+            extracted: !!metadata,
+            metadataKeys: metadata ? Object.keys(metadata) : 'none',
+            originalEnhancedPrompt: metadata?.originalEnhancedPrompt
+          });
           
-          console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata via drag-drop');
-        } else {
-          console.error('❌ DRAG-DROP: Metadata extraction failed');
+          if (metadata && metadata.originalEnhancedPrompt) {
+            setReferenceMetadata(metadata);
+            setExactCopyMode(true);
+            setReferenceStrength(0.9); // High strength for exact copy
+            
+            // CRITICAL FIX: Clear prompt to show as exact copy
+            setPrompt(''); // Clear current prompt to show as exact copy
+            console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata');
+            
+            // Show success feedback
+            toast.success('Drag & drop: Exact copy mode enabled');
+          } else {
+            console.error('❌ DRAG-DROP: Metadata extraction failed - no enhanced prompt');
+            
+            // FALLBACK: Still set as reference image but show warning
+            setExactCopyMode(false);
+            setReferenceMetadata(null);
+            toast.warning('Could not extract metadata. Using as style reference instead.');
+          }
+        } catch (error) {
+          console.error('❌ DRAG-DROP: Metadata extraction error:', error);
+          setExactCopyMode(false);
+          setReferenceMetadata(null);
+          toast.error('Failed to extract metadata from dragged image');
         }
       } else {
         console.warn('⚠️ DRAG-DROP: Asset not found with ID:', workspaceItem.id);
+        toast.error('Dragged image not found in workspace');
       }
     };
     
