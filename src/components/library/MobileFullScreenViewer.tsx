@@ -102,7 +102,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-background text-foreground"
+      className="fixed inset-0 z-50 bg-background text-foreground touch-none select-none"
       style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
       role="dialog"
       aria-modal="true"
@@ -138,7 +138,7 @@ export const MobileFullScreenViewer: React.FC<MobileFullScreenViewerProps> = ({
 
       {/* Media area */}
       <div
-        className="w-full h-full flex items-center justify-center px-4"
+        className="w-full h-full flex items-center justify-center px-4 touch-none select-none"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}

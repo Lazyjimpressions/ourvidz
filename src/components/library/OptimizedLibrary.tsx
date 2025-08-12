@@ -29,6 +29,19 @@ export const OptimizedLibrary = () => {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const { isMobile } = useMobileDetection();
   const [visibleCount, setVisibleCount] = useState<number>(24);
+  // Sticky measurements
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [stickyOffset, setStickyOffset] = useState<number>(0);
+
+  useEffect(() => {
+    const updateOffset = () => {
+      const h = headerRef.current?.offsetHeight ?? 0;
+      setStickyOffset(h);
+    };
+    updateOffset();
+    window.addEventListener('resize', updateOffset);
+    return () => window.removeEventListener('resize', updateOffset);
+  }, []);
 
   // Data fetching using AssetService.getUserAssetsOptimized()
   const {
@@ -247,8 +260,8 @@ export const OptimizedLibrary = () => {
   return (
     <>
       <OurVidzDashboardLayout>
-        <div className="max-w-7xl mx-auto px-4 pb-6 space-y-6">
-          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className={`max-w-7xl mx-auto px-4 ${selectedAssets.size > 0 ? 'pb-24' : 'pb-6'} space-y-6`}>
+          <div ref={headerRef} className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
             {/* Header */}
             <CompactLibraryHeader
               searchTerm={searchState.query}
@@ -287,13 +300,14 @@ export const OptimizedLibrary = () => {
                 </Drawer>
               </div>
             )}
-          </div>
+          </div
+          >
 
           {/* Content */}
           <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
             {/* Left Pane (Desktop) */}
             <aside className="hidden lg:block">
-              <div className="sticky top-20 space-y-4">
+              <div className="sticky space-y-4" style={{ top: stickyOffset + 8 }}>
                 <CompactLibraryFilters
                   typeFilter={searchState.filters.contentType}
                   onTypeFilterChange={(type) => updateFilters({ contentType: type })}

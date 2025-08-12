@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PillButton } from '@/components/ui/pill-button';
 import { Badge } from '@/components/ui/badge';
@@ -27,9 +27,15 @@ export const CompactAssetCard = ({
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
+  // Long-press handling to avoid preview on selection
+  const longPressTriggered = useRef(false);
+  const longPressTimer = useRef<number | null>(null);
+  const touchStart = useRef<{x: number; y: number} | null>(null);
+
   const handleImageError = () => {
     setImageError(true);
   };
+
 
   const getStatusColor = () => {
     switch (asset.status) {
@@ -79,17 +85,41 @@ export const CompactAssetCard = ({
       {/* Media Container */}
       <div 
         className="relative aspect-square bg-muted cursor-pointer overflow-hidden"
-        onClick={onPreview}
-        onTouchStart={(e) => {
-          const target = e.currentTarget as HTMLElement & { __pressTimer?: number };
-          target.__pressTimer = window.setTimeout(() => onSelect(!isSelected), 450);
-        }}
-        onTouchEnd={(e) => {
-          const target = e.currentTarget as HTMLElement & { __pressTimer?: number };
-          if (target.__pressTimer) {
-            clearTimeout(target.__pressTimer);
-            target.__pressTimer = undefined;
+        onClick={(e) => {
+          if (longPressTriggered.current) {
+            e.preventDefault();
+            longPressTriggered.current = false;
+            return;
           }
+          onPreview();
+        }}
+        onTouchStart={(e) => {
+          longPressTriggered.current = false;
+          touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+          if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+          }
+          longPressTimer.current = window.setTimeout(() => {
+            longPressTriggered.current = true;
+            onSelect(!isSelected);
+          }, 450);
+        }}
+        onTouchMove={(e) => {
+          if (!touchStart.current) return;
+          const dx = e.touches[0].clientX - touchStart.current.x;
+          const dy = e.touches[0].clientY - touchStart.current.y;
+          if (Math.hypot(dx, dy) > 8 && longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+          }
+        }}
+        onTouchEnd={() => {
+          if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+          }
+          touchStart.current = null;
         }}
       >
         {asset.url && asset.status === 'completed' && !imageError ? (
