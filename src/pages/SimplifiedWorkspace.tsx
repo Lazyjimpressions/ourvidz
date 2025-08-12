@@ -33,6 +33,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     clearJobFromWorkspace,
     deleteJobPermanently,
     deleteAllWorkspace,
+    clearWorkspace: optimizedClearWorkspace,
   } = useOptimizedWorkspace();
   
   // Modal state for confirmations
@@ -429,7 +430,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       description: 'This will hide all items from your workspace. You can still access them in your library.',
       confirmAction: async () => {
         console.log('🧹 WORKSPACE: Starting clear workspace action');
-        await clearWorkspace();
+        await optimizedClearWorkspace();
         setDeleteModal(prev => ({ ...prev, isOpen: false }));
       },
     });
