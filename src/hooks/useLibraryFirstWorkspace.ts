@@ -7,6 +7,7 @@ import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
 import { GenerationFormat } from '@/types/generation';
 import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
+import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 
 // LIBRARY-FIRST: Simplified workspace state using library assets
 export interface LibraryFirstWorkspaceState {
@@ -435,24 +436,17 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     setIsGenerating(true);
 
     try {
-      // Upload reference images if provided and return full public URL
-      const uploadReferenceImage = async (file: File): Promise<string> => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('User not authenticated');
-
-        const fileName = `reference_${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage
-          .from('reference-images')
-          .upload(`${user.id}/${fileName}`, file);
-
-        if (error) throw error;
-        
-        // Return full public URL for reference image
-        const { data: urlData } = supabase.storage
-          .from('reference-images')
-          .getPublicUrl(data.path);
-        
-        return urlData.publicUrl;
+      // Helper: upload reference file to reference_images and return signed URL
+      const uploadAndSignReference = async (file: File): Promise<string> => {
+        const res = await uploadReferenceFile(file);
+        if (res.error || !res.data?.path) {
+          throw (res as any).error || new Error('Failed to upload reference image');
+        }
+        const signed = await getReferenceImageUrl(res.data.path);
+        if (!signed) {
+          throw new Error('Failed to sign reference image URL');
+        }
+        return signed;
       };
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
@@ -543,17 +537,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         });
       }
 
+      // Precompute signed reference URLs when needed
+      const startRefUrl = mode === 'video'
+        ? (beginningRefImageUrl || (beginningRefImage ? await uploadAndSignReference(beginningRefImage) : undefined))
+        : undefined;
+      const endRefUrl = mode === 'video'
+        ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
+        : undefined;
+
       const generationRequest = {
         format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
         prompt: finalPrompt,
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
-          // This ensures content appears in both library and workspace views
-          // Reference image data - FIXED: Use reference_url instead of reference_image for queue-job compatibility
+          // Reference image data - FIXED: Use reference_url and signed URLs for private bucket
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
-            reference_url: referenceImageUrl || (referenceImage ? await uploadReferenceImage(referenceImage) : undefined),
+            reference_url: referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined),
             reference_strength: exactCopyMode ? 0.9 : referenceStrength,
             reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
             exact_copy_mode: exactCopyMode
@@ -566,6 +567,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             motion_intensity: motionIntensity,
             sound_enabled: soundEnabled
           }),
+          // Video reference URLs (included in metadata for queue-job compatibility)
+          ...(mode === 'video' ? {
+            start_reference_url: startRefUrl,
+            end_reference_url: endRefUrl
+          } : {}),
           // Control parameters (disabled in exact copy mode)
           aspect_ratio: finalAspectRatio,
           shot_type: finalShotType,
@@ -582,7 +588,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             guidance_scale: 3.0,
             negative_prompt: ''
           } : {}),
-          // CRITICAL: Pass reference metadata for exact copy mode
+          // Pass reference metadata for exact copy mode
           ...(exactCopyMode && referenceMetadata ? {
             exact_copy_mode: true,
             originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt,
@@ -591,16 +597,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             originalCameraAngle: referenceMetadata.originalCameraAngle,
             originalShotType: referenceMetadata.originalShotType
           } : {})
-        },
-        // Reference image URLs - REMOVED: This was duplicating data, now handled in metadata.reference_url
-        ...(mode === 'video' && beginningRefImageUrl ? 
-          { startReferenceImageUrl: beginningRefImageUrl } :
-          mode === 'video' && beginningRefImage ? { startReferenceImageUrl: await uploadReferenceImage(beginningRefImage) } : {}
-        ),
-        ...(mode === 'video' && endingRefImageUrl ? 
-          { endReferenceImageUrl: endingRefImageUrl } :
-          mode === 'video' && endingRefImage ? { endReferenceImageUrl: await uploadReferenceImage(endingRefImage) } : {}
-        )
+        }
       };
       
       // DEBUG: Log reference image handling
