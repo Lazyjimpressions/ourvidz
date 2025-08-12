@@ -73,6 +73,23 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [currentIndex, assets.length, onClose, showDetails]);
 
+  // Preload adjacent images to reduce swipe latency
+  useEffect(() => {
+    const preloadImage = (url?: string | null) => {
+      if (!url) return;
+      const img = new Image();
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.src = url;
+    };
+
+    const prev = assets[currentIndex - 1];
+    const next = assets[currentIndex + 1];
+
+    if (prev && prev.type === 'image') preloadImage(prev.url || undefined);
+    if (next && next.type === 'image') preloadImage(next.url || undefined);
+  }, [assets, currentIndex]);
+
   const handlePrevious = () => {
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1);
@@ -232,6 +249,8 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                     onLoad={handleImageLoad}
                     onError={handleImageError}
                     style={{ opacity: isLoading ? 0 : 1 }}
+                    playsInline
+                    disablePictureInPicture
                   >
                     Your browser does not support the video tag.
                   </video>

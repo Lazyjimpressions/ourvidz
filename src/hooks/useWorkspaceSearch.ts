@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { UnifiedAsset } from '@/lib/services/AssetService';
 
 export interface WorkspaceSearch {
@@ -26,13 +26,20 @@ export interface SearchResult {
   hasActiveFilters: boolean;
 }
 
-// Simple debounce helper bound to window for stable timer identity across re-renders
-const debounce = (fn: (...args: any[]) => void, delay: number) => {
+// Debounce helper with cancel support to avoid late updates on unmount
+const debounce = <T extends (...args: any[]) => void>(fn: T, delay: number) => {
   let timer: number | undefined;
-  return (...args: any[]) => {
+  const debounced = (...args: Parameters<T>) => {
     if (timer) window.clearTimeout(timer);
     timer = window.setTimeout(() => fn(...args), delay);
   };
+  (debounced as any).cancel = () => {
+    if (timer) {
+      window.clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+  return debounced as T & { cancel: () => void };
 };
 
 /**
@@ -90,6 +97,15 @@ export const useWorkspaceSearch = (assets: UnifiedAsset[]): SearchResult => {
 
   const updateQuery = useCallback((query: string) => {
     debouncedSetQuery(query);
+  }, [debouncedSetQuery]);
+
+  // Cleanup debounce on unmount to prevent late state updates
+  useEffect(() => {
+    return () => {
+      if ((debouncedSetQuery as any).cancel) {
+        (debouncedSetQuery as any).cancel();
+      }
+    };
   }, [debouncedSetQuery]);
 
   // Update filters
