@@ -46,7 +46,7 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAl
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onDismissAllJobs}
+                onClick={onClearWorkspace}
                 className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
                 title="Clear all items from workspace"
               >

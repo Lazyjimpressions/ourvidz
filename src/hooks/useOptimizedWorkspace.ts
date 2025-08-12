@@ -245,23 +245,30 @@ export const useOptimizedWorkspace = () => {
 
     try {
       console.log('🧹 OPTIMIZED: Clearing workspace via metadata.workspace_dismissed');
+      console.log('🧹 USER ID:', user.id);
       
       // Get ALL completed items (removed date filter bug)
-      const { data: images } = await supabase
+      const { data: images, error: imageError } = await supabase
         .from('images')
-        .select('id, metadata')
+        .select('id, metadata, created_at, prompt')
         .eq('user_id', user.id)
         .eq('status', 'completed')
         .is('metadata->workspace_dismissed', null);
 
-      const { data: videos } = await supabase
+      const { data: videos, error: videoError } = await supabase
         .from('videos')
-        .select('id, metadata')
+        .select('id, metadata, created_at')
         .eq('user_id', user.id)
         .eq('status', 'completed')
         .is('metadata->workspace_dismissed', null);
 
-      console.log(`Found ${images?.length || 0} images and ${videos?.length || 0} videos to clear`);
+      console.log('🧹 QUERY RESULTS:', { 
+        images: images?.length || 0, 
+        videos: videos?.length || 0,
+        imageError,
+        videoError,
+        sampleImages: images?.slice(0, 3)
+      });
 
       // Batch update images with dismissed flag
       if (images && images.length > 0) {
