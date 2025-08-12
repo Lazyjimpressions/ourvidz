@@ -28,9 +28,9 @@ export const SimplifiedWorkspace: React.FC = () => {
   const {
     deletingItems,
     deletingJobs,
-    hideFromWorkspace,
+    clearFromWorkspace,
     deleteItemPermanently,
-    hideJobFromWorkspace,
+    clearJobFromWorkspace,
     deleteJobPermanently,
     deleteAllWorkspace,
   } = useOptimizedWorkspace();
@@ -373,8 +373,8 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   // Optimized job handlers
-  const handleHideJob = async (jobId: string) => {
-    await hideJobFromWorkspace(jobId);
+  const handleClearJob = async (jobId: string) => {
+    await clearJobFromWorkspace(jobId);
     
     // Clear active job if it was hidden
     if (activeJobId === jobId) {
@@ -401,8 +401,8 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   // Optimized item handlers
-  const handleHideItem = async (item: UnifiedAsset) => {
-    await hideFromWorkspace(item.id, item.type);
+  const handleClearItem = async (item: UnifiedAsset) => {
+    await clearFromWorkspace(item.id, item.type);
   };
 
   const handleDeleteItem = (item: UnifiedAsset) => {
@@ -467,7 +467,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             activeJobId={activeJobId}
             onJobSelect={handleJobSelect}
             onDeleteJob={handleDeleteJob}
-            onDismissJob={handleHideJob}
+            onDismissJob={handleClearJob}
             onIterateFromItem={handleIterateFromItem}
             onRegenerateJob={handleRegenerateJob}
             onCreateVideo={handleCreateVideo}
@@ -479,7 +479,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
             onDelete={handleDeleteItem}
-            onDismiss={handleHideItem}
+            onDismiss={handleClearItem}
             isDeleting={new Set([...deletingItems, ...deletingJobs])}
           />
         </div>

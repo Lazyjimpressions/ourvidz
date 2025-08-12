@@ -45,26 +45,43 @@ export const useOptimizedWorkspace = () => {
     }
   }, [queryClient]);
 
-  // Hide item from workspace (soft delete)
-  const hideFromWorkspace = useCallback(async (itemId: string, itemType: 'image' | 'video') => {
+  // Clear item from workspace (library-first approach)
+  const clearFromWorkspace = useCallback(async (itemId: string, itemType: 'image' | 'video') => {
     return withOptimisticUpdate(
       itemId,
       async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
+        // Update the correct table based on item type with dismissed flag
+        const table = itemType === 'video' ? 'videos' : 'images';
+        const { data: currentItem } = await supabase
+          .from(table)
+          .select('metadata')
+          .eq('id', itemId)
+          .eq('user_id', user.id)
+          .single();
+
+        const currentMetadata = (currentItem?.metadata as Record<string, any>) || {};
+        
         const { error } = await supabase
-          .from('workspace_items')
-          .update({ status: 'hidden' })
+          .from(table)
+          .update({ 
+            metadata: {
+              ...currentMetadata,
+              workspace_dismissed: true,
+              dismissed_at: new Date().toISOString()
+            }
+          })
           .eq('id', itemId)
           .eq('user_id', user.id);
 
         if (error) throw error;
 
-        toast.success('Item hidden from workspace');
+        toast.success('Item cleared from workspace');
         return true;
       },
-      'Failed to hide item from workspace',
+      'Failed to clear item from workspace',
       setDeletingItems
     );
   }, [withOptimisticUpdate]);
@@ -104,26 +121,66 @@ export const useOptimizedWorkspace = () => {
     );
   }, [withOptimisticUpdate]);
 
-  // Hide entire job from workspace
-  const hideJobFromWorkspace = useCallback(async (jobId: string) => {
+  // Clear entire job from workspace (library-first approach)
+  const clearJobFromWorkspace = useCallback(async (jobId: string) => {
     return withOptimisticUpdate(
       jobId,
       async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        const { error } = await supabase
-          .from('workspace_items')
-          .update({ status: 'hidden' })
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
+        // Get all items for this job from both tables
+        const { data: images } = await supabase
+          .from('images')
+          .select('id, metadata')
+          .eq('user_id', user.id)
+          .eq('metadata->>job_id', jobId);
 
-        if (error) throw error;
+        const { data: videos } = await supabase
+          .from('videos')
+          .select('id, metadata')
+          .eq('user_id', user.id)
+          .eq('metadata->>job_id', jobId);
 
-        toast.success('Job hidden from workspace');
+        // Update images with dismissed flag
+        if (images) {
+          for (const image of images) {
+            const currentMetadata = (image.metadata as Record<string, any>) || {};
+            await supabase
+              .from('images')
+              .update({ 
+                metadata: {
+                  ...currentMetadata,
+                  workspace_dismissed: true,
+                  dismissed_at: new Date().toISOString()
+                }
+              })
+              .eq('id', image.id);
+          }
+        }
+
+        // Update videos with dismissed flag
+        if (videos) {
+          for (const video of videos) {
+            const currentMetadata = (video.metadata as Record<string, any>) || {};
+            await supabase
+              .from('videos')
+              .update({ 
+                metadata: {
+                  ...currentMetadata,
+                  workspace_dismissed: true,
+                  dismissed_at: new Date().toISOString()
+                }
+              })
+              .eq('id', video.id);
+          }
+        }
+
+        const totalCleared = (images?.length || 0) + (videos?.length || 0);
+        toast.success(`Job cleared from workspace (${totalCleared} items)`);
         return true;
       },
-      'Failed to hide job from workspace',
+      'Failed to clear job from workspace',
       setDeletingJobs
     );
   }, [withOptimisticUpdate]);
@@ -324,9 +381,9 @@ export const useOptimizedWorkspace = () => {
   return {
     deletingItems,
     deletingJobs,
-    hideFromWorkspace,
+    clearFromWorkspace,
     deleteItemPermanently,
-    hideJobFromWorkspace,
+    clearJobFromWorkspace,
     deleteJobPermanently,
     clearWorkspace,
     deleteAllWorkspace,
