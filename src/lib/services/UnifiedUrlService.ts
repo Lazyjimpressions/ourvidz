@@ -232,18 +232,22 @@ export class UnifiedUrlService {
 
   private static determineBucket(asset: UnifiedAsset): string {
     const metadata = asset.metadata || {};
-    const quality = asset.quality || 'fast';
+    const quality = (asset.quality as any) || 'fast';
+
+    // Priority 1: Explicit bucket hint from metadata or asset
+    const hinted = asset.bucketHint || metadata?.bucket;
+    if (typeof hinted === 'string' && hinted.length > 0) {
+      return hinted;
+    }
     
-    // Enhanced bucket detection with fallback logic
+    // Fallback: heuristic detection
     if (asset.type === 'image') {
       const isSDXL = metadata.is_sdxl || 
                      metadata.model_type === 'sdxl' || 
                      asset.isSDXL ||
-                     metadata.bucket?.includes('sdxl');
-      
-      const isEnhanced = metadata.job_type?.includes('enhanced') || 
-                         metadata.job_type?.includes('7b');
-      
+                     (typeof metadata.bucket === 'string' && metadata.bucket.includes('sdxl'));
+      const isEnhanced = (metadata.job_type || '').includes('enhanced') || 
+                         (metadata.job_type || '').includes('7b');
       if (isSDXL) {
         return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
       } else if (isEnhanced) {
@@ -252,10 +256,8 @@ export class UnifiedUrlService {
         return quality === 'high' ? 'image_high' : 'image_fast';
       }
     } else {
-      // Video bucket detection
-      const isEnhanced = metadata.job_type?.includes('enhanced') || 
-                         metadata.job_type?.includes('7b');
-      
+      const isEnhanced = (metadata.job_type || '').includes('enhanced') || 
+                         (metadata.job_type || '').includes('7b');
       if (isEnhanced) {
         return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
       } else {

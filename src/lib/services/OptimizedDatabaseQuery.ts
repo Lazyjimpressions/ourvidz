@@ -4,6 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { UnifiedAsset } from './OptimizedAssetService';
+import { normalizeQuality, normalizeModel } from '@/lib/generation/normalize';
 
 interface QueryFilters {
   type?: 'image' | 'video';
@@ -190,37 +191,50 @@ export class OptimizedDatabaseQuery {
 
   // Phase 1: Optimized image processing with reduced operations
   private static processImageDataOptimized(images: any[], metadataOnly: boolean): UnifiedAsset[] {
-    return images.map(image => ({
-      id: image.id,
-      type: 'image' as const,
-      prompt: image.prompt || 'Untitled Image',
-      status: image.status || 'pending',
-      quality: image.quality || 'fast',
-      format: image.format || 'png',
-      createdAt: new Date(image.created_at),
-      // Remove unnecessary joins and fields
-      url: metadataOnly ? undefined : image.image_url,
-      signedUrls: metadataOnly ? undefined : image.image_urls,
-      modelType: this.detectModelTypeSimple(image.metadata),
-      isSDXL: image.metadata?.is_sdxl || false
-    }));
+    return images.map(image => {
+      const quality = normalizeQuality(image);
+      const modelType = normalizeModel(image);
+      const bucketHint = image?.metadata?.bucket;
+      return {
+        id: image.id,
+        type: 'image' as const,
+        prompt: image.prompt || 'Untitled Image',
+        status: image.status || 'pending',
+        quality,
+        format: image.format || 'png',
+        createdAt: new Date(image.created_at),
+        // Remove unnecessary joins and fields
+        url: metadataOnly ? undefined : image.image_url,
+        signedUrls: metadataOnly ? undefined : image.image_urls,
+        modelType,
+        isSDXL: image.metadata?.is_sdxl || false,
+        bucketHint
+      };
+    });
   }
 
   // Phase 1: Optimized video processing with reduced operations
   private static processVideoDataOptimized(videos: any[], metadataOnly: boolean): UnifiedAsset[] {
-    return videos.map(video => ({
-      id: video.id,
-      type: 'video' as const,
-      prompt: this.extractVideoPromptSimple(video),
-      status: video.status || 'draft',
-      format: video.format || 'mp4',
-      createdAt: new Date(video.created_at),
-      duration: video.duration,
-      resolution: video.resolution,
-      // Only include URLs if not metadata-only
-      url: metadataOnly ? undefined : video.video_url,
-      modelType: this.detectModelTypeSimple(video.metadata)
-    }));
+    return videos.map(video => {
+      const quality = normalizeQuality(video);
+      const modelType = this.detectModelTypeSimple(video.metadata);
+      const bucketHint = video?.metadata?.bucket;
+      return {
+        id: video.id,
+        type: 'video' as const,
+        prompt: this.extractVideoPromptSimple(video),
+        status: video.status || 'draft',
+        format: video.format || 'mp4',
+        createdAt: new Date(video.created_at),
+        duration: video.duration,
+        resolution: video.resolution,
+        quality,
+        // Only include URLs if not metadata-only
+        url: metadataOnly ? undefined : video.video_url,
+        modelType,
+        bucketHint
+      };
+    });
   }
 
   // Phase 1: Simplified model type detection

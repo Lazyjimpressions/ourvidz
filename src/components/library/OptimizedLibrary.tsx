@@ -17,6 +17,7 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from 
 import { Button } from '@/components/ui/button';
 import { SlidersHorizontal } from 'lucide-react';
 import { MobileFullScreenViewer } from './MobileFullScreenViewer';
+import { useLazyAssetsV3 } from '@/hooks/useLazyAssetsV3';
 
 export const OptimizedLibrary = () => {
   // State management
@@ -70,12 +71,18 @@ export const OptimizedLibrary = () => {
     clearSearch,
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
+  // Lazy URL generation and viewport detection
+  const { lazyAssets, registerAssetRef, forceLoadAssetUrls } = useLazyAssetsV3({
+    assets: filteredAssets,
+    prefetchThreshold: 400,
+    batchSize: 6,
+  });
 
   // Reset visible items when results change
   useEffect(() => {
     const base = isMobile ? 16 : 24;
-    setVisibleCount(Math.min(base, filteredAssets.length));
-  }, [filteredAssets, isMobile]);
+    setVisibleCount(Math.min(base, lazyAssets.length));
+  }, [lazyAssets, isMobile]);
 
   // IntersectionObserver to load more on scroll
   useEffect(() => {

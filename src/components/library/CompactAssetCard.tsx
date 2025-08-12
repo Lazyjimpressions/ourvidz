@@ -56,7 +56,6 @@ export const CompactAssetCard = ({
       className="group relative bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      style={{ contentVisibility: 'auto' }}
     >
       {/* Selection Checkbox */}
       {(selectionMode || isHovered) && (
@@ -154,7 +153,7 @@ export const CompactAssetCard = ({
               </div>
             ) : (
               <img
-                src={asset.url}
+                src={asset.thumbnailUrl || asset.url}
                 alt={asset.prompt}
                 className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                 onError={handleImageError}
@@ -205,9 +204,16 @@ export const CompactAssetCard = ({
       {/* Content Info */}
       <div className="p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <Badge variant="outline" className="text-xs h-5">
-            {asset.type}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="text-xs h-5">
+              {asset.type}
+            </Badge>
+            {asset.modelType && (
+              <Badge variant="outline" className="text-xs h-5">
+                {asset.modelType}
+              </Badge>
+            )}
+          </div>
           {asset.quality && (
             <Badge 
               variant="outline" 
