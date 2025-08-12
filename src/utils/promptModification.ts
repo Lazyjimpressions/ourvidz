@@ -22,13 +22,18 @@ export const modifyOriginalPrompt = (originalPrompt: string, modification: strin
   const isLocationChange = /\b(forest|beach|park|studio|outdoor|indoor|street|room|kitchen|bedroom|office)\b/i.test(modification);
   const isStyleChange = /\b(hairstyle|hair|makeup|pose|position|standing|sitting|lying|background|setting)\b/i.test(modification);
   
+  // Check if this is both color and clothing (e.g., "red bikini")
+  const isColorAndClothing = isColorChange && isClothingChange;
+  
   if (!isModification && !isColorChange && !isClothingChange && !isLocationChange && !isStyleChange) {
     // If no modification indicators, treat as simple addition
     return `${originalPrompt}, ${modification}`;
   }
   
-  // Handle clothing/outfit modifications with better pattern matching
-  if (isClothingChange || modificationLower.includes('outfit') || modificationLower.includes('wearing') || modificationLower.includes('clothes')) {
+  // PRIORITY: Handle clothing/outfit modifications first (even if color is also present)
+  // This ensures "red bikini" replaces clothing type, not just color
+  if (isClothingChange || modificationLower.includes('outfit') || modificationLower.includes('wearing') || modificationLower.includes('clothes') || isColorAndClothing) {
+    console.log('Using clothing modification handler for:', modification);
     return handleClothingModification(originalPrompt, modification);
   }
   
@@ -42,8 +47,9 @@ export const modifyOriginalPrompt = (originalPrompt: string, modification: strin
     return handleBackgroundModification(originalPrompt, modification);
   }
   
-  // Handle color modifications
-  if (isColorChange) {
+  // Handle color modifications (only if no clothing is present)
+  if (isColorChange && !isClothingChange) {
+    console.log('Using color modification handler for:', modification);
     return handleColorModification(originalPrompt, modification);
   }
   
@@ -52,13 +58,16 @@ export const modifyOriginalPrompt = (originalPrompt: string, modification: strin
 };
 
 const handleClothingModification = (originalPrompt: string, modification: string): string => {
-  // Enhanced clothing patterns for better matching
+  // Enhanced clothing patterns for complete replacement (not just adding)
   const clothingPatterns = [
     /wearing\s+([^,;.]+)/gi,
-    /in\s+a?\s*([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom)/gi,
-    /([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt)/gi,
+    /in\s+a?\s*([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|jacket|sweater|t-shirt|blouse)/gi,
+    /([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|jacket|sweater|t-shirt|blouse)/gi,
     /(dressed\s+in|clad\s+in)\s+([^,;.]+)/gi,
-    /(has\s+on|puts\s+on)\s+([^,;.]+)/gi
+    /(has\s+on|puts\s+on)\s+([^,;.]+)/gi,
+    // More comprehensive patterns for better matching
+    /(blue|red|green|yellow|black|white|pink|purple|orange|brown|gray|grey)\s+(dress|bikini|shirt|top|bottom|outfit|clothes)/gi,
+    /(dress|bikini|shirt|top|bottom|outfit|clothes)(\s+[^,;.]*)?/gi
   ];
   
   let modifiedPrompt = originalPrompt;
@@ -66,28 +75,28 @@ const handleClothingModification = (originalPrompt: string, modification: string
   
   // Extract new clothing from modification
   const newClothing = extractNewClothing(modification);
+  console.log('Extracted new clothing:', newClothing, 'from modification:', modification);
   
   if (newClothing) {
-    // Try to replace existing clothing references
-    clothingPatterns.forEach(pattern => {
-      const newModifiedPrompt = modifiedPrompt.replace(pattern, (match, ...groups) => {
-        replacementMade = true;
-        if (match.toLowerCase().includes('wearing')) {
+    // Try to replace existing clothing references - iterate through all patterns
+    for (const pattern of clothingPatterns) {
+      const matches = Array.from(modifiedPrompt.matchAll(pattern));
+      if (matches.length > 0) {
+        console.log('Found clothing matches with pattern:', pattern, 'matches:', matches);
+        modifiedPrompt = modifiedPrompt.replace(pattern, () => {
+          replacementMade = true;
           return `wearing ${newClothing}`;
-        } else if (match.toLowerCase().includes('dressed in') || match.toLowerCase().includes('clad in')) {
-          return match.replace(/\s+[^,;.]+$/, ` ${newClothing}`);
-        } else {
-          return `${newClothing}`;
-        }
-      });
-      if (replacementMade) {
-        modifiedPrompt = newModifiedPrompt;
+        });
+        break; // Stop after first successful replacement
       }
-    });
+    }
     
     // If no clothing found in original, add new clothing
     if (!replacementMade) {
+      console.log('No existing clothing found, adding new clothing');
       modifiedPrompt = `${originalPrompt}, wearing ${newClothing}`;
+    } else {
+      console.log('Clothing replacement made:', modifiedPrompt);
     }
   }
   
