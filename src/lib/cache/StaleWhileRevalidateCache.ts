@@ -145,15 +145,15 @@ export class StaleWhileRevalidateCache<T> {
   }
 }
 
-// Global cache instances
+// Global cache instances - optimized TTLs
 export const assetMetadataCache = new StaleWhileRevalidateCache({
-  staleTime: 2 * 60 * 1000,    // 2 minutes stale time
-  maxAge: 15 * 60 * 1000,       // 15 minutes max age
-  maxSize: 50
+  staleTime: 15 * 60 * 1000,    // 15 minutes (longer for metadata)
+  maxAge: 60 * 60 * 1000,       // 1 hour
+  maxSize: 1000
 });
 
 export const assetUrlCache = new StaleWhileRevalidateCache({
-  staleTime: 30 * 60 * 1000,    // 30 minutes stale time  
-  maxAge: 4 * 60 * 60 * 1000,   // 4 hours max age
-  maxSize: 200
+  staleTime: 30 * 60 * 1000,    // 30 minutes (Supabase default)
+  maxAge: 2 * 60 * 60 * 1000,   // 2 hours (shorter refresh)
+  maxSize: 2000
 });

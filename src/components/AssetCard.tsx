@@ -16,6 +16,7 @@ import {
   ImageIcon
 } from "lucide-react";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
+import { UnifiedUrlService } from "@/lib/services/UnifiedUrlService";
 import { cn } from "@/lib/utils";
 
 interface AssetCardProps {

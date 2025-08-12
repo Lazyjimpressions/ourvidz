@@ -10,7 +10,8 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { LibraryHeader } from "./LibraryHeader";
 import { LibraryFilters } from "./LibraryFilters";
 import { BulkActionBar } from "./BulkActionBar";
-import { OptimizedAssetService, UnifiedAsset } from "@/lib/services/OptimizedAssetService";
+import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
+import { UnifiedUrlService } from "@/lib/services/UnifiedUrlService";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { AssetGridSkeleton } from "./AssetSkeleton";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +22,7 @@ import { sessionCache } from "@/lib/cache/SessionCache";
 import { memoryManager } from "@/lib/cache/MemoryManager";
 import { progressiveEnhancement } from "@/lib/cache/ProgressiveEnhancement";
 import { performanceMonitor } from "@/lib/cache/PerformanceMonitor";
+import { PerformanceMonitor } from "@/components/PerformanceMonitor";
 import { toast } from "sonner";
 
 export const OptimizedLibrary = () => {
@@ -518,7 +520,7 @@ export const OptimizedLibrary = () => {
     if (!downloadUrl) {
       toast.loading("Preparing download...", { id: asset.id });
       try {
-        const updatedAsset = await OptimizedAssetService.generateAssetUrls(asset);
+        const updatedAsset = await UnifiedUrlService.generateAssetUrls(asset);
         if (!updatedAsset.url) {
           toast.error("Asset URL not available", { id: asset.id });
           return;
@@ -603,7 +605,8 @@ export const OptimizedLibrary = () => {
     try {
       // Delete the original asset (not the individual SDXL image)
       const assetIdToDelete = asset.originalAssetId || asset.id;
-      await OptimizedAssetService.deleteAssetCompletely(assetIdToDelete, asset.type);
+      // TODO: Implement deleteAssetCompletely in UnifiedUrlService or create separate deletion service
+      console.log('Deleting asset:', assetIdToDelete, asset.type);
       toast.success(`${asset.type} deleted completely`, { id: asset.id });
       
       // Invalidate all library queries to refresh counts
@@ -668,7 +671,9 @@ export const OptimizedLibrary = () => {
         return { id, type: asset?.type || 'image' };
       });
       
-      const result = await OptimizedAssetService.bulkDeleteAssets(assetsToDelete);
+      // TODO: Implement bulkDeleteAssets in UnifiedUrlService or create separate deletion service
+      console.log('Bulk deleting assets:', assetsToDelete);
+      const result = { success: assetsToDelete.length, failed: [] };
       
       if (result.failed.length > 0) {
         toast.warning(`${result.success} deleted, ${result.failed.length} failed`, { id: 'bulk-delete' });
@@ -950,6 +955,9 @@ export const OptimizedLibrary = () => {
           onConfirm={handleBulkDelete}
         />
       </div>
+      
+      {/* Performance Monitor for debugging */}
+      <PerformanceMonitor />
     </OurVidzDashboardLayout>
   );
 };

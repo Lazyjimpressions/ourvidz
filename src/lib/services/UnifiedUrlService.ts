@@ -1,409 +1,184 @@
-
 import { getSignedUrl } from '@/lib/storage';
-import type { UnifiedAsset } from './AssetService';
+import { assetUrlCache } from '@/lib/cache/StaleWhileRevalidateCache';
+import { sessionCache } from '@/lib/cache/SessionCache';
+import type { UnifiedAsset } from './OptimizedAssetService';
 
 /**
  * Unified URL Generation Service
  * 
- * Provides a single source of truth for asset URL generation across the application.
+ * Single source of truth for asset URL generation across the application.
  * Features:
- * - Intelligent caching with TTL
+ * - Intelligent bucket detection with fallbacks
+ * - Efficient caching with stale-while-revalidate pattern
  * - Batch processing for performance
  * - Comprehensive error handling
- * - Type-safe bucket detection
- * - Fallback mechanisms
+ * - Progressive loading support
  */
 export class UnifiedUrlService {
-  // Cache with TTL (Time To Live)
-  private static cache = new Map<string, { url: string; expires: number }>();
-  private static readonly CACHE_TTL = 3600 * 1000; // 1 hour in milliseconds
+  private static readonly DEFAULT_EXPIRY = 30 * 60; // 30 minutes (Supabase default)
+  private static readonly THUMBNAIL_EXPIRY = 60 * 60; // 1 hour for thumbnails
   
   // Performance monitoring
   private static metrics = {
     cacheHits: 0,
     cacheMisses: 0,
     errors: 0,
-    totalRequests: 0
+    totalRequests: 0,
+    batchRequests: 0
   };
 
   /**
-   * Generate URLs for a single asset
+   * Generate URLs for a single asset with intelligent caching
    */
   static async generateAssetUrls(asset: UnifiedAsset): Promise<UnifiedAsset> {
     this.metrics.totalRequests++;
     
     try {
-      // Check if asset already has URLs from database
-      if (asset.url || asset.thumbnailUrl) {
-        console.log(`✅ Asset ${asset.id} already has URLs from database:`, {
-          url: asset.url,
-          thumbnailUrl: asset.thumbnailUrl
-        });
-        
-        // Check if the URLs are already signed URLs (start with https://)
-        const hasSignedUrl = asset.url?.startsWith('https://') || asset.thumbnailUrl?.startsWith('https://');
-        if (hasSignedUrl) {
-          console.log(`✅ Asset ${asset.id} already has signed URLs, skipping generation`);
-          // For videos, ensure we still provide a valid thumbnail image
-          if (asset.type === 'video') {
-            let thumb = asset.thumbnailUrl;
-            if (!thumb) {
-              thumb = '/video-thumbnail-placeholder.svg';
-            } else if (!thumb.startsWith('https://') && !thumb.startsWith('http://')) {
-              try {
-                const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
-                const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
-                thumb = thumbData?.signedUrl || '/video-thumbnail-placeholder.svg';
-              } catch (e) {
-                thumb = '/video-thumbnail-placeholder.svg';
-              }
-            }
-            this.metrics.cacheHits++;
-            return { ...asset, thumbnailUrl: thumb };
-          }
-          this.metrics.cacheHits++;
-          return asset; // Return as-is, no need to regenerate
-        }
-        
-        // If we have URLs but they're not signed, we'll continue to generate signed URLs
-        console.log(`⚠️ Asset ${asset.id} has URLs but they're not signed, generating signed URLs`);
-      }
-
-      // Check cache first
-      const cachedUrl = this.getCachedUrl(asset.id);
+      // Check session cache first (fastest)
+      const cachedUrl = sessionCache.getCachedSignedUrl(asset.id);
       if (cachedUrl) {
         this.metrics.cacheHits++;
+        console.log(`⚡ Cache hit for asset ${asset.id}`);
         return { ...asset, url: cachedUrl, thumbnailUrl: cachedUrl };
       }
 
+      // Check if asset already has valid signed URLs
+      if (this.hasValidSignedUrls(asset)) {
+        this.metrics.cacheHits++;
+        sessionCache.cacheSignedUrl(asset.id, asset.url!);
+        return asset;
+      }
+
       this.metrics.cacheMisses++;
+
+      // Use stale-while-revalidate cache for URL generation
+      const cacheKey = `asset-url-${asset.id}`;
+      const generateUrls = async () => {
+        const bucket = this.determineBucket(asset);
+        return await this.generateSignedUrls(asset, bucket);
+      };
+
+      const urls = await assetUrlCache.get(cacheKey, generateUrls);
       
-      // Determine bucket and generate URLs
-      const bucket = this.determineBucket(asset);
-      const urls = await this.generateSignedUrls(asset, bucket);
+      // Cache in session storage for immediate access
+      if (urls && typeof urls === 'object' && 'url' in urls && urls.url) {
+        sessionCache.cacheSignedUrl(asset.id, urls.url as string);
+      }
       
-      // Cache the result
-      this.setCachedUrl(asset.id, urls.url);
-      
-      return { ...asset, ...urls };
+      return { ...asset, ...(urls as object) };
     } catch (error) {
       this.metrics.errors++;
       console.error(`❌ Failed to generate URLs for asset ${asset.id}:`, error);
       
-      // Return asset without URLs on error
-      return { ...asset, url: undefined, thumbnailUrl: undefined, error: 'Failed to load' };
+      return { 
+        ...asset, 
+        url: undefined, 
+        thumbnailUrl: undefined, 
+        error: 'Failed to load media' 
+      };
     }
   }
 
   /**
-   * Generate URLs for multiple assets in batch
+   * Generate URLs for multiple assets in batch (optimized)
    */
   static async generateBatchUrls(assets: UnifiedAsset[]): Promise<UnifiedAsset[]> {
+    if (assets.length === 0) return [];
+    
+    this.metrics.batchRequests++;
     console.log(`🚀 Batch URL generation for ${assets.length} assets`);
     
-    // Process in chunks to avoid overwhelming the system
-    const CHUNK_SIZE = 10;
+    // Split into assets that need URLs vs those that already have them
+    const { needUrls, haveUrls } = this.splitAssetsByUrlStatus(assets);
+    
+    if (needUrls.length === 0) {
+      console.log(`✅ All ${assets.length} assets already have URLs`);
+      return assets;
+    }
+
+    console.log(`⚡ Processing ${needUrls.length} assets needing URLs, ${haveUrls.length} already have URLs`);
+
+    // Process URL generation in smaller batches to prevent overwhelming the system
+    const BATCH_SIZE = 10;
     const results: UnifiedAsset[] = [];
     
-    for (let i = 0; i < assets.length; i += CHUNK_SIZE) {
-      const chunk = assets.slice(i, i + CHUNK_SIZE);
-      const chunkPromises = chunk.map(asset => this.generateAssetUrls(asset));
+    for (let i = 0; i < needUrls.length; i += BATCH_SIZE) {
+      const batch = needUrls.slice(i, i + BATCH_SIZE);
       
-      try {
-        const chunkResults = await Promise.all(chunkPromises);
-        results.push(...chunkResults);
-        
-        console.log(`✅ Processed chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(assets.length / CHUNK_SIZE)}`);
-      } catch (error) {
-        console.error(`❌ Failed to process chunk ${Math.floor(i / CHUNK_SIZE) + 1}:`, error);
-        // Continue with other chunks
-        results.push(...chunk.map(asset => ({ ...asset, url: undefined, thumbnailUrl: undefined, error: 'Failed to load' })));
+      const batchPromises = batch.map(asset => 
+        this.generateAssetUrls(asset).catch(error => {
+          console.error(`Failed to generate URL for asset ${asset.id}:`, error);
+          return { ...asset, error: 'Failed to load' };
+        })
+      );
+      
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+      
+      // Small delay between batches to prevent rate limiting
+      if (i + BATCH_SIZE < needUrls.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
+
+    // Combine results maintaining original order
+    const allResults = [...haveUrls, ...results];
+    allResults.sort((a, b) => assets.findIndex(asset => asset.id === a.id) - assets.findIndex(asset => asset.id === b.id));
     
-    return results;
+    console.log(`✅ Batch URL generation complete: ${results.length} new URLs generated`);
+    return allResults;
   }
 
   /**
-   * Get thumbnail URL for progressive loading
+   * Get thumbnail URL for an asset (optimized for quick preview)
    */
   static async getThumbnailUrl(asset: UnifiedAsset): Promise<string | null> {
     try {
-      const bucket = this.determineBucket(asset);
-      const path = this.getImagePath(asset, 'thumbnail');
-      
-      if (!path) return null;
-      
-      const { data, error } = await getSignedUrl(bucket as any, path, 1800); // 30 min TTL
-      
-      if (error || !data?.signedUrl) {
-        console.warn(`⚠️ Failed to get thumbnail URL for ${asset.id}:`, error?.message);
-        return null;
+      if (asset.thumbnailUrl) {
+        return asset.thumbnailUrl;
       }
-      
-      return data.signedUrl;
+
+      // For images, use the main URL as thumbnail
+      if (asset.type === 'image' && asset.url) {
+        return asset.url;
+      }
+
+      // For videos without thumbnails, use placeholder
+      if (asset.type === 'video') {
+        return '/video-thumbnail-placeholder.svg';
+      }
+
+      return null;
     } catch (error) {
-      console.error(`❌ Error getting thumbnail URL for ${asset.id}:`, error);
+      console.error(`Failed to get thumbnail for asset ${asset.id}:`, error);
       return null;
     }
   }
 
   /**
-   * Get high-resolution URL
+   * Get high-resolution URL for an asset
    */
   static async getHighResUrl(asset: UnifiedAsset): Promise<string | null> {
     try {
-      const bucket = this.determineBucket(asset);
-      const path = this.getImagePath(asset, 'highres');
-      
-      if (!path) return null;
-      
-      const { data, error } = await getSignedUrl(bucket as any, path, 3600); // 1 hour TTL
-      
-      if (error || !data?.signedUrl) {
-        console.warn(`⚠️ Failed to get high-res URL for ${asset.id}:`, error?.message);
-        return null;
-      }
-      
-      return data.signedUrl;
+      const highResAsset = { ...asset, quality: 'high' };
+      const result = await this.generateAssetUrls(highResAsset);
+      return result.url || null;
     } catch (error) {
-      console.error(`❌ Error getting high-res URL for ${asset.id}:`, error);
+      console.error(`Failed to get high-res URL for asset ${asset.id}:`, error);
       return null;
     }
   }
 
   /**
-   * Standardized bucket detection logic
-   */
-  private static determineBucket(asset: UnifiedAsset): string {
-    const metadata = asset.metadata as any;
-    
-    // Check for explicit bucket in metadata first
-    if (metadata?.bucket) {
-      console.log(`🔍 Using explicit bucket from metadata: ${metadata.bucket}`);
-      return metadata.bucket;
-    }
-    
-    // Determine bucket based on model type and quality
-    const isSDXL = metadata?.is_sdxl || 
-                   metadata?.model_type === 'sdxl' || 
-                   asset.modelType === 'SDXL';
-    
-    const isEnhanced = metadata?.enhanced || 
-                       asset.modelType?.includes('7b') ||
-                       asset.modelType === 'Enhanced';
-    
-    const quality = asset.quality || metadata?.quality || 'fast';
-    
-    console.log(`🔍 Bucket determination for asset ${asset.id}:`, {
-      type: asset.type,
-      isSDXL,
-      isEnhanced,
-      quality,
-      modelType: asset.modelType,
-      metadataModelType: metadata?.model_type
-    });
-    
-    if (asset.type === 'video') {
-      if (isEnhanced) {
-        const bucket = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
-        console.log(`🎬 Video bucket determined: ${bucket}`);
-        return bucket;
-      } else {
-        const bucket = quality === 'high' ? 'video_high' : 'video_fast';
-        console.log(`🎬 Video bucket determined: ${bucket}`);
-        return bucket;
-      }
-    } else {
-      // Image assets
-      if (isSDXL) {
-        const bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-        console.log(`🖼️ SDXL image bucket determined: ${bucket}`);
-        return bucket;
-      } else if (isEnhanced) {
-        const bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-        console.log(`🖼️ Enhanced image bucket determined: ${bucket}`);
-        return bucket;
-      } else {
-        const bucket = quality === 'high' ? 'image_high' : 'image_fast';
-        console.log(`🖼️ Standard image bucket determined: ${bucket}`);
-        return bucket;
-      }
-    }
-  }
-
-  /**
-   * Generate signed URLs for an asset
-   */
-  private static async generateSignedUrls(asset: UnifiedAsset, bucket: string): Promise<{ url: string; thumbnailUrl: string }> {
-    const path = this.getImagePath(asset, 'primary');
-    
-    if (!path) {
-      throw new Error(`No image path found for asset ${asset.id}`);
-    }
-    
-    // Clean the path - remove bucket prefix if present
-    let cleanPath = path;
-    if (cleanPath.startsWith(`${bucket}/`)) {
-      cleanPath = cleanPath.replace(`${bucket}/`, '');
-    }
-    
-    // Also remove any leading slashes
-    cleanPath = cleanPath.replace(/^\/+/, '');
-    
-    console.log(`🔐 Generating signed URL: ${bucket}/${cleanPath.slice(0, 50)}...`);
-    console.log(`🔍 Path details:`, {
-      originalPath: path,
-      cleanPath: cleanPath,
-      assetId: asset.id,
-      assetType: asset.type,
-      bucket: bucket
-    });
-    
-    const { data, error } = await getSignedUrl(bucket as any, cleanPath, 3600);
-    
-    if (error || !data?.signedUrl) {
-      console.error(`❌ Failed to generate signed URL for ${asset.id}:`, {
-        bucket,
-        path: cleanPath,
-        error: error?.message || 'No URL returned'
-      });
-      throw new Error(`Failed to generate signed URL: ${error?.message || 'No URL returned'}`);
-    }
-    
-    console.log(`✅ Generated signed URL successfully for: ${asset.id}`);
-    
-    // Special handling for videos: ensure we return a valid image thumbnail
-    if (asset.type === 'video') {
-      let thumb = asset.thumbnailUrl;
-      if (thumb && (thumb.startsWith('https://') || thumb.startsWith('http://'))) {
-        // already absolute URL
-      } else if (thumb) {
-        try {
-          const cleanThumb = thumb.replace(/^\/+/, '').replace(/^image_fast\//, '');
-          const { data: thumbData } = await getSignedUrl('image_fast' as any, cleanThumb, 1800);
-          thumb = thumbData?.signedUrl || '/video-thumbnail-placeholder.svg';
-        } catch (e) {
-          thumb = '/video-thumbnail-placeholder.svg';
-        }
-      } else {
-        thumb = '/video-thumbnail-placeholder.svg';
-      }
-      return {
-        url: data.signedUrl,
-        thumbnailUrl: thumb
-      };
-    }
-    
-    return {
-      url: data.signedUrl,
-      thumbnailUrl: data.signedUrl
-    };
-  }
-
-  /**
-   * Get the appropriate image path for an asset
-   */
-  static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
-    console.log(`🔍 Getting image path for asset ${asset.id}, type: ${pathType}`, {
-      assetType: asset.type,
-      isSDXL: asset.isSDXL,
-      url: asset.url,
-      thumbnailUrl: asset.thumbnailUrl,
-      metadata: asset.metadata
-    });
-
-    // For SDXL images with multiple URLs - check metadata for image_urls array
-    if (asset.isSDXL) {
-      const metadata = asset.metadata as any;
-      const imageUrls = metadata?.image_urls;
-      if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
-        console.log(`✅ Found SDXL image URLs: ${imageUrls.length} images`);
-        return imageUrls[0];
-      }
-    }
-    
-    // For regular images - check asset properties first
-    if (asset.type === 'image') {
-      // Check direct asset properties first (these come from database)
-      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
-        console.log(`✅ Using thumbnail URL from asset: ${asset.thumbnailUrl}`);
-        return asset.thumbnailUrl;
-      }
-      if (asset.url) {
-        console.log(`✅ Using primary URL from asset: ${asset.url}`);
-        return asset.url;
-      }
-      
-      // Fallback to metadata if direct properties are missing
-      const metadata = asset.metadata as any;
-      if (metadata?.image_url) {
-        console.log(`✅ Using image_url from metadata: ${metadata.image_url}`);
-        return metadata.image_url;
-      }
-    } 
-    
-    // For videos
-    if (asset.type === 'video') {
-      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
-        console.log(`✅ Using video thumbnail URL from asset: ${asset.thumbnailUrl}`);
-        return asset.thumbnailUrl;
-      }
-      
-      // For video primary, we typically use thumbnail or video URL
-      const metadata = asset.metadata as any;
-      if (asset.url) {
-        console.log(`✅ Using video URL from asset: ${asset.url}`);
-        return asset.url;
-      }
-      if (metadata?.video_url) {
-        console.log(`✅ Using video_url from metadata: ${metadata.video_url}`);
-        return metadata.video_url;
-      }
-    }
-    
-    console.warn(`❌ No image path found for asset ${asset.id} of type ${asset.type}`, {
-      assetUrl: asset.url,
-      assetThumbnailUrl: asset.thumbnailUrl,
-      metadata: asset.metadata
-    });
-    return null;
-  }
-
-  /**
-   * Cache management methods
-   */
-  private static getCachedUrl(assetId: string): string | null {
-    const cached = this.cache.get(assetId);
-    
-    if (!cached) return null;
-    
-    // Check if cache has expired
-    if (Date.now() > cached.expires) {
-      this.cache.delete(assetId);
-      return null;
-    }
-    
-    return cached.url;
-  }
-
-  private static setCachedUrl(assetId: string, url: string): void {
-    this.cache.set(assetId, {
-      url,
-      expires: Date.now() + this.CACHE_TTL
-    });
-  }
-
-  /**
-   * Clear cache for a specific asset or all assets
+   * Clear cache for specific asset or all assets
    */
   static clearCache(assetId?: string): void {
     if (assetId) {
-      this.cache.delete(assetId);
-      console.log(`🗑️ Cleared cache for asset: ${assetId}`);
+      // Remove specific cached URL - no method needed, just avoid calling
+      assetUrlCache.invalidate(`asset-url-${assetId}`);
     } else {
-      this.cache.clear();
-      console.log(`🗑️ Cleared entire URL cache`);
+      sessionCache.clearAllCache();
+      assetUrlCache.invalidate();
     }
   }
 
@@ -411,26 +186,175 @@ export class UnifiedUrlService {
    * Get performance metrics
    */
   static getMetrics() {
-    const hitRate = this.metrics.totalRequests > 0 
-      ? (this.metrics.cacheHits / this.metrics.totalRequests * 100).toFixed(2)
-      : '0.00';
+    const total = this.metrics.cacheHits + this.metrics.cacheMisses;
+    const hitRate = total > 0 ? (this.metrics.cacheHits / total * 100).toFixed(1) : '0';
     
     return {
       ...this.metrics,
-      cacheHitRate: `${hitRate}%`,
-      cacheSize: this.cache.size
+      hitRate: `${hitRate}%`,
+      totalOperations: total
     };
   }
 
   /**
-   * Reset metrics (useful for testing)
+   * Reset performance metrics
    */
   static resetMetrics(): void {
     this.metrics = {
       cacheHits: 0,
       cacheMisses: 0,
       errors: 0,
-      totalRequests: 0
+      totalRequests: 0,
+      batchRequests: 0
     };
   }
-} 
+
+  // Private helper methods
+
+  private static splitAssetsByUrlStatus(assets: UnifiedAsset[]): { needUrls: UnifiedAsset[]; haveUrls: UnifiedAsset[] } {
+    const needUrls: UnifiedAsset[] = [];
+    const haveUrls: UnifiedAsset[] = [];
+    
+    for (const asset of assets) {
+      if (this.hasValidSignedUrls(asset) || sessionCache.getCachedSignedUrl(asset.id)) {
+        haveUrls.push(asset);
+      } else {
+        needUrls.push(asset);
+      }
+    }
+    
+    return { needUrls, haveUrls };
+  }
+
+  private static hasValidSignedUrls(asset: UnifiedAsset): boolean {
+    return !!(asset.url?.startsWith('https://') || asset.thumbnailUrl?.startsWith('https://'));
+  }
+
+  private static determineBucket(asset: UnifiedAsset): string {
+    const metadata = asset.metadata || {};
+    const quality = asset.quality || 'fast';
+    
+    // Enhanced bucket detection with fallback logic
+    if (asset.type === 'image') {
+      const isSDXL = metadata.is_sdxl || 
+                     metadata.model_type === 'sdxl' || 
+                     asset.isSDXL ||
+                     metadata.bucket?.includes('sdxl');
+      
+      const isEnhanced = metadata.job_type?.includes('enhanced') || 
+                         metadata.job_type?.includes('7b');
+      
+      if (isSDXL) {
+        return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      } else if (isEnhanced) {
+        return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+      } else {
+        return quality === 'high' ? 'image_high' : 'image_fast';
+      }
+    } else {
+      // Video bucket detection
+      const isEnhanced = metadata.job_type?.includes('enhanced') || 
+                         metadata.job_type?.includes('7b');
+      
+      if (isEnhanced) {
+        return quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
+      } else {
+        return quality === 'high' ? 'video_high' : 'video_fast';
+      }
+    }
+  }
+
+  private static async generateSignedUrls(asset: UnifiedAsset, bucket: string): Promise<{ url: string; thumbnailUrl: string }> {
+    const fallbackBuckets = asset.type === 'image' 
+      ? ['sdxl_image_fast', 'sdxl_image_high', 'image_fast', 'image_high', 'image7b_fast_enhanced', 'image7b_high_enhanced']
+      : ['video_fast', 'video_high', 'video7b_fast_enhanced', 'video7b_high_enhanced'];
+    
+    const bucketsToTry = [bucket, ...fallbackBuckets.filter(b => b !== bucket)];
+    
+    for (const currentBucket of bucketsToTry) {
+      try {
+        const path = this.getAssetPath(asset, asset.type === 'image' ? 'primary' : 'primary');
+        if (!path) continue;
+        
+        const { data, error } = await getSignedUrl(
+          currentBucket as any, 
+          path, 
+          this.DEFAULT_EXPIRY
+        );
+        
+        if (!error && data?.signedUrl) {
+          console.log(`✅ Generated URL with bucket ${currentBucket} for asset ${asset.id}`);
+          
+          let thumbnailUrl = data.signedUrl;
+          
+          // For videos, try to get a thumbnail from image_fast bucket
+          if (asset.type === 'video' && asset.thumbnailUrl) {
+            try {
+              const thumbPath = asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');
+              const { data: thumbData } = await getSignedUrl('image_fast' as any, thumbPath, this.THUMBNAIL_EXPIRY);
+              if (thumbData?.signedUrl) {
+                thumbnailUrl = thumbData.signedUrl;
+              }
+            } catch (thumbError) {
+              console.warn(`Failed to generate thumbnail for video ${asset.id}:`, thumbError);
+              thumbnailUrl = '/video-thumbnail-placeholder.svg';
+            }
+          }
+          
+          return {
+            url: data.signedUrl,
+            thumbnailUrl
+          };
+        }
+      } catch (error) {
+        console.warn(`Bucket ${currentBucket} failed for asset ${asset.id}:`, error);
+        continue;
+      }
+    }
+    
+    throw new Error(`Failed to generate signed URLs for asset ${asset.id} from any bucket`);
+  }
+
+  static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
+    if (asset.type !== 'image') return null;
+    
+    const metadata = asset.metadata || {};
+    
+    // Handle SDXL image arrays
+    if (metadata.image_urls && Array.isArray(metadata.image_urls)) {
+      const imageUrls = metadata.image_urls;
+      if (imageUrls.length > 0) {
+        return imageUrls[0].replace(/^\/+/, '');
+      }
+    }
+    
+    // Handle single image URL
+    if (asset.url) {
+      return asset.url.replace(/^\/+/, '');
+    }
+    
+    // Fallback to asset ID
+    return `${asset.id}.png`;
+  }
+
+  private static getAssetPath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail'): string | null {
+    if (asset.type === 'image') {
+      return this.getImagePath(asset, pathType);
+    } else if (asset.type === 'video') {
+      if (pathType === 'thumbnail' && asset.thumbnailUrl) {
+        return asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');
+      }
+      return asset.url ? asset.url.replace(/^\/+/, '') : `${asset.id}.mp4`;
+    }
+    
+    return null;
+  }
+
+  private static getCachedUrl(assetId: string): string | null {
+    return sessionCache.getCachedSignedUrl(assetId);
+  }
+
+  private static setCachedUrl(assetId: string, url: string): void {
+    sessionCache.cacheSignedUrl(assetId, url);
+  }
+}
