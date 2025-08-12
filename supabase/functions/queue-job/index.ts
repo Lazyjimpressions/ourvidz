@@ -776,11 +776,11 @@ serve(async (req)=>{
       expected_generation_time: isEnhanced ? 
         (format === 'video' ? (quality === 'high' ? 240 : 195) : (quality === 'high' ? 100 : 85)) :
         (format === 'video' ? (quality === 'high' ? 180 : 135) : (quality === 'high' ? 40 : 25)),
-      // Quality settings
+      // Quality settings with exact-copy overrides
       // Parameter mapping normalization: SDXL uses guidance_scale/num_inference_steps; WAN uses sample_*
       ...(isSDXL ? {
-        num_inference_steps: quality === 'high' ? 50 : 25,
-        guidance_scale: quality === 'high' ? 7.5 : 6.5,
+        num_inference_steps: (metadata?.exact_copy_mode ? (metadata?.num_inference_steps ?? 15) : (metadata?.num_inference_steps ?? (quality === 'high' ? 50 : 25))),
+        guidance_scale: (metadata?.exact_copy_mode ? (metadata?.guidance_scale ?? 3) : (metadata?.guidance_scale ?? (quality === 'high' ? 7.5 : 6.5))),
         scheduler: 'unipc'
       } : {
         sample_steps: quality === 'high' ? 50 : 25,
@@ -886,9 +886,10 @@ serve(async (req)=>{
       config = {
         width: 1024,                                        // ✅ SDXL format
         height: 1024,                                       // ✅ SDXL format
-        num_inference_steps: quality === 'high' ? 50 : 25, // ✅ SDXL parameter name
-        guidance_scale: quality === 'high' ? 7.5 : 6.5,   // ✅ SDXL parameter name
+        num_inference_steps: (metadata?.exact_copy_mode ? (metadata?.num_inference_steps ?? 15) : (metadata?.num_inference_steps ?? (quality === 'high' ? 50 : 25))), // ✅ SDXL parameter name with exact-copy override
+        guidance_scale: (metadata?.exact_copy_mode ? (metadata?.guidance_scale ?? 3) : (metadata?.guidance_scale ?? (quality === 'high' ? 7.5 : 6.5))),   // ✅ SDXL parameter name with exact-copy override
         scheduler: 'unipc',                                 // ✅ SDXL parameter name
+        ...(metadata?.denoise_strength != null || metadata?.preserve_strength != null ? { denoise_strength: (metadata?.denoise_strength ?? metadata?.preserve_strength) } : {}),
         frame_num: format === 'video' ? 83 : 1,
         enhance_prompt: isEnhanced,
         // SEED SUPPORT: Pass seed from metadata to worker config
@@ -898,7 +899,7 @@ serve(async (req)=>{
         // REFERENCE IMAGE SUPPORT: Pass reference data to worker config with exact copy mode handling
         ...metadata?.reference_image && {
           reference_image_url: metadata.reference_url,
-          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength ?? metadata.preserve_strength ?? 0.85),
           reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
           exact_copy_mode: metadata.exact_copy_mode || false
         },
@@ -927,7 +928,7 @@ serve(async (req)=>{
         // REFERENCE IMAGE SUPPORT: Pass reference data to worker config with exact copy mode handling
         ...metadata?.reference_image && {
           reference_image_url: metadata.reference_url,
-          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+          reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength ?? metadata.preserve_strength ?? 0.85),
           reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
           exact_copy_mode: metadata.exact_copy_mode || false,
           // VIDEO REFERENCE SUPPORT: Add start/end frame references for video generation
@@ -943,6 +944,16 @@ serve(async (req)=>{
         file_extension: format === 'video' ? 'mp4' : 'png',
         num_images: metadata?.num_images || 1
       };
+    }
+
+    // Log final SDXL params for visibility
+    if (isSDXL) {
+      console.log('🎛️ SDXL final params:', {
+        exactCopyMode: metadata?.exact_copy_mode || false,
+        num_inference_steps: config.num_inference_steps,
+        guidance_scale: config.guidance_scale,
+        denoise_strength: config.denoise_strength
+      });
     }
 
     // Format job payload for appropriate worker
@@ -965,7 +976,7 @@ serve(async (req)=>{
       // 🎯 REFERENCE IMAGE FIX: Include reference image parameters at root level for worker with exact copy mode
       ...metadata?.reference_image && {
         reference_image_url: metadata.reference_url,
-        reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength || 0.85),
+        reference_strength: metadata.exact_copy_mode ? 0.9 : (metadata.reference_strength ?? metadata.preserve_strength ?? 0.85),
         reference_type: metadata.exact_copy_mode ? 'composition' : (metadata.reference_type || 'character'),
         exact_copy_mode: metadata.exact_copy_mode || false
       },
