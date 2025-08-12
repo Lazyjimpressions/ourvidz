@@ -48,10 +48,10 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAl
                 size="sm"
                 onClick={onDismissAllJobs}
                 className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
-                title="Dismiss all jobs from workspace"
+                title="Clear all items from workspace"
               >
                 <RotateCcw className="h-3 w-3" />
-                <span className="hidden sm:inline">Dismiss All</span>
+                <span className="hidden sm:inline">Clear All</span>
               </Button>
               <Button
                 variant="ghost"

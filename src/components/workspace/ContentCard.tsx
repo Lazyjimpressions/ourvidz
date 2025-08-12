@@ -227,8 +227,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
         isHovered ? 'opacity-100' : 'opacity-0'
       }`}>
         
-        {/* Top-Right Corner - Single Minimal Hide Button */}
-        <div className="absolute top-1 right-1">
+        {/* Top-Right Corner - Clear and Delete Buttons */}
+        <div className="absolute top-1 right-1 flex gap-1">
           {onDismiss && (
             <TooltipProvider>
               <Tooltip>
@@ -246,7 +246,30 @@ export const ContentCard: React.FC<ContentCardProps> = ({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Hide from workspace</p>
+                  <p>Clear from workspace</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          
+          {onDelete && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="w-5 h-5 bg-red-600/80 hover:bg-red-700/90 border border-red-500/50 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm"
+                    onClick={(e) => handleActionClick(e, onDelete)}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <div className="w-2 h-2 bg-white/70 rounded-full animate-pulse" />
+                    ) : (
+                      <Trash2 className="w-3 h-3 text-white" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Delete permanently</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

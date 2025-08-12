@@ -258,7 +258,8 @@ export const useOptimizedWorkspace = () => {
         .eq('status', 'completed')
         .gte('created_at', todayStart.toISOString());
 
-      if (images) {
+      // Update images with dismissed flag (individual updates for simplicity)
+      if (images && images.length > 0) {
         for (const image of images) {
           const currentMetadata = (image.metadata as Record<string, any>) || {};
           await supabase
@@ -270,7 +271,8 @@ export const useOptimizedWorkspace = () => {
                 dismissed_at: new Date().toISOString()
               }
             })
-            .eq('id', image.id);
+            .eq('id', image.id)
+            .eq('user_id', user.id);
         }
         console.log(`✅ Dismissed ${images.length} images from workspace`);
       }
@@ -283,7 +285,8 @@ export const useOptimizedWorkspace = () => {
         .eq('status', 'completed')
         .gte('created_at', todayStart.toISOString());
 
-      if (videos) {
+      // Update videos with dismissed flag (individual updates for simplicity)
+      if (videos && videos.length > 0) {
         for (const video of videos) {
           const currentMetadata = (video.metadata as Record<string, any>) || {};
           await supabase
@@ -295,7 +298,8 @@ export const useOptimizedWorkspace = () => {
                 dismissed_at: new Date().toISOString()
               }
             })
-            .eq('id', video.id);
+            .eq('id', video.id)
+            .eq('user_id', user.id);
         }
         console.log(`✅ Dismissed ${videos.length} videos from workspace`);
       }

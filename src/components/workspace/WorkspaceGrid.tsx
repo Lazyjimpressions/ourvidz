@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ContentCard } from './ContentCard';
 import { UnifiedAsset } from '@/lib/services/AssetService';
-import { Play, Video as VideoIcon, Image as ImageIcon } from 'lucide-react';
+import { Play, Video as VideoIcon, Image as ImageIcon, Trash2 } from 'lucide-react';
 
 interface WorkspaceGridProps {
   items: UnifiedAsset[];
@@ -204,19 +204,33 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 ))}
               </div>
               
-              {/* Minimal Job Action - Single Hide Button */}
-              <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Job Actions - Clear and Delete Buttons */}
+              <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                 {onDismissJob && (
                   <button
                     onClick={() => onDismissJob(jobId)}
                     className="w-5 h-5 bg-background/80 hover:bg-background border border-border rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
-                    title="Hide from workspace"
+                    title="Clear job from workspace"
                     disabled={isDeleting.has(jobId)}
                   >
                     {isDeleting.has(jobId) ? (
                       <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
                     ) : (
                       <span className="text-muted-foreground">×</span>
+                    )}
+                  </button>
+                )}
+                {onDeleteJob && (
+                  <button
+                    onClick={() => onDeleteJob(jobId)}
+                    className="w-5 h-5 bg-red-600/80 hover:bg-red-700/90 border border-red-500/50 rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
+                    title="Delete job permanently"
+                    disabled={isDeleting.has(jobId)}
+                  >
+                    {isDeleting.has(jobId) ? (
+                      <div className="w-2 h-2 bg-white/70 rounded-full animate-pulse" />
+                    ) : (
+                      <Trash2 className="w-3 h-3 text-white" />
                     )}
                   </button>
                 )}
@@ -312,24 +326,43 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                     {/* Content Type Indicator - Removed redundant icons, keeping only play button for videos */}
                  </div>
 
-                {/* Minimal Sidebar Action - Single Hide Button */}
-                {hoveredJob === jobId && onDismissJob && (
-                  <div className="absolute -top-1 -right-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDismissJob(jobId);
-                      }}
-                      className="w-4 h-4 bg-background/90 hover:bg-background border border-border rounded-full flex items-center justify-center transition-all shadow-sm"
-                      disabled={isDeleting.has(jobId)}
-                      title="Hide from workspace"
-                    >
-                      {isDeleting.has(jobId) ? (
-                        <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-pulse" />
-                      ) : (
-                        <span className="text-xs text-muted-foreground leading-none">×</span>
-                      )}
-                    </button>
+                {/* Sidebar Actions - Clear and Delete Buttons */}
+                {hoveredJob === jobId && (
+                  <div className="absolute -top-1 -right-1 flex gap-1">
+                    {onDismissJob && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDismissJob(jobId);
+                        }}
+                        className="w-4 h-4 bg-background/90 hover:bg-background border border-border rounded-full flex items-center justify-center transition-all shadow-sm"
+                        disabled={isDeleting.has(jobId)}
+                        title="Clear from workspace"
+                      >
+                        {isDeleting.has(jobId) ? (
+                          <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-pulse" />
+                        ) : (
+                          <span className="text-xs text-muted-foreground leading-none">×</span>
+                        )}
+                      </button>
+                    )}
+                    {onDeleteJob && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteJob(jobId);
+                        }}
+                        className="w-4 h-4 bg-red-600/90 hover:bg-red-700 border border-red-500/50 rounded-full flex items-center justify-center transition-all shadow-sm"
+                        disabled={isDeleting.has(jobId)}
+                        title="Delete permanently"
+                      >
+                        {isDeleting.has(jobId) ? (
+                          <div className="w-1.5 h-1.5 bg-white/70 rounded-full animate-pulse" />
+                        ) : (
+                          <Trash2 className="w-2.5 h-2.5 text-white" />
+                        )}
+                      </button>
+                    )}
                   </div>
                 )}
 
