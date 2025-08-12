@@ -62,7 +62,7 @@ const ReferenceImageUpload: React.FC<{
       return;
     }
 
-    // Handle workspace item drops
+    // Handle workspace item drops with metadata extraction
     try {
       const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
       if (workspaceItem.url && workspaceItem.type === 'image') {
@@ -70,6 +70,17 @@ const ReferenceImageUpload: React.FC<{
           onImageUrlChange(workspaceItem.url);
         }
         onFileChange(null);
+        
+        // CRITICAL FIX: Extract metadata for exact copy mode on drag-drop
+        console.log('🎯 DRAG-DROP: Extracting metadata from workspace item:', workspaceItem);
+        
+        // Trigger metadata extraction event for parent component
+        if (workspaceItem.id) {
+          const extractMetadataEvent = new CustomEvent('drag-drop-extract-metadata', {
+            detail: { workspaceItem }
+          });
+          window.dispatchEvent(extractMetadataEvent);
+        }
       }
     } catch (error) {
       // Not a JSON drop, ignore
@@ -179,6 +190,8 @@ interface SimplePromptInputProps {
   onLockSeedChange?: (on: boolean) => void;
   referenceMetadata?: any;
   onReferenceMetadataChange?: (metadata: any) => void;
+  // Workspace assets for metadata extraction
+  workspaceAssets?: any[];
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -231,7 +244,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   lockSeed = false,
   onLockSeedChange,
   referenceMetadata = null,
-  onReferenceMetadataChange
+  onReferenceMetadataChange,
+  workspaceAssets = []
 }) => {
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);

@@ -185,13 +185,55 @@ export const SimplifiedWorkspace: React.FC = () => {
     };
     window.addEventListener('workspace-use-job-as-reference', handler as EventListener);
     return () => window.removeEventListener('workspace-use-job-as-reference', handler as EventListener);
-  }, [mode, setReferenceStrength]);
+  }, [mode, setReferenceStrength, workspaceAssets]);
+
+  // NEW: Listen for drag-drop metadata extraction events
+  React.useEffect(() => {
+    const handleDragDropMetadata = async (e: Event) => {
+      const custom = e as CustomEvent<{ workspaceItem: any }>;
+      const { workspaceItem } = custom.detail || {};
+      
+      if (!workspaceItem?.id) return;
+      
+      console.log('🎯 DRAG-DROP METADATA: Processing workspace item:', workspaceItem);
+      
+      // Find the full asset in workspace
+      const asset = workspaceAssets.find(a => a.id === workspaceItem.id);
+      if (!asset) {
+        console.warn('⚠️ DRAG-DROP: Asset not found in workspace:', workspaceItem.id);
+        return;
+      }
+      
+      // Extract reference metadata for exact copy functionality
+      const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+      const metadata = await extractReferenceMetadata(asset);
+      
+      console.log('🎯 DRAG-DROP METADATA EXTRACTION:', {
+        extracted: !!metadata,
+        metadataKeys: metadata ? Object.keys(metadata) : 'none',
+        originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+        originalSeed: metadata?.originalSeed
+      });
+      
+      if (metadata) {
+        setReferenceMetadata(metadata);
+        setExactCopyMode(true);
+        setReferenceStrength(0.9); // High strength for exact copy
+        console.log('🎯 DRAG-DROP: Exact copy mode enabled with metadata');
+      } else {
+        console.warn('⚠️ DRAG-DROP: Failed to extract metadata');
+      }
+    };
+    
+    window.addEventListener('drag-drop-extract-metadata', handleDragDropMetadata as EventListener);
+    return () => window.removeEventListener('drag-drop-extract-metadata', handleDragDropMetadata as EventListener);
+  }, [workspaceAssets, setReferenceMetadata, setExactCopyMode, setReferenceStrength]);
 
   /**
    * NEW: Use item as reference for iteration (img2img)
    * Matches LTX Studio's iterate functionality
    */
-  const handleIterateFromItem = (item: UnifiedAsset) => {
+  const handleIterateFromItem = async (item: UnifiedAsset) => {
     console.log('🔄 ITERATE FROM ITEM: Setting up img2img reference:', item);
     
     // 🎯 DEBUG: Check item metadata for exact copy
@@ -204,9 +246,9 @@ export const SimplifiedWorkspace: React.FC = () => {
       itemSeed: item.metadata?.seed
     });
     
-    // ✅ FIXED: Extract metadata synchronously for exact copy functionality
-    const { extractReferenceMetadata } = require('@/utils/extractReferenceMetadata');
-    const metadata = extractReferenceMetadata(item);
+    // ✅ FIXED: Extract metadata asynchronously for exact copy functionality
+    const { extractReferenceMetadata } = await import('@/utils/extractReferenceMetadata');
+    const metadata = await extractReferenceMetadata(item);
     
     console.log('🎯 ITERATE METADATA EXTRACTION:', {
       extracted: !!metadata,
@@ -540,6 +582,7 @@ export const SimplifiedWorkspace: React.FC = () => {
             onLockSeedChange={setLockSeed}
             referenceMetadata={state.referenceMetadata}
             onReferenceMetadataChange={state.setReferenceMetadata}
+            workspaceAssets={workspaceAssets}
           />
         </div>
       </div>
