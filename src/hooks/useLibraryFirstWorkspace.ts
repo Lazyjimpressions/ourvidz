@@ -476,7 +476,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         style,
         cameraAngle,
         shotType,
-        enhancementModel
+        enhancementModel,
+        // DEBUG: Full reference metadata
+        fullReferenceMetadata: referenceMetadata
       });
       
       if (exactCopyMode && referenceMetadata) {
@@ -565,7 +567,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           skip_enhancement: exactCopyMode ? true : (enhancementModel === 'none'),
           // CRITICAL: Pass reference metadata for exact copy mode
           ...(exactCopyMode && referenceMetadata ? {
-            exact_copy: true,
+            exact_copy_mode: true,
             originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt,
             originalSeed: referenceMetadata.originalSeed,
             originalStyle: referenceMetadata.originalStyle,
@@ -585,12 +587,16 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       };
       
       // DEBUG: Log reference image handling
-      console.log('🎯 Reference image debug:', {
+      console.log('🎯 GENERATION REQUEST FINAL DEBUG:', {
         referenceImage: !!referenceImage,
         referenceImageUrl: !!referenceImageUrl,
         exactCopyMode,
         hasReferenceData: !!(referenceImageUrl || referenceImage),
-        referenceMetadata: generationRequest.metadata?.reference_url ? 'URL set' : 'No URL'
+        referenceMetadata: generationRequest.metadata?.reference_url ? 'URL set' : 'No URL',
+        // DEBUG: Full metadata being sent
+        fullMetadata: generationRequest.metadata,
+        exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
+        originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
       });
 
       // Use existing GenerationService (simplified)

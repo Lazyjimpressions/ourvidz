@@ -506,6 +506,14 @@ serve(async (req)=>{
     }
 
     // CRITICAL FIX: Handle exact copy mode with reference metadata first
+    console.log('🔍 EXACT COPY MODE DEBUG:', {
+      hasMetadata: !!metadata,
+      exactCopyMode: metadata?.exact_copy_mode,
+      originalEnhancedPrompt: metadata?.originalEnhancedPrompt,
+      metadataKeys: metadata ? Object.keys(metadata) : 'none',
+      fullMetadata: metadata
+    });
+    
     if (metadata?.exact_copy_mode && metadata?.originalEnhancedPrompt) {
       console.log('🎯 EXACT COPY MODE: Using reference metadata prompt as base');
       const basePrompt = metadata.originalEnhancedPrompt;
