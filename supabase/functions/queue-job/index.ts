@@ -40,6 +40,165 @@ function trimToMaxTokens(text: string, maxTokens = 75): string {
   return words.slice(0, maxTokens).join(" ");
 }
 
+// Prompt modification functions for exact copy mode
+function modifyOriginalPrompt(originalPrompt: string, modification: string): string {
+  if (!originalPrompt || !modification.trim()) {
+    return originalPrompt;
+  }
+
+  const modificationLower = modification.toLowerCase().trim();
+  
+  // Keywords that indicate modification intent
+  const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to'];
+  const isModification = modificationKeywords.some(keyword => 
+    modificationLower.includes(keyword)
+  );
+  
+  if (!isModification) {
+    // If no modification keywords, treat as simple replacement/addition
+    return `${originalPrompt}, ${modification}`;
+  }
+  
+  // Handle clothing/outfit modifications
+  if (modificationLower.includes('outfit') || modificationLower.includes('wearing') || modificationLower.includes('clothes') || modificationLower.includes('shirt')) {
+    return handleClothingModification(originalPrompt, modification);
+  }
+  
+  // Handle pose modifications
+  if (modificationLower.includes('pose') || modificationLower.includes('position') || modificationLower.includes('standing') || modificationLower.includes('sitting')) {
+    return handlePoseModification(originalPrompt, modification);
+  }
+  
+  // Handle background modifications
+  if (modificationLower.includes('background') || modificationLower.includes('setting') || modificationLower.includes('location')) {
+    return handleBackgroundModification(originalPrompt, modification);
+  }
+  
+  // Default: append modification to original prompt
+  return `${originalPrompt}, ${modification}`;
+}
+
+function handleClothingModification(originalPrompt: string, modification: string): string {
+  // Common clothing patterns in enhanced prompts
+  const clothingPatterns = [
+    /wearing\s+([^,]+)/gi,
+    /in\s+a?\s*([^,]+)\s+(dress|outfit|clothes|attire|clothing)/gi,
+    /([^,]+)\s+(dress|outfit|clothes|attire|clothing|shirt|blouse|top|bottom)/gi,
+    /(dressed\s+in|clad\s+in)\s+([^,]+)/gi
+  ];
+  
+  let modifiedPrompt = originalPrompt;
+  
+  // Extract new clothing from modification
+  const newClothing = extractNewClothing(modification);
+  
+  // Replace existing clothing references
+  clothingPatterns.forEach(pattern => {
+    modifiedPrompt = modifiedPrompt.replace(pattern, (match) => {
+      if (newClothing) {
+        return match.replace(/wearing\s+[^,]+/gi, `wearing ${newClothing}`)
+                    .replace(/(in\s+a?\s*)[^,]+(\s+(dress|outfit|clothes|attire|clothing))/gi, `$1${newClothing}$2`)
+                    .replace(/[^,]+(\s+(dress|outfit|clothes|attire|clothing|shirt|blouse|top|bottom))/gi, `${newClothing}$1`)
+                    .replace(/(dressed\s+in|clad\s+in)\s+[^,]+/gi, `$1 ${newClothing}`);
+      }
+      return match;
+    });
+  });
+  
+  // If no clothing found in original, add new clothing
+  if (modifiedPrompt === originalPrompt && newClothing) {
+    modifiedPrompt = `${originalPrompt}, wearing ${newClothing}`;
+  }
+  
+  return modifiedPrompt;
+}
+
+function handlePoseModification(originalPrompt: string, modification: string): string {
+  const posePatterns = [
+    /(standing|sitting|lying|kneeling|crouching|leaning)([^,]*)/gi,
+    /(pose|posing|positioned)([^,]*)/gi
+  ];
+  
+  let modifiedPrompt = originalPrompt;
+  const newPose = extractNewPose(modification);
+  
+  if (newPose) {
+    posePatterns.forEach(pattern => {
+      modifiedPrompt = modifiedPrompt.replace(pattern, newPose);
+    });
+    
+    // If no pose found, add new pose
+    if (modifiedPrompt === originalPrompt) {
+      modifiedPrompt = `${originalPrompt}, ${newPose}`;
+    }
+  }
+  
+  return modifiedPrompt;
+}
+
+function handleBackgroundModification(originalPrompt: string, modification: string): string {
+  const backgroundPatterns = [
+    /(background|setting|environment|location)([^,]*)/gi,
+    /(in\s+a?\s*)(studio|room|outdoor|indoor|park|beach|forest)([^,]*)/gi
+  ];
+  
+  let modifiedPrompt = originalPrompt;
+  const newBackground = extractNewBackground(modification);
+  
+  if (newBackground) {
+    backgroundPatterns.forEach(pattern => {
+      modifiedPrompt = modifiedPrompt.replace(pattern, newBackground);
+    });
+    
+    // If no background found, add new background
+    if (modifiedPrompt === originalPrompt) {
+      modifiedPrompt = `${originalPrompt}, ${newBackground}`;
+    }
+  }
+  
+  return modifiedPrompt;
+}
+
+function extractNewClothing(modification: string): string {
+  // Extract clothing from modification text
+  const clothingMatch = modification.match(/(change|to|wearing|in)\s+(.*?)(?:\s|$)/i);
+  if (clothingMatch) {
+    return clothingMatch[2];
+  }
+  
+  // Look for common clothing items
+  const clothingItems = ['dress', 'shirt', 'blouse', 'skirt', 'pants', 'jeans', 'bikini', 'swimsuit', 'top', 'bottom'];
+  for (const item of clothingItems) {
+    if (modification.toLowerCase().includes(item)) {
+      const words = modification.split(' ');
+      const itemIndex = words.findIndex(word => word.toLowerCase().includes(item));
+      if (itemIndex >= 0) {
+        // Get color/description before the item
+        const description = words.slice(Math.max(0, itemIndex - 2), itemIndex + 1).join(' ');
+        return description;
+      }
+    }
+  }
+  
+  return modification.replace(/^(change|to|wearing|in)\s+/i, '').trim();
+}
+
+function extractNewPose(modification: string): string {
+  const poseMatch = modification.match(/(change|to)\s+(.*?)(?:\s|$)/i);
+  if (poseMatch) {
+    return poseMatch[2];
+  }
+  return modification.replace(/^(change|to|pose)\s+/i, '').trim();
+}
+
+function extractNewBackground(modification: string): string {
+  const backgroundMatch = modification.match(/(change|to|in)\s+(.*?)(?:\s|$)/i);
+  if (backgroundMatch) {
+    return backgroundMatch[2];
+  }
+  return modification.replace(/^(change|to|in|background)\s+/i, '').trim();
+}
+
 serve(async (req)=>{
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -346,8 +505,32 @@ serve(async (req)=>{
       }
     }
 
-    // CRITICAL FIX: Use originalPrompt first, then metadata.prompt, never UI controls as main prompt
-    if (!prompt) {
+    // CRITICAL FIX: Handle exact copy mode with reference metadata first
+    if (metadata?.exact_copy_mode && metadata?.originalEnhancedPrompt) {
+      console.log('🎯 EXACT COPY MODE: Using reference metadata prompt as base');
+      const basePrompt = metadata.originalEnhancedPrompt;
+      
+      // Apply modification if user provided one
+      if (originalPrompt && originalPrompt.trim()) {
+        prompt = modifyOriginalPrompt(basePrompt, originalPrompt.trim());
+        console.log('🎯 EXACT COPY MODE: Applied modification to reference prompt:', {
+          originalReferencePrompt: basePrompt.substring(0, 100) + '...',
+          userModification: originalPrompt,
+          modifiedPrompt: prompt.substring(0, 100) + '...',
+          modificationApplied: prompt !== basePrompt
+        });
+      } else {
+        prompt = basePrompt;
+        console.log('🎯 EXACT COPY MODE: Using reference prompt without modification');
+      }
+      
+      console.log('📝 Reference metadata prompt processed:', { 
+        source: 'referenceMetadata',
+        length: prompt.length,
+        hasModification: !!originalPrompt?.trim()
+      });
+    } else if (!prompt) {
+      // CRITICAL FIX: Use originalPrompt first, then metadata.prompt, never UI controls as main prompt
       prompt = originalPrompt || metadata?.prompt || '';
       console.log('📝 Using provided prompt:', {
         source: originalPrompt ? 'originalPrompt' : 'metadata.prompt',
@@ -369,7 +552,8 @@ serve(async (req)=>{
     let qualityImprovement = null;
     
     // Only enhance if user explicitly requested enhancement, we have a valid prompt, and enhancement model is not 'none'
-    const skipEnhancement = userEnhancementModel === 'none' || metadata?.skip_enhancement === true;
+    // CRITICAL FIX: Skip enhancement in exact copy mode
+    const skipEnhancement = userEnhancementModel === 'none' || metadata?.skip_enhancement === true || metadata?.exact_copy_mode === true;
     if (preservedOriginalPrompt && preservedOriginalPrompt.trim() && metadata?.user_requested_enhancement === true && !skipEnhancement) {
       try {
         console.log('🚀 Calling enhance-prompt function for job:', jobType);
@@ -478,6 +662,12 @@ serve(async (req)=>{
       }
       
       if (!metadata) return prompt;
+      
+      // CRITICAL FIX: Skip UI controls in exact copy mode
+      if (metadata.exact_copy_mode) {
+        console.log('🎯 EXACT COPY MODE: Skipping UI controls application');
+        return prompt.trim();
+      }
       
       const uiControlParts = [];
       

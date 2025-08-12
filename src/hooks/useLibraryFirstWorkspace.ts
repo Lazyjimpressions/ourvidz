@@ -563,8 +563,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           // Skip enhancement in exact copy mode
           user_requested_enhancement: exactCopyMode ? false : (enhancementModel !== 'none'),
           skip_enhancement: exactCopyMode ? true : (enhancementModel === 'none'),
-          // Exact copy hint to edge/worker
-          ...(exactCopyMode ? { exact_copy: true } : {})
+          // CRITICAL: Pass reference metadata for exact copy mode
+          ...(exactCopyMode && referenceMetadata ? {
+            exact_copy: true,
+            originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt,
+            originalSeed: referenceMetadata.originalSeed,
+            originalStyle: referenceMetadata.originalStyle,
+            originalCameraAngle: referenceMetadata.originalCameraAngle,
+            originalShotType: referenceMetadata.originalShotType
+          } : {})
         },
         // Reference image URLs - REMOVED: This was duplicating data, now handled in metadata.reference_url
         ...(mode === 'video' && beginningRefImageUrl ? 
