@@ -112,6 +112,8 @@ export const CompactAssetCard = ({
                     muted
                     preload="metadata"
                     onError={handleImageError}
+                    playsInline
+                    disablePictureInPicture
                   />
                 )}
                 <div className="absolute inset-0 flex items-center justify-center bg-black/20">

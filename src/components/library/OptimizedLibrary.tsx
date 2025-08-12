@@ -85,7 +85,7 @@ export const OptimizedLibrary = () => {
           setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), filteredAssets.length));
         }
       },
-      { root: null, rootMargin: '200px', threshold: 0 }
+      { root: null, rootMargin: '600px', threshold: 0 }
     );
     observer.observe(element);
     return () => observer.unobserve(element);
@@ -217,7 +217,7 @@ export const OptimizedLibrary = () => {
     return (
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 pb-6 space-y-3">
-          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
             <CompactLibraryHeader
               searchTerm={''}
               onSearchChange={() => {}}
@@ -258,7 +258,7 @@ export const OptimizedLibrary = () => {
     <>
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 pb-6 space-y-6">
-          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
             {/* Header */}
             <CompactLibraryHeader
               searchTerm={searchState.query}
