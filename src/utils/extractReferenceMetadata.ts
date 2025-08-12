@@ -7,14 +7,15 @@ import { supabase } from '@/integrations/supabase/client';
  */
 export const extractReferenceMetadata = async (asset: UnifiedAsset): Promise<ReferenceMetadata | null> => {
   try {
-    console.log('🎯 EXTRACTING REFERENCE METADATA:', {
+    console.log('🎯 METADATA EXTRACTION START:', {
       assetId: asset.id,
       assetType: asset.type,
       hasMetadata: !!asset.metadata,
       metadataKeys: asset.metadata ? Object.keys(asset.metadata) : 'none',
       hasEnhancedPrompt: !!asset.enhancedPrompt,
       hasPrompt: !!asset.prompt,
-      jobIdLocation: (asset as any).job_id ? 'direct' : (asset.metadata?.job_id ? 'metadata' : 'none')
+      jobIdLocation: (asset as any).job_id ? 'direct' : (asset.metadata?.job_id ? 'metadata' : 'none'),
+      rawAsset: JSON.stringify(asset, null, 2)
     });
     
     const metadata = asset.metadata as any;
@@ -69,12 +70,14 @@ export const extractReferenceMetadata = async (asset: UnifiedAsset): Promise<Ref
       }
     }
     
-    console.log('🎯 ENHANCED PROMPT EXTRACTION:', {
+    console.log('🎯 ENHANCED PROMPT EXTRACTION COMPLETE:', {
       fromMetadataEnhancedPrompt: metadata?.enhanced_prompt,
       fromAssetEnhancedPrompt: asset.enhancedPrompt,
       fromMetadataPrompt: metadata?.prompt,
       fromAssetPrompt: asset.prompt,
-      finalOriginalEnhancedPrompt: originalEnhancedPrompt
+      finalOriginalEnhancedPrompt: originalEnhancedPrompt,
+      extractionSuccess: !!originalEnhancedPrompt,
+      promptLength: originalEnhancedPrompt?.length || 0
     });
     
     if (!originalEnhancedPrompt) {

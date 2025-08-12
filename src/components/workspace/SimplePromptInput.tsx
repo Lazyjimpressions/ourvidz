@@ -65,14 +65,23 @@ const ReferenceImageUpload: React.FC<{
     // Handle workspace item drops with metadata extraction
     try {
       const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
+      console.log('🎯 DRAG-DROP: Parsed workspace item:', {
+        hasUrl: !!workspaceItem.url,
+        type: workspaceItem.type,
+        id: workspaceItem.id,
+        metadata: workspaceItem.metadata,
+        enhancedPrompt: workspaceItem.enhancedPrompt
+      });
+      
       if (workspaceItem.url && workspaceItem.type === 'image') {
         if (onImageUrlChange) {
           onImageUrlChange(workspaceItem.url);
+          console.log('🎯 DRAG-DROP: Set reference image URL:', workspaceItem.url);
         }
         onFileChange(null);
         
         // CRITICAL FIX: Extract metadata for exact copy mode on drag-drop
-        console.log('🎯 DRAG-DROP: Extracting metadata from workspace item:', workspaceItem);
+        console.log('🎯 DRAG-DROP: Triggering metadata extraction for workspace item:', workspaceItem.id);
         
         // Trigger metadata extraction event for parent component
         if (workspaceItem.id) {
@@ -80,10 +89,20 @@ const ReferenceImageUpload: React.FC<{
             detail: { workspaceItem }
           });
           window.dispatchEvent(extractMetadataEvent);
+          console.log('🎯 DRAG-DROP: Dispatched metadata extraction event');
+        } else {
+          console.warn('⚠️ DRAG-DROP: No workspace item ID found');
         }
+      } else {
+        console.warn('⚠️ DRAG-DROP: Invalid workspace item - missing URL or not an image');
       }
     } catch (error) {
-      // Not a JSON drop, ignore
+      console.log('🎯 DRAG-DROP: Not a JSON drop, treating as URL/text:', e.dataTransfer.getData('text/plain'));
+      // Handle as URL or text drop
+      const url = e.dataTransfer.getData('text/plain');
+      if (url && onImageUrlChange) {
+        onImageUrlChange(url);
+      }
     }
   };
 

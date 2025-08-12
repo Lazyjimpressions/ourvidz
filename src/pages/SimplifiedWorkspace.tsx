@@ -163,12 +163,11 @@ export const SimplifiedWorkspace: React.FC = () => {
         
         if (metadata) {
           setReferenceMetadata(metadata);
-          console.log('🎯 Reference metadata extracted and set:', metadata);
-          
-          // Auto-enable exact copy mode when metadata is available
           setExactCopyMode(true);
+          setReferenceStrength(0.9); // High strength for exact copy
+          console.log('✅ USE AS REFERENCE: Exact copy mode enabled with metadata:', metadata);
         } else {
-          console.warn('⚠️ METADATA EXTRACTION FAILED: No metadata extracted from asset');
+          console.error('❌ USE AS REFERENCE: Metadata extraction failed - no enhanced prompt found');
         }
       } else {
         console.warn('⚠️ ASSET NOT FOUND: Could not find asset with ID:', assetId);
@@ -193,9 +192,17 @@ export const SimplifiedWorkspace: React.FC = () => {
       const custom = e as CustomEvent<{ workspaceItem: any }>;
       const { workspaceItem } = custom.detail || {};
       
-      if (!workspaceItem?.id) return;
+      console.log('🎯 DRAG-DROP EVENT RECEIVED:', {
+        hasWorkspaceItem: !!workspaceItem,
+        workspaceItemId: workspaceItem?.id,
+        workspaceItem: workspaceItem,
+        workspaceAssetsAvailable: workspaceAssets?.length || 0
+      });
       
-      console.log('🎯 DRAG-DROP METADATA: Processing workspace item:', workspaceItem);
+      if (!workspaceItem?.id) {
+        console.warn('⚠️ DRAG-DROP: No workspace item ID provided');
+        return;
+      }
       
       // Find the full asset in workspace
       const asset = workspaceAssets.find(a => a.id === workspaceItem.id);
@@ -219,7 +226,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         setReferenceMetadata(metadata);
         setExactCopyMode(true);
         setReferenceStrength(0.9); // High strength for exact copy
-        console.log('🎯 DRAG-DROP: Exact copy mode enabled with metadata');
+        console.log('✅ DRAG-DROP: Exact copy mode enabled with metadata:', metadata);
       } else {
         console.warn('⚠️ DRAG-DROP: Failed to extract metadata');
       }
