@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
 import { LibraryLightbox } from './LibraryLightbox';
-import { LibraryLightboxStatic } from './LibraryLightboxStatic';
+
 import { AssetListView } from './AssetListView';
 import { CompactLibraryHeader } from './CompactLibraryHeader';
 import { CompactLibraryFilters } from './CompactLibraryFilters';
@@ -12,6 +12,11 @@ import { CompactAssetCard } from './CompactAssetCard';
 import { AssetService } from '../../lib/services/AssetService';
 import { useWorkspaceSearch } from '../../hooks/useWorkspaceSearch';
 import { toast } from 'sonner';
+import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer';
+import { Button } from '@/components/ui/button';
+import { SlidersHorizontal } from 'lucide-react';
+import { MobileFullScreenViewer } from './MobileFullScreenViewer';
 
 export const OptimizedLibrary = () => {
   // State management
@@ -22,23 +27,8 @@ export const OptimizedLibrary = () => {
 
   // Infinite scroll controls
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const { isMobile } = useMobileDetection();
   const [visibleCount, setVisibleCount] = useState<number>(24);
-
-  useEffect(() => {
-    const update = () => setIsMobile(window.innerWidth < 768);
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, []);
-
-  useEffect(() => {
-    // Adjust initial visible count based on device
-    setVisibleCount(prev => {
-      const base = isMobile ? 16 : 24;
-      return Math.max(base, Math.min(prev, base));
-    });
-  }, [isMobile]);
 
   // Data fetching using AssetService.getUserAssetsOptimized()
   const {
@@ -270,60 +260,97 @@ export const OptimizedLibrary = () => {
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
             />
-            {/* Filters */}
-            <CompactLibraryFilters
-              typeFilter={searchState.filters.contentType}
-              onTypeFilterChange={(type) => updateFilters({ contentType: type })}
-              statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
-              onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
-              counts={filterCounts}
-            />
+            {/* Mobile Filters Drawer Trigger */}
+            {isMobile && (
+              <div className="mt-3">
+                <Drawer>
+                  <DrawerTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Filters
+                    </Button>
+                  </DrawerTrigger>
+                  <DrawerContent>
+                    <DrawerHeader>
+                      <DrawerTitle>Filters</DrawerTitle>
+                    </DrawerHeader>
+                    <div className="p-4 pt-0">
+                      <CompactLibraryFilters
+                        typeFilter={searchState.filters.contentType}
+                        onTypeFilterChange={(type) => updateFilters({ contentType: type })}
+                        statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
+                        onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
+                        counts={filterCounts}
+                      />
+                    </div>
+                  </DrawerContent>
+                </Drawer>
+              </div>
+            )}
           </div>
 
           {/* Content */}
-          {filteredAssets.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-lg text-muted-foreground">
-                {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
-              </p>
-            </div>
-          ) : viewMode === 'grid' ? (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                {filteredAssets.slice(0, visibleCount).map((asset) => (
-                  <CompactAssetCard
-                    key={asset.id}
-                    asset={asset}
-                    isSelected={selectedAssets.has(asset.id)}
-                    onSelect={(selected) => handleSelectAsset(asset.id, selected)}
-                    onPreview={() => handlePreview(asset)}
-                    onDelete={() => handleDelete(asset)}
-                    onDownload={() => handleDownload(asset)}
-                    selectionMode={selectedAssets.size > 0}
-                  />
-                ))}
+          <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
+            {/* Left Pane (Desktop) */}
+            <aside className="hidden lg:block">
+              <div className="sticky top-20 space-y-4">
+                <CompactLibraryFilters
+                  typeFilter={searchState.filters.contentType}
+                  onTypeFilterChange={(type) => updateFilters({ contentType: type })}
+                  statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
+                  onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
+                  counts={filterCounts}
+                />
               </div>
-              {/* Infinite scroll sentinel */}
-              <div ref={sentinelRef} />
-            </>
-          ) : (
-            <AssetListView
-              assets={filteredAssets.map(asset => ({
-                ...asset,
-                title: asset.title || 'Untitled',
-                thumbnailUrl: asset.thumbnailUrl || null,
-                url: asset.url || null,
-                metadata: asset.metadata || {}
-              }))}
-              selectedAssets={selectedAssets}
-              onSelectAsset={(assetId) => handleSelectAsset(assetId, !selectedAssets.has(assetId))}
-              onSelectAll={(checked) => checked ? handleSelectAll() : handleClearSelection()}
-              onBulkDelete={handleBulkDelete}
-              onIndividualDelete={handleDelete}
-              onPreview={handlePreview}
-              isDeleting={isDeleting}
-            />
-          )}
+            </aside>
+
+            {/* Main Library */}
+            <div>
+              {filteredAssets.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-lg text-muted-foreground">
+                    {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
+                  </p>
+                </div>
+              ) : viewMode === 'grid' ? (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                    {filteredAssets.slice(0, visibleCount).map((asset) => (
+                      <CompactAssetCard
+                        key={asset.id}
+                        asset={asset}
+                        isSelected={selectedAssets.has(asset.id)}
+                        onSelect={(selected) => handleSelectAsset(asset.id, selected)}
+                        onPreview={() => handlePreview(asset)}
+                        onDelete={() => handleDelete(asset)}
+                        onDownload={() => handleDownload(asset)}
+                        selectionMode={selectedAssets.size > 0}
+                      />
+                    ))}
+                  </div>
+                  {/* Infinite scroll sentinel */}
+                  <div ref={sentinelRef} />
+                </>
+              ) : (
+                <AssetListView
+                  assets={filteredAssets.map(asset => ({
+                    ...asset,
+                    title: asset.title || 'Untitled',
+                    thumbnailUrl: asset.thumbnailUrl || null,
+                    url: asset.url || null,
+                    metadata: asset.metadata || {}
+                  }))}
+                  selectedAssets={selectedAssets}
+                  onSelectAsset={(assetId) => handleSelectAsset(assetId, !selectedAssets.has(assetId))}
+                  onSelectAll={(checked) => checked ? handleSelectAll() : handleClearSelection()}
+                  onBulkDelete={handleBulkDelete}
+                  onIndividualDelete={handleDelete}
+                  onPreview={handlePreview}
+                  isDeleting={isDeleting}
+                />
+              )}
+            </div>
+          </div>
         </div>
       </OurVidzDashboardLayout>
 
@@ -341,7 +368,7 @@ export const OptimizedLibrary = () => {
       {/* Lightbox */}
       {lightboxIndex !== null && (
         isMobile ? (
-          <LibraryLightboxStatic
+          <MobileFullScreenViewer
             assets={filteredAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
