@@ -238,7 +238,7 @@ export const useOptimizedWorkspace = () => {
     );
   }, [withOptimisticUpdate]);
 
-  // Clear all workspace (hide all items) - Fixed to use correct data model
+  // Clear all workspace (hide all items) - Fixed to remove date filter bug
   const clearWorkspace = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
@@ -246,61 +246,56 @@ export const useOptimizedWorkspace = () => {
     try {
       console.log('🧹 OPTIMIZED: Clearing workspace via metadata.workspace_dismissed');
       
-      // Get today's start (UTC-based to match database)
-      const now = new Date();
-      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      
-      // Update images with dismissed flag
+      // Get ALL completed items (removed date filter bug)
       const { data: images } = await supabase
         .from('images')
         .select('id, metadata')
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('created_at', todayStart.toISOString());
+        .is('metadata->workspace_dismissed', null);
 
-      // Update images with dismissed flag (individual updates for simplicity)
-      if (images && images.length > 0) {
-        for (const image of images) {
-          const currentMetadata = (image.metadata as Record<string, any>) || {};
-          await supabase
-            .from('images')
-            .update({ 
-              metadata: {
-                ...currentMetadata,
-                workspace_dismissed: true,
-                dismissed_at: new Date().toISOString()
-              }
-            })
-            .eq('id', image.id)
-            .eq('user_id', user.id);
-        }
-        console.log(`✅ Dismissed ${images.length} images from workspace`);
-      }
-
-      // Update videos with dismissed flag
       const { data: videos } = await supabase
         .from('videos')
         .select('id, metadata')
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('created_at', todayStart.toISOString());
+        .is('metadata->workspace_dismissed', null);
 
-      // Update videos with dismissed flag (individual updates for simplicity)
+      console.log(`Found ${images?.length || 0} images and ${videos?.length || 0} videos to clear`);
+
+      // Batch update images with dismissed flag
+      if (images && images.length > 0) {
+        const imageIds = images.map(img => img.id);
+        const { error: imageError } = await supabase
+          .from('images')
+          .update({ 
+            metadata: {
+              workspace_dismissed: true,
+              dismissed_at: new Date().toISOString()
+            }
+          })
+          .in('id', imageIds)
+          .eq('user_id', user.id);
+
+        if (imageError) throw imageError;
+        console.log(`✅ Dismissed ${images.length} images from workspace`);
+      }
+
+      // Batch update videos with dismissed flag
       if (videos && videos.length > 0) {
-        for (const video of videos) {
-          const currentMetadata = (video.metadata as Record<string, any>) || {};
-          await supabase
-            .from('videos')
-            .update({ 
-              metadata: {
-                ...currentMetadata,
-                workspace_dismissed: true,
-                dismissed_at: new Date().toISOString()
-              }
-            })
-            .eq('id', video.id)
-            .eq('user_id', user.id);
-        }
+        const videoIds = videos.map(vid => vid.id);
+        const { error: videoError } = await supabase
+          .from('videos')
+          .update({ 
+            metadata: {
+              workspace_dismissed: true,
+              dismissed_at: new Date().toISOString()
+            }
+          })
+          .in('id', videoIds)
+          .eq('user_id', user.id);
+
+        if (videoError) throw videoError;
         console.log(`✅ Dismissed ${videos.length} videos from workspace`);
       }
 
@@ -308,7 +303,8 @@ export const useOptimizedWorkspace = () => {
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
 
-      toast.success('Workspace cleared');
+      const totalCleared = (images?.length || 0) + (videos?.length || 0);
+      toast.success(`Workspace cleared (${totalCleared} items)`);
       return true;
     } catch (error) {
       console.error('Failed to clear workspace:', error);
@@ -325,26 +321,24 @@ export const useOptimizedWorkspace = () => {
     try {
       console.log('🗑️ OPTIMIZED: Deleting all workspace items permanently');
       
-      // Get today's start (UTC-based to match database)
-      const now = new Date();
-      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      
-      // Get today's items to delete
+      // Get ALL completed items (removed date filter bug)
       const { data: images } = await supabase
         .from('images')
         .select('id')
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('created_at', todayStart.toISOString());
+        .is('metadata->workspace_dismissed', null);
 
       const { data: videos } = await supabase
         .from('videos')
         .select('id')
         .eq('user_id', user.id)
         .eq('status', 'completed')
-        .gte('created_at', todayStart.toISOString());
+        .is('metadata->workspace_dismissed', null);
 
-      // Delete images permanently
+      console.log(`Found ${images?.length || 0} images and ${videos?.length || 0} videos to delete`);
+
+      // Batch delete images permanently
       if (images && images.length > 0) {
         const { error: deleteImagesError } = await supabase
           .from('images')
@@ -356,7 +350,7 @@ export const useOptimizedWorkspace = () => {
         console.log(`✅ Deleted ${images.length} images permanently`);
       }
 
-      // Delete videos permanently
+      // Batch delete videos permanently
       if (videos && videos.length > 0) {
         const { error: deleteVideosError } = await supabase
           .from('videos')
