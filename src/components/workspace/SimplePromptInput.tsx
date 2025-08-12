@@ -382,9 +382,16 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     { name: '2D Novel', style: '2D anime style, visual novel aesthetic' },
     { name: 'Boost', style: 'enhanced details, sharp focus, vivid colors' }
   ];
-
+  
+  // Previews for Exact Copy mode
+  const originalPromptPreview = exactCopyMode ? (referenceMetadata?.originalEnhancedPrompt || null) : null;
+  const finalPromptPreview = exactCopyMode
+    ? (referenceMetadata?.originalEnhancedPrompt
+        ? modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim() || '')
+        : (prompt.trim() ? `${prompt.trim()}, exact copy, high quality` : 'exact copy, high quality'))
+    : null;
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50">
+      <div className="fixed bottom-4 left-4 right-4 z-50">
       <div className="max-w-4xl mx-auto">
         <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2">
           <div className="space-y-1.5">
@@ -478,10 +485,22 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     ) : (
                       <Play size={16} />
                     )}
-                  </button>
-                </form>
+                    </button>
+                  </form>
+                  {exactCopyMode && (
+                    <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+                      <div className="border border-border rounded p-1 bg-muted/30">
+                        <div className="font-medium text-muted-foreground mb-0.5">Original Prompt</div>
+                        <div className="line-clamp-2 break-words">{originalPromptPreview || '—'}</div>
+                      </div>
+                      <div className="border border-border rounded p-1 bg-muted/30">
+                        <div className="font-medium text-muted-foreground mb-0.5">Final Prompt</div>
+                        <div className="line-clamp-2 break-words">{finalPromptPreview || '—'}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
 
             {/* Row 2: VIDEO button + Controls */}
             <div className="flex items-center justify-between gap-1.5">
@@ -523,18 +542,18 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <input type="checkbox" checked={exactCopyMode} onChange={(e) => onExactCopyModeChange?.(e.target.checked)} />
                       Exact Copy
                     </label>
-                    {referenceImageUrl !== null && (
-                      <>
-                        <label className="flex items-center gap-1 text-[11px] text-foreground">
-                          <input type="checkbox" checked={useOriginalParams} onChange={(e) => onUseOriginalParamsChange?.(e.target.checked)} />
-                          Use params
-                        </label>
-                        <label className="flex items-center gap-1 text-[11px] text-foreground">
-                          <input type="checkbox" checked={lockSeed} onChange={(e) => onLockSeedChange?.(e.target.checked)} />
-                          Lock seed
-                        </label>
-                      </>
-                    )}
+                      {referenceMetadata && (
+                        <>
+                          <label className="flex items-center gap-1 text-[11px] text-foreground">
+                            <input type="checkbox" checked={useOriginalParams} onChange={(e) => onUseOriginalParamsChange?.(e.target.checked)} />
+                            Use params
+                          </label>
+                          <label className="flex items-center gap-1 text-[11px] text-foreground">
+                            <input type="checkbox" checked={lockSeed} onChange={(e) => onLockSeedChange?.(e.target.checked)} />
+                            Lock seed
+                          </label>
+                        </>
+                      )}
                   </div>
                 )}
 

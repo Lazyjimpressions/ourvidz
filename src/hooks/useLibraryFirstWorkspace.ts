@@ -464,6 +464,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       let finalStyle: string = style;
       let finalCameraAngle: string = cameraAngle;
       let finalShotType: string = shotType;
+      let finalAspectRatio: '16:9' | '1:1' | '9:16' = aspectRatio;
       
       // 🎯 DEBUG: Add comprehensive logging for exact copy troubleshooting
       console.log('🎯 EXACT COPY DEBUG - State Check:', {
@@ -501,10 +502,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         // Use original seed
         finalSeed = referenceMetadata.originalSeed;
         
-        // Disable style controls - use original values
-        finalStyle = referenceMetadata.originalStyle || '';
-        finalCameraAngle = referenceMetadata.originalCameraAngle || 'eye_level';
-        finalShotType = referenceMetadata.originalShotType || 'wide';
+        // Style params: use originals if toggled, else keep current UI controls
+        if (useOriginalParams) {
+          finalStyle = referenceMetadata.originalStyle || '';
+          finalCameraAngle = referenceMetadata.originalCameraAngle || 'eye_level';
+          finalShotType = referenceMetadata.originalShotType || 'wide';
+          if (referenceMetadata.aspectRatio === '16:9' || referenceMetadata.aspectRatio === '1:1' || referenceMetadata.aspectRatio === '9:16') {
+            finalAspectRatio = referenceMetadata.aspectRatio;
+          }
+        }
         
         console.log('🎯 EXACT COPY MODE - ACTIVE:', {
           originalPrompt: referenceMetadata.originalEnhancedPrompt,
@@ -522,6 +528,11 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         // Normal generation flow
         finalPrompt = prompt.trim() || '';
         finalSeed = lockSeed && seed ? seed : undefined;
+        
+        // If user provided an uploaded/URL reference without metadata, guide the model to preserve subject
+        if (exactCopyMode && !referenceMetadata) {
+          finalPrompt = finalPrompt ? `${finalPrompt}, exact copy, high quality` : 'exact copy, high quality';
+        }
         
         console.log('🎯 NORMAL GENERATION MODE:', {
           finalPrompt,
@@ -556,7 +567,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             sound_enabled: soundEnabled
           }),
           // Control parameters (disabled in exact copy mode)
-          aspect_ratio: aspectRatio,
+          aspect_ratio: finalAspectRatio,
           shot_type: finalShotType,
           camera_angle: finalCameraAngle,
           style: finalStyle,
@@ -565,6 +576,12 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           // Skip enhancement in exact copy mode
           user_requested_enhancement: exactCopyMode ? false : (enhancementModel !== 'none'),
           skip_enhancement: exactCopyMode ? true : (enhancementModel === 'none'),
+          // Exact copy parameter overrides
+          ...(exactCopyMode ? {
+            num_inference_steps: 15,
+            guidance_scale: 3.0,
+            negative_prompt: ''
+          } : {}),
           // CRITICAL: Pass reference metadata for exact copy mode
           ...(exactCopyMode && referenceMetadata ? {
             exact_copy_mode: true,
