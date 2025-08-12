@@ -25,7 +25,10 @@ export const CompactBulkActionBar = ({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+    <div
+      className="fixed left-1/2 transform -translate-x-1/2 z-50"
+      style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+    >
       <div className="bg-background/95 border border-border rounded-xl shadow-lg p-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           {/* Selection Info */}
