@@ -1,9 +1,9 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
 import { OurVidzDashboardLayout } from '../OurVidzDashboardLayout';
-import { LoadingSpinner } from '../LoadingSpinner';
 import { LibraryLightbox } from './LibraryLightbox';
+import { LibraryLightboxStatic } from './LibraryLightboxStatic';
 import { AssetListView } from './AssetListView';
 import { CompactLibraryHeader } from './CompactLibraryHeader';
 import { CompactLibraryFilters } from './CompactLibraryFilters';
@@ -20,6 +20,26 @@ export const OptimizedLibrary = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Infinite scroll controls
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState<number>(24);
+
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    // Adjust initial visible count based on device
+    setVisibleCount(prev => {
+      const base = isMobile ? 16 : 24;
+      return Math.max(base, Math.min(prev, base));
+    });
+  }, [isMobile]);
+
   // Data fetching using AssetService.getUserAssetsOptimized()
   const {
     data: rawAssets = [],
@@ -30,15 +50,12 @@ export const OptimizedLibrary = () => {
     queryKey: ['library-assets-optimized'],
     queryFn: async () => {
       console.log('🎯 LIBRARY: Fetching assets via AssetService');
-      
-      // Use the proven AssetService.getUserAssetsOptimized() method
       const allAssets = await AssetService.getUserAssetsOptimized(false);
-      
       console.log(`✅ LIBRARY: AssetService returned ${allAssets.length} assets`);
       return allAssets;
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   // Search and filtering
@@ -51,18 +68,37 @@ export const OptimizedLibrary = () => {
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
 
+  // Reset visible items when results change
+  useEffect(() => {
+    const base = isMobile ? 16 : 24;
+    setVisibleCount(Math.min(base, filteredAssets.length));
+  }, [filteredAssets, isMobile]);
+
+  // IntersectionObserver to load more on scroll
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const element = sentinelRef.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), filteredAssets.length));
+        }
+      },
+      { root: null, rootMargin: '200px', threshold: 0 }
+    );
+    observer.observe(element);
+    return () => observer.unobserve(element);
+  }, [filteredAssets.length, isMobile]);
+
   // Calculate filter counts
   const filterCounts = useMemo(() => {
     return rawAssets.reduce((counts, asset) => {
-      // Type counts
       if (asset.type === 'image') counts.images++;
       if (asset.type === 'video') counts.videos++;
-      
-      // Status counts
       if (asset.status === 'completed') counts.completed++;
       if (asset.status === 'processing' || asset.status === 'queued') counts.processing++;
       if (asset.status === 'failed') counts.failed++;
-      
       return counts;
     }, {
       images: 0,
@@ -106,7 +142,6 @@ export const OptimizedLibrary = () => {
         toast.error('Asset URL not available');
         return;
       }
-      
       const response = await fetch(asset.url);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -117,7 +152,6 @@ export const OptimizedLibrary = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
       toast.success('Download started');
     } catch (error) {
       console.error('Download failed:', error);
@@ -151,11 +185,9 @@ export const OptimizedLibrary = () => {
     try {
       setIsDeleting(true);
       const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
-      
       await Promise.all(
         selectedAssetList.map(asset => AssetService.deleteAsset(asset.id, asset.type))
       );
-      
       toast.success(`Deleted ${selectedAssetList.length} assets`);
       handleClearSelection();
       refetch();
@@ -172,11 +204,39 @@ export const OptimizedLibrary = () => {
     handleClearSelection();
   }, [handleClearSelection]);
 
+  // Skeleton grid for initial load
+  const SkeletonGrid = ({ count = 12 }: { count?: number }) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="bg-muted/40 rounded-lg aspect-square animate-pulse" />
+      ))}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <OurVidzDashboardLayout>
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <LoadingSpinner />
+        <div className="max-w-7xl mx-auto px-4 pb-6 space-y-3">
+          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+            <CompactLibraryHeader
+              searchTerm={''}
+              onSearchChange={() => {}}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              totalAssets={0}
+              filteredCount={0}
+              hasActiveFilters={false}
+              onClearFilters={() => {}}
+            />
+            <CompactLibraryFilters
+              typeFilter={'all'}
+              onTypeFilterChange={() => {}}
+              statusFilter={'all'}
+              onStatusFilterChange={() => {}}
+              counts={{ images: 0, videos: 0, completed: 0, processing: 0, failed: 0 }}
+            />
+          </div>
+          <SkeletonGrid count={isMobile ? 6 : 12} />
         </div>
       </OurVidzDashboardLayout>
     );
@@ -187,7 +247,7 @@ export const OptimizedLibrary = () => {
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="text-center text-red-400">
-            <p>Failed to load assets: {error.message}</p>
+            <p>Failed to load assets: {(error as any).message}</p>
           </div>
         </div>
       </OurVidzDashboardLayout>
@@ -197,28 +257,29 @@ export const OptimizedLibrary = () => {
   return (
     <>
       <OurVidzDashboardLayout>
-        <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-          {/* Header */}
-          <CompactLibraryHeader
-            searchTerm={searchState.query}
-            onSearchChange={updateQuery}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            totalAssets={rawAssets.length}
-            filteredCount={filteredAssets.length}
-            hasActiveFilters={hasActiveFilters}
-            onClearFilters={clearSearch}
-          />
-          
-          {/* Filters */}
-          <CompactLibraryFilters
-            typeFilter={searchState.filters.contentType}
-            onTypeFilterChange={(type) => updateFilters({ contentType: type })}
-            statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
-            onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
-            counts={filterCounts}
-          />
-          
+        <div className="max-w-7xl mx-auto px-4 pb-6 space-y-6">
+          <div className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+            {/* Header */}
+            <CompactLibraryHeader
+              searchTerm={searchState.query}
+              onSearchChange={updateQuery}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+              totalAssets={rawAssets.length}
+              filteredCount={filteredAssets.length}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearSearch}
+            />
+            {/* Filters */}
+            <CompactLibraryFilters
+              typeFilter={searchState.filters.contentType}
+              onTypeFilterChange={(type) => updateFilters({ contentType: type })}
+              statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
+              onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
+              counts={filterCounts}
+            />
+          </div>
+
           {/* Content */}
           {filteredAssets.length === 0 ? (
             <div className="text-center py-12">
@@ -227,20 +288,24 @@ export const OptimizedLibrary = () => {
               </p>
             </div>
           ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-              {filteredAssets.map((asset) => (
-                <CompactAssetCard
-                  key={asset.id}
-                  asset={asset}
-                  isSelected={selectedAssets.has(asset.id)}
-                  onSelect={(selected) => handleSelectAsset(asset.id, selected)}
-                  onPreview={() => handlePreview(asset)}
-                  onDelete={() => handleDelete(asset)}
-                  onDownload={() => handleDownload(asset)}
-                  selectionMode={selectedAssets.size > 0}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                {filteredAssets.slice(0, visibleCount).map((asset) => (
+                  <CompactAssetCard
+                    key={asset.id}
+                    asset={asset}
+                    isSelected={selectedAssets.has(asset.id)}
+                    onSelect={(selected) => handleSelectAsset(asset.id, selected)}
+                    onPreview={() => handlePreview(asset)}
+                    onDelete={() => handleDelete(asset)}
+                    onDownload={() => handleDownload(asset)}
+                    selectionMode={selectedAssets.size > 0}
+                  />
+                ))}
+              </div>
+              {/* Infinite scroll sentinel */}
+              <div ref={sentinelRef} />
+            </>
           ) : (
             <AssetListView
               assets={filteredAssets.map(asset => ({
@@ -275,12 +340,21 @@ export const OptimizedLibrary = () => {
 
       {/* Lightbox */}
       {lightboxIndex !== null && (
-        <LibraryLightbox
-          assets={filteredAssets}
-          startIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
-          onDownload={handleDownload}
-        />
+        isMobile ? (
+          <LibraryLightboxStatic
+            assets={filteredAssets}
+            startIndex={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onDownload={handleDownload}
+          />
+        ) : (
+          <LibraryLightbox
+            assets={filteredAssets}
+            startIndex={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onDownload={handleDownload}
+          />
+        )
       )}
     </>
   );

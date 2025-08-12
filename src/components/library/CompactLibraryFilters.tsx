@@ -30,14 +30,14 @@ export const CompactLibraryFilters = ({
         <PillFilter
           active={typeFilter === 'all'}
           onClick={() => onTypeFilterChange('all')}
-          className="h-6 text-xs"
+          className="h-8 text-xs px-3"
         >
           All
         </PillFilter>
         <PillFilter
           active={typeFilter === 'image'}
           onClick={() => onTypeFilterChange('image')}
-          className="h-6 text-xs gap-1"
+          className="h-8 text-xs gap-1 px-3"
         >
           <Image className="h-3 w-3" />
           {counts.images}
@@ -45,7 +45,7 @@ export const CompactLibraryFilters = ({
         <PillFilter
           active={typeFilter === 'video'}
           onClick={() => onTypeFilterChange('video')}
-          className="h-6 text-xs gap-1"
+          className="h-8 text-xs gap-1 px-3"
         >
           <Video className="h-3 w-3" />
           {counts.videos}
@@ -57,14 +57,14 @@ export const CompactLibraryFilters = ({
         <PillFilter
           active={statusFilter === 'all'}
           onClick={() => onStatusFilterChange('all')}
-          className="h-6 text-xs"
+          className="h-8 text-xs px-3"
         >
           All
         </PillFilter>
         <PillFilter
           active={statusFilter === 'completed'}
           onClick={() => onStatusFilterChange('completed')}
-          className="h-6 text-xs gap-1"
+          className="h-8 text-xs gap-1 px-3"
         >
           <CheckCircle className="h-3 w-3" />
           {counts.completed}
@@ -73,7 +73,7 @@ export const CompactLibraryFilters = ({
           <PillFilter
             active={statusFilter === 'processing'}
             onClick={() => onStatusFilterChange('processing')}
-            className="h-6 text-xs gap-1"
+            className="h-8 text-xs gap-1 px-3"
           >
             <Clock className="h-3 w-3" />
             {counts.processing}
@@ -83,7 +83,7 @@ export const CompactLibraryFilters = ({
           <PillFilter
             active={statusFilter === 'failed'}
             onClick={() => onStatusFilterChange('failed')}
-            className="h-6 text-xs gap-1"
+            className="h-8 text-xs gap-1 px-3"
           >
             <AlertCircle className="h-3 w-3" />
             {counts.failed}

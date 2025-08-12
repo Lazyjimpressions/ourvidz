@@ -26,6 +26,15 @@ export interface SearchResult {
   hasActiveFilters: boolean;
 }
 
+// Simple debounce helper bound to window for stable timer identity across re-renders
+const debounce = (fn: (...args: any[]) => void, delay: number) => {
+  let timer: number | undefined;
+  return (...args: any[]) => {
+    if (timer) window.clearTimeout(timer);
+    timer = window.setTimeout(() => fn(...args), delay);
+  };
+};
+
 /**
  * Custom hook for workspace search and filtering
  * 
@@ -69,12 +78,19 @@ export const useWorkspaceSearch = (assets: UnifiedAsset[]): SearchResult => {
   }, [searchState]);
 
   // Update query with debouncing
+  const debouncedSetQuery = useMemo(
+    () => debounce((query: string) => {
+      setSearchState(prev => ({
+        ...prev,
+        query: query.trim()
+      }));
+    }, 200),
+    []
+  );
+
   const updateQuery = useCallback((query: string) => {
-    setSearchState(prev => ({
-      ...prev,
-      query: query.trim()
-    }));
-  }, []);
+    debouncedSetQuery(query);
+  }, [debouncedSetQuery]);
 
   // Update filters
   const updateFilters = useCallback((filters: Partial<WorkspaceSearch['filters']>) => {

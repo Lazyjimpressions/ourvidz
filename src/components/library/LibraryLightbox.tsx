@@ -141,11 +141,11 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
             <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
               <div className="flex items-center gap-2 bg-background/80 rounded-lg px-3 py-2 backdrop-blur-sm">
                 {currentAsset.type === 'image' ? (
-                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
                 ) : (
-                  <VideoIcon className="h-4 w-4 text-muted-foreground" />
+                  <VideoIcon className="h-5 w-5 text-muted-foreground" />
                 )}
-                <span className="text-sm font-medium truncate max-w-[200px]">
+                <span className="text-sm font-medium truncate max-w-[240px]">
                   {currentAsset.title || 'Asset Preview'}
                 </span>
               </div>
@@ -155,17 +155,19 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowDetails(!showDetails)}
-                  className="bg-background/80 backdrop-blur-sm"
+                  className="bg-background/80 backdrop-blur-sm h-9 w-9 p-0"
+                  aria-label="Toggle details"
                 >
-                  <Info className="h-4 w-4" />
+                  <Info className="h-5 w-5" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={onClose}
-                  className="bg-background/80 backdrop-blur-sm"
+                  className="bg-background/80 backdrop-blur-sm h-9 w-9 p-0"
+                  aria-label="Close"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </Button>
               </div>
             </div>
@@ -176,9 +178,10 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                 variant="ghost"
                 size="lg"
                 onClick={handlePrevious}
-                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90"
+                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-12 w-12 p-0"
+                aria-label="Previous"
               >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-7 w-7" />
               </Button>
             )}
 
@@ -187,15 +190,16 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                 variant="ghost"
                 size="lg"
                 onClick={handleNext}
-                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90"
+                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-12 w-12 p-0"
+                aria-label="Next"
               >
-                <ChevronRight className="h-6 w-6" />
+                <ChevronRight className="h-7 w-7" />
               </Button>
             )}
 
             {/* Media Container */}
             <div 
-              className="relative flex items-center justify-center min-h-[70vh] w-full px-16"
+              className="relative flex items-center justify-center min-h-[70vh] w-full px-6 sm:px-16"
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
@@ -216,6 +220,8 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                     onLoad={handleImageLoad}
                     onError={handleImageError}
                     style={{ opacity: isLoading ? 0 : 1 }}
+                    loading="eager"
+                    decoding="async"
                   />
                 ) : (
                   <video
@@ -263,7 +269,7 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                 <Button
                   onClick={() => onDownload(currentAsset)}
                   size="sm"
-                  className="bg-primary/90 hover:bg-primary"
+                  className="bg-primary/90 hover:bg-primary h-9 px-4"
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download
@@ -285,7 +291,8 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowDetails(false)}
-                  className="text-muted-foreground"
+                  className="text-muted-foreground h-8 w-8 p-0"
+                  aria-label="Close details"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>

@@ -50,6 +50,7 @@ export const CompactAssetCard = ({
       className="group relative bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      style={{ contentVisibility: 'auto' }}
     >
       {/* Selection Checkbox */}
       {(selectionMode || isHovered) && (
@@ -58,6 +59,7 @@ export const CompactAssetCard = ({
             checked={isSelected}
             onCheckedChange={onSelect}
             className="bg-background/80 border-border"
+            aria-label={isSelected ? 'Deselect asset' : 'Select asset'}
           />
         </div>
       )}
@@ -78,6 +80,17 @@ export const CompactAssetCard = ({
       <div 
         className="relative aspect-square bg-muted cursor-pointer overflow-hidden"
         onClick={onPreview}
+        onTouchStart={(e) => {
+          const target = e.currentTarget as HTMLElement & { __pressTimer?: number };
+          target.__pressTimer = window.setTimeout(() => onSelect(!isSelected), 450);
+        }}
+        onTouchEnd={(e) => {
+          const target = e.currentTarget as HTMLElement & { __pressTimer?: number };
+          if (target.__pressTimer) {
+            clearTimeout(target.__pressTimer);
+            target.__pressTimer = undefined;
+          }
+        }}
       >
         {asset.url && asset.status === 'completed' && !imageError ? (
           <>
@@ -89,6 +102,8 @@ export const CompactAssetCard = ({
                     alt="Video thumbnail"
                     className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                     onError={handleImageError}
+                    loading="lazy"
+                    decoding="async"
                   />
                 ) : (
                   <video
@@ -111,6 +126,8 @@ export const CompactAssetCard = ({
                 alt={asset.prompt}
                 className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                 onError={handleImageError}
+                loading="lazy"
+                decoding="async"
               />
             )}
           </>
@@ -124,9 +141,9 @@ export const CompactAssetCard = ({
           </div>
         )}
 
-        {/* Hover Actions */}
-        {isHovered && asset.status === 'completed' && (
-          <div className="absolute bottom-2 right-2 flex gap-1">
+        {/* Actions (visible on mobile, hover on desktop) */}
+        {asset.status === 'completed' && (
+          <div className="absolute bottom-2 right-2 flex gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
             <PillButton
               onClick={(e) => {
                 e.stopPropagation();
@@ -134,6 +151,7 @@ export const CompactAssetCard = ({
               }}
               variant="secondary"
               size="xs"
+              aria-label="Download asset"
             >
               <Download className="h-3 w-3" />
             </PillButton>
@@ -144,6 +162,7 @@ export const CompactAssetCard = ({
               }}
               variant="destructive"
               size="xs"
+              aria-label="Delete asset"
             >
               <Trash2 className="h-3 w-3" />
             </PillButton>
