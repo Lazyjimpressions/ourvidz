@@ -58,16 +58,18 @@ export const modifyOriginalPrompt = (originalPrompt: string, modification: strin
 };
 
 const handleClothingModification = (originalPrompt: string, modification: string): string => {
-  // Enhanced clothing patterns for complete replacement (not just adding)
+  // More aggressive clothing patterns for complete replacement
   const clothingPatterns = [
-    /wearing\s+([^,;.]+)/gi,
-    /in\s+a?\s*([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|jacket|sweater|t-shirt|blouse)/gi,
-    /([^,;.]+)\s+(dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|jacket|sweater|t-shirt|blouse)/gi,
+    // Broad patterns to catch various clothing structures
+    /wearing\s+(?:a\s+)?([^,;.]+)/gi,
+    /in\s+(?:a\s+)?([^,;.]*(?:dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|uniform|jacket|sweater|t-shirt|blouse)[^,;.]*)/gi,
+    /(?:a\s+)?([^,;.]*(?:dress|outfit|clothes|attire|clothing|bikini|shirt|top|bottom|pants|skirt|uniform|jacket|sweater|t-shirt|blouse)[^,;.]*)/gi,
     /(dressed\s+in|clad\s+in)\s+([^,;.]+)/gi,
     /(has\s+on|puts\s+on)\s+([^,;.]+)/gi,
-    // More comprehensive patterns for better matching
-    /(blue|red|green|yellow|black|white|pink|purple|orange|brown|gray|grey)\s+(dress|bikini|shirt|top|bottom|outfit|clothes)/gi,
-    /(dress|bikini|shirt|top|bottom|outfit|clothes)(\s+[^,;.]*)?/gi
+    // Color + clothing combinations
+    /(?:blue|red|green|yellow|black|white|pink|purple|orange|brown|gray|grey|dark|light)\s+[^,;.]*(?:dress|bikini|shirt|top|bottom|outfit|clothes|uniform|jacket|sweater|t-shirt|blouse)[^,;.]*/gi,
+    // Generic clothing terms with descriptors
+    /(?:school|casual|formal|summer|winter|party|work)\s+[^,;.]*(?:dress|outfit|clothes|uniform|attire)[^,;.]*/gi
   ];
   
   let modifiedPrompt = originalPrompt;
@@ -78,15 +80,17 @@ const handleClothingModification = (originalPrompt: string, modification: string
   console.log('Extracted new clothing:', newClothing, 'from modification:', modification);
   
   if (newClothing) {
-    // Try to replace existing clothing references - iterate through all patterns
+    // Try to replace existing clothing references - more aggressive approach
     for (const pattern of clothingPatterns) {
-      const matches = Array.from(modifiedPrompt.matchAll(pattern));
-      if (matches.length > 0) {
-        console.log('Found clothing matches with pattern:', pattern, 'matches:', matches);
+      if (pattern.test(modifiedPrompt)) {
+        console.log('Found clothing match with pattern:', pattern.source);
         modifiedPrompt = modifiedPrompt.replace(pattern, () => {
           replacementMade = true;
           return `wearing ${newClothing}`;
         });
+        // Reset the pattern's lastIndex for global patterns
+        pattern.lastIndex = 0;
+        console.log('Clothing replacement made:', modifiedPrompt);
         break; // Stop after first successful replacement
       }
     }
@@ -95,8 +99,6 @@ const handleClothingModification = (originalPrompt: string, modification: string
     if (!replacementMade) {
       console.log('No existing clothing found, adding new clothing');
       modifiedPrompt = `${originalPrompt}, wearing ${newClothing}`;
-    } else {
-      console.log('Clothing replacement made:', modifiedPrompt);
     }
   }
   

@@ -455,18 +455,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <span className="text-[10px] font-medium">Exact Copy</span>
                       </div>
                     )}
-                     {exactCopyMode && referenceMetadata?.originalEnhancedPrompt && prompt.trim() && (
-                        <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
-                          <div className="font-medium text-foreground">Original Prompt:</div>
-                          <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
-                            {referenceMetadata.originalEnhancedPrompt}
-                          </div>
-                          <div className="font-medium text-foreground">Final Prompt:</div>
-                          <div className="text-primary text-[10px] max-h-8 overflow-y-auto">
-                            {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
-                          </div>
-                        </div>
-                       )}
                       {exactCopyMode && !referenceMetadata?.originalEnhancedPrompt && (
                         <div className="absolute bottom-1 left-3 text-[10px] text-destructive">
                           ⚠️ No metadata found - exact copy unavailable
