@@ -35,13 +35,10 @@ export const CompactAssetCard = ({
   const longPressTimer = useRef<number | null>(null);
   const touchStart = useRef<{x: number; y: number} | null>(null);
 
-  // Register this card for lazy loading
+  // TEMPORARY: Skip lazy loading registration for mobile fix
   useEffect(() => {
-    if (registerAssetRef && cardRef.current) {
-      registerAssetRef(asset.id, cardRef.current);
-      return () => registerAssetRef(asset.id, null);
-    }
-  }, [registerAssetRef, asset.id]);
+    // Disabled during mobile URL fix - assets now have URLs from eager generation
+  }, []);
 
   const handleImageError = () => {
     setImageError(true);

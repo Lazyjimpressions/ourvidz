@@ -44,18 +44,18 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Data fetching using AssetService.getUserAssetsOptimized()
+  // TEMPORARY FIX: Use eager URL generation for mobile to match desktop behavior
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['library-assets-optimized'],
+    queryKey: ['library-assets-mobile-fix'],
     queryFn: async () => {
-      console.log('🎯 LIBRARY: Fetching assets via AssetService');
-      const allAssets = await AssetService.getUserAssetsOptimized(false);
-      console.log(`✅ LIBRARY: AssetService returned ${allAssets.length} assets`);
+      console.log('🎯 MOBILE FIX: Using eager URL generation like desktop');
+      const allAssets = await AssetService.getUserAssets(false); // Use eager method
+      console.log(`✅ MOBILE FIX: AssetService returned ${allAssets.length} assets with URLs`);
       return allAssets;
     },
     staleTime: 5 * 60 * 1000,
@@ -71,12 +71,10 @@ export const OptimizedLibrary = () => {
     clearSearch,
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
-  // Lazy URL generation and viewport detection
-  const { lazyAssets, registerAssetRef, forceLoadAssetUrls } = useLazyAssetsV3({
-    assets: filteredAssets,
-    prefetchThreshold: isMobile ? 200 : 400, // More conservative on mobile
-    batchSize: 6,
-  });
+  // TEMPORARY: Skip lazy loading for mobile, use direct assets
+  const lazyAssets = filteredAssets; // Direct assignment since URLs are already generated
+  const registerAssetRef = () => {}; // No-op
+  const forceLoadAssetUrls = () => {}; // No-op
 
   // Reset visible items when results change
   useEffect(() => {
