@@ -620,17 +620,31 @@ export const useRealtimeWorkspace = () => {
     toast.success(`Import feature coming soon`);
   }, []);
 
-  // Clear workspace - delete all items in current session
+  // Clear workspace - delete all items in current session with enhanced handling for failed jobs
   const clearWorkspace = useCallback(async () => {
     if (!activeSession?.id) return;
     
     try {
+      // Enhanced clearing: handle both regular and failed jobs
+      // Remove time restrictions and status filters for complete clearing
       const { error } = await (supabase as any)
         .from('workspace_items')
         .delete()
         .eq('session_id', activeSession.id);
       
       if (error) throw error;
+      
+      // Also clean up any orphaned jobs that might be stuck
+      try {
+        await (supabase as any)
+          .from('jobs')
+          .delete()
+          .eq('workspace_session_id', activeSession.id)
+          .in('status', ['failed', 'processing']); // Clean up problematic jobs
+      } catch (jobError) {
+        console.warn('⚠️ Failed to clean up orphaned jobs:', jobError);
+        // Don't throw - workspace clearing is still successful
+      }
       
       // ✅ FIX: Use coordinated invalidation for all workspace queries
       console.log('🔄 QUERY INVALIDATION: Clearing workspace, invalidating queries');
@@ -643,7 +657,7 @@ export const useRealtimeWorkspace = () => {
     }
   }, [activeSession?.id, invalidateWorkspaceQueries]);
 
-  // Delete tile - delete workspace item
+  // Delete tile - delete workspace item with enhanced error handling for failed jobs
   const deleteTile = useCallback(async (tile: MediaTile) => {
     if (deletingTiles.has(tile.id)) return;
     
@@ -652,13 +666,29 @@ export const useRealtimeWorkspace = () => {
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
-      // Delete workspace item
-      const { error } = await (supabase as any)
+      // Delete workspace item - this should work even for failed jobs
+      const { error: workspaceError } = await (supabase as any)
         .from('workspace_items')
         .delete()
         .eq('id', tile.id);
       
-      if (error) throw error;
+      if (workspaceError) {
+        console.warn('⚠️ Workspace item deletion failed, trying alternate approach:', workspaceError);
+        
+        // For failed jobs, try to also clean up related job records
+        if (tile.generationParams?.job_id) {
+          const { error: jobError } = await (supabase as any)
+            .from('jobs')
+            .delete()
+            .eq('id', tile.generationParams.job_id);
+          
+          if (jobError) {
+            console.warn('⚠️ Job cleanup also failed:', jobError);
+          }
+        }
+        
+        throw workspaceError;
+      }
       
       // ✅ FIX: Use coordinated invalidation for all workspace queries
       console.log('🔄 QUERY INVALIDATION: Deleting tile, invalidating queries');

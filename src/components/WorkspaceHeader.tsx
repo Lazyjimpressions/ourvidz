@@ -1,18 +1,21 @@
 
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, User, LogOut, RotateCcw } from "lucide-react";
+import { ArrowLeft, User, LogOut, RotateCcw, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWorkspaceCleanup } from "@/hooks/useWorkspaceCleanup";
 
 interface WorkspaceHeaderProps {
   onClearWorkspace?: () => void;
   onDismissAllJobs?: () => void;
   onDeleteAllWorkspace?: () => void;
+  showForceCleanup?: boolean;
 }
 
-export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAllWorkspace }: WorkspaceHeaderProps) => {
+export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAllWorkspace, showForceCleanup }: WorkspaceHeaderProps) => {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
+  const { forceClearWorkspace } = useWorkspaceCleanup();
 
   const handleSignOut = async () => {
     await signOut();
@@ -53,6 +56,18 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAl
                 <RotateCcw className="h-3 w-3" />
                 <span className="hidden sm:inline">Clear All</span>
               </Button>
+              {showForceCleanup && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={forceClearWorkspace}
+                  className="gap-1 text-orange-400 hover:text-orange-300 hover:bg-orange-900/20 h-8 px-2"
+                  title="Force clear all items including failed jobs"
+                >
+                  <AlertTriangle className="h-3 w-3" />
+                  <span className="hidden sm:inline">Force Clear</span>
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

@@ -158,20 +158,30 @@ export const ContentCard: React.FC<ContentCardProps> = ({
       {/* Media Content */}
       {item.type === 'video' ? (
         <div className="relative w-full h-full">
-          {/* Video Element */}
-          <video
-            src={item.url}
-            className="w-full h-full object-cover"
-            muted
-            loop
-            preload="metadata"
-            playsInline
-            onMouseEnter={handleVideoMouseEnter}
-            onMouseLeave={handleVideoMouseLeave}
-            onLoadedData={handleVideoLoad}
-            onError={handleVideoError}
-            poster={getVideoPoster()}
-          />
+      {/* Video Element */}
+          {item.url ? (
+            <video
+              src={item.url}
+              className="w-full h-full object-cover"
+              muted
+              loop
+              preload="metadata"
+              playsInline
+              onMouseEnter={handleVideoMouseEnter}
+              onMouseLeave={handleVideoMouseLeave}
+              onLoadedData={handleVideoLoad}
+              onError={handleVideoError}
+              poster={getVideoPoster()}
+            />
+          ) : (
+            /* Fallback for videos without URLs (failed videos) */
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <div className="text-center p-4">
+                <VideoIcon className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Video unavailable</p>
+              </div>
+            </div>
+          )}
           
           {/* Video Play Overlay - Shows when not playing */}
           {!isVideoPlaying && (

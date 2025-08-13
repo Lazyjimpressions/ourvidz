@@ -36,6 +36,20 @@ export class AssetService {
     const jobType = jobData?.job_type || '';
     const quality = imageData.quality || jobData?.quality || 'fast';
     
+    // For failed jobs or missing job data, try to infer from metadata
+    if (!jobData || !jobType) {
+      console.log('⚠️ No job data available, using fallback bucket detection');
+      
+      // Check metadata bucket hint first
+      if (metadata?.bucket) {
+        console.log('✅ Using bucket from metadata:', metadata.bucket);
+        return metadata.bucket;
+      }
+      
+      // Fallback to safe defaults based on available data
+      return quality === 'high' ? 'image_high' : 'image_fast';
+    }
+    
     // Enhanced model detection with all 7B variants
     const isSDXL = metadata?.is_sdxl || 
                    metadata?.model_type === 'sdxl' || 
@@ -70,6 +84,12 @@ export class AssetService {
   private static determineVideoBucket(jobData?: any): string {
     const quality = jobData?.quality || 'fast';
     const jobType = jobData?.job_type || '';
+    
+    // For failed jobs or missing job data, use safe defaults
+    if (!jobData || !jobType) {
+      console.log('⚠️ No job data available for video, using fallback bucket');
+      return quality === 'high' ? 'video_high' : 'video_fast';
+    }
     
     // Enhanced video model detection with all 7B variants
     const isEnhanced = jobType.includes('enhanced') || 
@@ -992,6 +1012,7 @@ export class AssetService {
       // Step 1: Get asset and job data in single optimized query
       let assetData: any = null;
       let jobData: any = null;
+      let assetStatus: string = 'unknown';
       
       if (assetType === 'image') {
         // Single query with JOIN to get both asset and job data - corrected foreign key reference
@@ -1002,6 +1023,7 @@ export class AssetService {
             image_urls,
             quality, 
             metadata,
+            status,
             jobs!jobs_image_id_fkey(quality, job_type, model_type)
           `)
           .eq('id', assetId)
@@ -1013,6 +1035,7 @@ export class AssetService {
         }
         
         assetData = data;
+        assetStatus = data?.status || 'unknown';
         jobData = data?.jobs?.[0] || null;
         
         // Handle orphaned images (no associated job data)
@@ -1038,6 +1061,7 @@ export class AssetService {
           .select(`
             video_url, 
             thumbnail_url,
+            status,
             jobs!jobs_video_id_fkey(quality, job_type)
           `)
           .eq('id', assetId)
@@ -1049,6 +1073,7 @@ export class AssetService {
         }
         
         assetData = data;
+        assetStatus = data?.status || 'unknown';
         jobData = data?.jobs?.[0] || null;
         
         // Handle orphaned videos (no associated job data)
@@ -1078,50 +1103,61 @@ export class AssetService {
       }
 
       // Step 3: Clean up storage files in parallel (non-blocking)
-      if (assetData) {
+      // Skip storage cleanup for failed jobs that may not have valid URLs
+      if (assetData && assetStatus !== 'failed') {
         const storageCleanupPromises: Promise<any>[] = [];
         
         if (assetType === 'image') {
-          const bucket = AssetService.determineImageBucket(assetData, jobData);
-          console.log('🗑️ Cleaning up from bucket:', bucket);
-          
-          // Handle multi-image generations (image_urls array)
-          const imageUrlsArray = assetData.image_urls || (assetData.metadata as any)?.image_urls;
-          
-          if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
-            console.log('🗑️ Deleting multiple images:', imageUrlsArray.length);
-            imageUrlsArray.forEach(imagePath => {
+          try {
+            const bucket = AssetService.determineImageBucket(assetData, jobData);
+            console.log('🗑️ Cleaning up from bucket:', bucket);
+            
+            // Handle multi-image generations (image_urls array)
+            const imageUrlsArray = assetData.image_urls || (assetData.metadata as any)?.image_urls;
+            
+            if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
+              console.log('🗑️ Deleting multiple images:', imageUrlsArray.length);
+              imageUrlsArray.forEach(imagePath => {
+                if (imagePath) { // Only delete if path exists
+                  storageCleanupPromises.push(
+                    deleteFile(bucket as any, imagePath).catch(err => 
+                      console.warn('⚠️ Failed to delete image:', imagePath, err)
+                    )
+                  );
+                }
+              });
+            } else if (assetData.image_url) {
+              console.log('🗑️ Deleting single image:', assetData.image_url);
               storageCleanupPromises.push(
-                deleteFile(bucket as any, imagePath).catch(err => 
-                  console.warn('⚠️ Failed to delete image:', imagePath, err)
+                deleteFile(bucket as any, assetData.image_url).catch(err => 
+                  console.warn('⚠️ Failed to delete image:', assetData.image_url, err)
                 )
               );
-            });
-          } else if (assetData.image_url) {
-            console.log('🗑️ Deleting single image:', assetData.image_url);
-            storageCleanupPromises.push(
-              deleteFile(bucket as any, assetData.image_url).catch(err => 
-                console.warn('⚠️ Failed to delete image:', assetData.image_url, err)
-              )
-            );
+            }
+          } catch (bucketError) {
+            console.warn('⚠️ Failed to determine bucket for cleanup, skipping storage deletion:', bucketError);
           }
         } else if (assetType === 'video') {
-          if (assetData.video_url) {
-            const bucket = AssetService.determineVideoBucket(jobData);
-            console.log('🗑️ Deleting video from bucket:', bucket);
-            storageCleanupPromises.push(
-              deleteFile(bucket as any, assetData.video_url).catch(err => 
-                console.warn('⚠️ Failed to delete video:', assetData.video_url, err)
-              )
-            );
-          }
-          if (assetData.thumbnail_url) {
-            console.log('🗑️ Deleting thumbnail');
-            storageCleanupPromises.push(
-              deleteFile('image_fast' as any, assetData.thumbnail_url).catch(err => 
-                console.warn('⚠️ Failed to delete thumbnail:', assetData.thumbnail_url, err)
-              )
-            );
+          try {
+            if (assetData.video_url) {
+              const bucket = AssetService.determineVideoBucket(jobData);
+              console.log('🗑️ Deleting video from bucket:', bucket);
+              storageCleanupPromises.push(
+                deleteFile(bucket as any, assetData.video_url).catch(err => 
+                  console.warn('⚠️ Failed to delete video:', assetData.video_url, err)
+                )
+              );
+            }
+            if (assetData.thumbnail_url) {
+              console.log('🗑️ Deleting thumbnail');
+              storageCleanupPromises.push(
+                deleteFile('image_fast' as any, assetData.thumbnail_url).catch(err => 
+                  console.warn('⚠️ Failed to delete thumbnail:', assetData.thumbnail_url, err)
+                )
+              );
+            }
+          } catch (bucketError) {
+            console.warn('⚠️ Failed to determine bucket for video cleanup, skipping storage deletion:', bucketError);
           }
         }
         
@@ -1136,6 +1172,8 @@ export class AssetService {
             }
           });
         }
+      } else if (assetStatus === 'failed') {
+        console.log('⚠️ Skipping storage cleanup for failed job:', assetId);
       }
       
       console.log('✅ OPTIMIZED: Asset deletion completed:', assetId);
