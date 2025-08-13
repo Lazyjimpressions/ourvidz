@@ -53,7 +53,7 @@ const RoleplayChatInterface = () => {
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
 // Roleplay Settings
 const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
-  contentMode: 'sfw',
+  contentMode: 'nsfw', // NSFW-first default
   responseStyle: 'detailed',
   responseLength: 'medium',
   autoSceneGeneration: false,
@@ -213,9 +213,27 @@ useEffect(() => {
           const prompt = await generateSceneDescription(
             `Opening scene with ${character.name}`,
             character.name,
-            { userCharacterId: userCharacterId || undefined, contentMode }
+            { userCharacterId: userCharacterId || undefined, contentMode: roleplaySettings.contentMode }
           );
-          await sendMessage(prompt, { conversationId: state.activeConversationId, characterId: characterId || undefined });
+          
+          // Build participants list for multi-character support
+          const participants = [];
+          if (character) {
+            participants.push({
+              id: character.id,
+              name: character.name,
+              description: character.description,
+              role: 'character'
+            });
+          }
+          
+          console.log('🎭 Sending opening narration with settings:', { roleplaySettings, participants });
+          await sendMessage(prompt, { 
+            conversationId: state.activeConversationId, 
+            characterId: characterId || undefined,
+            roleplaySettings,
+            participants
+          });
           hasSentOpeningNarrationRef.current = true;
           setOpeningNarrationSent(true);
         } catch (err) {
@@ -360,9 +378,23 @@ useEffect(() => {
     
     setIsTyping(true);
     try {
+      // Build participants list for multi-character support
+      const participants = [];
+      if (character) {
+        participants.push({
+          id: character.id,
+          name: character.name,
+          description: character.description,
+          role: 'character'
+        });
+      }
+      
+      console.log('💬 Sending message with settings:', { roleplaySettings, participants });
       await sendMessage(inputMessage, { 
         characterId: characterId || undefined,
-        conversationId: state.activeConversationId 
+        conversationId: state.activeConversationId,
+        roleplaySettings,
+        participants
       });
       setInputMessage('');
     } catch (error) {

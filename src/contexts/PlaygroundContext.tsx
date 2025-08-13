@@ -70,7 +70,12 @@ interface PlaygroundContextType {
   setSfwMode: (v: boolean) => void;
   setActiveConversation: (id: string | null) => void;
   createConversation: (title?: string, projectId?: string, conversationType?: string, characterId?: string) => Promise<string>;
-  sendMessage: (content: string, options?: { characterId?: string; conversationId?: string }) => Promise<void>;
+  sendMessage: (content: string, options?: { 
+    characterId?: string; 
+    conversationId?: string; 
+    roleplaySettings?: any;
+    participants?: any[];
+  }) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   refreshPromptCache: () => Promise<void>;
@@ -156,17 +161,36 @@ const createConversationMutation = useMutation({
 
   // Send message mutation
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, characterId }: { conversationId: string; content: string; characterId?: string }) => {
-      console.log('📧 PlaygroundContext sending message:', { conversationId, content, characterId });
+    mutationFn: async ({ 
+      conversationId, 
+      content, 
+      characterId, 
+      roleplaySettings, 
+      participants 
+    }: { 
+      conversationId: string; 
+      content: string; 
+      characterId?: string;
+      roleplaySettings?: any;
+      participants?: any[];
+    }) => {
+      console.log('📧 PlaygroundContext sending message:', { 
+        conversationId, 
+        content, 
+        characterId, 
+        roleplaySettings, 
+        participants 
+      });
       
       const { data, error } = await supabase.functions.invoke('playground-chat', {
         body: {
           conversation_id: conversationId,
           message: content,
-          // Let the backend determine content tier based on user status and content
-          // Only override if user explicitly chose SFW mode
-          ...(sfwMode ? { content_tier: 'sfw' } : {}),
+          // NSFW-first: only override to SFW if explicitly set in roleplaySettings or sfwMode
+          ...(roleplaySettings?.contentMode === 'sfw' || sfwMode ? { content_tier: 'sfw' } : {}),
           ...(characterId ? { character_id: characterId } : {}),
+          ...(roleplaySettings ? { roleplay_settings: roleplaySettings } : {}),
+          ...(participants ? { participants } : {}),
         },
       });
 
@@ -241,7 +265,12 @@ const createConversation = useCallback(async (title?: string, projectId?: string
   return result.id;
 }, [createConversationMutation]);
 
-  const sendMessage = useCallback(async (content: string, options?: { characterId?: string; conversationId?: string }) => {
+  const sendMessage = useCallback(async (content: string, options?: { 
+    characterId?: string; 
+    conversationId?: string; 
+    roleplaySettings?: any;
+    participants?: any[];
+  }) => {
     const targetConversationId = options?.conversationId || state.activeConversationId;
     if (!targetConversationId) {
       toast.error('No active conversation');
@@ -271,6 +300,8 @@ const createConversation = useCallback(async (title?: string, projectId?: string
         conversationId: targetConversationId,
         content,
         characterId: options?.characterId,
+        roleplaySettings: options?.roleplaySettings,
+        participants: options?.participants,
       });
 
       // Patch assistant placeholder with actual response immediately

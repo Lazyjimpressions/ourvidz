@@ -57,7 +57,7 @@ export const useSceneNarration = () => {
     characterName: string,
     options: SceneNarrationOptions = {}
   ): string => {
-    const { userCharacterId, contentMode = 'sfw' } = options;
+    const { userCharacterId, contentMode = 'nsfw' } = options; // NSFW-first default
     
     // Base scene generation prompt
     let prompt = `[SCENE_GENERATION] Scene ID: ${sceneId}`;
@@ -89,7 +89,7 @@ export const useSceneNarration = () => {
     options: SceneNarrationOptions = {}
   ) => {
     try {
-      const { userCharacterId, contentMode = 'sfw' } = options;
+      const { userCharacterId, contentMode = 'nsfw' } = options; // NSFW-first default
       
       // Build enhanced scene prompt
       let enhancedPrompt = `[SCENE_GENERATION] ${scenePrompt}`;

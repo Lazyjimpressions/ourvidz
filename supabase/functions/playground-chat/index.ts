@@ -116,9 +116,11 @@ serve(async (req) => {
     cache: any,
     characterData?: any,
     ageVerified?: boolean,
-    requestedTier?: 'sfw' | 'nsfw'
+    requestedTier?: 'sfw' | 'nsfw',
+    roleplaySettings?: any,
+    participants?: any[]
   ): Promise<string | null> {
-    // Tier is explicitly determined by caller (NSFW-first model)
+    // NSFW-first approach: default to NSFW unless explicitly overridden to SFW
     let contentTier: 'sfw' | 'nsfw' = requestedTier || 'nsfw';
 
     // Force tier by explicit character rating when available
@@ -169,9 +171,9 @@ serve(async (req) => {
       } else {
         console.log('🔄 Cache miss, fetching roleplay template from database...');
         try {
-          const dbTemplate = await getDatabaseTemplate(
+        const dbTemplate = await getDatabaseTemplate(
             null,                    // target_model
-            'qwen_instruct',         // enhancer_model  
+            roleplaySettings?.enhancementModel || 'qwen_instruct', // enhancer_model from settings
             'chat',                  // job_type
             'character_roleplay',    // use_case
             contentTier              // content_mode
@@ -229,6 +231,13 @@ serve(async (req) => {
         const extractTraitValue = (traitName: string): string => traitsMap[traitName] || '';
 
         // Replace character variables in the template (single processing, then cache)
+        // Build multi-character participant roster if applicable
+        let participantRoster = '';
+        if (participants && participants.length > 0) {
+          participantRoster = '\n\n## Participants Roster:\n' + 
+            participants.map(p => `- **${p.name}**: ${p.description || 'No description'}`).join('\n');
+        }
+
         const processed = template
           .replace(/\{\{character_name\}\}/g, characterData.name || 'Character')
           .replace(/\{\{character_description\}\}/g, characterData.description || '')
@@ -242,9 +251,36 @@ serve(async (req) => {
           .replace(/\{\{character_persona\}\}/g, characterData.persona || '')
           .replace(/\{\{voice_tone\}\}/g, characterData.voice_tone || 'neutral')
           .replace(/\{\{mood\}\}/g, characterData.mood || 'neutral')
-          .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '');
+          .replace(/\{\{character_visual_description\}\}/g, characterData.appearance_tags?.join(', ') || '')
+          .replace(/\{\{scene_context\}\}/g, participantRoster);
 
         let processedFinal = processed;
+        
+        // Apply roleplay settings modifications
+        if (roleplaySettings) {
+          console.log('🎛️ Applying roleplay settings:', roleplaySettings);
+          
+          // Add response style guidance
+          if (roleplaySettings.responseStyle) {
+            const styleGuidance = {
+              'casual': '\n\n**Response Style**: Keep responses casual and friendly, 1-2 sentences.',
+              'detailed': '\n\n**Response Style**: Provide rich, descriptive responses with vivid details.',
+              'immersive': '\n\n**Response Style**: Create deeply immersive experiences with extensive detail and atmosphere.'
+            };
+            processedFinal += styleGuidance[roleplaySettings.responseStyle] || '';
+          }
+          
+          // Add response length guidance
+          if (roleplaySettings.responseLength) {
+            const lengthGuidance = {
+              'short': '\n\n**Response Length**: Keep responses to 1-2 sentences maximum.',
+              'medium': '\n\n**Response Length**: Use 2-4 sentences for balanced responses.',
+              'long': '\n\n**Response Length**: Write detailed paragraphs with rich descriptions.'
+            };
+            processedFinal += lengthGuidance[roleplaySettings.responseLength] || '';
+          }
+        }
+        
         if (contentTier === 'nsfw' && !processedFinal.includes(NSFW_GUIDANCE_MARK)) {
           processedFinal = `${processedFinal}\n\n${NSFW_ROLEPLAY_GUIDANCE}`;
           console.log('🔧 Appended NSFW roleplay guidance to system prompt (character_roleplay)');
@@ -426,7 +462,15 @@ You say: ...`;
 
     const body = await req.json();
 
-    const { conversation_id, message, project_id, character_id, content_tier } = body;
+    const { 
+      conversation_id, 
+      message, 
+      project_id, 
+      character_id, 
+      content_tier,
+      roleplay_settings,
+      participants
+    } = body;
 
     if (!conversation_id || !message) {
       throw new Error('Missing required fields: conversation_id and message');
@@ -643,7 +687,9 @@ You say: ...`;
       cache,
       characterData,
       ageVerified || allowNSFWOverride,
-      finalTier
+      finalTier,
+      roleplay_settings,
+      participants
     );
     promptTime = Date.now() - promptStart;
 

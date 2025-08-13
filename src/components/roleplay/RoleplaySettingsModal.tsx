@@ -58,7 +58,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 
   const handleReset = () => {
     const defaultSettings: RoleplaySettings = {
-      contentMode: 'sfw',
+      contentMode: 'nsfw', // NSFW-first default
       responseStyle: 'detailed',
       responseLength: 'medium',
       autoSceneGeneration: false,
@@ -190,7 +190,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   <p className="text-xs text-muted-foreground">
                     {localSettings.contentMode === 'sfw' 
                       ? 'Safe for work content only' 
-                      : 'Allows mature content (18+)'}
+                      : 'Allows mature content (18+) - Default setting'}
                   </p>
                 </div>
               </CardContent>
