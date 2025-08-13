@@ -23,9 +23,10 @@ const RoleplayDashboard = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [selectedCharacter, setSelectedCharacter] = useState<string | null>(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [regeneratingSceneId, setRegeneratingSceneId] = useState<string | null>(null);
   
   const { characters, isLoading, likeCharacter, incrementInteraction } = usePublicCharacters();
-  const { scenes: recentScenes, isLoading: scenesLoading } = useRecentScenes(12);
+  const { scenes: recentScenes, isLoading: scenesLoading, reload: reloadScenes } = useRecentScenes(12);
   const { startSceneChat } = useSceneNavigation();
   const { generateSceneImage, isGenerating } = useSceneGeneration();
 
@@ -63,6 +64,19 @@ const RoleplayDashboard = () => {
   const handleCreateCharacter = () => {
     // Navigate to character creation - could be a modal or separate page
     navigate('/roleplay/create');
+  };
+
+  const handleRegenerateScene = async (scene: { id: string; scenePrompt: string }) => {
+    try {
+      setRegeneratingSceneId(scene.id);
+      await generateSceneImage(scene.scenePrompt, null, { quality: 'fast', sceneId: scene.id });
+      // Give the callback a moment to persist the new image, then refresh
+      setTimeout(() => {
+        reloadScenes();
+      }, 2500);
+    } finally {
+      setRegeneratingSceneId(null);
+    }
   };
 
   // Transform database characters to display format
@@ -181,9 +195,11 @@ const RoleplayDashboard = () => {
           </div>
 
           {/* Latest Scenes */}
-          {!scenesLoading && recentScenes.length > 0 && (
-            <section>
-              <SectionHeader title="Latest Scenes" count={recentScenes.length} className="mb-4" />
+          <section>
+            <SectionHeader title="Latest Scenes" count={recentScenes.length} className="mb-4" />
+            {scenesLoading ? (
+              <div className="text-muted-foreground text-sm px-1">Loading scenes...</div>
+            ) : recentScenes.length > 0 ? (
               <HorizontalScroll>
                 {recentScenes.map((scene) => (
                   <SceneCard
@@ -194,12 +210,16 @@ const RoleplayDashboard = () => {
                     backgroundImage={scene.backgroundImage}
                     gradient="bg-gradient-to-br from-primary/20 to-primary/10"
                     onClick={() => startSceneChat(scene.id, scene.characterId ? [{ id: scene.characterId }] : [])}
+                    onRegenerate={() => handleRegenerateScene(scene)}
+                    isRegenerating={regeneratingSceneId === scene.id || isGenerating}
                     className="w-64"
                   />
                 ))}
               </HorizontalScroll>
-            </section>
-          )}
+            ) : (
+              <div className="text-muted-foreground text-sm px-1">No scenes yet.</div>
+            )}
+          </section>
 
           {/* For You Section */}
           {!isLoading && categorizedCharacters.forYou.length > 0 && (

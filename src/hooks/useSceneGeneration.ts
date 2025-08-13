@@ -21,6 +21,10 @@ interface SceneGenerationOptions {
   referenceStrength?: number;
   style?: 'realistic' | 'artistic' | 'anime' | 'lustify';
   quality?: 'fast' | 'high';
+  sceneId?: string;
+  characterId?: string;
+  conversationId?: string;
+  referenceImageUrl?: string;
 }
 
 export const useSceneGeneration = () => {
