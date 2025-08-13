@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play } from 'lucide-react';
+import { Play, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SceneCardProps {
@@ -9,6 +9,8 @@ interface SceneCardProps {
   backgroundImage?: string;
   gradient: string;
   onClick: () => void;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
   className?: string;
 }
 
@@ -18,6 +20,8 @@ export const SceneCard: React.FC<SceneCardProps> = ({
   backgroundImage,
   gradient,
   onClick,
+  onRegenerate,
+  isRegenerating,
   className
 }) => {
   return (
@@ -41,6 +45,22 @@ export const SceneCard: React.FC<SceneCardProps> = ({
 
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors" />
+
+      {/* Regenerate Button */}
+      {onRegenerate && (
+        <div className="absolute top-2 right-2 z-10">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
+            className="bg-white/30 hover:bg-white/40 text-white rounded-full p-1.5 backdrop-blur-sm transition-colors disabled:opacity-50"
+            aria-label="Regenerate scene image"
+            title="Regenerate image"
+            disabled={isRegenerating}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div className="relative h-full flex flex-col justify-between p-4 text-white">

@@ -15,6 +15,7 @@ import { useRecentScenes } from '@/hooks/useRecentScenes';
 import { useSceneNavigation } from '@/hooks/useSceneNavigation';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { Button } from '@/components/ui/button';
+import { useSceneGeneration } from '@/hooks/useSceneGeneration';
 
 const RoleplayDashboard = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ const RoleplayDashboard = () => {
   const { characters, isLoading, likeCharacter, incrementInteraction } = usePublicCharacters();
   const { scenes: recentScenes, isLoading: scenesLoading } = useRecentScenes(12);
   const { startSceneChat } = useSceneNavigation();
+  const { generateSceneImage, isGenerating } = useSceneGeneration();
 
   // Get selected character data for modal
   const { character: selectedCharacterData } = useCharacterData(selectedCharacter || undefined);
