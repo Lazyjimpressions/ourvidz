@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useSceneNavigation } from '@/hooks/useSceneNavigation';
+import { useGeneration } from '@/hooks/useGeneration';
+import { useToast } from '@/hooks/use-toast';
 import { SceneCard } from './SceneCard';
 import { MultiCharacterSceneCard } from './MultiCharacterSceneCard';
 import { SceneGenerationModal } from './SceneGenerationModal';
@@ -45,8 +47,10 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const { character, isLoading, likeCharacter } = useCharacterData(characterId);
-  const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId);
+  const { scenes, isLoading: scenesLoading, createScene } = useCharacterScenes(characterId);
   const { startSceneChat } = useSceneNavigation();
+  const { generateContent, isGenerating } = useGeneration();
+  const { toast } = useToast();
 
   // Don't return null - let the parent handle conditional rendering
 
@@ -84,6 +88,51 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const handleLikeCharacter = () => {
     if (character) {
       likeCharacter(character.id);
+    }
+  };
+
+  const handleGeneratePortrait = async () => {
+    if (!character) return;
+    try {
+      const tags = Array.isArray((character as any).appearance_tags)
+        ? (character as any).appearance_tags.join(', ')
+        : '';
+      const base = `${character.name}, portrait, cinematic headshot, sharp focus, soft lighting`;
+      const desc = character.description ? `, ${character.description}` : '';
+      const persona = character.persona ? `, ${character.persona}` : '';
+      const extra = tags ? `, ${tags}` : '';
+      const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
+
+      const onComplete = (e: any) => {
+        const detail = e?.detail || {};
+        if (detail.type !== 'image' || !detail.imageUrl) return;
+        const payload: any = {
+          character_id: character.id,
+          image_url: detail.imageUrl,
+          scene_prompt: `${character.name} portrait`,
+          generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
+        };
+        createScene(payload)
+          .then(() => {
+            toast({ title: 'Portrait generated', description: 'Added to Scenes' });
+            setActiveTab('scenes');
+          })
+          .catch((err) => console.error('Failed to save portrait scene', err))
+          .finally(() => {
+            window.removeEventListener('generation-completed', onComplete as any);
+          });
+      };
+
+      window.addEventListener('generation-completed', onComplete as any);
+
+      await generateContent({
+        format: 'sdxl_image_high',
+        prompt,
+        metadata: { model_variant: 'lustify_sdxl' }
+      });
+    } catch (err) {
+      console.error('Portrait generation failed', err);
+      toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
     }
   };
 
@@ -428,6 +477,16 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
           >
             <Palette className="w-3 h-3 mr-1" />
             Scene
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="flex-1 h-7 text-xs"
+            onClick={handleGeneratePortrait}
+            disabled={isGenerating}
+          >
+            <Wand2 className="w-3 h-3 mr-1" />
+            {isGenerating ? 'Generating…' : 'Portrait'}
           </Button>
           <Button 
             variant="outline" 

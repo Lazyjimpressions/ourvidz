@@ -133,17 +133,17 @@ const RoleplayChatInterface = () => {
 
   // Initialize conversation when character is loaded (only once per character)
   useEffect(() => {
-    if (character && !state.activeConversationId && conversations.length === 0 && !state.isLoadingMessage) {
+    if (character && !state.activeConversationId && !state.isLoadingMessage) {
       // Add a small delay to prevent immediate re-triggers
       const timer = setTimeout(() => {
-        if (!state.activeConversationId && conversations.length === 0) {
+        if (!state.activeConversationId) {
           handleNewConversation();
         }
       }, 100);
 
       return () => clearTimeout(timer);
     }
-  }, [character, state.activeConversationId, conversations.length, state.isLoadingMessage]);
+  }, [character, state.activeConversationId, state.isLoadingMessage]);
 
   // Handle scene initialization when conversation is created and scene is specified
   useEffect(() => {
@@ -291,6 +291,12 @@ const RoleplayChatInterface = () => {
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isTyping) return;
+    
+    // Ensure there is an active conversation before sending
+    if (!state.activeConversationId) {
+      await handleNewConversation();
+    }
+    if (!state.activeConversationId) return; // Safety check
     
     setIsTyping(true);
     try {
@@ -481,7 +487,7 @@ const RoleplayChatInterface = () => {
               onSend={handleSendMessage}
               onGenerateScene={handleGenerateScene}
               onOpenSettings={() => setShowSettingsModal(true)}
-              isDisabled={isTyping || state.isLoadingMessage}
+              isDisabled={isTyping || state.isLoadingMessage || !state.activeConversationId}
               characterName={character?.name}
               mode={inputMode}
               onModeChange={setInputMode}
