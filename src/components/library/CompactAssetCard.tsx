@@ -133,7 +133,8 @@ export const CompactAssetCard = ({
           touchStart.current = null;
         }}
       >
-        {asset.url && asset.status === 'completed' && !imageError ? (
+        {/* Show media if URL available and asset is completed, or in loading state */}
+        {(asset.url && asset.status === 'completed' && !imageError) ? (
           <>
             {asset.type === 'video' ? (
               <div className="relative w-full h-full">
@@ -174,28 +175,43 @@ export const CompactAssetCard = ({
               />
             )}
           </>
-        ) : (
+        ) : asset.status === 'completed' && !asset.url ? (
+          // Loading state for completed assets without URLs (lazy loading)
+          <div className="animate-pulse bg-muted/40 w-full h-full flex items-center justify-center">
+            <div className="text-center">
+              {asset.type === 'image' ? (
+                <Image className="h-8 w-8 text-muted-foreground/50 mx-auto mb-1" />
+              ) : (
+                <Video className="h-8 w-8 text-muted-foreground/50 mx-auto mb-1" />
+              )}
+              <span className="text-xs text-muted-foreground/70">Loading...</span>
+            </div>
+          </div>
+        ) : asset.status === 'processing' || asset.status === 'queued' ? (
+          // Processing state
           <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/20">
-            {asset.url === undefined ? (
-              // Loading state
-              <div className="animate-pulse bg-muted/40 w-full h-full flex items-center justify-center">
-                {asset.type === 'image' ? (
-                  <Image className="h-8 w-8 text-muted-foreground/50" />
-                ) : (
-                  <Video className="h-8 w-8 text-muted-foreground/50" />
-                )}
-              </div>
-            ) : (
-              // Failed to load or no URL
-              <div className="flex flex-col items-center justify-center gap-2">
-                {asset.type === 'image' ? (
-                  <Image className="h-8 w-8" />
-                ) : (
-                  <Video className="h-8 w-8" />
-                )}
-                <span className="text-xs text-muted-foreground">Failed to load</span>
-              </div>
-            )}
+            <div className="text-center">
+              {asset.type === 'image' ? (
+                <Image className="h-8 w-8 text-muted-foreground/50 mx-auto mb-1" />
+              ) : (
+                <Video className="h-8 w-8 text-muted-foreground/50 mx-auto mb-1" />
+              )}
+              <span className="text-xs text-muted-foreground">
+                {asset.status === 'processing' ? 'Processing...' : 'Queued'}
+              </span>
+            </div>
+          </div>
+        ) : (
+          // Failed state
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/20">
+            <div className="text-center">
+              {asset.type === 'image' ? (
+                <Image className="h-8 w-8 text-red-400/50 mx-auto mb-1" />
+              ) : (
+                <Video className="h-8 w-8 text-red-400/50 mx-auto mb-1" />
+              )}
+              <span className="text-xs text-red-400">Failed to load</span>
+            </div>
           </div>
         )}
 

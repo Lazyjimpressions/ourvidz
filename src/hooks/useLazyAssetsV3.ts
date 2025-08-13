@@ -188,6 +188,7 @@ export const useLazyAssetsV3 = ({
           if (!assetId) return;
 
           if (entry.isIntersecting) {
+            console.log(`📱 MOBILE: Asset ${assetId} entered viewport - triggering URL loading`);
             // Mark as visible
             setLazyAssets(prev => 
               prev.map(asset => 
@@ -258,9 +259,11 @@ export const useLazyAssetsV3 = ({
       // Observe new element
       if (observerRef.current) {
         observerRef.current.observe(element);
+        console.log(`📱 MOBILE: Registered asset ${assetId} for lazy loading observation`);
       }
     } else {
       assetRefs.current.delete(assetId);
+      console.log(`📱 MOBILE: Unregistered asset ${assetId} from lazy loading`);
     }
   }, [enabled]);
 
