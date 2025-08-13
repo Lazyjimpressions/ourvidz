@@ -140,6 +140,9 @@ const [quickImageAsset, setQuickImageAsset] = useState<{assetId: string; imageUr
 
 const messagesEndRef = useRef<HTMLDivElement>(null);
 const inputRef = useRef<HTMLTextAreaElement>(null);
+// Guards to prevent duplicate initializations under StrictMode
+const hasCreatedConversationRef = useRef(false);
+const hasSentOpeningNarrationRef = useRef(false);
 
 // SDXL scene generation for quick image
 const { generateSceneImage, detectScene } = useSceneGeneration();
@@ -152,18 +155,19 @@ const { generateSceneImage, detectScene } = useSceneGeneration();
   }, [characterId, character, characterLoading]);
 
   // Initialize conversation when character is loaded (only once per character)
-  useEffect(() => {
-    if (character && !state.activeConversationId && !state.isLoadingMessage) {
-      // Add a small delay to prevent immediate re-triggers
-      const timer = setTimeout(() => {
-        if (!state.activeConversationId) {
-          handleNewConversation();
-        }
-      }, 100);
+useEffect(() => {
+  if (character && !state.activeConversationId && !state.isLoadingMessage && !hasCreatedConversationRef.current) {
+    // Add a small delay to prevent immediate re-triggers
+    const timer = setTimeout(() => {
+      if (!state.activeConversationId && !hasCreatedConversationRef.current) {
+        hasCreatedConversationRef.current = true;
+        handleNewConversation();
+      }
+    }, 100);
 
-      return () => clearTimeout(timer);
-    }
-  }, [character, state.activeConversationId, state.isLoadingMessage]);
+    return () => clearTimeout(timer);
+  }
+}, [character, state.activeConversationId, state.isLoadingMessage]);
 
   // If Narrator is selected but participants include real characters, switch to the first participant
   useEffect(() => {
@@ -195,13 +199,14 @@ const { generateSceneImage, detectScene } = useSceneGeneration();
   }, [state.activeConversationId, sceneId, character, sceneInitialized, messages.length]);
 
   // Opening narration (no sceneId): narrator paints the opening scene in text only
-  useEffect(() => {
+useEffect(() => {
     if (
       !sceneId &&
       state.activeConversationId &&
       character &&
       messages.length === 0 &&
-      !openingNarrationSent
+      !openingNarrationSent &&
+      !hasSentOpeningNarrationRef.current
     ) {
       (async () => {
         try {
@@ -211,6 +216,7 @@ const { generateSceneImage, detectScene } = useSceneGeneration();
             { userCharacterId: userCharacterId || undefined, contentMode }
           );
           await sendMessage(prompt, { conversationId: state.activeConversationId, characterId: characterId || undefined });
+          hasSentOpeningNarrationRef.current = true;
           setOpeningNarrationSent(true);
         } catch (err) {
           console.error('Failed to send opening narration:', err);
@@ -531,7 +537,7 @@ const { generateSceneImage, detectScene } = useSceneGeneration();
         {/* Chat Messages Area - Fixed height with padding for floating input */}
         <div className="flex-1 relative overflow-hidden">
           <ScrollArea className="h-full">
-          <div className="p-3 pb-20">
+          <div className="p-3 pb-28">
             <div className="max-w-2xl mx-auto space-y-2">
               {messages.length === 0 ? (
                 <div className="text-center py-8">
