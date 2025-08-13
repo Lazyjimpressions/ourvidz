@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { PillButton } from '@/components/ui/pill-button';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ interface CompactAssetCardProps {
   onDownload: () => void;
   onDelete: () => void;
   selectionMode: boolean;
+  registerAssetRef?: (assetId: string, element: HTMLElement | null) => void;
 }
 
 export const CompactAssetCard = ({
@@ -22,15 +23,25 @@ export const CompactAssetCard = ({
   onPreview,
   onDownload,
   onDelete,
-  selectionMode
+  selectionMode,
+  registerAssetRef
 }: CompactAssetCardProps) => {
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // Long-press handling to avoid preview on selection
   const longPressTriggered = useRef(false);
   const longPressTimer = useRef<number | null>(null);
   const touchStart = useRef<{x: number; y: number} | null>(null);
+
+  // Register this card for lazy loading
+  useEffect(() => {
+    if (registerAssetRef && cardRef.current) {
+      registerAssetRef(asset.id, cardRef.current);
+      return () => registerAssetRef(asset.id, null);
+    }
+  }, [registerAssetRef, asset.id]);
 
   const handleImageError = () => {
     setImageError(true);
@@ -53,6 +64,7 @@ export const CompactAssetCard = ({
 
   return (
     <div
+      ref={cardRef}
       className="group relative bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -163,11 +175,26 @@ export const CompactAssetCard = ({
             )}
           </>
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            {asset.type === 'image' ? (
-              <Image className="h-8 w-8" />
+          <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/20">
+            {asset.url === undefined ? (
+              // Loading state
+              <div className="animate-pulse bg-muted/40 w-full h-full flex items-center justify-center">
+                {asset.type === 'image' ? (
+                  <Image className="h-8 w-8 text-muted-foreground/50" />
+                ) : (
+                  <Video className="h-8 w-8 text-muted-foreground/50" />
+                )}
+              </div>
             ) : (
-              <Video className="h-8 w-8" />
+              // Failed to load or no URL
+              <div className="flex flex-col items-center justify-center gap-2">
+                {asset.type === 'image' ? (
+                  <Image className="h-8 w-8" />
+                ) : (
+                  <Video className="h-8 w-8" />
+                )}
+                <span className="text-xs text-muted-foreground">Failed to load</span>
+              </div>
             )}
           </div>
         )}

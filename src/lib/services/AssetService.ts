@@ -485,7 +485,7 @@ export class AssetService {
       throw serviceError;
     }
 
-    // Transform images to UnifiedAsset format
+    // Transform images to UnifiedAsset format (no URL generation - handled by lazy loading)
     const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map((image) => {
       const metadata = image.metadata as any;
       const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
@@ -577,29 +577,23 @@ export class AssetService {
     // Combine all assets
     const allAssets = [...imageAssets, ...videoAssets];
 
-    // Use UnifiedUrlService for batch URL generation
-    console.log(`🚀 Generating URLs for ${allAssets.length} assets using UnifiedUrlService`);
-    const assetsWithUrls = await UnifiedUrlService.generateBatchUrls(allAssets);
-
-    console.log('✅ OPTIMIZED: Asset loading completed', {
-      totalAssets: assetsWithUrls.length,
-      images: assetsWithUrls.filter(a => a.type === 'image').length,
-      videos: assetsWithUrls.filter(a => a.type === 'video').length,
-      withUrls: assetsWithUrls.filter(a => a.url).length,
-      withErrors: assetsWithUrls.filter(a => a.error).length,
-      completed: assetsWithUrls.filter(a => a.status === 'completed').length
+    console.log('✅ OPTIMIZED: Asset loading completed (URLs will be loaded lazily)', {
+      totalAssets: allAssets.length,
+      images: allAssets.filter(a => a.type === 'image').length,
+      videos: allAssets.filter(a => a.type === 'video').length,
+      completed: allAssets.filter(a => a.status === 'completed').length
     });
 
     // Emit library-assets-ready event for real-time UI updates
     window.dispatchEvent(new CustomEvent('library-assets-ready', {
       detail: { 
-        assets: assetsWithUrls,
+        assets: allAssets,
         sessionOnly,
         source: 'AssetService.getUserAssetsOptimized'
       }
     }));
 
-    return assetsWithUrls;
+    return allAssets;
   }
 
   static async getUserAssets(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {

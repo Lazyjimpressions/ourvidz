@@ -74,7 +74,7 @@ export const OptimizedLibrary = () => {
   // Lazy URL generation and viewport detection
   const { lazyAssets, registerAssetRef, forceLoadAssetUrls } = useLazyAssetsV3({
     assets: filteredAssets,
-    prefetchThreshold: 400,
+    prefetchThreshold: isMobile ? 200 : 400, // More conservative on mobile
     batchSize: 6,
   });
 
@@ -92,14 +92,14 @@ export const OptimizedLibrary = () => {
       (entries) => {
         const first = entries[0];
         if (first.isIntersecting) {
-          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), filteredAssets.length));
+          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), lazyAssets.length));
         }
       },
       { root: null, rootMargin: '600px', threshold: 0 }
     );
     observer.observe(element);
     return () => observer.unobserve(element);
-  }, [filteredAssets.length, isMobile]);
+  }, [lazyAssets.length, isMobile]);
 
   // Calculate filter counts
   const filterCounts = useMemo(() => {
@@ -133,8 +133,8 @@ export const OptimizedLibrary = () => {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    setSelectedAssets(new Set(filteredAssets.map(asset => asset.id)));
-  }, [filteredAssets]);
+    setSelectedAssets(new Set(lazyAssets.map(asset => asset.id)));
+  }, [lazyAssets]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedAssets(new Set());
@@ -142,9 +142,9 @@ export const OptimizedLibrary = () => {
 
   // Asset actions
   const handlePreview = useCallback((asset: UnifiedAsset) => {
-    const index = filteredAssets.findIndex(a => a.id === asset.id);
+    const index = lazyAssets.findIndex(a => a.id === asset.id);
     setLightboxIndex(index);
-  }, [filteredAssets]);
+  }, [lazyAssets]);
 
   const handleDownload = useCallback(async (asset: UnifiedAsset) => {
     try {
@@ -184,17 +184,17 @@ export const OptimizedLibrary = () => {
   }, [refetch]);
 
   const handleBulkDownload = useCallback(async () => {
-    const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
+    const selectedAssetList = lazyAssets.filter(asset => selectedAssets.has(asset.id));
     for (const asset of selectedAssetList) {
       await handleDownload(asset);
     }
     handleClearSelection();
-  }, [filteredAssets, selectedAssets, handleDownload, handleClearSelection]);
+  }, [lazyAssets, selectedAssets, handleDownload, handleClearSelection]);
 
   const handleBulkDelete = useCallback(async () => {
     try {
       setIsDeleting(true);
-      const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
+      const selectedAssetList = lazyAssets.filter(asset => selectedAssets.has(asset.id));
       await Promise.all(
         selectedAssetList.map(asset => AssetService.deleteAsset(asset.id, asset.type))
       );
@@ -207,7 +207,7 @@ export const OptimizedLibrary = () => {
     } finally {
       setIsDeleting(false);
     }
-  }, [filteredAssets, selectedAssets, handleClearSelection, refetch]);
+  }, [lazyAssets, selectedAssets, handleClearSelection, refetch]);
 
   const handleAddToWorkspace = useCallback(() => {
     toast.info('Add to workspace feature coming soon');
@@ -276,7 +276,7 @@ export const OptimizedLibrary = () => {
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               totalAssets={rawAssets.length}
-              filteredCount={filteredAssets.length}
+              filteredCount={lazyAssets.length}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
             />
@@ -327,7 +327,7 @@ export const OptimizedLibrary = () => {
 
             {/* Main Library */}
             <div>
-              {filteredAssets.length === 0 ? (
+              {lazyAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
                     {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
@@ -336,7 +336,7 @@ export const OptimizedLibrary = () => {
               ) : viewMode === 'grid' ? (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                    {filteredAssets.slice(0, visibleCount).map((asset) => (
+                    {lazyAssets.slice(0, visibleCount).map((asset) => (
                       <CompactAssetCard
                         key={asset.id}
                         asset={asset}
@@ -346,6 +346,7 @@ export const OptimizedLibrary = () => {
                         onDelete={() => handleDelete(asset)}
                         onDownload={() => handleDownload(asset)}
                         selectionMode={selectedAssets.size > 0}
+                        registerAssetRef={registerAssetRef}
                       />
                     ))}
                   </div>
@@ -354,7 +355,7 @@ export const OptimizedLibrary = () => {
                 </>
               ) : (
                 <AssetListView
-                  assets={filteredAssets.map(asset => ({
+                  assets={lazyAssets.map(asset => ({
                     ...asset,
                     title: asset.title || 'Untitled',
                     thumbnailUrl: asset.thumbnailUrl || null,
@@ -383,21 +384,21 @@ export const OptimizedLibrary = () => {
         onBulkDownload={handleBulkDownload}
         onBulkDelete={handleBulkDelete}
         onAddToWorkspace={handleAddToWorkspace}
-        totalFilteredCount={filteredAssets.length}
+        totalFilteredCount={lazyAssets.length}
       />
 
       {/* Lightbox */}
       {lightboxIndex !== null && (
         isMobile ? (
           <MobileFullScreenViewer
-            assets={filteredAssets}
+            assets={lazyAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onDownload={handleDownload}
           />
         ) : (
           <LibraryLightbox
-            assets={filteredAssets}
+            assets={lazyAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onDownload={handleDownload}
