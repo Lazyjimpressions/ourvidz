@@ -340,8 +340,8 @@ export const useSceneGeneration = () => {
       // Generate optimized prompt
       const prompt = generateSDXLPrompt(sceneContext, options);
 
-      // Use appropriate format based on quality setting
-      const format = options.quality === 'fast' ? 'image_fast' : 'image_high';
+      // Use SDXL formats by default for scene prompts
+      const format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
 
       // Use character reference if available and requested
       let referenceImages = undefined;

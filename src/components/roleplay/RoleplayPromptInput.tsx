@@ -20,6 +20,7 @@ interface RoleplayPromptInputProps {
   onChange: (value: string) => void;
   onSend: () => void;
   onGenerateScene: () => void;
+  onQuickImage?: () => void;
   onOpenSettings: () => void;
   isDisabled?: boolean;
   characterName?: string;
@@ -32,6 +33,7 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
   onChange,
   onSend,
   onGenerateScene,
+  onQuickImage,
   onOpenSettings,
   isDisabled = false,
   characterName = 'Character',
@@ -85,6 +87,17 @@ export const RoleplayPromptInput: React.FC<RoleplayPromptInputProps> = ({
               disabled={isDisabled}
             />
           </div>
+
+          <Button
+            type="button"
+            onClick={onQuickImage}
+            disabled={isDisabled}
+            size="sm"
+            className="h-9 w-9 p-0 rounded-lg shadow-sm"
+            title="Quick image (SDXL fast)"
+          >
+            <Camera className="w-4 h-4" />
+          </Button>
 
           <Button
             type="submit"

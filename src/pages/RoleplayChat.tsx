@@ -29,6 +29,10 @@ import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { SceneContextHeader } from '@/components/roleplay/SceneContextHeader';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { supabase } from '@/integrations/supabase/client';
+import { useSceneGeneration } from '@/hooks/useSceneGeneration';
+import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Card } from '@/components/ui/card';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -47,17 +51,21 @@ const RoleplayChatInterface = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
-  // Roleplay Settings
-  const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
-    contentMode: 'sfw',
-    responseStyle: 'detailed',
-    responseLength: 'medium',
-    autoSceneGeneration: false,
-    voiceModel: 'none',
-    enhancementModel: 'qwen_instruct',
-    sceneQuality: 'fast',
-    messageFrequency: 5
-  });
+// Roleplay Settings
+const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
+  contentMode: 'sfw',
+  responseStyle: 'detailed',
+  responseLength: 'medium',
+  autoSceneGeneration: false,
+  voiceModel: 'none',
+  enhancementModel: 'qwen_instruct',
+  sceneQuality: 'fast',
+  messageFrequency: 5
+});
+
+// Quick image local state
+const [quickImagePending, setQuickImagePending] = useState(false);
+const [quickImageAsset, setQuickImageAsset] = useState<{assetId: string; imageUrl: string | null; bucket: string | null} | null>(null);
   
   // Get character and scene data from URL
   const characterId = searchParams.get('character');
@@ -129,8 +137,11 @@ const RoleplayChatInterface = () => {
     contentMode: roleplaySettings.contentMode
   });
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+const messagesEndRef = useRef<HTMLDivElement>(null);
+const inputRef = useRef<HTMLTextAreaElement>(null);
+
+// SDXL scene generation for quick image
+const { generateSceneImage, detectScene } = useSceneGeneration();
 
   // Auto-load character and initialize conversation when character is selected
   useEffect(() => {
@@ -336,11 +347,50 @@ const RoleplayChatInterface = () => {
 
   const handleGenerateScene = async () => {
     if (isTyping) return;
-    
     // Open scene narrative modal for text-based scene generation
     setShowSceneNarrativeModal(true);
   };
 
+  const handleQuickImage = async () => {
+    if (isTyping) return;
+
+    // Determine the best source text: input content or last assistant scene-like message
+    const sourceText = inputMessage.trim() ||
+      [...messages].reverse().find(m => m.sender === 'assistant' && detectScene(m.content))?.content || '';
+
+    if (!sourceText) {
+      toast({ title: 'No scene found', description: 'Type a description or let the AI reply first.' });
+      return;
+    }
+
+    // Show inline pending card and attach one-time completion listener
+    setQuickImagePending(true);
+    setQuickImageAsset(null);
+
+    const handleCompletion = (event: any) => {
+      const detail = event.detail || {};
+      if (detail?.assetId) {
+        setQuickImageAsset({ assetId: detail.assetId, imageUrl: detail.imageUrl || null, bucket: detail.bucket || null });
+        setQuickImagePending(false);
+        window.removeEventListener('generation-completed', handleCompletion);
+      }
+    };
+
+    window.addEventListener('generation-completed', handleCompletion);
+
+    try {
+      await generateSceneImage(sourceText, null, {
+        quality: 'fast',
+        style: 'lustify',
+        useCharacterReference: !!character?.reference_image_url,
+        characterId: character?.id,
+        conversationId: state.activeConversationId || undefined,
+      });
+    } catch (error) {
+      setQuickImagePending(false);
+      window.removeEventListener('generation-completed', handleCompletion);
+    }
+  };
   const handleCharacterAdded = (newCharacter: any) => {
     // Navigate to the new character
     const params = new URLSearchParams(searchParams);
@@ -478,6 +528,26 @@ const RoleplayChatInterface = () => {
                         roleplayTemplate={true}
                       />
                     ))}
+
+                    {/* Quick image inline status */}
+                    {quickImagePending && (
+                      <Card className="mt-2 p-3 max-w-xs bg-muted/30">
+                        <div className="flex items-center gap-2">
+                          <LoadingSpinner size="sm" />
+                          <span className="text-xs text-muted-foreground">Generating image...</span>
+                        </div>
+                      </Card>
+                    )}
+                    {quickImageAsset && !quickImagePending && (
+                      <div className="mt-2">
+                        <InlineImageDisplay
+                          assetId={quickImageAsset.assetId}
+                          imageUrl={quickImageAsset.imageUrl || undefined}
+                          bucket={quickImageAsset.bucket || undefined}
+                          onExpand={() => {}}
+                        />
+                      </div>
+                    )}
                   </>
                 )}
                 
@@ -503,6 +573,7 @@ const RoleplayChatInterface = () => {
               onChange={setInputMessage}
               onSend={handleSendMessage}
               onGenerateScene={handleGenerateScene}
+              onQuickImage={handleQuickImage}
               onOpenSettings={() => setShowSettingsModal(true)}
               isDisabled={isTyping || state.isLoadingMessage || !state.activeConversationId}
               characterName={character?.name}

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { ResponseTruncation } from './ResponseTruncation';
-import { SceneImageButton } from './SceneImageButton';
+
 import { InlineImageDisplay } from './InlineImageDisplay';
 import { ImageLightbox } from './ImageLightbox';
 import { useGeneratedMedia } from '@/contexts/GeneratedMediaContext';
@@ -224,18 +224,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
           )}
         </div>
 
-        {/* Scene Image Button - Only for AI messages in roleplay mode */}
-        {!isUser && mode === 'roleplay' && (
-          <div className="mt-2">
-            <SceneImageButton
-              messageContent={message.content}
-              characterId={roleplayTemplate?.characters?.[0]?.id}
-              conversationId={message.conversation_id}
-              character={roleplayTemplate?.characters?.[0]}
-              className="text-xs"
-            />
-          </div>
-        )}
 
         {/* Inline Image Display */}
         {mediaEntry?.status === 'pending' && (
