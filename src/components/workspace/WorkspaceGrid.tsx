@@ -92,14 +92,15 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
 
   // Scroll to job function
   const scrollToJob = (jobId: string) => {
-    const jobElement = document.querySelector(`[data-job-id="${jobId}"]`);
-    if (jobElement) {
-      jobElement.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start',
-        inline: 'nearest'
-      });
-    }
+    const jobElement = document.querySelector(`[data-job-id="${jobId}"]`) as HTMLElement | null;
+    if (!jobElement) return;
+
+    // Offset to account for fixed/sticky headers
+    const headerOffset = 96; // 24 * 4px = 96px (matches scroll-mt-24)
+    const elementTop = jobElement.getBoundingClientRect().top + window.pageYOffset;
+    const targetY = Math.max(0, elementTop - headerOffset);
+
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
   };
 
   // Get job metadata for display
@@ -144,7 +145,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   return (
     <div className="flex h-full">
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1">
         {/* Job Groups - 1x3 Layout */}
         {Object.entries(displayJobs).map(([jobId, jobItems]) => {
           const metadata = getJobMetadata(jobItems);
@@ -167,7 +168,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
           }
           
           return (
-            <div key={jobId} data-job-id={jobId} className="job-group mb-6 relative group">
+            <div key={jobId} data-job-id={jobId} className="job-group mb-6 relative group scroll-mt-24">
               {/* 1x3 Grid Layout - Fixed 3 columns */}
               <div className="grid grid-cols-3 gap-1 w-full">
                 {displayItems.map((item, index) => (
@@ -253,7 +254,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
 
       {/* Job Thumbnail Sidebar with Scroll-to Functionality */}
       {Object.keys(sessionGroups).length > 0 && (
-        <div className="w-20 border-l-0 bg-transparent p-2 space-y-2 overflow-y-auto">
+        <div className="w-20 sticky top-24 max-h-[calc(100vh-6rem)] self-start p-2 space-y-2 overflow-auto bg-transparent">
           {Object.entries(sessionGroups)
             .sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime())
             .map(([jobId, jobItems]) => {
