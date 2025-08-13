@@ -92,6 +92,13 @@ export const useSceneGeneration = () => {
     setIsAnalyzing(true);
     
     try {
+      // Pre-clean content: strip role labels like "**Narrator:**", "Mei:", etc. while keeping the text
+      const cleanedContent = content
+        .replace(/^\s*\*{2}?[A-Za-z][A-Za-z0-9 _-]{0,30}\*{2}?:\s*/gm, '') // **Name:**
+        .replace(/^\s*[A-Za-z][A-Za-z0-9 _-]{0,30}:\s*/gm, '')               // Name:
+        .replace(/\*\*/g, '');                                              // remove stray bold markers
+      const text = cleanedContent;
+
       // Extract characters from roleplay template with enhanced details
       const characters = roleplayTemplate?.characters?.map(char => ({
         name: char.name,
@@ -107,7 +114,7 @@ export const useSceneGeneration = () => {
       
       const actions: string[] = [];
       for (const pattern of actionPatterns) {
-        const matches = content.match(pattern) || [];
+        const matches = text.match(pattern) || [];
         actions.push(...matches.map(match => match.replace(/[*()]/g, '').trim()));
       }
 
@@ -119,7 +126,7 @@ export const useSceneGeneration = () => {
       
       let setting = 'intimate indoor setting';
       for (const pattern of settingPatterns) {
-        const matches = content.match(pattern);
+        const matches = text.match(pattern);
         if (matches && matches.length > 0) {
           setting = matches[0].toLowerCase().replace(/^(in|at|on|near)\s+/, '');
           break;
@@ -128,7 +135,7 @@ export const useSceneGeneration = () => {
 
       // Enhanced mood detection
       const moodPattern = /\b(romantic|passionate|intimate|seductive|tender|gentle|intense|playful|sultry|sensual|loving|caring|lustful|aroused)\b/gi;
-      const moodMatches = content.match(moodPattern) || [];
+      const moodMatches = text.match(moodPattern) || [];
       const mood = moodMatches[0]?.toLowerCase() || 'intimate';
 
       // Enhanced visual element extraction
@@ -145,7 +152,7 @@ export const useSceneGeneration = () => {
       
       const visualElements: string[] = [];
       for (const pattern of visualPatterns) {
-        const matches = content.match(pattern) || [];
+        const matches = text.match(pattern) || [];
         visualElements.push(...matches.map(match => match.toLowerCase()));
       }
 
@@ -155,7 +162,7 @@ export const useSceneGeneration = () => {
         /\b(nipple|clit|pussy|cock|dick|cum|orgasm|pleasure|desire|lust)\b/gi
       ];
       const isNSFW = roleplayTemplate?.isAdult === true || 
-                     nsfwPatterns.some(pattern => pattern.test(content));
+                     nsfwPatterns.some(pattern => pattern.test(text));
 
       const sceneContext: SceneContext = {
         characters: characters.slice(0, 2), // Limit to main characters for prompt efficiency
@@ -198,6 +205,10 @@ export const useSceneGeneration = () => {
         .slice(0, 6);
       
       characterTokens.push('1girl', 'beautiful woman', ...characterDesc);
+    }
+    // Ensure we always include baseline character tokens
+    if (characterTokens.length === 0) {
+      characterTokens.push('1girl', 'beautiful woman');
     }
 
     // Build scene and action tokens
@@ -251,7 +262,7 @@ export const useSceneGeneration = () => {
 
     // Build technical quality tokens
     const technicalTokens = [
-      'professional photography',
+      'studio photography',
       'cinematic lighting',
       'high detail',
       'sharp focus'
@@ -359,7 +370,8 @@ export const useSceneGeneration = () => {
           originalContent: content.slice(0, 200),
           sceneContext,
           characterContext: roleplayTemplate?.characters?.map(c => c.name).join(', ') || 'none',
-          options
+          options,
+          contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw'
         }
       });
 

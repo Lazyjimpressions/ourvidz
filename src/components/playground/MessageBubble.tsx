@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, User, Copy, RotateCw, RefreshCcw, Sparkles } from 'lucide-react';
+import { Bot, User, Copy, RefreshCcw, Sparkles, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
@@ -218,7 +218,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, mode = 'c
                 className="h-5 w-5 p-0 text-muted-foreground hover:text-foreground"
                 title="Generate scene image"
               >
-                <RotateCw className="h-3 w-3" />
+                <Camera className="h-3 w-3" />
               </Button>
             </>
           )}

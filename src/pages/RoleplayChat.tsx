@@ -99,7 +99,7 @@ const [quickImageAsset, setQuickImageAsset] = useState<{assetId: string; imageUr
   
   const { character, isLoading: characterLoading } = useCharacterData(characterId || undefined);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId || undefined);
-  const { startSceneWithNarration } = useSceneNarration();
+  const { startSceneWithNarration, generateSceneDescription } = useSceneNarration();
 
   // Playground context for conversations and messages
   const {
@@ -120,6 +120,7 @@ const [quickImageAsset, setQuickImageAsset] = useState<{assetId: string; imageUr
   }, [conversationIdParam, setActiveConversation]);
 
   const [sceneInitialized, setSceneInitialized] = useState(false);
+  const [openingNarrationSent, setOpeningNarrationSent] = useState(false);
 
   // Scene Management
   const {
@@ -192,6 +193,31 @@ const { generateSceneImage, detectScene } = useSceneGeneration();
       return () => clearTimeout(timer);
     }
   }, [state.activeConversationId, sceneId, character, sceneInitialized, messages.length]);
+
+  // Opening narration (no sceneId): narrator paints the opening scene in text only
+  useEffect(() => {
+    if (
+      !sceneId &&
+      state.activeConversationId &&
+      character &&
+      messages.length === 0 &&
+      !openingNarrationSent
+    ) {
+      (async () => {
+        try {
+          const prompt = await generateSceneDescription(
+            `Opening scene with ${character.name}`,
+            character.name,
+            { userCharacterId: userCharacterId || undefined, contentMode }
+          );
+          await sendMessage(prompt, { conversationId: state.activeConversationId, characterId: characterId || undefined });
+          setOpeningNarrationSent(true);
+        } catch (err) {
+          console.error('Failed to send opening narration:', err);
+        }
+      })();
+    }
+  }, [sceneId, state.activeConversationId, character, messages.length, openingNarrationSent, generateSceneDescription, sendMessage, userCharacterId, contentMode, characterId]);
 
   // Update scene state when sceneId changes
   useEffect(() => {
