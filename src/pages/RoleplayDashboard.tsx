@@ -11,7 +11,8 @@ import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { CharacterPreviewModal } from '@/components/roleplay/CharacterPreviewModal';
 import { Search, Plus } from 'lucide-react';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
-import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { useRecentScenes } from '@/hooks/useRecentScenes';
+import { useSceneNavigation } from '@/hooks/useSceneNavigation';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { Button } from '@/components/ui/button';
 
@@ -23,7 +24,8 @@ const RoleplayDashboard = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   
   const { characters, isLoading, likeCharacter, incrementInteraction } = usePublicCharacters();
-  const { scenes } = useCharacterScenes();
+  const { scenes: recentScenes, isLoading: scenesLoading } = useRecentScenes(12);
+  const { startSceneChat } = useSceneNavigation();
 
   // Get selected character data for modal
   const { character: selectedCharacterData } = useCharacterData(selectedCharacter || undefined);
@@ -105,16 +107,7 @@ const RoleplayDashboard = () => {
     return matchesSearch;
   });
 
-  // Transform scenes data for display
-  const displayScenes = useMemo(() => {
-    return scenes.map(scene => ({
-      id: scene.id,
-      title: scene.scene_prompt || 'Untitled Scene',
-      characterNames: [], // We'll need to fetch character names based on character_id
-      backgroundImage: scene.image_url,
-      gradient: 'bg-gradient-to-br from-primary/20 to-primary/10'
-    }));
-  }, [scenes]);
+  
 
   // Group characters by category
   const categorizedCharacters = useMemo(() => {
@@ -184,6 +177,27 @@ const RoleplayDashboard = () => {
               className="pl-10"
             />
           </div>
+
+          {/* Latest Scenes */}
+          {!scenesLoading && recentScenes.length > 0 && (
+            <section>
+              <SectionHeader title="Latest Scenes" count={recentScenes.length} className="mb-4" />
+              <HorizontalScroll>
+                {recentScenes.map((scene) => (
+                  <SceneCard
+                    key={scene.id}
+                    id={scene.id}
+                    title={scene.title}
+                    characterNames={scene.characterNames}
+                    backgroundImage={scene.backgroundImage}
+                    gradient="bg-gradient-to-br from-primary/20 to-primary/10"
+                    onClick={() => startSceneChat(scene.id, scene.characterId ? [{ id: scene.characterId }] : [])}
+                    className="w-64"
+                  />
+                ))}
+              </HorizontalScroll>
+            </section>
+          )}
 
           {/* For You Section */}
           {!isLoading && categorizedCharacters.forYou.length > 0 && (
