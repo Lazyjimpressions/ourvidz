@@ -4,12 +4,19 @@ import { useNavigate } from 'react-router-dom';
 export const useSceneNavigation = () => {
   const navigate = useNavigate();
 
-  const startSceneChat = useCallback((sceneId: string, participants: any[]) => {
+  const startSceneChat = useCallback((sceneId: string, participants: any[], characterId?: string) => {
     // Navigate to roleplay chat with scene context
     const params = new URLSearchParams({
       scene: sceneId,
-      participants: participants.map(p => p.id).join(',')
     });
+
+    const participantIds = (participants || []).map(p => p.id).filter(Boolean);
+    if (participantIds.length > 0) {
+      params.set('participants', participantIds.join(','));
+    }
+    if (characterId) {
+      params.set('character', characterId);
+    }
     
     navigate(`/roleplay/chat?${params.toString()}`);
   }, [navigate]);

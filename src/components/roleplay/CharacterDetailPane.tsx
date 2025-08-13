@@ -59,10 +59,10 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
 
   const handleSceneClick = (sceneId: string, participants?: any[]) => {
     if (participants && participants.length > 0) {
-      startSceneChat(sceneId, participants);
+      startSceneChat(sceneId, participants, characterId);
     } else {
       // Single character scene
-      startSceneChat(sceneId, [{ id: characterId, name: character?.name }]);
+      startSceneChat(sceneId, [{ id: characterId, name: character?.name }], characterId);
     }
   };
 

@@ -28,6 +28,7 @@ import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/R
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { SceneContextHeader } from '@/components/roleplay/SceneContextHeader';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { supabase } from '@/integrations/supabase/client';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,6 +68,25 @@ const RoleplayChatInterface = () => {
   
   // Parse participants from URL
   const participantIds = participantsParam ? participantsParam.split(',') : [];
+
+  // If sceneId is present but characterId is missing, resolve character from scene
+  useEffect(() => {
+    if (sceneId && !characterId) {
+      const resolveCharacter = async () => {
+        const { data, error } = await supabase
+          .from('character_scenes')
+          .select('character_id')
+          .eq('id', sceneId)
+          .maybeSingle();
+        if (!error && data?.character_id) {
+          const params = new URLSearchParams(searchParams);
+          params.set('character', data.character_id);
+          setSearchParams(params);
+        }
+      };
+      resolveCharacter();
+    }
+  }, [sceneId, characterId, searchParams, setSearchParams]);
   
   const { character, isLoading: characterLoading } = useCharacterData(characterId || undefined);
   const { scenes, isLoading: scenesLoading } = useCharacterScenes(characterId || undefined);

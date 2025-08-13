@@ -209,7 +209,14 @@ const RoleplayDashboard = () => {
                     characterNames={scene.characterNames}
                     backgroundImage={scene.backgroundImage}
                     gradient="bg-gradient-to-br from-primary/20 to-primary/10"
-                    onClick={() => startSceneChat(scene.id, scene.characterId ? [{ id: scene.characterId }] : [])}
+                    onClick={() => {
+                      if (scene.characterId) incrementInteraction(scene.characterId);
+                      startSceneChat(
+                        scene.id,
+                        scene.characterId ? [{ id: scene.characterId }] : [],
+                        scene.characterId
+                      );
+                    }}
                     onRegenerate={() => handleRegenerateScene(scene)}
                     isRegenerating={regeneratingSceneId === scene.id || isGenerating}
                     className="w-64"
