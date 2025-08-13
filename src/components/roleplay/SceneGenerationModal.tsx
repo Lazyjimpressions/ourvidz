@@ -44,6 +44,16 @@ export const SceneGenerationModal = ({
   const { characters: userCharacters } = useUserCharacters();
   const { characters: aiCharacters } = usePublicCharacters();
 
+  // Reset defaults when opened
+  React.useEffect(() => {
+    if (isOpen) {
+      setSelectedAICharacter1(characterId || '');
+      setSelectedAICharacter2('');
+      setSelectedUserCharacter('');
+      setIncludeNarrator(true);
+    }
+  }, [isOpen, characterId]);
+
   const handleGenerateScene = async () => {
     if (!prompt.trim()) return;
 
@@ -52,7 +62,7 @@ export const SceneGenerationModal = ({
       const selectedCharacters: CharacterParticipant[] = [];
       
       // Add AI characters
-      if (selectedAICharacter1) {
+      if (selectedAICharacter1 && selectedAICharacter1 !== 'none') {
         const char1 = aiCharacters.find(c => c.id === selectedAICharacter1);
         if (char1) {
           selectedCharacters.push({
@@ -66,7 +76,7 @@ export const SceneGenerationModal = ({
         }
       }
       
-      if (selectedAICharacter2) {
+      if (selectedAICharacter2 && selectedAICharacter2 !== 'none') {
         const char2 = aiCharacters.find(c => c.id === selectedAICharacter2);
         if (char2) {
           selectedCharacters.push({
@@ -82,10 +92,10 @@ export const SceneGenerationModal = ({
 
       await generateSceneNarrative(prompt, selectedCharacters, {
         includeNarrator,
-        includeUserCharacter: !!selectedUserCharacter,
+        includeUserCharacter: !!selectedUserCharacter && selectedUserCharacter !== 'none',
         characterId,
         conversationId,
-        userCharacterId: selectedUserCharacter
+        userCharacterId: selectedUserCharacter && selectedUserCharacter !== 'none' ? selectedUserCharacter : undefined
       });
 
       onClose();

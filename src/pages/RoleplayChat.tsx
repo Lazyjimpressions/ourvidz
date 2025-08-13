@@ -65,6 +65,7 @@ const RoleplayChatInterface = () => {
   const sceneId = searchParams.get('scene');
   const participantsParam = searchParams.get('participants');
   const contentMode = searchParams.get('mode') as 'sfw' | 'nsfw' || 'sfw';
+  const conversationIdParam = searchParams.get('conversation');
   
   // Parse participants from URL
   const participantIds = participantsParam ? participantsParam.split(',') : [];
@@ -103,8 +104,15 @@ const RoleplayChatInterface = () => {
     sendMessage,
   } = usePlayground();
 
+  // Adopt conversation from URL if present
+  useEffect(() => {
+    if (conversationIdParam) {
+      setActiveConversation(conversationIdParam);
+    }
+  }, [conversationIdParam, setActiveConversation]);
+
   const [sceneInitialized, setSceneInitialized] = useState(false);
-  
+
   // Scene Management
   const {
     sceneState,
@@ -144,6 +152,15 @@ const RoleplayChatInterface = () => {
       return () => clearTimeout(timer);
     }
   }, [character, state.activeConversationId, state.isLoadingMessage]);
+
+  // If Narrator is selected but participants include real characters, switch to the first participant
+  useEffect(() => {
+    if (character?.name?.toLowerCase() === 'narrator' && participantIds.length > 0) {
+      const params = new URLSearchParams(searchParams);
+      params.set('character', participantIds[0]);
+      setSearchParams(params);
+    }
+  }, [character?.name, participantIds, searchParams, setSearchParams]);
 
   // Handle scene initialization when conversation is created and scene is specified
   useEffect(() => {
