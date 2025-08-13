@@ -657,53 +657,70 @@ export const useRealtimeWorkspace = () => {
     }
   }, [activeSession?.id, invalidateWorkspaceQueries]);
 
-  // Delete tile - delete workspace item with enhanced error handling for failed jobs
+  // Delete tile - permanently delete asset using unified logic
   const deleteTile = useCallback(async (tile: MediaTile) => {
     if (deletingTiles.has(tile.id)) return;
     
-    console.log('🗑️ Starting workspace item deletion:', tile.id);
+    console.log('🗑️ Starting permanent asset deletion:', tile.id, tile.type);
     
     try {
       setDeletingTiles(prev => new Set([...prev, tile.id]));
       
-      // Delete workspace item - this should work even for failed jobs
-      const { error: workspaceError } = await (supabase as any)
-        .from('workspace_items')
-        .delete()
-        .eq('id', tile.id);
-      
-      if (workspaceError) {
-        console.warn('⚠️ Workspace item deletion failed, trying alternate approach:', workspaceError);
+      // First, try to delete the actual asset permanently using AssetService
+      try {
+        const AssetService = await import('@/lib/services/AssetService').then(m => m.AssetService);
+        await AssetService.deleteAsset(tile.originalAssetId || tile.id, tile.type);
+        console.log('✅ Asset permanently deleted via AssetService');
+      } catch (assetError) {
+        console.warn('⚠️ AssetService deletion failed, trying workspace-only deletion:', assetError);
         
-        // For failed jobs, try to also clean up related job records
-        if (tile.generationParams?.job_id) {
-          const { error: jobError } = await (supabase as any)
-            .from('jobs')
-            .delete()
-            .eq('id', tile.generationParams.job_id);
+        // Fallback: delete only from workspace if asset deletion fails
+        const { error: workspaceError } = await (supabase as any)
+          .from('workspace_items')
+          .delete()
+          .eq('id', tile.id);
+        
+        if (workspaceError) {
+          console.warn('⚠️ Workspace item deletion also failed:', workspaceError);
           
-          if (jobError) {
-            console.warn('⚠️ Job cleanup also failed:', jobError);
+          // Last resort: try to clean up related job records for failed jobs
+          if (tile.generationParams?.job_id) {
+            try {
+              await (supabase as any)
+                .from('jobs')
+                .delete()
+                .eq('id', tile.generationParams.job_id);
+              console.log('🧹 Cleaned up related job record as fallback');
+            } catch (jobError) {
+              console.warn('⚠️ Job cleanup also failed:', jobError);
+            }
           }
+          
+          throw workspaceError;
         }
-        
-        throw workspaceError;
       }
       
-      // ✅ FIX: Use coordinated invalidation for all workspace queries
-      console.log('🔄 QUERY INVALIDATION: Deleting tile, invalidating queries');
+      // Immediately invalidate all workspace queries for real-time updates
+      console.log('🔄 QUERY INVALIDATION: Asset deleted, invalidating all workspace queries');
       invalidateWorkspaceQueries();
+      
+      // Dispatch custom event for other components to react
+      window.dispatchEvent(new CustomEvent('workspace-item-deleted', { 
+        detail: { tileId: tile.id, assetId: tile.originalAssetId || tile.id, type: tile.type } 
+      }));
       
       toast.success(`${tile.type === 'image' ? 'Image' : 'Video'} deleted successfully`);
       
     } catch (error) {
-      console.error('❌ Workspace deletion failed:', error);
+      console.error('❌ Asset deletion failed:', error);
       
       const errorMessage = error instanceof Error 
         ? error.message.includes('Failed to fetch') 
           ? 'Network error - please check your connection'
           : error.message.includes('permission')
           ? 'Permission denied - please try again'
+          : error.message.includes('not found')
+          ? 'Item already deleted or not found'
           : `Deletion failed: ${error.message}`
         : 'Failed to delete item - unknown error';
         

@@ -1091,7 +1091,24 @@ export class AssetService {
         }
       }
 
-      // Step 2: Delete from database (jobs will be cleaned up by CASCADE)
+      // Step 2: Handle failed jobs - skip storage cleanup if no valid URLs
+      const isFailed = assetStatus === 'failed' || assetStatus === 'error';
+      const hasValidUrl = assetType === 'image' 
+        ? (assetData?.image_url && assetData.image_url !== '' && !assetData.image_url.includes('undefined'))
+        : (assetData?.video_url && assetData.video_url !== '' && !assetData.video_url.includes('undefined'));
+      
+      if (isFailed && !hasValidUrl) {
+        console.log('⚠️ Failed job without valid URL - skipping storage cleanup, only database cleanup');
+        
+        // For failed jobs, also try to delete from workspace_items if present
+        try {
+          await supabase.from('workspace_items').delete().eq('job_id', jobData?.id || assetId);
+        } catch (workspaceError) {
+          console.warn('⚠️ Workspace cleanup failed (non-critical):', workspaceError);
+        }
+      }
+
+      // Step 3: Delete from database (jobs will be cleaned up by CASCADE)
       const deletePromise = assetType === 'image' 
         ? supabase.from('images').delete().eq('id', assetId)
         : supabase.from('videos').delete().eq('id', assetId);
@@ -1102,9 +1119,9 @@ export class AssetService {
         throw deleteError;
       }
 
-      // Step 3: Clean up storage files in parallel (non-blocking)
+      // Step 4: Clean up storage files in parallel (non-blocking)
       // Skip storage cleanup for failed jobs that may not have valid URLs
-      if (assetData && assetStatus !== 'failed') {
+      if (assetData && !isFailed && hasValidUrl) {
         const storageCleanupPromises: Promise<any>[] = [];
         
         if (assetType === 'image') {
