@@ -518,6 +518,22 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           finalCameraAngle,
           finalShotType
         });
+      } else if (exactCopyMode && (referenceImageUrl || referenceImage) && !referenceMetadata) {
+        // ✅ MINIMAL FIX: Handle uploaded images without metadata (the broken case)
+        console.log('🎯 EXACT COPY MODE - UPLOADED REFERENCE (no metadata)');
+        
+        if (prompt.trim()) {
+          // User provided modification
+          finalPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+        } else {
+          // Promptless exact copy
+          finalPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional';
+        }
+        
+        console.log('🎯 EXACT COPY MODE - UPLOADED REFERENCE:', {
+          finalPrompt,
+          hasModification: !!prompt.trim()
+        });
       } else {
         // Normal generation flow
         finalPrompt = prompt.trim() || '';

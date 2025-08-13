@@ -64,52 +64,110 @@ serve(async (req) => {
     if (exactCopyMode) {
       console.log('🎯 EXACT COPY MODE: Using subject preservation enhancement for image-to-image reference')
       
-      // Detect if this is a modification prompt (change, add, remove, etc.)
-      const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
-      const isModificationPrompt = modificationKeywords.some(keyword => 
-        prompt.toLowerCase().includes(keyword)
-      )
+      // Check if this is an uploaded reference (no original enhanced prompt) vs workspace/library reference
+      const hasOriginalEnhancedPrompt = requestBody.metadata?.originalEnhancedPrompt && requestBody.metadata.originalEnhancedPrompt.trim().length > 0;
       
-      let enhancedPrompt: string
-      
-      if (isModificationPrompt && prompt.trim().length > 3) {
-        // This is a modification request - enhance while preserving subject
-        console.log('🔄 Processing modification prompt in exact copy mode')
+      if (hasOriginalEnhancedPrompt) {
+        // ✅ WORKSPACE/LIBRARY REFERENCE: Use original enhanced prompt as base
+        console.log('🎯 EXACT COPY MODE: Using original enhanced prompt from reference metadata')
         
-        // Create subject-preserving enhancement
-        const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition`
+        // Detect if this is a modification prompt (change, add, remove, etc.)
+        const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
+        const isModificationPrompt = modificationKeywords.some(keyword => 
+          prompt.toLowerCase().includes(keyword)
+        )
         
-        enhancedPrompt = subjectPreservationPrompt
-      } else {
-        // Empty or minimal prompt - just preserve the subject exactly
-        enhancedPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, high quality'
-      }
-      
-      return new Response(JSON.stringify({
-        success: true,
-        original_prompt: prompt,
-        enhanced_prompt: enhancedPrompt,
-        enhancement_strategy: 'exact_copy_subject_preservation',
-        enhancement_metadata: {
-          original_length: prompt.length,
-          enhanced_length: enhancedPrompt.length,
-          expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
-          job_type: jobType,
-          format,
-          quality,
-          content_mode: contentType || 'nsfw',
-          template_name: 'exact_copy_subject_preservation',
-          model_used: 'subject_preservation',
-          token_count: Math.ceil(enhancedPrompt.length / 4),
-          compression_applied: false,
-          fallback_level: 0,
-          exact_copy_mode: true,
-          is_modification_prompt: isModificationPrompt,
-          execution_time_ms: 5
+        let enhancedPrompt: string
+        
+        if (isModificationPrompt && prompt.trim().length > 3) {
+          // This is a modification request - enhance while preserving subject
+          console.log('🔄 Processing modification prompt in exact copy mode')
+          
+          // Create subject-preserving enhancement
+          const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition`
+          
+          enhancedPrompt = subjectPreservationPrompt
+        } else {
+          // Empty or minimal prompt - use original enhanced prompt as-is
+          enhancedPrompt = requestBody.metadata.originalEnhancedPrompt
         }
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+        
+        return new Response(JSON.stringify({
+          success: true,
+          original_prompt: prompt,
+          enhanced_prompt: enhancedPrompt,
+          enhancement_strategy: 'exact_copy_original_prompt',
+          enhancement_metadata: {
+            original_length: prompt.length,
+            enhanced_length: enhancedPrompt.length,
+            expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
+            job_type: jobType,
+            format,
+            quality,
+            content_mode: contentType || 'nsfw',
+            template_name: 'exact_copy_workspace_reference',
+            model_used: 'reference_metadata',
+            token_count: Math.ceil(enhancedPrompt.length / 4),
+            compression_applied: false,
+            fallback_level: 0,
+            exact_copy_mode: true,
+            is_modification_prompt: isModificationPrompt,
+            execution_time_ms: 5
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      } else {
+        // ✅ UPLOADED REFERENCE: No original enhanced prompt available
+        console.log('🎯 EXACT COPY MODE: Uploaded reference - no original enhanced prompt available')
+        
+        // Detect if this is a modification prompt (change, add, remove, etc.)
+        const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
+        const isModificationPrompt = modificationKeywords.some(keyword => 
+          prompt.toLowerCase().includes(keyword)
+        )
+        
+        let enhancedPrompt: string
+        
+        if (isModificationPrompt && prompt.trim().length > 3) {
+          // This is a modification request - enhance while preserving subject
+          console.log('🔄 Processing modification prompt for uploaded reference')
+          
+          // Create subject-preserving enhancement for uploaded reference
+          const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`
+          
+          enhancedPrompt = subjectPreservationPrompt
+        } else {
+          // Empty or minimal prompt - just preserve the subject exactly
+          enhancedPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional'
+        }
+        
+        return new Response(JSON.stringify({
+          success: true,
+          original_prompt: prompt,
+          enhanced_prompt: enhancedPrompt,
+          enhancement_strategy: 'exact_copy_uploaded_reference',
+          enhancement_metadata: {
+            original_length: prompt.length,
+            enhanced_length: enhancedPrompt.length,
+            expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
+            job_type: jobType,
+            format,
+            quality,
+            content_mode: contentType || 'nsfw',
+            template_name: 'exact_copy_uploaded_reference',
+            model_used: 'subject_preservation',
+            token_count: Math.ceil(enhancedPrompt.length / 4),
+            compression_applied: false,
+            fallback_level: 0,
+            exact_copy_mode: true,
+            is_modification_prompt: isModificationPrompt,
+            execution_time_ms: 5
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
     }
 
     // Initialize Dynamic Enhancement Orchestrator

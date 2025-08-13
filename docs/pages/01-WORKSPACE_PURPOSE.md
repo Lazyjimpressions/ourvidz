@@ -483,7 +483,32 @@ console.log('🎯 EDGE FUNCTION:', {
 });
 ```
 
-#### **Issue 2: Original Prompt Not Displayed**
+#### **Issue 2: Uploaded Images Not Working in Exact Copy Mode**
+**Symptoms**: Uploaded images don't produce exact copies, system falls back to normal generation
+**Causes**: 
+- Uploaded images have no metadata (no `originalEnhancedPrompt`)
+- System requires `referenceMetadata` to enable exact copy mode
+- Fallback logic not handling uploaded references properly
+
+**Solutions**:
+```typescript
+// ✅ MINIMAL FIX: System now handles uploaded references without metadata
+if (exactCopyMode && referenceMetadata) {
+  // Workspace/library reference with metadata (unchanged - already working)
+  finalPrompt = referenceMetadata.originalEnhancedPrompt;
+} else if (exactCopyMode && (referenceImageUrl || referenceImage) && !referenceMetadata) {
+  // ✅ Uploaded reference without metadata (NEW FIX)
+  finalPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional';
+}
+```
+
+**What Was Fixed**:
+- Added minimal case for uploaded images without metadata
+- Preserved all existing working functionality
+- No changes to reference strength values or style controls
+- Only fixed the specific broken case
+
+#### **Issue 3: Original Prompt Not Displayed**
 **Symptoms**: No original prompt shown in control panel
 **Causes**:
 - Asset doesn't have enhanced_prompt field

@@ -537,6 +537,28 @@ serve(async (req)=>{
         length: prompt.length,
         hasModification: !!originalPrompt?.trim()
       });
+    } else if (metadata?.exact_copy_mode && (metadata?.reference_image || metadata?.reference_url) && !metadata?.originalEnhancedPrompt) {
+      // ✅ MINIMAL FIX: Handle uploaded references without metadata (the broken case)
+      console.log('🎯 EXACT COPY MODE: Uploaded reference - no original enhanced prompt available');
+      
+      if (originalPrompt && originalPrompt.trim()) {
+        // User provided modification - create subject-preserving prompt
+        prompt = `maintain the exact same subject, person, face, and body from the reference image, only ${originalPrompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+        console.log('🎯 EXACT COPY MODE: Created modification prompt for uploaded reference:', {
+          userModification: originalPrompt,
+          generatedPrompt: prompt.substring(0, 100) + '...'
+        });
+      } else {
+        // Promptless exact copy - use minimal preservation prompt
+        prompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional';
+        console.log('🎯 EXACT COPY MODE: Created promptless exact copy prompt for uploaded reference');
+      }
+      
+      console.log('📝 Uploaded reference prompt processed:', { 
+        source: 'uploadedReference',
+        length: prompt.length,
+        hasModification: !!originalPrompt?.trim()
+      });
     } else if (!prompt) {
       // CRITICAL FIX: Use originalPrompt first, then metadata.prompt, never UI controls as main prompt
       prompt = originalPrompt || metadata?.prompt || '';
