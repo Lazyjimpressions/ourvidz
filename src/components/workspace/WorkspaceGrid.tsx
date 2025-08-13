@@ -253,7 +253,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
 
       {/* Job Thumbnail Sidebar with Scroll-to Functionality */}
       {Object.keys(sessionGroups).length > 0 && (
-        <div className="w-20 border-l border-gray-700 bg-gray-800/50 p-2 space-y-2 overflow-y-auto">
+        <div className="w-20 border-l-0 bg-transparent p-2 space-y-2 overflow-y-auto">
           {Object.entries(sessionGroups)
             .sort(([, a], [, b]) => new Date(b[0].createdAt).getTime() - new Date(a[0].createdAt).getTime())
             .map(([jobId, jobItems]) => {
@@ -265,7 +265,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
               <div 
                 key={jobId}
                 className={`relative group cursor-pointer transition-all duration-200 ${
-                  isActive ? 'ring-2 ring-blue-500' : 'hover:ring-1 hover:ring-gray-500'
+                  isActive ? 'ring-2 ring-primary' : 'hover:ring-1 hover:ring-border/40'
                 }`}
                 onClick={() => {
                   // Scroll to job instead of filtering
@@ -277,7 +277,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 title={`Scroll to ${metadata.isVideoJob ? 'video' : 'image'} job`}
               >
                 {/* Thumbnail Container */}
-                <div className="w-16 h-16 rounded overflow-hidden bg-gray-700 relative">
+                <div className="w-16 h-16 rounded overflow-hidden bg-card/10 relative">
                    {/* Sidebar thumbnail - always show an image (real thumbnail for video if available, else placeholder) */}
                    {thumbnailItem?.type === 'video' ? (
                      <div className="relative w-full h-full">
@@ -293,17 +293,17 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                          }}
                        />
                        {/* Video Play Overlay */}
-                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                         <div className="bg-black/60 rounded-full p-1">
-                           <Play className="w-4 h-4 text-white" fill="white" />
+                       <div className="absolute inset-0 flex items-center justify-center bg-background/20">
+                         <div className="bg-background/60 rounded-full p-1">
+                           <Play className="w-4 h-4 text-foreground" fill="currentColor" />
                          </div>
                        </div>
                        {/* Video Duration */}
-                       {thumbnailItem.duration && (
-                         <div className="absolute bottom-1 left-1 bg-black/60 text-white text-xs px-1 rounded">
-                           {thumbnailItem.duration}s
-                         </div>
-                       )}
+                         {thumbnailItem.duration && (
+                           <div className="absolute bottom-1 left-1 bg-background/60 text-foreground text-xs px-1 rounded">
+                             {thumbnailItem.duration}s
+                           </div>
+                         )}
                        {/* Fallback for failed loads */}
                        <div className="fallback-placeholder absolute inset-0 bg-muted animate-pulse flex items-center justify-center" style={{ display: 'none' }}>
                          <VideoIcon className="w-4 h-4 text-muted-foreground" />
@@ -388,7 +388,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
 
                 {/* Active Indicator */}
                 {isActive && (
-                  <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-full" />
+                  <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-full" />
                 )}
               </div>
             );

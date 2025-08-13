@@ -117,7 +117,7 @@ const ReferenceImageUpload: React.FC<{
 
   return (
     <div 
-      className={`border border-border rounded h-9 w-12 transition-all duration-200 overflow-hidden ${
+      className={`border border-border/30 bg-muted/10 rounded h-9 w-12 transition-all duration-200 overflow-hidden ${
         isDragOver ? 'border-primary bg-primary/10' : ''
       }`}
       onDragOver={handleDragOver}
@@ -139,7 +139,7 @@ const ReferenceImageUpload: React.FC<{
           </button>
         </div>
       ) : (
-        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:text-foreground transition-colors bg-muted/50">
+        <label className="cursor-pointer flex flex-col items-center justify-center w-full h-full text-muted-foreground hover:text-foreground transition-colors bg-muted/20">
           <Camera className="w-2.5 h-2.5 mb-0.5" />
           <span className="text-[9px]">{label}</span>
           <input 
@@ -393,7 +393,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   return (
       <div className="fixed bottom-4 left-4 right-4 z-50">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-background/95 backdrop-blur-sm border border-border rounded-lg shadow-lg px-3 py-2">
+        <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-3 py-2">
           <div className="space-y-1.5">
             {/* Row 1: IMAGE button + Reference Images + Prompt Input */}
             <div className="flex items-center gap-1.5">
