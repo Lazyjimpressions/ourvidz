@@ -193,44 +193,75 @@ export const useOptimizedWorkspace = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        // Get all workspace items for this job
-        const { data: workspaceItems, error: fetchError } = await supabase
+        // Validate job ID - reject synthetic "single-" IDs
+        if (jobId.startsWith('single-')) {
+          throw new Error('Cannot delete synthetic job ID. Use individual item deletion instead.');
+        }
+
+        // First, get all images/videos associated with this job ID from metadata
+        const { data: images } = await supabase
+          .from('images')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('metadata->>job_id', jobId);
+
+        const { data: videos } = await supabase
+          .from('videos')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('metadata->>job_id', jobId);
+
+        // Get workspace items for this job (may not exist if using library-first approach)
+        const { data: workspaceItems } = await supabase
           .from('workspace_items')
           .select('id, content_type')
           .eq('job_id', jobId)
           .eq('user_id', user.id);
 
-        if (fetchError) throw fetchError;
-
-        // Delete workspace items
-        const { error: workspaceError } = await supabase
-          .from('workspace_items')
-          .delete()
-          .eq('job_id', jobId)
-          .eq('user_id', user.id);
-
-        if (workspaceError) throw workspaceError;
-
-        // Delete from content tables
-        for (const item of workspaceItems || []) {
-          const table = item.content_type === 'video' ? 'videos' : 'images';
-          await supabase
-            .from(table)
+        // Delete images permanently
+        if (images && images.length > 0) {
+          const { error: deleteImagesError } = await supabase
+            .from('images')
             .delete()
-            .eq('id', item.id)
+            .in('id', images.map(img => img.id))
             .eq('user_id', user.id);
+          if (deleteImagesError) throw deleteImagesError;
         }
 
-        // Delete job record
+        // Delete videos permanently  
+        if (videos && videos.length > 0) {
+          const { error: deleteVideosError } = await supabase
+            .from('videos')
+            .delete()
+            .in('id', videos.map(vid => vid.id))
+            .eq('user_id', user.id);
+          if (deleteVideosError) throw deleteVideosError;
+        }
+
+        // Delete workspace items (if any exist)
+        if (workspaceItems && workspaceItems.length > 0) {
+          const { error: workspaceError } = await supabase
+            .from('workspace_items')
+            .delete()
+            .eq('job_id', jobId)
+            .eq('user_id', user.id);
+          if (workspaceError) throw workspaceError;
+        }
+
+        // Delete job record (handle case where job might not exist)
         const { error: jobError } = await supabase
           .from('jobs')
           .delete()
           .eq('id', jobId)
           .eq('user_id', user.id);
 
-        if (jobError) throw jobError;
+        // Don't throw error if job doesn't exist - it might have been a failed job
+        if (jobError && !jobError.message.includes('No rows')) {
+          console.warn('Job deletion warning:', jobError);
+        }
 
-        toast.success('Job deleted permanently');
+        const totalDeleted = (images?.length || 0) + (videos?.length || 0);
+        toast.success(`Job deleted permanently (${totalDeleted} items)`);
         return true;
       },
       'Failed to delete job permanently',

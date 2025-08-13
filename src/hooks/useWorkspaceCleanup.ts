@@ -13,39 +13,66 @@ export const useWorkspaceCleanup = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get current active session
-      const { data: activeSession } = await supabase
-        .from('workspace_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
+      console.log('🔥 Force clearing workspace for user:', user.id);
 
-      if (!activeSession) {
-        toast.info('No active workspace session found');
-        return;
+      // Use library-first approach - clear workspace by setting dismissed flags
+      const { data: images } = await supabase
+        .from('images')
+        .select('id, metadata')
+        .eq('user_id', user.id)
+        .is('metadata->workspace_dismissed', null);
+
+      const { data: videos } = await supabase
+        .from('videos')
+        .select('id, metadata')  
+        .eq('user_id', user.id)
+        .is('metadata->workspace_dismissed', null);
+
+      // Clear images from workspace
+      if (images && images.length > 0) {
+        const { error: imageError } = await supabase
+          .from('images')
+          .update({ 
+            metadata: {
+              workspace_dismissed: true,
+              dismissed_at: new Date().toISOString()
+            }
+          })
+          .in('id', images.map(img => img.id))
+          .eq('user_id', user.id);
+
+        if (imageError) throw imageError;
       }
 
-      // Clear ALL workspace items for this session
-      const { error: itemsError } = await supabase
-        .from('workspace_items')
-        .delete()
-        .eq('session_id', activeSession.id);
+      // Clear videos from workspace
+      if (videos && videos.length > 0) {
+        const { error: videoError } = await supabase
+          .from('videos')
+          .update({
+            metadata: {
+              workspace_dismissed: true,
+              dismissed_at: new Date().toISOString()
+            }
+          })
+          .in('id', videos.map(vid => vid.id))
+          .eq('user_id', user.id);
 
-      if (itemsError) throw itemsError;
+        if (videoError) throw videoError;
+      }
 
-      // Clean up orphaned and failed jobs
+      // Clean up failed jobs specifically
       const { error: jobsError } = await supabase
         .from('jobs')
         .delete()
-        .eq('workspace_session_id', activeSession.id)
+        .eq('user_id', user.id)
         .in('status', ['failed', 'processing', 'queued']);
 
       if (jobsError) {
         console.warn('⚠️ Failed to clean up orphaned jobs:', jobsError);
       }
 
-      toast.success('Workspace force cleared - all items removed');
+      const totalCleared = (images?.length || 0) + (videos?.length || 0);
+      toast.success(`Workspace force cleared - ${totalCleared} items removed`);
       
       // Invalidate queries to refresh UI
       window.dispatchEvent(new CustomEvent('workspace-force-cleared'));

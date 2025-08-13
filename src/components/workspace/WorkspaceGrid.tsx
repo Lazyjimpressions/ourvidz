@@ -222,7 +222,18 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                 )}
                 {onDeleteJob && (
                   <button
-                    onClick={() => onDeleteJob(jobId)}
+                    onClick={() => {
+                      // Handle synthetic "single-" job IDs - route to individual item deletion
+                      if (jobId.startsWith('single-')) {
+                        const itemId = jobId.replace('single-', '');
+                        const item = jobItems.find(item => item.id === itemId);
+                        if (item && onDelete) {
+                          onDelete(item);
+                        }
+                      } else {
+                        onDeleteJob(jobId);
+                      }
+                    }}
                     className="w-5 h-5 bg-red-600/80 hover:bg-red-700/90 border border-red-500/50 rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
                     title="Delete job permanently"
                     disabled={isDeleting.has(jobId)}
@@ -350,7 +361,16 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onDeleteJob(jobId);
+                          // Handle synthetic "single-" job IDs - route to individual item deletion
+                          if (jobId.startsWith('single-')) {
+                            const itemId = jobId.replace('single-', '');
+                            const item = jobItems.find(item => item.id === itemId);
+                            if (item && onDelete) {
+                              onDelete(item);
+                            }
+                          } else {
+                            onDeleteJob(jobId);
+                          }
                         }}
                         className="w-4 h-4 bg-red-600/90 hover:bg-red-700 border border-red-500/50 rounded-full flex items-center justify-center transition-all shadow-sm"
                         disabled={isDeleting.has(jobId)}

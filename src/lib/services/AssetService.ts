@@ -1091,14 +1091,14 @@ export class AssetService {
         }
       }
 
-      // Step 2: Handle failed jobs - skip storage cleanup if no valid URLs
+      // Step 2: Enhanced handling for failed jobs and invalid URLs
       const isFailed = assetStatus === 'failed' || assetStatus === 'error';
       const hasValidUrl = assetType === 'image' 
-        ? (assetData?.image_url && assetData.image_url !== '' && !assetData.image_url.includes('undefined'))
-        : (assetData?.video_url && assetData.video_url !== '' && !assetData.video_url.includes('undefined'));
+        ? (assetData?.image_url && assetData.image_url !== '' && !assetData.image_url.includes('undefined') && !assetData.image_url.includes('placeholder'))
+        : (assetData?.video_url && assetData.video_url !== '' && !assetData.video_url.includes('undefined') && !assetData.video_url.includes('placeholder'));
       
-      if (isFailed && !hasValidUrl) {
-        console.log('⚠️ Failed job without valid URL - skipping storage cleanup, only database cleanup');
+      if (isFailed || !hasValidUrl) {
+        console.log('⚠️ Failed job or invalid URL - skipping storage cleanup, performing database cleanup only');
         
         // For failed jobs, also try to delete from workspace_items if present
         try {
