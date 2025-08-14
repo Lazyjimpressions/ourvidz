@@ -44,7 +44,7 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Unified asset loading with optimized lazy loading for all devices
+  // Unified asset loading (eager URLs for stability)
   const {
     data: rawAssets = [],
     isLoading,
@@ -53,27 +53,16 @@ export const OptimizedLibrary = () => {
   } = useQuery({
     queryKey: ['library-assets'],
     queryFn: async () => {
-      console.log('🔄 Loading assets with optimized approach');
-      const allAssets = await AssetService.getUserAssetsOptimized();
-      console.log(`✅ AssetService returned ${allAssets.length} assets`);
+      console.log('📚 Loading assets with eager URL generation for stability');
+      const allAssets = await AssetService.getUserAssets(false);
+      console.log(`✅ AssetService returned ${allAssets.length} assets with URLs`);
       return allAssets;
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
 
-  // Lazy loading for all devices
-  const {
-    lazyAssets: lazyAssetsData = [],
-    registerAssetRef: lazyRegisterAssetRef
-  } = useLazyAssetsV3({ 
-    assets: rawAssets, 
-    enabled: true,
-    prefetchThreshold: 100,
-    batchSize: 6
-  });
-
-  // Search and filtering - use raw assets to avoid dependency issues
+  // Search and filtering - use raw assets that already include URLs
   const {
     searchState,
     filteredAssets,
@@ -82,19 +71,9 @@ export const OptimizedLibrary = () => {
     clearSearch,
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
-  
-  // Merge lazy URLs back into filtered assets for display
-  const finalAssets = useMemo(() => {
-    return filteredAssets.map(asset => {
-      const lazyAsset = lazyAssetsData.find(la => la.id === asset.id);
-      if (lazyAsset && lazyAsset.urlsLoaded) {
-        return { ...asset, url: lazyAsset.url, thumbnailUrl: lazyAsset.thumbnailUrl };
-      }
-      return asset;
-    });
-  }, [filteredAssets, lazyAssetsData]);
-  
-  const finalRegisterAssetRef = lazyRegisterAssetRef;
+
+  const finalAssets = filteredAssets;
+  const finalRegisterAssetRef = () => {};
 
   // Reset visible items when results change
   useEffect(() => {
