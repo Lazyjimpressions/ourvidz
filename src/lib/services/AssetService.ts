@@ -496,6 +496,24 @@ export class AssetService {
 
       // Include job information in metadata with enhanced prompt fallback
       const resolvedJobId = (image as any)?.job_id || jobData?.id || metadata?.job_id || null;
+      // Carry through root-level image_urls for SDXL jobs so URL service can sign them
+      const rootImageUrls = (image as any)?.image_urls && Array.isArray((image as any).image_urls)
+        ? (image as any).image_urls
+        : undefined;
+
+      // Build enhanced metadata and ensure bucket hint exists
+      const inferBucket = () => {
+        const quality = image.quality || jobData?.quality || 'fast';
+        const jobType = jobData?.job_type || '';
+        if (jobType.startsWith('sdxl_')) {
+          return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        }
+        if (jobType.includes('enhanced') || jobType.includes('7b')) {
+          return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
+        }
+        return quality === 'high' ? 'image_high' : 'image_fast';
+      };
+
       const enhancedMetadata = {
         ...metadata,
         // Prefer the database job_id; fall back to joined job id; never fall back to image id (prevents false single-item groups)
@@ -507,8 +525,16 @@ export class AssetService {
           // Ensure enhanced_prompt is available in job metadata for exact copy
           enhanced_prompt: jobData?.metadata?.enhanced_prompt || image.enhanced_prompt,
           original_prompt: jobData?.metadata?.original_prompt || image.prompt
-        }
+        },
+        // Attach SDXL array to metadata so UnifiedUrlService can read it
+        ...(rootImageUrls ? { image_urls: rootImageUrls } : {}),
+        // Provide bucket hint if missing to avoid URL generation failure
+        ...(metadata?.bucket ? {} : { bucket: inferBucket() })
       };
+
+      // Select a raw path we can sign later: prefer single image_url, else first of image_urls
+      const rawUrlPath: string | undefined = (image as any).image_url
+        || (rootImageUrls && rootImageUrls.length > 0 ? rootImageUrls[0] : undefined);
 
       return {
         id: image.id,
@@ -526,8 +552,8 @@ export class AssetService {
         isSDXL,
         metadata: enhancedMetadata,
         // Map database URLs to UnifiedAsset properties
-        thumbnailUrl: image.thumbnail_url || undefined,
-        url: image.image_url || undefined,
+        thumbnailUrl: image.thumbnail_url || (rootImageUrls && rootImageUrls[0]) || undefined,
+        url: rawUrlPath,
         error: undefined
       };
     });
