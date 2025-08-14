@@ -555,8 +555,9 @@ export const SimplifiedWorkspace: React.FC = () => {
         onDeleteAllWorkspace={deleteAllWorkspace}
       />
       <div className="flex flex-1 overflow-hidden pb-60 pt-header">
-        <div className="flex-1 overflow-y-auto p-4">
-          <WorkspaceGrid
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto p-4">
+            <WorkspaceGrid
             items={workspaceAssets}
             activeJobId={activeJobId}
             onJobSelect={handleJobSelect}
@@ -575,7 +576,8 @@ export const SimplifiedWorkspace: React.FC = () => {
             onDelete={handleDeleteItem}
             onDismiss={handleClearItem}
             isDeleting={new Set([...deletingItems, ...deletingJobs])}
-          />
+            />
+          </div>
         </div>
       </div>
       
