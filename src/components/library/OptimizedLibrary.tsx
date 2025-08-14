@@ -81,6 +81,9 @@ export const OptimizedLibrary = () => {
     setVisibleCount(Math.min(base, finalAssets.length));
   }, [finalAssets, isMobile]);
 
+  // Calculate if there are more items to show
+  const hasMoreToShow = visibleCount < finalAssets.length;
+
   // IntersectionObserver to load more on scroll
   useEffect(() => {
     if (!sentinelRef.current) return;
@@ -264,7 +267,8 @@ export const OptimizedLibrary = () => {
   return (
     <>
       <OurVidzDashboardLayout>
-        <div className={`max-w-7xl mx-auto px-4 ${selectedAssets.size > 0 ? 'pb-24' : 'pb-6'} space-y-6`}>
+        <div className="-m-6"> {/* Negative margin to counteract dashboard padding */}
+          <div className="p-6 max-w-7xl mx-auto space-y-6">
           <div ref={headerRef} className="sticky top-0 z-40 -mx-4 px-4 pt-4 pb-3 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
             {/* Header */}
             <CompactLibraryHeader
@@ -306,10 +310,10 @@ export const OptimizedLibrary = () => {
             )}
           </div>
 
-          {/* Content */}
-          <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
-            {/* Left Pane (Desktop) */}
-            <aside className="hidden lg:block">
+          {/* Desktop Content Grid */}
+          <div className="hidden lg:grid lg:grid-cols-[260px_1fr] lg:gap-6 lg:min-h-0">
+            {/* Left Sidebar (Desktop Only) */}
+            <aside className="lg:block">
               <div className="sticky space-y-4" style={{ top: stickyOffset + 8 }}>
                 <CompactLibraryFilters
                   typeFilter={searchState.filters.contentType}
@@ -321,8 +325,8 @@ export const OptimizedLibrary = () => {
               </div>
             </aside>
 
-            {/* Main Library */}
-            <div>
+            {/* Main Content Area */}
+            <main className="min-w-0"> {/* min-w-0 prevents grid overflow */}
               {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
@@ -367,7 +371,55 @@ export const OptimizedLibrary = () => {
                   isDeleting={isDeleting}
                 />
               )}
-            </div>
+            </main>
+          </div>
+
+          {/* Mobile Content (outside desktop grid) */}
+          <div className="lg:hidden">
+            {finalAssets.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-lg text-muted-foreground">
+                  {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
+                </p>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {finalAssets.slice(0, visibleCount).map((asset) => (
+                    <CompactAssetCard
+                      key={asset.id}
+                      asset={asset}
+                      isSelected={selectedAssets.has(asset.id)}
+                      onSelect={(selected) => handleSelectAsset(asset.id, selected)}
+                      onPreview={() => handlePreview(asset)}
+                      onDelete={() => handleDelete(asset)}
+                      onDownload={() => handleDownload(asset)}
+                      selectionMode={selectedAssets.size > 0}
+                      registerAssetRef={finalRegisterAssetRef}
+                    />
+                  ))}
+                </div>
+                <div ref={sentinelRef} />
+              </>
+            ) : (
+              <AssetListView
+                assets={finalAssets.map(asset => ({
+                  ...asset,
+                  title: asset.title || 'Untitled',
+                  thumbnailUrl: asset.thumbnailUrl || null,
+                  url: asset.url || null,
+                  metadata: asset.metadata || {}
+                }))}
+                selectedAssets={selectedAssets}
+                onSelectAsset={(assetId) => handleSelectAsset(assetId, !selectedAssets.has(assetId))}
+                onSelectAll={(checked) => checked ? handleSelectAll() : handleClearSelection()}
+                onBulkDelete={handleBulkDelete}
+                onIndividualDelete={handleDelete}
+                onPreview={handlePreview}
+                isDeleting={isDeleting}
+              />
+            )}
+          </div>
           </div>
         </div>
       </OurVidzDashboardLayout>
