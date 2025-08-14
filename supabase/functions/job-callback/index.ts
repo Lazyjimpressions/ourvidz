@@ -527,6 +527,14 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
         reference_image_url: jobMetadata.reference_image_url,
         reference_strength: jobMetadata.reference_strength,
         reference_type: jobMetadata.reference_type,
+        // LIBRARY-FIRST BUCKET HINT: persist the concrete storage bucket for client signing
+        bucket: (
+          isSDXL
+            ? `sdxl_image_${quality}`
+            : isEnhanced
+              ? `image7b_${quality}_enhanced`
+              : `image_${quality}`
+        ),
         job_type: job.job_type, // Store job_type for model detection
         callback_debug: {
           job_type: job.job_type,
@@ -543,7 +551,9 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
         image_url: imageUrl,
         thumbnail_url: imageUrl,
         status: 'completed',
-        metadata: imageMetadata
+        metadata: imageMetadata,
+        // For multi-image SDXL/WAN jobs, store the full array for client-side URL services
+        ...(assets && assets.length > 1 ? { image_urls: assets } : {})
       };
       
       // Add enhancement fields to image table columns
