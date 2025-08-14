@@ -44,22 +44,39 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Unified asset loading with eager URLs for all devices
+  // Device-specific asset loading: Desktop with lazy loading, Mobile with eager URLs
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['library-assets-unified'],
+    queryKey: ['library-assets', isMobile ? 'mobile' : 'desktop'],
     queryFn: async () => {
-      console.log('📚 Loading assets with eager URL generation');
-      const allAssets = await AssetService.getUserAssets(false); // Eager URLs for all devices
-      console.log(`✅ AssetService returned ${allAssets.length} assets with URLs`);
-      return allAssets;
+      if (isMobile) {
+        console.log('📱 Loading mobile assets with eager URL generation');
+        const allAssets = await AssetService.getUserAssets(false); // Eager URLs for mobile
+        console.log(`✅ Mobile: AssetService returned ${allAssets.length} assets with URLs`);
+        return allAssets;
+      } else {
+        console.log('🖥️ Loading desktop assets with lazy loading');
+        const allAssets = await AssetService.getUserAssetsOptimized(); // Lazy loading for desktop
+        console.log(`✅ Desktop: AssetService returned ${allAssets.length} assets`);
+        return allAssets;
+      }
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+  });
+
+  // Lazy loading for desktop only
+  const {
+    lazyAssets: lazyAssetsData = [],
+    registerAssetRef: lazyRegisterAssetRef
+  } = useLazyAssetsV3({ 
+    assets: rawAssets, 
+    enabled: !isMobile,
+    prefetchThreshold: 200
   });
 
   // Search and filtering
@@ -70,10 +87,11 @@ export const OptimizedLibrary = () => {
     updateFilters,
     clearSearch,
     hasActiveFilters
-  } = useWorkspaceSearch(rawAssets);
-  // Use filtered assets directly since URLs are already generated
+  } = useWorkspaceSearch(isMobile ? rawAssets : lazyAssetsData);
+  
+  // Use appropriate assets based on device
   const finalAssets = filteredAssets;
-  const finalRegisterAssetRef = () => {}; // No lazy loading registration needed
+  const finalRegisterAssetRef = isMobile ? () => {} : lazyRegisterAssetRef;
 
   // Reset visible items when results change
   useEffect(() => {
@@ -310,7 +328,7 @@ export const OptimizedLibrary = () => {
           </div>
 
           {/* Desktop Content Grid */}
-          <div className="hidden lg:grid lg:grid-cols-[260px_1fr] lg:gap-6 lg:min-h-0">
+          <div className="hidden lg:grid lg:grid-cols-[260px_1fr] lg:gap-6 lg:min-h-0 overflow-hidden">
             {/* Left Sidebar (Desktop Only) */}
             <aside className="lg:block">
               <div className="sticky space-y-4" style={{ top: stickyOffset + 8 }}>
@@ -325,7 +343,7 @@ export const OptimizedLibrary = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="min-w-0"> {/* min-w-0 prevents grid overflow */}
+            <main className="min-w-0 overflow-hidden"> {/* Added overflow-hidden to prevent layout shifts */}
               {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
@@ -334,7 +352,7 @@ export const OptimizedLibrary = () => {
                 </div>
               ) : viewMode === 'grid' ? (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 overflow-hidden">
                     {finalAssets.slice(0, visibleCount).map((asset) => (
                       <CompactAssetCard
                         key={asset.id}

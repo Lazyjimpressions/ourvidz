@@ -142,7 +142,7 @@ export const CompactAssetCard = ({
                   <img
                     src={asset.thumbnailUrl}
                     alt="Video thumbnail"
-                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                className="w-full h-full object-cover transition-transform duration-200"
                     onError={handleImageError}
                     loading="lazy"
                     decoding="async"
@@ -150,7 +150,7 @@ export const CompactAssetCard = ({
                 ) : (
                   <video
                     src={asset.url}
-                    className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-200"
                     muted
                     preload="metadata"
                     onError={handleImageError}
@@ -168,7 +168,7 @@ export const CompactAssetCard = ({
               <img
                 src={asset.thumbnailUrl || asset.url}
                 alt={asset.prompt}
-                className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                className="w-full h-full object-cover transition-transform duration-200"
                 onError={handleImageError}
                 loading="lazy"
                 decoding="async"
