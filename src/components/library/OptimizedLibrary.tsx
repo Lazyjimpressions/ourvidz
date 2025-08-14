@@ -44,7 +44,7 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Unified asset loading (eager URLs for stability)
+  // RESTORED: Fast optimized loading like workspace
   const {
     data: rawAssets = [],
     isLoading,
@@ -53,16 +53,27 @@ export const OptimizedLibrary = () => {
   } = useQuery({
     queryKey: ['library-assets'],
     queryFn: async () => {
-      console.log('📚 Loading assets with eager URL generation for stability');
-      const allAssets = await AssetService.getUserAssets(false);
-      console.log(`✅ AssetService returned ${allAssets.length} assets with URLs`);
+      console.log('⚡ Loading assets with optimized approach (like workspace)');
+      const allAssets = await AssetService.getUserAssetsOptimized();
+      console.log(`✅ AssetService returned ${allAssets.length} assets (raw paths)`);
       return allAssets;
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
 
-  // Search and filtering - use raw assets that already include URLs
+  // RESTORED: Lazy loading for efficient URL generation
+  const {
+    lazyAssets: lazyAssetsData = [],
+    registerAssetRef: lazyRegisterAssetRef
+  } = useLazyAssetsV3({ 
+    assets: rawAssets, 
+    enabled: true,
+    prefetchThreshold: 200,
+    batchSize: 8
+  });
+
+  // Search and filtering - use lazy assets with URLs
   const {
     searchState,
     filteredAssets,
@@ -70,10 +81,10 @@ export const OptimizedLibrary = () => {
     updateFilters,
     clearSearch,
     hasActiveFilters
-  } = useWorkspaceSearch(rawAssets);
+  } = useWorkspaceSearch(lazyAssetsData);
 
   const finalAssets = filteredAssets;
-  const finalRegisterAssetRef = () => {};
+  const finalRegisterAssetRef = lazyRegisterAssetRef;
 
   // Reset visible items when results change
   useEffect(() => {

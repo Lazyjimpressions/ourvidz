@@ -65,7 +65,7 @@ export const CompactAssetCard = ({
   return (
     <div
       ref={cardRef}
-      className="group relative bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-all duration-200"
+      className="group relative bg-card border border-border rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -142,7 +142,7 @@ export const CompactAssetCard = ({
                   <img
                     src={asset.thumbnailUrl}
                     alt="Video thumbnail"
-                className="w-full h-full object-cover transition-transform duration-200"
+                className="w-full h-full object-cover"
                     onError={handleImageError}
                     loading="lazy"
                     decoding="async"
@@ -150,7 +150,7 @@ export const CompactAssetCard = ({
                 ) : (
                   <video
                     src={asset.url}
-                    className="w-full h-full object-cover transition-transform duration-200"
+                    className="w-full h-full object-cover"
                     muted
                     preload="metadata"
                     onError={handleImageError}
@@ -168,7 +168,7 @@ export const CompactAssetCard = ({
               <img
                 src={asset.thumbnailUrl || asset.url}
                 alt={asset.prompt}
-                className="w-full h-full object-cover transition-transform duration-200"
+                className="w-full h-full object-cover"
                 onError={handleImageError}
                 loading="lazy"
                 decoding="async"
