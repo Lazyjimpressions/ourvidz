@@ -44,42 +44,36 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Device-specific asset loading: Desktop with lazy loading, Mobile with eager URLs
+  // Unified asset loading with optimized lazy loading for all devices
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['library-assets', isMobile ? 'mobile' : 'desktop'],
+    queryKey: ['library-assets'],
     queryFn: async () => {
-      if (isMobile) {
-        console.log('📱 Loading mobile assets with eager URL generation');
-        const allAssets = await AssetService.getUserAssets(false); // Eager URLs for mobile
-        console.log(`✅ Mobile: AssetService returned ${allAssets.length} assets with URLs`);
-        return allAssets;
-      } else {
-        console.log('🖥️ Loading desktop assets with lazy loading');
-        const allAssets = await AssetService.getUserAssetsOptimized(); // Lazy loading for desktop
-        console.log(`✅ Desktop: AssetService returned ${allAssets.length} assets`);
-        return allAssets;
-      }
+      console.log('🔄 Loading assets with optimized approach');
+      const allAssets = await AssetService.getUserAssetsOptimized();
+      console.log(`✅ AssetService returned ${allAssets.length} assets`);
+      return allAssets;
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
   });
 
-  // Lazy loading for desktop only
+  // Lazy loading for all devices
   const {
     lazyAssets: lazyAssetsData = [],
     registerAssetRef: lazyRegisterAssetRef
   } = useLazyAssetsV3({ 
     assets: rawAssets, 
-    enabled: !isMobile,
-    prefetchThreshold: 200
+    enabled: true,
+    prefetchThreshold: 100,
+    batchSize: 6
   });
 
-  // Search and filtering
+  // Search and filtering using lazy assets
   const {
     searchState,
     filteredAssets,
@@ -87,11 +81,11 @@ export const OptimizedLibrary = () => {
     updateFilters,
     clearSearch,
     hasActiveFilters
-  } = useWorkspaceSearch(isMobile ? rawAssets : lazyAssetsData);
+  } = useWorkspaceSearch(lazyAssetsData.length > 0 ? lazyAssetsData : rawAssets);
   
-  // Use appropriate assets based on device
+  // Use filtered assets for display
   const finalAssets = filteredAssets;
-  const finalRegisterAssetRef = isMobile ? () => {} : lazyRegisterAssetRef;
+  const finalRegisterAssetRef = lazyRegisterAssetRef;
 
   // Reset visible items when results change
   useEffect(() => {
@@ -343,7 +337,7 @@ export const OptimizedLibrary = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="min-w-0 overflow-hidden"> {/* Added overflow-hidden to prevent layout shifts */}
+            <main className="min-w-0">
               {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
@@ -352,7 +346,7 @@ export const OptimizedLibrary = () => {
                 </div>
               ) : viewMode === 'grid' ? (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 overflow-hidden">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                     {finalAssets.slice(0, visibleCount).map((asset) => (
                       <CompactAssetCard
                         key={asset.id}
