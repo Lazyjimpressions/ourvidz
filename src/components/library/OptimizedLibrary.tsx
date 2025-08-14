@@ -44,19 +44,26 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // TEMPORARY FIX: Use eager URL generation for mobile to match desktop behavior
+  // Device-specific asset loading: Desktop uses lazy loading, mobile uses eager URLs
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['library-assets-mobile-fix'],
+    queryKey: [`library-assets-${isMobile ? 'mobile' : 'desktop'}`],
     queryFn: async () => {
-      console.log('🎯 MOBILE FIX: Using eager URL generation like desktop');
-      const allAssets = await AssetService.getUserAssets(false); // Use eager method
-      console.log(`✅ MOBILE FIX: AssetService returned ${allAssets.length} assets with URLs`);
-      return allAssets;
+      if (isMobile) {
+        console.log('📱 MOBILE: Using eager URL generation');
+        const allAssets = await AssetService.getUserAssets(false); // Eager URLs for mobile
+        console.log(`✅ MOBILE: AssetService returned ${allAssets.length} assets with URLs`);
+        return allAssets;
+      } else {
+        console.log('🖥️ DESKTOP: Using optimized lazy loading');
+        const allAssets = await AssetService.getUserAssetsOptimized(false); // Lazy URLs for desktop
+        console.log(`✅ DESKTOP: AssetService returned ${allAssets.length} assets for lazy loading`);
+        return allAssets;
+      }
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -71,16 +78,23 @@ export const OptimizedLibrary = () => {
     clearSearch,
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
-  // TEMPORARY: Skip lazy loading for mobile, use direct assets
-  const lazyAssets = filteredAssets; // Direct assignment since URLs are already generated
-  const registerAssetRef = () => {}; // No-op
-  const forceLoadAssetUrls = () => {}; // No-op
+  // Device-specific URL generation and viewport detection
+  const { lazyAssets, registerAssetRef, forceLoadAssetUrls } = useLazyAssetsV3({
+    assets: filteredAssets,
+    prefetchThreshold: isMobile ? 200 : 400, // More conservative on mobile
+    batchSize: 6,
+    enabled: !isMobile, // Only enable lazy loading for desktop
+  });
+
+  // For mobile, use direct assets since URLs are already generated
+  const finalAssets = isMobile ? filteredAssets : lazyAssets;
+  const finalRegisterAssetRef = isMobile ? () => {} : registerAssetRef;
 
   // Reset visible items when results change
   useEffect(() => {
     const base = isMobile ? 16 : 24;
-    setVisibleCount(Math.min(base, lazyAssets.length));
-  }, [lazyAssets, isMobile]);
+    setVisibleCount(Math.min(base, finalAssets.length));
+  }, [finalAssets, isMobile]);
 
   // IntersectionObserver to load more on scroll
   useEffect(() => {
@@ -90,14 +104,14 @@ export const OptimizedLibrary = () => {
       (entries) => {
         const first = entries[0];
         if (first.isIntersecting) {
-          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), lazyAssets.length));
+          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), finalAssets.length));
         }
       },
       { root: null, rootMargin: '600px', threshold: 0 }
     );
     observer.observe(element);
     return () => observer.unobserve(element);
-  }, [lazyAssets.length, isMobile]);
+  }, [finalAssets.length, isMobile]);
 
   // Calculate filter counts
   const filterCounts = useMemo(() => {
@@ -131,8 +145,8 @@ export const OptimizedLibrary = () => {
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    setSelectedAssets(new Set(lazyAssets.map(asset => asset.id)));
-  }, [lazyAssets]);
+    setSelectedAssets(new Set(finalAssets.map(asset => asset.id)));
+  }, [finalAssets]);
 
   const handleClearSelection = useCallback(() => {
     setSelectedAssets(new Set());
@@ -140,9 +154,9 @@ export const OptimizedLibrary = () => {
 
   // Asset actions
   const handlePreview = useCallback((asset: UnifiedAsset) => {
-    const index = lazyAssets.findIndex(a => a.id === asset.id);
+    const index = finalAssets.findIndex(a => a.id === asset.id);
     setLightboxIndex(index);
-  }, [lazyAssets]);
+  }, [finalAssets]);
 
   const handleDownload = useCallback(async (asset: UnifiedAsset) => {
     try {
@@ -182,17 +196,17 @@ export const OptimizedLibrary = () => {
   }, [refetch]);
 
   const handleBulkDownload = useCallback(async () => {
-    const selectedAssetList = lazyAssets.filter(asset => selectedAssets.has(asset.id));
+    const selectedAssetList = finalAssets.filter(asset => selectedAssets.has(asset.id));
     for (const asset of selectedAssetList) {
       await handleDownload(asset);
     }
     handleClearSelection();
-  }, [lazyAssets, selectedAssets, handleDownload, handleClearSelection]);
+  }, [finalAssets, selectedAssets, handleDownload, handleClearSelection]);
 
   const handleBulkDelete = useCallback(async () => {
     try {
       setIsDeleting(true);
-      const selectedAssetList = lazyAssets.filter(asset => selectedAssets.has(asset.id));
+      const selectedAssetList = finalAssets.filter(asset => selectedAssets.has(asset.id));
       await Promise.all(
         selectedAssetList.map(asset => AssetService.deleteAsset(asset.id, asset.type))
       );
@@ -205,7 +219,7 @@ export const OptimizedLibrary = () => {
     } finally {
       setIsDeleting(false);
     }
-  }, [lazyAssets, selectedAssets, handleClearSelection, refetch]);
+  }, [finalAssets, selectedAssets, handleClearSelection, refetch]);
 
   const handleAddToWorkspace = useCallback(() => {
     toast.info('Add to workspace feature coming soon');
@@ -274,7 +288,7 @@ export const OptimizedLibrary = () => {
               viewMode={viewMode}
               onViewModeChange={setViewMode}
               totalAssets={rawAssets.length}
-              filteredCount={lazyAssets.length}
+              filteredCount={finalAssets.length}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
             />
@@ -325,7 +339,7 @@ export const OptimizedLibrary = () => {
 
             {/* Main Library */}
             <div>
-              {lazyAssets.length === 0 ? (
+              {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
                     {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
@@ -334,7 +348,7 @@ export const OptimizedLibrary = () => {
               ) : viewMode === 'grid' ? (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                    {lazyAssets.slice(0, visibleCount).map((asset) => (
+                    {finalAssets.slice(0, visibleCount).map((asset) => (
                       <CompactAssetCard
                         key={asset.id}
                         asset={asset}
@@ -344,7 +358,7 @@ export const OptimizedLibrary = () => {
                         onDelete={() => handleDelete(asset)}
                         onDownload={() => handleDownload(asset)}
                         selectionMode={selectedAssets.size > 0}
-                        registerAssetRef={registerAssetRef}
+                        registerAssetRef={finalRegisterAssetRef}
                       />
                     ))}
                   </div>
@@ -353,7 +367,7 @@ export const OptimizedLibrary = () => {
                 </>
               ) : (
                 <AssetListView
-                  assets={lazyAssets.map(asset => ({
+                  assets={finalAssets.map(asset => ({
                     ...asset,
                     title: asset.title || 'Untitled',
                     thumbnailUrl: asset.thumbnailUrl || null,
@@ -382,21 +396,21 @@ export const OptimizedLibrary = () => {
         onBulkDownload={handleBulkDownload}
         onBulkDelete={handleBulkDelete}
         onAddToWorkspace={handleAddToWorkspace}
-        totalFilteredCount={lazyAssets.length}
+        totalFilteredCount={finalAssets.length}
       />
 
       {/* Lightbox */}
       {lightboxIndex !== null && (
         isMobile ? (
           <MobileFullScreenViewer
-            assets={lazyAssets}
+            assets={finalAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onDownload={handleDownload}
           />
         ) : (
           <LibraryLightbox
-            assets={lazyAssets}
+            assets={finalAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onDownload={handleDownload}
