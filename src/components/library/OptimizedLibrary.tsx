@@ -73,7 +73,7 @@ export const OptimizedLibrary = () => {
     batchSize: 6
   });
 
-  // Search and filtering using lazy assets
+  // Search and filtering - use raw assets to avoid dependency issues
   const {
     searchState,
     filteredAssets,
@@ -81,10 +81,19 @@ export const OptimizedLibrary = () => {
     updateFilters,
     clearSearch,
     hasActiveFilters
-  } = useWorkspaceSearch(lazyAssetsData.length > 0 ? lazyAssetsData : rawAssets);
+  } = useWorkspaceSearch(rawAssets);
   
-  // Use filtered assets for display
-  const finalAssets = filteredAssets;
+  // Merge lazy URLs back into filtered assets for display
+  const finalAssets = useMemo(() => {
+    return filteredAssets.map(asset => {
+      const lazyAsset = lazyAssetsData.find(la => la.id === asset.id);
+      if (lazyAsset && lazyAsset.urlsLoaded) {
+        return { ...asset, url: lazyAsset.url, thumbnailUrl: lazyAsset.thumbnailUrl };
+      }
+      return asset;
+    });
+  }, [filteredAssets, lazyAssetsData]);
+  
   const finalRegisterAssetRef = lazyRegisterAssetRef;
 
   // Reset visible items when results change

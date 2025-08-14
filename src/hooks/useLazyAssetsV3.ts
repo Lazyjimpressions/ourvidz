@@ -42,6 +42,11 @@ export const useLazyAssetsV3 = ({
 
   // Initialize lazy assets with session cache check
   useEffect(() => {
+    if (assets.length === 0) {
+      setLazyAssets([]);
+      return;
+    }
+
     const initialAssets = assets.map(asset => {
       // Check session cache for existing URLs
       const cachedUrl = sessionCache.getCachedSignedUrl(asset.id);
@@ -74,68 +79,70 @@ export const useLazyAssetsV3 = ({
     console.log(`🔄 Processing batch of ${assetIds.length} assets for URL generation`);
     
     try {
-      // Get assets that need URLs
-      const assetsToProcess = lazyAssets.filter(
-        asset => assetIds.includes(asset.id) && !asset.urlsLoaded && !asset.isLoading
-      );
-      
-      if (assetsToProcess.length === 0) return;
-      
-      // Mark as loading
-      setLoadingUrls(prev => {
-        const newSet = new Set(prev);
-        assetsToProcess.forEach(asset => newSet.add(asset.id));
-        return newSet;
-      });
-      
-      setLazyAssets(prev => 
-        prev.map(asset => 
+      // Get current assets from state
+      setLazyAssets(currentAssets => {
+        const assetsToProcess = currentAssets.filter(
+          asset => assetIds.includes(asset.id) && !asset.urlsLoaded && !asset.isLoading
+        );
+        
+        if (assetsToProcess.length === 0) return currentAssets;
+        
+        // Mark as loading
+        setLoadingUrls(prev => {
+          const newSet = new Set(prev);
+          assetsToProcess.forEach(asset => newSet.add(asset.id));
+          return newSet;
+        });
+        
+        // Process URLs asynchronously
+        UnifiedUrlService.generateBatchUrls(assetsToProcess)
+          .then(updatedAssets => {
+            setLazyAssets(prev => 
+              prev.map(asset => {
+                const updated = updatedAssets.find(u => u.id === asset.id);
+                if (updated) {
+                  return {
+                    ...updated,
+                    isVisible: asset.isVisible,
+                    urlsLoaded: !!(updated.url || updated.thumbnailUrl),
+                    isLoading: false,
+                    error: updated.error
+                  };
+                }
+                return asset;
+              })
+            );
+          })
+          .catch(error => {
+            console.error('Batch URL generation failed:', error);
+            setLazyAssets(prev => 
+              prev.map(asset => 
+                assetIds.includes(asset.id) 
+                  ? { ...asset, isLoading: false, error: 'Failed to load' }
+                  : asset
+              )
+            );
+          })
+          .finally(() => {
+            setLoadingUrls(prev => {
+              const newSet = new Set(prev);
+              assetIds.forEach(id => newSet.delete(id));
+              return newSet;
+            });
+          });
+        
+        // Return state with loading markers
+        return currentAssets.map(asset => 
           assetIds.includes(asset.id) 
             ? { ...asset, isLoading: true }
             : asset
-        )
-      );
-      
-      // Generate URLs in batch
-      const updatedAssets = await UnifiedUrlService.generateBatchUrls(assetsToProcess);
-      
-      // Update state with results
-      setLazyAssets(prev => 
-        prev.map(asset => {
-          const updated = updatedAssets.find(u => u.id === asset.id);
-          if (updated) {
-            return {
-              ...updated,
-              isVisible: asset.isVisible,
-              urlsLoaded: !!(updated.url || updated.thumbnailUrl),
-              isLoading: false,
-              error: updated.error
-            };
-          }
-          return asset;
-        })
-      );
+        );
+      });
       
     } catch (error) {
-      console.error('Batch URL generation failed:', error);
-      
-      // Mark failed assets
-      setLazyAssets(prev => 
-        prev.map(asset => 
-          assetIds.includes(asset.id) 
-            ? { ...asset, isLoading: false, error: 'Failed to load' }
-            : asset
-        )
-      );
-    } finally {
-      // Remove from loading state
-      setLoadingUrls(prev => {
-        const newSet = new Set(prev);
-        assetIds.forEach(id => newSet.delete(id));
-        return newSet;
-      });
+      console.error('Batch processing setup failed:', error);
     }
-  }, [lazyAssets]);
+  }, []);
 
   // Enhanced URL loading with batching
   const loadAssetUrls = useCallback(async (assetId: string) => {
@@ -143,9 +150,6 @@ export const useLazyAssetsV3 = ({
     if (loadingUrls.has(assetId) || loadingPromises.current.has(assetId)) {
       return await loadingPromises.current.get(assetId);
     }
-
-    const asset = lazyAssets.find(a => a.id === assetId);
-    if (!asset || asset.urlsLoaded) return asset;
 
     // Check session cache first
     const cachedUrl = sessionCache.getCachedSignedUrl(assetId);
@@ -157,7 +161,7 @@ export const useLazyAssetsV3 = ({
             : a
         )
       );
-      return { ...asset, url: cachedUrl, urlsLoaded: true };
+      return;
     }
 
     // Add to batch queue for efficient processing
@@ -171,9 +175,7 @@ export const useLazyAssetsV3 = ({
     batchTimer.current = setTimeout(() => {
       processBatchQueue();
     }, 100); // Small delay to allow batching
-    
-    return asset;
-  }, [lazyAssets, loadingUrls, processBatchQueue]);
+  }, [loadingUrls, processBatchQueue]);
 
   // Smart intersection observer with prefetch threshold
   useEffect(() => {
