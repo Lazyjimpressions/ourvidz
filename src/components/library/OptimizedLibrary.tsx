@@ -44,26 +44,19 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // Device-specific asset loading: Desktop uses lazy loading, mobile uses eager URLs
+  // Unified asset loading with eager URLs for all devices
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: [`library-assets-${isMobile ? 'mobile' : 'desktop'}`],
+    queryKey: ['library-assets-unified'],
     queryFn: async () => {
-      if (isMobile) {
-        console.log('📱 MOBILE: Using eager URL generation');
-        const allAssets = await AssetService.getUserAssets(false); // Eager URLs for mobile
-        console.log(`✅ MOBILE: AssetService returned ${allAssets.length} assets with URLs`);
-        return allAssets;
-      } else {
-        console.log('🖥️ DESKTOP: Using optimized lazy loading');
-        const allAssets = await AssetService.getUserAssetsOptimized(false); // Lazy URLs for desktop
-        console.log(`✅ DESKTOP: AssetService returned ${allAssets.length} assets for lazy loading`);
-        return allAssets;
-      }
+      console.log('📚 Loading assets with eager URL generation');
+      const allAssets = await AssetService.getUserAssets(false); // Eager URLs for all devices
+      console.log(`✅ AssetService returned ${allAssets.length} assets with URLs`);
+      return allAssets;
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
@@ -78,17 +71,9 @@ export const OptimizedLibrary = () => {
     clearSearch,
     hasActiveFilters
   } = useWorkspaceSearch(rawAssets);
-  // Device-specific URL generation and viewport detection
-  const { lazyAssets, registerAssetRef, forceLoadAssetUrls } = useLazyAssetsV3({
-    assets: filteredAssets,
-    prefetchThreshold: isMobile ? 200 : 400, // More conservative on mobile
-    batchSize: 6,
-    enabled: !isMobile, // Only enable lazy loading for desktop
-  });
-
-  // For mobile, use direct assets since URLs are already generated
-  const finalAssets = isMobile ? filteredAssets : lazyAssets;
-  const finalRegisterAssetRef = isMobile ? () => {} : registerAssetRef;
+  // Use filtered assets directly since URLs are already generated
+  const finalAssets = filteredAssets;
+  const finalRegisterAssetRef = () => {}; // No lazy loading registration needed
 
   // Reset visible items when results change
   useEffect(() => {
@@ -319,8 +304,7 @@ export const OptimizedLibrary = () => {
                 </Drawer>
               </div>
             )}
-          </div
-          >
+          </div>
 
           {/* Content */}
           <div className="lg:grid lg:grid-cols-[260px_1fr] lg:gap-6">
