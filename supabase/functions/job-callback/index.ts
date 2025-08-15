@@ -488,167 +488,99 @@ async function handleImageJobCallback(supabase, job, status, assets, error_messa
   });
   
   if (status === 'completed' && assets && assets.length > 0) {
-    // Extract title from job metadata or prompt
+    // Extract metadata from job
     const jobMetadata = job.metadata || {};
-    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image';
-    const baseTitle = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
+    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Asset';
     
-    console.log('✅ PHASE 3: Processing completed job - updating by job_id and image_index');
+    console.log('✅ NEW ARCHITECTURE: Creating workspace_assets records');
     
-    // PHASE 3 FIX: Enhanced update strategy with better error handling
-    const updatedImages = [];
+    // Create workspace_assets records for the new architecture
+    const workspaceAssets = [];
     for (let i = 0; i < assets.length; i++) {
-      const imageUrl = assets[i];
-      const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
+      const assetUrl = assets[i];
+      const tempStoragePath = `${job.user_id}/${job.id}/${i}.${jobMetadata.format || 'png'}`;
       
-      console.log(`🔄 PHASE 3: Updating image ${i + 1}/${assets.length} by job_id and index:`, {
+      console.log(`🔄 NEW ARCHITECTURE: Creating workspace_asset ${i + 1}/${assets.length}:`, {
         jobId: job.id,
-        imageIndex: i,
-        assetUrl: imageUrl,
-        isEnhanced,
-        jobType: job.job_type
+        assetIndex: i,
+        assetUrl: assetUrl,
+        tempStoragePath: tempStoragePath
       });
       
-      // PHASE 3 FIX: Enhanced metadata handling for all job types
-      const imageMetadata = {
-        ...jobMetadata,
-        model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-        is_sdxl: isSDXL,
-        is_enhanced: isEnhanced,
-        callback_processed_at: new Date().toISOString(),
-        original_job_id: job.id,
-        image_index: i,
-        total_images: assets.length,
-        // PHASE 1 FIX: Store worker metadata in image metadata
-        seed: jobMetadata.seed,
-        generation_time: jobMetadata.generation_time,
-        negative_prompt: jobMetadata.negative_prompt,
-        // REFERENCE IMAGE SUPPORT: Store reference data in image metadata
-        reference_image_url: jobMetadata.reference_image_url,
-        reference_strength: jobMetadata.reference_strength,
-        reference_type: jobMetadata.reference_type,
-        // LIBRARY-FIRST BUCKET HINT: persist the concrete storage bucket for client signing
-        bucket: (
-          isSDXL
-            ? `sdxl_image_${quality}`
-            : isEnhanced
-              ? `image7b_${quality}_enhanced`
-              : `image_${quality}`
-        ),
-        job_type: job.job_type, // Store job_type for model detection
-        callback_debug: {
-          job_type: job.job_type,
-          primary_asset: assets[0],
-          received_assets: assets,
-          processing_timestamp: new Date().toISOString(),
-          enhanced_job_fix: 'phase_3_implementation'
+      const workspaceAsset = {
+        user_id: job.user_id,
+        asset_type: job.job_type?.includes('video') ? 'video' : 'image',
+        temp_storage_path: tempStoragePath,
+        file_size_bytes: 1024000, // Placeholder - would be actual file size in production
+        mime_type: job.job_type?.includes('video') ? 'video/mp4' : 'image/png',
+        duration_seconds: job.job_type?.includes('video') ? (jobMetadata.duration || 5) : null,
+        job_id: job.id,
+        asset_index: i,
+        generation_seed: parseInt(jobMetadata.seed || '0'),
+        original_prompt: jobMetadata.original_prompt || prompt,
+        model_used: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
+        generation_settings: {
+          quality: quality,
+          format: jobMetadata.format || 'png',
+          enhanced_prompt: jobMetadata.enhanced_prompt,
+          enhancement_strategy: jobMetadata.enhancement_strategy,
+          reference_image_url: jobMetadata.reference_image_url,
+          reference_strength: jobMetadata.reference_strength,
+          reference_type: jobMetadata.reference_type,
+          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
+          is_sdxl: isSDXL,
+          is_enhanced: isEnhanced,
+          callback_processed_at: new Date().toISOString(),
+          asset_url: assetUrl // Store the actual generated URL
         }
       };
       
-      // PHASE 3 FIX: Update image table with enhancement fields
-      const imageUpdate: any = {
-        title: title,
-        image_url: imageUrl,
-        thumbnail_url: imageUrl,
-        status: 'completed',
-        metadata: imageMetadata,
-        // For multi-image SDXL/WAN jobs, store the full array for client-side URL services
-        ...(assets && assets.length > 1 ? { image_urls: assets } : {})
-      };
-      
-      // Add enhancement fields to image table columns
-      if (jobMetadata.original_prompt) {
-        imageUpdate.original_prompt = jobMetadata.original_prompt;
-      }
-      if (jobMetadata.enhanced_prompt) {
-        imageUpdate.enhanced_prompt = jobMetadata.enhanced_prompt;
-      }
-      if (jobMetadata.enhancement_strategy) {
-        imageUpdate.enhancement_strategy = jobMetadata.enhancement_strategy;
-      }
-      if (jobMetadata.qwen_expansion_percentage) {
-        imageUpdate.qwen_expansion_percentage = jobMetadata.qwen_expansion_percentage;
-      }
-      if (jobMetadata.compel_weights) {
-        imageUpdate.compel_weights = jobMetadata.compel_weights;
-      }
-      if (jobMetadata.seed) {
-        imageUpdate.seed = jobMetadata.seed;
-      }
-      
-      console.log('🔄 PHASE 3: Updating image with enhancement data:', {
-        jobId: job.id,
-        imageIndex: i,
-        enhancementFields: {
-          original_prompt: !!imageUpdate.original_prompt,
-          enhanced_prompt: !!imageUpdate.enhanced_prompt,
-          enhancement_strategy: imageUpdate.enhancement_strategy,
-          qwen_expansion: imageUpdate.qwen_expansion_percentage,
-          seed: imageUpdate.seed
-        }
-      });
-
-      const { data: updatedImage, error: updateError } = await supabase
-        .from('images')
-        .update(imageUpdate)
-        .eq('job_id', job.id)
-        .eq('image_index', i)
-        .select()
-        .single();
-      
-      if (updateError) {
-        logContextualError(updateError, {
-          stage: 'image_update',
-          jobId: job.id,
-          operation: `update_image_${i}`,
-          metadata: { imageIndex: i, isEnhanced, jobType: job.job_type }
-        });
-        
-        // PHASE 3 FIX: Fallback for enhanced images without image_index
-        if (isEnhanced && updateError.code === 'PGRST116') {
-          console.log('🔄 PHASE 3: Attempting fallback update for enhanced image without index');
-          
-          const { data: fallbackImage, error: fallbackError } = await supabase
-            .from('images')
-            .update(imageUpdate)
-            .eq('job_id', job.id)
-            .is('image_index', null)
-            .select()
-            .single();
-          
-          if (!fallbackError && fallbackImage) {
-            console.log('✅ PHASE 3: Fallback update successful for enhanced image:', {
-              imageId: fallbackImage.id,
-              jobId: job.id,
-              status: fallbackImage.status
-            });
-            updatedImages.push(fallbackImage);
-          } else {
-            console.error('❌ PHASE 3: Fallback update also failed:', fallbackError);
-          }
-        }
-      } else {
-        console.log('✅ PHASE 3: Successfully updated image:', {
-          imageId: updatedImage.id,
-          imageIndex: i,
-          jobId: job.id,
-          status: updatedImage.status,
-          isEnhanced,
-          jobType: job.job_type
-        });
-        updatedImages.push(updatedImage);
-      }
+      workspaceAssets.push(workspaceAsset);
     }
     
-    console.log('🎉 IMAGE UPDATE COMPLETED:', {
-      jobId: job.id,
-      totalAssets: assets.length,
-      recordsUpdated: updatedImages.length,
-      success: updatedImages.length === assets.length
-    });
+    // Insert all workspace assets in batch
+    console.log(`🔄 NEW ARCHITECTURE: Inserting ${workspaceAssets.length} workspace_assets records`);
+    
+    const { data: createdAssets, error: workspaceError } = await supabase
+      .from('workspace_assets')
+      .insert(workspaceAssets)
+      .select();
+    
+    if (workspaceError) {
+      console.error('❌ Error creating workspace_assets:', workspaceError);
+      
+      // Update job with error status
+      await supabase
+        .from('jobs')
+        .update({ 
+          status: 'failed',
+          error_message: `Failed to create workspace assets: ${workspaceError.message}`,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', job.id);
+        
+      return;
+    }
+    
+    console.log(`✅ NEW ARCHITECTURE: Created ${createdAssets.length} workspace_assets records successfully`);
+    
+    // Update job status to completed
+    const { error: jobUpdateError } = await supabase
+      .from('jobs')
+      .update({ 
+        status: 'completed',
+        completed_at: new Date().toISOString()
+      })
+      .eq('id', job.id);
+
+    if (jobUpdateError) {
+      console.error('❌ Error updating job status:', jobUpdateError);
+    } else {
+      console.log('✅ Job marked as completed successfully');
+    }
     
     // PHASE 4 FIX: Add enhancement analytics tracking
-    await trackEnhancementAnalytics(supabase, job, status, updatedImages.length > 0);
+    await trackEnhancementAnalytics(supabase, job, status, createdAssets.length > 0);
     
   } else if (status === 'failed' && job.image_id) {
     console.log('❌ Processing failed image job');

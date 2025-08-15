@@ -1,54 +1,69 @@
 import React, { useState } from 'react';
-import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
-import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
-import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
-import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
-import { OptimizedDeleteModal } from '@/components/workspace/OptimizedDeleteModal';
-import { UnifiedAsset } from '@/lib/services/AssetService';
-import { WorkspaceHeader } from '@/components/WorkspaceHeader';
+import { useWorkspaceAssets, useSaveToLibrary, useDiscardAsset } from '@/hooks/useWorkspaceAssets';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { Save, Trash2, Sparkles, Download, Eye, Copy } from 'lucide-react';
+import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
+import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 
 /**
- * Library-first workspace page component
- * Provides unified workspace experience using library assets
+ * NEW ARCHITECTURE: Workspace using workspace_assets table
+ * Provides simplified workspace experience with save/discard flow
  * 
  * Features:
- * - Library-first architecture
- * - Event-driven updates
- * - Mobile-responsive design
- * - Real-time workspace updates
- * - Job-level grouping with streamlined UI
- * - LTX-style job thumbnail selector
- * - LTX-style hover actions and click-to-expand
+ * - New workspace_assets table for temporary staging
+ * - Clear save/discard actions
+ * - Simplified 2-bucket storage architecture
+ * - Real-time asset updates
+ * - Collection organization
  * 
  * @returns {JSX.Element} Rendered workspace page
  */
 export const SimplifiedWorkspace: React.FC = () => {
-  const state = useLibraryFirstWorkspace();
-  const {
-    deletingItems,
-    deletingJobs,
-    clearFromWorkspace,
-    deleteItemPermanently,
-    clearJobFromWorkspace,
-    deleteJobPermanently,
-    deleteAllWorkspace,
-    clearWorkspace: optimizedClearWorkspace,
-  } = useOptimizedWorkspace();
-  
-  // Modal state for confirmations
-  const [deleteModal, setDeleteModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    description: string;
-    confirmAction: () => void;
-  }>({
-    isOpen: false,
-    title: '',
-    description: '',
-    confirmAction: () => {},
-  });
+  const { data: workspaceAssets, isLoading, error } = useWorkspaceAssets();
+  const saveToLibrary = useSaveToLibrary();
+  const discardAsset = useDiscardAsset();
+  // State for lightbox and prompt input
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Asset action handlers
+  const handleSaveAsset = async (assetId: string) => {
+    try {
+      await saveToLibrary.mutateAsync({ assetId });
+      toast.success('Asset saved to library');
+    } catch (error) {
+      toast.error('Failed to save asset');
+    }
+  };
+
+  const handleDiscardAsset = async (assetId: string) => {
+    try {
+      await discardAsset.mutateAsync(assetId);
+      toast.success('Asset discarded');
+    } catch (error) {
+      toast.error('Failed to discard asset');
+    }
+  };
+
+  const handleDownload = async (asset: any) => {
+    try {
+      const link = document.createElement('a');
+      link.href = asset.url || '#';
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+      const filename = `${asset.prompt?.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.png`;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success('Download started');
+    } catch (error) {
+      toast.error('Failed to download asset');
+    }
+  };
+
+  const handleExpand = (assetIndex: number) => {
+    setLightboxIndex(assetIndex);
+  };
   
   const {
     // Core State

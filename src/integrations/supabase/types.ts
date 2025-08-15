@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "12.2.3 (519615d)"
@@ -1295,6 +1295,101 @@ export type Database = {
           },
         ]
       }
+      user_collections: {
+        Row: {
+          asset_count: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          asset_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          asset_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_library: {
+        Row: {
+          asset_type: string
+          collection_id: string | null
+          created_at: string | null
+          custom_title: string | null
+          duration_seconds: number | null
+          file_size_bytes: number
+          generation_seed: number | null
+          id: string
+          is_favorite: boolean | null
+          mime_type: string
+          model_used: string
+          original_prompt: string
+          storage_path: string
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string
+          visibility: string | null
+        }
+        Insert: {
+          asset_type: string
+          collection_id?: string | null
+          created_at?: string | null
+          custom_title?: string | null
+          duration_seconds?: number | null
+          file_size_bytes: number
+          generation_seed?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          mime_type: string
+          model_used: string
+          original_prompt: string
+          storage_path: string
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id: string
+          visibility?: string | null
+        }
+        Update: {
+          asset_type?: string
+          collection_id?: string | null
+          created_at?: string | null
+          custom_title?: string | null
+          duration_seconds?: number | null
+          file_size_bytes?: number
+          generation_seed?: number | null
+          id?: string
+          is_favorite?: boolean | null
+          mime_type?: string
+          model_used?: string
+          original_prompt?: string
+          storage_path?: string
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+          visibility?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_library_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "user_collections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -1423,6 +1518,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      workspace_assets: {
+        Row: {
+          asset_index: number
+          asset_type: string
+          created_at: string | null
+          duration_seconds: number | null
+          expires_at: string | null
+          file_size_bytes: number
+          generation_seed: number
+          generation_settings: Json | null
+          id: string
+          job_id: string
+          mime_type: string
+          model_used: string
+          original_prompt: string
+          temp_storage_path: string
+          user_id: string
+        }
+        Insert: {
+          asset_index?: number
+          asset_type: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          expires_at?: string | null
+          file_size_bytes: number
+          generation_seed: number
+          generation_settings?: Json | null
+          id?: string
+          job_id: string
+          mime_type: string
+          model_used: string
+          original_prompt: string
+          temp_storage_path: string
+          user_id: string
+        }
+        Update: {
+          asset_index?: number
+          asset_type?: string
+          created_at?: string | null
+          duration_seconds?: number | null
+          expires_at?: string | null
+          file_size_bytes?: number
+          generation_seed?: number
+          generation_settings?: Json | null
+          id?: string
+          job_id?: string
+          mime_type?: string
+          model_used?: string
+          original_prompt?: string
+          temp_storage_path?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       workspace_items: {
         Row: {
@@ -1565,12 +1714,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: number
       }
+      cleanup_expired_workspace_assets: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       clear_workspace_session: {
         Args: { p_session_id: string; p_user_id: string }
         Returns: boolean
       }
       create_workspace_session: {
-        Args: { p_user_id: string; p_session_name?: string }
+        Args: { p_session_name?: string; p_user_id: string }
         Returns: string
       }
       get_system_stats: {
@@ -1584,16 +1737,16 @@ export type Database = {
       get_video_path_stats: {
         Args: Record<PropertyKey, never>
         Returns: {
+          system_asset_thumbnails: number
           total_videos: number
           videos_with_user_prefix: number
           videos_without_prefix: number
-          system_asset_thumbnails: number
         }[]
       }
       has_role: {
         Args: {
-          _user_id: string
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
@@ -1607,28 +1760,28 @@ export type Database = {
       }
       log_user_activity: {
         Args: {
-          p_user_id: string
           p_action: string
-          p_resource_type?: string
-          p_resource_id?: string
-          p_metadata?: Json
           p_ip_address?: unknown
+          p_metadata?: Json
+          p_resource_id?: string
+          p_resource_type?: string
           p_user_agent?: string
+          p_user_id: string
         }
         Returns: string
       }
       save_workspace_item_to_library: {
-        Args: { p_workspace_item_id: string; p_user_id: string }
+        Args: { p_user_id: string; p_workspace_item_id: string }
         Returns: string
       }
       validate_video_path_consistency: {
         Args: Record<PropertyKey, never>
         Returns: {
-          video_id: string
           current_path: string
           expected_path: string
           path_matches: boolean
           requires_fix: boolean
+          video_id: string
         }[]
       }
     }
