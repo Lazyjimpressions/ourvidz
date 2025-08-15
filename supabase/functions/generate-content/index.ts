@@ -41,9 +41,15 @@ export default async function handler(req: Request) {
       model, 
       quantity = 1, 
       enhance_prompt = false,
+      enhancement_only = false,
       quality = 'fast',
       reference_images = [],
-      generation_settings = {}
+      generation_settings = {},
+      // Enhancement-specific parameters
+      jobType,
+      format,
+      selectedModel = 'qwen_base',
+      selectedPresets = []
     } = await req.json();
 
     console.log('Generate content request:', { 
@@ -55,14 +61,41 @@ export default async function handler(req: Request) {
     });
 
     // Validate input
-    if (!prompt || !model) {
+    if (!prompt || (!enhancement_only && !model)) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: prompt, model' }),
+        JSON.stringify({ error: 'Missing required fields: prompt' + (enhancement_only ? '' : ', model') }),
         { status: 400, headers: corsHeaders }
       );
     }
 
-    // 1. Enhance prompt if requested
+    // 1. Handle enhancement-only mode
+    if (enhancement_only) {
+      try {
+        const enhancementResult = await enhancePromptDirect(prompt, {
+          jobType,
+          format,
+          quality,
+          selectedModel,
+          selectedPresets
+        });
+        
+        return new Response(
+          JSON.stringify(enhancementResult),
+          { headers: corsHeaders }
+        );
+      } catch (enhanceError) {
+        console.error('Enhancement-only mode failed:', enhanceError);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Enhancement failed', 
+            details: enhanceError.message 
+          }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+    }
+
+    // 2. Enhance prompt if requested for generation
     let finalPrompt = prompt;
     if (enhance_prompt) {
       try {
@@ -74,7 +107,7 @@ export default async function handler(req: Request) {
       }
     }
 
-    // 2. Create job record
+    // 3. Create job record
     const jobId = crypto.randomUUID();
     const { error: jobError } = await supabase
       .from('jobs')
@@ -103,7 +136,7 @@ export default async function handler(req: Request) {
       );
     }
 
-    // 3. Send to appropriate worker
+    // 4. Send to appropriate worker
     const workerUrl = await getWorkerUrl(model);
     if (!workerUrl) {
       return new Response(
@@ -181,26 +214,96 @@ export default async function handler(req: Request) {
 }
 
 async function enhancePromptWithChatWorker(prompt: string, model: string): Promise<string> {
+  // Direct enhancement without calling external edge function
+  return await enhancePromptDirect(prompt, {
+    jobType: model.includes('video') ? 'video_fast' : 'image_fast',
+    format: model.includes('video') ? 'video' : 'image',
+    quality: 'fast',
+    selectedModel: 'qwen_base'
+  });
+}
+
+async function enhancePromptDirect(prompt: string, params: {
+  jobType?: string;
+  format?: string;
+  quality?: string;
+  selectedModel?: string;
+  selectedPresets?: string[];
+}): Promise<any> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
 
   try {
-    const { data, error } = await supabase.functions.invoke('enhance-prompt', {
-      body: { 
-        prompt: prompt,
-        model: model,
-        use_case: 'generation'
-      }
+    // Get active chat worker URL
+    const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
+      body: { model_type: 'chat' }
     });
 
-    if (error) throw error;
-    return data?.enhanced_prompt || prompt;
+    if (workerError || !workerData?.worker_url) {
+      throw new Error('No chat worker available for enhancement');
+    }
+
+    const workerUrl = workerData.worker_url;
+    
+    // Prepare enhancement payload
+    const enhancementPayload = {
+      prompt: prompt.trim(),
+      job_type: params.jobType || 'image_fast',
+      format: params.format || 'image',
+      quality: params.quality || 'fast',
+      selected_model: params.selectedModel || 'qwen_base',
+      selected_presets: params.selectedPresets || [],
+      enhancement_only: true
+    };
+
+    console.log('Direct enhancement request:', { workerUrl, prompt: prompt.substring(0, 50) + '...', params });
+
+    // Call chat worker directly for enhancement
+    const workerResponse = await fetch(`${workerUrl}/enhance`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('CHAT_WORKER_API_KEY')}`
+      },
+      body: JSON.stringify(enhancementPayload)
+    });
+
+    if (!workerResponse.ok) {
+      throw new Error(`Worker responded with status: ${workerResponse.status}`);
+    }
+
+    const result = await workerResponse.json();
+    
+    if (!result.success) {
+      throw new Error(result.error || 'Enhancement failed');
+    }
+
+    return {
+      success: true,
+      original_prompt: prompt,
+      enhanced_prompt: result.enhanced_prompt || result.enhancedPrompt,
+      enhancement_metadata: result.enhancement_metadata || {
+        original_length: prompt.length,
+        enhanced_length: (result.enhanced_prompt || result.enhancedPrompt || '').length,
+        expansion_percentage: Math.round(((result.enhanced_prompt || result.enhancedPrompt || '').length / prompt.length) * 100).toString(),
+        job_type: params.jobType || 'image_fast',
+        format: params.format || 'image',
+        quality: params.quality || 'fast',
+        is_sdxl: (params.jobType || '').includes('sdxl'),
+        is_video: (params.format || '').includes('video'),
+        enhancement_strategy: 'unified_system',
+        model_used: params.selectedModel || 'qwen_base',
+        token_count: Math.ceil(prompt.split(/\s+/).length * 0.75),
+        compression_applied: false,
+        version: '3.0'
+      }
+    };
     
   } catch (error) {
-    console.error('Prompt enhancement error:', error);
-    return prompt; // Return original on failure
+    console.error('Direct enhancement error:', error);
+    throw error;
   }
 }
 

@@ -105,9 +105,10 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
     }
     
     try {
-      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+      const { data, error } = await supabase.functions.invoke('generate-content', {
         body: {
           prompt: originalPrompt,
+          enhancement_only: true,
           jobType,
           format,
           quality,

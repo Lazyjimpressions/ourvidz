@@ -346,15 +346,15 @@ export function PromptManagementTab() {
   // Test prompt functionality
   const testPrompt = async (template: PromptTemplate) => {
     try {
-      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+      const { data, error } = await supabase.functions.invoke('generate-content', {
         body: {
           prompt: 'Test prompt for quality assessment',
+          enhancement_only: true,
           jobType: template.enhancer_model === 'sdxl' ? 'sdxl_image_fast' : 'image_fast',
           format: 'image',
           quality: 'fast',
           selectedModel: 'qwen_instruct',
-          test_mode: true,
-          template_id: template.id
+          selectedPresets: []
         }
       });
 

@@ -287,13 +287,15 @@ export function PromptTestingTab() {
 
   const generateContent = async (prompt: string, jobType: string, metadata: any) => {
     try {
-      const { data: result, error } = await supabase.functions.invoke('queue-job', {
+      const { data: result, error } = await supabase.functions.invoke('generate-content', {
         body: {
-          jobType,
-          metadata: {
-            prompt,
-            ...metadata
-          }
+          prompt,
+          model: jobType.includes('sdxl') ? 'sdxl' : 'wan',
+          quantity: 1,
+          enhance_prompt: !metadata.exact_copy_mode,
+          quality: jobType.includes('high') ? 'high' : 'fast',
+          format: jobType.includes('video') ? 'video' : 'image',
+          generation_settings: metadata
         }
       });
 

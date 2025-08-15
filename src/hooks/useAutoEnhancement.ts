@@ -47,15 +47,14 @@ export const useAutoEnhancement = () => {
     const startTime = Date.now();
 
     try {
-      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
+      const { data, error } = await supabase.functions.invoke('generate-content', {
         body: {
           prompt: prompt.trim(),
+          enhancement_only: true,
           jobType,
-          metadata: {
-            source: 'auto_enhancement',
-            selectedModel: config.strategy,
-            timestamp: startTime
-          }
+          format: jobType.includes('video') ? 'video' : 'image',
+          selectedModel: config.strategy,
+          selectedPresets: []
         }
       });
 
