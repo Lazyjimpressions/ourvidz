@@ -107,19 +107,33 @@ export default async function handler(req: Request) {
       }
     }
 
-    // 3. Create job record
+    // 3. Create job record with format-based job_type
     const jobId = crypto.randomUUID();
+    
+    // Map format to proper job_type
+    let jobType = 'image_generation';
+    if (format === 'video') {
+      jobType = quality === 'high' ? 'video_high' : 'video_fast';
+    } else if (format === 'image') {
+      if (model.includes('sdxl')) {
+        jobType = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      } else {
+        jobType = quality === 'high' ? 'image_high' : 'image_fast';
+      }
+    }
+    
     const { error: jobError } = await supabase
       .from('jobs')
       .insert({
         id: jobId,
         user_id: user.id,
-        job_type: model.includes('video') ? 'video_generation' : 'image_generation',
+        job_type: jobType,
         status: 'queued',
         original_prompt: prompt,
         enhanced_prompt: finalPrompt,
         model_type: model,
         quality: quality,
+        format: format,
         destination: 'workspace',
         metadata: {
           quantity,
@@ -151,8 +165,9 @@ export default async function handler(req: Request) {
       user_id: user.id,
       prompt: finalPrompt,
       model: model,
-      quantity: quantity,
+      format: format,
       quality: quality,
+      quantity: quantity,
       reference_images: reference_images,
       generation_settings: generation_settings,
       callback_url: `${Deno.env.get('SUPABASE_URL')}/functions/v1/generation-complete`

@@ -53,47 +53,15 @@ export const useRealtimeWorkspace = () => {
   // ✅ ADD: Coordinated invalidation function
   const invalidateWorkspaceQueries = useCallback(createWorkspaceInvalidator(queryClient), [queryClient]);
   
-  /**
-   * Get active workspace session for the current user
-   * Creates session storage based workspace management
-   */
-  const { data: activeSession, isLoading: sessionLoading, error: sessionError } = useQuery({
-    queryKey: ['active-workspace-session'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        console.log('🚀 DEBUG: No authenticated user found');
-        return null;
-      }
-      
-      console.log('🚀 DEBUG: Fetching active workspace session for user:', user.id);
-      const { data, error } = await (supabase as any)
-        .from('workspace_sessions')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
-      
-      if (error) {
-        console.error('🚀 DEBUG: Error fetching workspace session:', error);
-        return null;
-      }
-      
-      console.log('🚀 DEBUG: Active workspace session:', data);
-      return data;
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  });
+  // Session management removed - using direct workspace_assets queries
+  const activeSession = null;
+  const sessionLoading = false;
+  const sessionError = null;
 
-  // Debug session state
+  // Session management removed - using direct workspace_assets approach
   useEffect(() => {
-    console.log('🚀 DEBUG: Session state changed:', {
-      sessionLoading,
-      sessionError,
-      activeSession,
-      hasSession: !!activeSession?.id
-    });
-  }, [activeSession, sessionLoading, sessionError]);
+    console.log('🔄 WORKSPACE: Using direct workspace_assets approach (no sessions)');
+  }, []);
 
   /**
    * Fetch all workspace items for the current user

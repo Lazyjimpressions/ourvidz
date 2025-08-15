@@ -96,16 +96,6 @@ export const useWorkspaceCleanup = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get current active session
-      const { data: activeSession } = await supabase
-        .from('workspace_sessions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (!activeSession) return;
-
       // Find workspace assets that have invalid job references
       const { data: workspaceAssets } = await supabase
         .from('workspace_assets')
