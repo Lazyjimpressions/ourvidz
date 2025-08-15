@@ -128,8 +128,16 @@ export class GenerationService {
         throw new Error('Unable to sanitize request for serialization');
       }
 
-      const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: sanitizedBody
+      const { data, error } = await supabase.functions.invoke('generate-content', {
+        body: {
+          prompt: request.originalPrompt || request.prompt,
+          model: config.isSDXL ? 'sdxl' : 'wan',
+          quantity: request.batchCount || 1,
+          enhance_prompt: !request.metadata?.exact_copy_mode,
+          metadata: sanitizedBody.metadata,
+          quality: config.format.includes('high') ? 'high' : 'fast',
+          format: request.format
+        }
       });
 
       if (error) {

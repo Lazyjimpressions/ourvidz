@@ -110,7 +110,7 @@ export const useRealtimeWorkspace = () => {
       
       console.log('🚀 DEBUG: Fetching ALL workspace items for user:', user.id);
       const { data, error } = await (supabase as any)
-        .from('workspace_items')
+        .from('workspace_assets')
         .select('*')
         .eq('user_id', user.id)
         .eq('status', 'generated')
@@ -230,7 +230,7 @@ export const useRealtimeWorkspace = () => {
           {
             event: '*',
             schema: 'public',
-            table: 'workspace_items',
+            table: 'workspace_assets',
             filter: `user_id=eq.${user.id}`
           },
           (payload) => {

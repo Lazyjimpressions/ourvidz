@@ -22,8 +22,14 @@ export const useJobQueue = () => {
     mutationFn: async (params: QueueJobParams) => {
       console.log('Queuing job:', params);
       
-      const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: params
+      const { data, error } = await supabase.functions.invoke('generate-content', {
+        body: {
+          prompt: params.originalPrompt || 'Default video prompt',
+          model: 'video',
+          quantity: 1,
+          enhance_prompt: params.isPromptEnhanced !== false,
+          metadata: params.metadata
+        }
       });
 
       if (error) throw error;

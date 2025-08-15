@@ -27,366 +27,134 @@ export interface UnifiedAsset {
   modelType?: string;
   isSDXL?: boolean;
   metadata?: Record<string, any>;
-  // Individual image record now - no arrays needed
 }
 
 export class AssetService {
-  private static determineImageBucket(imageData: Partial<ImageRecord>, jobData?: any): string {
-    const metadata = imageData.metadata as any;
-    const jobType = jobData?.job_type || '';
-    const quality = imageData.quality || jobData?.quality || 'fast';
-    
-    // For failed jobs or missing job data, try to infer from metadata
-    if (!jobData || !jobType) {
-      console.log('⚠️ No job data available, using fallback bucket detection');
-      
-      // Check metadata bucket hint first
-      if (metadata?.bucket) {
-        console.log('✅ Using bucket from metadata:', metadata.bucket);
-        return metadata.bucket;
-      }
-      
-      // Fallback to safe defaults based on available data
-      return quality === 'high' ? 'image_high' : 'image_fast';
-    }
-    
-    // Enhanced model detection with all 7B variants
-    const isSDXL = metadata?.is_sdxl || 
-                   metadata?.model_type === 'sdxl' || 
-                   jobType.startsWith('sdxl_') ||
-                   jobData?.model_type?.includes('sdxl_image') ||
-                   metadata?.bucket?.includes('sdxl');
-    
-    const isEnhanced = jobType.includes('enhanced') || jobType.includes('7b');
-    
-    // Determine bucket with enhanced 7B model support
-    let bucket: string;
-    if (isSDXL) {
-      bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-    } else if (isEnhanced) {
-      bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-    } else {
-      bucket = quality === 'high' ? 'image_high' : 'image_fast';
-    }
-    
-    console.log('🔍 Enhanced bucket determination:', {
-      imageId: imageData.id,
-      jobType,
-      quality,
-      isSDXL,
-      isEnhanced,
-      bucket
-    });
-    
-    return bucket;
+  static getBucketByType(assetType: 'image' | 'video'): string {
+    return assetType === 'image' ? 'images' : 'videos';
   }
 
-  private static determineVideoBucket(jobData?: any): string {
-    const quality = jobData?.quality || 'fast';
-    const jobType = jobData?.job_type || '';
-    
-    // For failed jobs or missing job data, use safe defaults
-    if (!jobData || !jobType) {
-      console.log('⚠️ No job data available for video, using fallback bucket');
-      return quality === 'high' ? 'video_high' : 'video_fast';
+  static async generateURL(asset: UnifiedAsset): Promise<string | null> {
+    if (!asset) {
+      console.warn('No asset provided to generateURL');
+      return null;
     }
-    
-    // Enhanced video model detection with all 7B variants
-    const isEnhanced = jobType.includes('enhanced') || 
-                       jobType.includes('7b') ||
-                       jobType.startsWith('video7b_');
-    
-    let bucket: string;
-    if (isEnhanced) {
-      bucket = quality === 'high' ? 'video7b_high_enhanced' : 'video7b_fast_enhanced';
-    } else {
-      bucket = quality === 'high' ? 'video_high' : 'video_fast';
+
+    try {
+      let storagePath: string | undefined;
+
+      if (asset.type === 'image') {
+        const image = await supabase
+          .from('images')
+          .select('image_url')
+          .eq('id', asset.id)
+          .single();
+        storagePath = image.data?.image_url;
+      } else if (asset.type === 'video') {
+        const video = await supabase
+          .from('videos')
+          .select('video_url')
+          .eq('id', asset.id)
+          .single();
+        storagePath = video.data?.video_url;
+      }
+
+      if (!storagePath) {
+        console.warn(`No storage path found for asset ID: ${asset.id}`);
+        return null;
+      }
+
+      const { data, error } = await getSignedUrl(this.getBucketByType(asset.type) as any, storagePath, 3600);
+      return error ? null : data?.signedUrl || null;
+    } catch (error) {
+      console.error('Error generating URL:', error);
+      return null;
     }
-    
-    console.log('🎬 Enhanced video bucket determination:', {
-      jobType,
-      quality,
-      isEnhanced,
-      bucket
-    });
-    
-    return bucket;
   }
 
-  // URL generation methods with fallback bucket support
-  private static async generateImageUrlsWithFallback(imageUrlsArray: string[], primaryBucket: any, imageId: string): Promise<any> {
-    const fallbackBuckets = ['sdxl_image_fast', 'sdxl_image_high', 'image_fast', 'image_high', 'image7b_fast_enhanced', 'image7b_high_enhanced'];
-    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
-    
-    for (const bucket of bucketsToTry) {
-      try {
-        const urlPromises = imageUrlsArray.map(path => 
-          getSignedUrl(bucket as any, path, 3600)
-            .then(({ data, error }) => error ? null : data?.signedUrl)
-            .catch(() => null)
-        );
-        
-        const urls = await Promise.all(urlPromises);
-        const validUrls = urls.filter(Boolean) as string[];
-        
-        if (validUrls.length > 0) {
-          console.log(`✅ Generated URLs with bucket ${bucket}:`, validUrls.length);
-            return {
-              id: imageId,
-              thumbnailUrl: validUrls[0],
-              url: validUrls[0],
-              error: undefined
-            };
-        }
-      } catch (error) {
-        console.warn(`⚠️ Bucket ${bucket} failed for image ${imageId}:`, error);
-        continue;
-      }
+  static async generateThumbnailURL(asset: UnifiedAsset): Promise<string | null> {
+    if (!asset) {
+      console.warn('No asset provided to generateThumbnailURL');
+      return null;
     }
-    
-      return {
-        id: imageId,
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: 'Failed to generate URLs from any bucket'
-      };
+
+    try {
+      let thumbnailPath: string | undefined;
+
+      if (asset.type === 'image') {
+        const image = await supabase
+          .from('images')
+          .select('thumbnail_url')
+          .eq('id', asset.id)
+          .single();
+        thumbnailPath = image.data?.thumbnail_url;
+      } else if (asset.type === 'video') {
+        const video = await supabase
+          .from('videos')
+          .select('thumbnail_url')
+          .eq('id', asset.id)
+          .single();
+        thumbnailPath = video.data?.thumbnail_url;
+      }
+
+      if (!thumbnailPath) {
+        console.warn(`No thumbnail path found for asset ID: ${asset.id}`);
+        return null;
+      }
+
+      const { data, error } = await getSignedUrl(this.getBucketByType(asset.type) as any, thumbnailPath, 3600);
+      return error ? null : data?.signedUrl || null;
+    } catch (error) {
+      console.error('Error generating thumbnail URL:', error);
+      return null;
+    }
   }
 
-  private static async generateSingleImageUrlWithFallback(imagePath: string, primaryBucket: any, imageId: string): Promise<any> {
-    const fallbackBuckets = ['sdxl_image_fast', 'sdxl_image_high', 'image_fast', 'image_high', 'image7b_fast_enhanced', 'image7b_high_enhanced'];
-    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
-    
-    for (const bucket of bucketsToTry) {
-      try {
-        const { data, error } = await getSignedUrl(bucket as any, imagePath, 3600);
-        
-        if (!error && data?.signedUrl) {
-          console.log(`✅ Generated single image URL with bucket ${bucket}`);
-          return {
-            id: imageId,
-            thumbnailUrl: data.signedUrl,
-            url: data.signedUrl,
-            error: undefined
-          };
-        }
-      } catch (error) {
-        console.warn(`⚠️ Bucket ${bucket} failed for image ${imageId}:`, error);
-        continue;
-      }
-    }
-    
-      return {
-        id: imageId,
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: 'Failed to generate URL from any bucket'
-      };
-  }
-
-  private static async generateVideoUrlWithFallback(videoPath: string, primaryBucket: any, videoId: string, thumbnailPath?: string): Promise<any> {
-    const fallbackBuckets = ['video_fast', 'video_high', 'video7b_fast_enhanced', 'video7b_high_enhanced'];
-    const bucketsToTry = [primaryBucket, ...fallbackBuckets.filter(b => b !== primaryBucket)];
-    
-    let videoUrl: string | undefined;
-    let thumbnailUrl: string | undefined;
-    
-    // Try to get video URL with fallback buckets
-    for (const bucket of bucketsToTry) {
-      try {
-        const { data, error } = await getSignedUrl(bucket as any, videoPath, 7200);
-        
-        if (!error && data?.signedUrl) {
-          videoUrl = data.signedUrl;
-          console.log(`✅ Generated video URL with bucket ${bucket}`);
-          break;
-        }
-      } catch (error) {
-        console.warn(`⚠️ Video bucket ${bucket} failed for video ${videoId}:`, error);
-        continue;
-      }
-    }
-    
-    // Try to get thumbnail URL if provided
-    if (thumbnailPath) {
-      try {
-        const { data } = await getSignedUrl('image_fast' as any, thumbnailPath, 3600);
-        if (data?.signedUrl) {
-          thumbnailUrl = data.signedUrl;
-        }
-      } catch (error) {
-        console.warn(`⚠️ Thumbnail generation failed for video ${videoId}:`, error);
-      }
-    }
-    
-    return {
-      id: videoId,
-      url: videoUrl,
-      thumbnailUrl: thumbnailUrl,
-      error: videoUrl ? undefined : 'Failed to generate video URL from any bucket'
-    };
-  }
-
-  static async getAssetsByIds(assetIds: string[]): Promise<UnifiedAsset[]> {
-    if (assetIds.length === 0) {
-      return [];
-    }
-
-    console.log('🚀 Optimized getAssetsByIds:', { assetIds: assetIds.length });
+  /**
+   * NEW: Get user library assets from new architecture
+   */
+  static async getUserLibraryAssets(): Promise<UnifiedAsset[]> {
+    console.log('🚀 Getting user library assets from new architecture');
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated');
     }
 
-    // OPTIMIZATION: Batch all database queries in parallel
-    const [imagesResult, videosResult, jobsResult] = await Promise.all([
-      supabase
-        .from('images')
-        .select('*, project:projects(title)')
-        .eq('user_id', user.id)
-        .in('id', assetIds)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('videos')
-        .select('*, project:projects(title)')
-        .eq('user_id', user.id)
-        .in('id', assetIds)
-        .order('created_at', { ascending: false }),
-      // OPTIMIZATION: Get ALL job data in one query instead of per-asset
-      supabase
-        .from('jobs')
-        .select('image_id, video_id, quality, job_type, model_type, metadata')
-        .or(`image_id.in.(${assetIds.join(',')}),video_id.in.(${assetIds.join(',')})`)
-        .order('created_at', { ascending: false })
-    ]);
+    const { data: libraryAssets, error } = await supabase
+      .from('user_library')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
 
-    if (imagesResult.error) throw imagesResult.error;
-    if (videosResult.error) throw videosResult.error;
+    if (error) {
+      console.error('❌ Failed to fetch library assets:', error);
+      throw error;
+    }
 
-    // OPTIMIZATION: Create job lookup map for O(1) access
-    const jobMap = new Map<string, any>();
-    (jobsResult.data || []).forEach(job => {
-      const assetId = job.image_id || job.video_id;
-      if (assetId && !jobMap.has(assetId)) {
-        jobMap.set(assetId, job);
-      }
-    });
+    // Transform library assets to UnifiedAsset format
+    const assets: UnifiedAsset[] = (libraryAssets || []).map(asset => ({
+      id: asset.id,
+      type: asset.asset_type as 'image' | 'video',
+      title: asset.custom_title || undefined,
+      prompt: asset.original_prompt,
+      status: 'completed',
+      createdAt: new Date(asset.created_at!),
+      modelType: asset.model_used,
+      // URLs will be generated on demand
+      thumbnailUrl: undefined,
+      url: undefined
+    }));
 
-    // OPTIMIZATION: Process all URL generation in parallel
-    const urlGenerationTasks: Array<Promise<any>> = [];
-    
-    // Process images
-    const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map(image => {
-      const jobData = jobMap.get(image.id);
-      const metadata = image.metadata as any;
-      const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl' || 
-                     jobData?.job_type?.startsWith('sdxl_') ||
-                     jobData?.model_type?.includes('sdxl');
-      const modelType = isSDXL ? 'SDXL' : 'WAN';
-
-      let urlPromise: Promise<any> = Promise.resolve({
-        id: image.id,
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: undefined
-      });
-
-      if (image.status === 'completed') {
-        const bucket = AssetService.determineImageBucket(image, jobData);
-        if (image.image_url) {
-          urlPromise = AssetService.generateSingleImageUrlWithFallback(image.image_url, bucket as any, image.id);
-        }
-      }
-
-      urlGenerationTasks.push(urlPromise);
-
-      return {
-        id: image.id,
-        type: 'image' as const,
-        title: image.title || undefined,
-        prompt: image.prompt,
-        status: image.status,
-        quality: image.quality || undefined,
-        format: image.format || undefined,
-        createdAt: new Date(image.created_at),
-        projectId: image.project_id || undefined,
-        projectTitle: (image.project as any)?.title,
-        modelType,
-        isSDXL,
-        // URLs will be populated after Promise resolves
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: undefined
-      };
-    });
-
-    // Process videos
-    const videoAssets: UnifiedAsset[] = (videosResult.data || []).map(video => {
-      const jobData = jobMap.get(video.id);
-      
-      let urlPromise: Promise<any> = Promise.resolve({
-        id: video.id,
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: undefined
-      });
-
-      if (video.status === 'completed' && video.video_url) {
-        const bucket = AssetService.determineVideoBucket(jobData);
-        
-        urlPromise = AssetService.generateVideoUrlWithFallback(video.video_url, bucket as any, video.id, video.thumbnail_url);
-      }
-
-      urlGenerationTasks.push(urlPromise);
-
-      return {
-        id: video.id,
-        type: 'video' as const,
-        prompt: (video.project as any)?.title || 'Untitled Video',
-        status: video.status || 'draft',
-        format: video.format || undefined,
-        createdAt: new Date(video.created_at!),
-        projectId: video.project_id || undefined,
-        projectTitle: (video.project as any)?.title,
-        duration: video.duration || undefined,
-        resolution: video.resolution || undefined,
-        // URLs will be populated after Promise resolves
-        thumbnailUrl: undefined,
-        url: undefined,
-        error: undefined
-      };
-    });
-
-    // OPTIMIZATION: Wait for all URL generation to complete in parallel
-    const urlResults = await Promise.all(urlGenerationTasks);
-    
-    // Merge URL results back into assets
-    const allAssets = [...imageAssets, ...videoAssets];
-    urlResults.forEach(result => {
-      const asset = allAssets.find(a => a.id === result.id);
-      if (asset) {
-        asset.thumbnailUrl = result.thumbnailUrl;
-        asset.url = result.url;
-        asset.error = result.error;
-      }
-    });
-
-    allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    
-    console.log('✅ Optimized getAssetsByIds complete:', { 
-      found: allAssets.length,
-      withUrls: allAssets.filter(a => a.url).length 
-    });
-    
-    return allAssets;
+    console.log('✅ Library assets fetched:', { count: assets.length });
+    return assets;
   }
 
   /**
-   * Optimized getUserAssets method using UnifiedUrlService
-   * This is the primary implementation for workspace and library
+   * ENHANCED: Get user assets with support for both old and new architecture
    */
   static async getUserAssetsOptimized(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
-    console.log('🚀 OPTIMIZED: Fetching assets with UTC session filtering:', { sessionOnly });
+    console.log('🚀 OPTIMIZED: Fetching assets with new architecture support:', { sessionOnly });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -399,6 +167,57 @@ export class AssetService {
       );
       AssetServiceErrorHandler.handleError(authError);
       throw authError;
+    }
+
+    if (sessionOnly) {
+      // For workspace view: check new workspace_assets table first
+      console.log('🔍 Checking new workspace_assets for session assets');
+      
+      try {
+        const { data: workspaceAssets, error: workspaceError } = await supabase
+          .from('workspace_assets')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (!workspaceError && workspaceAssets && workspaceAssets.length > 0) {
+          console.log('✅ Found assets in new workspace_assets table:', { count: workspaceAssets.length });
+          
+          // Transform workspace assets to UnifiedAsset format
+          const assets: UnifiedAsset[] = workspaceAssets.map(asset => ({
+            id: asset.id,
+            type: asset.asset_type as 'image' | 'video',
+            prompt: asset.original_prompt,
+            status: 'completed', // Workspace assets are always completed
+            createdAt: new Date(asset.created_at!),
+            modelType: asset.model_used,
+            // URLs will be generated on demand via new service
+            thumbnailUrl: undefined,
+            url: undefined
+          }));
+
+          return assets;
+        } else {
+          console.log('⚠️ No assets in new workspace_assets, falling back to old system');
+        }
+      } catch (error) {
+        console.error('❌ Error checking workspace_assets, falling back to old system:', error);
+      }
+    }
+
+    // Fallback to old system or for library view
+    return this.getUserAssetsLegacy(sessionOnly);
+  }
+
+  /**
+   * LEGACY: Original method for backward compatibility
+   */
+  private static async getUserAssetsLegacy(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
+    console.log('🔄 Using legacy asset fetching method');
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
     }
 
     // Get cutoff time for session filtering (last 48 hours for better job persistence)
@@ -441,100 +260,42 @@ export class AssetService {
       videoQuery = videoQuery.gte('created_at', fortyEightHoursAgo.toISOString());
       
       // Filter out dismissed items for workspace view (handle null values correctly)
-      // Use ->> for text extraction, not -> for JSONB
       imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
       videoQuery = videoQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
       
-      console.log('🚫 WORKSPACE FILTER: Excluding dismissed items from workspace view (using ->> for text extraction)');
+      console.log('🚫 WORKSPACE FILTER: Excluding dismissed items from workspace view');
     }
 
-    console.log('🔍 ASSET SERVICE: Executing database queries...');
+    console.log('🔍 ASSET SERVICE: Executing legacy database queries...');
 
-    let imagesResult, videosResult;
-    
-    try {
-      // Fetch images and videos in parallel
-      [imagesResult, videosResult] = await Promise.all([
-        imageQuery.order('created_at', { ascending: false }),
-        videoQuery.order('created_at', { ascending: false })
-      ]);
+    // Fetch images and videos in parallel
+    const [imagesResult, videosResult] = await Promise.all([
+      imageQuery.order('created_at', { ascending: false }),
+      videoQuery.order('created_at', { ascending: false })
+    ]);
 
-      if (imagesResult.error) {
-        console.error('❌ ASSET SERVICE: Images query failed:', imagesResult.error);
-        throw imagesResult.error;
-      }
-      if (videosResult.error) {
-        console.error('❌ ASSET SERVICE: Videos query failed:', videosResult.error);
-        throw videosResult.error;
-      }
-
-      console.log('✅ ASSET SERVICE: Database queries successful:', {
-        imagesFound: imagesResult.data?.length || 0,
-        videosFound: videosResult.data?.length || 0,
-        totalRawAssets: (imagesResult.data?.length || 0) + (videosResult.data?.length || 0)
-      });
-    } catch (error: any) {
-      const serviceError = AssetServiceErrorHandler.createError(
-        'DATABASE_QUERY_FAILED',
-        `Database query failed: ${error.message}`,
-        { sessionOnly, userId: user.id, error: error.message },
-        'Failed to load your content from the database'
-      );
-      
-      AssetServiceErrorHandler.handleError(serviceError);
-      throw serviceError;
+    if (imagesResult.error) {
+      console.error('❌ ASSET SERVICE: Images query failed:', imagesResult.error);
+      throw imagesResult.error;
+    }
+    if (videosResult.error) {
+      console.error('❌ ASSET SERVICE: Videos query failed:', videosResult.error);
+      throw videosResult.error;
     }
 
-    // Transform images to UnifiedAsset format (no URL generation - handled by lazy loading)
+    console.log('✅ ASSET SERVICE: Legacy queries successful:', {
+      imagesFound: imagesResult.data?.length || 0,
+      videosFound: videosResult.data?.length || 0,
+      totalRawAssets: (imagesResult.data?.length || 0) + (videosResult.data?.length || 0)
+    });
+
+    // Transform images to UnifiedAsset format
     const imageAssets: UnifiedAsset[] = (imagesResult.data || []).map((image) => {
       const metadata = image.metadata as any;
       const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
       const modelType = isSDXL ? 'SDXL' : 'WAN';
 
-      // Get the first job from the jobs array (most recent)
       const jobData = (image.jobs as any[])?.[0] || null;
-
-      // Include job information in metadata with enhanced prompt fallback
-      const resolvedJobId = (image as any)?.job_id || jobData?.id || metadata?.job_id || null;
-      // Carry through root-level image_urls for SDXL jobs so URL service can sign them
-      const rootImageUrls = (image as any)?.image_urls && Array.isArray((image as any).image_urls)
-        ? (image as any).image_urls
-        : undefined;
-
-      // Build enhanced metadata and ensure bucket hint exists
-      const inferBucket = () => {
-        const quality = image.quality || jobData?.quality || 'fast';
-        const jobType = jobData?.job_type || '';
-        if (jobType.startsWith('sdxl_')) {
-          return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-        }
-        if (jobType.includes('enhanced') || jobType.includes('7b')) {
-          return quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-        }
-        return quality === 'high' ? 'image_high' : 'image_fast';
-      };
-
-      const enhancedMetadata = {
-        ...metadata,
-        // Prefer the database job_id; fall back to joined job id; never fall back to image id (prevents false single-item groups)
-        job_id: resolvedJobId,
-        job_type: jobData?.job_type,
-        job_model_type: jobData?.model_type,
-        job_metadata: {
-          ...jobData?.metadata,
-          // Ensure enhanced_prompt is available in job metadata for exact copy
-          enhanced_prompt: jobData?.metadata?.enhanced_prompt || image.enhanced_prompt,
-          original_prompt: jobData?.metadata?.original_prompt || image.prompt
-        },
-        // Attach SDXL array to metadata so UnifiedUrlService can read it
-        ...(rootImageUrls ? { image_urls: rootImageUrls } : {}),
-        // Provide bucket hint if missing to avoid URL generation failure
-        ...(metadata?.bucket ? {} : { bucket: inferBucket() })
-      };
-
-      // Select a raw path we can sign later: prefer single image_url, else first of image_urls
-      const rawUrlPath: string | undefined = (image as any).image_url
-        || (rootImageUrls && rootImageUrls.length > 0 ? rootImageUrls[0] : undefined);
 
       return {
         id: image.id,
@@ -550,777 +311,302 @@ export class AssetService {
         projectTitle: (image.project as any)?.title,
         modelType,
         isSDXL,
-        metadata: enhancedMetadata,
-        // Map database URLs to UnifiedAsset properties
-        thumbnailUrl: image.thumbnail_url || (rootImageUrls && rootImageUrls[0]) || undefined,
-        url: rawUrlPath,
-        error: undefined
+        metadata: metadata || {},
+        // URLs will be populated by lazy loading
+        thumbnailUrl: undefined,
+        url: undefined
       };
     });
 
     // Transform videos to UnifiedAsset format
     const videoAssets: UnifiedAsset[] = (videosResult.data || []).map((video) => {
-      const metadata = video.metadata as any;
-      const isEnhanced = metadata?.enhanced || metadata?.model_type?.includes('7b');
-
-      // Get the first job from the jobs array (most recent)
       const jobData = (video.jobs as any[])?.[0] || null;
-
-      // Include job information in metadata
-      const resolvedJobId = (video as any)?.job_id || jobData?.id || metadata?.job_id || null;
-      const enhancedMetadata = {
-        ...metadata,
-        // Prefer the database job_id; fall back to joined job id; never fall back to video id (prevents false single-item groups)
-        job_id: resolvedJobId,
-        job_type: jobData?.job_type,
-        job_model_type: jobData?.model_type,
-        job_metadata: jobData?.metadata
-      };
-
+      
       return {
         id: video.id,
         type: 'video' as const,
-        title: video.title || undefined,
-        prompt: (video as any).prompt || '',
-        enhancedPrompt: video.enhanced_prompt || undefined,
-        status: video.status,
-        quality: (video as any).quality || undefined,
+        prompt: (video.project as any)?.title || 'Untitled Video',
+        status: video.status || 'draft',
         format: video.format || undefined,
-        createdAt: new Date(video.created_at),
+        createdAt: new Date(video.created_at!),
         projectId: video.project_id || undefined,
         projectTitle: (video.project as any)?.title,
         duration: video.duration || undefined,
         resolution: video.resolution || undefined,
-        modelType: isEnhanced ? 'Enhanced' : 'Standard',
-        metadata: enhancedMetadata,
-        // Map database URLs to UnifiedAsset properties
-        thumbnailUrl: video.thumbnail_url || undefined,
-        url: video.video_url || undefined,
-        error: undefined
+        // URLs will be populated by lazy loading
+        thumbnailUrl: undefined,
+        url: undefined
       };
     });
-
-    // Combine all assets
-    const allAssets = [...imageAssets, ...videoAssets];
-
-    console.log('✅ OPTIMIZED: Asset loading completed (URLs will be loaded lazily)', {
-      totalAssets: allAssets.length,
-      images: allAssets.filter(a => a.type === 'image').length,
-      videos: allAssets.filter(a => a.type === 'video').length,
-      completed: allAssets.filter(a => a.status === 'completed').length
-    });
-
-    // Emit library-assets-ready event for real-time UI updates
-    window.dispatchEvent(new CustomEvent('library-assets-ready', {
-      detail: { 
-        assets: allAssets,
-        sessionOnly,
-        source: 'AssetService.getUserAssetsOptimized'
-      }
-    }));
-
-    return allAssets;
-  }
-
-  static async getUserAssets(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
-    console.log('🔍 ENHANCED ASSET FETCHING with session filtering:', { sessionOnly });
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User must be authenticated');
-    }
-
-    console.log('👤 Fetching assets for user:', user.id);
-
-    // Get today's date for session filtering (LOCAL timezone, not UTC)
-    const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    console.log('📅 Session filtering details:', {
-      sessionOnly,
-      startOfDay: startOfDay.toISOString(),
-      localStartOfDay: startOfDay.toLocaleString(),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      currentTime: now.toLocaleString()
-    });
-    
-    // Build query conditions
-    let imageQuery = supabase
-      .from('images')
-      .select(`
-        *,
-        project:projects(title),
-        jobs!jobs_image_id_fkey(id, job_type, model_type, metadata)
-      `)
-      .eq('user_id', user.id);
-      
-    let videoQuery = supabase
-      .from('videos')
-      .select(`
-        *,
-        project:projects(title),
-        jobs!jobs_video_id_fkey(id, job_type, model_type, metadata)
-      `)
-      .eq('user_id', user.id);
-
-    // Add session filtering if requested
-    if (sessionOnly) {
-      imageQuery = imageQuery.gte('created_at', startOfDay.toISOString());
-      videoQuery = videoQuery.gte('created_at', startOfDay.toISOString());
-      console.log('📅 Session filtering enabled - showing assets from:', startOfDay.toISOString());
-    }
-
-    // Filter out dismissed items for workspace view
-    if (sessionOnly) {
-      // For workspace view, exclude items that have been dismissed
-      // Use ->> for text extraction, not -> for JSONB
-      imageQuery = imageQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
-      videoQuery = videoQuery.or('metadata->>workspace_dismissed.is.null,metadata->>workspace_dismissed.neq.true');
-      console.log('🚫 WORKSPACE FILTER: Excluding dismissed items from workspace view (using ->> for text extraction)');
-    }
-
-    // Fetch images and videos in parallel
-    const [imagesResult, videosResult] = await Promise.all([
-      imageQuery.order('created_at', { ascending: false }),
-      videoQuery.order('created_at', { ascending: false })
-    ]);
-
-    if (imagesResult.error) {
-      console.error('❌ Error fetching images:', imagesResult.error);
-      throw imagesResult.error;
-    }
-
-    if (videosResult.error) {
-      console.error('❌ Error fetching videos:', videosResult.error);
-      throw videosResult.error;
-    }
-
-    console.log('📊 ENHANCED Raw data analysis:', {
-      totalImages: imagesResult.data?.length,
-      totalVideos: videosResult.data?.length,
-      imageStatuses: imagesResult.data?.reduce((acc, img) => {
-        acc[img.status] = (acc[img.status] || 0) + 1;
-        return acc;
-      }, {}),
-      completedImages: imagesResult.data?.filter(img => img.status === 'completed').length,
-      imagesWithUrls: imagesResult.data?.filter(img => img.image_url).length,
-      sessionFiltered: sessionOnly ? 'YES' : 'NO',
-      oldestImage: imagesResult.data?.[imagesResult.data.length - 1]?.created_at,
-      newestImage: imagesResult.data?.[0]?.created_at
-    });
-
-    // Enhanced debugging for each image
-    imagesResult.data?.forEach((image, index) => {
-      console.log(`🖼️ Image ${index + 1} analysis:`, {
-        id: image.id,
-        status: image.status,
-        quality: image.quality,
-        hasImageUrl: !!image.image_url,
-        createdAt: image.created_at,
-        isInSession: sessionOnly ? new Date(image.created_at) >= startOfDay : 'N/A'
-      });
-    });
-
-    // Transform and combine assets
-    const imageAssets: UnifiedAsset[] = await Promise.all(
-      (imagesResult.data || []).map(async (image, index) => {
-        console.log(`🔄 Processing image asset ${index + 1}/${imagesResult.data?.length}:`, image.id);
-        
-        let thumbnailUrl: string | undefined;
-        let url: string | undefined;
-        let error: string | undefined;
-        let jobData: any = null;
-        let modelType: string | undefined;
-        let isSDXL = false;
-
-        // Get job data to determine model type and bucket
-        console.log('🔍 Fetching job data for image:', image.id);
-        const { data: jobResult, error: jobError } = await supabase
-          .from('jobs')
-          .select('quality, job_type, model_type, metadata')
-          .eq('image_id', image.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (jobError) {
-          console.warn('⚠️ Error fetching job data for image:', image.id, jobError);
-        } else {
-          jobData = jobResult;
-          console.log('✅ Job data fetched:', {
-            imageId: image.id,
-            jobData: jobResult
-          });
-        }
-
-        // Determine model type and SDXL status
-        const metadata = image.metadata as any;
-        isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl' || 
-                 jobData?.job_type?.startsWith('sdxl_') ||
-                 jobData?.model_type?.includes('sdxl');
-        modelType = isSDXL ? 'SDXL' : 'WAN';
-
-        console.log('🔧 Enhanced image processing analysis:', {
-          imageId: image.id,
-          status: image.status,
-          quality: image.quality,
-          isSDXL,
-          modelType,
-          jobType: jobData?.job_type,
-          hasImageUrl: !!image.image_url,
-          imageUrl: image.image_url,
-          metadata: metadata,
-          jobMetadata: jobData?.metadata
-        });
-
-        // Generate signed URLs for completed images
-        if (image.status === 'completed') {
-          try {
-            const bucket = AssetService.determineImageBucket(image, jobData);
-            
-            // Check for image_urls array (6-image generation) - check root field first
-            const metadata = image.metadata as any;
-            const imageUrlsArray = image.image_urls || metadata?.image_urls;
-            
-            if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
-              console.log('✅ Processing image_urls array:', {
-                imageId: image.id,
-                bucket,
-                urlCount: imageUrlsArray.length,
-                source: image.image_urls ? 'root' : 'metadata'
-              });
-              
-              // Generate signed URLs for each image in the array in parallel for speed
-              const signedUrlPromises = imageUrlsArray.map(async (imagePath) => {
-                const { data: signedUrlData, error: urlError } = await getSignedUrl(
-                  bucket as any,
-                  imagePath,
-                  3600
-                );
-                
-                if (!urlError && signedUrlData?.signedUrl) {
-                  return signedUrlData.signedUrl;
-                } else {
-                  console.error('❌ Failed to generate URL for image in array:', {
-                    imageId: image.id,
-                    imagePath,
-                    error: urlError?.message
-                  });
-                  return null;
-                }
-              });
-              
-              const signedUrls = (await Promise.all(signedUrlPromises)).filter(url => url !== null);
-              
-              if (signedUrls.length > 0) {
-                // Store signed URLs in metadata for MediaGrid to use
-                (metadata as any).signed_urls = signedUrls;
-                thumbnailUrl = signedUrls[0]; // Use first image as thumbnail
-                url = signedUrls[0]; // Use first image as main URL
-                console.log('✅ Generated signed URLs for image array:', {
-                  imageId: image.id,
-                  bucket,
-                  urlCount: signedUrls.length,
-                  processingTime: 'optimized-parallel'
-                });
-              } else {
-                error = 'Failed to generate URLs for image array';
-                console.error('❌ No signed URLs generated for image array:', image.id);
-              }
-            }
-            // Fallback to single image_url (legacy)
-            else if (image.image_url) {
-              console.log('📁 Processing single image_url:', {
-                imageId: image.id,
-                bucket,
-                imagePath: image.image_url
-              });
-              
-              const { data: signedUrlData, error: urlError } = await getSignedUrl(
-                bucket as any,
-                image.image_url,
-                3600
-              );
-
-              if (!urlError && signedUrlData?.signedUrl) {
-                thumbnailUrl = signedUrlData.signedUrl;
-                url = signedUrlData.signedUrl;
-                console.log('✅ Generated signed URL for single image:', image.id);
-              } else {
-                error = urlError?.message || 'Failed to generate image URL';
-                console.error('❌ Failed to generate URL for single image:', {
-                  imageId: image.id,
-                  bucket,
-                  imagePath: image.image_url,
-                  error: error
-                });
-                
-                console.log('❌ Failed to generate URL - check bucket and file path');
-                // Note: Removing fallback bucket logic - buckets should be consistent now
-              }
-            } else {
-              console.log('⚠️ No image_url or image_urls found:', image.id);
-            }
-          } catch (urlError) {
-            console.error('❌ Exception generating image URL:', {
-              imageId: image.id,
-              error: urlError,
-              stack: urlError instanceof Error ? urlError.stack : 'No stack'
-            });
-            error = 'Failed to load image';
-          }
-        } else {
-          console.log('⚠️ Skipping URL generation for image:', {
-            imageId: image.id,
-            status: image.status,
-            reason: 'not completed'
-          });
-        }
-
-        const asset: UnifiedAsset = {
-          id: image.id,
-          type: 'image' as const,
-          title: image.title || undefined,
-          prompt: image.prompt,
-          enhancedPrompt: image.enhanced_prompt,
-          thumbnailUrl,
-          url,
-          status: image.status,
-          quality: image.quality || undefined,
-          format: image.format || undefined,
-          createdAt: new Date(image.created_at),
-          projectId: image.project_id || undefined,
-          projectTitle: (image.project as any)?.title,
-          modelType,
-          isSDXL,
-          metadata: image.metadata as Record<string, any>,
-          error,
-        };
-
-        console.log('📦 Final asset created:', {
-          id: asset.id,
-          hasUrl: !!asset.url,
-          hasError: !!asset.error,
-          modelType: asset.modelType,
-          status: asset.status
-        });
-
-        return asset;
-      })
-    );
-
-    const videoAssets: UnifiedAsset[] = await Promise.all(
-      (videosResult.data || []).map(async (video) => {
-        let thumbnailUrl: string | undefined;
-        let url: string | undefined;
-        let error: string | undefined;
-
-        // Generate signed URLs for completed videos
-        if (video.status === 'completed' && video.video_url) {
-          try {
-            // Get job data to determine quality
-            const { data: jobData } = await supabase
-              .from('jobs')
-              .select('quality, job_type')
-              .eq('video_id', video.id)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            const bucket = AssetService.determineVideoBucket(jobData);
-            const { data: signedUrlData, error: urlError } = await getSignedUrl(
-              bucket as any,
-              video.video_url,
-              7200
-            );
-
-            if (!urlError && signedUrlData?.signedUrl) {
-              url = signedUrlData.signedUrl;
-            } else {
-              error = urlError?.message || 'Failed to generate video URL';
-            }
-
-            // Use thumbnail URL if available
-            if (video.thumbnail_url) {
-              const { data: thumbSignedUrlData } = await getSignedUrl(
-                'image_fast' as any,
-                video.thumbnail_url,
-                3600
-              );
-              if (thumbSignedUrlData?.signedUrl) {
-                thumbnailUrl = thumbSignedUrlData.signedUrl;
-              }
-            }
-          } catch (urlError) {
-            console.error('Error generating video URL:', urlError);
-            error = 'Failed to load video';
-          }
-        }
-
-        return {
-          id: video.id,
-          type: 'video' as const,
-          prompt: (video.project as any)?.title || 'Untitled Video',
-          enhancedPrompt: undefined, // Videos don't have enhanced prompts currently
-          thumbnailUrl: thumbnailUrl || video.thumbnail_url || undefined,
-          url,
-          status: video.status || 'draft',
-          format: video.format || undefined,
-          createdAt: new Date(video.created_at!),
-          projectId: video.project_id || undefined,
-          projectTitle: (video.project as any)?.title,
-          duration: video.duration || undefined,
-          resolution: video.resolution || undefined,
-          metadata: video.metadata as Record<string, any>,
-          error
-        };
-      })
-    );
 
     // Combine and sort by creation date
     const allAssets = [...imageAssets, ...videoAssets];
     allAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-
-    // LIBRARY-FIRST: Emit event for workspace and other consumers after URL generation
-    const completedAssets = allAssets.filter(asset => asset.status === 'completed' && asset.url && !asset.error);
     
-    if (completedAssets.length > 0) {
-      // Emit event for workspace and other consumers
-      window.dispatchEvent(new CustomEvent('library-assets-ready', {
-        detail: {
-          assets: completedAssets,
-          type: 'batch',
-          timestamp: new Date().toISOString(),
-          sessionOnly: sessionOnly
-        }
-      }));
-      
-      console.log('📡 LIBRARY: Emitted assets-ready event:', {
-        assetCount: completedAssets.length,
-        types: completedAssets.map(a => a.type),
-        sessionOnly: sessionOnly
-      });
-    }
-
-    console.log('✅ ENHANCED Final asset summary:', {
-      total: allAssets.length,
-      images: imageAssets.length,
-      videos: videoAssets.length,
-      sdxlImages: imageAssets.filter(a => a.isSDXL).length,
-      wanImages: imageAssets.filter(a => !a.isSDXL).length,
-      completedImages: imageAssets.filter(a => a.status === 'completed').length,
-      imagesWithUrls: imageAssets.filter(a => !!a.url).length,
-      imagesWithErrors: imageAssets.filter(a => !!a.error).length,
-      completedWithUrls: completedAssets.length,
-      assetBreakdown: allAssets.map(a => ({
-        id: a.id,
-        type: a.type,
-        status: a.status,
-        hasUrl: !!a.url,
-        hasError: !!a.error,
-        modelType: a.modelType
-      }))
+    console.log('✅ Legacy asset fetching complete:', { 
+      found: allAssets.length
     });
     
     return allAssets;
   }
 
-  static async deleteAsset(assetId: string, assetType: 'image' | 'video'): Promise<void> {
-    console.log('🗑️ OPTIMIZED: Deleting asset with enhanced performance:', assetId, assetType);
-    
+  static async getAssetURL(assetId: string, assetType: 'image' | 'video'): Promise<string | null> {
     try {
-      // Step 1: Get asset and job data in single optimized query
-      let assetData: any = null;
-      let jobData: any = null;
-      let assetStatus: string = 'unknown';
-      
+      const bucket = this.getBucketByType(assetType);
+      let storagePath: string | undefined;
+  
       if (assetType === 'image') {
-        // Single query with JOIN to get both asset and job data - corrected foreign key reference
         const { data, error } = await supabase
           .from('images')
-          .select(`
-            image_url, 
-            image_urls,
-            quality, 
-            metadata,
-            status,
-            jobs!jobs_image_id_fkey(quality, job_type, model_type)
-          `)
+          .select('image_url')
           .eq('id', assetId)
-          .maybeSingle();
-        
+          .single();
+  
         if (error) {
-          console.error('❌ Failed to fetch image data:', error);
-          throw error;
+          console.error('Error fetching image URL:', error);
+          return null;
         }
-        
-        assetData = data;
-        assetStatus = data?.status || 'unknown';
-        jobData = data?.jobs?.[0] || null;
-        
-        // Handle orphaned images (no associated job data)
-        if (!jobData && assetData?.image_url) {
-          console.log('⚠️ Image has no job data - attempting fallback bucket detection');
-          // Fallback bucket detection based on URL patterns or metadata
-          const metadata = assetData.metadata as any;
-          if (metadata?.bucket?.includes('sdxl') || assetData.image_url.includes('sdxl')) {
-            jobData = { quality: assetData.quality || 'fast', job_type: 'sdxl_image_fast', model_type: 'sdxl_image' };
-          } else if (assetData.image_url.includes('7b_') || assetData.image_url.includes('enhanced')) {
-            jobData = { quality: assetData.quality || 'fast', job_type: 'image7b_fast_enhanced' };
-          } else if (assetData.quality === 'high') {
-            jobData = { quality: 'high', job_type: 'image_high' };
-          } else {
-            jobData = { quality: 'fast', job_type: 'image_fast' };
-          }
-          console.log('🔧 Using fallback job data for image:', jobData);
-        }
-      } else {
-        // Single query with JOIN for videos - corrected foreign key reference
+        storagePath = data?.image_url;
+      } else if (assetType === 'video') {
         const { data, error } = await supabase
           .from('videos')
-          .select(`
-            video_url, 
-            thumbnail_url,
-            status,
-            jobs!jobs_video_id_fkey(quality, job_type)
-          `)
+          .select('video_url')
           .eq('id', assetId)
-          .maybeSingle();
-        
+          .single();
+  
         if (error) {
-          console.error('❌ Failed to fetch video data:', error);
-          throw error;
+          console.error('Error fetching video URL:', error);
+          return null;
         }
-        
-        assetData = data;
-        assetStatus = data?.status || 'unknown';
-        jobData = data?.jobs?.[0] || null;
-        
-        // Handle orphaned videos (no associated job data)
-        if (!jobData && assetData?.video_url) {
-          console.log('⚠️ Video has no job data - attempting fallback bucket detection');
-          // Fallback bucket detection based on URL patterns
-          if (assetData.video_url.includes('7b_') || assetData.video_url.includes('enhanced')) {
-            jobData = { quality: 'fast', job_type: 'video7b_fast_enhanced' };
-          } else if (assetData.video_url.includes('high')) {
-            jobData = { quality: 'high', job_type: 'video_high' };
-          } else {
-            jobData = { quality: 'fast', job_type: 'video_fast' };
-          }
-          console.log('🔧 Using fallback job data:', jobData);
-        }
+        storagePath = data?.video_url;
       }
-
-      // Step 2: Enhanced handling for failed jobs and invalid URLs
-      const isFailed = assetStatus === 'failed' || assetStatus === 'error';
-      const hasValidUrl = assetType === 'image' 
-        ? (assetData?.image_url && assetData.image_url !== '' && !assetData.image_url.includes('undefined') && !assetData.image_url.includes('placeholder'))
-        : (assetData?.video_url && assetData.video_url !== '' && !assetData.video_url.includes('undefined') && !assetData.video_url.includes('placeholder'));
-      
-      if (isFailed || !hasValidUrl) {
-        console.log('⚠️ Failed job or invalid URL - skipping storage cleanup, performing database cleanup only');
-        
-        // For failed jobs, also try to delete from workspace_items if present
-        try {
-          await supabase.from('workspace_items').delete().eq('job_id', jobData?.id || assetId);
-        } catch (workspaceError) {
-          console.warn('⚠️ Workspace cleanup failed (non-critical):', workspaceError);
-        }
+  
+      if (!storagePath) {
+        console.warn(`No storage path found for asset ID: ${assetId}`);
+        return null;
       }
-
-      // Step 3: Delete from database (jobs will be cleaned up by CASCADE)
-      const deletePromise = assetType === 'image' 
-        ? supabase.from('images').delete().eq('id', assetId)
-        : supabase.from('videos').delete().eq('id', assetId);
-      
-      const { error: deleteError } = await deletePromise;
-      if (deleteError) {
-        console.error('❌ Database deletion failed:', deleteError);
-        throw deleteError;
-      }
-
-      // Step 4: Clean up storage files in parallel (non-blocking)
-      // Skip storage cleanup for failed jobs that may not have valid URLs
-      if (assetData && !isFailed && hasValidUrl) {
-        const storageCleanupPromises: Promise<any>[] = [];
-        
-        if (assetType === 'image') {
-          try {
-            const bucket = AssetService.determineImageBucket(assetData, jobData);
-            console.log('🗑️ Cleaning up from bucket:', bucket);
-            
-            // Handle multi-image generations (image_urls array)
-            const imageUrlsArray = assetData.image_urls || (assetData.metadata as any)?.image_urls;
-            
-            if (imageUrlsArray && Array.isArray(imageUrlsArray) && imageUrlsArray.length > 0) {
-              console.log('🗑️ Deleting multiple images:', imageUrlsArray.length);
-              imageUrlsArray.forEach(imagePath => {
-                if (imagePath) { // Only delete if path exists
-                  storageCleanupPromises.push(
-                    deleteFile(bucket as any, imagePath).catch(err => 
-                      console.warn('⚠️ Failed to delete image:', imagePath, err)
-                    )
-                  );
-                }
-              });
-            } else if (assetData.image_url) {
-              console.log('🗑️ Deleting single image:', assetData.image_url);
-              storageCleanupPromises.push(
-                deleteFile(bucket as any, assetData.image_url).catch(err => 
-                  console.warn('⚠️ Failed to delete image:', assetData.image_url, err)
-                )
-              );
-            }
-          } catch (bucketError) {
-            console.warn('⚠️ Failed to determine bucket for cleanup, skipping storage deletion:', bucketError);
-          }
-        } else if (assetType === 'video') {
-          try {
-            if (assetData.video_url) {
-              const bucket = AssetService.determineVideoBucket(jobData);
-              console.log('🗑️ Deleting video from bucket:', bucket);
-              storageCleanupPromises.push(
-                deleteFile(bucket as any, assetData.video_url).catch(err => 
-                  console.warn('⚠️ Failed to delete video:', assetData.video_url, err)
-                )
-              );
-            }
-            if (assetData.thumbnail_url) {
-              console.log('🗑️ Deleting thumbnail');
-              storageCleanupPromises.push(
-                deleteFile('image_fast' as any, assetData.thumbnail_url).catch(err => 
-                  console.warn('⚠️ Failed to delete thumbnail:', assetData.thumbnail_url, err)
-                )
-              );
-            }
-          } catch (bucketError) {
-            console.warn('⚠️ Failed to determine bucket for video cleanup, skipping storage deletion:', bucketError);
-          }
-        }
-        
-        // Execute storage cleanup in parallel (don't await - fire and forget)
-        if (storageCleanupPromises.length > 0) {
-          Promise.allSettled(storageCleanupPromises).then(results => {
-            const failed = results.filter(r => r.status === 'rejected').length;
-            if (failed > 0) {
-              console.warn(`⚠️ ${failed}/${results.length} storage cleanup operations failed`);
-            } else {
-              console.log('✅ All storage cleanup completed successfully');
-            }
-          });
-        }
-      } else if (assetStatus === 'failed') {
-        console.log('⚠️ Skipping storage cleanup for failed job:', assetId);
-      }
-      
-      console.log('✅ OPTIMIZED: Asset deletion completed:', assetId);
+  
+      const { data, error } = await getSignedUrl(bucket as any, storagePath, 3600);
+      return error ? null : data?.signedUrl || null;
     } catch (error) {
-      console.error('❌ OPTIMIZED: Asset deletion failed:', error);
-      throw error;
+      console.error('Error in getAssetURL:', error);
+      return null;
     }
   }
 
-  static async bulkDeleteAssets(assets: { id: string; type: 'image' | 'video' }[]): Promise<void> {
-    console.log('🗑️ Bulk deleting assets:', assets.length);
-    
-    // Delete each asset individually to ensure proper storage cleanup
-    const deletePromises = assets.map(asset => 
-      AssetService.deleteAsset(asset.id, asset.type)
-    );
-
-    await Promise.all(deletePromises);
-    console.log('✅ Bulk delete completed successfully');
+  static async getAssetThumbnailURL(assetId: string, assetType: 'image' | 'video'): Promise<string | null> {
+    try {
+      const bucket = this.getBucketByType(assetType);
+      let thumbnailPath: string | undefined;
+  
+      if (assetType === 'image') {
+        const { data, error } = await supabase
+          .from('images')
+          .select('thumbnail_url')
+          .eq('id', assetId)
+          .single();
+  
+        if (error) {
+          console.error('Error fetching image thumbnail URL:', error);
+          return null;
+        }
+        thumbnailPath = data?.thumbnail_url;
+      } else if (assetType === 'video') {
+        const { data, error } = await supabase
+          .from('videos')
+          .select('thumbnail_url')
+          .eq('id', assetId)
+          .single();
+  
+        if (error) {
+          console.error('Error fetching video thumbnail URL:', error);
+          return null;
+        }
+        thumbnailPath = data?.thumbnail_url;
+      }
+  
+      if (!thumbnailPath) {
+        console.warn(`No thumbnail path found for asset ID: ${assetId}`);
+        return null;
+      }
+  
+      const { data, error } = await getSignedUrl(bucket as any, thumbnailPath, 3600);
+      return error ? null : data?.signedUrl || null;
+    } catch (error) {
+      console.error('Error in getAssetThumbnailURL:', error);
+      return null;
+    }
   }
+  
+  static async getAssetsByIds(assetIds: string): Promise<UnifiedAsset[]>;
+  static async getAssetsByIds(assetIds: string[]): Promise<UnifiedAsset[]>;
+  static async getAssetsByIds(assetIds: string | string[]): Promise<UnifiedAsset[]> {
+    if (typeof assetIds === 'string') {
+      assetIds = [assetIds];
+    }
+    if (assetIds.length === 0) {
+      return [];
+    }
 
-  static async cleanupOrphanedAssets(): Promise<{ cleaned: number; errors: string[] }> {
-    console.log('🧹 Starting orphaned asset cleanup...');
+    console.log('🚀 Optimized getAssetsByIds:', { assetIds: assetIds.length });
     
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       throw new Error('User must be authenticated');
     }
 
-    const errors: string[] = [];
-    let cleanedCount = 0;
-
-    try {
-      // Get all user images
-      const { data: images } = await supabase
+    // Check both new and old systems
+    const [libraryResult, imagesResult, videosResult, workspaceResult] = await Promise.all([
+      // New system: user_library
+      supabase
+        .from('user_library')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('id', assetIds),
+      // Old system: images
+      supabase
         .from('images')
-        .select('id, image_url, quality, metadata')
-        .eq('user_id', user.id);
-
-      // Get all user videos
-      const { data: videos } = await supabase
+        .select('*, project:projects(title)')
+        .eq('user_id', user.id)
+        .in('id', assetIds),
+      // Old system: videos
+      supabase
         .from('videos')
-        .select('id, video_url, thumbnail_url')
-        .eq('user_id', user.id);
+        .select('*, project:projects(title)')
+        .eq('user_id', user.id)
+        .in('id', assetIds),
+      // New system: workspace_assets
+      supabase
+        .from('workspace_assets')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('id', assetIds)
+    ]);
 
-      // Check images for orphaned database records
-      if (images) {
-        for (const image of images) {
-          if (image.image_url) {
-            try {
-              // Get job data for proper bucket determination
-              const { data: jobData } = await supabase
-                .from('jobs')
-                .select('quality, job_type, model_type')
-                .eq('image_id', image.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+    const allAssets: UnifiedAsset[] = [];
 
-              const bucket = AssetService.determineImageBucket(image, jobData);
-              const { data } = await getSignedUrl(bucket as any, image.image_url, 60);
-              
-              if (!data?.signedUrl) {
-                // File doesn't exist in storage, remove database record
-                await supabase.from('images').delete().eq('id', image.id);
-                cleanedCount++;
-                console.log('🗑️ Cleaned orphaned image record:', image.id);
-              }
-            } catch (error) {
-              errors.push(`Image ${image.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
-          }
-        }
-      }
-
-      // Check videos for orphaned database records
-      if (videos) {
-        for (const video of videos) {
-          if (video.video_url) {
-            try {
-              // Get quality from jobs table
-              const { data: jobData } = await supabase
-                .from('jobs')
-                .select('quality, job_type')
-                .eq('video_id', video.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-              const bucket = AssetService.determineVideoBucket(jobData);
-              const { data } = await getSignedUrl(bucket as any, video.video_url, 60);
-              
-              if (!data?.signedUrl) {
-                // File doesn't exist in storage, remove database record
-                await supabase.from('videos').delete().eq('id', video.id);
-                cleanedCount++;
-                console.log('🗑️ Cleaned orphaned video record:', video.id);
-              }
-            } catch (error) {
-              errors.push(`Video ${video.id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-            }
-          }
-        }
-      }
-
-      console.log(`✅ Cleanup completed: ${cleanedCount} orphaned records removed`);
-      return { cleaned: cleanedCount, errors };
-    } catch (error) {
-      console.error('❌ Cleanup failed:', error);
-      throw error;
+    // Process library assets (new system)
+    if (libraryResult.data) {
+      const libraryAssets = libraryResult.data.map(asset => ({
+        id: asset.id,
+        type: asset.asset_type as 'image' | 'video',
+        title: asset.custom_title || undefined,
+        prompt: asset.original_prompt,
+        status: 'completed',
+        createdAt: new Date(asset.created_at!),
+        modelType: asset.model_used,
+        thumbnailUrl: undefined,
+        url: undefined
+      }));
+      allAssets.push(...libraryAssets);
     }
+
+    // Process workspace assets (new system)
+    if (workspaceResult.data) {
+      const workspaceAssets = workspaceResult.data.map(asset => ({
+        id: asset.id,
+        type: asset.asset_type as 'image' | 'video',
+        prompt: asset.original_prompt,
+        status: 'completed',
+        createdAt: new Date(asset.created_at!),
+        modelType: asset.model_used,
+        thumbnailUrl: undefined,
+        url: undefined
+      }));
+      allAssets.push(...workspaceAssets);
+    }
+
+    // Process legacy images
+    if (imagesResult.data) {
+      const imageAssets = imagesResult.data.map(image => ({
+        id: image.id,
+        type: 'image' as const,
+        title: image.title || undefined,
+        prompt: image.prompt,
+        status: image.status,
+        createdAt: new Date(image.created_at),
+        modelType: 'Legacy',
+        thumbnailUrl: undefined,
+        url: undefined
+      }));
+      allAssets.push(...imageAssets);
+    }
+
+    // Process legacy videos
+    if (videosResult.data) {
+      const videoAssets = videosResult.data.map(video => ({
+        id: video.id,
+        type: 'video' as const,
+        prompt: 'Legacy Video',
+        status: video.status || 'draft',
+        createdAt: new Date(video.created_at!),
+        modelType: 'Legacy',
+        thumbnailUrl: undefined,
+        url: undefined
+      }));
+      allAssets.push(...videoAssets);
+    }
+
+    // Remove duplicates and sort
+    const uniqueAssets = allAssets.filter((asset, index, self) => 
+      index === self.findIndex(a => a.id === asset.id)
+    );
+    
+    uniqueAssets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    console.log('✅ getAssetsByIds complete:', { 
+      found: uniqueAssets.length,
+      requested: assetIds.length
+    });
+    
+    return uniqueAssets;
+  }
+
+  static async deleteAsset(assetId: string, type: 'image' | 'video'): Promise<void> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User must be authenticated');
+    }
+
+    // Try to delete from new systems first
+    if (type === 'image' || type === 'video') {
+      // Try workspace_assets first
+      const { error: workspaceError } = await supabase
+        .from('workspace_assets')
+        .delete()
+        .eq('id', assetId)
+        .eq('user_id', user.id);
+      
+      if (!workspaceError) {
+        console.log('✅ Deleted from workspace_assets');
+        return;
+      }
+
+      // Try user_library
+      const { error: libraryError } = await supabase
+        .from('user_library')
+        .delete()
+        .eq('id', assetId)
+        .eq('user_id', user.id);
+      
+      if (!libraryError) {
+        console.log('✅ Deleted from user_library');
+        return;
+      }
+    }
+
+    // Fallback to legacy system
+    const table = type === 'image' ? 'images' : 'videos';
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('id', assetId)
+      .eq('user_id', user.id);
+
+    if (error) {
+      throw new Error(`Failed to delete ${type}: ${error.message}`);
+    }
+
+    console.log(`✅ Deleted ${type} from legacy ${table} table`);
   }
 }

@@ -90,14 +90,51 @@ async function saveToLibrary(
       );
     }
 
-    // TODO: Implement file copying from workspace-temp to user-library bucket
-    // This requires server-side file operations that we'll implement next
+    // Copy files from workspace-temp to user-library bucket
+    const copyResults = await Promise.all(
+      assets.map(async (asset: any) => {
+        try {
+          const sourcePath = asset.temp_storage_path;
+          const destPath = `${userId}/${collection_id || 'default'}/${asset.id}`;
+          
+          // Copy file from workspace-temp to user-library
+          const { data: copyData, error: copyError } = await supabase.storage
+            .from('user-library')
+            .copy(sourcePath, destPath, {
+              sourceKey: 'workspace-temp'
+            });
+            
+          if (copyError) {
+            console.error(`Failed to copy asset ${asset.id}:`, copyError);
+            throw copyError;
+          }
+          
+          return { asset, destPath, success: true };
+        } catch (error) {
+          console.error(`Copy failed for asset ${asset.id}:`, error);
+          return { asset, error, success: false };
+        }
+      })
+    );
+    
+    // Check for copy failures
+    const failures = copyResults.filter(result => !result.success);
+    if (failures.length > 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'File copy failed', 
+          details: `${failures.length} files failed to copy`,
+          failures: failures.map(f => ({ id: f.asset.id, error: f.error?.message }))
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
-    // Create library records
-    const libraryAssets = assets.map((asset: any) => ({
+    // Create library records with correct storage paths
+    const libraryAssets = copyResults.map(({ asset, destPath }) => ({
       user_id: userId,
       asset_type: asset.asset_type,
-      storage_path: `${userId}/workspace-copy/${asset.id}`, // Temporary path until copy is implemented
+      storage_path: destPath,
       file_size_bytes: asset.file_size_bytes,
       mime_type: asset.mime_type,
       duration_seconds: asset.duration_seconds,
@@ -141,7 +178,35 @@ async function saveToLibrary(
 
 async function deleteAssets(supabase: any, userId: string, assetIds: string[]) {
   try {
-    // TODO: Delete files from storage bucket before deleting records
+    // Get asset details before deletion for cleanup
+    const { data: assets, error: fetchError } = await supabase
+      .from('workspace_assets')
+      .select('temp_storage_path')
+      .in('id', assetIds)
+      .eq('user_id', userId);
+    
+    if (fetchError) {
+      console.error('Failed to fetch assets for deletion:', fetchError);
+    }
+    
+    // Delete files from storage bucket
+    if (assets && assets.length > 0) {
+      const deletePromises = assets.map(async (asset: any) => {
+        try {
+          const { error: storageError } = await supabase.storage
+            .from('workspace-temp')
+            .remove([asset.temp_storage_path]);
+          
+          if (storageError) {
+            console.error(`Failed to delete file ${asset.temp_storage_path}:`, storageError);
+          }
+        } catch (error) {
+          console.error(`Storage deletion failed for ${asset.temp_storage_path}:`, error);
+        }
+      });
+      
+      await Promise.all(deletePromises);
+    }
     
     const { error } = await supabase
       .from('workspace_assets')
@@ -192,7 +257,22 @@ async function cleanupExpiredAssets(supabase: any, userId: string) {
       );
     }
 
-    // TODO: Delete files from storage bucket
+    // Delete files from storage bucket
+    const deletePromises = expiredAssets.map(async (asset: any) => {
+      try {
+        const { error: storageError } = await supabase.storage
+          .from('workspace-temp')
+          .remove([asset.temp_storage_path]);
+        
+        if (storageError) {
+          console.error(`Failed to delete expired file ${asset.temp_storage_path}:`, storageError);
+        }
+      } catch (error) {
+        console.error(`Storage cleanup failed for ${asset.temp_storage_path}:`, error);
+      }
+    });
+    
+    await Promise.all(deletePromises);
 
     const { error: deleteError } = await supabase
       .from('workspace_assets')

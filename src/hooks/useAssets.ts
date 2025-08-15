@@ -11,7 +11,7 @@ export const useAssets = (sessionOnly: boolean = true) => {
     queryKey: [...ASSETS_QUERY_KEY, sessionOnly],
     queryFn: async (): Promise<UnifiedAsset[]> => {
       try {
-        const assets = await AssetService.getUserAssets(sessionOnly);
+        const assets = await AssetService.getUserAssetsOptimized(sessionOnly);
         return assets;
       } catch (error) {
         console.error('❌ React Query: Failed to fetch assets:', error);
