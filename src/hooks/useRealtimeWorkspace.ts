@@ -113,7 +113,6 @@ export const useRealtimeWorkspace = () => {
         .from('workspace_assets')
         .select('*')
         .eq('user_id', user.id)
-        .eq('status', 'generated')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -236,7 +235,7 @@ export const useRealtimeWorkspace = () => {
             const workspaceItem = payload.new as any;
             const eventType = payload.eventType;
             
-            if (eventType === 'INSERT' && workspaceItem.status === 'generated' && 
+            if (eventType === 'INSERT' && 
                 !processedUpdatesRef.current.has(workspaceItem.id)) {
               
               console.log('🎉 Workspace item created:', workspaceItem.id, 'asset_type:', workspaceItem.asset_type);

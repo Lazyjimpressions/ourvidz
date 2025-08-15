@@ -259,17 +259,7 @@ export class GenerationService {
         }
       }
       
-      // Log usage with enhanced metadata
-      await usageAPI.logAction(request.format, config.credits, {
-        format: config.isVideo ? 'video' : 'image',
-        quality: config.format.includes('high') ? 'high' : 'fast',
-        model_type: config.isSDXL ? 'sdxl' : 'wan',
-        is_sdxl: config.isSDXL,
-        bucket: config.bucket,
-        job_id: data.job?.id,
-        enhanced_tracking: true,
-        generation_timestamp: new Date().toISOString()
-      });
+      // Usage logging handled by edge function
 
       return data.job_id || 'unknown';
     } catch (error) {
