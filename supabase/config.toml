@@ -1,6 +1,15 @@
 
 project_id = "ulmdmzhcdwfadbvfpckt"
 
+[functions.generation-complete]
+verify_jwt = false
+
+[functions.workspace-actions]
+verify_jwt = true
+
+[functions.generate-content]
+verify_jwt = true
+
 [api]
 enabled = true
 port = 54321
