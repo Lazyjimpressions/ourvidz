@@ -25,14 +25,19 @@ export const useLazyUrlGeneration = ({
   const assetRefs = useRef<Map<string, HTMLElement>>(new Map());
   const loadingPromises = useRef<Map<string, Promise<LazyAsset>>>(new Map());
 
-  // Efficient bucket detection (same as LibraryV2)
-  const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast'): string => {
+  // Enhanced bucket detection supporting user-library
+  const inferBucketFromMetadata = useCallback((metadata: any, quality: string = 'fast', assetSource?: string): string => {
     // Primary: Use bucket from metadata if available
     if (metadata?.bucket) {
       return metadata.bucket;
     }
 
-    // Fallback logic based on metadata properties
+    // Check if this is a library asset (from user_library table)
+    if (assetSource === 'library' || metadata?.source === 'library') {
+      return 'user-library';
+    }
+
+    // Fallback logic based on metadata properties for workspace assets
     const modelVariant = metadata?.model_variant || '';
     const isSDXL = metadata?.is_sdxl || metadata?.model_type === 'sdxl';
     const isEnhanced = metadata?.is_enhanced || modelVariant.includes('7b');
@@ -158,11 +163,12 @@ export const useLazyUrlGeneration = ({
 
     const loadingPromise = (async () => {
       try {
-        // Use the same logic as LibraryV2 for URL generation
+        // Enhanced URL generation with user-library support
         const metadata = (asset as any).metadata || {};
+        const assetSource = (asset as any).source || (metadata?.source);
         const bucket = asset.type === 'video' 
-          ? (metadata?.bucket || (asset.quality === 'high' ? 'video_high' : 'video_fast'))
-          : inferBucketFromMetadata(metadata, asset.quality);
+          ? (metadata?.bucket || (assetSource === 'library' ? 'user-library' : (asset.quality === 'high' ? 'video_high' : 'video_fast')))
+          : inferBucketFromMetadata(metadata, asset.quality, assetSource);
 
         // Get raw paths from asset
         const rawPaths = (asset as any).rawPaths || [];

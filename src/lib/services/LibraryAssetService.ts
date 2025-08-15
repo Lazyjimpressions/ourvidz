@@ -36,6 +36,7 @@ export interface UnifiedLibraryAsset {
   url?: string;
   prompt: string;
   timestamp: Date;
+  createdAt: Date;
   quality: 'fast' | 'high';
   modelType?: string;
   duration?: number;
@@ -47,6 +48,7 @@ export interface UnifiedLibraryAsset {
   tags: string[];
   isFavorite: boolean;
   collectionId?: string;
+  status: 'completed' | 'processing' | 'failed';
 }
 
 export class LibraryAssetService {
@@ -176,6 +178,7 @@ export class LibraryAssetService {
       type: asset.asset_type,
       prompt: asset.original_prompt,
       timestamp: new Date(asset.created_at),
+      createdAt: new Date(asset.created_at),
       quality: 'high', // Library assets are considered high quality
       modelType: asset.model_used,
       duration: asset.duration_seconds,
@@ -183,7 +186,8 @@ export class LibraryAssetService {
       customTitle: asset.custom_title,
       tags: asset.tags,
       isFavorite: asset.is_favorite,
-      collectionId: asset.collection_id
+      collectionId: asset.collection_id,
+      status: 'completed' // Library assets are always completed
     };
   }
 }

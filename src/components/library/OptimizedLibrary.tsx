@@ -9,7 +9,8 @@ import { CompactLibraryHeader } from './CompactLibraryHeader';
 import { CompactLibraryFilters } from './CompactLibraryFilters';
 import { CompactBulkActionBar } from './CompactBulkActionBar';
 import { CompactAssetCard } from './CompactAssetCard';
-import { AssetService } from '../../lib/services/AssetService';
+import { LibraryAssetService, type UnifiedLibraryAsset } from '../../lib/services/LibraryAssetService';
+import { useLibraryAssets } from '../../hooks/useLibraryAssets';
 import { useWorkspaceSearch } from '../../hooks/useWorkspaceSearch';
 import { toast } from 'sonner';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
@@ -44,30 +45,34 @@ export const OptimizedLibrary = () => {
     return () => window.removeEventListener('resize', updateOffset);
   }, []);
 
-  // RESTORED: Fast optimized loading like workspace
+  // Use new library assets hook
   const {
     data: rawAssets = [],
     isLoading,
     error,
     refetch
-  } = useQuery({
-    queryKey: ['library-assets'],
-    queryFn: async () => {
-      console.log('⚡ Loading assets with optimized approach (like workspace)');
-      const allAssets = await AssetService.getUserAssetsOptimized();
-      console.log(`✅ AssetService returned ${allAssets.length} assets (raw paths)`);
-      return allAssets;
-    },
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-  });
+  } = useLibraryAssets();
+
+  // Convert library assets to unified asset format for compatibility
+  const unifiedAssets: UnifiedAsset[] = useMemo(() => 
+    rawAssets.map(asset => ({
+      ...asset,
+      // Add missing properties for UnifiedAsset compatibility
+      createdAt: asset.createdAt || asset.timestamp,
+      status: asset.status || 'completed',
+      originalAssetId: asset.originalAssetId || asset.id,
+      title: asset.customTitle || `Generated ${asset.type}`,
+      metadata: { source: 'library', ...asset.generationParams }
+    })),
+    [rawAssets]
+  );
 
   // RESTORED: Lazy loading for efficient URL generation
   const {
     lazyAssets: lazyAssetsData = [],
     registerAssetRef: lazyRegisterAssetRef
   } = useLazyAssetsV3({ 
-    assets: rawAssets, 
+    assets: unifiedAssets, 
     enabled: true,
     prefetchThreshold: 200,
     batchSize: 8
@@ -112,14 +117,13 @@ export const OptimizedLibrary = () => {
     return () => observer.unobserve(element);
   }, [finalAssets.length, isMobile]);
 
-  // Calculate filter counts
+  // Calculate filter counts for library assets
   const filterCounts = useMemo(() => {
-    return rawAssets.reduce((counts, asset) => {
+    return unifiedAssets.reduce((counts, asset) => {
       if (asset.type === 'image') counts.images++;
       if (asset.type === 'video') counts.videos++;
-      if (asset.status === 'completed') counts.completed++;
-      if (asset.status === 'processing' || asset.status === 'queued') counts.processing++;
-      if (asset.status === 'failed') counts.failed++;
+      // Library assets are always completed
+      counts.completed++;
       return counts;
     }, {
       images: 0,
@@ -128,7 +132,7 @@ export const OptimizedLibrary = () => {
       processing: 0,
       failed: 0
     });
-  }, [rawAssets]);
+  }, [unifiedAssets]);
 
   // Selection handlers
   const handleSelectAsset = useCallback((assetId: string, selected: boolean) => {
@@ -183,7 +187,7 @@ export const OptimizedLibrary = () => {
   const handleDelete = useCallback(async (asset: UnifiedAsset) => {
     try {
       setIsDeleting(true);
-      await AssetService.deleteAsset(asset.id, asset.type);
+      await LibraryAssetService.deleteAsset(asset.id);
       toast.success('Asset deleted');
       refetch();
     } catch (error) {
@@ -207,7 +211,7 @@ export const OptimizedLibrary = () => {
       setIsDeleting(true);
       const selectedAssetList = finalAssets.filter(asset => selectedAssets.has(asset.id));
       await Promise.all(
-        selectedAssetList.map(asset => AssetService.deleteAsset(asset.id, asset.type))
+        selectedAssetList.map(asset => LibraryAssetService.deleteAsset(asset.id))
       );
       toast.success(`Deleted ${selectedAssetList.length} assets`);
       handleClearSelection();
@@ -286,7 +290,7 @@ export const OptimizedLibrary = () => {
               onSearchChange={updateQuery}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
-              totalAssets={rawAssets.length}
+              totalAssets={unifiedAssets.length}
               filteredCount={finalAssets.length}
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
@@ -340,8 +344,13 @@ export const OptimizedLibrary = () => {
               {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
-                    {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
+                    {hasActiveFilters ? 'No assets match your filters' : 'No saved assets yet'}
                   </p>
+                  {!hasActiveFilters && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Assets you save from your workspace will appear here
+                    </p>
+                  )}
                 </div>
               ) : viewMode === 'grid' ? (
                 <>
@@ -389,8 +398,13 @@ export const OptimizedLibrary = () => {
             {finalAssets.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-lg text-muted-foreground">
-                  {hasActiveFilters ? 'No assets match your filters' : 'No assets found'}
+                  {hasActiveFilters ? 'No assets match your filters' : 'No saved assets yet'}
                 </p>
+                {!hasActiveFilters && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Assets you save from your workspace will appear here
+                  </p>
+                )}
               </div>
             ) : viewMode === 'grid' ? (
               <>
