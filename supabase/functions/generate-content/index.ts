@@ -136,11 +136,12 @@ export default async function handler(req: Request) {
       );
     }
 
-    // 4. Send to appropriate worker
-    const workerUrl = await getWorkerUrl(model);
+    // 4. Send to appropriate worker with correct worker_type
+    const workerType = await mapModelToWorkerType(model, false);
+    const workerUrl = await getWorkerUrl(workerType);
     if (!workerUrl) {
       return new Response(
-        JSON.stringify({ error: 'No available worker for model: ' + model }),
+        JSON.stringify({ error: `No available worker for type: ${workerType}` }),
         { status: 503, headers: corsHeaders }
       );
     }
@@ -223,6 +224,12 @@ async function enhancePromptWithChatWorker(prompt: string, model: string): Promi
   });
 }
 
+async function mapModelToWorkerType(model: string, enhancementOnly: boolean): Promise<string> {
+  if (enhancementOnly) return 'chat';
+  if (model.includes('sdxl')) return 'sdxl';
+  return 'wan';
+}
+
 async function enhancePromptDirect(prompt: string, params: {
   jobType?: string;
   format?: string;
@@ -236,9 +243,9 @@ async function enhancePromptDirect(prompt: string, params: {
   );
 
   try {
-    // Get active chat worker URL
+    // Get active chat worker URL with correct worker_type
     const { data: workerData, error: workerError } = await supabase.functions.invoke('get-active-worker-url', {
-      body: { model_type: 'chat' }
+      body: { worker_type: 'chat' }
     });
 
     if (workerError || !workerData?.worker_url) {
@@ -307,7 +314,7 @@ async function enhancePromptDirect(prompt: string, params: {
   }
 }
 
-async function getWorkerUrl(model: string): Promise<string | null> {
+async function getWorkerUrl(workerType: string): Promise<string | null> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -315,7 +322,7 @@ async function getWorkerUrl(model: string): Promise<string | null> {
 
   try {
     const { data, error } = await supabase.functions.invoke('get-active-worker-url', {
-      body: { model_type: model }
+      body: { worker_type: workerType }
     });
 
     if (error) throw error;

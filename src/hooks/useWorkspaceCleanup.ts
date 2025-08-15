@@ -15,49 +15,19 @@ export const useWorkspaceCleanup = () => {
 
       console.log('🔥 Force clearing workspace for user:', user.id);
 
-      // Use library-first approach - clear workspace by setting dismissed flags
-      const { data: images } = await supabase
-        .from('images')
-        .select('id, metadata')
-        .eq('user_id', user.id)
-        .is('metadata->workspace_dismissed', null);
+      // Use workspace_assets approach - clear workspace by deleting assets
+      const { data: workspaceAssets } = await supabase
+        .from('workspace_assets')
+        .select('id')
+        .eq('user_id', user.id);
 
-      const { data: videos } = await supabase
-        .from('videos')
-        .select('id, metadata')  
-        .eq('user_id', user.id)
-        .is('metadata->workspace_dismissed', null);
-
-      // Clear images from workspace
-      if (images && images.length > 0) {
-        const { error: imageError } = await supabase
-          .from('images')
-          .update({ 
-            metadata: {
-              workspace_dismissed: true,
-              dismissed_at: new Date().toISOString()
-            }
-          })
-          .in('id', images.map(img => img.id))
+      if (workspaceAssets && workspaceAssets.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('workspace_assets')
+          .delete()
           .eq('user_id', user.id);
 
-        if (imageError) throw imageError;
-      }
-
-      // Clear videos from workspace
-      if (videos && videos.length > 0) {
-        const { error: videoError } = await supabase
-          .from('videos')
-          .update({
-            metadata: {
-              workspace_dismissed: true,
-              dismissed_at: new Date().toISOString()
-            }
-          })
-          .in('id', videos.map(vid => vid.id))
-          .eq('user_id', user.id);
-
-        if (videoError) throw videoError;
+        if (deleteError) throw deleteError;
       }
 
       // Clean up failed jobs specifically
@@ -71,7 +41,7 @@ export const useWorkspaceCleanup = () => {
         console.warn('⚠️ Failed to clean up orphaned jobs:', jobsError);
       }
 
-      const totalCleared = (images?.length || 0) + (videos?.length || 0);
+      const totalCleared = workspaceAssets?.length || 0;
       toast.success(`Workspace force cleared - ${totalCleared} items removed`);
       
       // Invalidate queries to refresh UI
@@ -136,43 +106,35 @@ export const useWorkspaceCleanup = () => {
 
       if (!activeSession) return;
 
-      // Find workspace items that have invalid job references or are in failed state
-      const { data: workspaceItems } = await supabase
-        .from('workspace_items')
-        .select(`
-          id,
-          job_id,
-          content_type,
-          status
-        `)
-        .eq('session_id', activeSession.id);
+      // Find workspace assets that have invalid job references
+      const { data: workspaceAssets } = await supabase
+        .from('workspace_assets')
+        .select('id, job_id')
+        .eq('user_id', user.id);
 
-      if (!workspaceItems || workspaceItems.length === 0) return;
+      if (!workspaceAssets || workspaceAssets.length === 0) return;
 
       const orphanedItems: string[] = [];
 
-      // Check each item for valid job reference and status
-      for (const item of workspaceItems) {
-        // Remove items with failed status or invalid job references
-        if (item.status === 'failed' || item.status === 'error') {
-          orphanedItems.push(item.id);
-        } else if (item.job_id) {
+      // Check each asset for valid job reference
+      for (const asset of workspaceAssets) {
+        if (asset.job_id) {
           // Check if job still exists and is valid
           const { data: job } = await supabase
             .from('jobs')
             .select('id, status')
-            .eq('id', item.job_id)
+            .eq('id', asset.job_id)
             .maybeSingle();
           
           if (!job || job.status === 'failed') {
-            orphanedItems.push(item.id);
+            orphanedItems.push(asset.id);
           }
         }
       }
 
       if (orphanedItems.length > 0) {
         const { error } = await supabase
-          .from('workspace_items')
+          .from('workspace_assets')
           .delete()
           .in('id', orphanedItems);
 

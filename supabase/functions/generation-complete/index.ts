@@ -40,7 +40,10 @@ export default async function handler(req: Request) {
 
       const { error: insertError } = await supabase
         .from('workspace_assets')
-        .insert(workspaceAssets);
+        .upsert(workspaceAssets, { 
+          onConflict: 'job_id,asset_index',
+          ignoreDuplicates: true 
+        });
 
       if (insertError) {
         console.error('Failed to insert workspace assets:', insertError);

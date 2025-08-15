@@ -69,7 +69,7 @@ export class WorkspaceAssetService {
   }
 
   /**
-   * Save workspace asset to user library
+   * Save workspace asset to user library via workspace-actions
    */
   static async saveToLibrary(
     workspaceAssetId: string, 
@@ -79,54 +79,26 @@ export class WorkspaceAssetService {
       tags?: string[];
     }
   ): Promise<string> {
-    // Get the workspace asset
-    const { data: workspaceAsset, error: fetchError } = await supabase
-      .from('workspace_assets')
-      .select('*')
-      .eq('id', workspaceAssetId)
-      .single();
+    const { data, error } = await supabase.functions.invoke('workspace-actions', {
+      body: {
+        action: 'save_to_library',
+        asset_ids: [workspaceAssetId],
+        collection_id: options?.collectionId,
+        custom_title: options?.customTitle,
+        tags: options?.tags
+      }
+    });
 
-    if (fetchError || !workspaceAsset) {
-      throw new Error('Workspace asset not found');
+    if (error) {
+      console.error('Error saving to library via workspace-actions:', error);
+      throw error;
     }
 
-    // Create new storage path in user-library bucket
-    const newStoragePath = options?.collectionId 
-      ? `${workspaceAsset.user_id}/${options.collectionId}/${workspaceAssetId}.${this.getFileExtension(workspaceAsset.mime_type)}`
-      : `${workspaceAsset.user_id}/default/${workspaceAssetId}.${this.getFileExtension(workspaceAsset.mime_type)}`;
-
-    // TODO: Copy file from workspace-temp to user-library bucket
-    // This would need a server-side function to handle the file copy
-
-    // Create library record
-    const libraryAsset = {
-      user_id: workspaceAsset.user_id,
-      asset_type: workspaceAsset.asset_type,
-      storage_path: newStoragePath,
-      file_size_bytes: workspaceAsset.file_size_bytes,
-      mime_type: workspaceAsset.mime_type,
-      duration_seconds: workspaceAsset.duration_seconds,
-      original_prompt: workspaceAsset.original_prompt,
-      model_used: workspaceAsset.model_used,
-      generation_seed: workspaceAsset.generation_seed,
-      collection_id: options?.collectionId,
-      custom_title: options?.customTitle,
-      tags: options?.tags || []
-    };
-
-    const { data: savedAsset, error: saveError } = await supabase
-      .from('user_library')
-      .insert(libraryAsset)
-      .select()
-      .single();
-
-    if (saveError) {
-      console.error('Error saving to library:', saveError);
-      throw saveError;
+    if (!data?.success) {
+      throw new Error(data?.error || 'Failed to save to library');
     }
 
-    // Mark workspace asset as saved (could add a status field)
-    return savedAsset.id;
+    return data.saved_assets?.[0]?.id || workspaceAssetId;
   }
 
   /**

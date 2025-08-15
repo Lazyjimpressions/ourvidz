@@ -94,9 +94,9 @@ export const useOptimizedWorkspace = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        // Delete from workspace_items table
+        // Delete from workspace_assets table (migrated from workspace_items)
         const { error: workspaceError } = await supabase
-          .from('workspace_items')
+          .from('workspace_assets')
           .delete()
           .eq('id', itemId)
           .eq('user_id', user.id);
@@ -211,10 +211,10 @@ export const useOptimizedWorkspace = () => {
           .eq('user_id', user.id)
           .eq('metadata->>job_id', jobId);
 
-        // Get workspace items for this job (may not exist if using library-first approach)
-        const { data: workspaceItems } = await supabase
-          .from('workspace_items')
-          .select('id, content_type')
+        // Get workspace assets for this job (migrated from workspace_items)
+        const { data: workspaceAssets } = await supabase
+          .from('workspace_assets')
+          .select('id, asset_type')
           .eq('job_id', jobId)
           .eq('user_id', user.id);
 
@@ -238,10 +238,10 @@ export const useOptimizedWorkspace = () => {
           if (deleteVideosError) throw deleteVideosError;
         }
 
-        // Delete workspace items (if any exist)
-        if (workspaceItems && workspaceItems.length > 0) {
+        // Delete workspace assets (if any exist)
+        if (workspaceAssets && workspaceAssets.length > 0) {
           const { error: workspaceError } = await supabase
-            .from('workspace_items')
+            .from('workspace_assets')
             .delete()
             .eq('job_id', jobId)
             .eq('user_id', user.id);

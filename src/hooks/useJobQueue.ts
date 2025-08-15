@@ -25,10 +25,11 @@ export const useJobQueue = () => {
       const { data, error } = await supabase.functions.invoke('generate-content', {
         body: {
           prompt: params.originalPrompt || 'Default video prompt',
-          model: 'video',
+          model: params.jobType?.includes('sdxl') ? 'sdxl' : 'wan',
           quantity: 1,
           enhance_prompt: params.isPromptEnhanced !== false,
-          metadata: params.metadata
+          format: params.jobType?.includes('video') ? 'video' : 'image',
+          generation_settings: params.metadata
         }
       });
 

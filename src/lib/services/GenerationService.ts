@@ -134,9 +134,9 @@ export class GenerationService {
           model: config.isSDXL ? 'sdxl' : 'wan',
           quantity: request.batchCount || 1,
           enhance_prompt: !request.metadata?.exact_copy_mode,
-          metadata: sanitizedBody.metadata,
+          generation_settings: sanitizedBody.metadata,
           quality: config.format.includes('high') ? 'high' : 'fast',
-          format: request.format
+          format: config.isVideo ? 'video' : 'image'
         }
       });
 
@@ -150,9 +150,9 @@ export class GenerationService {
         throw new Error(data?.error || 'Failed to queue generation');
       }
 
-      const jobId = data.job?.id;
+      const jobId = data.job_id;
       if (!jobId) {
-        throw new Error('No job ID returned from queue-job');
+        throw new Error('No job ID returned from generate-content');
       }
 
       console.log('✅ Job created successfully:', {
@@ -271,7 +271,7 @@ export class GenerationService {
         generation_timestamp: new Date().toISOString()
       });
 
-      return data.job?.id || 'unknown';
+      return data.job_id || 'unknown';
     } catch (error) {
       console.error('❌ GenerationService.queueGeneration failed:', {
         error: error instanceof Error ? error.message : 'Unknown error',

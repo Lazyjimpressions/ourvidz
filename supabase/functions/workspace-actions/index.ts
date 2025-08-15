@@ -90,23 +90,36 @@ async function saveToLibrary(
       );
     }
 
-    // Copy files from workspace-temp to user-library bucket
+    // Download from workspace-temp and upload to user-library (cross-bucket copy not supported)
     const copyResults = await Promise.all(
       assets.map(async (asset: any) => {
         try {
           const sourcePath = asset.temp_storage_path;
-          const destPath = `${userId}/${collection_id || 'default'}/${asset.id}`;
+          const fileExtension = asset.mime_type?.includes('video') ? 'mp4' : 
+                               asset.mime_type?.includes('jpeg') ? 'jpg' : 'png';
+          const destPath = `${userId}/${options.collection_id || 'default'}/${asset.id}.${fileExtension}`;
           
-          // Copy file from workspace-temp to user-library
-          const { data: copyData, error: copyError } = await supabase.storage
+          // Download file from workspace-temp bucket
+          const { data: downloadData, error: downloadError } = await supabase.storage
+            .from('workspace-temp')
+            .download(sourcePath);
+            
+          if (downloadError || !downloadData) {
+            console.error(`Failed to download asset ${asset.id}:`, downloadError);
+            throw downloadError || new Error('No file data');
+          }
+          
+          // Upload file to user-library bucket
+          const { data: uploadData, error: uploadError } = await supabase.storage
             .from('user-library')
-            .copy(sourcePath, destPath, {
-              sourceKey: 'workspace-temp'
+            .upload(destPath, downloadData, {
+              contentType: asset.mime_type,
+              upsert: true
             });
             
-          if (copyError) {
-            console.error(`Failed to copy asset ${asset.id}:`, copyError);
-            throw copyError;
+          if (uploadError) {
+            console.error(`Failed to upload asset ${asset.id}:`, uploadError);
+            throw uploadError;
           }
           
           return { asset, destPath, success: true };

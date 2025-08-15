@@ -127,10 +127,9 @@ export const useRealtimeWorkspace = () => {
         userId: user.id,
         items: data?.map((item: any) => ({
           id: item.id,
-          session_id: item.session_id,
-          content_type: item.content_type,
-          url: item.url ? 'has_url' : 'no_url',
-          prompt: item.prompt?.substring(0, 30) + '...'
+          asset_type: item.asset_type,
+          temp_storage_path: item.temp_storage_path,
+          prompt: item.original_prompt?.substring(0, 30) + '...'
         }))
       });
       
@@ -142,7 +141,7 @@ export const useRealtimeWorkspace = () => {
         sessionId: activeSession?.id,
         userId: user.id,
         contentTypes: data?.reduce((acc: any, item: any) => {
-          acc[item.content_type] = (acc[item.content_type] || 0) + 1;
+          acc[item.asset_type] = (acc[item.asset_type] || 0) + 1;
           return acc;
         }, {}) || {}
       });
@@ -172,8 +171,8 @@ export const useRealtimeWorkspace = () => {
       sessionId: activeSession?.id,
       assets: assets.slice(0, 3).map((item: any) => ({
         id: item.id,
-        content_type: item.content_type,
-        url: item.url ? 'has_url' : 'no_url'
+        asset_type: item.asset_type,
+        temp_storage_path: item.temp_storage_path
       }))
     });
   }, [assets, itemsLoading, itemsError, activeSession?.id]);
@@ -240,7 +239,7 @@ export const useRealtimeWorkspace = () => {
             if (eventType === 'INSERT' && workspaceItem.status === 'generated' && 
                 !processedUpdatesRef.current.has(workspaceItem.id)) {
               
-              console.log('🎉 Workspace item created:', workspaceItem.id, 'content_type:', workspaceItem.content_type);
+              console.log('🎉 Workspace item created:', workspaceItem.id, 'asset_type:', workspaceItem.asset_type);
               processedUpdatesRef.current.add(workspaceItem.id);
               
               // ✅ FIX: Use coordinated invalidation for all workspace queries
@@ -251,7 +250,7 @@ export const useRealtimeWorkspace = () => {
               window.dispatchEvent(new CustomEvent('generation-completed', {
                 detail: { 
                   assetId: workspaceItem.id, 
-                  type: workspaceItem.content_type, 
+                  type: workspaceItem.asset_type, 
                   status: 'completed'
                 }
               }));
@@ -511,47 +510,51 @@ export const useRealtimeWorkspace = () => {
     // ✅ ADD: Safe metadata parsing
     let safeMetadata = {};
     try {
-      safeMetadata = item.metadata ? 
-        (typeof item.metadata === 'string' ? JSON.parse(item.metadata) : item.metadata) : 
+      safeMetadata = item.generation_settings ? 
+        (typeof item.generation_settings === 'string' ? JSON.parse(item.generation_settings) : item.generation_settings) : 
         {};
     } catch (error) {
-      console.warn('⚠️ Failed to parse metadata for item:', item.id, error);
+      console.warn('⚠️ Failed to parse generation_settings for item:', item.id, error);
       safeMetadata = {};
     }
     
-    if (item.content_type === 'image' && item.url) {
+    if (item.asset_type === 'image') {
+      // Generate signed URL for the asset
+      const assetUrl = `https://ulmdmzhcdwfadbvfpckt.supabase.co/storage/v1/object/public/workspace-temp/${item.temp_storage_path}`;
+      
       tiles.push({
         id: item.id,
         originalAssetId: item.id,
         type: 'image',
-        url: item.url,
-        prompt: item.prompt || '',
+        url: assetUrl,
+        prompt: item.original_prompt || '',
         timestamp: new Date(item.created_at),
-        quality: (item.quality as 'fast' | 'high') || 'fast',
-        modelType: item.model_type || 'sdxl',
-        enhancedPrompt: item.enhanced_prompt || '',
+        quality: 'fast', // Default quality for workspace assets
+        modelType: item.model_used || 'unknown',
+        enhancedPrompt: (safeMetadata as any).enhanced_prompt || '',
         seed: extractedSeed,
         generationParams: {
-          ...item.generation_params,
           ...safeMetadata,
           seed: extractedSeed
         }
       });
-    } else if (item.content_type === 'video' && item.url) {
+    } else if (item.asset_type === 'video') {
+      // Generate signed URL for the asset
+      const assetUrl = `https://ulmdmzhcdwfadbvfpckt.supabase.co/storage/v1/object/public/workspace-temp/${item.temp_storage_path}`;
+      
       tiles.push({
         id: item.id,
         originalAssetId: item.id,
         type: 'video',
-        url: item.url,
-        prompt: item.prompt || '',
+        url: assetUrl,
+        prompt: item.original_prompt || '',
         timestamp: new Date(item.created_at),
-        quality: (item.quality as 'fast' | 'high') || 'fast',
-        duration: 5, // Default duration
-        thumbnailUrl: item.thumbnail_url || '',
-        enhancedPrompt: item.enhanced_prompt || '',
+        quality: 'fast', // Default quality for workspace assets
+        duration: item.duration_seconds || 5,
+        thumbnailUrl: '', // No thumbnail for workspace assets yet
+        enhancedPrompt: (safeMetadata as any).enhanced_prompt || '',
         seed: extractedSeed,
         generationParams: {
-          ...item.generation_params,
           ...safeMetadata,
           seed: extractedSeed
         }
@@ -620,31 +623,21 @@ export const useRealtimeWorkspace = () => {
     toast.success(`Import feature coming soon`);
   }, []);
 
-  // Clear workspace - delete all items in current session with enhanced handling for failed jobs
+  // Clear workspace - delete all workspace_assets (migrated from workspace_items)
   const clearWorkspace = useCallback(async () => {
-    if (!activeSession?.id) return;
-    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
     try {
-      // Enhanced clearing: handle both regular and failed jobs
-      // Remove time restrictions and status filters for complete clearing
-      const { error } = await (supabase as any)
-        .from('workspace_items')
+      console.log('🧹 MIGRATED: Clearing workspace_assets for user:', user.id);
+      
+      // Delete all workspace assets for this user
+      const { error: deleteError } = await supabase
+        .from('workspace_assets')
         .delete()
-        .eq('session_id', activeSession.id);
-      
-      if (error) throw error;
-      
-      // Also clean up any orphaned jobs that might be stuck
-      try {
-        await (supabase as any)
-          .from('jobs')
-          .delete()
-          .eq('workspace_session_id', activeSession.id)
-          .in('status', ['failed', 'processing']); // Clean up problematic jobs
-      } catch (jobError) {
-        console.warn('⚠️ Failed to clean up orphaned jobs:', jobError);
-        // Don't throw - workspace clearing is still successful
-      }
+        .eq('user_id', user.id);
+
+      if (deleteError) throw deleteError;
       
       // ✅ FIX: Use coordinated invalidation for all workspace queries
       console.log('🔄 QUERY INVALIDATION: Clearing workspace, invalidating queries');
@@ -655,7 +648,7 @@ export const useRealtimeWorkspace = () => {
       console.error('❌ Error clearing workspace:', error);
       toast.error('Failed to clear workspace');
     }
-  }, [activeSession?.id, invalidateWorkspaceQueries]);
+  }, [invalidateWorkspaceQueries]);
 
   // Delete tile - permanently delete asset using unified logic
   const deleteTile = useCallback(async (tile: MediaTile) => {
@@ -675,8 +668,8 @@ export const useRealtimeWorkspace = () => {
         console.warn('⚠️ AssetService deletion failed, trying workspace-only deletion:', assetError);
         
         // Fallback: delete only from workspace if asset deletion fails
-        const { error: workspaceError } = await (supabase as any)
-          .from('workspace_items')
+        const { error: workspaceError } = await supabase
+          .from('workspace_assets')
           .delete()
           .eq('id', tile.id);
         
