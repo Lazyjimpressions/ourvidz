@@ -583,10 +583,10 @@ export const useRealtimeWorkspace = () => {
     invalidateWorkspaceQueries();
   }, [queryClient]);
 
-  // Import to workspace - would need to create workspace items
+  // Import to workspace - create workspace assets from imported assets
   const importToWorkspace = useCallback((importedAssets: UnifiedAsset[]) => {
-    console.log('🔄 Import to workspace not yet implemented for workspace_items');
-    // TODO: Implement workspace item creation for imported assets
+    console.log('🔄 Import to workspace not yet implemented for workspace_assets');
+    // TODO: Implement workspace asset creation for imported assets
     toast.success(`Import feature coming soon`);
   }, []);
 
