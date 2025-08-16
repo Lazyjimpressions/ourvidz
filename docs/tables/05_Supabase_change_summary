@@ -1,0 +1,10 @@
+Supabase: tables and buckets (new vs old)
+New/Current (use these):
+Tables: jobs (queue tracking), workspace_assets (authoritative asset index), user_library, user_collections, conversations, messages, system_config, prompt_templates, negative_prompts, user_activity_log, user_roles, profiles, projects (if used by chat context).
+Buckets: workspace-temp (staging), user-library (permanent).
+Old (deprecate/remove from code paths):
+Tables: images, videos, workspace_items (no longer written by callback in the new setup).
+Buckets: per-model/per-quality buckets (e.g., sdxl_image_fast, video_high, etc.) — replace with the 2-bucket model.
+Redis:
+Queues: sdxl_queue, wan_queue (unchanged; single list each).
+No Redis for chat.
