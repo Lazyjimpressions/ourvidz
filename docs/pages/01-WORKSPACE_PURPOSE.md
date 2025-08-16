@@ -1,20 +1,20 @@
 ﻿# Workspace Page Purpose & Implementation Guide
 
-**Date:** August 8, 2025  
-**Status:** ✅ **IMPLEMENTED - Library-First Event-Driven Workspace System with Advanced Exact Copy Functionality**  
-**Phase:** Production Ready with Complete Library-First Architecture and SDXL Image-to-Image Exact Copy  
-**Last Updated:** August 9, 2025 - Exact Copy functionality fully implemented with intelligent prompt modification, metadata extraction, and complete enhancement bypass
+**Date:** 8/16/25  
+**Status:** ✅ **IMPLEMENTED - Staging-First Workspace with Two-Bucket Storage and Exact Copy Functionality**  
+**Phase:** Production, aligned with `workspace_assets` + `workspace-actions` flow  
+**Last Updated:** 8/16/25 - Updated storage, realtime, and rendering to staging-first model
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
 ### **📊 What's Actually Built**
-- **Library-First Architecture**: All content generated directly to library, workspace listens for events
-- **Event-Driven Updates**: Workspace receives real-time updates via custom events from library
+- **Staging-First Architecture**: Workers upload to `workspace-temp`; `job-callback` inserts into `workspace_assets`
+- **Realtime Workspace**: Workspace subscribes to `public.workspace_assets` (by `user_id`) and renders newly staged assets
 - **Unified Asset System**: Single `UnifiedAsset` type for images and videos
 - **LTX-Style Workspace System**: Job-level grouping with thumbnail selector
 - **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
 - **Storage Path Normalization**: Fixed signed URL generation across all components
-- **Simplified Real-time**: Single subscription to library tables instead of workspace-specific
+- **Simplified Real-time**: Single subscription to `workspace_assets` for workspace page
 - **UI Components**: WorkspaceGrid, ContentCard, SimplePromptInput
 - **URL-Based Reference Images**: Support for drag & drop URL references
 - **Enhanced Control Parameters**: Aspect ratio, shot type, camera angle, style controls
@@ -23,12 +23,44 @@
 - **🎯 EXACT COPY FUNCTIONALITY**: Advanced SDXL image-to-image with intelligent prompt modification
 
 ### **🔧 Backend Infrastructure (COMPLETE)**
-- **Database Tables**: `images`, `videos` with `workspace_dismissed` metadata flag ✅
-- **Edge Functions**: `queue-job`, `job-callback` with library-first routing ✅
-- **Asset Service**: Event emission for workspace and other consumers ✅
-- **Real-time Subscriptions**: Library table updates trigger workspace refresh ✅
-- **Storage Path Normalization**: Fixed signed URL generation ✅
+- **Database Tables**: `workspace_assets` (staging index), `user_library` (permanent), `jobs`
+- **Edge Functions**: `queue-job` (enqueue), `job-callback` (insert staged assets), `workspace-actions` (save/discard)
+- **Realtime**: Subscribe to `public.workspace_assets` for INSERT/UPDATE/DELETE filtered by `user_id`
+- **Storage**: Two buckets — `workspace-temp` (staging), `user-library` (permanent)
 - **🎯 Exact Copy Edge Functions**: Enhanced prompt handling and reference image processing ✅
+
+### **🗄️ Storage & URL Conventions**
+- **Staging (Workspace)**
+  - bucket: `workspace-temp`
+  - key: `userId/jobId/{assetIndex}.{ext}` (e.g., `8d1f.../b4a2.../0.png`)
+  - access: create signed URL per item, or download to blob URL
+- **Library (Saved)**
+  - bucket: `user-library`
+  - key: `userId/{assetId}.{ext}` (e.g., `8d1f.../c93d....png`)
+  - access: same signing/download pattern
+
+```ts
+// Example: create a signed URL for a workspace asset
+const { data, error } = await supabase
+  .storage
+  .from('workspace-temp')
+  .createSignedUrl(temp_storage_path, 3600);
+```
+
+### **🔁 Workspace Workflow Summary**
+1) User submits generation (same control box). Default SDXL batch: 3 images.
+2) Worker generates and uploads to `workspace-temp` using `userId/jobId/{index}.{ext}`.
+3) Worker calls `job-callback`; rows inserted into `workspace_assets`.
+4) Workspace subscribes to `workspace_assets`; on INSERT, it resolves a signed URL and appends cards to the grid.
+5) User action:
+   - Save to Library → `workspace-actions` action: `save_to_library` (copy to `user-library`, insert `user_library`).
+   - Discard → `workspace-actions` action: `discard_asset` (remove storage object + `workspace_assets` row).
+
+### **🧩 Rendering & UX**
+- Cards are 1x1 and appended inline to a responsive grid (not a rigid 1x3 row).
+- Newest items first; lazy-load/paginate as needed.
+- Videos show duration overlay; images show resolution overlay.
+- Each card: Save to Library, Discard, Copy link, Use as reference.
 
 ### **🎨 UI/UX Features (COMPLETE)**
 - **LTX-Style Grid Layout**: Job-based grouping with dynamic grid sizing
