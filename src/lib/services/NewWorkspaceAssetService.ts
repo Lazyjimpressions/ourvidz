@@ -5,7 +5,7 @@ export interface WorkspaceAsset {
   id: string;
   user_id: string;
   job_id: string;
-  asset_type: 'image' | 'video';
+  asset_type: string; // Changed from 'image' | 'video' to string to match DB
   temp_storage_path: string;
   file_size_bytes: number;
   mime_type: string;
