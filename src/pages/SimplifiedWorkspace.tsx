@@ -177,7 +177,7 @@ export const SimplifiedWorkspace: React.FC = () => {
 
       // Extract and apply metadata for exact copy
       if (item.metadata) {
-        const metadata = await extractReferenceMetadata(item);
+        const metadata = await extractReferenceMetadata(item.id);
         setReferenceMetadata(metadata);
         setExactCopyMode(true);
         

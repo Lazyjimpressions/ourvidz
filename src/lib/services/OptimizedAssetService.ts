@@ -3,10 +3,7 @@ import { AssetService, type UnifiedAsset } from './AssetService';
 
 // Extended UnifiedAsset with legacy properties for compatibility
 export interface LazyAsset extends UnifiedAsset {
-  signedUrls?: {
-    main?: string;
-    thumbnail?: string;
-  };
+  signedUrls?: string[];
   bucketHint?: string;
 }
 
@@ -26,10 +23,7 @@ export class OptimizedAssetService extends AssetService {
             ...asset,
             url: mainUrl || undefined,
             thumbnailUrl: thumbnailUrl || undefined,
-            signedUrls: {
-              main: mainUrl || undefined,
-              thumbnail: thumbnailUrl || undefined,
-            },
+            signedUrls: [mainUrl, thumbnailUrl].filter(Boolean) as string[],
           };
         })
       );
@@ -42,10 +36,7 @@ export class OptimizedAssetService extends AssetService {
         ...input,
         url: mainUrl || undefined,
         thumbnailUrl: thumbnailUrl || undefined,
-        signedUrls: {
-          main: mainUrl || undefined,
-          thumbnail: thumbnailUrl || undefined,
-        },
+        signedUrls: [mainUrl, thumbnailUrl].filter(Boolean) as string[],
       };
     }
   }

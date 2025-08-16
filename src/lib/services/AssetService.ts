@@ -33,10 +33,7 @@ export interface UnifiedAsset {
   tags?: string[];
   isFavorite?: boolean;
   customTitle?: string;
-  signedUrls?: {
-    main?: string;
-    thumbnail?: string;
-  };
+  signedUrls?: string[];
   bucketHint?: string;
 }
 
