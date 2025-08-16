@@ -266,32 +266,25 @@ class DynamicEnhancementOrchestrator {
       const modelType = this.getModelTypeFromJobType(request.job_type)
       console.log('🤖 Model type selected:', modelType)
 
-      // Try to get dynamic template from database first
+      // Try cache first, then database fallback
       let enhancementResult
       try {
-        const template = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
-        enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
+        const cachedTemplate = await this.getCachedTemplate(modelType, 'enhancement', contentMode)
+        enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
         enhancementResult.fallback_level = 0
-      } catch (dbError) {
-        console.log('⚠️ Database template failed, trying cache:', dbError.message)
+        console.log('✅ Using cached template')
+      } catch (cacheError) {
+        console.log('⚠️ Cache failed, trying database:', cacheError.message)
         
         try {
-          const cachedTemplate = await this.getCachedTemplate(modelType, 'enhancement', contentMode)
-          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
+          const template = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
+          enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
           enhancementResult.fallback_level = 1
-        } catch (cacheError) {
-          console.log('⚠️ Cache failed, using database-driven template fallback:', cacheError.message)
-          
-          try {
-            const dbTemplate = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
-            enhancementResult = await this.enhanceWithRules(request, modelType, contentMode, dbTemplate)
-            enhancementResult.fallback_level = 2
-          } catch (dbTemplateError) {
-            console.log('⚠️ Database template fallback failed, using hardcoded:', dbTemplateError.message)
-            enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
-            enhancementResult.fallback_level = 3
-            enhancementResult.template_name = 'hardcoded_fallback'
-          }
+        } catch (dbError) {
+          console.log('⚠️ Database template failed, using hardcoded fallback:', dbError.message)
+          enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
+          enhancementResult.fallback_level = 2
+          enhancementResult.template_name = 'hardcoded_fallback'
         }
       }
 
@@ -855,12 +848,26 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
-   * Get cached template from system_config (fallback method)
+   * Get cached template from system_config (cache-first approach)
    */
   private async getCachedTemplate(modelType: string, useCase: string, contentMode: string) {
-    // This would use the shared cache-utils if available
-    // For now, throw error to trigger next fallback
-    throw new Error(`Cached template not implemented for ${modelType}/${useCase}/${contentMode}`);
+    try {
+      const cache = await getCachedData();
+      if (!cache) {
+        throw new Error('No cache data available');
+      }
+      
+      const template = getTemplateFromCache(cache, modelType, useCase, contentMode);
+      if (!template) {
+        throw new Error(`No cached template found for ${modelType}/${useCase}/${contentMode}`);
+      }
+      
+      console.log('✅ Using cached template:', template.template_name || 'unnamed');
+      return template;
+    } catch (error) {
+      console.log('❌ Cache template lookup failed:', error.message);
+      throw error;
+    }
   }
 
   /**

@@ -202,7 +202,7 @@ serve(async (req) => {
           'Authorization': `Bearer ${redisToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ data: JSON.stringify(queuePayload) })
+        body: JSON.stringify(queuePayload)
       })
 
       if (!enqueueResponse.ok) {
