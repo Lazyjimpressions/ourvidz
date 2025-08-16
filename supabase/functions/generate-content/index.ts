@@ -182,22 +182,51 @@ Deno.serve(async (req: Request) => {
     };
 
     try {
-      const workerResponse = await fetch(`${workerUrl}/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
-        },
-        body: JSON.stringify(workerPayload)
-      });
+      // Try multiple endpoint paths in case of 404
+      const endpointPaths = ['/generate', '/api/generate', '/v1/generate'];
+      let workerResponse;
+      let lastError;
+      
+      for (const path of endpointPaths) {
+        try {
+          console.log(`🔄 Trying worker endpoint: ${workerUrl}${path}`);
+          workerResponse = await fetch(`${workerUrl}${path}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+            },
+            body: JSON.stringify(workerPayload)
+          });
 
-    if (!workerResponse.ok) {
-      const errorText = await workerResponse.text().catch(() => 'No error details');
-      console.error(`❌ Worker dispatch failed: ${workerResponse.status} ${workerResponse.statusText}`, errorText);
-      throw new Error(`Worker responded with status: ${workerResponse.status}`, { 
-        cause: { workerType, workerUrl, status: workerResponse.status, details: errorText } 
-      });
-    }
+          if (workerResponse.ok) {
+            console.log(`✅ Worker endpoint success: ${workerUrl}${path}`);
+            break; // Success! Exit the loop
+          } else if (workerResponse.status === 404 && path !== endpointPaths[endpointPaths.length - 1]) {
+            console.log(`⚠️ 404 on ${path}, trying next endpoint...`);
+            continue; // Try next endpoint
+          } else {
+            // Non-404 error or last endpoint - handle as error
+            const errorText = await workerResponse.text().catch(() => 'No error details');
+            console.error(`❌ Worker dispatch failed on ${path}: ${workerResponse.status} ${workerResponse.statusText}`, errorText);
+            lastError = new Error(`Worker responded with status: ${workerResponse.status}`, { 
+              cause: { workerType, workerUrl: `${workerUrl}${path}`, status: workerResponse.status, details: errorText } 
+            });
+            break;
+          }
+        } catch (fetchError) {
+          console.error(`❌ Network error on ${path}:`, fetchError);
+          lastError = fetchError;
+          if (path === endpointPaths[endpointPaths.length - 1]) {
+            break; // Last endpoint, exit loop
+          }
+          continue; // Try next endpoint
+        }
+      }
+
+      if (!workerResponse || !workerResponse.ok) {
+        throw lastError || new Error('All worker endpoints failed');
+      }
 
       console.log('Job sent to worker successfully');
       
@@ -293,11 +322,20 @@ async function enhancePromptDirect(prompt: string, params: {
 
     const workerUrl = workerData.worker_url;
     
-    // Prepare enhancement payload
+    // Prepare enhancement payload in messages format (required by chat worker)
     const enhancementPayload = {
-      prompt: prompt.trim(),
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a prompt enhancement assistant. Enhance the given prompt for image generation.'
+        },
+        {
+          role: 'user',
+          content: prompt.trim()
+        }
+      ],
       job_type: params.jobType || 'image_fast',
-      format: params.format || 'image',
+      format: params.format || 'image', 
       quality: params.quality || 'fast',
       selected_model: params.selectedModel || 'qwen_base',
       selected_presets: params.selectedPresets || [],
