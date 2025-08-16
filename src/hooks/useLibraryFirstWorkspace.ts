@@ -506,7 +506,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
           : (quality === 'high' ? 'video_high' : 'video_fast')
         ),
-        prompt: finalPrompt,
+        original_prompt: finalPrompt,
         format: mode === 'image' ? 'png' : 'mp4',
         metadata: {
           num_images: mode === 'image' ? 3 : 1,

@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface JobRequest {
   prompt: string;
+  original_prompt?: string;
   job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high';
   quality?: 'fast' | 'high';
   format?: string;
@@ -57,12 +58,61 @@ serve(async (req) => {
 
     const jobRequest: JobRequest = await req.json()
 
-    // Validate required fields
-    if (!jobRequest.prompt || !jobRequest.job_type) {
-      return new Response('Missing required fields: prompt, job_type', { 
+    // Validate job_type
+    const validJobTypes = ['sdxl_image_fast', 'sdxl_image_high', 'video_fast', 'video_high'];
+    if (!jobRequest.job_type || !validJobTypes.includes(jobRequest.job_type)) {
+      return new Response(`Invalid job_type. Must be one of: ${validJobTypes.join(', ')}`, { 
         status: 400, 
         headers: corsHeaders 
       })
+    }
+
+    // Determine original prompt - prefer original_prompt, fallback to prompt
+    const originalPrompt = jobRequest.original_prompt || jobRequest.prompt;
+    if (!originalPrompt) {
+      return new Response('Missing required field: original_prompt or prompt', { 
+        status: 400, 
+        headers: corsHeaders 
+      })
+    }
+
+    // Determine database format (image/video) vs output format (png/mp4)
+    const dbFormat = jobRequest.job_type.includes('image') ? 'image' : 'video';
+    const outputFormat = jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4');
+    const quality = jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast');
+
+    // Handle prompt enhancement if needed
+    let enhancedPrompt = jobRequest.enhanced_prompt;
+    const shouldEnhance = jobRequest.metadata?.user_requested_enhancement && 
+                         !jobRequest.metadata?.skip_enhancement &&
+                         jobRequest.metadata?.enhancement_model !== 'none';
+
+    if (shouldEnhance && !enhancedPrompt) {
+      try {
+        console.log('🔧 Enhancing prompt before queuing job...');
+        
+        const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
+          body: {
+            original_prompt: originalPrompt,
+            job_type: jobRequest.job_type,
+            quality: quality,
+            format: dbFormat,
+            contentType: jobRequest.metadata?.contentType || 'sfw',
+            enhancement_model: jobRequest.metadata?.enhancement_model || 'qwen_instruct'
+          }
+        });
+
+        if (enhanceResponse.data?.enhanced_prompt) {
+          enhancedPrompt = enhanceResponse.data.enhanced_prompt;
+          console.log('✅ Prompt enhanced successfully');
+        } else {
+          console.warn('⚠️ Enhancement failed, using original prompt');
+          enhancedPrompt = originalPrompt;
+        }
+      } catch (error) {
+        console.error('❌ Enhancement failed:', error);
+        enhancedPrompt = originalPrompt;
+      }
     }
 
     // Create job record
@@ -72,10 +122,10 @@ serve(async (req) => {
         user_id: user.id,
         job_type: jobRequest.job_type,
         status: 'queued',
-        prompt: jobRequest.prompt,
-        enhanced_prompt: jobRequest.enhanced_prompt,
-        quality: jobRequest.quality || 'fast',
-        format: jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4'),
+        original_prompt: originalPrompt,
+        enhanced_prompt: enhancedPrompt || originalPrompt,
+        quality: quality,
+        format: dbFormat,  // Store as 'image'/'video' in database
         model_type: jobRequest.model_type,
         metadata: {
           ...jobRequest.metadata,
@@ -108,10 +158,10 @@ serve(async (req) => {
       jobId: job.id,
       userId: user.id,
       jobType: jobRequest.job_type,
-      prompt: jobRequest.prompt,
-      enhancedPrompt: jobRequest.enhanced_prompt,
-      quality: jobRequest.quality || 'fast',
-      format: jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4'),
+      originalPrompt: originalPrompt,
+      enhancedPrompt: enhancedPrompt || originalPrompt,
+      quality: quality,
+      format: outputFormat,  // Use output format (png/mp4) for worker
       modelType: jobRequest.model_type,
       referenceImageUrl: jobRequest.reference_image_url,
       referenceStrength: jobRequest.reference_strength,
