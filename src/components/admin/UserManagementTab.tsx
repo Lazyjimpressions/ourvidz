@@ -137,14 +137,15 @@ export const UserManagementTab = () => {
               .eq('user_id', user.id);
 
             const { data: imageStats } = await supabase
-              .from('images')
-              .select('id, file_size')
-              .eq('user_id', user.id);
+              .from('workspace_assets')
+              .select('id, file_size_bytes')
+              .eq('user_id', user.id)
+              .eq('asset_type', 'image');
 
             const totalJobs = jobStats?.length || 0;
             const totalImages = imageStats?.length || 0;
             const totalVideos = jobStats?.filter(j => j.job_type.includes('video')).length || 0;
-            const storageUsed = imageStats?.reduce((sum, img) => sum + (img.file_size || 0), 0) || 0;
+            const storageUsed = imageStats?.reduce((sum, img) => sum + (img.file_size_bytes || 0), 0) || 0;
 
             return {
               ...user,

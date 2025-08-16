@@ -469,7 +469,8 @@ You say: ...`;
       character_id, 
       content_tier,
       roleplay_settings,
-      participants
+      participants,
+      long_response = false
     } = body;
 
     if (!conversation_id || !message) {
@@ -766,6 +767,7 @@ You say: ...`;
     });
 
     const workerStart = Date.now();
+    const timeoutMs = long_response ? 90000 : 45000; // 90s for long responses, 45s default
     const chatResponse = await fetch(`${chatWorkerUrl}/chat`, {
       method: 'POST',
       headers: {
@@ -773,7 +775,7 @@ You say: ...`;
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(basePayload),
-      signal: AbortSignal.timeout(45000), // 45 second timeout
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!chatResponse.ok) {

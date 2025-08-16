@@ -21,16 +21,18 @@ export const StorageUsageIndicator = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Get user's assets count
+        // Get user's assets count from workspace_assets
         const [imagesResult, videosResult] = await Promise.all([
           supabase
-            .from('images')
-            .select('id', { count: 'exact' })
-            .eq('user_id', user.id),
-          supabase
-            .from('videos')
+            .from('workspace_assets')
             .select('id', { count: 'exact' })
             .eq('user_id', user.id)
+            .eq('asset_type', 'image'),
+          supabase
+            .from('workspace_assets')
+            .select('id', { count: 'exact' })
+            .eq('user_id', user.id)
+            .eq('asset_type', 'video')
         ]);
 
         const imageCount = imagesResult.count || 0;

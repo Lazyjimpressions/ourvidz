@@ -84,38 +84,35 @@ export const ContentModerationTab = () => {
   const loadContent = async () => {
     setIsLoading(true);
     try {
-      // Get images with moderation data
-      const { data: images, error: imagesError } = await supabase
-        .from('images')
+      // Get images for basic content review (no moderation fields in new schema)
+      const { data: assets, error: assetsError } = await supabase
+        .from('workspace_assets')
         .select(`
           id,
           user_id,
-          prompt,
-          image_url,
-          nsfw_score,
-          moderation_status,
-          created_at,
-          reviewed_at,
-          reviewed_by,
-          review_notes
+          original_prompt,
+          temp_storage_path,
+          created_at
         `)
-        .order('created_at', { ascending: false });
+        .eq('asset_type', 'image')
+        .order('created_at', { ascending: false })
+        .limit(100);
 
-      if (imagesError) throw imagesError;
+      if (assetsError) throw assetsError;
 
-      const contentItems: ContentItem[] = (images || []).map(img => ({
-        id: img.id,
-        user_id: img.user_id,
-        user_email: 'Unknown', // Removed profiles dependency for now
+      const contentItems: ContentItem[] = (assets || []).map(asset => ({
+        id: asset.id,
+        user_id: asset.user_id,
+        user_email: 'Unknown',
         content_type: 'image' as const,
-        file_url: img.image_url,
-        prompt: img.prompt,
-        nsfw_score: img.nsfw_score || 0,
-        moderation_status: (img.moderation_status as 'pending' | 'approved' | 'rejected' | 'flagged') || 'pending',
-        created_at: img.created_at,
-        reviewed_at: img.reviewed_at,
-        reviewed_by: img.reviewed_by,
-        review_notes: img.review_notes
+        file_url: asset.temp_storage_path,
+        prompt: asset.original_prompt,
+        nsfw_score: 0, // Not available in simplified schema
+        moderation_status: 'pending' as const, // Default status
+        created_at: asset.created_at,
+        reviewed_at: undefined,
+        reviewed_by: undefined,
+        review_notes: undefined
       }));
 
       setContent(contentItems);
@@ -163,45 +160,12 @@ export const ContentModerationTab = () => {
   };
 
   const handleModerationAction = async (itemId: string, action: 'approve' | 'reject' | 'flag', notes?: string) => {
-    try {
-      const statusMap = {
-        'approve': 'approved',
-        'reject': 'rejected', 
-        'flag': 'flagged'
-      } as const;
-      
-      const updateData = {
-        moderation_status: statusMap[action],
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: 'admin', // TODO: Get current admin user
-        review_notes: notes
-      };
-
-      const { error } = await supabase
-        .from('images')
-        .update(updateData)
-        .eq('id', itemId);
-
-      if (error) throw error;
-
-      setContent(content.map(item => 
-        item.id === itemId ? { ...item, ...updateData } : item
-      ));
-
-      toast({
-        title: "Success",
-        description: `Content ${action}ed successfully`
-      });
-
-      setSelectedItem(null);
-    } catch (error) {
-      console.error(`Error ${action}ing content:`, error);
-      toast({
-        title: "Error",
-        description: `Failed to ${action} content`,
-        variant: "destructive"
-      });
-    }
+    // Note: Moderation functionality disabled in simplified schema
+    toast({
+      title: "Feature Not Available",
+      description: "Moderation features are not available in the simplified schema. This is a display-only interface.",
+      variant: "destructive"
+    });
   };
 
   const getStatusBadgeVariant = (status: string) => {

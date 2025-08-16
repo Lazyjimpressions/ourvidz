@@ -44,6 +44,25 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // Verify user is admin
+    const { data: { user } } = await supabaseClient.auth.getUser()
+    if (!user) {
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    const { data: isAdmin, error: roleError } = await supabaseClient
+      .rpc('has_role', { _user_id: user.id, _role: 'admin' })
+
+    if (roleError || !isAdmin) {
+      return new Response(
+        JSON.stringify({ error: 'Admin access required' }),
+        { status: 403, headers: corsHeaders }
+      )
+    }
+
     // Get worker health from system_config
     const { data: systemConfig } = await supabaseClient
       .from('system_config')
@@ -88,23 +107,31 @@ serve(async (req) => {
       return '> 10 mins'
     }
 
-    // Format worker health data
-    const formatWorkers = (workers: any[]): WorkerHealth[] => {
-      return workers.map(worker => ({
-        type: worker.type || 'unknown',
-        url: worker.url || '',
-        lastChecked: worker.lastChecked || new Date().toISOString(),
-        responseTime: worker.responseTime,
-        status: worker.status || 'unknown'
-      }))
+    // Format worker health data from current cache structure
+    const formatWorkerFromObject = (workerObj: any, type: string): WorkerHealth => {
+      if (!workerObj) {
+        return {
+          type,
+          url: '',
+          lastChecked: new Date().toISOString(),
+          status: 'unknown'
+        }
+      }
+      return {
+        type,
+        url: workerObj.url || '',
+        lastChecked: workerObj.lastChecked || new Date().toISOString(),
+        responseTime: workerObj.responseTimeMs,
+        status: workerObj.isHealthy ? 'healthy' : 'unhealthy'
+      }
     }
 
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
       workers: {
-        chat: formatWorkers(workerHealthCache.chat || []),
-        sdxl: formatWorkers(workerHealthCache.sdxl || []),
-        wan: formatWorkers(workerHealthCache.wan || [])
+        chat: [formatWorkerFromObject(workerHealthCache.chatWorker, 'chat')],
+        sdxl: [formatWorkerFromObject(workerHealthCache.sdxlWorker, 'sdxl')],
+        wan: [formatWorkerFromObject(workerHealthCache.wanWorker, 'wan')]
       },
       queues: queueDepths,
       etaEstimates: {

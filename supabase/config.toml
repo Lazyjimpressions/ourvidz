@@ -1,8 +1,8 @@
 
 project_id = "ulmdmzhcdwfadbvfpckt"
 
-[functions.generation-complete]
-verify_jwt = false
+[functions.system-metrics]
+verify_jwt = true
 
 [functions.workspace-actions]
 verify_jwt = true

@@ -93,8 +93,9 @@ export const AnalyticsTab = () => {
 
       // Get image statistics
       const { data: images, error: imagesError } = await supabase
-        .from('images')
+        .from('workspace_assets')
         .select('*')
+        .eq('asset_type', 'image')
         .gte('created_at', startDate.toISOString());
 
       if (imagesError) throw imagesError;
@@ -130,7 +131,7 @@ export const AnalyticsTab = () => {
 
       const totalImages = images?.length || 0;
       const totalVideos = jobs?.filter(j => j.job_type.includes('video')).length || 0;
-      const storageUsed = images?.reduce((sum, img) => sum + (img.file_size || 0), 0) || 0;
+      const storageUsed = images?.reduce((sum, img) => sum + (img.file_size_bytes || 0), 0) || 0;
 
       // Calculate average job time (simplified)
       const completedJobsWithTime = jobs?.filter(j => 

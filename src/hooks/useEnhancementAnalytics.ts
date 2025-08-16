@@ -23,7 +23,7 @@ export const useEnhancementAnalytics = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Store in jobs table directly (views are temporarily unavailable)
+      // Store enhancement analytics in jobs table only (simplified schema)
       const { error: jobAnalysisError } = await supabase
         .from('jobs')
         .update({
@@ -38,42 +38,7 @@ export const useEnhancementAnalytics = () => {
         console.error('❌ Failed to store job enhancement analysis:', jobAnalysisError);
       }
 
-      // Store in appropriate base table based on job type
-      if (metrics.jobType.includes('image') || metrics.jobType.includes('sdxl')) {
-        const { error: imageAnalysisError } = await supabase
-          .from('images')
-          .update({
-            enhancement_time_ms: metrics.enhancementTimeMs,
-            quality_improvement: metrics.qualityImprovement,
-            qwen_expansion_percentage: metrics.tokenOptimization ? 
-              Math.min(((metrics.tokenOptimization.enhancedTokens - metrics.tokenOptimization.originalTokens) / metrics.tokenOptimization.originalTokens) * 100, 99999.99) : 
-              null,
-          })
-          .eq('user_id', user.id)
-          .eq('prompt', metrics.originalPrompt)
-          .eq('enhanced_prompt', metrics.enhancedPrompt);
-
-        if (imageAnalysisError) {
-          console.error('❌ Failed to store image enhancement analysis:', imageAnalysisError);
-        }
-      } else if (metrics.jobType.includes('video')) {
-        const { error: videoAnalysisError } = await supabase
-          .from('videos')
-          .update({
-            enhancement_time_ms: metrics.enhancementTimeMs,
-            quality_improvement: metrics.qualityImprovement,
-            qwen_expansion_percentage: metrics.tokenOptimization ? 
-              Math.min(((metrics.tokenOptimization.enhancedTokens - metrics.tokenOptimization.originalTokens) / metrics.tokenOptimization.originalTokens) * 100, 99999.99) : 
-              null,
-          })
-          .eq('user_id', user.id)
-          .eq('original_prompt', metrics.originalPrompt)
-          .eq('enhanced_prompt', metrics.enhancedPrompt);
-
-        if (videoAnalysisError) {
-          console.error('❌ Failed to store video enhancement analysis:', videoAnalysisError);
-        }
-      }
+      // Note: Legacy table updates removed in simplified schema
 
       // Log user activity
       const { error: activityError } = await supabase
