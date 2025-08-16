@@ -427,20 +427,31 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
       <div className="max-w-4xl mx-auto">
         <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-3 py-2 relative">
           <div className="space-y-1.5">
-            {/* Row 1: IMAGE button + Reference Images + Prompt Input */}
-            <div className="flex items-center gap-1.5">
-              {/* IMAGE Button (Stacked) */}
-              <div className="flex flex-col">
+            {/* Row 1: IMAGE/VIDEO buttons + Reference Images + Prompt Input */}
+            <div className="flex items-center gap-1.5 justify-end">
+              {/* IMAGE/VIDEO Buttons (Stacked) */}
+              <div className="flex flex-col gap-0.5">
                 <button
                   onClick={() => onModeChange('image')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
                     mode === 'image'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   }`}
                 >
-                  <Image size={10} />
+                  <Image size={9} />
                   IMAGE
+                </button>
+                <button
+                  onClick={() => onModeChange('video')}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    mode === 'video'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <Video size={9} />
+                  VIDEO
                 </button>
               </div>
 
@@ -474,9 +485,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 )}
               </div>
 
-              {/* Prompt Input - Wider like LTX */}
-              <div className="flex-1">
-                <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+              {/* Prompt Input - Right justified */}
+              <div className="flex-1 flex justify-end">
+                <form onSubmit={handleSubmit} className="flex items-center gap-1.5 w-full max-w-2xl">
                   <div className="relative flex-1">
                     <textarea
                       value={prompt}
@@ -496,25 +507,25 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     )}
                   </div>
 
-                  {/* Generate Button */}
+                  {/* Generate Button - Smaller */}
                   <button
                     type="submit"
                     disabled={isGenerating || (!prompt.trim() && !exactCopyMode)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isGenerating ? (
-                      <div className="animate-spin w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full" />
+                      <div className="animate-spin w-3 h-3 border-2 border-primary-foreground border-t-transparent rounded-full" />
                     ) : (
-                      <Zap size={12} />
+                      <Zap size={10} />
                     )}
-                    {isGenerating ? 'Generating...' : 'Generate'}
+                    {isGenerating ? 'Gen...' : 'Generate'}
                   </button>
                 </form>
               </div>
             </div>
 
-            {/* Row 2: Control Bar */}
-            <div className="flex items-center gap-1 text-xs">
+            {/* Row 2: Control Bar - Right justified */}
+            <div className="flex items-center gap-1 text-xs justify-end">
               {/* Quality Toggle */}
               <button
                 onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')}
