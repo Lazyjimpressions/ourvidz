@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceAssetService, type UnifiedWorkspaceAsset } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useEffect } from 'react';
 
 const WORKSPACE_ASSETS_QUERY_KEY = ['workspace-assets'];
 
@@ -127,3 +128,4 @@ export function useWorkspaceRealtimeUpdates() {
     };
   }, [queryClient]);
 }
+

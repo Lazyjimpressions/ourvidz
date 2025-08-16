@@ -38,20 +38,22 @@ export class WorkspaceAssetService {
       }
 
       // Convert to unified format
-      return assets.map(asset => ({
+      return (assets || []).map((asset: any) => ({
         id: asset.id,
         userId: asset.user_id,
         jobId: asset.job_id,
         assetType: asset.asset_type as 'image' | 'video',
         tempStoragePath: asset.temp_storage_path,
-        fileSizeBytes: asset.file_size_bytes,
+        fileSizeBytes: Number(asset.file_size_bytes),
         mimeType: asset.mime_type,
-        durationSeconds: asset.duration_seconds,
-        assetIndex: asset.asset_index,
-        generationSeed: asset.generation_seed,
+        durationSeconds: asset.duration_seconds ? Number(asset.duration_seconds) : undefined,
+        assetIndex: Number(asset.asset_index),
+        generationSeed: Number(asset.generation_seed),
         originalPrompt: asset.original_prompt,
         modelUsed: asset.model_used,
-        generationSettings: asset.generation_settings || {},
+        generationSettings: (asset.generation_settings && typeof asset.generation_settings === 'object')
+          ? (asset.generation_settings as Record<string, any>)
+          : {},
         createdAt: asset.created_at,
         expiresAt: asset.expires_at
       }));
@@ -150,3 +152,4 @@ export class WorkspaceAssetService {
     }
   }
 }
+
