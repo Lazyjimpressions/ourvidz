@@ -144,10 +144,18 @@ serve(async (req) => {
     if (!supportedEndpoints.length) {
       console.log('🔍 Attempting to discover worker endpoints...')
       
-      // Try to get worker info/capabilities
+      // Try to get worker info/capabilities (unauthenticated first, then with Bearer token)
       const infoEndpoints = ['/worker/info', '/status', '/info', '/api/status']
+      const apiKey = (worker_type === 'chat')
+        ? Deno.env.get('CHAT_WORKER_API_KEY')
+        : (worker_type === 'sdxl')
+          ? Deno.env.get('SDXL_WORKER_API_KEY')
+          : Deno.env.get('WAN_WORKER_API_KEY')
+      
       for (const infoEndpoint of infoEndpoints) {
+        let infoOk = false
         try {
+          // Attempt without auth
           const infoResponse = await fetch(`${workerUrl}${infoEndpoint}`, {
             method: 'GET',
             signal: AbortSignal.timeout(3000)
@@ -156,18 +164,42 @@ serve(async (req) => {
             const infoData = await infoResponse.json()
             console.log(`✅ Worker info from ${infoEndpoint}:`, infoData)
             
-            // Extract endpoints from worker info
             if (infoData.endpoints) {
               supportedEndpoints = Array.isArray(infoData.endpoints) ? infoData.endpoints : Object.keys(infoData.endpoints)
             }
             if (infoData.capabilities) {
               workerCapabilities = infoData.capabilities
             }
+            infoOk = true
             break
+          } else if ((infoResponse.status === 401 || infoResponse.status === 403) && apiKey) {
+            // Retry with Authorization header
+            try {
+              const infoAuthResponse = await fetch(`${workerUrl}${infoEndpoint}`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${apiKey}` },
+                signal: AbortSignal.timeout(3000)
+              })
+              if (infoAuthResponse.ok) {
+                const infoData = await infoAuthResponse.json()
+                console.log(`✅ Worker info (auth) from ${infoEndpoint}:`, infoData)
+                if (infoData.endpoints) {
+                  supportedEndpoints = Array.isArray(infoData.endpoints) ? infoData.endpoints : Object.keys(infoData.endpoints)
+                }
+                if (infoData.capabilities) {
+                  workerCapabilities = infoData.capabilities
+                }
+                infoOk = true
+                break
+              }
+            } catch (_) {
+              // ignore and continue
+            }
           }
-        } catch (infoError) {
+        } catch (_) {
           // Continue trying other info endpoints
         }
+        if (infoOk) break
       }
     }
 
@@ -178,7 +210,7 @@ serve(async (req) => {
       // Worker-type-specific endpoints first, then common ones
       let testEndpoints = []
       if (worker_type === 'wan') {
-        testEndpoints = ['/wan/generate', '/wan/image', '/generate', '/api/generate', '/v1/generate']
+        testEndpoints = ['/wan/generate', '/wan/image', '/image', '/generate', '/api/generate', '/v1/generate']
       } else if (worker_type === 'chat') {
         testEndpoints = ['/chat', '/enhance', '/api/chat', '/generate']
       } else if (worker_type === 'sdxl') {
@@ -211,15 +243,16 @@ serve(async (req) => {
 
     // Update health cache in system_config
     try {
-      const healthCacheKey = worker_type === 'chat' ? 'chatWorker' : 'wanWorker'
+      const healthCacheKey = worker_type === 'chat' ? 'chatWorker' : (worker_type === 'sdxl' ? 'sdxlWorker' : 'wanWorker')
+      const baseConfig = (currentConfig && currentConfig.config) ? currentConfig.config : {}
       await supabase
         .from('system_config')
         .upsert({
           id: 1,
           config: {
-            ...currentConfig.config,
+            ...baseConfig,
             workerHealthCache: {
-              ...currentConfig.config.workerHealthCache,
+              ...(baseConfig.workerHealthCache || {}),
               [healthCacheKey]: {
                 isHealthy,
                 lastChecked: new Date().toISOString(),

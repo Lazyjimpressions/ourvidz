@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
 
     // 4. Get worker info with capabilities
     const workerType = await mapModelToWorkerType(model, false);
-    const workerInfo = await getWorkerInfo(workerType);
+    let workerInfo = await getWorkerInfo(workerType);
     
     // If no dedicated worker available, try fallback
     if (!workerInfo && workerType !== 'wan') {
@@ -188,10 +188,10 @@ Deno.serve(async (req: Request) => {
     };
 
     try {
-      const success = await dispatchToWorker(workerInfo, workerPayload);
-      
-      if (!success) {
-        throw new Error('All worker endpoints failed');
+      const dispatchResult = await dispatchToWorker(workerInfo, workerPayload);
+      if (!dispatchResult.ok) {
+        const tried = dispatchResult.attemptedEndpoints?.join(', ');
+        throw new Error(`All worker endpoints failed${tried ? ` (tried: ${tried})` : ''}`);
       }
 
       console.log('✅ Worker dispatch successful');
@@ -213,7 +213,8 @@ Deno.serve(async (req: Request) => {
           error: 'Failed to queue job', 
           details: workerError.message,
           worker_type: workerType,
-          worker_url: workerInfo?.worker_url 
+          worker_url: workerInfo?.worker_url,
+          attempted_endpoints: /\(tried: ([^)]*)\)/.exec(workerError.message || '')?.[1]?.split(', ').filter(Boolean) || undefined 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -254,14 +255,10 @@ async function enhancePromptWithChatWorker(prompt: string, model: string): Promi
 // Helper function to map models to worker types
 const mapModelToWorkerType = async (model: string, enhancementOnly: boolean): Promise<string> => {
   if (enhancementOnly) return 'chat';
-  
-  // Route both SDXL and WAN models to 'wan' for now until distinct SDXL worker is configured
-  switch (model.toLowerCase()) {
-    case 'sdxl':
-    case 'wan':
-    default:
-      return 'wan';
-  }
+  const normalized = (model || '').toLowerCase();
+  if (normalized.includes('sdxl')) return 'sdxl';
+  if (normalized.includes('wan')) return 'wan';
+  return 'wan';
 };
 
 async function enhancePromptDirect(prompt: string, params: {
@@ -384,62 +381,92 @@ async function getWorkerInfo(workerType: string): Promise<any | null> {
 }
 
 // Robust worker dispatch with endpoint fallbacks and payload adaptation
-async function dispatchToWorker(workerInfo: any, payload: any): Promise<boolean> {
-  const { worker_url, supportedEndpoints = [], workerCapabilities = {} } = workerInfo;
+async function dispatchToWorker(workerInfo: any, payload: any): Promise<{ ok: boolean; attemptedEndpoints: string[] }> {
+  const { worker_url, supportedEndpoints = [], workerCapabilities = {}, worker_type } = workerInfo;
   
-  // Define smart endpoint fallbacks based on worker capabilities and type
-  let fallbackEndpoints = [];
+  const attemptedEndpoints: string[] = [];
+  
+  // Determine worker-first fallback endpoints
+  let fallbackEndpoints: string[] = [];
+  const workerType = (worker_type || '').toLowerCase();
+  const isVideoGeneration = payload.format === 'video';
   
   if (supportedEndpoints.length > 0) {
     fallbackEndpoints = supportedEndpoints;
   } else {
-    // Intelligent fallbacks based on payload/model type
-    const isVideoGeneration = payload.format === 'video';
-    const isSDXLModel = payload.model?.includes('sdxl');
-    
-    if (isVideoGeneration) {
-      fallbackEndpoints = ['/video', '/generate', '/api/video', '/v1/video', '/api/generate', '/v1/generate'];
-    } else if (isSDXLModel) {
+    if (workerType === 'wan') {
+      fallbackEndpoints = ['/wan/generate', '/wan/image', '/image', '/generate', '/v1/generate', '/api/generate'];
+    } else if (workerType === 'sdxl') {
       fallbackEndpoints = ['/sdxl/generate', '/sdxl/image', '/generate', '/api/generate', '/v1/generate'];
+    } else if (workerType === 'chat') {
+      fallbackEndpoints = ['/generate', '/enhance', '/chat'];
+    } else if (isVideoGeneration) {
+      fallbackEndpoints = ['/video', '/generate', '/api/video', '/v1/video', '/api/generate', '/v1/generate'];
     } else {
-      fallbackEndpoints = ['/wan/generate', '/wan/image', '/generate', '/api/generate', '/v1/generate', '/image'];
+      fallbackEndpoints = ['/generate', '/api/generate', '/v1/generate', '/image', '/wan/generate', '/sdxl/generate'];
     }
   }
   
-  console.log(`🎯 Attempting dispatch to ${fallbackEndpoints.length} endpoints:`, fallbackEndpoints);
+  console.log(`🎯 Attempting dispatch (worker_type=${workerType || 'unknown'}) to ${fallbackEndpoints.length} endpoints:`, fallbackEndpoints);
   
   for (const endpoint of fallbackEndpoints) {
     const fullUrl = `${worker_url}${endpoint}`;
+    attemptedEndpoints.push(endpoint);
     console.log(`🔄 Trying worker endpoint: ${fullUrl}`);
     
     try {
       // Adapt payload based on endpoint and worker capabilities
-      let adaptedPayload = { ...payload };
+      let adaptedPayload: any = { ...payload };
       
-      // Add endpoint-specific payload adaptations
+      // Endpoint-specific payload adaptations
       if (endpoint.includes('/wan/')) {
         adaptedPayload.worker_type = 'wan';
       } else if (endpoint.includes('/sdxl/')) {
         adaptedPayload.worker_type = 'sdxl';
-      } else if (endpoint.includes('/video/')) {
+      } else if (endpoint.includes('/video')) {
         adaptedPayload.content_type = 'video';
       }
+      
+      // Chat-style adaptation if targeting chat worker or chat endpoints
+      const isChatStyle = workerType === 'chat' || endpoint === '/enhance' || endpoint === '/chat';
+      if (isChatStyle) {
+        const prompt = (payload.prompt || '').toString();
+        adaptedPayload = {
+          messages: [
+            { role: 'system', content: 'You are an image generation assistant.' },
+            { role: 'user', content: prompt }
+          ],
+          job_type: payload.generation_settings?.jobType || (payload.format === 'video' ? 'video_fast' : 'image_fast'),
+          format: payload.format || 'image',
+          quality: payload.quality || 'fast',
+          selected_model: payload.model || 'wan',
+          enhancement_only: false,
+          callback_url: payload.callback_url
+        };
+      }
+      
+      // Select API key based on worker type
+      const apiKey = workerType === 'chat'
+        ? Deno.env.get('CHAT_WORKER_API_KEY')
+        : workerType === 'sdxl'
+          ? Deno.env.get('SDXL_WORKER_API_KEY')
+          : Deno.env.get('WAN_WORKER_API_KEY');
       
       const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`,
-          'X-Worker-Type': payload.model || 'wan'
+          ...(apiKey ? { 'Authorization': `Bearer ${apiKey}` } : {}),
+          'X-Worker-Type': workerType || (payload.model || 'wan')
         },
         body: JSON.stringify(adaptedPayload),
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+        signal: AbortSignal.timeout(30000)
       });
 
       if (response.ok) {
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
         console.log(`✅ Success on ${endpoint}:`, { status: response.status, hasResult: !!result });
-        return true;
+        return { ok: true, attemptedEndpoints };
       } else {
         const errorText = await response.text().catch(() => 'No error details');
         console.error(`❌ Worker dispatch failed on ${endpoint}: ${response.status} ${response.statusText}`, errorText.substring(0, 200));
@@ -459,11 +486,11 @@ async function dispatchToWorker(workerInfo: any, payload: any): Promise<boolean>
         }
       }
     } catch (fetchError) {
-      console.error(`❌ Network error on ${endpoint}:`, fetchError.message);
+      console.error(`❌ Network error on ${endpoint}:`, (fetchError as Error).message);
       continue;
     }
   }
   
   console.error(`❌ All ${fallbackEndpoints.length} endpoints failed for worker: ${worker_url}`);
-  return false;
+  return { ok: false, attemptedEndpoints };
 }
