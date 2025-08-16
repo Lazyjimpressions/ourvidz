@@ -182,29 +182,30 @@ export const useGeneration = () => {
                   jobType: jobData.job_type 
                 });
                 
-                // Get image URL and bucket for images
+                // Get asset URL from workspace_assets for recent generations
                 let imageUrl = null;
                 let bucket = null;
                 if (assetType === 'image') {
-                  const { data: imageData, error: imageError } = await supabase
-                    .from('images')
-                    .select('image_url, metadata')
-                    .eq('id', assetId)
-                    .single();
+                  const { data: assetData, error: assetError } = await supabase
+                    .from('workspace_assets')
+                    .select('temp_storage_path, generation_settings')
+                    .eq('job_id', currentJob.id)
+                    .eq('asset_type', 'image')
+                    .maybeSingle();
                   
-                  if (!imageError && imageData?.image_url) {
-                    imageUrl = imageData.image_url;
+                  if (!assetError && assetData?.temp_storage_path) {
+                    imageUrl = assetData.temp_storage_path;
                     
-                    // Extract bucket from job type or metadata
+                    // Extract bucket from generation settings or job type
                     if (jobData.job_type?.includes('sdxl_image_high')) {
-                      bucket = 'sdxl_image_high';
+                      bucket = 'workspace-temp';
                     } else if (jobData.job_type?.includes('sdxl_image_fast')) {
-                      bucket = 'sdxl_image_fast';
-                    } else if (imageData.metadata && typeof imageData.metadata === 'object' && 'bucket' in imageData.metadata) {
-                      bucket = (imageData.metadata as any).bucket;
+                      bucket = 'workspace-temp';
+                    } else if (assetData.generation_settings && typeof assetData.generation_settings === 'object') {
+                      bucket = 'workspace-temp'; // All new assets go to workspace-temp
                     }
                     
-                    console.log('🖼️ Resolved image URL and bucket:', { imageUrl, bucket });
+                    console.log('🖼️ Resolved asset URL and bucket:', { imageUrl, bucket });
                   }
                 }
                 

@@ -1,14 +1,11 @@
 
+// Simplified database types using the new schema
 import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
 export type Project = Database['public']['Tables']['projects']['Row'];
 export type ProjectInsert = Database['public']['Tables']['projects']['Insert'];
 export type ProjectUpdate = Database['public']['Tables']['projects']['Update'];
-
-export type Video = Database['public']['Tables']['videos']['Row'];
-export type VideoInsert = Database['public']['Tables']['videos']['Insert'];
-export type VideoUpdate = Database['public']['Tables']['videos']['Update'];
 
 export type Job = Database['public']['Tables']['jobs']['Row'];
 export type JobInsert = Database['public']['Tables']['jobs']['Insert'];
@@ -17,55 +14,19 @@ export type JobUpdate = Database['public']['Tables']['jobs']['Update'];
 export type UsageLog = Database['public']['Tables']['usage_logs']['Row'];
 export type UsageLogInsert = Database['public']['Tables']['usage_logs']['Insert'];
 
-export type Image = Database['public']['Tables']['images']['Row'];
-export type ImageInsert = Database['public']['Tables']['images']['Insert'];
-export type ImageUpdate = Database['public']['Tables']['images']['Update'];
+export type WorkspaceAsset = Database['public']['Tables']['workspace_assets']['Row'];
+export type WorkspaceAssetInsert = Database['public']['Tables']['workspace_assets']['Insert'];
+export type WorkspaceAssetUpdate = Database['public']['Tables']['workspace_assets']['Update'];
 
-// Video operations
-export const videoAPI = {
-  async getByUser() {
-    const { data, error } = await supabase
-      .from('videos')
-      .select(`
-        *,
-        project:projects(title, original_prompt)
-      `)
-      .order('created_at', { ascending: false });
-    
-    if (error) throw error;
-    return data;
-  },
+export type UserLibrary = Database['public']['Tables']['user_library']['Row'];
+export type UserLibraryInsert = Database['public']['Tables']['user_library']['Insert'];
+export type UserLibraryUpdate = Database['public']['Tables']['user_library']['Update'];
 
-  async create(video: VideoInsert) {
+// Asset operations using the new simplified schema
+export const assetAPI = {
+  async getWorkspaceAssets() {
     const { data, error } = await supabase
-      .from('videos')
-      .insert(video)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async updateStatus(id: string, status: string, additionalUpdates?: VideoUpdate) {
-    const updates = { status, ...additionalUpdates };
-    const { data, error } = await supabase
-      .from('videos')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  }
-};
-
-// Image operations
-export const imageAPI = {
-  async getAll() {
-    const { data, error } = await supabase
-      .from('images')
+      .from('workspace_assets')
       .select('*')
       .order('created_at', { ascending: false });
     
@@ -73,21 +34,20 @@ export const imageAPI = {
     return data;
   },
 
-  async getByMode(mode: string) {
+  async getUserLibrary() {
     const { data, error } = await supabase
-      .from('images')
+      .from('user_library')
       .select('*')
-      .eq('generation_mode', mode)
       .order('created_at', { ascending: false });
     
     if (error) throw error;
     return data;
   },
 
-  async create(image: ImageInsert) {
+  async createWorkspaceAsset(asset: WorkspaceAssetInsert) {
     const { data, error } = await supabase
-      .from('images')
-      .insert(image)
+      .from('workspace_assets')
+      .insert(asset)
       .select()
       .single();
     
@@ -95,11 +55,11 @@ export const imageAPI = {
     return data;
   },
 
-  async update(id: string, updates: ImageUpdate) {
+  async moveToLibrary(assetId: string, libraryData: UserLibraryInsert) {
+    // Add to library
     const { data, error } = await supabase
-      .from('images')
-      .update(updates)
-      .eq('id', id)
+      .from('user_library')
+      .insert(libraryData)
       .select()
       .single();
     
@@ -107,22 +67,9 @@ export const imageAPI = {
     return data;
   },
 
-  async updateStatus(id: string, status: string, additionalUpdates?: ImageUpdate) {
-    const updates = { status, ...additionalUpdates };
-    const { data, error } = await supabase
-      .from('images')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    return data;
-  },
-
-  async delete(id: string) {
+  async deleteWorkspaceAsset(id: string) {
     const { error } = await supabase
-      .from('images')
+      .from('workspace_assets')
       .delete()
       .eq('id', id);
     

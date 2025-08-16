@@ -60,12 +60,41 @@ export const useFetchImageDetails = () => {
     try {
       console.log('📡 Making database query for imageId:', imageId);
       
-      const { data, error } = await supabase
-        .from('images')
-        .select('metadata, original_prompt')
+      // Try workspace_assets first (recent generations), then user_library (saved assets)
+      let data = null;
+      let error = null;
+      
+      // First check workspace_assets
+      const { data: workspaceData, error: workspaceError } = await supabase
+        .from('workspace_assets')
+        .select('generation_settings, original_prompt')
         .eq('id', imageId)
         .abortSignal(abortControllerRef.current.signal)
-        .single();
+        .maybeSingle();
+      
+      if (workspaceData) {
+        data = { 
+          metadata: workspaceData.generation_settings,
+          original_prompt: workspaceData.original_prompt 
+        };
+      } else {
+        // Check user_library if not found in workspace
+        const { data: libraryData, error: libraryError } = await supabase
+          .from('user_library')
+          .select('generation_seed, original_prompt, model_used')
+          .eq('id', imageId)
+          .abortSignal(abortControllerRef.current.signal)
+          .maybeSingle();
+        
+        if (libraryData) {
+          data = {
+            metadata: { seed: libraryData.generation_seed, model_type: libraryData.model_used },
+            original_prompt: libraryData.original_prompt
+          };
+        } else {
+          error = libraryError || workspaceError;
+        }
+      }
 
       console.log('📊 Database response:', { data, error });
 

@@ -53,22 +53,21 @@ export const useOptimizedWorkspace = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        // Update the correct table based on item type with dismissed flag
-        const table = itemType === 'video' ? 'videos' : 'images';
+        // Update the correct workspace asset with dismissed flag
         const { data: currentItem } = await supabase
-          .from(table)
-          .select('metadata')
+          .from('workspace_assets')
+          .select('generation_settings')
           .eq('id', itemId)
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
-        const currentMetadata = (currentItem?.metadata as Record<string, any>) || {};
+        const currentSettings = (currentItem?.generation_settings as Record<string, any>) || {};
         
         const { error } = await supabase
-          .from(table)
+          .from('workspace_assets')
           .update({ 
-            metadata: {
-              ...currentMetadata,
+            generation_settings: {
+              ...currentSettings,
               workspace_dismissed: true,
               dismissed_at: new Date().toISOString()
             }
@@ -94,7 +93,7 @@ export const useOptimizedWorkspace = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        // Delete from workspace_assets table (migrated from workspace_items)
+        // Delete from workspace_assets only (simplified schema - no separate content tables)
         const { error: workspaceError } = await supabase
           .from('workspace_assets')
           .delete()
@@ -102,16 +101,6 @@ export const useOptimizedWorkspace = () => {
           .eq('user_id', user.id);
 
         if (workspaceError) throw workspaceError;
-
-        // Delete from respective content table
-        const table = itemType === 'video' ? 'videos' : 'images';
-        const { error: contentError } = await supabase
-          .from(table)
-          .delete()
-          .eq('id', itemId)
-          .eq('user_id', user.id);
-
-        if (contentError) throw contentError;
 
         toast.success('Item deleted permanently');
         return true;
@@ -129,54 +118,31 @@ export const useOptimizedWorkspace = () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
 
-        // Get all items for this job from both tables
-        const { data: images } = await supabase
-          .from('images')
-          .select('id, metadata')
-          .eq('user_id', user.id)
-          .eq('metadata->>job_id', jobId);
+        // Get all workspace assets for this job
+        const { data: assets } = await supabase
+          .from('workspace_assets')
+          .select('id, generation_settings')
+          .eq('job_id', jobId)
+          .eq('user_id', user.id);
 
-        const { data: videos } = await supabase
-          .from('videos')
-          .select('id, metadata')
-          .eq('user_id', user.id)
-          .eq('metadata->>job_id', jobId);
-
-        // Update images with dismissed flag
-        if (images) {
-          for (const image of images) {
-            const currentMetadata = (image.metadata as Record<string, any>) || {};
+        // Update assets with dismissed flag
+        if (assets) {
+          for (const asset of assets) {
+            const currentSettings = (asset.generation_settings as Record<string, any>) || {};
             await supabase
-              .from('images')
+              .from('workspace_assets')
               .update({ 
-                metadata: {
-                  ...currentMetadata,
+                generation_settings: {
+                  ...currentSettings,
                   workspace_dismissed: true,
                   dismissed_at: new Date().toISOString()
                 }
               })
-              .eq('id', image.id);
+              .eq('id', asset.id);
           }
         }
 
-        // Update videos with dismissed flag
-        if (videos) {
-          for (const video of videos) {
-            const currentMetadata = (video.metadata as Record<string, any>) || {};
-            await supabase
-              .from('videos')
-              .update({ 
-                metadata: {
-                  ...currentMetadata,
-                  workspace_dismissed: true,
-                  dismissed_at: new Date().toISOString()
-                }
-              })
-              .eq('id', video.id);
-          }
-        }
-
-        const totalCleared = (images?.length || 0) + (videos?.length || 0);
+        const totalCleared = assets?.length || 0;
         toast.success(`Job cleared from workspace (${totalCleared} items)`);
         return true;
       },
@@ -198,48 +164,15 @@ export const useOptimizedWorkspace = () => {
           throw new Error('Cannot delete synthetic job ID. Use individual item deletion instead.');
         }
 
-        // First, get all images/videos associated with this job ID from metadata
-        const { data: images } = await supabase
-          .from('images')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('metadata->>job_id', jobId);
-
-        const { data: videos } = await supabase
-          .from('videos')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('metadata->>job_id', jobId);
-
-        // Get workspace assets for this job (migrated from workspace_items)
-        const { data: workspaceAssets } = await supabase
+        // Get all workspace assets for this job
+        const { data: assets } = await supabase
           .from('workspace_assets')
           .select('id, asset_type')
           .eq('job_id', jobId)
           .eq('user_id', user.id);
 
-        // Delete images permanently
-        if (images && images.length > 0) {
-          const { error: deleteImagesError } = await supabase
-            .from('images')
-            .delete()
-            .in('id', images.map(img => img.id))
-            .eq('user_id', user.id);
-          if (deleteImagesError) throw deleteImagesError;
-        }
-
-        // Delete videos permanently  
-        if (videos && videos.length > 0) {
-          const { error: deleteVideosError } = await supabase
-            .from('videos')
-            .delete()
-            .in('id', videos.map(vid => vid.id))
-            .eq('user_id', user.id);
-          if (deleteVideosError) throw deleteVideosError;
-        }
-
-        // Delete workspace assets (if any exist)
-        if (workspaceAssets && workspaceAssets.length > 0) {
+        // Delete workspace assets
+        if (assets && assets.length > 0) {
           const { error: workspaceError } = await supabase
             .from('workspace_assets')
             .delete()
@@ -260,7 +193,7 @@ export const useOptimizedWorkspace = () => {
           console.warn('Job deletion warning:', jobError);
         }
 
-        const totalDeleted = (images?.length || 0) + (videos?.length || 0);
+        const totalDeleted = assets?.length || 0;
         toast.success(`Job deleted permanently (${totalDeleted} items)`);
         return true;
       },
@@ -278,70 +211,42 @@ export const useOptimizedWorkspace = () => {
       console.log('🧹 OPTIMIZED: Clearing workspace via metadata.workspace_dismissed');
       console.log('🧹 USER ID:', user.id);
       
-      // Get ALL completed items (removed date filter bug)
-      const { data: images, error: imageError } = await supabase
-        .from('images')
-        .select('id, metadata, created_at, prompt')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .is('metadata->workspace_dismissed', null);
-
-      const { data: videos, error: videoError } = await supabase
-        .from('videos')
-        .select('id, metadata, created_at')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .is('metadata->workspace_dismissed', null);
+      // Get ALL completed workspace assets (simplified schema)
+      const { data: assets, error: assetsError } = await supabase
+        .from('workspace_assets')
+        .select('id, generation_settings, created_at, original_prompt')
+        .eq('user_id', user.id);
 
       console.log('🧹 QUERY RESULTS:', { 
-        images: images?.length || 0, 
-        videos: videos?.length || 0,
-        imageError,
-        videoError,
-        sampleImages: images?.slice(0, 3)
+        assets: assets?.length || 0,
+        assetsError,
+        sampleAssets: assets?.slice(0, 3)
       });
 
-      // Batch update images with dismissed flag
-      if (images && images.length > 0) {
-        const imageIds = images.map(img => img.id);
-        const { error: imageError } = await supabase
-          .from('images')
-          .update({ 
-            metadata: {
-              workspace_dismissed: true,
-              dismissed_at: new Date().toISOString()
-            }
-          })
-          .in('id', imageIds)
-          .eq('user_id', user.id);
+      // Update assets with dismissed flag
+      if (assets && assets.length > 0) {
+        for (const asset of assets) {
+          const currentSettings = (asset.generation_settings as Record<string, any>) || {};
+          const updatedSettings = {
+            ...currentSettings,
+            workspace_dismissed: true,
+            dismissed_at: new Date().toISOString()
+          };
 
-        if (imageError) throw imageError;
-        console.log(`✅ Dismissed ${images.length} images from workspace`);
-      }
-
-      // Batch update videos with dismissed flag
-      if (videos && videos.length > 0) {
-        const videoIds = videos.map(vid => vid.id);
-        const { error: videoError } = await supabase
-          .from('videos')
-          .update({ 
-            metadata: {
-              workspace_dismissed: true,
-              dismissed_at: new Date().toISOString()
-            }
-          })
-          .in('id', videoIds)
-          .eq('user_id', user.id);
-
-        if (videoError) throw videoError;
-        console.log(`✅ Dismissed ${videos.length} videos from workspace`);
+          await supabase
+            .from('workspace_assets')
+            .update({ generation_settings: updatedSettings })
+            .eq('id', asset.id);
+        }
+        
+        console.log(`✅ Dismissed ${assets.length} assets from workspace`);
       }
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
 
-      const totalCleared = (images?.length || 0) + (videos?.length || 0);
+      const totalCleared = assets?.length || 0;
       toast.success(`Workspace cleared (${totalCleared} items)`);
       return true;
     } catch (error) {
@@ -359,52 +264,31 @@ export const useOptimizedWorkspace = () => {
     try {
       console.log('🗑️ OPTIMIZED: Deleting all workspace items permanently');
       
-      // Get ALL completed items (removed date filter bug)
-      const { data: images } = await supabase
-        .from('images')
+      // Get ALL workspace assets for permanent deletion
+      const { data: assets } = await supabase
+        .from('workspace_assets')
         .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .is('metadata->workspace_dismissed', null);
+        .eq('user_id', user.id);
 
-      const { data: videos } = await supabase
-        .from('videos')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .is('metadata->workspace_dismissed', null);
+      console.log(`Found ${assets?.length || 0} workspace assets to delete`);
 
-      console.log(`Found ${images?.length || 0} images and ${videos?.length || 0} videos to delete`);
-
-      // Batch delete images permanently
-      if (images && images.length > 0) {
-        const { error: deleteImagesError } = await supabase
-          .from('images')
+      // Delete workspace assets permanently
+      if (assets && assets.length > 0) {
+        const { error: deleteAssetsError } = await supabase
+          .from('workspace_assets')
           .delete()
-          .in('id', images.map(img => img.id))
+          .in('id', assets.map(asset => asset.id))
           .eq('user_id', user.id);
         
-        if (deleteImagesError) throw deleteImagesError;
-        console.log(`✅ Deleted ${images.length} images permanently`);
-      }
-
-      // Batch delete videos permanently
-      if (videos && videos.length > 0) {
-        const { error: deleteVideosError } = await supabase
-          .from('videos')
-          .delete()
-          .in('id', videos.map(vid => vid.id))
-          .eq('user_id', user.id);
-        
-        if (deleteVideosError) throw deleteVideosError;
-        console.log(`✅ Deleted ${videos.length} videos permanently`);
+        if (deleteAssetsError) throw deleteAssetsError;
+        console.log(`✅ Deleted ${assets.length} assets permanently`);
       }
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['assets'] });
       queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
 
-      const totalDeleted = (images?.length || 0) + (videos?.length || 0);
+      const totalDeleted = assets?.length || 0;
       toast.success(`${totalDeleted} items deleted permanently`);
       return true;
     } catch (error) {

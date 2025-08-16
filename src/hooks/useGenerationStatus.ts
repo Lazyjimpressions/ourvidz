@@ -126,23 +126,23 @@ export const useGenerationStatus = (
               }
               // Handle multi-image case - emit for ALL images immediately
               else if (jobData.job_type && jobData.job_type.includes('image')) {
-                const { data: images, error: imagesError } = await supabase
-                  .from('images')
+                const { data: assets, error: assetsError } = await supabase
+                  .from('workspace_assets')
                   .select('id')
                   .eq('job_id', id)
-                  .eq('status', 'completed');
+                  .eq('asset_type', 'image');
                 
-                if (!imagesError && images && images.length > 0) {
-                  console.log(`🎉 Found ${images.length} completed images for job:`, id);
+                if (!assetsError && assets && assets.length > 0) {
+                  console.log(`🎉 Found ${assets.length} completed assets for job:`, id);
                   
-                  // Emit event for each image immediately
-                  for (const image of images) {
-                    const eventKey = `generation-completed-${image.id}`;
+                  // Emit event for each asset immediately
+                  for (const asset of assets) {
+                    const eventKey = `generation-completed-${asset.id}`;
                     if (!processedEventsRef.current.has(eventKey)) {
                       processedEventsRef.current.add(eventKey);
                       
                       window.dispatchEvent(new CustomEvent('generation-completed', {
-                        detail: { assetId: image.id, type: 'image', jobId: id }
+                        detail: { assetId: asset.id, type: 'image', jobId: id }
                       }));
                       
                       setTimeout(() => processedEventsRef.current.delete(eventKey), 30000);

@@ -163,46 +163,44 @@ export const useRealtimeGenerationStatus = (
             for (let attempt = 0; attempt < maxRetries; attempt++) {
               console.log(`🔄 PHASE 1: Asset discovery attempt ${attempt + 1}/${maxRetries} for job:`, completedJobId);
               
-              const { data: images, error: imagesError } = await supabase
-                .from('images')
-                .select('id, status')
+              const { data: assets, error: assetsError } = await supabase
+                .from('workspace_assets')
+                .select('id, asset_type')
                 .eq('job_id', completedJobId);
               
-              if (!imagesError && images && images.length > 0) {
-                const completedImages = images.filter(img => img.status === 'completed');
-                const totalImages = images.length;
+              if (!assetsError && assets && assets.length > 0) {
+                const totalAssets = assets.length;
                 
-                console.log(`📊 PHASE 1: Found ${completedImages.length}/${totalImages} completed images (attempt ${attempt + 1}):`, {
+                console.log(`📊 PHASE 1: Found ${totalAssets} completed assets (attempt ${attempt + 1}):`, {
                   jobId: completedJobId,
-                  totalImages,
-                  completedImages: completedImages.length,
-                  allImages: images.map(img => ({ id: img.id, status: img.status }))
+                  totalAssets,
+                  allAssets: assets.map(asset => ({ id: asset.id, type: asset.asset_type }))
                 });
                 
-                // If we have completed images OR it's the final attempt, emit events
-                if (completedImages.length > 0 || attempt === maxRetries - 1) {
-                  if (completedImages.length > 0) {
-                    console.log(`🎉 PHASE 1: Emitting generation completed events for ${completedImages.length} images from job:`, completedJobId);
+                // If we have assets OR it's the final attempt, emit events
+                if (assets.length > 0 || attempt === maxRetries - 1) {
+                  if (assets.length > 0) {
+                    console.log(`🎉 PHASE 1: Emitting generation completed events for ${assets.length} assets from job:`, completedJobId);
                     
-                    // Emit individual events for each completed image
-                    for (const image of completedImages) {
+                    // Emit individual events for each asset
+                    for (const asset of assets) {
                       window.dispatchEvent(new CustomEvent('generation-completed', {
-                        detail: { assetId: image.id, type: 'image', jobId: completedJobId }
+                        detail: { assetId: asset.id, type: asset.asset_type, jobId: completedJobId }
                       }));
                     }
                     
                     // Also emit a batch event for UI coordination
                     window.dispatchEvent(new CustomEvent('generation-batch-completed', {
                       detail: { 
-                        assetIds: completedImages.map(img => img.id),
+                        assetIds: assets.map(asset => asset.id),
                         type: 'image-batch',
                         jobId: completedJobId,
-                        totalCompleted: completedImages.length,
-                        totalExpected: totalImages
+                        totalCompleted: assets.length,
+                        totalExpected: totalAssets
                       }
                     }));
                   } else {
-                    console.warn(`⚠️ PHASE 1: No completed images found after ${maxRetries} attempts for job:`, completedJobId);
+                    console.warn(`⚠️ PHASE 1: No completed assets found after ${maxRetries} attempts for job:`, completedJobId);
                   }
                   break; // Exit retry loop
                 }
@@ -213,9 +211,9 @@ export const useRealtimeGenerationStatus = (
                   await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)));
                 }
               } else {
-                console.error(`❌ PHASE 1: Error querying images (attempt ${attempt + 1}):`, imagesError);
+                console.error(`❌ PHASE 1: Error querying assets (attempt ${attempt + 1}):`, assetsError);
                 if (attempt === maxRetries - 1) {
-                  console.error('❌ PHASE 1: Failed to find images after all retries for job:', completedJobId);
+                  console.error('❌ PHASE 1: Failed to find assets after all retries for job:', completedJobId);
                 }
               }
             }
