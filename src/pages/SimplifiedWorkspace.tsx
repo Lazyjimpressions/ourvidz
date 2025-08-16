@@ -1,249 +1,327 @@
-import React, { useState } from 'react';
-import { useWorkspaceAssets, useSaveToLibrary, useDiscardAsset } from '@/hooks/useWorkspaceAssets';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
-import { Save, Trash2, Sparkles, Download, Eye, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
+import { UnifiedAsset } from '@/lib/services/AssetService';
+import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
+import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
+import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
+import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
+import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
 
 /**
- * NEW ARCHITECTURE: Workspace using workspace_assets table
- * Provides simplified workspace experience with save/discard flow
+ * LIBRARY-FIRST: Desktop workspace using library-first generation architecture
  * 
  * Features:
- * - New workspace_assets table for temporary staging
- * - Clear save/discard actions
- * - Simplified 2-bucket storage architecture
- * - Real-time asset updates
- * - Collection organization
+ * - Library-first generation (all assets go to library first)
+ * - Fixed bottom control bar with SimplePromptInput
+ * - WorkspaceGrid for session-only assets
+ * - URL param mode support (image/video)
+ * - Drag-drop metadata extraction
+ * - Full generation controls
  */
 export const SimplifiedWorkspace: React.FC = () => {
-  const { data: workspaceAssets, isLoading, error } = useWorkspaceAssets();
-  const saveToLibrary = useSaveToLibrary();
-  const discardAsset = useDiscardAsset();
+  const { user, loading } = useAuth();
+  const [searchParams] = useSearchParams();
 
-  // State for lightbox
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Library-first workspace state
+  const {
+    // Core State
+    mode,
+    prompt,
+    referenceImage,
+    referenceStrength,
+    contentType,
+    quality,
+    // Video State
+    beginningRefImage,
+    endingRefImage,
+    videoDuration,
+    motionIntensity,
+    soundEnabled,
+    // Control Parameters
+    aspectRatio,
+    shotType,
+    cameraAngle,
+    style,
+    styleRef,
+    enhancementModel,
+    // UI State
+    isGenerating,
+    workspaceAssets,
+    activeJobId,
+    lightboxIndex,
+    referenceMetadata,
+    exactCopyMode,
+    useOriginalParams,
+    lockSeed,
+    // Actions
+    updateMode,
+    setPrompt,
+    setReferenceImage,
+    setReferenceStrength,
+    setContentType,
+    setQuality,
+    setBeginningRefImage,
+    setEndingRefImage,
+    setVideoDuration,
+    setMotionIntensity,
+    setSoundEnabled,
+    setAspectRatio,
+    setShotType,
+    setCameraAngle,
+    setStyle,
+    setStyleRef,
+    setEnhancementModel,
+    generate,
+    clearWorkspace,
+    deleteItem,
+    dismissItem,
+    setLightboxIndex,
+    selectJob,
+    deleteJob,
+    dismissJob,
+    useJobAsReference,
+    applyAssetParamsFromItem,
+    setExactCopyMode,
+    setUseOriginalParams,
+    setLockSeed,
+    setReferenceMetadata
+  } = useLibraryFirstWorkspace();
 
-  // Asset action handlers
-  const handleSaveAsset = async (assetId: string) => {
-    try {
-      await saveToLibrary.mutateAsync({ assetId });
-      toast.success('Asset saved to library');
-    } catch (error) {
-      toast.error('Failed to save asset');
+  // Honor URL param mode
+  useEffect(() => {
+    const urlMode = searchParams.get('mode');
+    if (urlMode === 'video' || urlMode === 'image') {
+      updateMode(urlMode);
+    }
+  }, [searchParams, updateMode]);
+
+  // Auth loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-muted-foreground">Please sign in to access the workspace.</p>
+      </div>
+    );
+  }
+
+  // Workspace management handlers
+  const handleEditItem = (item: UnifiedAsset) => {
+    // Set the prompt to the item's prompt for editing
+    setPrompt(item.prompt || '');
+    // Load generation parameters if available
+    if (item.metadata?.referenceStrength) {
+      setReferenceStrength(item.metadata.referenceStrength);
     }
   };
 
-  const handleDiscardAsset = async (assetId: string) => {
-    try {
-      await discardAsset.mutateAsync(assetId);
-      toast.success('Asset discarded');
-    } catch (error) {
-      toast.error('Failed to discard asset');
+  const handleSaveItem = async (item: UnifiedAsset) => {
+    // For library-first approach, items are already in library
+    // This could trigger a collection organization flow in the future
+    console.log('Save item (already in library):', item.id);
+  };
+
+  const handleViewItem = (item: UnifiedAsset) => {
+    const index = workspaceAssets.findIndex(asset => asset.id === item.id);
+    if (index !== -1) {
+      setLightboxIndex(index);
     }
   };
 
-  const handleDownload = async (asset: any) => {
+  const handleDownloadItem = async (item: UnifiedAsset) => {
     try {
-      if (!asset.url) {
-        toast.error('Asset URL not available');
+      if (!item.url) {
+        console.error('Asset URL not available for download');
         return;
       }
       
       const link = document.createElement('a');
-      link.href = asset.url;
+      link.href = item.url;
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
-      const filename = `${asset.prompt?.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.png`;
+      const filename = `${item.prompt?.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.${item.type === 'video' ? 'mp4' : 'png'}`;
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      toast.success('Download started');
     } catch (error) {
-      toast.error('Failed to download asset');
+      console.error('Failed to download asset:', error);
     }
   };
 
-  const handleExpand = (assetIndex: number) => {
-    setLightboxIndex(assetIndex);
+  const handleUseAsReference = async (item: UnifiedAsset) => {
+    try {
+      if (!item.url) {
+        console.error('Asset URL not available for reference');
+        return;
+      }
+
+      // Convert item to blob and create File object
+      const response = await fetch(item.url);
+      const blob = await response.blob();
+      const file = new File([blob], `reference_${item.id}.${item.type === 'video' ? 'mp4' : 'png'}`, {
+        type: item.type === 'video' ? 'video/mp4' : 'image/png'
+      });
+
+      // Set as reference image
+      setReferenceImage(file);
+
+      // Extract and apply metadata for exact copy
+      if (item.metadata) {
+        const metadata = await extractReferenceMetadata(item);
+        setReferenceMetadata(metadata);
+        setExactCopyMode(true);
+        
+        // Apply asset parameters
+        applyAssetParamsFromItem(item);
+      }
+    } catch (error) {
+      console.error('Failed to use item as reference:', error);
+    }
   };
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading workspace assets...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="text-center text-destructive">
-          <p>Failed to load workspace assets: {error.message}</p>
-        </div>
-      </div>
-    );
-  }
+  const handleUseSeed = (item: UnifiedAsset) => {
+    if (item.metadata?.seed) {
+      // Apply seed and enable lock
+      setLockSeed(true);
+      setExactCopyMode(true);
+      applyAssetParamsFromItem(item);
+    }
+  };
 
   return (
     <>
-      <div className="flex flex-col min-h-screen">        
-        <main className="flex-1 container mx-auto px-4 py-8">
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold mb-2">Workspace</h1>
-            <p className="text-muted-foreground">
-              Review your generated assets and save the ones you want to keep to your library.
-            </p>
+      <div className="flex flex-col min-h-screen">
+        {/* Header */}
+        <WorkspaceHeader 
+          onClearWorkspace={clearWorkspace}
+        />
+        
+        {/* Main content area with bottom padding for fixed control bar */}
+        <main className="flex-1 pb-32">
+          <div className="container mx-auto px-4 py-6">
+            <WorkspaceGrid
+              items={workspaceAssets}
+              // Grid actions
+              onDownload={handleDownloadItem}
+              onEdit={handleEditItem}
+              onSave={handleSaveItem}
+              onDelete={(item) => deleteItem(item.id, item.type)}
+              onDismiss={(item) => dismissItem(item.id, item.type)}
+              onView={handleViewItem}
+              onUseAsReference={handleUseAsReference}
+              onUseSeed={handleUseSeed}
+              // Job actions
+              onDeleteJob={deleteJob}
+              onDismissJob={dismissJob}
+              isDeleting={new Set()} // TODO: Track deleting state
+              activeJobId={activeJobId}
+              onJobSelect={selectJob}
+            />
           </div>
-
-          {/* TODO: Add new prompt input component for workspace_assets */}
-          <div className="mb-8 p-4 border rounded-lg">
-            <p className="text-muted-foreground">
-              Prompt input will be added here for the new workspace architecture.
-            </p>
-          </div>
-          
-          {/* Assets grid */}
-          {workspaceAssets && workspaceAssets.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {workspaceAssets.map((asset, index) => (
-                <WorkspaceAssetCard
-                  key={asset.id}
-                  asset={asset}
-                  index={index}
-                  onSave={() => handleSaveAsset(asset.id)}
-                  onDiscard={() => handleDiscardAsset(asset.id)}
-                  onDownload={() => handleDownload(asset)}
-                  onExpand={() => handleExpand(index)}
-                  isSaving={saveToLibrary.isPending}
-                  isDiscarding={discardAsset.isPending}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <Sparkles className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-xl font-semibold mb-2">No assets in workspace</h3>
-              <p className="text-muted-foreground">
-                Generated assets will appear here for you to review and save.
-              </p>
-            </div>
-          )}
         </main>
-      </div>
-      
-      {/* TODO: Add lightbox for new workspace assets */}
-      {lightboxIndex !== null && workspaceAssets && workspaceAssets.length > 0 && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
-          <div className="relative max-w-4xl max-h-[90vh] w-full mx-4">
-            <button 
-              onClick={() => setLightboxIndex(null)}
-              className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <img 
-              src={workspaceAssets[lightboxIndex]?.url} 
-              alt={workspaceAssets[lightboxIndex]?.prompt}
-              className="w-full h-full object-contain"
+
+        {/* Fixed bottom control bar */}
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border z-40">
+          <div className="container mx-auto px-4 py-4">
+            <SimplePromptInput
+              // Core props
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              mode={mode}
+              onModeChange={updateMode}
+              contentType={contentType}
+              onContentTypeChange={setContentType}
+              quality={quality}
+              onQualityChange={setQuality}
+              isGenerating={isGenerating}
+              onGenerate={generate}
+              // Reference images
+              referenceImage={referenceImage}
+              onReferenceImageChange={setReferenceImage}
+              referenceStrength={referenceStrength}
+              onReferenceStrengthChange={setReferenceStrength}
+              // Video controls
+              beginningRefImage={beginningRefImage}
+              onBeginningRefImageChange={setBeginningRefImage}
+              endingRefImage={endingRefImage}
+              onEndingRefImageChange={setEndingRefImage}
+              videoDuration={videoDuration}
+              onVideoDurationChange={setVideoDuration}
+              motionIntensity={motionIntensity}
+              onMotionIntensityChange={setMotionIntensity}
+              soundEnabled={soundEnabled}
+              onSoundToggle={setSoundEnabled}
+              // Control parameters
+              aspectRatio={aspectRatio}
+              onAspectRatioChange={setAspectRatio}
+              shotType={shotType}
+              onShotTypeChange={setShotType}
+              cameraAngle={cameraAngle}
+              onCameraAngleChange={setCameraAngle}
+              style={style}
+              onStyleChange={setStyle}
+              styleRef={styleRef}
+              onStyleRefChange={setStyleRef}
+              // Enhancement
+              enhancementModel={enhancementModel}
+              onEnhancementModelChange={setEnhancementModel}
+              // Exact copy workflow
+              exactCopyMode={exactCopyMode}
+              onExactCopyModeChange={setExactCopyMode}
+              useOriginalParams={useOriginalParams}
+              onUseOriginalParamsChange={setUseOriginalParams}
+              lockSeed={lockSeed}
+              onLockSeedChange={setLockSeed}
+              referenceMetadata={referenceMetadata}
             />
           </div>
         </div>
+      </div>
+      
+      {/* Lightbox */}
+      {lightboxIndex !== null && workspaceAssets.length > 0 && (
+        <SimpleLightbox
+          items={workspaceAssets.map(asset => ({
+            id: asset.id,
+            url: asset.url,
+            prompt: asset.prompt,
+            enhancedPrompt: asset.metadata?.enhancedPrompt,
+            type: asset.type,
+            quality: asset.metadata?.quality || 'fast',
+            aspectRatio: asset.metadata?.aspectRatio,
+            modelType: asset.metadata?.modelType,
+            timestamp: asset.createdAt.toISOString(),
+            originalAssetId: asset.id,
+            seed: asset.metadata?.seed?.toString(),
+            metadata: asset.metadata
+          }))}
+          currentIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+          onIndexChange={setLightboxIndex}
+          onEdit={(item) => {
+            const asset = workspaceAssets.find(a => a.id === item.id);
+            if (asset) handleEditItem(asset);
+          }}
+          onDownload={(item) => {
+            const asset = workspaceAssets.find(a => a.id === item.id);
+            if (asset) handleDownloadItem(asset);
+          }}
+        />
       )}
     </>
   );
 };
 
-interface WorkspaceAssetCardProps {
-  asset: any;
-  index: number;
-  onSave: () => void;
-  onDiscard: () => void;
-  onDownload: () => void;
-  onExpand: () => void;
-  isSaving: boolean;
-  isDiscarding: boolean;
-}
-
-function WorkspaceAssetCard({ 
-  asset, 
-  index, 
-  onSave, 
-  onDiscard, 
-  onDownload, 
-  onExpand, 
-  isSaving, 
-  isDiscarding 
-}: WorkspaceAssetCardProps) {
-  return (
-    <Card className="overflow-hidden group">
-      <div className="aspect-square bg-muted relative cursor-pointer" onClick={onExpand}>
-        {asset.url ? (
-          <img
-            src={asset.url}
-            alt={asset.prompt}
-            className="w-full h-full object-cover transition-transform group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
-          </div>
-        )}
-        
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-          <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); onExpand(); }}>
-            <Eye className="w-4 h-4 mr-2" />
-            View
-          </Button>
-        </div>
-      </div>
-      
-      <CardContent className="p-4">
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
-          {asset.prompt}
-        </p>
-        
-        <div className="flex gap-2">
-          <Button
-            onClick={onSave}
-            disabled={isSaving || isDiscarding}
-            className="flex-1"
-            size="sm"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
-          
-          <Button
-            onClick={onDownload}
-            disabled={isSaving || isDiscarding}
-            variant="outline"
-            size="sm"
-          >
-            <Download className="w-4 h-4" />
-          </Button>
-          
-          <Button
-            onClick={onDiscard}
-            disabled={isSaving || isDiscarding}
-            variant="destructive"
-            size="sm"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // Make it the default export to maintain compatibility
 export default SimplifiedWorkspace;
