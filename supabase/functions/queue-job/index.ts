@@ -9,7 +9,8 @@ const corsHeaders = {
 
 interface JobRequest {
   prompt: string;
-  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'wan_video_fast' | 'wan_video_high';
+  original_prompt?: string;
+  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high';
   quality?: 'fast' | 'high';
   format?: string;
   model_type?: string;
@@ -18,6 +19,13 @@ interface JobRequest {
   reference_strength?: number;
   seed?: number;
   metadata?: any;
+  // Advanced SDXL settings
+  num_images?: number;
+  steps?: number;
+  guidance_scale?: number;
+  negative_prompt?: string;
+  compel_enabled?: boolean;
+  compel_weights?: string;
 }
 
 serve(async (req) => {
@@ -57,12 +65,70 @@ serve(async (req) => {
 
     const jobRequest: JobRequest = await req.json()
 
-    // Validate required fields
-    if (!jobRequest.prompt || !jobRequest.job_type) {
-      return new Response('Missing required fields: prompt, job_type', { 
+    // Validate job_type
+    const validJobTypes = ['sdxl_image_fast', 'sdxl_image_high', 'video_fast', 'video_high'];
+    if (!jobRequest.job_type || !validJobTypes.includes(jobRequest.job_type)) {
+      return new Response(`Invalid job_type. Must be one of: ${validJobTypes.join(', ')}`, { 
         status: 400, 
         headers: corsHeaders 
       })
+    }
+
+    // Determine original prompt - prefer original_prompt, fallback to prompt
+    const originalPrompt = jobRequest.original_prompt || jobRequest.prompt;
+    if (!originalPrompt) {
+      return new Response('Missing required field: original_prompt or prompt', { 
+        status: 400, 
+        headers: corsHeaders 
+      })
+    }
+
+    // Determine database format (image/video) vs output format (png/mp4)
+    const dbFormat = jobRequest.job_type.includes('image') ? 'image' : 'video';
+    const outputFormat = jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4');
+    const quality = jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast');
+
+    // Handle prompt enhancement if needed
+    let enhancedPrompt = jobRequest.enhanced_prompt;
+    const shouldEnhance = jobRequest.metadata?.user_requested_enhancement && 
+                         !jobRequest.metadata?.skip_enhancement &&
+                         jobRequest.metadata?.enhancement_model !== 'none';
+
+    if (shouldEnhance && !enhancedPrompt) {
+      try {
+        console.log('🔧 Enhancing prompt before queuing job...', {
+          model: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+          contentType: jobRequest.metadata?.contentType || 'sfw'
+        });
+        
+        const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
+          body: {
+            prompt: originalPrompt,
+            jobType: jobRequest.job_type,
+            format: dbFormat,
+            quality: quality,
+            selectedModel: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+            contentType: jobRequest.metadata?.contentType || 'sfw',
+            metadata: jobRequest.metadata || {}
+          }
+        });
+
+        if (enhanceResponse.data?.enhanced_prompt) {
+          enhancedPrompt = enhanceResponse.data.enhanced_prompt;
+          console.log('✅ Prompt enhanced successfully');
+        } else {
+          console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
+          enhancedPrompt = originalPrompt;
+        }
+      } catch (error) {
+        console.error('❌ Enhancement failed:', error);
+        enhancedPrompt = originalPrompt;
+      }
+    }
+
+    // If no enhancement was requested or enhancement was skipped, use original prompt
+    if (!enhancedPrompt) {
+      enhancedPrompt = originalPrompt;
     }
 
     // Create job record
@@ -72,10 +138,10 @@ serve(async (req) => {
         user_id: user.id,
         job_type: jobRequest.job_type,
         status: 'queued',
-        prompt: jobRequest.prompt,
-        enhanced_prompt: jobRequest.enhanced_prompt,
-        quality: jobRequest.quality || 'fast',
-        format: jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4'),
+        original_prompt: originalPrompt,
+        enhanced_prompt: enhancedPrompt || originalPrompt,
+        quality: quality,
+        format: dbFormat,  // Store as 'image'/'video' in database
         model_type: jobRequest.model_type,
         metadata: {
           ...jobRequest.metadata,
@@ -93,7 +159,7 @@ serve(async (req) => {
     }
 
     // Determine queue based on job type
-    const queueName = jobRequest.job_type.startsWith('wan') ? 'wan_queue' : 'sdxl_queue'
+    const queueName = jobRequest.job_type.startsWith('sdxl') ? 'sdxl_queue' : 'wan_queue'
 
     // Enqueue to Redis
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')
@@ -104,20 +170,62 @@ serve(async (req) => {
       return new Response('Queue service unavailable', { status: 503, headers: corsHeaders })
     }
 
+    // Derive content type and NSFW optimization for worker
+    const contentType = jobRequest.metadata?.contentType || 'sfw';
+    const nsfwOptimization = contentType === 'nsfw';
+
+    // Helper function to derive resolution from aspect ratio
+    const getResolutionFromAspectRatio = (ratio?: string): string => {
+      switch (ratio) {
+        case '1:1': return '1024x1024';
+        case '16:9': return '1024x576';
+        case '9:16': return '576x1024';
+        default: return '1024x1024';
+      }
+    };
+
     const queuePayload = {
-      jobId: job.id,
-      userId: user.id,
-      jobType: jobRequest.job_type,
-      prompt: jobRequest.prompt,
-      enhancedPrompt: jobRequest.enhanced_prompt,
-      quality: jobRequest.quality || 'fast',
-      format: jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4'),
-      modelType: jobRequest.model_type,
-      referenceImageUrl: jobRequest.reference_image_url,
-      referenceStrength: jobRequest.reference_strength,
-      seed: jobRequest.seed,
-      metadata: jobRequest.metadata || {}
+      id: job.id,                    // Worker expects 'id' field
+      type: jobRequest.job_type,     // Worker expects 'type' field
+      prompt: enhancedPrompt,        // Worker uses 'prompt' for generation
+      user_id: user.id,              // snake_case for worker
+      config: {
+        num_images: jobRequest.num_images || jobRequest.metadata?.num_images || 1,
+        steps: jobRequest.steps || jobRequest.metadata?.steps || 25,
+        guidance_scale: jobRequest.guidance_scale || jobRequest.metadata?.guidance_scale || 7.5,
+        resolution: getResolutionFromAspectRatio(jobRequest.metadata?.aspect_ratio),
+        seed: jobRequest.seed || jobRequest.metadata?.seed,
+        negative_prompt: jobRequest.negative_prompt || jobRequest.metadata?.negative_prompt || undefined
+      },
+      metadata: {
+        ...jobRequest.metadata,
+        reference_image_url: jobRequest.reference_image_url,
+        reference_strength: jobRequest.reference_strength,
+        reference_type: jobRequest.metadata?.reference_type || 'style',
+        nsfw_optimization: nsfwOptimization
+      },
+      compel_enabled: jobRequest.compel_enabled || jobRequest.metadata?.compel_enabled || false,
+      compel_weights: jobRequest.compel_weights || jobRequest.metadata?.compel_weights || undefined,
+      // Legacy fields for compatibility
+      job_id: job.id,
+      job_type: jobRequest.job_type,
+      quality: quality,
+      format: outputFormat,
+      content_type: contentType
     }
+
+    console.log(`📋 Enqueuing job ${job.id} to ${queueName}:`, {
+      type: jobRequest.job_type,
+      config: queuePayload.config,
+      has_metadata: !!queuePayload.metadata,
+      compel_enabled: queuePayload.compel_enabled,
+      legacy_fields: {
+        job_type: jobRequest.job_type,
+        format: outputFormat,
+        quality: quality,
+        content_type: contentType
+      }
+    });
 
     try {
       const enqueueResponse = await fetch(`${redisUrl}/rpush/${queueName}`, {
@@ -126,7 +234,7 @@ serve(async (req) => {
           'Authorization': `Bearer ${redisToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ data: JSON.stringify(queuePayload) })
+        body: JSON.stringify(queuePayload)
       })
 
       if (!enqueueResponse.ok) {

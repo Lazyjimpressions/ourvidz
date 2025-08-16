@@ -105,14 +105,14 @@ export const PromptEnhancementModal: React.FC<PromptEnhancementModalProps> = ({
     }
     
     try {
-      const { data, error } = await supabase.functions.invoke('generate-content', {
+      const { data, error } = await supabase.functions.invoke('enhance-prompt', {
         body: {
-          prompt: originalPrompt,
-          enhancement_only: true,
-          jobType,
-          format,
-          quality,
-          selectedModel,
+          original_prompt: originalPrompt,
+          job_type: jobType,
+          format: format,
+          quality: quality,
+          enhancement_model: selectedModel,
+          contentType: 'sfw', // Default for modal enhancement
           selectedPresets
         }
       });

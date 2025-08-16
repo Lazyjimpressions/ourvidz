@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, Cog, X, Palette, Copy, Edit3 } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 
 // Compact reference upload component
@@ -211,6 +212,21 @@ interface SimplePromptInputProps {
   onReferenceMetadataChange?: (metadata: any) => void;
   // Workspace assets for metadata extraction
   workspaceAssets?: any[];
+  // Advanced SDXL settings
+  numImages?: number;
+  onNumImagesChange?: (num: number) => void;
+  steps?: number;
+  onStepsChange?: (steps: number) => void;
+  guidanceScale?: number;
+  onGuidanceScaleChange?: (scale: number) => void;
+  negativePrompt?: string;
+  onNegativePromptChange?: (prompt: string) => void;
+  compelEnabled?: boolean;
+  onCompelEnabledChange?: (enabled: boolean) => void;
+  compelWeights?: string;
+  onCompelWeightsChange?: (weights: string) => void;
+  seed?: number | null;
+  onSeedChange?: (seed: number | null) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -264,12 +280,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onLockSeedChange,
   referenceMetadata = null,
   onReferenceMetadataChange,
-  workspaceAssets = []
+  workspaceAssets = [],
+  // Advanced SDXL settings
+  numImages = 1,
+  onNumImagesChange,
+  steps = 25,
+  onStepsChange,
+  guidanceScale = 7.5,
+  onGuidanceScaleChange,
+  negativePrompt = '',
+  onNegativePromptChange,
+  compelEnabled = false,
+  onCompelEnabledChange,
+  compelWeights = '',
+  onCompelWeightsChange,
+  seed = null,
+  onSeedChange
 }) => {
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
   const [showAnglePopup, setShowAnglePopup] = useState(false);
   const [showStylePopup, setShowStylePopup] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -342,6 +374,21 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     setShowShotTypePopup(false);
   };
 
+  const stylePresets = [
+    { name: 'None', style: '' },
+    { name: 'Cinematic', style: 'cinematic lighting, film grain, dramatic composition' },
+    { name: 'Vintage', style: 'vintage photography, retro aesthetic, warm tones' },
+    { name: 'Low Key', style: 'low key lighting, dramatic shadows, high contrast' },
+    { name: 'Indy', style: 'indie film aesthetic, natural lighting, muted colors' },
+    { name: 'Y2K', style: 'Y2K aesthetic, digital glitch, cyber punk vibes' },
+    { name: 'Pop', style: 'pop art style, bright colors, high saturation' },
+    { name: 'Grunge', style: 'grunge aesthetic, rough textures, alternative style' },
+    { name: 'Dreamy', style: 'dreamy atmosphere, soft focus, ethereal lighting' },
+    { name: 'Hand Drawn', style: 'hand drawn illustration, sketch-like, artistic' },
+    { name: '2D Novel', style: '2D anime style, visual novel aesthetic' },
+    { name: 'Boost', style: 'enhanced details, sharp focus, vivid colors' }
+  ];
+  
   const handleStyleSelect = (selectedStyle: string) => {
     onStyleChange?.(selectedStyle);
     setShowStylePopup(false);
@@ -367,21 +414,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     { value: 'medium', label: 'Medium', icon: '📷' },
     { value: 'close', label: 'Close', icon: '🔬' }
   ];
-
-  const stylePresets = [
-    { name: 'None', style: '' },
-    { name: 'Cinematic', style: 'cinematic lighting, film grain, dramatic composition' },
-    { name: 'Vintage', style: 'vintage photography, retro aesthetic, warm tones' },
-    { name: 'Low Key', style: 'low key lighting, dramatic shadows, high contrast' },
-    { name: 'Indy', style: 'indie film aesthetic, natural lighting, muted colors' },
-    { name: 'Y2K', style: 'Y2K aesthetic, digital glitch, cyber punk vibes' },
-    { name: 'Pop', style: 'pop art style, bright colors, high saturation' },
-    { name: 'Grunge', style: 'grunge aesthetic, rough textures, alternative style' },
-    { name: 'Dreamy', style: 'dreamy atmosphere, soft focus, ethereal lighting' },
-    { name: 'Hand Drawn', style: 'hand drawn illustration, sketch-like, artistic' },
-    { name: '2D Novel', style: '2D anime style, visual novel aesthetic' },
-    { name: 'Boost', style: 'enhanced details, sharp focus, vivid colors' }
-  ];
   
   // Previews for Exact Copy mode
   const originalPromptPreview = exactCopyMode ? (referenceMetadata?.originalEnhancedPrompt || null) : null;
@@ -393,22 +425,33 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   return (
       <div className="fixed bottom-4 left-4 right-4 z-50">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-3 py-2">
+        <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-3 py-2 relative">
           <div className="space-y-1.5">
-            {/* Row 1: IMAGE button + Reference Images + Prompt Input */}
-            <div className="flex items-center gap-1.5">
-              {/* IMAGE Button (Stacked) */}
-              <div className="flex flex-col">
+            {/* Row 1: IMAGE/VIDEO buttons + Reference Images + Prompt Input */}
+            <div className="flex items-center gap-1.5 justify-end">
+              {/* IMAGE/VIDEO Buttons (Stacked) */}
+              <div className="flex flex-col gap-0.5">
                 <button
                   onClick={() => onModeChange('image')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
                     mode === 'image'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
                   }`}
                 >
-                  <Image size={10} />
+                  <Image size={9} />
                   IMAGE
+                </button>
+                <button
+                  onClick={() => onModeChange('video')}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    mode === 'video'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  <Video size={9} />
+                  VIDEO
                 </button>
               </div>
 
@@ -442,9 +485,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 )}
               </div>
 
-              {/* Prompt Input - Wider like LTX */}
-              <div className="flex-1">
-                <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+              {/* Prompt Input - Right justified */}
+              <div className="flex-1 flex justify-end">
+                <form onSubmit={handleSubmit} className="flex items-center gap-1.5 w-full max-w-2xl">
                   <div className="relative flex-1">
                     <textarea
                       value={prompt}
@@ -462,347 +505,285 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <span className="text-[10px] font-medium">Exact Copy</span>
                       </div>
                     )}
-                      {exactCopyMode && !referenceMetadata?.originalEnhancedPrompt && (
-                        <div className="absolute bottom-1 left-3 text-[10px] text-destructive">
-                          ⚠️ No metadata found - exact copy unavailable
-                        </div>
-                       )}
-                      {exactCopyMode && referenceMetadata?.originalEnhancedPrompt && prompt.length === 0 && (
-                        <div className="absolute bottom-1 left-3 text-[10px] text-muted-foreground">
-                          Try: "change outfit to bikini" • "in a forest setting" • "different hairstyle"
-                       </div>
-                     )}
                   </div>
-                  
-                  {/* Generate Button */}
+
+                  {/* Generate Button - Smaller */}
                   <button
                     type="submit"
                     disabled={isGenerating || (!prompt.trim() && !exactCopyMode)}
-                    className="h-16 w-16 bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+                    className="flex items-center gap-1 px-2 py-1.5 bg-primary text-primary-foreground rounded text-xs font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {isGenerating ? (
-                      <div className="w-4 h-4 border-2 border-primary-foreground/20 border-t-primary-foreground rounded-full animate-spin" />
+                      <div className="animate-spin w-3 h-3 border-2 border-primary-foreground border-t-transparent rounded-full" />
                     ) : (
-                      <Play size={16} />
+                      <Zap size={10} />
                     )}
-                    </button>
-                  </form>
-                  {exactCopyMode && (
-                    <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
-                      <div className="border border-border rounded p-1 bg-muted/30">
-                        <div className="font-medium text-muted-foreground mb-0.5">Original Prompt</div>
-                        <div className="line-clamp-2 break-words">{originalPromptPreview || '—'}</div>
-                      </div>
-                      <div className="border border-border rounded p-1 bg-muted/30">
-                        <div className="font-medium text-muted-foreground mb-0.5">Final Prompt</div>
-                        <div className="line-clamp-2 break-words">{finalPromptPreview || '—'}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    {isGenerating ? 'Gen...' : 'Generate'}
+                  </button>
+                </form>
               </div>
+            </div>
 
-            {/* Row 2: VIDEO button + Controls */}
-            <div className="flex items-center justify-between gap-1.5">
-              
-              {/* VIDEO Button (Stacked) */}
-              <div className="flex flex-col">
+            {/* Row 2: Control Bar - Right justified */}
+            <div className="flex items-center gap-1 text-xs justify-end">
+              {/* Quality Toggle */}
+              <button
+                onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')}
+                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                  quality === 'high'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {quality === 'high' ? 'HIGH' : 'FAST'}
+              </button>
+
+              {/* Content Type */}
+              <button
+                onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
+                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                  contentType === 'nsfw'
+                    ? 'bg-secondary text-secondary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {contentType.toUpperCase()}
+              </button>
+
+              {/* Aspect Ratio */}
+              <button
+                onClick={handleAspectRatioToggle}
+                className="px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
+              >
+                {aspectRatio}
+              </button>
+
+              {/* Shot Type */}
+              <div className="relative">
                 <button
-                  onClick={() => onModeChange('video')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors ${
-                    mode === 'video'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
+                  onClick={handleShotTypeToggle}
+                  className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
                 >
-                  <Video size={10} />
-                  VIDEO
-                </button>
-              </div>
-
-              {/* Control Buttons - Right Side */}
-              <div className="flex items-center gap-1">
-                
-                {/* SFW Button */}
-                <button
-                  onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
-                  className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                    contentType === 'sfw'
-                      ? 'bg-secondary text-secondary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  SFW
+                  {shotType.toUpperCase()}
+                  <ChevronDown size={8} />
                 </button>
 
-                {/* Exact Copy & Params Toggles (shown when reference is set) */}
-                {(referenceImage || referenceImageUrl) && (
-                  <div className="flex items-center gap-2 ml-2">
-                    <label className="flex items-center gap-1 text-[11px] text-foreground">
-                      <input type="checkbox" checked={exactCopyMode} onChange={(e) => onExactCopyModeChange?.(e.target.checked)} />
-                      Exact Copy
-                    </label>
-                      {referenceMetadata && (
-                        <>
-                          <label className="flex items-center gap-1 text-[11px] text-foreground">
-                            <input type="checkbox" checked={useOriginalParams} onChange={(e) => onUseOriginalParamsChange?.(e.target.checked)} />
-                            Use params
-                          </label>
-                          <label className="flex items-center gap-1 text-[11px] text-foreground">
-                            <input type="checkbox" checked={lockSeed} onChange={(e) => onLockSeedChange?.(e.target.checked)} />
-                            Lock seed
-                          </label>
-                        </>
-                      )}
+                {/* Shot Type Popup */}
+                {showShotTypePopup && (
+                  <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-24">
+                    {shotTypeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleShotTypeSelect(option.value as 'wide' | 'medium' | 'close')}
+                        className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors flex items-center gap-1"
+                      >
+                        <span>{option.icon}</span>
+                        {option.label}
+                      </button>
+                    ))}
                   </div>
                 )}
+              </div>
 
-                {/* Enhancement Model Dropdown */}
-                <div className="relative">
+              {/* Camera Angle */}
+              <div className="relative">
+                <button
+                  onClick={handleCameraAngleToggle}
+                  className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
+                >
+                  {cameraAngle === 'none' ? 'ANGLE' : cameraAngle.replace('_', ' ').toUpperCase()}
+                  <ChevronDown size={8} />
+                </button>
+
+                {/* Camera Angle Popup */}
+                {showAnglePopup && (
+                  <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-32">
+                    {cameraAngleOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => handleCameraAngleSelect(option.value as any)}
+                        className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors flex items-center gap-1"
+                      >
+                        <span>{option.icon}</span>
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Style */}
+              <div className="relative">
+                <button
+                  onClick={handleStyleToggle}
+                  className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
+                >
+                  <Palette size={8} />
+                  STYLE
+                  <ChevronDown size={8} />
+                </button>
+
+                {/* Style Popup */}
+                {showStylePopup && (
+                  <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-50 min-w-32 max-h-48 overflow-y-auto">
+                    {stylePresets.map((preset) => (
+                      <button
+                        key={preset.name}
+                        onClick={() => handleStyleSelect(preset.style)}
+                        className="w-full px-2 py-1 text-left text-[10px] hover:bg-muted transition-colors"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                    <div className="border-t border-border mt-1 pt-1">
+                      <label className="block px-2 py-1 text-[10px] text-muted-foreground cursor-pointer hover:bg-muted">
+                        Upload Style Ref
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleStyleRefUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Controls */}
+              <button
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                  showAdvancedSettings
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Settings size={8} />
+                CONTROLS
+              </button>
+            </div>
+          </div>
+
+          {/* Advanced Settings Modal */}
+          {showAdvancedSettings && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-2 z-50">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-medium text-foreground">Controls</h3>
+                <button
+                  onClick={() => setShowAdvancedSettings(false)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {/* Batch Size */}
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Batch Size
+                  </label>
                   <select
-                    value={enhancementModel}
-                    onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
-                    disabled={exactCopyMode}
-                    className={`px-1.5 py-0.5 border border-border rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-ring appearance-none pr-5 ${
-                      exactCopyMode 
-                        ? 'bg-muted/50 text-muted-foreground/50 cursor-not-allowed' 
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                    title={exactCopyMode ? "Enhancement disabled in Exact Copy mode" : "AI prompt enhancement model"}
+                    value={numImages}
+                    onChange={(e) => onNumImagesChange?.(parseInt(e.target.value))}
+                    className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
+                    disabled={mode === 'video'}
                   >
-                    <option value="qwen_instruct">Instruct</option>
-                    <option value="qwen_base">Base</option>
-                    <option value="none">None</option>
+                    <option value={1}>1</option>
+                    <option value={3}>3</option>
+                    <option value={6}>6</option>
                   </select>
-                  <ChevronDown size={8} className={`absolute right-1 top-1/2 transform -translate-y-1/2 pointer-events-none ${
-                    exactCopyMode ? 'text-muted-foreground/50' : 'text-muted-foreground'
-                  }`} />
                 </div>
 
-                 {/* Mode-specific controls - Disable in exact copy mode */}
-                 {mode === 'image' && !exactCopyMode ? (
-                  <>
-                    {/* Aspect Ratio Button */}
-                    <button
-                      onClick={handleAspectRatioToggle}
-                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                        aspectRatio === '16:9'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {aspectRatio}
-                    </button>
-                    
-                    {/* Shot Type Button with Popup */}
-                    <div className="relative">
-                      <button
-                        onClick={handleShotTypeToggle}
-                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                          shotType !== 'wide'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        <Camera size={8} />
-                        Shot
-                      </button>
-                      
-                      {/* Shot Type Popup */}
-                      {showShotTypePopup && (
-                        <div className="absolute bottom-full right-0 mb-2 bg-popover border border-border rounded-lg shadow-lg p-2 min-w-[150px] z-50">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-medium text-popover-foreground">Shot Type</h3>
-                            <button
-                              onClick={() => setShowShotTypePopup(false)}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                          
-                          {/* Shot Type Options */}
-                          <div className="grid grid-cols-1 gap-1">
-                            {shotTypeOptions.map((option) => (
-                              <button
-                                key={option.value}
-                                onClick={() => handleShotTypeSelect(option.value as any)}
-                                className={`p-1.5 rounded text-[11px] transition-colors text-left ${
-                                  shotType === option.value
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-sm">{option.icon}</span>
-                                  <span className="capitalize">{option.label}</span>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Angle Button with Popup */}
-                    <div className="relative">
-                      <button
-                        onClick={handleCameraAngleToggle}
-                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                          cameraAngle !== 'none'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        <Camera size={8} />
-                        Angle
-                      </button>
-                      
-                      {/* Angle Popup */}
-                      {showAnglePopup && (
-                        <div className="absolute bottom-full right-0 mb-2 bg-popover border border-border rounded-lg shadow-lg p-2 min-w-[200px] z-50">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-medium text-popover-foreground">Camera Angle</h3>
-                            <button
-                              onClick={() => setShowAnglePopup(false)}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                          
-                          {/* 2x3 Grid of Angle Options */}
-                          <div className="grid grid-cols-3 gap-1">
-                            {cameraAngleOptions.map((option) => (
-                              <button
-                                key={option.value}
-                                onClick={() => handleCameraAngleSelect(option.value as any)}
-                                className={`p-1.5 rounded text-[10px] transition-colors ${
-                                  cameraAngle === option.value
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                }`}
-                              >
-                                <div className="text-sm mb-0.5">{option.icon}</div>
-                                <div className="text-[10px]">{option.label}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Style Button with Popup */}
-                    <div className="relative">
-                      <button
-                        onClick={handleStyleToggle}
-                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                          style
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        <Palette size={8} />
-                        Style
-                      </button>
-                      
-                      {/* Style Popup */}
-                      {showStylePopup && (
-                        <div className="absolute bottom-full right-0 mb-2 bg-popover border border-border rounded-lg shadow-lg p-2 min-w-[240px] max-w-[300px] z-50">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-medium text-popover-foreground">Style</h3>
-                            <button
-                              onClick={() => setShowStylePopup(false)}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                          
-                          {/* Style Presets Grid */}
-                          <div className="grid grid-cols-3 gap-1 mb-2">
-                            {stylePresets.map((preset) => (
-                              <button
-                                key={preset.name}
-                                onClick={() => handleStyleSelect(preset.style)}
-                                className={`p-1.5 rounded text-[10px] transition-colors ${
-                                  style === preset.style
-                                    ? 'bg-primary text-primary-foreground'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                }`}
-                              >
-                                {preset.name}
-                              </button>
-                            ))}
-                          </div>
+                {/* Steps */}
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Steps: {steps}
+                  </label>
+                  <Slider
+                    value={[steps]}
+                    onValueChange={(value) => onStepsChange?.(value[0])}
+                    min={10}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
 
-                          {/* Custom Style Input */}
-                          <input
-                            type="text"
-                            value={style}
-                            onChange={(e) => onStyleChange?.(e.target.value)}
-                            placeholder="Custom style..."
-                            className="w-full px-1.5 py-1 bg-background border border-input rounded text-foreground placeholder-muted-foreground text-[11px] focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* Video Model Label */}
-                    <span className="text-[11px] text-muted-foreground">LTX</span>
-                    
-                    {/* 16:9 Button */}
-                    <button
-                      onClick={handleAspectRatioToggle}
-                      className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors ${
-                        aspectRatio === '16:9'
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {aspectRatio}
-                    </button>
-                    
-                    {/* 5s Duration (Static) */}
-                    <span className="px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-[11px]">5s</span>
-                    
-                    {/* Sound Button */}
-                    <button
-                      onClick={() => onSoundToggle?.(!soundEnabled)}
-                      className={`p-0.5 rounded transition-colors ${
-                        soundEnabled
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      <Volume2 size={10} />
-                    </button>
-                    
-                    {/* Motion Intensity Button */}
-                      <button
-                        onClick={() => onMotionIntensityChange?.(motionIntensity === 0.5 ? 0.8 : 0.5)}
-                        className={`p-0.5 rounded transition-colors ${
-                          motionIntensity > 0.5
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        <Zap size={10} />
-                      </button>
-                    </>
+                {/* Guidance Scale */}
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    CFG: {guidanceScale}
+                  </label>
+                  <Slider
+                    value={[guidanceScale]}
+                    onValueChange={(value) => onGuidanceScaleChange?.(value[0])}
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Seed */}
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Seed
+                  </label>
+                  <input
+                    type="number"
+                    value={seed || ''}
+                    onChange={(e) => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Random"
+                    className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
+                    min="0"
+                    max="2147483647"
+                  />
+                </div>
+
+                {/* Negative Prompt */}
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Negative Prompt
+                  </label>
+                  <textarea
+                    value={negativePrompt}
+                    onChange={(e) => onNegativePromptChange?.(e.target.value)}
+                    placeholder="What to avoid..."
+                    className="w-full h-12 px-1 py-1 bg-background border border-input rounded text-[10px] resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {/* Compel Enhancement */}
+                <div className="col-span-2">
+                  <label className="flex items-center gap-1 mb-1">
+                    <input
+                      type="checkbox"
+                      checked={compelEnabled}
+                      onChange={(e) => onCompelEnabledChange?.(e.target.checked)}
+                      className="w-3 h-3"
+                    />
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      Compel Enhancement
+                    </span>
+                  </label>
+                  {compelEnabled && (
+                    <input
+                      type="text"
+                      value={compelWeights}
+                      onChange={(e) => onCompelWeightsChange?.(e.target.value)}
+                      placeholder="(woman:1.2), (beautiful:0.8)"
+                      className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
+                    />
                   )}
-                  {exactCopyMode && mode === 'video' && (
-                    <div className="text-xs text-muted-foreground">
-                      Style controls disabled in exact copy mode
-                    </div>
-                  )}
-               </div>
-             </div>
-           </div>
-         </div>
-       </div>
-     </div>
-   );
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };

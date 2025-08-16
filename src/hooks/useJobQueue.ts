@@ -22,16 +22,20 @@ export const useJobQueue = () => {
     mutationFn: async (params: QueueJobParams) => {
       console.log('Queuing job:', params);
       
-      const { data, error } = await supabase.functions.invoke('generate-content', {
-        body: {
-          prompt: params.originalPrompt || 'Default video prompt',
-          model: params.jobType?.includes('sdxl') ? 'sdxl' : 'wan',
-          quantity: 1,
-          enhance_prompt: params.isPromptEnhanced !== false,
-          format: params.jobType?.includes('video') ? 'video' : 'image',
-          generation_settings: params.metadata
-        }
-      });
+        const { data, error } = await supabase.functions.invoke('queue-job', {
+          body: {
+            original_prompt: params.originalPrompt || 'Default video prompt',
+            job_type: params.jobType as 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high',
+            quality: params.jobType?.includes('high') ? 'high' : 'fast',
+            format: params.jobType?.includes('video') ? 'mp4' : 'png',
+            metadata: {
+              ...params.metadata,
+              user_requested_enhancement: params.isPromptEnhanced,
+              enhancement_model: params.isPromptEnhanced ? 'qwen_instruct' : 'none',
+              contentType: 'sfw' // Default for job queue usage
+            }
+          }
+        });
 
       if (error) throw error;
       return data;
