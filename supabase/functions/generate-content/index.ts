@@ -383,44 +383,78 @@ async function getWorkerInfo(workerType: string): Promise<any | null> {
   }
 }
 
-// Robust worker dispatch with endpoint fallbacks
+// Robust worker dispatch with endpoint fallbacks and payload adaptation
 async function dispatchToWorker(workerInfo: any, payload: any): Promise<boolean> {
-  const { worker_url, supportedEndpoints = [] } = workerInfo;
+  const { worker_url, supportedEndpoints = [], workerCapabilities = {} } = workerInfo;
   
-  // Define fallback endpoints in order of preference
-  const fallbackEndpoints = supportedEndpoints.length > 0 
-    ? supportedEndpoints 
-    : ['/generate', '/api/generate', '/v1/generate'];
+  // Define smart endpoint fallbacks based on worker capabilities and type
+  let fallbackEndpoints = [];
+  
+  if (supportedEndpoints.length > 0) {
+    fallbackEndpoints = supportedEndpoints;
+  } else {
+    // Intelligent fallbacks based on payload/model type
+    const isVideoGeneration = payload.format === 'video';
+    const isSDXLModel = payload.model?.includes('sdxl');
+    
+    if (isVideoGeneration) {
+      fallbackEndpoints = ['/video', '/generate', '/api/video', '/v1/video', '/api/generate', '/v1/generate'];
+    } else if (isSDXLModel) {
+      fallbackEndpoints = ['/sdxl/generate', '/sdxl/image', '/generate', '/api/generate', '/v1/generate'];
+    } else {
+      fallbackEndpoints = ['/wan/generate', '/wan/image', '/generate', '/api/generate', '/v1/generate', '/image'];
+    }
+  }
+  
+  console.log(`🎯 Attempting dispatch to ${fallbackEndpoints.length} endpoints:`, fallbackEndpoints);
   
   for (const endpoint of fallbackEndpoints) {
     const fullUrl = `${worker_url}${endpoint}`;
     console.log(`🔄 Trying worker endpoint: ${fullUrl}`);
     
     try {
+      // Adapt payload based on endpoint and worker capabilities
+      let adaptedPayload = { ...payload };
+      
+      // Add endpoint-specific payload adaptations
+      if (endpoint.includes('/wan/')) {
+        adaptedPayload.worker_type = 'wan';
+      } else if (endpoint.includes('/sdxl/')) {
+        adaptedPayload.worker_type = 'sdxl';
+      } else if (endpoint.includes('/video/')) {
+        adaptedPayload.content_type = 'video';
+      }
+      
       const response = await fetch(fullUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+          'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`,
+          'X-Worker-Type': payload.model || 'wan'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(adaptedPayload),
         signal: AbortSignal.timeout(30000) // 30 second timeout
       });
 
       if (response.ok) {
         const result = await response.json();
-        console.log(`✅ Success on ${endpoint}:`, result);
+        console.log(`✅ Success on ${endpoint}:`, { status: response.status, hasResult: !!result });
         return true;
       } else {
         const errorText = await response.text().catch(() => 'No error details');
-        console.error(`❌ Worker dispatch failed on ${endpoint}: ${response.status} ${response.statusText}`, errorText);
+        console.error(`❌ Worker dispatch failed on ${endpoint}: ${response.status} ${response.statusText}`, errorText.substring(0, 200));
         
         // If it's a 404, try next endpoint
         if (response.status === 404) {
           console.log(`⚠️ 404 on ${endpoint}, trying next endpoint...`);
           continue;
+        } else if (response.status >= 500) {
+          // Server errors - try next endpoint
+          console.log(`⚠️ Server error on ${endpoint}, trying next endpoint...`);
+          continue;
         } else {
-          // For other errors, don't continue trying
+          // Client errors (400s) usually mean bad payload - don't continue
+          console.log(`🛑 Client error on ${endpoint}, stopping attempts`);
           break;
         }
       }
@@ -430,5 +464,6 @@ async function dispatchToWorker(workerInfo: any, payload: any): Promise<boolean>
     }
   }
   
+  console.error(`❌ All ${fallbackEndpoints.length} endpoints failed for worker: ${worker_url}`);
   return false;
 }

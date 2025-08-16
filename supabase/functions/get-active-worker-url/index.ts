@@ -140,10 +140,53 @@ serve(async (req) => {
       healthError = `Health check error: ${error.message}`
     }
 
-    // If health failed, try to discover endpoints by testing common paths
-    if (!isHealthy) {
-      console.log('🔍 Health check failed, attempting endpoint discovery...')
-      const testEndpoints = ['/generate', '/api/generate', '/v1/generate']
+    // Try to discover endpoints by querying worker info first
+    if (!supportedEndpoints.length) {
+      console.log('🔍 Attempting to discover worker endpoints...')
+      
+      // Try to get worker info/capabilities
+      const infoEndpoints = ['/worker/info', '/status', '/info', '/api/status']
+      for (const infoEndpoint of infoEndpoints) {
+        try {
+          const infoResponse = await fetch(`${workerUrl}${infoEndpoint}`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(3000)
+          })
+          if (infoResponse.ok) {
+            const infoData = await infoResponse.json()
+            console.log(`✅ Worker info from ${infoEndpoint}:`, infoData)
+            
+            // Extract endpoints from worker info
+            if (infoData.endpoints) {
+              supportedEndpoints = Array.isArray(infoData.endpoints) ? infoData.endpoints : Object.keys(infoData.endpoints)
+            }
+            if (infoData.capabilities) {
+              workerCapabilities = infoData.capabilities
+            }
+            break
+          }
+        } catch (infoError) {
+          // Continue trying other info endpoints
+        }
+      }
+    }
+
+    // If no endpoints discovered via info, try common generation paths
+    if (!supportedEndpoints.length) {
+      console.log('🔍 No worker info available, testing common endpoints...')
+      
+      // Worker-type-specific endpoints first, then common ones
+      let testEndpoints = []
+      if (worker_type === 'wan') {
+        testEndpoints = ['/wan/generate', '/wan/image', '/generate', '/api/generate', '/v1/generate']
+      } else if (worker_type === 'chat') {
+        testEndpoints = ['/chat', '/enhance', '/api/chat', '/generate']
+      } else if (worker_type === 'sdxl') {
+        testEndpoints = ['/sdxl/generate', '/sdxl/image', '/generate', '/api/generate', '/v1/generate']
+      } else {
+        testEndpoints = ['/generate', '/api/generate', '/v1/generate', '/image', '/video']
+      }
+      
       for (const endpoint of testEndpoints) {
         try {
           const testResponse = await fetch(`${workerUrl}${endpoint}`, {
@@ -158,12 +201,12 @@ serve(async (req) => {
           // Endpoint doesn't exist, continue
         }
       }
-      
-      // If we found endpoints, consider worker partially healthy
-      if (supportedEndpoints.length > 0) {
-        isHealthy = true
-        healthError = 'Health endpoint failed but generation endpoints discovered'
-      }
+    }
+    
+    // If health failed but we found endpoints, consider worker partially healthy
+    if (!isHealthy && supportedEndpoints.length > 0) {
+      isHealthy = true
+      healthError = 'Health endpoint failed but generation endpoints discovered'
     }
 
     // Update health cache in system_config
