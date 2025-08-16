@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -6,39 +6,32 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MoreHorizontal, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-
-interface SimpleAsset {
-  id: string;
-  type: 'image' | 'video';
-  title: string | null;
-  prompt: string;
-  thumbnailUrl: string | null;
-  url: string | null;
-  status: string;
-  createdAt: Date;
-  metadata: any;
-}
+import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 
 interface AssetListViewProps {
-  assets: SimpleAsset[];
+  assets: UnifiedAsset[];
+  lazyAssets: UnifiedAsset[];
   selectedAssets: Set<string>;
   onSelectAsset: (assetId: string) => void;
   onSelectAll: (checked: boolean) => void;
   onBulkDelete: () => void;
-  onIndividualDelete: (asset: SimpleAsset) => void;
-  onPreview: (asset: SimpleAsset) => void;
+  onIndividualDelete: (asset: UnifiedAsset) => void;
+  onPreview: (asset: UnifiedAsset) => void;
   isDeleting: boolean;
+  registerAssetRef: (assetId: string, element: HTMLElement | null) => void;
 }
 
 export const AssetListView = ({
   assets,
+  lazyAssets,
   selectedAssets,
   onSelectAsset,
   onSelectAll,
   onBulkDelete,
   onIndividualDelete,
   onPreview,
-  isDeleting
+  isDeleting,
+  registerAssetRef
 }: AssetListViewProps) => {
   const allSelected = assets.length > 0 && assets.every(asset => selectedAssets.has(asset.id));
   const someSelected = selectedAssets.size > 0;
@@ -103,81 +96,86 @@ export const AssetListView = ({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {assets.map((asset) => (
-            <TableRow key={asset.id} className="group">
-              <TableCell>
-                <Checkbox
-                  checked={selectedAssets.has(asset.id)}
-                  onCheckedChange={() => onSelectAsset(asset.id)}
-                  disabled={isDeleting}
-                />
-              </TableCell>
-              <TableCell>
-                <div 
-                  className="w-12 h-12 rounded-md overflow-hidden cursor-pointer border bg-muted flex items-center justify-center"
-                  onClick={() => onPreview(asset)}
-                >
-                  {asset.thumbnailUrl ? (
-                    <img
-                      src={asset.thumbnailUrl}
-                      alt="Asset thumbnail"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="text-xs text-muted-foreground">
-                      {asset.type === 'image' ? 'IMG' : 'VID'}
-                    </div>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="max-w-0">
-                <div 
-                  className="cursor-pointer hover:text-primary"
-                  onClick={() => onPreview(asset)}
-                >
-                  <p className="font-medium truncate">
-                    {asset.title || 'Untitled'}
-                  </p>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {truncatePrompt(asset.prompt)}
-                  </p>
-                </div>
-              </TableCell>
-              <TableCell>
-                <Badge variant={getStatusColor(asset.status)}>
-                  {asset.status}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline">
-                  {asset.type}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-sm text-muted-foreground">
-                {format(asset.createdAt, 'MMM d, yyyy')}
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onPreview(asset)}
-                  >
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onIndividualDelete(asset)}
+          {assets.map((asset) => {
+            const lazyAsset = lazyAssets.find(la => la.id === asset.id) || asset;
+            return (
+              <TableRow key={asset.id} className="group">
+                <TableCell>
+                  <Checkbox
+                    checked={selectedAssets.has(asset.id)}
+                    onCheckedChange={() => onSelectAsset(asset.id)}
                     disabled={isDeleting}
-                    className="text-destructive hover:text-destructive"
+                  />
+                </TableCell>
+                <TableCell>
+                  <div 
+                    ref={(el) => registerAssetRef(asset.id, el)}
+                    className="w-12 h-12 rounded-md overflow-hidden cursor-pointer border bg-muted flex items-center justify-center"
+                    onClick={() => onPreview(lazyAsset)}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
+                    {lazyAsset.url ? (
+                      <img
+                        src={lazyAsset.url}
+                        alt="Asset thumbnail"
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        {asset.type === 'image' ? 'IMG' : 'VID'}
+                      </div>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="max-w-0">
+                  <div 
+                    className="cursor-pointer hover:text-primary"
+                    onClick={() => onPreview(lazyAsset)}
+                  >
+                    <p className="font-medium truncate">
+                      {asset.title || 'Untitled'}
+                    </p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {truncatePrompt(asset.prompt)}
+                    </p>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={getStatusColor(asset.status)}>
+                    {asset.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {asset.type}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {format(asset.createdAt, 'MMM d, yyyy')}
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onPreview(lazyAsset)}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onIndividualDelete(asset)}
+                      disabled={isDeleting}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
 

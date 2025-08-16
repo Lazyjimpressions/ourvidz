@@ -387,6 +387,7 @@ export const OptimizedLibrary = () => {
                     url: asset.url || null,
                     metadata: asset.metadata || {}
                   }))}
+                  lazyAssets={lazyAssetsData}
                   selectedAssets={selectedAssets}
                   onSelectAsset={(assetId) => handleSelectAsset(assetId, !selectedAssets.has(assetId))}
                   onSelectAll={(checked) => checked ? handleSelectAll() : handleClearSelection()}
@@ -394,6 +395,7 @@ export const OptimizedLibrary = () => {
                   onIndividualDelete={handleDelete}
                   onPreview={handlePreview}
                   isDeleting={isDeleting}
+                  registerAssetRef={finalRegisterAssetRef}
                 />
               )}
             </main>
@@ -440,6 +442,7 @@ export const OptimizedLibrary = () => {
                   url: asset.url || null,
                   metadata: asset.metadata || {}
                 }))}
+                lazyAssets={lazyAssetsData}
                 selectedAssets={selectedAssets}
                 onSelectAsset={(assetId) => handleSelectAsset(assetId, !selectedAssets.has(assetId))}
                 onSelectAll={(checked) => checked ? handleSelectAll() : handleClearSelection()}
@@ -447,6 +450,7 @@ export const OptimizedLibrary = () => {
                 onIndividualDelete={handleDelete}
                 onPreview={handlePreview}
                 isDeleting={isDeleting}
+                registerAssetRef={finalRegisterAssetRef}
               />
             )}
           </div>
