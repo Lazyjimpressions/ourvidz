@@ -471,7 +471,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               </form>
 
               {/* Right section: Generate button */}
-              <button onClick={handleSubmit} disabled={isGenerating || !prompt.trim() && !exactCopyMode} className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded py-2 h-16 flex items-center justify-center shrink-0 font-medium px-2">
+              <button onClick={handleSubmit} disabled={isGenerating || !prompt.trim() && !exactCopyMode} className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded py-2 h-16 flex items-center justify-center shrink-0 font-medium px-1">
                 <Play size={16} fill="currentColor" className="mr-2" />
                 Generate
               </button>
