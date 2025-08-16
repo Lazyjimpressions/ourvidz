@@ -93,6 +93,7 @@ export type StorageBucket =
   | 'image7b_high_enhanced'
   | 'video7b_fast_enhanced'
   | 'video7b_high_enhanced'
+  | 'user-library'
   | 'system_assets'
   | 'reference_images';
 

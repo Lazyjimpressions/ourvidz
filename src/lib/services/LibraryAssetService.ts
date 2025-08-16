@@ -34,6 +34,8 @@ export interface UnifiedLibraryAsset {
   originalAssetId: string;
   type: 'image' | 'video';
   url?: string;
+  storagePath?: string;
+  mimeType?: string;
   prompt: string;
   timestamp: Date;
   createdAt: Date;
@@ -176,6 +178,8 @@ export class LibraryAssetService {
       id: asset.id,
       originalAssetId: asset.id,
       type: asset.asset_type,
+      storagePath: asset.storage_path,
+      mimeType: asset.mime_type,
       prompt: asset.original_prompt,
       timestamp: new Date(asset.created_at),
       createdAt: new Date(asset.created_at),

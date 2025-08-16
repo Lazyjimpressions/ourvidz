@@ -62,7 +62,13 @@ export const OptimizedLibrary = () => {
       status: asset.status || 'completed',
       originalAssetId: asset.originalAssetId || asset.id,
       title: asset.customTitle || `Generated ${asset.type}`,
-      metadata: { source: 'library', ...asset.generationParams }
+      metadata: { 
+        source: 'library', 
+        storage_path: (asset as any).storagePath, 
+        mime_type: (asset as any).mimeType,
+        bucket: 'user-library',
+        ...asset.generationParams 
+      }
     })),
     [rawAssets]
   );

@@ -240,6 +240,11 @@ export class UnifiedUrlService {
       return hinted;
     }
     
+    // Library assets: use user-library bucket
+    if (metadata?.source === 'library' || metadata?.storage_path) {
+      return 'user-library' as any;
+    }
+    
     // Fallback: heuristic detection
     if (asset.type === 'image') {
       const isSDXL = metadata.is_sdxl || 
@@ -322,6 +327,11 @@ export class UnifiedUrlService {
     
     const metadata = asset.metadata || {};
     
+    // Library assets: use exact storage_path
+    if (metadata.storage_path) {
+      return String(metadata.storage_path).replace(/^\/+/, '');
+    }
+    
     // Handle SDXL image arrays
     if (metadata.image_urls && Array.isArray(metadata.image_urls)) {
       const imageUrls = metadata.image_urls;
@@ -343,6 +353,11 @@ export class UnifiedUrlService {
     if (asset.type === 'image') {
       return this.getImagePath(asset, pathType);
     } else if (asset.type === 'video') {
+      const metadata = asset.metadata || {};
+      // Library videos: use storage_path directly
+      if (metadata.storage_path) {
+        return String(metadata.storage_path).replace(/^\/+/, '');
+      }
       if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         return asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');
       }
