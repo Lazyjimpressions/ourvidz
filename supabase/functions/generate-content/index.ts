@@ -111,14 +111,14 @@ export default async function handler(req: Request) {
     const jobId = crypto.randomUUID();
     
     // Map format to proper job_type
-    let jobType = 'image_generation';
+    let mappedJobType = 'image_generation';
     if (format === 'video') {
-      jobType = quality === 'high' ? 'video_high' : 'video_fast';
+      mappedJobType = quality === 'high' ? 'video_high' : 'video_fast';
     } else if (format === 'image') {
       if (model.includes('sdxl')) {
-        jobType = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        mappedJobType = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
       } else {
-        jobType = quality === 'high' ? 'image_high' : 'image_fast';
+        mappedJobType = quality === 'high' ? 'image_high' : 'image_fast';
       }
     }
     
@@ -127,7 +127,7 @@ export default async function handler(req: Request) {
       .insert({
         id: jobId,
         user_id: user.id,
-        job_type: jobType,
+        job_type: mappedJobType,
         status: 'queued',
         original_prompt: prompt,
         enhanced_prompt: finalPrompt,
