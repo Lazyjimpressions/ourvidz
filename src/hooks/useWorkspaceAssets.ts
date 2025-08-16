@@ -1,3 +1,4 @@
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { WorkspaceAssetService, type UnifiedWorkspaceAsset } from '@/lib/services/WorkspaceAssetService';
 import { supabase } from '@/integrations/supabase/client';
@@ -104,4 +105,25 @@ export function useInvalidateWorkspaceAssets() {
   return () => {
     queryClient.invalidateQueries({ queryKey: WORKSPACE_ASSETS_QUERY_KEY });
   };
+}
+
+/**
+ * Hook for real-time workspace updates
+ */
+export function useWorkspaceRealtimeUpdates() {
+  const queryClient = useQueryClient();
+  
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationComplete = (event: CustomEvent) => {
+      console.log('🔄 Generation complete event received, refreshing workspace');
+      queryClient.invalidateQueries({ queryKey: WORKSPACE_ASSETS_QUERY_KEY });
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [queryClient]);
 }
