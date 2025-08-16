@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { GenerationRequest, GenerationFormat, GENERATION_CONFIGS } from '@/types/generation';
-import { videoAPI, imageAPI, usageAPI } from '@/lib/database';
+import { usageAPI } from '@/lib/database';
 
 export class GenerationService {
 /**
@@ -189,96 +189,19 @@ export class GenerationService {
       // Phase 2: Create records with job_id directly (like videos)
       if (config.isVideo) {
         console.log('📹 Creating video record with job_id...');
-        const video = await videoAPI.create({
-          user_id: user.id,
-          project_id: request.projectId,
-          status: 'queued',
-          format: 'mp4',
-          resolution: config.format.includes('high') ? '1280x720' : '832x480'
-        });
-        videoId = video.id;
+        // TODO: Replace with new workspace_assets creation
+        console.log('⚠️ Video creation temporarily disabled - using new architecture');
         
-        // Update job with video_id
-        await supabase.from('jobs').update({ video_id: video.id }).eq('id', jobId);
-        console.log('✅ Video record created and linked:', { videoId, jobId });
+        // For now, the job is created and queued without creating legacy video records
+        // The callback will create workspace_assets entries
       } else {
         console.log('🖼️ Creating image record(s) with job_id directly...');
         
-        if (config.isSDXL) {
-          const numImages = request.metadata?.num_images || 1;
-          console.log(`📸 Creating ${numImages} SDXL image records with job_id...`);
-          
-          for (let i = 0; i < numImages; i++) {
-            const image = await imageAPI.create({
-              user_id: user.id,
-              project_id: request.projectId,
-              prompt: request.prompt,
-              generation_mode: 'standalone',
-              status: 'queued',
-              format: 'png',
-              quality: config.format.includes('high') ? 'high' : 'fast',
-              image_index: i,
-              job_id: jobId, // Direct assignment, no update needed
-              metadata: {
-                model_type: 'sdxl',
-                is_sdxl: true,
-                bucket: config.bucket,
-                job_format: request.format,
-                generation_timestamp: new Date().toISOString()
-              }
-            });
-            
-            // Use first image as the primary for job linking
-            if (i === 0) {
-              imageId = image.id;
-              await supabase.from('jobs').update({ image_id: image.id }).eq('id', jobId);
-            }
-            
-            console.log(`✅ SDXL image record ${i + 1}/${numImages} created:`, {
-              imageId: image.id,
-              imageIndex: i,
-              jobId,
-              quality: image.quality
-            });
-          }
-          
-          console.log('✅ All SDXL image records created with job_id:', {
-            totalRecords: numImages,
-            firstImageId: imageId,
-            jobId,
-            bucket: config.bucket
-          });
-        } else {
-          // Non-SDXL jobs: create single image record
-          const image = await imageAPI.create({
-            user_id: user.id,
-            project_id: request.projectId,
-            prompt: request.prompt,
-            generation_mode: 'standalone',
-            status: 'queued',
-            format: 'png',
-            quality: config.format.includes('high') ? 'high' : 'fast',
-            job_id: jobId, // Direct assignment
-            metadata: {
-              model_type: 'wan',
-              is_sdxl: false,
-              bucket: config.bucket,
-              job_format: request.format,
-              generation_timestamp: new Date().toISOString()
-            }
-          });
-          imageId = image.id;
-          
-          // Update job with image_id
-          await supabase.from('jobs').update({ image_id: image.id }).eq('id', jobId);
-          console.log('✅ Single image record created and linked:', {
-            imageId,
-            jobId,
-            quality: image.quality,
-            modelType: 'wan',
-            bucket: config.bucket
-          });
-        }
+        // TODO: Replace with new workspace_assets creation
+        console.log('⚠️ Image creation temporarily disabled - using new architecture');
+        
+        // For now, the job is created and queued without creating legacy image records
+        // The callback will create workspace_assets entries
       }
       
       // Usage logging handled by edge function
