@@ -8,12 +8,13 @@ import { UserManagementTab } from "@/components/admin/UserManagementTab";
 import { ContentModerationTab } from "@/components/admin/ContentModerationTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 import { SystemConfigTab } from "@/components/admin/SystemConfigTab";
+import { SystemMetricsTab } from "@/components/admin/SystemMetricsTab";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Shield, Flag, BarChart3, Settings, Database, Activity, Home } from "lucide-react";
+import { Users, Shield, Flag, BarChart3, Settings, Database, Activity, Home, Monitor } from "lucide-react";
 
 interface ActivityLog {
   id: string;
@@ -131,8 +132,9 @@ const Admin = () => {
           </div>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
+            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
               <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="metrics">Metrics</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="users">Users</TabsTrigger>
               <TabsTrigger value="moderation">Moderation</TabsTrigger>
@@ -261,6 +263,23 @@ const Admin = () => {
                       <p className="text-sm text-gray-500">No recent activity to display</p>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="metrics" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Monitor className="h-5 w-5" />
+                    System Metrics
+                  </CardTitle>
+                  <CardDescription>
+                    Real-time worker health, queue depths, and system performance
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SystemMetricsTab />
                 </CardContent>
               </Card>
             </TabsContent>

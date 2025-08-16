@@ -44,11 +44,22 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Verify user is admin
-    const { data: { user } } = await supabaseClient.auth.getUser()
-    if (!user) {
+    // Get Authorization header
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'Authentication required' }),
+        JSON.stringify({ error: 'Authorization header required' }),
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    // Verify user is admin using the provided JWT
+    const jwt = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(jwt)
+    
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: corsHeaders }
       )
     }
@@ -129,9 +140,9 @@ serve(async (req) => {
     const metrics: SystemMetrics = {
       timestamp: new Date().toISOString(),
       workers: {
-        chat: [formatWorkerFromObject(workerHealthCache.chatWorker, 'chat')],
-        sdxl: [formatWorkerFromObject(workerHealthCache.sdxlWorker, 'sdxl')],
-        wan: [formatWorkerFromObject(workerHealthCache.wanWorker, 'wan')]
+        chat: workerHealthCache.chatWorker ? [formatWorkerFromObject(workerHealthCache.chatWorker, 'chat')] : [],
+        sdxl: workerHealthCache.sdxlWorker ? [formatWorkerFromObject(workerHealthCache.sdxlWorker, 'sdxl')] : [],
+        wan: workerHealthCache.wanWorker ? [formatWorkerFromObject(workerHealthCache.wanWorker, 'wan')] : []
       },
       queues: queueDepths,
       etaEstimates: {
