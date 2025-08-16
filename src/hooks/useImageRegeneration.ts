@@ -14,7 +14,7 @@ interface RegenerationState {
 }
 
 export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: { seed?: number; negativePrompt?: string; originalPrompt?: string }) => {
-  const { generateContent, isGenerating } = useGeneration();
+  const { generateContent, isGenerating, cancelGeneration } = useGeneration();
   
   // Memoize values to prevent unnecessary re-renders
   const basePrompt = useMemo(() => 

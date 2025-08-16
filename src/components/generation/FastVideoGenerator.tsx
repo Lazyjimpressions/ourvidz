@@ -30,7 +30,7 @@ export const FastVideoGenerator = ({
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
-  const { generateContent, isGenerating, currentJob, error } = useGeneration();
+  const { generateContent, isGenerating, currentJob, error, cancelGeneration } = useGeneration();
   const { data: generationData } = useGenerationStatus(generatedId, 'video_fast');
 
   // Check if generation is complete
@@ -154,9 +154,21 @@ export const FastVideoGenerator = ({
 
         {isGenerating && (
           <div className="p-4 bg-blue-50 rounded-lg border">
-            <p className="text-sm text-blue-800 font-medium mb-2">
-              Fast Video Generation in Progress
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-blue-800 font-medium">
+                Fast Video Generation in Progress
+              </p>
+              {currentJob?.id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelGeneration}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-blue-600">
               Generating your video using the fast model. This usually takes 1-2 minutes.
             </p>

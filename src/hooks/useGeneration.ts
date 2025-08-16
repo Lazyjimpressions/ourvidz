@@ -9,6 +9,7 @@ export const useGeneration = () => {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [currentJob, setCurrentJob] = useState<GenerationStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   const generateContent = useCallback(async (request: GenerationRequest) => {
@@ -75,11 +76,54 @@ export const useGeneration = () => {
     setError(null);
   }, []);
 
-  // Enhanced polling for job status updates with completion event emission
+  const cancelGeneration = useCallback(async () => {
+    if (!currentJob?.id) return;
+    
+    try {
+      await GenerationService.cancelGeneration(currentJob.id);
+      setIsGenerating(false);
+      setCurrentJob(null);
+      
+      // Clear timeout
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        setTimeoutId(null);
+      }
+      
+      toast({
+        title: "Generation Cancelled",
+        description: "Your generation has been cancelled.",
+      });
+    } catch (error) {
+      console.error('Failed to cancel generation:', error);
+      toast({
+        title: "Cancel Failed",
+        description: "Could not cancel the generation. It may have already completed.",
+        variant: "destructive",
+      });
+    }
+  }, [currentJob?.id, timeoutId, toast]);
+
+  // Enhanced polling for job status updates with completion event emission and timeout handling
   useEffect(() => {
     if (!currentJob || currentJob.status === 'completed' || currentJob.status === 'failed') {
       return;
     }
+
+    // Set timeout for stuck jobs (90 seconds) 
+    const timeout = setTimeout(() => {
+      console.warn('⏰ Generation timeout reached, stopping processing');
+      setIsGenerating(false);
+      setCurrentJob(null);
+      setError('Generation took too long - this may indicate a server issue');
+      toast({
+        title: "Generation Timeout",
+        description: "This is taking longer than expected. The system may be overloaded. Please try again.",
+        variant: "destructive",
+      });
+    }, 90000);
+    
+    setTimeoutId(timeout);
 
     const pollInterval = setInterval(async () => {
       try {
@@ -103,6 +147,13 @@ export const useGeneration = () => {
         if (jobStatus.status === 'completed') {
           setIsGenerating(false);
           setGenerationProgress(100);
+          
+          // Clear timeout
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            setTimeoutId(null);
+          }
+          
           console.log('✅ Generation completed with enhanced status:', {
             jobId: currentJob.id,
             format: currentJob.format,
@@ -184,6 +235,13 @@ export const useGeneration = () => {
           
         } else if (jobStatus.status === 'failed') {
           setIsGenerating(false);
+          
+          // Clear timeout
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            setTimeoutId(null);
+          }
+          
           const errorMsg = jobStatus.error_message || 'Generation failed';
           setError(errorMsg);
           console.error('❌ Generation failed with enhanced error tracking:', {
@@ -209,8 +267,22 @@ export const useGeneration = () => {
       }
     }, 2000);
 
-    return () => clearInterval(pollInterval);
-  }, [currentJob, toast]);
+    return () => {
+      clearInterval(pollInterval);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [currentJob, toast, timeoutId]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [timeoutId]);
 
   return {
     generateContent,
@@ -218,6 +290,7 @@ export const useGeneration = () => {
     generationProgress,
     currentJob,
     error,
-    clearError
+    clearError,
+    cancelGeneration
   };
 };

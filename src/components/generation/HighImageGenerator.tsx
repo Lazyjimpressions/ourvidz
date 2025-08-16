@@ -28,7 +28,7 @@ export const HighImageGenerator = ({
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
-  const { generateContent, isGenerating, currentJob, error } = useGeneration();
+  const { generateContent, isGenerating, currentJob, error, cancelGeneration } = useGeneration();
   const { data: generationData } = useGenerationStatus(generatedId, 'image_high');
 
   // Check if generation is complete
@@ -132,9 +132,21 @@ export const HighImageGenerator = ({
 
         {isGenerating && (
           <div className="p-4 bg-purple-50 rounded-lg border">
-            <p className="text-sm text-purple-800 font-medium mb-2">
-              High Quality Image Generation in Progress
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-purple-800 font-medium">
+                High Quality Image Generation in Progress
+              </p>
+              {currentJob?.id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelGeneration}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-purple-600">
               Generating your high-quality image using the premium model. This usually takes 45-90 seconds.
             </p>

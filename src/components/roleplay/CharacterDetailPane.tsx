@@ -49,7 +49,7 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const { character, isLoading, likeCharacter } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading, createScene } = useCharacterScenes(characterId);
   const { startSceneChat } = useSceneNavigation();
-  const { generateContent, isGenerating } = useGeneration();
+  const { generateContent, isGenerating, cancelGeneration } = useGeneration();
   const { toast } = useToast();
 
   // Don't return null - let the parent handle conditional rendering

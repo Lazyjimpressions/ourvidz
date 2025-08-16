@@ -5,9 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-export default async function handler(req: Request) {
+Deno.serve(async (req: Request) => {
+  console.log(`🔥 Generate-content: ${req.method} ${req.url}`);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
+    console.log('✅ CORS preflight handled');
     return new Response(null, { headers: corsHeaders });
   }
 
@@ -227,7 +230,7 @@ export default async function handler(req: Request) {
       { status: 500, headers: corsHeaders }
     );
   }
-}
+});
 
 async function enhancePromptWithChatWorker(prompt: string, model: string): Promise<string> {
   // Direct enhancement without calling external edge function

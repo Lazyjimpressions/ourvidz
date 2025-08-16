@@ -30,7 +30,7 @@ export const HighVideoGenerator = ({
   const [generatedId, setGeneratedId] = useState<string | null>(null);
   const [showEnhancementModal, setShowEnhancementModal] = useState(false);
 
-  const { generateContent, isGenerating, currentJob, error } = useGeneration();
+  const { generateContent, isGenerating, currentJob, error, cancelGeneration } = useGeneration();
   const { data: generationData } = useGenerationStatus(generatedId, 'video_high');
 
   // Check if generation is complete
@@ -154,9 +154,21 @@ export const HighVideoGenerator = ({
 
         {isGenerating && (
           <div className="p-4 bg-purple-50 rounded-lg border">
-            <p className="text-sm text-purple-800 font-medium mb-2">
-              High Quality Video Generation in Progress
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm text-purple-800 font-medium">
+                High Quality Video Generation in Progress
+              </p>
+              {currentJob?.id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelGeneration}
+                  className="text-red-600 border-red-200 hover:bg-red-50"
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
             <p className="text-xs text-purple-600">
               Generating your high-quality video using the premium model. This usually takes 3-6 minutes.
             </p>

@@ -30,7 +30,7 @@ interface SceneGenerationOptions {
 export const useSceneGeneration = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [lastSceneContext, setLastSceneContext] = useState<SceneContext | null>(null);
-  const { generateContent, isGenerating, currentJob } = useGeneration();
+  const { generateContent, isGenerating, currentJob, cancelGeneration } = useGeneration();
 
   // Enhanced scene detection with roleplay patterns
   const detectScene = useCallback((content: string): boolean => {
