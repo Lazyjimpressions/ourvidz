@@ -117,7 +117,7 @@ export class NewWorkspaceAssetService {
    */
   static async queueJob(request: {
     prompt: string;
-    job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'wan_video_fast' | 'wan_video_high';
+    job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high';
     quality?: 'fast' | 'high';
     format?: string;
     model_type?: string;

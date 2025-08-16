@@ -502,19 +502,19 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         : undefined;
 
       const generationRequest = {
-        format: (mode === 'image' 
+        job_type: (mode === 'image' 
           ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
           : (quality === 'high' ? 'video_high' : 'video_fast')
-        ) as GenerationFormat,
+        ),
         prompt: finalPrompt,
-        batchCount: mode === 'image' ? 3 : 1,
+        format: mode === 'image' ? 'png' : 'mp4',
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables
           // Reference image data - FIXED: Use reference_url and signed URLs for private bucket
           ...((referenceImageUrl || referenceImage) && {
             reference_image: true,
-            reference_url: referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined),
+            reference_image_url: referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined),
             reference_strength: exactCopyMode ? 0.9 : referenceStrength,
             reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
             exact_copy_mode: exactCopyMode
@@ -566,7 +566,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         referenceImageUrl: !!referenceImageUrl,
         exactCopyMode,
         hasReferenceData: !!(referenceImageUrl || referenceImage),
-        referenceMetadata: generationRequest.metadata?.reference_url ? 'URL set' : 'No URL',
+        referenceMetadata: generationRequest.metadata?.reference_image_url ? 'URL set' : 'No URL',
         // DEBUG: Full metadata being sent
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,

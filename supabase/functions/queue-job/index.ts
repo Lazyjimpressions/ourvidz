@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface JobRequest {
   prompt: string;
-  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'wan_video_fast' | 'wan_video_high';
+  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high';
   quality?: 'fast' | 'high';
   format?: string;
   model_type?: string;
@@ -93,7 +93,7 @@ serve(async (req) => {
     }
 
     // Determine queue based on job type
-    const queueName = jobRequest.job_type.startsWith('wan') ? 'wan_queue' : 'sdxl_queue'
+    const queueName = jobRequest.job_type.startsWith('sdxl') ? 'sdxl_queue' : 'wan_queue'
 
     // Enqueue to Redis
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')

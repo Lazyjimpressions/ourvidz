@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.208.0/http/server.ts"
 
 const corsHeaders = {
@@ -6,8 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Thin proxy to queue-job for backwards compatibility
-// This will be removed after a short deprecation period
+// DEPRECATED: This endpoint is fully deprecated and non-functional
+// Use queue-job directly instead
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -15,58 +14,20 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405, headers: corsHeaders })
-  }
-
-  try {
-    console.log('⚠️ DEPRECATED: generate-content called, proxying to queue-job')
-    
-    const body = await req.json()
-    
-    // Forward request to queue-job
-    const queueJobUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/queue-job`
-    
-    const response = await fetch(queueJobUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': req.headers.get('Authorization') || '',
-        'Content-Type': 'application/json',
+  console.log('⚠️ DEPRECATED: generate-content called - endpoint is fully deprecated')
+  
+  return new Response(
+    JSON.stringify({ 
+      error: 'Endpoint deprecated',
+      message: 'This endpoint has been deprecated. Please use queue-job directly.',
+      status: 'deprecated'
+    }),
+    {
+      status: 410, // Gone
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json' 
       },
-      body: JSON.stringify(body)
-    })
-
-    const result = await response.json()
-
-    return new Response(
-      JSON.stringify({
-        ...result,
-        deprecationNotice: 'This endpoint is deprecated. Please use queue-job directly.'
-      }),
-      {
-        status: response.status,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        },
-      },
-    )
-
-  } catch (error) {
-    console.error('Generate content proxy error:', error)
-    return new Response(
-      JSON.stringify({ 
-        error: 'Proxy error',
-        details: error.message,
-        deprecationNotice: 'This endpoint is deprecated. Please use queue-job directly.'
-      }),
-      {
-        status: 500,
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        },
-      },
-    )
-  }
+    },
+  )
 })
