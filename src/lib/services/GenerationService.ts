@@ -144,7 +144,16 @@ export class GenerationService {
 
       if (error) {
         console.error('❌ Edge function error:', { error, request });
-        throw new Error(`Failed to queue generation: ${error.message}`);
+        
+        // Improved error handling with specific messages
+        let errorMessage = `Failed to queue generation: ${error.message}`;
+        if (error.details?.status === 404) {
+          errorMessage = `Worker endpoint not found (404). Check configured worker URL.`;
+        } else if (error.details?.status === 503) {
+          errorMessage = `No worker available for processing. Please try again later.`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (!data?.success) {

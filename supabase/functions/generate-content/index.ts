@@ -153,15 +153,20 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Send to appropriate worker with correct worker_type
+    // 4. Send to appropriate worker with correct worker_type and fallback
     const workerType = await mapModelToWorkerType(model, false);
-    const workerUrl = await getWorkerUrl(workerType);
-    if (!workerUrl) {
-      return new Response(
-        JSON.stringify({ error: `No available worker for type: ${workerType}` }),
-        { status: 503, headers: corsHeaders }
-      );
+    
+    // Get worker URL based on determined type with fallback
+    let workerUrl = await getWorkerUrl(workerType);
+    if (!workerUrl && workerType !== 'wan') {
+      console.log(`⚠️ No ${workerType} worker available, falling back to wan worker`);
+      workerUrl = await getWorkerUrl('wan');
     }
+    if (!workerUrl) {
+      throw new Error(`No active worker available (tried: ${workerType}${workerType !== 'wan' ? ', wan' : ''})`);
+    }
+    
+    console.log(`✅ Using ${workerType} worker: ${workerUrl}`);
 
     const workerPayload = {
       job_id: jobId,
@@ -186,9 +191,13 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(workerPayload)
       });
 
-      if (!workerResponse.ok) {
-        throw new Error(`Worker responded with status: ${workerResponse.status}`);
-      }
+    if (!workerResponse.ok) {
+      const errorText = await workerResponse.text().catch(() => 'No error details');
+      console.error(`❌ Worker dispatch failed: ${workerResponse.status} ${workerResponse.statusText}`, errorText);
+      throw new Error(`Worker responded with status: ${workerResponse.status}`, { 
+        cause: { workerType, workerUrl, status: workerResponse.status, details: errorText } 
+      });
+    }
 
       console.log('Job sent to worker successfully');
       
@@ -205,7 +214,12 @@ Deno.serve(async (req: Request) => {
         .eq('id', jobId);
 
       return new Response(
-        JSON.stringify({ error: 'Failed to queue job', details: workerError.message }),
+        JSON.stringify({ 
+          error: 'Failed to queue job', 
+          details: workerError.message,
+          worker_type: workerType,
+          worker_url: workerUrl 
+        }),
         { status: 500, headers: corsHeaders }
       );
     }
@@ -242,11 +256,18 @@ async function enhancePromptWithChatWorker(prompt: string, model: string): Promi
   });
 }
 
-async function mapModelToWorkerType(model: string, enhancementOnly: boolean): Promise<string> {
+// Helper function to map models to worker types
+const mapModelToWorkerType = async (model: string, enhancementOnly: boolean): Promise<string> => {
   if (enhancementOnly) return 'chat';
-  if (model.includes('sdxl')) return 'sdxl';
-  return 'wan';
-}
+  
+  // Route both SDXL and WAN models to 'wan' for now until distinct SDXL worker is configured
+  switch (model.toLowerCase()) {
+    case 'sdxl':
+    case 'wan':
+    default:
+      return 'wan';
+  }
+};
 
 async function enhancePromptDirect(prompt: string, params: {
   jobType?: string;
@@ -296,7 +317,9 @@ async function enhancePromptDirect(prompt: string, params: {
     });
 
     if (!workerResponse.ok) {
-      throw new Error(`Worker responded with status: ${workerResponse.status}`);
+      const errorText = await workerResponse.text().catch(() => 'No error details');
+      console.error(`❌ Chat worker enhancement failed: ${workerResponse.status} ${workerResponse.statusText}`, errorText);
+      throw new Error(`Worker responded with status: ${workerResponse.status}${errorText ? ` - ${errorText}` : ''}`);
     }
 
     const result = await workerResponse.json();

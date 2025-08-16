@@ -40,6 +40,29 @@ serve(async (req) => {
           registrationMethod: currentConfig.config.chatWorkerRegistrationMethod || 'manual',
           lastUpdated: currentConfig.config.chatWorkerUrlUpdatedAt
         }
+        console.log('✅ Using chatWorkerUrl from config')
+      } else if (worker_type === 'sdxl') {
+        // Check for SDXL-specific worker first
+        if (currentConfig.config.sdxlWorkerUrl) {
+          workerUrl = currentConfig.config.sdxlWorkerUrl
+          registrationInfo = {
+            workerType: 'sdxl',
+            autoRegistered: currentConfig.config.sdxlWorkerAutoRegistered || false,
+            registrationMethod: currentConfig.config.sdxlWorkerRegistrationMethod || 'manual',
+            lastUpdated: currentConfig.config.sdxlWorkerUrlUpdatedAt
+          }
+          console.log('✅ Using sdxlWorkerUrl from config')
+        } else if (currentConfig.config.wanWorkerUrl) {
+          // Fallback to WAN worker for SDXL requests
+          workerUrl = currentConfig.config.wanWorkerUrl
+          registrationInfo = {
+            workerType: 'wan-fallback',
+            autoRegistered: currentConfig.config.wanWorkerAutoRegistered || false,
+            registrationMethod: currentConfig.config.wanWorkerRegistrationMethod || 'manual',
+            lastUpdated: currentConfig.config.wanWorkerUrlUpdatedAt
+          }
+          console.log('⚠️ Using wanWorkerUrl as fallback for SDXL')
+        }
       } else if (worker_type === 'wan' && currentConfig.config.wanWorkerUrl) {
         workerUrl = currentConfig.config.wanWorkerUrl
         registrationInfo = {
@@ -48,8 +71,11 @@ serve(async (req) => {
           registrationMethod: currentConfig.config.wanWorkerRegistrationMethod || 'manual',
           lastUpdated: currentConfig.config.wanWorkerUrlUpdatedAt
         }
-      } else if (currentConfig.config.workerUrl) {
-        // Fallback to legacy single worker URL
+        console.log('✅ Using wanWorkerUrl from config')
+      } 
+      
+      // Final fallback to legacy worker URL
+      if (!workerUrl && currentConfig.config.workerUrl) {
         workerUrl = currentConfig.config.workerUrl
         registrationInfo = {
           workerType: 'legacy',
@@ -57,6 +83,7 @@ serve(async (req) => {
           registrationMethod: currentConfig.config.registrationMethod || 'manual',
           lastUpdated: currentConfig.config.workerUrlUpdatedAt
         }
+        console.log('⚠️ Using legacy workerUrl as final fallback')
       }
       
       if (workerUrl) {
