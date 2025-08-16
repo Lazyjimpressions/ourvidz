@@ -89,16 +89,20 @@ serve(async (req) => {
 
     if (shouldEnhance && !enhancedPrompt) {
       try {
-        console.log('🔧 Enhancing prompt before queuing job...');
+        console.log('🔧 Enhancing prompt before queuing job...', {
+          model: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+          contentType: jobRequest.metadata?.contentType || 'sfw'
+        });
         
         const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
           body: {
-            original_prompt: originalPrompt,
-            job_type: jobRequest.job_type,
-            quality: quality,
+            prompt: originalPrompt,
+            jobType: jobRequest.job_type,
             format: dbFormat,
+            quality: quality,
+            selectedModel: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
             contentType: jobRequest.metadata?.contentType || 'sfw',
-            enhancement_model: jobRequest.metadata?.enhancement_model || 'qwen_instruct'
+            metadata: jobRequest.metadata || {}
           }
         });
 
@@ -106,13 +110,18 @@ serve(async (req) => {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
           console.log('✅ Prompt enhanced successfully');
         } else {
-          console.warn('⚠️ Enhancement failed, using original prompt');
+          console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
           enhancedPrompt = originalPrompt;
         }
       } catch (error) {
         console.error('❌ Enhancement failed:', error);
         enhancedPrompt = originalPrompt;
       }
+    }
+
+    // If no enhancement was requested or enhancement was skipped, use original prompt
+    if (!enhancedPrompt) {
+      enhancedPrompt = originalPrompt;
     }
 
     // Create job record
@@ -154,20 +163,37 @@ serve(async (req) => {
       return new Response('Queue service unavailable', { status: 503, headers: corsHeaders })
     }
 
+    // Derive content type and NSFW optimization for worker
+    const contentType = jobRequest.metadata?.contentType || 'sfw';
+    const nsfwOptimization = contentType === 'nsfw';
+
     const queuePayload = {
-      jobId: job.id,
-      userId: user.id,
-      jobType: jobRequest.job_type,
-      originalPrompt: originalPrompt,
-      enhancedPrompt: enhancedPrompt || originalPrompt,
+      id: job.id,                    // Worker expects 'id' field
+      job_id: job.id,               // Also include job_id for compatibility
+      user_id: user.id,             // snake_case for worker
+      job_type: jobRequest.job_type,
+      original_prompt: originalPrompt,
+      enhanced_prompt: enhancedPrompt,
+      prompt: enhancedPrompt,       // Worker uses 'prompt' for generation
       quality: quality,
-      format: outputFormat,  // Use output format (png/mp4) for worker
-      modelType: jobRequest.model_type,
-      referenceImageUrl: jobRequest.reference_image_url,
-      referenceStrength: jobRequest.reference_strength,
+      format: outputFormat,         // Use output format (png/mp4) for worker
+      model_type: jobRequest.model_type,
+      reference_image_url: jobRequest.reference_image_url,
+      reference_strength: jobRequest.reference_strength,
       seed: jobRequest.seed,
+      content_type: contentType,
+      nsfw_optimization: nsfwOptimization,
       metadata: jobRequest.metadata || {}
     }
+
+    console.log(`📋 Enqueuing job ${job.id} to ${queueName}:`, {
+      job_type: jobRequest.job_type,
+      format: outputFormat,
+      quality: quality,
+      content_type: contentType,
+      enhancement_model: jobRequest.metadata?.enhancement_model || 'none',
+      has_reference: !!jobRequest.reference_image_url
+    });
 
     try {
       const enqueueResponse = await fetch(`${redisUrl}/rpush/${queueName}`, {
