@@ -154,17 +154,16 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     return today.toISOString();
   };
 
-  // LIBRARY-FIRST: Enhanced real-time subscriptions with debouncing to prevent infinite loops
+  // STAGING-FIRST: Subscribe to workspace_assets instead of images/videos
   useEffect(() => {
-    let imagesChannel: any = null;
-    let videosChannel: any = null;
+    let workspaceChannel: any = null;
     let isSubscribed = false;
     
-    const setupLibrarySubscription = async () => {
+    const setupWorkspaceSubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return () => {};
 
-      console.log('📡 LIBRARY-FIRST: Setting up DEBOUNCED real-time subscriptions');
+      console.log('📡 STAGING-FIRST: Setting up workspace_assets subscription');
 
       // Prevent multiple subscriptions
       if (isSubscribed) {
@@ -173,13 +172,9 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       }
 
       // Clean up any existing channels first
-      if (imagesChannel) {
-        supabase.removeChannel(imagesChannel);
-        imagesChannel = null;
-      }
-      if (videosChannel) {
-        supabase.removeChannel(videosChannel);
-        videosChannel = null;
+      if (workspaceChannel) {
+        supabase.removeChannel(workspaceChannel);
+        workspaceChannel = null;
       }
 
       let debounceTimer: NodeJS.Timeout | null = null;
@@ -192,7 +187,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
         debounceTimer = setTimeout(() => {
           if (pendingUpdates.size > 0) {
-            console.log('🔄 DEBOUNCED: Processing', pendingUpdates.size, 'pending updates');
+            console.log('🔄 DEBOUNCED: Processing', pendingUpdates.size, 'pending workspace updates');
             // Use the hook's debounced invalidate method
             if (debouncedInvalidate) {
               debouncedInvalidate();
@@ -206,134 +201,79 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       };
 
       try {
-        // Enhanced Images subscription - listen for both INSERT and UPDATE
-        imagesChannel = supabase
-          .channel(`workspace-images-realtime-${user.id}-${Date.now()}`)
+        // Subscribe to workspace_assets for INSERT events
+        workspaceChannel = supabase
+          .channel(`workspace-assets-realtime-${user.id}-${Date.now()}`)
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
-            table: 'images',
+            table: 'workspace_assets',
             filter: `user_id=eq.${user.id}`
           }, (payload) => {
-            console.log('📷 NEW IMAGE - Adding to debounced update queue:', payload.new);
-            pendingUpdates.add(`image-insert-${payload.new.id}`);
+            const asset = payload.new as any;
+            console.log('🎉 NEW WORKSPACE ASSET - Adding to debounced update queue:', asset);
+            pendingUpdates.add(`workspace-asset-insert-${asset.id}`);
             localDebouncedInvalidate();
             
             // Emit completion event for other systems
-            window.dispatchEvent(new CustomEvent('library-assets-ready', {
+            window.dispatchEvent(new CustomEvent('generation-completed', {
               detail: { 
-                type: 'image', 
-                assetId: payload.new.id,
-                jobId: payload.new.job_id 
+                assetId: asset.id,
+                type: asset.asset_type,
+                jobId: asset.job_id,
+                status: 'completed'
               }
             }));
+
+            // Show immediate toast notification
+            toast({
+              title: `${asset.asset_type === 'image' ? 'Image' : 'Video'} Ready`,
+              description: "New content generated and added to workspace",
+            });
           })
           .on('postgres_changes', {
-            event: 'UPDATE',
+            event: 'DELETE',
             schema: 'public',
-            table: 'images',
+            table: 'workspace_assets',
             filter: `user_id=eq.${user.id}`
           }, (payload) => {
-            const image = payload.new as any;
-            if (image.status === 'completed' && (image.image_url || image.image_urls)) {
-              console.log('📷 IMAGE COMPLETED - Adding to debounced update queue:', image.id);
-              pendingUpdates.add(`image-update-${image.id}`);
-              localDebouncedInvalidate();
-              
-              // Show toast notification (immediate)
-              toast({
-                title: "Image Ready",
-                description: "New image generated and ready to view",
-              });
-            }
-          });
-
-        // Enhanced Videos subscription - listen for both INSERT and UPDATE  
-        videosChannel = supabase
-          .channel(`workspace-videos-realtime-${user.id}-${Date.now()}`)
-          .on('postgres_changes', {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'videos',
-            filter: `user_id=eq.${user.id}`
-          }, (payload) => {
-            console.log('🎥 NEW VIDEO - Adding to debounced update queue:', payload.new);
-            pendingUpdates.add(`video-insert-${payload.new.id}`);
+            console.log('🗑️ WORKSPACE ASSET DELETED:', payload.old);
             localDebouncedInvalidate();
-            
-            // Emit completion event for other systems
-            window.dispatchEvent(new CustomEvent('library-assets-ready', {
-              detail: { 
-                type: 'video', 
-                assetId: payload.new.id,
-                jobId: payload.new.job_id 
-              }
-            }));
-          })
-          .on('postgres_changes', {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'videos',
-            filter: `user_id=eq.${user.id}`
-          }, (payload) => {
-            const video = payload.new as any;
-            if (video.status === 'completed' && video.video_url) {
-              console.log('🎥 VIDEO COMPLETED - Adding to debounced update queue:', video.id);
-              pendingUpdates.add(`video-update-${video.id}`);
-              localDebouncedInvalidate();
-              
-              // Show toast notification (immediate)
-              toast({
-                title: "Video Ready",
-                description: "New video generated and ready to view",
-              });
-            }
           });
 
-        // Subscribe to both channels
-        await Promise.all([
-          imagesChannel.subscribe(),
-          videosChannel.subscribe()
-        ]);
+        // Subscribe to the channel
+        await workspaceChannel.subscribe();
 
         isSubscribed = true;
-        console.log('✅ LIBRARY-FIRST: Successfully subscribed to real-time channels');
+        console.log('✅ STAGING-FIRST: Successfully subscribed to workspace_assets');
 
       } catch (error) {
-        console.error('❌ LIBRARY-FIRST: Failed to setup subscriptions:', error);
+        console.error('❌ STAGING-FIRST: Failed to setup workspace subscription:', error);
         // Clean up on error
-        if (imagesChannel) {
-          supabase.removeChannel(imagesChannel);
-          imagesChannel = null;
-        }
-        if (videosChannel) {
-          supabase.removeChannel(videosChannel);
-          videosChannel = null;
+        if (workspaceChannel) {
+          supabase.removeChannel(workspaceChannel);
+          workspaceChannel = null;
         }
         isSubscribed = false;
       }
 
       return () => {
-        console.log('📡 LIBRARY-FIRST: Cleaning up debounced real-time subscriptions');
+        console.log('📡 STAGING-FIRST: Cleaning up workspace subscription');
         isSubscribed = false;
         
         if (debounceTimer) {
           clearTimeout(debounceTimer);
         }
         
-        if (imagesChannel) {
-          supabase.removeChannel(imagesChannel);
-          imagesChannel = null;
-        }
-        if (videosChannel) {
-          supabase.removeChannel(videosChannel);
-          videosChannel = null;
+        if (workspaceChannel) {
+          supabase.removeChannel(workspaceChannel);
+          workspaceChannel = null;
         }
       };
     };
 
     let cleanup: () => void;
-    setupLibrarySubscription().then(cleanupFn => {
+    setupWorkspaceSubscription().then(cleanupFn => {
       cleanup = cleanupFn;
     });
 
@@ -631,50 +571,29 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
         originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
-      });
-
-      // Use existing GenerationService (simplified)
-      const { GenerationService } = await import('@/lib/services/GenerationService');
-      const result = await GenerationService.queueGeneration(generationRequest);
-      
-      if (result) {
-        toast({
-          title: "Generation Started",
-          description: `Your ${mode} is being generated`,
-        });
-      } else {
-        throw new Error('Failed to start generation');
+      // Clear exact copy mode after generation
+      if (exactCopyMode) {
+        setExactCopyMode(false);
+        setReferenceMetadata(null);
+        setUseOriginalParams(false);
+        setLockSeed(false);
       }
-    } catch (error) {
-      console.error('Generation failed:', error);
+
+    } catch (error: any) {
+      console.error('❌ Generation failed:', error);
       toast({
         title: "Generation Failed",
-        description: error instanceof Error ? error.message : 'Please try again',
+        description: error.message || "Failed to generate content",
         variant: "destructive",
       });
     } finally {
       setIsGenerating(false);
     }
   }, [
-    prompt,
-    mode,
-    contentType,
-    quality,
-    referenceImage,
-    referenceStrength,
-    videoDuration,
-    motionIntensity,
-    soundEnabled,
-    beginningRefImage,
-    endingRefImage,
-    aspectRatio,
-    shotType,
-    cameraAngle,
-    style,
-    styleRef,
-    enhancementModel,
-    isGenerating,
-    toast
+    prompt, mode, referenceImage, referenceStrength, contentType, quality,
+    beginningRefImage, endingRefImage, videoDuration, motionIntensity, soundEnabled,
+    aspectRatio, shotType, cameraAngle, style, styleRef, exactCopyMode, referenceMetadata,
+    useOriginalParams, lockSeed, enhancementModel, toast
   ]);
 
   // LIBRARY-FIRST: Workspace dismiss = hide from workspace view (add workspace_dismissed flag)
@@ -1071,5 +990,4 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     getJobStats,
     getActiveJob,
     getJobById
-  };
-}; 
+};

@@ -146,110 +146,36 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
     <div className="flex h-full">
       {/* Main Content Area */}
       <div className="flex-1">
-        {/* Job Groups - 1x3 Layout */}
-        {Object.entries(displayJobs).map(([jobId, jobItems]) => {
-          const metadata = getJobMetadata(jobItems);
-          
-          // Create 1x3 grid: always 3 tiles per job
-          const displayItems = [...jobItems];
-          // For image jobs, pad to 3 items if needed
-          if (!metadata.isVideoJob) {
-            while (displayItems.length < 3) {
-              displayItems.push(null); // Empty slots
-            }
-            // Limit to 3 items maximum
-            displayItems.splice(3);
-          } else {
-            // For video jobs, only show the first item, pad with empty slots
-            displayItems.splice(1);
-            while (displayItems.length < 3) {
-              displayItems.push(null);
-            }
-          }
-          
-          return (
-            <div key={jobId} data-job-id={jobId} className="job-group mb-6 relative group scroll-mt-24">
-              {/* 1x3 Grid Layout - Fixed 3 columns */}
-              <div className="grid grid-cols-3 gap-1 w-full">
-                {displayItems.map((item, index) => (
-                  <div key={item?.id || `empty-${index}`} className="aspect-square">
-                    {item ? (
-                      <ContentCard
-                        item={item}
-                        // LTX-Style Actions
-                        onIterate={onIterate ? () => onIterate(item) : undefined}
-                        onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
-                        onDownload={() => onDownload(item)}
-                        onExpand={onExpand ? () => onExpand(item) : () => onView(item)}
-                        // Legacy Actions (for compatibility)
-                        onEdit={() => onEdit(item)}
-                        onSave={() => onSave(item)}
-                        onDelete={() => onDelete(item)}
-                        onDismiss={() => onDismiss?.(item)}
-                        onView={() => onView(item)}
-                        onUseAsReference={() => onUseAsReference(item)}
-                        onUseSeed={() => onUseSeed(item)}
-                        // NEW: Separate iterate and regenerate actions
-                        onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
-                        onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
-                        isDeleting={isDeleting.has(item.id)}
-                        size="lg"
-                      />
-                    ) : (
-                      // Empty slot for incomplete jobs - match ContentCard sizing
-                      <div className="w-full aspect-square bg-muted/30 border border-border/50 rounded-lg flex items-center justify-center">
-                        <div className="text-muted-foreground text-xs">Empty</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+        {/* Responsive Grid - Individual 1x1 Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 w-full">
+          {Object.entries(displayJobs).flatMap(([jobId, jobItems]) => 
+            jobItems.map((item) => (
+              <div key={item.id} data-job-id={jobId} className="aspect-square relative group scroll-mt-24">
+                <ContentCard
+                  item={item}
+                  // LTX-Style Actions
+                  onIterate={onIterate ? () => onIterate(item) : undefined}
+                  onCreateVideo={onCreateVideo ? () => onCreateVideo(item) : undefined}
+                  onDownload={() => onDownload(item)}
+                  onExpand={onExpand ? () => onExpand(item) : () => onView(item)}
+                  // Legacy Actions (for compatibility)
+                  onEdit={() => onEdit(item)}
+                  onSave={() => onSave(item)}
+                  onDelete={() => onDelete(item)}
+                  onDismiss={() => onDismiss?.(item)}
+                  onView={() => onView(item)}
+                  onUseAsReference={() => onUseAsReference(item)}
+                  onUseSeed={() => onUseSeed(item)}
+                  // NEW: Separate iterate and regenerate actions
+                  onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
+                  onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
+                  isDeleting={isDeleting.has(item.id)}
+                  size="lg"
+                />
               </div>
-              
-              {/* Job Actions - Clear and Delete Buttons */}
-              <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-                {onDismissJob && (
-                  <button
-                    onClick={() => onDismissJob(jobId)}
-                    className="w-5 h-5 bg-background/80 hover:bg-background border border-border rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
-                    title="Clear job from workspace"
-                    disabled={isDeleting.has(jobId)}
-                  >
-                    {isDeleting.has(jobId) ? (
-                      <div className="w-2 h-2 bg-muted-foreground rounded-full animate-pulse" />
-                    ) : (
-                      <span className="text-muted-foreground">×</span>
-                    )}
-                  </button>
-                )}
-                {onDeleteJob && (
-                  <button
-                    onClick={() => {
-                      // Handle synthetic "single-" job IDs - route to individual item deletion
-                      if (jobId.startsWith('single-')) {
-                        const itemId = jobId.replace('single-', '');
-                        const item = jobItems.find(item => item.id === itemId);
-                        if (item && onDelete) {
-                          onDelete(item);
-                        }
-                      } else {
-                        onDeleteJob(jobId);
-                      }
-                    }}
-                    className="w-5 h-5 bg-red-600/80 hover:bg-red-700/90 border border-red-500/50 rounded-full flex items-center justify-center text-xs transition-all shadow-sm"
-                    title="Delete job permanently"
-                    disabled={isDeleting.has(jobId)}
-                  >
-                    {isDeleting.has(jobId) ? (
-                      <div className="w-2 h-2 bg-white/70 rounded-full animate-pulse" />
-                    ) : (
-                      <Trash2 className="w-3 h-3 text-white" />
-                    )}
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            ))
+          )}
+        </div>
       </div>
 
       {/* Job Thumbnail Sidebar with Scroll-to Functionality */}

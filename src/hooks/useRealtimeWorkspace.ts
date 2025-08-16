@@ -231,38 +231,6 @@ export const useRealtimeWorkspace = () => {
           {
             event: '*',
             schema: 'public',
-            table: 'videos',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const video = payload.new as any;
-            const eventType = payload.eventType;
-            
-            if (eventType === 'UPDATE' && video.status === 'completed' && 
-                !processedUpdatesRef.current.has(video.id)) {
-              console.log('🎉 Video completed with enhanced tracking:', video.id);
-              processedUpdatesRef.current.add(video.id);
-              
-              setWorkspaceFilter(prev => new Set([...prev, video.id]));
-              
-              // Dispatch enhanced completion event
-              window.dispatchEvent(new CustomEvent('generation-completed', {
-                detail: { assetId: video.id, type: 'video', status: 'completed' }
-              }));
-              
-              // ✅ FIX: Use coordinated invalidation for all workspace queries
-              console.log('🔄 QUERY INVALIDATION: Video completed, invalidating queries');
-              invalidateWorkspaceQueries();
-              
-              setTimeout(() => processedUpdatesRef.current.delete(video.id), 60000);
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
             table: 'jobs',
             filter: `user_id=eq.${user.id}`
           },
@@ -486,14 +454,12 @@ export const useRealtimeWorkspace = () => {
     }
     
     if (item.asset_type === 'image') {
-      // Generate signed URL for the asset
-      const assetUrl = `https://ulmdmzhcdwfadbvfpckt.supabase.co/storage/v1/object/public/workspace-temp/${item.temp_storage_path}`;
-      
+      // ✅ FIX: Don't generate signed URL here - will be handled by UI/service layer
       tiles.push({
         id: item.id,
         originalAssetId: item.id,
         type: 'image',
-        url: assetUrl,
+        url: '', // Empty URL - will be generated on-demand by WorkspaceAssetService
         prompt: item.original_prompt || '',
         timestamp: new Date(item.created_at),
         quality: 'fast', // Default quality for workspace assets
@@ -502,18 +468,17 @@ export const useRealtimeWorkspace = () => {
         seed: extractedSeed,
         generationParams: {
           ...safeMetadata,
-          seed: extractedSeed
+          seed: extractedSeed,
+          temp_storage_path: item.temp_storage_path // Store path for later URL generation
         }
       });
     } else if (item.asset_type === 'video') {
-      // Generate signed URL for the asset
-      const assetUrl = `https://ulmdmzhcdwfadbvfpckt.supabase.co/storage/v1/object/public/workspace-temp/${item.temp_storage_path}`;
-      
+      // ✅ FIX: Don't generate signed URL here - will be handled by UI/service layer
       tiles.push({
         id: item.id,
         originalAssetId: item.id,
         type: 'video',
-        url: assetUrl,
+        url: '', // Empty URL - will be generated on-demand by WorkspaceAssetService
         prompt: item.original_prompt || '',
         timestamp: new Date(item.created_at),
         quality: 'fast', // Default quality for workspace assets
@@ -523,7 +488,8 @@ export const useRealtimeWorkspace = () => {
         seed: extractedSeed,
         generationParams: {
           ...safeMetadata,
-          seed: extractedSeed
+          seed: extractedSeed,
+          temp_storage_path: item.temp_storage_path // Store path for later URL generation
         }
       });
     }
