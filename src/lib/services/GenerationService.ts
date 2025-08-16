@@ -284,14 +284,32 @@ export class GenerationService {
       // Usage logging handled by edge function
 
       return data.job_id || 'unknown';
-    } catch (error) {
-      console.error('❌ GenerationService.queueGeneration failed:', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        request,
-        timestamp: new Date().toISOString()
-      });
-      throw error;
-    }
+      } catch (error) {
+        console.error('Generation request failed:', error);
+        
+        // Enhanced error messages for common failures
+        let userMessage = 'Generation failed. Please try again.';
+        
+        if (error.message?.includes('Worker responded with status: 404')) {
+          userMessage = 'Generation worker endpoint not found. Please contact support if this persists.';
+        } else if (error.message?.includes('All worker endpoints failed')) {
+          userMessage = 'Unable to connect to any generation endpoints. Please try again later.';
+        } else if (error.message?.includes('No active') || error.message?.includes('worker available')) {
+          userMessage = 'Generation service is starting up. Please try again in a moment.';
+        } else if (error.message?.includes('timeout') || error.message?.includes('AbortError')) {
+          userMessage = 'Generation request timed out. Please try again with a simpler prompt.';
+        } else if (error.message?.includes('enhance') || error.message?.includes('prompt')) {
+          userMessage = 'Failed to enhance your prompt. Please try with a simpler description.';
+        } else if (error.message?.includes('Network error') || error.message?.includes('fetch')) {
+          userMessage = 'Network connection issue. Please check your connection and try again.';
+        } else if (error.message?.includes('Worker endpoint not found') || error.message?.includes('404')) {
+          userMessage = 'Generation service configuration issue. Please contact support.';
+        } else if (error.message?.includes('Worker server error') || error.message?.includes('503')) {
+          userMessage = 'Generation service temporarily overloaded. Please try again in a few minutes.';
+        }
+        
+        throw new Error(userMessage);
+      }
   }
 
   static async getGenerationStatus(jobId: string) {

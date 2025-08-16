@@ -101,10 +101,12 @@ serve(async (req) => {
       })
     }
 
-    // Test worker health with detailed check
+    // Test worker health with detailed check and discover endpoints
     let isHealthy = false
     let healthError = null
     let responseTimeMs = null
+    let supportedEndpoints = []
+    let workerCapabilities = {}
     
     try {
       const startTime = Date.now()
@@ -118,6 +120,16 @@ serve(async (req) => {
         // Additional validation - check response content
         const healthData = await healthResponse.text()
         isHealthy = healthData.includes('status') || healthData.includes('healthy') || healthData.length > 0
+        
+        // Try to parse capabilities if JSON response
+        try {
+          const healthJson = JSON.parse(healthData)
+          workerCapabilities = healthJson.capabilities || {}
+          supportedEndpoints = healthJson.endpoints || []
+        } catch (parseError) {
+          // Not JSON, that's fine
+        }
+        
         if (!isHealthy) {
           healthError = `Health endpoint returned empty/invalid response: ${healthData.substring(0, 100)}`
         }
@@ -126,6 +138,32 @@ serve(async (req) => {
       }
     } catch (error) {
       healthError = `Health check error: ${error.message}`
+    }
+
+    // If health failed, try to discover endpoints by testing common paths
+    if (!isHealthy) {
+      console.log('🔍 Health check failed, attempting endpoint discovery...')
+      const testEndpoints = ['/generate', '/api/generate', '/v1/generate']
+      for (const endpoint of testEndpoints) {
+        try {
+          const testResponse = await fetch(`${workerUrl}${endpoint}`, {
+            method: 'OPTIONS',
+            signal: AbortSignal.timeout(3000)
+          })
+          if (testResponse.ok || testResponse.status === 405) { // 405 = Method Not Allowed means endpoint exists
+            supportedEndpoints.push(endpoint)
+            console.log(`✅ Discovered endpoint: ${endpoint}`)
+          }
+        } catch (testError) {
+          // Endpoint doesn't exist, continue
+        }
+      }
+      
+      // If we found endpoints, consider worker partially healthy
+      if (supportedEndpoints.length > 0) {
+        isHealthy = true
+        healthError = 'Health endpoint failed but generation endpoints discovered'
+      }
     }
 
     // Update health cache in system_config
@@ -159,7 +197,10 @@ serve(async (req) => {
       isHealthy: isHealthy,
       healthError: healthError,
       registrationInfo: registrationInfo,
-      worker_type: worker_type
+      worker_type: worker_type,
+      supportedEndpoints: supportedEndpoints,
+      workerCapabilities: workerCapabilities,
+      responseTimeMs: responseTimeMs
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

@@ -153,20 +153,26 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 4. Send to appropriate worker with correct worker_type and fallback
+    // 4. Get worker info with capabilities
     const workerType = await mapModelToWorkerType(model, false);
+    const workerInfo = await getWorkerInfo(workerType);
     
-    // Get worker URL based on determined type with fallback
-    let workerUrl = await getWorkerUrl(workerType);
-    if (!workerUrl && workerType !== 'wan') {
+    // If no dedicated worker available, try fallback
+    if (!workerInfo && workerType !== 'wan') {
       console.log(`⚠️ No ${workerType} worker available, falling back to wan worker`);
-      workerUrl = await getWorkerUrl('wan');
+      const fallbackInfo = await getWorkerInfo('wan');
+      if (fallbackInfo) {
+        workerInfo = fallbackInfo;
+      }
     }
-    if (!workerUrl) {
+    
+    if (!workerInfo) {
       throw new Error(`No active worker available (tried: ${workerType}${workerType !== 'wan' ? ', wan' : ''})`);
     }
     
-    console.log(`✅ Using ${workerType} worker: ${workerUrl}`);
+    console.log(`✅ Using ${workerType} worker: ${workerInfo.worker_url}`);
+    console.log(`🔧 Worker capabilities:`, workerInfo.workerCapabilities || {});
+    console.log(`📍 Supported endpoints:`, workerInfo.supportedEndpoints || []);
 
     const workerPayload = {
       job_id: jobId,
@@ -182,53 +188,13 @@ Deno.serve(async (req: Request) => {
     };
 
     try {
-      // Try multiple endpoint paths in case of 404
-      const endpointPaths = ['/generate', '/api/generate', '/v1/generate'];
-      let workerResponse;
-      let lastError;
+      const success = await dispatchToWorker(workerInfo, workerPayload);
       
-      for (const path of endpointPaths) {
-        try {
-          console.log(`🔄 Trying worker endpoint: ${workerUrl}${path}`);
-          workerResponse = await fetch(`${workerUrl}${path}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
-            },
-            body: JSON.stringify(workerPayload)
-          });
-
-          if (workerResponse.ok) {
-            console.log(`✅ Worker endpoint success: ${workerUrl}${path}`);
-            break; // Success! Exit the loop
-          } else if (workerResponse.status === 404 && path !== endpointPaths[endpointPaths.length - 1]) {
-            console.log(`⚠️ 404 on ${path}, trying next endpoint...`);
-            continue; // Try next endpoint
-          } else {
-            // Non-404 error or last endpoint - handle as error
-            const errorText = await workerResponse.text().catch(() => 'No error details');
-            console.error(`❌ Worker dispatch failed on ${path}: ${workerResponse.status} ${workerResponse.statusText}`, errorText);
-            lastError = new Error(`Worker responded with status: ${workerResponse.status}`, { 
-              cause: { workerType, workerUrl: `${workerUrl}${path}`, status: workerResponse.status, details: errorText } 
-            });
-            break;
-          }
-        } catch (fetchError) {
-          console.error(`❌ Network error on ${path}:`, fetchError);
-          lastError = fetchError;
-          if (path === endpointPaths[endpointPaths.length - 1]) {
-            break; // Last endpoint, exit loop
-          }
-          continue; // Try next endpoint
-        }
+      if (!success) {
+        throw new Error('All worker endpoints failed');
       }
 
-      if (!workerResponse || !workerResponse.ok) {
-        throw lastError || new Error('All worker endpoints failed');
-      }
-
-      console.log('Job sent to worker successfully');
+      console.log('✅ Worker dispatch successful');
       
     } catch (workerError) {
       console.error('Failed to send job to worker:', workerError);
@@ -247,7 +213,7 @@ Deno.serve(async (req: Request) => {
           error: 'Failed to queue job', 
           details: workerError.message,
           worker_type: workerType,
-          worker_url: workerUrl 
+          worker_url: workerInfo?.worker_url 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -393,7 +359,8 @@ async function enhancePromptDirect(prompt: string, params: {
   }
 }
 
-async function getWorkerUrl(workerType: string): Promise<string | null> {
+// Helper function to get worker info with capabilities
+async function getWorkerInfo(workerType: string): Promise<any | null> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -404,11 +371,64 @@ async function getWorkerUrl(workerType: string): Promise<string | null> {
       body: { worker_type: workerType }
     });
 
-    if (error) throw error;
-    return data?.worker_url || null;
-    
+    if (error || !data?.success) {
+      console.error(`Failed to get ${workerType} worker info:`, error);
+      return null;
+    }
+
+    return data;
   } catch (error) {
-    console.error('Failed to get worker URL:', error);
+    console.error(`Error getting ${workerType} worker info:`, error);
     return null;
   }
+}
+
+// Robust worker dispatch with endpoint fallbacks
+async function dispatchToWorker(workerInfo: any, payload: any): Promise<boolean> {
+  const { worker_url, supportedEndpoints = [] } = workerInfo;
+  
+  // Define fallback endpoints in order of preference
+  const fallbackEndpoints = supportedEndpoints.length > 0 
+    ? supportedEndpoints 
+    : ['/generate', '/api/generate', '/v1/generate'];
+  
+  for (const endpoint of fallbackEndpoints) {
+    const fullUrl = `${worker_url}${endpoint}`;
+    console.log(`🔄 Trying worker endpoint: ${fullUrl}`);
+    
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${Deno.env.get('WAN_WORKER_API_KEY')}`
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000) // 30 second timeout
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log(`✅ Success on ${endpoint}:`, result);
+        return true;
+      } else {
+        const errorText = await response.text().catch(() => 'No error details');
+        console.error(`❌ Worker dispatch failed on ${endpoint}: ${response.status} ${response.statusText}`, errorText);
+        
+        // If it's a 404, try next endpoint
+        if (response.status === 404) {
+          console.log(`⚠️ 404 on ${endpoint}, trying next endpoint...`);
+          continue;
+        } else {
+          // For other errors, don't continue trying
+          break;
+        }
+      }
+    } catch (fetchError) {
+      console.error(`❌ Network error on ${endpoint}:`, fetchError.message);
+      continue;
+    }
+  }
+  
+  return false;
 }

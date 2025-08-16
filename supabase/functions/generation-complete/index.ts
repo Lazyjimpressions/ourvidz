@@ -15,30 +15,58 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { job_id, status, assets, user_id, prompt, model_used, generation_settings } = await req.json();
+    const rawPayload = await req.json();
+    console.log('Raw generation complete payload:', rawPayload);
     
-    console.log('Generation complete callback:', { job_id, status, assets_count: assets?.length });
+    // Handle multiple payload formats (legacy and new)
+    const {
+      job_id,
+      status,
+      assets,
+      user_id,
+      prompt,
+      model_used,
+      generation_settings,
+      // Legacy format fields
+      jobId,
+      userId,
+      results,
+      images,
+      videos
+    } = rawPayload;
+    
+    // Normalize the payload
+    const normalizedJobId = job_id || jobId;
+    const normalizedUserId = user_id || userId;
+    const normalizedAssets = assets || results || images || videos || [];
+    
+    console.log('Generation complete callback:', { 
+      job_id: normalizedJobId, 
+      status, 
+      assets_count: normalizedAssets?.length,
+      user_id: normalizedUserId
+    });
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
-    if (status === 'completed' && assets && assets.length > 0) {
-      // Insert each asset into workspace_assets table
-      const workspaceAssets = assets.map((asset: any, index: number) => ({
-        user_id: user_id,
-        asset_type: asset.mime_type?.includes('video') ? 'video' : 'image',
-        temp_storage_path: asset.temp_storage_path || asset.storage_path,
-        file_size_bytes: asset.file_size_bytes || 0,
-        mime_type: asset.mime_type || 'image/png',
-        duration_seconds: asset.duration_seconds,
-        job_id: job_id,
+    if (status === 'completed' && normalizedAssets && normalizedAssets.length > 0) {
+      // Insert each asset into workspace_assets table with flexible field mapping
+      const workspaceAssets = normalizedAssets.map((asset: any, index: number) => ({
+        user_id: normalizedUserId,
+        asset_type: (asset.mime_type || asset.type || '').includes('video') ? 'video' : 'image',
+        temp_storage_path: asset.temp_storage_path || asset.storage_path || asset.url || asset.path,
+        file_size_bytes: asset.file_size_bytes || asset.size || 0,
+        mime_type: asset.mime_type || asset.type || 'image/png',
+        duration_seconds: asset.duration_seconds || asset.duration,
+        job_id: normalizedJobId,
         asset_index: index,
-        generation_seed: asset.generation_seed || Math.floor(Math.random() * 1000000),
-        original_prompt: prompt || 'Generated content',
-        model_used: model_used || 'unknown',
-        generation_settings: generation_settings || {}
+        generation_seed: asset.generation_seed || asset.seed || Math.floor(Math.random() * 1000000),
+        original_prompt: prompt || asset.prompt || 'Generated content',
+        model_used: model_used || asset.model || 'unknown',
+        generation_settings: generation_settings || asset.settings || {}
       }));
 
       const { error: insertError } = await supabase
@@ -66,14 +94,14 @@ Deno.serve(async (req: Request) => {
         status: status,
         completed_at: status === 'completed' ? new Date().toISOString() : null
       })
-      .eq('id', job_id);
+      .eq('id', normalizedJobId);
 
     if (jobError) {
       console.error('Failed to update job status:', jobError);
     }
 
     return new Response(
-      JSON.stringify({ success: true, job_id }),
+      JSON.stringify({ success: true, job_id: normalizedJobId }),
       { headers: corsHeaders }
     );
     
