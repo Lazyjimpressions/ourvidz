@@ -23,6 +23,8 @@ interface CallbackPayload {
     }>;
   };
   errorMessage?: string;
+  error_message?: string; // Alternative error key
+  error?: string; // Another alternative
   completedAt?: string;
   
   // New SDXL worker format support
@@ -47,6 +49,7 @@ interface CallbackPayload {
     reference_mode?: string;
     processing_time?: number;
     vram_used?: number;
+    error_type?: string; // From SDXL worker logs
     [key: string]: any;
   };
 }
@@ -68,10 +71,22 @@ serve(async (req) => {
     )
 
     const payload: CallbackPayload = await req.json()
+    
+    // Log the incoming payload for debugging
+    console.log(`🔍 Callback received for job: ${payload.job_id || payload.jobId}`, {
+      status: payload.status,
+      hasAssets: !!(payload.assets || payload.results?.assets),
+      errorMessage: payload.errorMessage || payload.error_message || payload.error,
+      metadata: payload.metadata
+    })
 
     // Normalize payload fields (support both legacy and new formats)
     const jobId = payload.job_id || payload.jobId;
     const userId = payload.userId; // Extract from job if not provided
+    
+    // Normalize error message from various possible keys
+    const errorMessage = payload.errorMessage || payload.error_message || payload.error || 
+                        (payload.metadata?.error_type ? `${payload.metadata.error_type}: Internal processing error` : null);
     
     // Validate required fields
     if (!jobId || !payload.status) {
@@ -104,10 +119,17 @@ serve(async (req) => {
       .update({
         status: payload.status,
         completed_at: completedAt,
-        error_message: payload.errorMessage,
+        error_message: errorMessage,
         metadata: {
           ...job.metadata,
-          ...payload.metadata
+          ...payload.metadata,
+          // Store callback details for debugging
+          callback_received_at: new Date().toISOString(),
+          original_error_keys: {
+            errorMessage: payload.errorMessage,
+            error_message: payload.error_message,
+            error: payload.error
+          }
         }
       })
       .eq('id', jobId)
@@ -190,7 +212,15 @@ serve(async (req) => {
 
       console.log(`✅ Job ${jobId} completed with ${assetsToCreate.length} assets`)
     } else if (payload.status === 'failed') {
-      console.log(`❌ Job ${jobId} failed: ${payload.errorMessage}`)
+      console.log(`❌ Job ${jobId} failed:`, {
+        errorMessage: errorMessage,
+        errorType: payload.metadata?.error_type,
+        rawPayload: {
+          errorMessage: payload.errorMessage,
+          error_message: payload.error_message,
+          error: payload.error
+        }
+      })
     }
 
     return new Response(
