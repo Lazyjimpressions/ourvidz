@@ -1,925 +1,158 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+import { serve } from "https://deno.land/std@0.208.0/http/server.ts"
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
-};
-
-/**
- * Enhanced Prompt Verification Logging
- */
-function logEnhancementVerification(jobMetadata: any, jobId: string) {
-  const hasEnhancement = jobMetadata.enhancement_strategy && 
-                        jobMetadata.enhancement_strategy !== 'none';
-  
-  if (hasEnhancement) {
-    console.log('🎯 ENHANCEMENT VERIFICATION:', {
-      jobId: jobId,
-      strategy: jobMetadata.enhancement_strategy,
-      templateUsed: jobMetadata.template_name || jobMetadata.template_used,
-      originalPrompt: jobMetadata.original_prompt?.substring(0, 200) + '...',
-      enhancedPrompt: jobMetadata.enhanced_prompt?.substring(0, 200) + '...',
-      expansionRatio: jobMetadata.enhanced_prompt && jobMetadata.original_prompt 
-        ? (jobMetadata.enhanced_prompt.length / jobMetadata.original_prompt.length).toFixed(2)
-        : 'unknown',
-      enhancementTimeMs: jobMetadata.enhancement_time_ms
-    });
-    
-    // Validate enhancement integrity
-    if (!jobMetadata.original_prompt || !jobMetadata.enhanced_prompt) {
-      console.warn('⚠️ ENHANCEMENT INTEGRITY ISSUE:', {
-        jobId: jobId,
-        hasOriginal: !!jobMetadata.original_prompt,
-        hasEnhanced: !!jobMetadata.enhanced_prompt,
-        strategy: jobMetadata.enhancement_strategy
-      });
-    }
-  } else {
-    console.log('📝 NO ENHANCEMENT:', {
-      jobId: jobId,
-      strategy: jobMetadata.enhancement_strategy || 'none',
-      promptLength: jobMetadata.prompt?.length || 0
-    });
-  }
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-/**
- * Template Tracking & Validation
- */
-function logTemplateTracking(jobMetadata: any, jobId: string) {
-  const templateInfo = {
-    template_name: jobMetadata.template_name || jobMetadata.template_used,
-    model_used: jobMetadata.model_used,
-    fallback_level: jobMetadata.fallback_level,
-    content_mode: jobMetadata.content_mode
-  };
-  
-  console.log('📋 TEMPLATE TRACKING:', {
-    jobId: jobId,
-    templateInfo: templateInfo,
-    templatePresent: !!templateInfo.template_name,
-    fallbackUsed: templateInfo.fallback_level > 0
-  });
-  
-  // Alert if template information is missing
-  if (!templateInfo.template_name && jobMetadata.enhancement_strategy !== 'none') {
-    console.warn('⚠️ MISSING TEMPLATE INFO:', {
-      jobId: jobId,
-      strategy: jobMetadata.enhancement_strategy,
-      availableFields: Object.keys(jobMetadata)
-    });
-  }
-}
-
-/**
- * Comprehensive Status Tracking
- */
-function logJobCompletionStatus(job: any, status: string, assets: any[]) {
-  const completionInfo = {
-    jobId: job.id,
-    status: status,
-    jobType: job.job_type,
-    destination: job.destination,
-    assetsGenerated: assets?.length || 0,
-    isWorkspace: job.destination === 'workspace',
-    processingTime: job.completed_at && job.created_at 
-      ? new Date(job.completed_at).getTime() - new Date(job.created_at).getTime()
-      : null
-  };
-  
-  console.log('🏁 JOB COMPLETION STATUS:', completionInfo);
-  
-  // Log asset details
-  if (assets && assets.length > 0) {
-    assets.forEach((asset, index) => {
-      console.log(`📎 Asset ${index + 1}:`, {
-        url: asset.substring(0, 100) + '...',
-        length: asset.length
-      });
-    });
-  }
-}
-
-/**
- * Error Context Enhancement
- */
-function logContextualError(error: any, context: {
-  stage: string;
+interface CallbackPayload {
   jobId: string;
-  operation: string;
+  userId: string;
+  status: 'completed' | 'failed';
+  results?: {
+    assets: Array<{
+      assetType: 'image' | 'video';
+      tempStoragePath: string;
+      fileSizeBytes: number;
+      mimeType: string;
+      durationSeconds?: number;
+      assetIndex?: number;
+    }>;
+  };
+  errorMessage?: string;
+  completedAt?: string;
   metadata?: any;
-}) {
-  console.error(`❌ ERROR in ${context.stage}:`, {
-    jobId: context.jobId,
-    operation: context.operation,
-    errorMessage: error.message,
-    errorCode: error.code,
-    hasMetadata: !!context.metadata,
-    metadataKeys: context.metadata ? Object.keys(context.metadata) : [],
-    timestamp: new Date().toISOString()
-  });
-  
-  // Log metadata sample if available
-  if (context.metadata) {
-    console.error('📋 Error context metadata:', {
-      enhancement_strategy: context.metadata.enhancement_strategy,
-      template_name: context.metadata.template_name,
-      original_prompt_length: context.metadata.original_prompt?.length,
-      enhanced_prompt_length: context.metadata.enhanced_prompt?.length
-    });
-  }
 }
-serve(async (req)=>{
+
+serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: corsHeaders
-    });
+    return new Response('ok', { headers: corsHeaders })
   }
+
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders })
+  }
+
   try {
-    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
-    const requestBody = await req.json();
-    const { job_id, status, assets, error_message, enhancedPrompt } = requestBody;
-    // Standardized parameter handling: all workers now send 'assets' array
-    const primaryAsset = assets && assets.length > 0 ? assets[0] : null;
-    console.log('🔍 STANDARDIZED CALLBACK DEBUGGING - Received request:', {
-      job_id,
-      status,
-      assets,
-      assetsCount: assets ? assets.length : 0,
-      primaryAsset,
-      error_message,
-      enhancedPrompt,
-      fullRequestBody: requestBody,
-      timestamp: new Date().toISOString()
-    });
-    // Validate critical parameters with standardized naming
-    if (!job_id) {
-      console.error('❌ CRITICAL: No job_id provided in callback');
-      throw new Error('job_id is required');
-    }
-    if (!primaryAsset && status === 'completed') {
-      console.error('❌ CRITICAL: No assets provided for completed job', {
-        job_id,
-        status,
-        assets,
-        assetsCount: assets ? assets.length : 0,
-        primaryAsset
-      });
-    }
-    // Get current job to preserve existing metadata and check format
-    console.log('🔍 Fetching job details for:', job_id);
-    const { data: currentJob, error: fetchError } = await supabase.from('jobs').select('metadata, job_type, image_id, video_id, format, quality, model_type, user_id, destination, workspace_session_id').eq('id', job_id).single();
-    if (fetchError) {
-      logContextualError(fetchError, {
-        stage: 'job_fetch',
-        jobId: job_id,
-        operation: 'fetch_current_job',
-        metadata: { job_id }
-      });
-      throw fetchError;
-    }
-    console.log('✅ Job details fetched successfully:', {
-      job_id: currentJob.id,
-      jobType: currentJob.job_type,
-      imageId: currentJob.image_id,
-      videoId: currentJob.video_id,
-      userId: currentJob.user_id,
-      quality: currentJob.quality,
-      modelType: currentJob.model_type,
-      existingMetadata: currentJob.metadata
-    });
-    // Prepare update data
-    const updateData: any = {
-      status,
-      completed_at: status === 'completed' || status === 'failed' ? new Date().toISOString() : null,
-      error_message: error_message || null
-    };
-    // Merge metadata instead of overwriting
-    let updatedMetadata = currentJob.metadata || {};
-    
-    // PHASE 1 FIX: Extract worker metadata from requestBody.metadata
-    const workerMetadata = requestBody.metadata || {};
-    if (workerMetadata.seed) {
-      updatedMetadata.seed = workerMetadata.seed;
-      console.log('🌱 Storing seed from worker:', workerMetadata.seed);
-    }
-    if (workerMetadata.generation_time) {
-      updatedMetadata.generation_time = workerMetadata.generation_time;
-      console.log('⏱️ Storing generation time from worker:', workerMetadata.generation_time);
-    }
-    if (workerMetadata.num_images) {
-      updatedMetadata.num_images = workerMetadata.num_images;
-    }
-    
-    // PHASE 1 FIX: Extract enhancement metadata from worker response
-    // Preserve original user prompt from job metadata, don't overwrite with worker version
-    if (workerMetadata.original_prompt && !updatedMetadata.original_prompt) {
-      updatedMetadata.original_prompt = workerMetadata.original_prompt;
-    }
-    if (workerMetadata.final_prompt) {
-      updatedMetadata.enhanced_prompt = workerMetadata.final_prompt;
-    }
-    // PHASE 4 FIX: Correct enhancement strategy tracking
-    if (workerMetadata.enhancement_strategy && workerMetadata.enhancement_strategy !== 'none') {
-      updatedMetadata.enhancement_strategy = workerMetadata.enhancement_strategy;
-      console.log('📈 Enhancement strategy tracked:', workerMetadata.enhancement_strategy);
-    } else {
-      // Default strategy for jobs without explicit strategy
-      updatedMetadata.enhancement_strategy = 'template_based';
-    }
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-    // PHASE 4 FIX: Extract and preserve actual template name from enhancement_strategy_source
-    if (updatedMetadata.debug?.enhancement_strategy_source) {
-      updatedMetadata.template_name = updatedMetadata.debug.enhancement_strategy_source;
-      console.log('📋 Template name extracted from source:', updatedMetadata.template_name);
-    }
+    const payload: CallbackPayload = await req.json()
 
-    // Add enhanced logging after metadata extraction
-    logEnhancementVerification(updatedMetadata, job_id);
-    logTemplateTracking(updatedMetadata, job_id);
-    
-// WORKSPACE SUPPORT: Check if job is destined for workspace
-const isWorkspaceJob = currentJob.destination === 'workspace' || currentJob.workspace_session_id;
-console.log('🎯 WORKSPACE DESTINATION CHECK:', {
-  job_id: job_id,
-  destination: currentJob.destination,
-  workspace_session_id: currentJob.workspace_session_id,
-  isWorkspaceJob,
-  currentJobId: currentJob.id
-});
-    
-    // Normalize SDXL parameter fields and exact copy behavior before persisting metadata
-    const isSDXLJob = (currentJob.job_type || '').startsWith('sdxl_');
-    if (isSDXLJob) {
-      if (updatedMetadata.sample_guide_scale && !updatedMetadata.guidance_scale) {
-        updatedMetadata.guidance_scale = updatedMetadata.sample_guide_scale;
-      }
-      if (updatedMetadata.sample_steps && !updatedMetadata.num_inference_steps) {
-        updatedMetadata.num_inference_steps = updatedMetadata.sample_steps;
-      }
-      delete updatedMetadata.sample_guide_scale;
-      delete updatedMetadata.sample_steps;
-      delete updatedMetadata.sample_solver;
-      delete updatedMetadata.sample_shift;
-    }
-    if (updatedMetadata.exact_copy_mode) {
-      updatedMetadata.negative_prompt = '';
-    }
-    updateData.metadata = updatedMetadata;
-    
-    // PURE LIBRARY-FIRST: Always route completed jobs to library tables
-    if (status === 'completed' && assets && assets.length > 0) {
-      console.log('📚 LIBRARY-FIRST: Always routing to library tables for workspace compatibility');
-      // Route to appropriate library table based on job type
-      if (currentJob.job_type === 'image' || currentJob.job_type.includes('image')) {
-        await handleImageJobCallback(supabase, currentJob, status, assets, error_message, currentJob.quality, currentJob.job_type.includes('sdxl'), currentJob.job_type.includes('enhance'));
-      } else if (currentJob.job_type === 'video' || currentJob.job_type.includes('video')) {
-        await handleVideoJobCallback(supabase, currentJob, status, assets, error_message, currentJob.quality, currentJob.job_type.includes('enhance'));
-      }
-    }
-    
-    // PHASE 2 FIX: Update job table with enhancement fields - preserve original user prompt
-    // Only set original_prompt if it doesn't exist in the job, to preserve user input
-    if (updatedMetadata.original_prompt && !currentJob.original_prompt) {
-      updateData.original_prompt = updatedMetadata.original_prompt;
-    }
-    if (updatedMetadata.enhanced_prompt) {
-      updateData.enhanced_prompt = updatedMetadata.enhanced_prompt;
-    }
-    if (updatedMetadata.enhancement_strategy) {
-      updateData.enhancement_strategy = updatedMetadata.enhancement_strategy;
-    }
-    // PHASE 4 FIX: Add template name tracking
-    if (updatedMetadata.template_name) {
-      updateData.template_name = updatedMetadata.template_name;
-    }
-    if (updatedMetadata.qwen_expansion_percentage) {
-      // Validate and cap numeric values to prevent overflow
-      const qwenValue = parseFloat(updatedMetadata.qwen_expansion_percentage);
-      updateData.qwen_expansion_percentage = Math.min(qwenValue, 99999.99);
-      if (qwenValue > 99999.99) {
-        console.warn('⚠️ Capped qwen_expansion_percentage from', qwenValue, 'to 99999.99');
-      }
-    }
-    if (updatedMetadata.compel_weights) {
-      updateData.compel_weights = updatedMetadata.compel_weights;
-    }
-    
-    // Add validation for other numeric fields that might overflow
-    if (updatedMetadata.quality_rating) {
-      const qualityValue = parseFloat(updatedMetadata.quality_rating);
-      updateData.quality_rating = Math.min(qualityValue, 99999.99);
-      if (qualityValue > 99999.99) {
-        console.warn('⚠️ Capped quality_rating from', qualityValue, 'to 99999.99');
-      }
-    }
-    if (updatedMetadata.quality_improvement) {
-      const improvementValue = parseFloat(updatedMetadata.quality_improvement);
-      updateData.quality_improvement = Math.min(improvementValue, 99999.99);
-      if (improvementValue > 99999.99) {
-        console.warn('⚠️ Capped quality_improvement from', improvementValue, 'to 99999.99');
-      }
-    }
-    
-    console.log('🔄 Updating job with standardized metadata and enhancement fields:', {
-      job_id,
-      updateData,
-      metadataKeys: Object.keys(updatedMetadata),
-      enhancementFields: {
-        original_prompt: !!updateData.original_prompt,
-        enhanced_prompt: !!updateData.enhanced_prompt,
-        enhancement_strategy: updateData.enhancement_strategy,
-        qwen_expansion_percentage: updateData.qwen_expansion_percentage
-      }
-    });
-    // Update job status
-    const { data: job, error: updateError } = await supabase.from('jobs').update(updateData).eq('id', job_id).select().single();
-    if (updateError) {
-      logContextualError(updateError, {
-        stage: 'job_update',
-        jobId: job_id,
-        operation: 'update_job_status',
-        metadata: updatedMetadata
-      });
-      throw updateError;
-    }
-    console.log('✅ Job updated successfully with standardized processing:', {
-      job_id: job.id,
-      status: job.status,
-      jobType: job.job_type,
-      metadata: job.metadata
-    });
-
-    // Handle prompt test results if this is a test job
-    if (job.metadata?.created_from === 'admin_prompt_testing' && job.metadata?.prompt_test_metadata) {
-      console.log('🧪 Processing prompt test job callback:', {
-        job_id: job.id,
-        status,
-        test_metadata: job.metadata.prompt_test_metadata
-      });
-      await handlePromptTestCallback(supabase, job, status, assets, error_message);
-    }
-    // Enhanced job type parsing to handle SDXL jobs AND enhanced WAN jobs
-    let format, quality, isSDXL = false, isEnhanced = false;
-    if (job.job_type.startsWith('sdxl_')) {
-      // Handle SDXL jobs: sdxl_image_fast -> image, fast, true
-      isSDXL = true;
-      const parts = job.job_type.replace('sdxl_', '').split('_');
-      format = parts[0]; // 'image'
-      quality = parts[1]; // 'fast' or 'high'
-    } else if (job.job_type.includes('enhanced')) {
-      // PHASE 3 FIX: Enhanced WAN jobs: video7b_fast_enhanced, image7b_high_enhanced
-      isEnhanced = true;
-      console.log('🔧 PHASE 3: Processing enhanced job type:', job.job_type);
-      
-      if (job.job_type.startsWith('video7b_')) {
-        format = 'video';
-        quality = job.job_type.includes('_fast_') ? 'fast' : 'high';
-      } else if (job.job_type.startsWith('image7b_')) {
-        format = 'image';
-        quality = job.job_type.includes('_fast_') ? 'fast' : 'high';
-      } else {
-        // Fallback for unknown enhanced patterns
-        const parts = job.job_type.split('_');
-        format = parts[0].replace('7b', ''); // Remove '7b' suffix
-        quality = parts[1]; // 'fast' or 'high'
-        console.log('⚠️ PHASE 3: Using fallback enhanced job parsing:', { parts, format, quality });
-      }
-    } else {
-      // Handle standard WAN jobs: image_fast, video_high -> image/video, fast/high, false
-      const parts = job.job_type.split('_');
-      format = parts[0]; // 'image' or 'video'
-      quality = parts[1]; // 'fast' or 'high'
-    }
-    console.log('🔧 Enhanced job type parsing with enhanced job support:', {
-      originalJobType: job.job_type,
-      parsedFormat: format,
-      parsedQuality: quality,
-      isSDXL,
-      isEnhanced,
-      expectedBucket: isSDXL ? `sdxl_image_${quality}` : isEnhanced ? `${format}7b_${quality}_enhanced` : `${format}_${quality}`
-    });
-    // Handle different job types based on parsed format with standardized assets
-    if (format === 'image') {
-      console.log('🖼️ Processing image job callback...');
-      await handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced);
-    } else if (format === 'video' && job.video_id) {
-      console.log('📹 Processing video job callback...');
-      await handleVideoJobCallback(supabase, job, status, assets, error_message, quality, isEnhanced);
-    } else {
-      console.error('❌ CRITICAL: Unknown job format or missing ID:', {
-        format,
-        imageId: job.image_id,
-        videoId: job.video_id,
-        jobType: job.job_type
-      });
-    }
-    // Log comprehensive completion status
-    logJobCompletionStatus(job, status, assets);
-    
-    console.log('✅ STANDARDIZED CALLBACK PROCESSING COMPLETE:', {
-      job_id,
-      status,
-      format,
-      quality,
-      isSDXL,
-      isEnhanced,
-      assets,
-      assetsCount: assets ? assets.length : 0,
-      processingTimestamp: new Date().toISOString()
-    });
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Job callback processed successfully with standardized parameters',
-      debug: {
-        job_id,
-        jobStatus: status,
-        jobType: job.job_type,
-        format: format,
-        quality: quality,
-        isSDXL: isSDXL,
-        isEnhanced: isEnhanced,
-        assetsProcessed: assets ? assets.length : 0,
-        processingTimestamp: new Date().toISOString()
-      }
-    }), {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json'
-      },
-      status: 200
-    });
-  } catch (error) {
-    logContextualError(error, {
-      stage: 'main_callback',
-      jobId: 'unknown',
-      operation: 'process_callback'
-    });
-    return new Response(JSON.stringify({
-      error: error.message,
-      success: false,
-      debug: {
-        timestamp: new Date().toISOString(),
-        errorType: error.constructor.name
-      }
-    }), {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json'
-      },
-      status: 400
-    });
-  }
-});
-// Enhanced image callback with original prompt preservation
-async function handleImageJobCallback(supabase, job, status, assets, error_message, quality, isSDXL, isEnhanced) {
-  console.log('🖼️ IMAGE CALLBACK PROCESSING (SIMPLIFIED):', {
-    job_id: job.id,
-    job_type: job.job_type,
-    status,
-    assets,
-    assetsCount: assets ? assets.length : 0,
-    quality,
-    isSDXL,
-    isEnhanced,
-    timestamp: new Date().toISOString()
-  });
-  
-  if (status === 'completed' && assets && assets.length > 0) {
-    // Extract metadata from job
-    const jobMetadata = job.metadata || {};
-    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Asset';
-    
-    console.log('✅ NEW ARCHITECTURE: Creating workspace_assets records');
-    
-    // Create workspace_assets records for the new architecture
-    const workspaceAssets = [];
-    for (let i = 0; i < assets.length; i++) {
-      const assetUrl = assets[i];
-      const tempStoragePath = `${job.user_id}/${job.id}/${i}.${jobMetadata.format || 'png'}`;
-      
-      console.log(`🔄 NEW ARCHITECTURE: Creating workspace_asset ${i + 1}/${assets.length}:`, {
-        jobId: job.id,
-        assetIndex: i,
-        assetUrl: assetUrl,
-        tempStoragePath: tempStoragePath
-      });
-      
-      const workspaceAsset = {
-        user_id: job.user_id,
-        asset_type: job.job_type?.includes('video') ? 'video' : 'image',
-        temp_storage_path: tempStoragePath,
-        file_size_bytes: 1024000, // Placeholder - would be actual file size in production
-        mime_type: job.job_type?.includes('video') ? 'video/mp4' : 'image/png',
-        duration_seconds: job.job_type?.includes('video') ? (jobMetadata.duration || 5) : null,
-        job_id: job.id,
-        asset_index: i,
-        generation_seed: parseInt(jobMetadata.seed || '0'),
-        original_prompt: jobMetadata.original_prompt || prompt,
-        model_used: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-        generation_settings: {
-          quality: quality,
-          format: jobMetadata.format || 'png',
-          enhanced_prompt: jobMetadata.enhanced_prompt,
-          enhancement_strategy: jobMetadata.enhancement_strategy,
-          reference_image_url: jobMetadata.reference_image_url,
-          reference_strength: jobMetadata.reference_strength,
-          reference_type: jobMetadata.reference_type,
-          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-          is_sdxl: isSDXL,
-          is_enhanced: isEnhanced,
-          callback_processed_at: new Date().toISOString(),
-          asset_url: assetUrl // Store the actual generated URL
-        }
-      };
-      
-      workspaceAssets.push(workspaceAsset);
-    }
-    
-    // Insert all workspace assets in batch
-    console.log(`🔄 NEW ARCHITECTURE: Inserting ${workspaceAssets.length} workspace_assets records`);
-    
-    const { data: createdAssets, error: workspaceError } = await supabase
-      .from('workspace_assets')
-      .insert(workspaceAssets)
-      .select();
-    
-    if (workspaceError) {
-      console.error('❌ Error creating workspace_assets:', workspaceError);
-      
-      // Update job with error status
-      await supabase
-        .from('jobs')
-        .update({ 
-          status: 'failed',
-          error_message: `Failed to create workspace assets: ${workspaceError.message}`,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', job.id);
-        
-      return;
-    }
-    
-    console.log(`✅ NEW ARCHITECTURE: Created ${createdAssets.length} workspace_assets records successfully`);
-    
-    // Update job status to completed
-    const { error: jobUpdateError } = await supabase
-      .from('jobs')
-      .update({ 
-        status: 'completed',
-        completed_at: new Date().toISOString()
+    // Validate required fields
+    if (!payload.jobId || !payload.userId || !payload.status) {
+      return new Response('Missing required fields: jobId, userId, status', { 
+        status: 400, 
+        headers: corsHeaders 
       })
-      .eq('id', job.id);
-
-    if (jobUpdateError) {
-      console.error('❌ Error updating job status:', jobUpdateError);
-    } else {
-      console.log('✅ Job marked as completed successfully');
     }
-    
-    // PHASE 4 FIX: Add enhancement analytics tracking
-    await trackEnhancementAnalytics(supabase, job, status, createdAssets.length > 0);
-    
-  } else if (status === 'failed' && job.image_id) {
-    console.log('❌ Processing failed image job');
-    const { error: imageError } = await supabase.from('images').update({
-      status: 'failed',
-      metadata: {
-        ...job.metadata || {},
-        error_message: error_message,
-        failed_at: new Date().toISOString()
-      }
-    }).eq('id', job.image_id);
-    if (imageError) {
-      console.error('❌ Error updating image status to failed:', imageError);
-    } else {
-      console.log('✅ Image job marked as failed');
-    }
-  } else if (status === 'processing' && job.image_id) {
-    console.log('🔄 Processing image job in progress');
-    const { error: imageError } = await supabase.from('images').update({
-      status: 'generating',
-      metadata: {
-        ...job.metadata || {},
-        processing_started_at: new Date().toISOString()
-      }
-    }).eq('id', job.image_id);
-    if (imageError) {
-      console.error('❌ Error updating image status to generating:', imageError);
-    } else {
-      console.log('✅ Image job marked as generating');
-    }
-  }
-}
 
-// ============= LEGACY IMAGE INSERT HANDLER =============
-async function handleLegacyImageInsert(supabase, job, assets, jobMetadata, baseTitle, quality, isSDXL, isEnhanced) {
-  const createdImages = [];
-  for (let i = 0; i < assets.length; i++) {
-    const imageUrl = assets[i];
-    const title = assets.length > 1 ? `${baseTitle} (${i + 1})` : baseTitle;
-    
-    const imageData = {
-      user_id: job.user_id,
-      prompt: jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Image',
-      title: title,
-      image_url: imageUrl,
-      thumbnail_url: imageUrl,
-      status: 'completed',
-      quality: quality,
-      format: 'png',
-      generation_mode: 'standalone',
-      job_id: job.id,
-              metadata: {
-          ...jobMetadata,
-          model_type: isSDXL ? 'sdxl' : isEnhanced ? 'enhanced-7b' : 'wan',
-          is_sdxl: isSDXL,
-          is_enhanced: isEnhanced,
-          callback_processed_at: new Date().toISOString(),
-          original_job_id: job.id,
-          image_index: i,
-          total_images: assets.length,
-          // REFERENCE IMAGE SUPPORT: Store reference data in image metadata
-          reference_image_url: jobMetadata.reference_image_url,
-          reference_strength: jobMetadata.reference_strength,
-          reference_type: jobMetadata.reference_type
-        }
-    };
-    
-    const { data: newImage, error: imageError } = await supabase
-      .from('images')
-      .insert(imageData)
-      .select()
-      .single();
-    
-    if (imageError) {
-      console.error('❌ Error creating image record:', {
-        imageIndex: i,
-        error: imageError
-      });
-    } else {
-      console.log('✅ Image record created:', {
-        imageId: newImage.id,
-        imageIndex: i,
-        jobId: job.id
-      });
-      createdImages.push(newImage);
-    }
-  }
-  
-  console.log('✅ Created individual image records:', {
-    jobId: job.id,
-    totalImages: assets.length,
-    createdCount: createdImages.length
-  });
-}
-
-// ============= VIDEO JOB CALLBACK HANDLER =============
-async function handleVideoJobCallback(supabase, job, status, assets, error_message, quality, isEnhanced) {
-  console.log('📹 STANDARDIZED VIDEO CALLBACK PROCESSING:', {
-    job_id: job.id,
-    videoId: job.video_id,
-    status,
-    assets,
-    assetsCount: assets ? assets.length : 0,
-    jobType: job.job_type,
-    quality,
-    isEnhanced
-  });
-  if (status === 'completed' && job.video_id && assets && assets.length > 0) {
-    // Store video path exactly as returned by WAN worker - no normalization
-    const videoPath = assets[0];
-    
-    console.log('📹 Video path handling (FIXED):', {
-      receivedPath: assets[0],
-      storedPath: videoPath,
-      userId: job.user_id,
-      jobType: job.job_type,
-      pathConsistencyFixed: true
-    });
-
-    // Extract title from job metadata or prompt
-    const jobMetadata = job.metadata || {};
-    const prompt = jobMetadata.prompt || jobMetadata.original_prompt || 'Untitled Video';
-    const title = prompt.length <= 60 ? prompt : prompt.substring(0, 60) + '...';
-
-    // Generate thumbnail URL based on video URL
-    // TODO: Implement server-side thumbnail generation
-    // For now, use video frame at 20% duration as thumbnail fallback
-    const placeholderThumbnailUrl = `system_assets/video-thumbnail-placeholder.png`;
-    
-    console.log('📹 Setting video thumbnail:', {
-      videoId: job.video_id,
-      placeholderThumbnailUrl,
-      hasVideoUrl: !!videoPath
-    });
-
-    // Store exact path from worker - this matches actual storage structure  
-    const updateData = {
-      status: 'completed',
-      title: title,
-      video_url: videoPath,
-      thumbnail_url: placeholderThumbnailUrl,
-      signed_url: videoPath,
-      signed_url_expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
-      completed_at: new Date().toISOString(),
-      metadata: {
-        ...jobMetadata,
-        prompt: prompt,
-        callback_processed_at: new Date().toISOString(),
-        stored_path: videoPath,
-        thumbnail_placeholder: true,
-        bucket: isEnhanced ? `video7b_${quality}_enhanced` : `video_${quality}`,
-        path_consistency_fixed: true
-      }
-    };
-
-    const { error: videoError } = await supabase.from('videos').update(updateData).eq('id', job.video_id);
-    
-    if (videoError) {
-      console.error('❌ Error updating video:', {
-        videoId: job.video_id,
-        error: videoError,
-        updateData
-      });
-    } else {
-      console.log('✅ Video job updated successfully with path consistency fix:', {
-        videoId: job.video_id,
-        storedPath: videoPath,
-        bucket: updateData.metadata.bucket,
-        pathConsistencyFixed: true
-      });
-    }
-  }
-  if (status === 'failed' && job.video_id) {
-    const { error: videoError } = await supabase.from('videos').update({
-      status: 'failed',
-      error_message: error_message
-    }).eq('id', job.video_id);
-    if (videoError) {
-      console.error('❌ Error updating video status to failed:', videoError);
-    } else {
-      console.log('✅ Video job marked as failed');
-    }
-  }
-  if (status === 'processing' && job.video_id) {
-    const { error: videoError } = await supabase.from('videos').update({
-      status: 'processing'
-    }).eq('id', job.video_id);
-    if (videoError) {
-      console.error('❌ Error updating video status to processing:', videoError);
-    } else {
-      console.log('✅ Video job marked as processing');
-    }
-  }
-}
-
-async function handlePromptTestCallback(supabase, job, status, assets, error_message) {
-  console.log('🧪 Processing prompt test callback:', {
-    job_id: job.id,
-    status,
-    test_metadata: job.metadata?.prompt_test_metadata,
-    assets: assets
-  });
-
-  try {
-    // Find the test result record by job_id
-    const { data: testResult, error: findError } = await supabase
-      .from('model_test_results')
+    // Get the job to validate and get context
+    const { data: job, error: jobError } = await supabaseClient
+      .from('jobs')
       .select('*')
-      .eq('job_id', job.id)
-      .single();
+      .eq('id', payload.jobId)
+      .eq('user_id', payload.userId)
+      .single()
 
-    if (findError) {
-      console.error('❌ Error finding test result:', findError);
-      return;
+    if (jobError || !job) {
+      console.error('Job not found:', jobError)
+      return new Response('Job not found', { status: 404, headers: corsHeaders })
     }
 
-    // Prepare update data based on job status
-    let updateData: any = {
-      success: status === 'completed',
-      test_metadata: {
-        ...testResult.test_metadata,
-        job_status: status,
-        completed_at: status === 'completed' ? new Date().toISOString() : null,
-        error_message: error_message || null
-      }
-    };
+    const completedAt = payload.completedAt || new Date().toISOString()
 
-    // Add generated content URLs if completed successfully
-    if (status === 'completed' && assets && assets.length > 0) {
-      // For images, link to the image record
-      if (job.image_id) {
-        const { data: imageData } = await supabase
-          .from('images')
-          .select('image_url')
-          .eq('id', job.image_id)
-          .single();
-        
-        if (imageData) {
-          updateData.image_id = job.image_id;
-          updateData.test_metadata = {
-            ...updateData.test_metadata,
-            image_url: imageData.image_url,
-            content_type: 'image'
-          };
+    // Update job status
+    const { error: updateError } = await supabaseClient
+      .from('jobs')
+      .update({
+        status: payload.status,
+        completed_at: completedAt,
+        error_message: payload.errorMessage,
+        metadata: {
+          ...job.metadata,
+          ...payload.metadata
         }
-      }
-      
-      // For videos, link to the video record
-      if (job.video_id) {
-        const { data: videoData } = await supabase
-          .from('videos')
-          .select('video_url, thumbnail_url')
-          .eq('id', job.video_id)
-          .single();
-        
-        if (videoData) {
-          updateData.video_id = job.video_id;
-          updateData.test_metadata = {
-            ...updateData.test_metadata,
-            video_url: videoData.video_url,
-            thumbnail_url: videoData.thumbnail_url,
-            content_type: 'video'
-          };
-        }
-      }
-    }
-
-    // Update the test result
-    const { error: updateError } = await supabase
-      .from('model_test_results')
-      .update(updateData)
-      .eq('job_id', job.id);
+      })
+      .eq('id', payload.jobId)
 
     if (updateError) {
-      console.error('❌ Error updating test result:', updateError);
-    } else {
-      console.log('✅ Test result updated successfully:', {
-        job_id: job.id,
-        success: updateData.success,
-        content_type: updateData.test_metadata?.content_type
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error in prompt test callback handler:', error);
-  }
-}
-
-// PHASE 4 FIX: Enhancement analytics tracking function
-async function trackEnhancementAnalytics(supabase, job, status, hasImages) {
-  try {
-    // Only track completed jobs with enhancement data
-    if (status !== 'completed') return;
-
-    const jobMetadata = job.metadata || {};
-    const hasEnhancement = jobMetadata.enhancement_strategy && jobMetadata.enhancement_strategy !== 'none';
-    if (!hasEnhancement) {
-      console.log('📊 Skipping analytics tracking - no enhancement detected');
-      return;
+      console.error('Failed to update job:', updateError)
+      return new Response('Failed to update job', { status: 500, headers: corsHeaders })
     }
 
-    // Calculate token expansion if available
-    let tokenExpansion: number | null = null;
-    if (jobMetadata.original_prompt && jobMetadata.enhanced_prompt) {
-      const originalLength = jobMetadata.original_prompt.length;
-      const enhancedLength = jobMetadata.enhanced_prompt.length;
-      tokenExpansion = originalLength > 0 ? ((enhancedLength - originalLength) / originalLength) * 100 : 0;
-    }
+    // If successful, create workspace assets
+    if (payload.status === 'completed' && payload.results?.assets) {
+      for (const asset of payload.results.assets) {
+        const { error: assetError } = await supabaseClient
+          .from('workspace_assets')
+          .insert({
+            user_id: payload.userId,
+            job_id: payload.jobId,
+            asset_type: asset.assetType,
+            temp_storage_path: asset.tempStoragePath,
+            file_size_bytes: asset.fileSizeBytes,
+            mime_type: asset.mimeType,
+            duration_seconds: asset.durationSeconds,
+            asset_index: asset.assetIndex || 0,
+            generation_seed: job.metadata?.seed || Math.floor(Math.random() * 1000000),
+            original_prompt: job.prompt,
+            model_used: job.model_type || 'unknown',
+            generation_settings: {
+              quality: job.quality,
+              format: job.format,
+              enhanced_prompt: job.enhanced_prompt,
+              reference_image_url: job.metadata?.reference_image_url,
+              reference_strength: job.metadata?.reference_strength,
+              ...payload.metadata
+            }
+          })
 
-    // Store lightweight analytics in user_activity_log to avoid missing-table errors
-    const activityPayload = {
-      user_id: job.user_id,
-      action: 'job_enhancement_analytics',
-      resource_type: 'job',
-      resource_id: job.id,
-      metadata: {
-        job_type: job.job_type,
-        status: job.status,
-        enhancement_strategy: jobMetadata.enhancement_strategy,
-        enhancement_time_ms: jobMetadata.enhancement_time_ms || null,
-        qwen_expansion_percentage: jobMetadata.qwen_expansion_percentage || tokenExpansion,
-        quality_improvement: jobMetadata.quality_improvement || null,
-        has_images: hasImages,
-        generation_time_seconds: jobMetadata.generation_time || null
+        if (assetError) {
+          console.error('Failed to create workspace asset:', assetError)
+          // Don't fail the entire callback, just log the error
+        }
       }
-    };
 
-    const { error: activityError } = await supabase
-      .from('user_activity_log')
-      .insert(activityPayload);
-
-    if (activityError) {
-      console.error('❌ PHASE 4: Failed to log enhancement analytics activity:', activityError);
-    } else {
-      console.log('✅ PHASE 4: Enhancement analytics activity logged');
+      console.log(`✅ Job ${payload.jobId} completed with ${payload.results.assets.length} assets`)
+    } else if (payload.status === 'failed') {
+      console.log(`❌ Job ${payload.jobId} failed: ${payload.errorMessage}`)
     }
-  } catch (error) {
-    console.error('❌ PHASE 4: Error in enhancement analytics tracking:', error);
-  }
-}
 
-// REMOVED: handleWorkspaceJobCallback function - using pure library-first architecture
-// All content now routes to library tables (images/videos) which workspace queries directly
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        jobId: payload.jobId,
+        status: payload.status,
+        message: 'Callback processed successfully'
+      }),
+      {
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        },
+      },
+    )
+
+  } catch (error) {
+    console.error('Job callback error:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Internal server error',
+        details: error.message 
+      }),
+      {
+        status: 500,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        },
+      },
+    )
+  }
+})
