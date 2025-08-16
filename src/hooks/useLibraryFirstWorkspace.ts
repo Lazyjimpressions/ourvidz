@@ -571,6 +571,30 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
         originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
+      });
+
+      // STAGING-FIRST: Use queue-job directly for new staging-first architecture
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: generationRequest
+      });
+
+      if (error) {
+        console.error('❌ Generation error:', error);
+        toast({
+          title: "Generation Failed",
+          description: error.message || "Failed to generate content",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('✅ STAGING-FIRST: Generation request successful:', data);
+      
+      toast({
+        title: `${mode === 'image' ? 'Image' : 'Video'} Generation Started`,
+        description: "Your content is being generated and will appear in the workspace when ready",
+      });
+
       // Clear exact copy mode after generation
       if (exactCopyMode) {
         setExactCopyMode(false);
@@ -990,4 +1014,5 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     getJobStats,
     getActiveJob,
     getJobById
+  };
 };
