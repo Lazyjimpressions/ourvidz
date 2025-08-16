@@ -562,8 +562,12 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         : undefined;
 
       const generationRequest = {
-        format: (mode === 'image' ? 'sdxl_image_high' : 'video_high') as GenerationFormat,
+        format: (mode === 'image' 
+          ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
+          : (quality === 'high' ? 'video_high' : 'video_fast')
+        ) as GenerationFormat,
         prompt: finalPrompt,
+        batchCount: mode === 'image' ? 3 : 1,
         metadata: {
           num_images: mode === 'image' ? 3 : 1,
           // LIBRARY-FIRST: No destination needed - always goes to library tables

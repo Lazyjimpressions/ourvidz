@@ -133,7 +133,9 @@ export class GenerationService {
           prompt: request.originalPrompt || request.prompt,
           model: config.isSDXL ? 'sdxl' : 'wan',
           quantity: request.batchCount || 1,
-          enhance_prompt: !request.metadata?.exact_copy_mode,
+          enhance_prompt: !request.metadata?.exact_copy_mode && 
+                         request.metadata?.enhancement_model !== 'none' &&
+                         request.metadata?.skip_enhancement !== true,
           generation_settings: sanitizedBody.metadata,
           quality: config.format.includes('high') ? 'high' : 'fast',
           format: config.isVideo ? 'video' : 'image'
