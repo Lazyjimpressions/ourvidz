@@ -48,6 +48,15 @@ export interface LibraryFirstWorkspaceState {
   // Enhancement Model Selection
   enhancementModel: 'qwen_base' | 'qwen_instruct' | 'none';
   userPreferredModel: 'qwen_base' | 'qwen_instruct' | 'none';
+  
+  // Advanced SDXL Settings
+  numImages: number;
+  steps: number;
+  guidanceScale: number;
+  negativePrompt: string;
+  compelEnabled: boolean;
+  compelWeights: string;
+  seed: number | null;
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -86,6 +95,14 @@ export interface LibraryFirstWorkspaceActions {
   setUseOriginalParams: (on: boolean) => void;
   setLockSeed: (on: boolean) => void;
   setReferenceMetadata: (metadata: ReferenceMetadata | null) => void;
+  // Advanced SDXL Settings
+  setNumImages: (num: number) => void;
+  setSteps: (steps: number) => void;
+  setGuidanceScale: (scale: number) => void;
+  setNegativePrompt: (prompt: string) => void;
+  setCompelEnabled: (enabled: boolean) => void;
+  setCompelWeights: (weights: string) => void;
+  setSeed: (seed: number | null) => void;
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => any | null;
@@ -132,6 +149,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
   const [userPreferredModel, setUserPreferredModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
+
+  // Advanced SDXL Settings
+  const [numImages, setNumImages] = useState(1);
+  const [steps, setSteps] = useState(25);
+  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [compelEnabled, setCompelEnabled] = useState(false);
+  const [compelWeights, setCompelWeights] = useState('');
+  const [seed, setSeed] = useState<number | null>(null);
 
   // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -958,6 +984,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     exactCopyMode,
     useOriginalParams,
     lockSeed,
+    workspaceCleared,
+    // Advanced SDXL Settings
+    numImages,
+    steps,
+    guidanceScale,
+    negativePrompt,
+    compelEnabled,
+    compelWeights,
+    seed,
     
     // Actions
     updateMode: setMode,
@@ -982,7 +1017,6 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     deleteItem,
     dismissItem,
     setLightboxIndex,
-    workspaceCleared,
     selectJob,
     deleteJob,
     dismissJob,
@@ -1011,6 +1045,14 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       }
     },
     setReferenceMetadata,
+    // Advanced SDXL Settings Actions
+    setNumImages,
+    setSteps,
+    setGuidanceScale,
+    setNegativePrompt,
+    setCompelEnabled,
+    setCompelWeights,
+    setSeed,
     getJobStats,
     getActiveJob,
     getJobById

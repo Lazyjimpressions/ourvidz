@@ -56,6 +56,14 @@ export const SimplifiedWorkspace: React.FC = () => {
     exactCopyMode,
     useOriginalParams,
     lockSeed,
+    // Advanced SDXL Settings
+    numImages,
+    steps,
+    guidanceScale,
+    negativePrompt,
+    compelEnabled,
+    compelWeights,
+    seed,
     // Actions
     updateMode,
     setPrompt,
@@ -87,7 +95,15 @@ export const SimplifiedWorkspace: React.FC = () => {
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
-    setReferenceMetadata
+    setReferenceMetadata,
+    // Advanced SDXL Settings Actions
+    setNumImages,
+    setSteps,
+    setGuidanceScale,
+    setNegativePrompt,
+    setCompelEnabled,
+    setCompelWeights,
+    setSeed
   } = useLibraryFirstWorkspace();
 
   // Honor URL param mode
@@ -283,6 +299,23 @@ export const SimplifiedWorkspace: React.FC = () => {
               lockSeed={lockSeed}
               onLockSeedChange={setLockSeed}
               referenceMetadata={referenceMetadata}
+              onReferenceMetadataChange={setReferenceMetadata}
+              workspaceAssets={workspaceAssets}
+              // Advanced SDXL settings
+              numImages={numImages}
+              onNumImagesChange={setNumImages}
+              steps={steps}
+              onStepsChange={setSteps}
+              guidanceScale={guidanceScale}
+              onGuidanceScaleChange={setGuidanceScale}
+              negativePrompt={negativePrompt}
+              onNegativePromptChange={setNegativePrompt}
+              compelEnabled={compelEnabled}
+              onCompelEnabledChange={setCompelEnabled}
+              compelWeights={compelWeights}
+              onCompelWeightsChange={setCompelWeights}
+              seed={seed}
+              onSeedChange={setSeed}
             />
           </div>
         </div>

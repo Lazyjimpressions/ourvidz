@@ -19,6 +19,13 @@ interface JobRequest {
   reference_strength?: number;
   seed?: number;
   metadata?: any;
+  // Advanced SDXL settings
+  num_images?: number;
+  steps?: number;
+  guidance_scale?: number;
+  negative_prompt?: string;
+  compel_enabled?: boolean;
+  compel_weights?: string;
 }
 
 serve(async (req) => {
@@ -167,32 +174,57 @@ serve(async (req) => {
     const contentType = jobRequest.metadata?.contentType || 'sfw';
     const nsfwOptimization = contentType === 'nsfw';
 
+    // Helper function to derive resolution from aspect ratio
+    const getResolutionFromAspectRatio = (ratio?: string): string => {
+      switch (ratio) {
+        case '1:1': return '1024x1024';
+        case '16:9': return '1024x576';
+        case '9:16': return '576x1024';
+        default: return '1024x1024';
+      }
+    };
+
     const queuePayload = {
       id: job.id,                    // Worker expects 'id' field
-      job_id: job.id,               // Also include job_id for compatibility
-      user_id: user.id,             // snake_case for worker
+      type: jobRequest.job_type,     // Worker expects 'type' field
+      prompt: enhancedPrompt,        // Worker uses 'prompt' for generation
+      user_id: user.id,              // snake_case for worker
+      config: {
+        num_images: jobRequest.num_images || jobRequest.metadata?.num_images || 1,
+        steps: jobRequest.steps || jobRequest.metadata?.steps || 25,
+        guidance_scale: jobRequest.guidance_scale || jobRequest.metadata?.guidance_scale || 7.5,
+        resolution: getResolutionFromAspectRatio(jobRequest.metadata?.aspect_ratio),
+        seed: jobRequest.seed || jobRequest.metadata?.seed,
+        negative_prompt: jobRequest.negative_prompt || jobRequest.metadata?.negative_prompt || undefined
+      },
+      metadata: {
+        ...jobRequest.metadata,
+        reference_image_url: jobRequest.reference_image_url,
+        reference_strength: jobRequest.reference_strength,
+        reference_type: jobRequest.metadata?.reference_type || 'style',
+        nsfw_optimization: nsfwOptimization
+      },
+      compel_enabled: jobRequest.compel_enabled || jobRequest.metadata?.compel_enabled || false,
+      compel_weights: jobRequest.compel_weights || jobRequest.metadata?.compel_weights || undefined,
+      // Legacy fields for compatibility
+      job_id: job.id,
       job_type: jobRequest.job_type,
-      original_prompt: originalPrompt,
-      enhanced_prompt: enhancedPrompt,
-      prompt: enhancedPrompt,       // Worker uses 'prompt' for generation
       quality: quality,
-      format: outputFormat,         // Use output format (png/mp4) for worker
-      model_type: jobRequest.model_type,
-      reference_image_url: jobRequest.reference_image_url,
-      reference_strength: jobRequest.reference_strength,
-      seed: jobRequest.seed,
-      content_type: contentType,
-      nsfw_optimization: nsfwOptimization,
-      metadata: jobRequest.metadata || {}
+      format: outputFormat,
+      content_type: contentType
     }
 
     console.log(`📋 Enqueuing job ${job.id} to ${queueName}:`, {
-      job_type: jobRequest.job_type,
-      format: outputFormat,
-      quality: quality,
-      content_type: contentType,
-      enhancement_model: jobRequest.metadata?.enhancement_model || 'none',
-      has_reference: !!jobRequest.reference_image_url
+      type: jobRequest.job_type,
+      config: queuePayload.config,
+      has_metadata: !!queuePayload.metadata,
+      compel_enabled: queuePayload.compel_enabled,
+      legacy_fields: {
+        job_type: jobRequest.job_type,
+        format: outputFormat,
+        quality: quality,
+        content_type: contentType
+      }
     });
 
     try {
