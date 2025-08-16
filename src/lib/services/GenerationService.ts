@@ -128,22 +128,30 @@ export class GenerationService {
         throw new Error('Unable to sanitize request for serialization');
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-content', {
+      // Use queue-job instead of deprecated generate-content
+      const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
-          prompt: request.originalPrompt || request.prompt,
-          model: config.isSDXL ? 'sdxl' : 'wan',
-          quantity: request.batchCount || 1,
-          enhance_prompt: !request.metadata?.exact_copy_mode && 
-                         request.metadata?.enhancement_model !== 'none' &&
-                         request.metadata?.skip_enhancement !== true,
-          generation_settings: sanitizedBody.metadata,
+          prompt: request.enhancedPrompt || request.originalPrompt || request.prompt,
+          original_prompt: request.originalPrompt || request.prompt,
+          job_type: `${config.isSDXL ? 'sdxl' : 'video'}_${config.format.includes('high') ? 'high' : 'fast'}`,
           quality: config.format.includes('high') ? 'high' : 'fast',
-          format: config.isVideo ? 'video' : 'image'
+          format: config.isVideo ? 'mp4' : 'png',
+          model_type: config.isSDXL ? 'sdxl' : 'wan',
+          enhanced_prompt: request.enhancedPrompt,
+          num_images: request.batchCount || 1,
+          metadata: {
+            ...sanitizedBody.metadata,
+            user_requested_enhancement: !request.metadata?.exact_copy_mode && 
+                                      request.metadata?.enhancement_model !== 'none' &&
+                                      request.metadata?.skip_enhancement !== true,
+            enhancement_model: request.metadata?.enhancement_model || 'qwen_instruct',
+            skip_enhancement: request.metadata?.skip_enhancement || request.metadata?.exact_copy_mode
+          }
         }
       });
 
       if (error) {
-        console.error('❌ Edge function error:', { error, request });
+        console.error('❌ Queue job error:', { error, request });
         
         // Enhanced error handling with specific messages
         let errorMessage = `Failed to queue generation: ${error.message}`;
@@ -167,23 +175,16 @@ export class GenerationService {
         throw new Error(errorMessage);
       }
 
-      if (!data?.success) {
-        console.error('❌ Edge function returned failure:', { data, request });
-        throw new Error(data?.error || 'Failed to queue generation');
-      }
-
-      const jobId = data.job_id;
+      const jobId = data?.jobId;
       if (!jobId) {
-        throw new Error('No job ID returned from generate-content');
+        throw new Error('No job ID returned from queue-job');
       }
 
-      console.log('✅ Job created successfully:', {
+      console.log('✅ Job queued successfully:', {
         jobId,
-        queueLength: data.queueLength,
-        modelVariant: data.modelVariant,
-        isSDXL: data.isSDXL,
-        queue: data.queue,
-        bucket: config.bucket
+        status: data.status,
+        queueName: data.queueName,
+        message: data.message
       });
 
       // Phase 2: Create records with job_id directly (like videos)
@@ -206,7 +207,7 @@ export class GenerationService {
       
       // Usage logging handled by edge function
 
-      return data.job_id || 'unknown';
+      return data.jobId || 'unknown';
       } catch (error) {
         console.error('Generation request failed:', error);
         
