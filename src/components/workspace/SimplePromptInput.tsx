@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, Cog, X, Palette, Copy, Edit3 } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 
 // Compact reference upload component
@@ -508,19 +509,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     )}
                     {isGenerating ? 'Generating...' : 'Generate'}
                   </button>
-
-                  {/* Advanced Settings Button */}
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                    className={`flex items-center gap-1 px-2 py-2 rounded text-sm font-medium transition-colors ${
-                      showAdvancedSettings
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    <Cog size={12} />
-                  </button>
                 </form>
               </div>
             </div>
@@ -650,82 +638,94 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Controls */}
+              <button
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                  showAdvancedSettings
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                <Settings size={8} />
+                CONTROLS
+              </button>
             </div>
           </div>
 
           {/* Advanced Settings Modal */}
           {showAdvancedSettings && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 bg-background/95 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg p-4 z-50">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-medium text-foreground">Advanced Settings</h3>
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-2 z-50">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-medium text-foreground">Controls</h3>
                 <button
                   onClick={() => setShowAdvancedSettings(false)}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </button>
               </div>
               
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-2 text-xs">
                 {/* Batch Size */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
                     Batch Size
                   </label>
                   <select
                     value={numImages}
                     onChange={(e) => onNumImagesChange?.(parseInt(e.target.value))}
-                    className="w-full h-8 px-2 bg-background border border-input rounded text-xs"
+                    className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
                     disabled={mode === 'video'}
                   >
-                    <option value={1}>1 Image</option>
-                    <option value={3}>3 Images</option>
-                    <option value={6}>6 Images</option>
+                    <option value={1}>1</option>
+                    <option value={3}>3</option>
+                    <option value={6}>6</option>
                   </select>
                 </div>
 
                 {/* Steps */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    Steps ({steps})
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Steps: {steps}
                   </label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="50"
-                    value={steps}
-                    onChange={(e) => onStepsChange?.(parseInt(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  <Slider
+                    value={[steps]}
+                    onValueChange={(value) => onStepsChange?.(value[0])}
+                    min={10}
+                    max={50}
+                    step={1}
+                    className="w-full"
                   />
                 </div>
 
                 {/* Guidance Scale */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    Guidance Scale ({guidanceScale})
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    CFG: {guidanceScale}
                   </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="20"
-                    step="0.5"
-                    value={guidanceScale}
-                    onChange={(e) => onGuidanceScaleChange?.(parseFloat(e.target.value))}
-                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
+                  <Slider
+                    value={[guidanceScale]}
+                    onValueChange={(value) => onGuidanceScaleChange?.(value[0])}
+                    min={1}
+                    max={20}
+                    step={0.5}
+                    className="w-full"
                   />
                 </div>
 
                 {/* Seed */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    Seed (Optional)
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Seed
                   </label>
                   <input
                     type="number"
                     value={seed || ''}
                     onChange={(e) => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)}
                     placeholder="Random"
-                    className="w-full h-8 px-2 bg-background border border-input rounded text-xs"
+                    className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
                     min="0"
                     max="2147483647"
                   />
@@ -733,29 +733,29 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
                 {/* Negative Prompt */}
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
                     Negative Prompt
                   </label>
                   <textarea
                     value={negativePrompt}
                     onChange={(e) => onNegativePromptChange?.(e.target.value)}
-                    placeholder="What to avoid in the image..."
-                    className="w-full h-16 px-2 py-1 bg-background border border-input rounded text-xs resize-none"
+                    placeholder="What to avoid..."
+                    className="w-full h-12 px-1 py-1 bg-background border border-input rounded text-[10px] resize-none"
                     rows={2}
                   />
                 </div>
 
                 {/* Compel Enhancement */}
                 <div className="col-span-2">
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-1 mb-1">
                     <input
                       type="checkbox"
                       checked={compelEnabled}
                       onChange={(e) => onCompelEnabledChange?.(e.target.checked)}
-                      className="w-4 h-4"
+                      className="w-3 h-3"
                     />
-                    <span className="text-xs font-medium text-muted-foreground">
-                      Enable Compel Enhancement
+                    <span className="text-[10px] font-medium text-muted-foreground">
+                      Compel Enhancement
                     </span>
                   </label>
                   {compelEnabled && (
@@ -763,8 +763,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       type="text"
                       value={compelWeights}
                       onChange={(e) => onCompelWeightsChange?.(e.target.value)}
-                      placeholder="e.g., (woman:1.2), (beautiful:0.8)"
-                      className="w-full h-8 px-2 mt-2 bg-background border border-input rounded text-xs"
+                      placeholder="(woman:1.2), (beautiful:0.8)"
+                      className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]"
                     />
                   )}
                 </div>
