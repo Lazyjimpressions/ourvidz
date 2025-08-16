@@ -1,6 +1,6 @@
 # AI Context Guide - OurVidz Documentation
 
-**Last Updated:** August 4, 2025  
+**Last Updated:** 8/16/25  
 **Purpose:** Central navigation and context guide for AI assistants
 
 ## 🚀 Quick Start for AI
@@ -38,10 +38,12 @@ OurVidz.com is an AI-powered adult content generation platform with:
    ├── supabase/              # Database, migrations, edge functions
    │   ├── functions/         # Supabase Edge Functions
    │   │   ├── _shared/       # Shared utilities (cache-utils.ts, monitoring.ts)
-   │   │   ├── queue-job/     # Job queuing with workspace support
-   │   │   ├── job-callback/  # Job completion handling with workspace routing
+   │   │   ├── queue-job/     # Canonical job queuing (SDXL/WAN)
+   │   │   ├── job-callback/  # Single worker callback (writes workspace_assets)
    │   │   ├── enhance-prompt/ # Dynamic prompt enhancement with template system
-   │   │   ├── playground-chat/ # Chat functionality
+   │   │   ├── playground-chat/ # Direct chat (no Redis)
+   │   │   ├── workspace-actions/ # Save to library / discard
+   │   │   ├── system-metrics/ # Admin metrics (worker health, queue depths)
    │   │   ├── delete-workspace-item/ # Workspace item deletion
    │   │   └── refresh-prompt-cache/ # Template cache management
    │   └── migrations/        # Database schema changes (60+ migrations)
@@ -149,8 +151,9 @@ The backend consists of **Supabase Edge Functions** that handle all server-side 
 
 ### **API Integration Points**
 - **Frontend → Edge Functions**: HTTP requests to Supabase Edge Functions
-- **Edge Functions → Workers**: Redis queue communication
-- **Workers → Edge Functions**: Callback notifications
+- **Edge Functions → Workers**: Redis queue communication (SDXL/WAN only)
+- **Chat**: Direct HTTP (no Redis) from edge function to Chat Worker
+- **Workers → Edge Functions**: `job-callback` notifications
 - **Real-time Updates**: WebSocket subscriptions for live status
 
 ## 🤖 AI Assistant Guidelines
@@ -240,6 +243,23 @@ npm run jsdoc:generate
 - ✅ **LTX-style workspace system implemented**
 - ✅ **Dynamic prompting system with 12+ templates implemented**
 
+### **Recent Updates (August 16, 2025):**
+- **Supabase Workspace Refactor (Schema & Storage)**
+  - ✅ Two-bucket model: `workspace-temp` (staging), `user-library` (permanent)
+  - ✅ Dropped legacy per-model buckets and legacy `images`/`videos` tables
+  - ✅ Archived `workspace_items` to admin-read-only
+  - ✅ Updated cleanup/stats functions to use `workspace_assets`
+- **Edge Functions**
+  - ✅ `queue-job` is the canonical generator (SDXL/WAN)
+  - ✅ `job-callback` is the single worker callback
+  - ✅ `system-metrics` added (admin-only)
+  - ⚠️ `generate-content` deprecated (temporary proxy to `queue-job`)
+- **Chat Path**
+  - ✅ Direct HTTP via `playground-chat`; no Redis used for chat
+  - 🕒 Long responses supported via higher timeout (no streaming)
+- **Admin**
+  - ✅ New System Metrics tab consuming `system-metrics`
+
 ### **Recent Updates (August 4, 2025):**
 - **Chat Worker Pure Inference Engine Overhaul**: Complete architectural transformation eliminating template override risks
   - ❌ **Removed**: All hardcoded prompts from worker code (38-127 lines deleted)
@@ -278,6 +298,8 @@ npm run jsdoc:generate
 - **Edge Functions**: Comprehensive backend API with caching and monitoring
 - **Dynamic Prompting**: Template-based system with content mode awareness
 - **Template Override Risk**: Eliminated through pure inference architecture
+ - **Queues**: Single list per worker type (`sdxl_queue`, `wan_queue`); chat bypasses Redis
+ - **Storage**: Two-bucket strategy with `workspace-actions` moving from `workspace-temp` → `user-library`
 
 ---
 

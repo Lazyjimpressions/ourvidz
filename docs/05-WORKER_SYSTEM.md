@@ -1,6 +1,6 @@
 # Worker System Documentation
 
-**Last Updated:** August 4, 2025  
+**Last Updated:** 8/16/25  
 **Status:** ✅ Production Ready with Enhanced Logging
 
 ## Overview
@@ -118,6 +118,10 @@ logger.warning(f"⚠️ Fallback to original prompt due to error")
 **Purpose:** High-quality image generation  
 **Model:** SDXL  
 **Status:** Stable production deployment
+#### Runtime & Queueing
+- Polls Redis `sdxl_queue` (single list) with appropriate backoff
+- Uploads outputs to Supabase Storage bucket `workspace-temp` at path `userId/jobId/assetIndex.png`
+- Posts results to Supabase Edge `job-callback` only (legacy callbacks removed)
 
 ## 🏗️ Pure Inference Engine Architecture
 
@@ -318,6 +322,24 @@ logger.info(f"Template override risk: eliminated through pure inference architec
 - Database-driven template system
 
 ## Recent Updates
+
+### August 16, 2025: Queueing & Callback Simplification
+
+- Queueing
+  - SDXL and WAN use single Redis lists: `sdxl_queue`, `wan_queue`
+  - Chat bypasses Redis entirely (direct HTTP via edge `playground-chat`)
+- Storage
+  - Workers upload to `workspace-temp` only (no writes to legacy buckets)
+  - Promotion to permanent storage handled by edge `workspace-actions` (copies to `user-library`)
+- Callback
+  - Workers call Supabase Edge `job-callback` exclusively
+  - Legacy `generation-complete` path removed
+- Admin Metrics
+  - New edge `system-metrics` endpoint (admin-only) exposes worker health and queue depths
+  - Admin UI includes a System Metrics tab for live monitoring
+- Endpoints & Ports
+  - SDXL/WAN share 7860; Chat runs on 7861
+  - Health endpoints unchanged; memory manager remains in place
 
 ### August 4, 2025: Enhanced Logging & Pure Inference
 

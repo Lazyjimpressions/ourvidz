@@ -1,6 +1,6 @@
 # Worker API Documentation
 
-**Last Updated:** August 16, 2025
+**Last Updated:** 8/16/25
 
 ## System Overview
 
@@ -19,8 +19,8 @@ The `ourvidz-worker` repository manages a comprehensive AI content generation sy
 - **Worker Registration** (`worker_registration.py`) - Dynamic worker discovery and registration
 
 #### Infrastructure
-- **Redis Job Queues** - `sdxl_queue`, `chat_queue`, `wan_queue` for job distribution
-- **Flask HTTP APIs** - RESTful endpoints for each worker and system management
+- **Redis Job Queues** - `sdxl_queue`, `wan_queue` (chat bypasses Redis)
+- **HTTP APIs** - RESTful endpoints for each worker and system management
 - **Callback System** - Standardized job status reporting via `POST /functions/v1/job-callback`
 
 ### File Structure

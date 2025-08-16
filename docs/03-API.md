@@ -1,6 +1,6 @@
 # API Documentation - Consolidated
 
-**Last Updated:** August 2, 2025  
+**Last Updated:** 8/16/25  
 **Status:** Production Active with Dual-Destination System
 
 ## �� Overview
@@ -49,6 +49,9 @@ verify_jwt = true
 
 [functions.validate-enhancement-fix]
 verify_jwt = false
+
+[functions.system-metrics]
+verify_jwt = true
 ```
 
 ## 📋 Core Endpoints
@@ -58,26 +61,18 @@ verify_jwt = false
 #### **Queue Job** - `POST /queue-job`
 Creates and routes generation jobs to appropriate workers with workspace support.
 
-**Supported Job Types (10 Total):**
-- `sdxl_image_fast` - SDXL ultra-fast images (3-8s)
-- `sdxl_image_high` - SDXL high-quality images (8-15s)
-- `image_fast` - WAN fast images (73s)
-- `image_high` - WAN high-quality images (90s)
-- `video_fast` - WAN fast videos (180s)
-- `video_high` - WAN high-quality videos (280s)
-- `image7b_fast_enhanced` - Enhanced fast images (87s)
-- `image7b_high_enhanced` - Enhanced high-quality images (104s)
-- `video7b_fast_enhanced` - Enhanced fast videos (194s)
-- `video7b_high_enhanced` - Enhanced high-quality videos (294s)
+**Supported Job Types:**
+- `sdxl_image_fast` - SDXL fast images
+- `sdxl_image_high` - SDXL high-quality images
+- `wan_video_fast` - WAN fast videos
+- `wan_video_high` - WAN high-quality videos
 
 **Queue Routing:**
 - SDXL jobs → `sdxl_queue` (2s polling)
 - WAN jobs → `wan_queue` (5s polling)
 
-**Workspace Support:**
-- **Destination**: `'library'` (default) or `'workspace'`
-- **Session Management**: Automatic workspace session creation
-- **Metadata**: Enhanced metadata for workspace tracking
+Note:
+- Workspace sessions and `workspace_items` are deprecated. All generated assets are recorded in `workspace_assets`. Promotion to permanent storage is handled via `workspace-actions` (copy from `workspace-temp` → `user-library`).
 
 ```typescript
 interface QueueJobRequest {
@@ -122,37 +117,39 @@ interface QueueJobResponse {
 ```
 
 #### **Job Callback** - `POST /job-callback`
-Handles job completion with workspace routing support.
-
-**Workspace Routing:**
-- **Library Jobs**: Routes to `images`/`videos` tables
-- **Workspace Jobs**: Routes to `workspace_items` table
+Handles job completion. Writes asset records to `workspace_assets` and updates `jobs` status/metadata. No writes to legacy `images`/`videos`/`workspace_items` tables.
 
 ```typescript
 interface JobCallbackRequest {
-  job_id: string;
-  status: 'completed' | 'failed' | 'processing';
-  assets?: string[];           // Generated asset URLs
-  error_message?: string;      // Error details if failed
-  metadata?: {
-    generation_time?: number;
-    model_used?: string;
-    [key: string]: any;
+  jobId: string;
+  userId: string;
+  status: 'completed' | 'failed';
+  results?: {
+    assets: Array<{
+      assetType: 'image' | 'video';
+      tempStoragePath: string;
+      fileSizeBytes: number;
+      mimeType: string;
+      durationSeconds?: number;
+      assetIndex?: number;
+    }>;
   };
+  errorMessage?: string;
+  metadata?: Record<string, any>;
 }
 
 interface JobCallbackResponse {
   success: boolean;
   message: string;
-  items_created?: number;      // NEW: Number of workspace items created
-  destination?: 'library' | 'workspace';  // NEW: Where items were routed
 }
 ```
 
-### **2. Workspace Management (NEW)**
+### **2. Workspace Management (Deprecated)
 
-#### **Create Workspace Session** - `RPC /create_workspace_session`
-Creates a new workspace session for the user.
+The legacy workspace session/item RPCs are deprecated. Use `workspace-assets` + `workspace-actions` (edge function) flow:
+- Workers upload to `workspace-temp` bucket using `userId/jobId/...` path
+- `job-callback` inserts into `workspace_assets`
+- `workspace-actions` copies to `user-library` when the user saves an asset
 
 ```typescript
 interface CreateWorkspaceSessionRequest {
@@ -173,8 +170,7 @@ const { data: sessionId, error } = await supabase.rpc('create_workspace_session'
 });
 ```
 
-#### **Save Workspace Item to Library** - `RPC /save_workspace_item_to_library`
-Moves a workspace item to the permanent library.
+Use `POST /workspace-actions` with `action: 'save_to_library'` instead.
 
 ```typescript
 interface SaveWorkspaceItemRequest {
@@ -195,8 +191,7 @@ const { data: libraryItemId, error } = await supabase.rpc('save_workspace_item_t
 });
 ```
 
-#### **Clear Workspace Session** - `RPC /clear_workspace_session`
-Deletes all items in a workspace session and the session itself.
+`clear_workspace_session` no longer applies; `workspace_items` is archived admin-read-only.
 
 ```typescript
 interface ClearWorkspaceSessionRequest {
@@ -309,7 +304,25 @@ interface UpdateWorkerUrlResponse {
 }
 ```
 
-### **5. Playground & Testing**
+### **5. System Metrics**
+
+#### **System Metrics** - `POST /system-metrics`
+Admin-only endpoint returning worker health and queue depths. Requires Authorization header (admin JWT).
+
+```json
+{
+  "timestamp": "2025-08-16T12:00:00Z",
+  "workers": {
+    "chat": [{"status":"healthy","responseTime": 120, "lastChecked": "..."}],
+    "sdxl": [...],
+    "wan": [...]
+  },
+  "queues": { "sdxl_queue": 2, "wan_queue": 5 },
+  "etaEstimates": { "sdxl": "< 1 min", "wan": "3-10 mins" }
+}
+```
+
+### **6. Playground & Testing**
 
 #### **Playground Chat** - `POST /playground-chat`
 Chat functionality for the playground.
@@ -319,6 +332,7 @@ interface PlaygroundChatRequest {
   message: string;
   conversation_id?: string;
   model_type?: 'qwen_base' | 'qwen_instruct';
+  long_response?: boolean; // Optional: request longer responses (higher timeout)
 }
 
 interface PlaygroundChatResponse {
