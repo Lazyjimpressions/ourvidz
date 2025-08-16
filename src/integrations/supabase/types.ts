@@ -358,154 +358,6 @@ export type Database = {
         }
         Relationships: []
       }
-      images: {
-        Row: {
-          compel_weights: Json | null
-          created_at: string
-          enhanced_prompt: string | null
-          enhancement_strategy: string | null
-          enhancement_time_ms: number | null
-          file_size: number | null
-          format: string | null
-          generation_mode: string
-          id: string
-          image_index: number | null
-          image_url: string | null
-          image_urls: Json | null
-          job_id: string | null
-          metadata: Json | null
-          moderation_status: string | null
-          nsfw_score: number | null
-          original_prompt: string | null
-          project_id: string | null
-          prompt: string
-          prompt_test_id: string | null
-          quality: string | null
-          quality_improvement: number | null
-          quality_rating: number | null
-          qwen_expansion_percentage: number | null
-          reference_image_url: string | null
-          reference_strength: number | null
-          reference_type: string | null
-          review_notes: string | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          seed: number | null
-          signed_url: string | null
-          signed_url_expires_at: string | null
-          status: string
-          test_metadata: Json | null
-          thumbnail_url: string | null
-          title: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          compel_weights?: Json | null
-          created_at?: string
-          enhanced_prompt?: string | null
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          file_size?: number | null
-          format?: string | null
-          generation_mode?: string
-          id?: string
-          image_index?: number | null
-          image_url?: string | null
-          image_urls?: Json | null
-          job_id?: string | null
-          metadata?: Json | null
-          moderation_status?: string | null
-          nsfw_score?: number | null
-          original_prompt?: string | null
-          project_id?: string | null
-          prompt: string
-          prompt_test_id?: string | null
-          quality?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          reference_image_url?: string | null
-          reference_strength?: number | null
-          reference_type?: string | null
-          review_notes?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          seed?: number | null
-          signed_url?: string | null
-          signed_url_expires_at?: string | null
-          status?: string
-          test_metadata?: Json | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          compel_weights?: Json | null
-          created_at?: string
-          enhanced_prompt?: string | null
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          file_size?: number | null
-          format?: string | null
-          generation_mode?: string
-          id?: string
-          image_index?: number | null
-          image_url?: string | null
-          image_urls?: Json | null
-          job_id?: string | null
-          metadata?: Json | null
-          moderation_status?: string | null
-          nsfw_score?: number | null
-          original_prompt?: string | null
-          project_id?: string | null
-          prompt?: string
-          prompt_test_id?: string | null
-          quality?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          reference_image_url?: string | null
-          reference_strength?: number | null
-          reference_type?: string | null
-          review_notes?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          seed?: number | null
-          signed_url?: string | null
-          signed_url_expires_at?: string | null
-          status?: string
-          test_metadata?: Json | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "images_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "images_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "images_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       jobs: {
         Row: {
           attempts: number | null
@@ -617,13 +469,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "jobs_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "images"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "jobs_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -642,13 +487,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "jobs_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
           {
@@ -877,24 +715,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "model_test_results_image_id_fkey"
-            columns: ["image_id"]
-            isOneToOne: false
-            referencedRelation: "images"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "model_test_results_job_id_fkey"
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "model_test_results_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "videos"
             referencedColumns: ["id"]
           },
         ]
@@ -1411,114 +1235,6 @@ export type Database = {
         }
         Relationships: []
       }
-      videos: {
-        Row: {
-          compel_weights: Json | null
-          completed_at: string | null
-          created_at: string | null
-          duration: number | null
-          enhanced_prompt: string | null
-          enhancement_strategy: string | null
-          enhancement_time_ms: number | null
-          error_message: string | null
-          expires_at: string | null
-          format: string | null
-          id: string
-          metadata: Json | null
-          original_prompt: string | null
-          preview_url: string | null
-          project_id: string | null
-          quality_improvement: number | null
-          quality_rating: number | null
-          qwen_expansion_percentage: number | null
-          reference_image_url: string | null
-          resolution: string | null
-          signed_url: string | null
-          signed_url_expires_at: string | null
-          status: string | null
-          thumbnail_url: string | null
-          title: string | null
-          updated_at: string | null
-          user_id: string
-          video_url: string | null
-        }
-        Insert: {
-          compel_weights?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          duration?: number | null
-          enhanced_prompt?: string | null
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          error_message?: string | null
-          expires_at?: string | null
-          format?: string | null
-          id?: string
-          metadata?: Json | null
-          original_prompt?: string | null
-          preview_url?: string | null
-          project_id?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          reference_image_url?: string | null
-          resolution?: string | null
-          signed_url?: string | null
-          signed_url_expires_at?: string | null
-          status?: string | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string | null
-          user_id: string
-          video_url?: string | null
-        }
-        Update: {
-          compel_weights?: Json | null
-          completed_at?: string | null
-          created_at?: string | null
-          duration?: number | null
-          enhanced_prompt?: string | null
-          enhancement_strategy?: string | null
-          enhancement_time_ms?: number | null
-          error_message?: string | null
-          expires_at?: string | null
-          format?: string | null
-          id?: string
-          metadata?: Json | null
-          original_prompt?: string | null
-          preview_url?: string | null
-          project_id?: string | null
-          quality_improvement?: number | null
-          quality_rating?: number | null
-          qwen_expansion_percentage?: number | null
-          reference_image_url?: string | null
-          resolution?: string | null
-          signed_url?: string | null
-          signed_url_expires_at?: string | null
-          status?: string | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string | null
-          user_id?: string
-          video_url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "videos_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "videos_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       workspace_assets: {
         Row: {
           asset_index: number
@@ -1718,10 +1434,6 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: number
       }
-      clear_workspace_session: {
-        Args: { p_session_id: string; p_user_id: string }
-        Returns: boolean
-      }
       create_workspace_session: {
         Args: { p_session_name?: string; p_user_id: string }
         Returns: string
@@ -1734,15 +1446,6 @@ export type Database = {
         Args: { _user_id: string }
         Returns: number
       }
-      get_video_path_stats: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          system_asset_thumbnails: number
-          total_videos: number
-          videos_with_user_prefix: number
-          videos_without_prefix: number
-        }[]
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1753,10 +1456,6 @@ export type Database = {
       is_url_expired: {
         Args: { expires_at: string }
         Returns: boolean
-      }
-      link_workspace_items_to_jobs: {
-        Args: Record<PropertyKey, never>
-        Returns: number
       }
       log_user_activity: {
         Args: {
@@ -1769,20 +1468,6 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
-      }
-      save_workspace_item_to_library: {
-        Args: { p_user_id: string; p_workspace_item_id: string }
-        Returns: string
-      }
-      validate_video_path_consistency: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          current_path: string
-          expected_path: string
-          path_matches: boolean
-          requires_fix: boolean
-          video_id: string
-        }[]
       }
     }
     Enums: {

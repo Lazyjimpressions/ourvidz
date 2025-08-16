@@ -5,7 +5,7 @@ export interface WorkspaceAsset {
   id: string;
   user_id: string;
   job_id: string;
-  asset_type: string; // Changed from 'image' | 'video' to string to match DB
+  asset_type: string;
   temp_storage_path: string;
   file_size_bytes: number;
   mime_type: string;
@@ -36,7 +36,13 @@ export class NewWorkspaceAssetService {
       throw error;
     }
 
-    return data || [];
+    return (data || []).map(asset => ({
+      ...asset,
+      // Ensure proper type handling
+      duration_seconds: asset.duration_seconds || undefined,
+      signed_url: undefined,
+      signed_url_expires_at: undefined
+    }));
   }
 
   /**
@@ -145,5 +151,21 @@ export class NewWorkspaceAssetService {
     }
 
     return data;
+  }
+
+  /**
+   * Helper method to check if asset is an image
+   */
+  static isImageAsset(asset: WorkspaceAsset): boolean {
+    return asset.asset_type.toLowerCase().includes('image') || 
+           asset.mime_type.startsWith('image/');
+  }
+
+  /**
+   * Helper method to check if asset is a video
+   */
+  static isVideoAsset(asset: WorkspaceAsset): boolean {
+    return asset.asset_type.toLowerCase().includes('video') || 
+           asset.mime_type.startsWith('video/');
   }
 }
