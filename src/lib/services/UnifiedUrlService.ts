@@ -300,16 +300,23 @@ export class UnifiedUrlService {
           
           let thumbnailUrl = data.signedUrl;
           
-          // For videos, try to get a thumbnail from image_fast bucket
-          if (asset.type === 'video' && asset.thumbnailUrl) {
-            try {
-              const thumbPath = asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');
-              const { data: thumbData } = await getSignedUrl('image_fast' as any, thumbPath, this.THUMBNAIL_EXPIRY);
-              if (thumbData?.signedUrl) {
-                thumbnailUrl = thumbData.signedUrl;
+          // For videos, try to get a thumbnail from image_fast bucket or use placeholder
+          if (asset.type === 'video') {
+            if (asset.thumbnailUrl) {
+              try {
+                const thumbPath = asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');
+                const { data: thumbData } = await getSignedUrl('image_fast' as any, thumbPath, this.THUMBNAIL_EXPIRY);
+                if (thumbData?.signedUrl) {
+                  thumbnailUrl = thumbData.signedUrl;
+                } else {
+                  thumbnailUrl = '/video-thumbnail-placeholder.svg';
+                }
+              } catch (thumbError) {
+                console.warn(`Failed to generate thumbnail for video ${asset.id}:`, thumbError);
+                thumbnailUrl = '/video-thumbnail-placeholder.svg';
               }
-            } catch (thumbError) {
-              console.warn(`Failed to generate thumbnail for video ${asset.id}:`, thumbError);
+            } else {
+              // No thumbnail available, use placeholder instead of video URL
               thumbnailUrl = '/video-thumbnail-placeholder.svg';
             }
           }

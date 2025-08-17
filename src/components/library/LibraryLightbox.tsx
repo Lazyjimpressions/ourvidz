@@ -246,7 +246,7 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                     controls
                     className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-lg"
                     poster={currentAsset.thumbnailUrl}
-                    onLoad={handleImageLoad}
+                    onLoadedData={handleImageLoad}
                     onError={handleImageError}
                     style={{ opacity: isLoading ? 0 : 1 }}
                     playsInline
