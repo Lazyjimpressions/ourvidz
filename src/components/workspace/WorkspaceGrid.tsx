@@ -275,7 +275,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                         }}
                         className="w-4 h-4 bg-background/90 hover:bg-background border border-border rounded-full flex items-center justify-center transition-all shadow-sm"
                         disabled={isDeleting.has(jobId)}
-                        title="Clear from workspace"
+                        title="Clear (save to library & remove)"
                       >
                         {isDeleting.has(jobId) ? (
                           <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-pulse" />

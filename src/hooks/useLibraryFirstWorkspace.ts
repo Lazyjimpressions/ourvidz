@@ -82,13 +82,14 @@ export interface LibraryFirstWorkspaceActions {
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
   clearWorkspace: () => Promise<void>;
+  deleteAllWorkspace: () => Promise<void>;
   deleteItem: (id: string, type: 'image' | 'video') => Promise<void>;
-  dismissItem: (id: string, type: 'image' | 'video') => Promise<void>;
+  clearItem: (id: string, type: 'image' | 'video') => Promise<void>;
   setLightboxIndex: (index: number | null) => void;
   // Job-level actions (simplified)
   selectJob: (jobId: string) => void;
   deleteJob: (jobId: string) => Promise<void>;
-  dismissJob: (jobId: string) => Promise<void>;
+  clearJob: (jobId: string) => Promise<void>;
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
   applyAssetParamsFromItem: (item: UnifiedAsset) => void;
@@ -606,49 +607,65 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     useOriginalParams, lockSeed, enhancementModel, toast
   ]);
 
-  // LIBRARY-FIRST: Workspace dismiss = hide from workspace view (add workspace_dismissed flag)
-  const dismissItem = useCallback(async (id: string, type: 'image' | 'video') => {
+  const clearItem = useCallback(async (id: string, type: 'image' | 'video') => {
     try {
-      console.log('🚫 WORKSPACE: Dismissing item:', { id, type });
+      console.log('🧹 STAGING-FIRST: Clearing item:', { id, type });
+
+      await WorkspaceAssetService.clearAsset(id);
+
+      console.log('✅ STAGING-FIRST: Item cleared successfully');
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
+      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       
-      // Add dismissed flag to workspace asset (simplified schema)
-      const { data: currentItem } = await supabase
-        .from('workspace_assets')
-        .select('generation_settings')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (currentItem) {
-        const currentSettings = currentItem.generation_settings as Record<string, any> || {};
-        const updatedSettings = {
-          ...currentSettings,
-          workspace_dismissed: true,
-          dismissed_at: new Date().toISOString()
-        };
-        
-        console.log('🚫 WORKSPACE: Dismissing asset:', id, 'with settings:', updatedSettings);
-        
-        await supabase
-          .from('workspace_assets')
-          .update({ generation_settings: updatedSettings })
-          .eq('id', id);
-        
-        queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-        
-        toast({
-          title: "Item Dismissed",
-          description: "Item hidden from workspace view",
-        });
-      }
-    } catch (error) {
-      console.error('❌ WORKSPACE: Dismiss failed:', error);
       toast({
-        title: "Dismiss Failed",
-        description: "Failed to dismiss item",
+        title: "Item Cleared",
+        description: "Item saved to library and removed from workspace"
+      });
+    } catch (error) {
+      console.error('❌ STAGING-FIRST: Clear failed:', error);
+      toast({
+        title: "Clear Failed",
+        description: "Failed to clear item",
         variant: "destructive",
       });
     }
   }, [queryClient, toast]);
+
+  const deleteAllWorkspace = useCallback(async () => {
+    try {
+      console.log('🗑️ STAGING-FIRST: Deleting all workspace items permanently');
+
+      if (workspaceAssets.length === 0) {
+        toast({
+          title: "Workspace Empty", 
+          description: "No items to delete"
+        });
+        return;
+      }
+
+      // Delete all assets permanently
+      const deletions = workspaceAssets.map(async (asset) => {
+        return WorkspaceAssetService.discardAsset(asset.id);
+      });
+
+      await Promise.all(deletions);
+
+      console.log('✅ STAGING-FIRST: Deleted all workspace items');
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
+      
+      toast({
+        title: "Workspace Deleted",
+        description: `${workspaceAssets.length} items permanently deleted`
+      });
+    } catch (error) {
+      console.error('❌ STAGING-FIRST: Delete all failed:', error);
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete workspace items",
+        variant: "destructive",
+      });
+    }
+  }, [workspaceAssets, queryClient, toast]);
 
   // STAGING-FIRST: Workspace delete = discard from workspace_assets (use WorkspaceAssetService)
   const deleteItem = useCallback(async (id: string, type: 'image' | 'video') => {
@@ -672,31 +689,29 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     }
   }, [queryClient, toast]);
 
-  // STAGING-FIRST: Clear workspace = discard all workspace assets
+  // STAGING-FIRST: Clear workspace = clear all workspace assets (save to library then remove)
   const clearWorkspace = useCallback(async () => {
     try {
-      console.log('🧹 STAGING-FIRST: Clearing workspace (discarding all assets)');
-      
-      // Set workspace as cleared immediately for better UX
-      setWorkspaceCleared(true);
+      console.log('🧹 STAGING-FIRST: Clearing all workspace items');
 
-      // Discard all workspace assets for current user
-      for (const asset of workspaceAssets) {
-        try {
-          await WorkspaceAssetService.discardAsset(asset.id);
-        } catch (error) {
-          console.error('Failed to discard asset:', asset.id, error);
-        }
+      if (workspaceAssets.length === 0) {
+        toast({
+          title: "Workspace Empty", 
+          description: "No items to clear"
+        });
+        return;
       }
 
+      await WorkspaceAssetService.clearWorkspace();
+
+      console.log('✅ STAGING-FIRST: Cleared workspace items');
       queryClient.invalidateQueries({ queryKey: ['assets', true] });
+      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       
       toast({
         title: "Workspace Cleared",
-        description: "All assets discarded from workspace",
+        description: "All items saved to library and removed from workspace"
       });
-      
-      console.log('✅ STAGING-FIRST: Successfully cleared workspace');
     } catch (error) {
       console.error('❌ STAGING-FIRST: Clear failed:', error);
       toast({
@@ -705,7 +720,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         variant: "destructive",
       });
     }
-  }, [workspaceAssets, queryClient, toast]);
+  }, [workspaceAssets.length, queryClient, toast]);
 
   // Simplified job management (group by job_id from metadata)
   const selectJob = useCallback((jobId: string) => {
@@ -723,16 +738,29 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     }
   }, [workspaceAssets, deleteItem]);
 
-  const dismissJob = useCallback(async (jobId: string) => {
-    // Find all items with this job_id and dismiss them
-    const jobItems = workspaceAssets.filter(asset => 
-      asset.metadata?.job_id === jobId
-    );
-    
-    for (const item of jobItems) {
-      await dismissItem(item.id, item.type);
+  const clearJob = useCallback(async (jobId: string) => {
+    try {
+      console.log('🧹 STAGING-FIRST: Clearing job:', jobId);
+      
+      await WorkspaceAssetService.clearJob(jobId);
+
+      console.log('✅ STAGING-FIRST: Job cleared successfully');
+      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
+      
+      toast({
+        title: "Job Cleared",
+        description: "Job items saved to library and removed from workspace"
+      });
+    } catch (error) {
+      console.error('❌ STAGING-FIRST: Clear job failed:', error);
+      toast({
+        title: "Clear Job Failed",
+        description: "Failed to clear job items",
+        variant: "destructive",
+      });
     }
-  }, [workspaceAssets, dismissItem]);
+  }, [queryClient, toast]);
 
   const saveJob = useCallback(async (jobId: string) => {
     // Items are already in library, so "save" just removes dismissed flag
@@ -948,12 +976,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     setEnhancementModel,
     generate,
     clearWorkspace,
+    deleteAllWorkspace,
     deleteItem,
-    dismissItem,
+    clearItem,
     setLightboxIndex,
     selectJob,
     deleteJob,
-    dismissJob,
+    clearJob,
     saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,

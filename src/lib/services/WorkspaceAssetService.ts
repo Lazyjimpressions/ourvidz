@@ -131,7 +131,7 @@ export class WorkspaceAssetService {
   }
 
   /**
-   * Discard workspace asset
+   * Discard workspace asset (permanently delete)
    */
   static async discardAsset(assetId: string): Promise<void> {
     try {
@@ -152,6 +152,93 @@ export class WorkspaceAssetService {
       console.log('✅ Asset discarded successfully');
     } catch (error) {
       console.error('Failed to discard asset:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear workspace asset (save to library if not saved, then remove from workspace)
+   */
+  static async clearAsset(
+    assetId: string, 
+    options?: {
+      customTitle?: string;
+      collectionId?: string;
+      tags?: string[];
+    }
+  ): Promise<void> {
+    try {
+      console.log('🧹 Clearing workspace asset:', { assetId, options });
+
+      const { error } = await supabase.functions.invoke('workspace-actions', {
+        body: {
+          action: 'clear_asset',
+          assetId,
+          customTitle: options?.customTitle,
+          collectionId: options?.collectionId,
+          tags: options?.tags
+        }
+      });
+
+      if (error) {
+        console.error('Error clearing asset:', error);
+        throw error;
+      }
+
+      console.log('✅ Asset cleared successfully');
+    } catch (error) {
+      console.error('Failed to clear asset:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear job assets (save to library if not saved, then remove from workspace)
+   */
+  static async clearJob(jobId: string): Promise<void> {
+    try {
+      console.log('🧹 Clearing job assets:', jobId);
+
+      const { error } = await supabase.functions.invoke('workspace-actions', {
+        body: {
+          action: 'clear_job',
+          jobId
+        }
+      });
+
+      if (error) {
+        console.error('Error clearing job:', error);
+        throw error;
+      }
+
+      console.log('✅ Job cleared successfully');
+    } catch (error) {
+      console.error('Failed to clear job:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clear entire workspace (save to library if not saved, then remove from workspace)
+   */
+  static async clearWorkspace(): Promise<void> {
+    try {
+      console.log('🧹 Clearing entire workspace');
+
+      const { error } = await supabase.functions.invoke('workspace-actions', {
+        body: {
+          action: 'clear_workspace'
+        }
+      });
+
+      if (error) {
+        console.error('Error clearing workspace:', error);
+        throw error;
+      }
+
+      console.log('✅ Workspace cleared successfully');
+    } catch (error) {
+      console.error('Failed to clear workspace:', error);
       throw error;
     }
   }

@@ -51,10 +51,10 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAl
                 size="sm"
                 onClick={onClearWorkspace}
                 className="gap-1 text-gray-300 hover:text-white hover:bg-gray-800 h-8 px-2"
-                title="Clear all items from workspace"
+                title="Clear all (save to library & remove)"
               >
                 <RotateCcw className="h-3 w-3" />
-                <span className="hidden sm:inline">Clear All</span>
+                <span className="hidden sm:inline">Clear</span>
               </Button>
               {showForceCleanup && (
                 <Button
@@ -76,7 +76,7 @@ export const WorkspaceHeader = ({ onClearWorkspace, onDismissAllJobs, onDeleteAl
                 title="Delete all workspace items permanently"
               >
                 <RotateCcw className="h-3 w-3" />
-                <span className="hidden sm:inline">Delete All</span>
+                <span className="hidden sm:inline">Delete</span>
               </Button>
               <Button
                 variant="ghost"

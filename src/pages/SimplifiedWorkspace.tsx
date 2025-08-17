@@ -91,17 +91,20 @@ export const SimplifiedWorkspace: React.FC = () => {
     setEnhancementModel,
     generate,
     clearWorkspace,
+    deleteAllWorkspace,
     deleteItem,
-    dismissItem,
+    clearItem,
     setLightboxIndex,
     selectJob,
     deleteJob,
-    dismissJob,
+    clearJob,
+    saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
+    updateEnhancementModel,
     setReferenceMetadata,
     // Advanced SDXL Settings Actions
     setNumImages,
@@ -173,13 +176,13 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   };
 
-  const handleDiscardItem = async (item: UnifiedAsset) => {
+  const handleDeleteItem = async (item: UnifiedAsset) => {
     try {
       await WorkspaceAssetService.discardAsset(item.id);
       
       toast({
-        title: "Asset discarded",
-        description: "Asset has been removed from workspace",
+        title: "Asset deleted",
+        description: "Asset has been permanently deleted",
       });
       
       // Note: Signed URLs cache now managed centrally in hook
@@ -188,10 +191,33 @@ export const SimplifiedWorkspace: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
       
     } catch (error) {
-      console.error('Failed to discard asset:', error);
+      console.error('Failed to delete asset:', error);
       toast({
-        title: "Discard failed",
-        description: "Failed to discard asset",
+        title: "Delete failed",
+        description: "Failed to delete asset",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleClearItem = async (item: UnifiedAsset) => {
+    try {
+      await WorkspaceAssetService.clearAsset(item.id);
+      
+      toast({
+        title: "Asset cleared",
+        description: "Asset saved to library and removed from workspace",
+      });
+      
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
+      
+    } catch (error) {
+      console.error('Failed to clear asset:', error);
+      toast({
+        title: "Clear failed",
+        description: "Failed to clear asset",
         variant: "destructive",
       });
     }
@@ -301,6 +327,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         {/* Header */}
         <WorkspaceHeader 
           onClearWorkspace={clearWorkspace}
+          onDeleteAllWorkspace={deleteAllWorkspace}
         />
         
         {/* Main content area with bottom padding for fixed control bar */}
@@ -312,14 +339,14 @@ export const SimplifiedWorkspace: React.FC = () => {
               onDownload={handleDownloadItem}
               onEdit={handleEditItem}
               onSave={handleSaveItem}
-              onDelete={handleDiscardItem}
-              onDismiss={(item) => dismissItem(item.id, item.type)}
+            onDelete={handleDeleteItem}
+            onDismiss={handleClearItem}
               onView={handleViewItem}
               onUseAsReference={handleUseAsReference}
               onUseSeed={handleUseSeed}
-              // Job actions
-              onDeleteJob={deleteJob}
-              onDismissJob={dismissJob}
+            // Job actions
+            onDeleteJob={deleteJob}
+            onDismissJob={clearJob}
               isDeleting={new Set()} // TODO: Track deleting state
               activeJobId={activeJobId}
               onJobSelect={selectJob}

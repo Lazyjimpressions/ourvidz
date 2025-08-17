@@ -256,7 +256,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Clear from workspace</p>
+                  <p>Clear (save to library & remove)</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
