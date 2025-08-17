@@ -29,8 +29,8 @@ interface LazyAsset extends UnifiedAsset {
 export const useLazyAssetsV3 = ({ 
   assets, 
   enabled = true, 
-  prefetchThreshold = 200,
-  batchSize = 5
+  prefetchThreshold = 600,
+  batchSize = 10
 }: UseLazyAssetsProps) => {
   const [lazyAssets, setLazyAssets] = useState<LazyAsset[]>([]);
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());

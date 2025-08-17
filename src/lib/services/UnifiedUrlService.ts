@@ -278,6 +278,12 @@ export class UnifiedUrlService {
     
     const bucketsToTry = [bucket, ...fallbackBuckets.filter(b => b !== bucket)];
     
+    // Last-resort fallback for library assets with full URLs
+    const metadata = asset.metadata || {};
+    const hasLegacyUrl = bucket === 'user-library' && 
+                        metadata.storage_path && 
+                        String(metadata.storage_path).startsWith('http');
+    
     for (const currentBucket of bucketsToTry) {
       try {
         const path = this.getAssetPath(asset, asset.type === 'image' ? 'primary' : 'primary');
@@ -319,14 +325,32 @@ export class UnifiedUrlService {
       }
     }
     
+    // Last resort: if this is a library asset with a full URL, use it
+    if (hasLegacyUrl) {
+      console.warn(`🔄 Using legacy URL fallback for asset ${asset.id}`);
+      return {
+        url: String(metadata.storage_path),
+        thumbnailUrl: String(metadata.storage_path)
+      };
+    }
+    
     throw new Error(`Failed to generate signed URLs for asset ${asset.id} from any bucket`);
   }
 
   /**
-   * Strip bucket prefix from storage path if it exists
+   * Normalize storage path for reliable bucket-relative access
    */
-  private static stripBucketPrefix(storagePath: string): string {
+  private static normalizeStoragePath(storagePath: string): string {
     if (!storagePath) return storagePath;
+    
+    // Handle full HTTP URLs from database (extract path after bucket)
+    if (storagePath.startsWith('http')) {
+      const urlMatch = storagePath.match(/\/storage\/v1\/object\/(?:sign|public)\/user-library\/([^?]+)/);
+      if (urlMatch) {
+        console.log(`🔄 Extracted path from URL: "${storagePath}" → "${urlMatch[1]}"`);
+        return urlMatch[1];
+      }
+    }
     
     // Remove leading slash if present
     let cleanPath = storagePath.replace(/^\/+/, '');
@@ -334,9 +358,18 @@ export class UnifiedUrlService {
     // Remove bucket prefix if it exists (for user-library assets)
     if (cleanPath.startsWith('user-library/')) {
       cleanPath = cleanPath.substring('user-library/'.length);
+      console.log(`🧹 Stripped bucket prefix: "${storagePath}" → "${cleanPath}"`);
     }
     
     return cleanPath;
+  }
+
+  /**
+   * Strip bucket prefix from storage path if it exists
+   * @deprecated Use normalizeStoragePath instead
+   */
+  private static stripBucketPrefix(storagePath: string): string {
+    return this.normalizeStoragePath(storagePath);
   }
 
   static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
@@ -344,9 +377,9 @@ export class UnifiedUrlService {
     
     const metadata = asset.metadata || {};
     
-    // Library assets: use exact storage_path with bucket prefix stripped
+    // Library assets: use exact storage_path with robust normalization
     if (metadata.storage_path) {
-      return this.stripBucketPrefix(String(metadata.storage_path));
+      return this.normalizeStoragePath(String(metadata.storage_path));
     }
     
     // Handle SDXL image arrays
@@ -371,9 +404,9 @@ export class UnifiedUrlService {
       return this.getImagePath(asset, pathType);
     } else if (asset.type === 'video') {
       const metadata = asset.metadata || {};
-      // Library videos: use storage_path with bucket prefix stripped
+      // Library videos: use storage_path with robust normalization
       if (metadata.storage_path) {
-        return this.stripBucketPrefix(String(metadata.storage_path));
+        return this.normalizeStoragePath(String(metadata.storage_path));
       }
       if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         return asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');

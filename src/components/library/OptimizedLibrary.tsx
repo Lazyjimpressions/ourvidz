@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { SlidersHorizontal } from 'lucide-react';
 import { MobileFullScreenViewer } from './MobileFullScreenViewer';
 import { useLazyAssetsV3 } from '@/hooks/useLazyAssetsV3';
+import { PerformanceMonitor } from '../PerformanceMonitor';
 
 export const OptimizedLibrary = () => {
   // State management
@@ -76,13 +77,22 @@ export const OptimizedLibrary = () => {
   // RESTORED: Lazy loading for efficient URL generation
   const {
     lazyAssets: lazyAssetsData = [],
-    registerAssetRef: lazyRegisterAssetRef
+    registerAssetRef: lazyRegisterAssetRef,
+    preloadNextAssets
   } = useLazyAssetsV3({ 
     assets: unifiedAssets, 
     enabled: true,
-    prefetchThreshold: 200,
-    batchSize: 8
+    prefetchThreshold: 600,
+    batchSize: 10
   });
+
+  // Preload first 12 assets immediately on mount
+  useEffect(() => {
+    if (preloadNextAssets && unifiedAssets.length > 0) {
+      console.log(`🚀 Preloading first 12 library assets`);
+      preloadNextAssets(12);
+    }
+  }, [preloadNextAssets, unifiedAssets.length]);
 
   // Search and filtering - use lazy assets with URLs
   const {
@@ -455,16 +465,21 @@ export const OptimizedLibrary = () => {
         </div>
       </OurVidzDashboardLayout>
 
+      {/* Performance Monitor */}
+      <PerformanceMonitor />
+
       {/* Bulk Action Bar */}
-      <CompactBulkActionBar
-        selectedCount={selectedAssets.size}
-        onSelectAll={handleSelectAll}
-        onClearSelection={handleClearSelection}
-        onBulkDownload={handleBulkDownload}
-        onBulkDelete={handleBulkDelete}
-        onAddToWorkspace={handleAddToWorkspace}
-        totalFilteredCount={finalAssets.length}
-      />
+      {selectedAssets.size > 0 && (
+        <CompactBulkActionBar
+          selectedCount={selectedAssets.size}
+          onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
+          onBulkDownload={handleBulkDownload}
+          onBulkDelete={handleBulkDelete}
+          onAddToWorkspace={handleAddToWorkspace}
+          totalFilteredCount={finalAssets.length}
+        />
+      )}
 
       {/* Lightbox */}
       {lightboxIndex !== null && (

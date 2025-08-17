@@ -72,10 +72,19 @@ export class LibraryAssetService {
   }
 
   /**
-   * Strip bucket prefix from storage path if it exists
+   * Normalize storage path for reliable bucket-relative access
    */
-  private static stripBucketPrefix(storagePath: string): string {
+  private static normalizeStoragePath(storagePath: string): string {
     if (!storagePath) return storagePath;
+    
+    // Handle full HTTP URLs from database (extract path after bucket)
+    if (storagePath.startsWith('http')) {
+      const urlMatch = storagePath.match(/\/storage\/v1\/object\/(?:sign|public)\/user-library\/([^?]+)/);
+      if (urlMatch) {
+        console.log(`🔄 Extracted path from URL: "${storagePath}" → "${urlMatch[1]}"`);
+        return urlMatch[1];
+      }
+    }
     
     // Remove leading slash if present
     let cleanPath = storagePath.replace(/^\/+/, '');
@@ -93,7 +102,7 @@ export class LibraryAssetService {
    * Generate signed URL for a library asset
    */
   static async generateSignedUrl(asset: any): Promise<string> {
-    const cleanPath = this.stripBucketPrefix(asset.storage_path);
+    const cleanPath = this.normalizeStoragePath(asset.storage_path);
     
     console.log(`🔗 Generating signed URL for library asset ${asset.id}:`, {
       originalPath: asset.storage_path,
