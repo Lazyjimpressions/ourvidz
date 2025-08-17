@@ -248,76 +248,74 @@ export const SimplifiedWorkspace: React.FC = () => {
 
         {/* Fixed bottom control bar */}
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border z-40">
-          <div className="container mx-auto px-4 py-4">
-            <SimplePromptInput
-              // Core props
-              prompt={prompt}
-              onPromptChange={setPrompt}
-              mode={mode}
-              onModeChange={updateMode}
-              contentType={contentType}
-              onContentTypeChange={setContentType}
-              quality={quality}
-              onQualityChange={setQuality}
-              isGenerating={isGenerating}
-              onGenerate={generate}
-              // Reference images
-              referenceImage={referenceImage}
-              onReferenceImageChange={setReferenceImage}
-              referenceStrength={referenceStrength}
-              onReferenceStrengthChange={setReferenceStrength}
-              // Video controls
-              beginningRefImage={beginningRefImage}
-              onBeginningRefImageChange={setBeginningRefImage}
-              endingRefImage={endingRefImage}
-              onEndingRefImageChange={setEndingRefImage}
-              videoDuration={videoDuration}
-              onVideoDurationChange={setVideoDuration}
-              motionIntensity={motionIntensity}
-              onMotionIntensityChange={setMotionIntensity}
-              soundEnabled={soundEnabled}
-              onSoundToggle={setSoundEnabled}
-              // Control parameters
-              aspectRatio={aspectRatio}
-              onAspectRatioChange={setAspectRatio}
-              shotType={shotType}
-              onShotTypeChange={setShotType}
-              cameraAngle={cameraAngle}
-              onCameraAngleChange={setCameraAngle}
-              style={style}
-              onStyleChange={setStyle}
-              styleRef={styleRef}
-              onStyleRefChange={setStyleRef}
-              // Enhancement
-              enhancementModel={enhancementModel}
-              onEnhancementModelChange={setEnhancementModel}
-              // Exact copy workflow
-              exactCopyMode={exactCopyMode}
-              onExactCopyModeChange={setExactCopyMode}
-              useOriginalParams={useOriginalParams}
-              onUseOriginalParamsChange={setUseOriginalParams}
-              lockSeed={lockSeed}
-              onLockSeedChange={setLockSeed}
-              referenceMetadata={referenceMetadata}
-              onReferenceMetadataChange={setReferenceMetadata}
-              workspaceAssets={workspaceAssets}
-              // Advanced SDXL settings
-              numImages={numImages}
-              onNumImagesChange={setNumImages}
-              steps={steps}
-              onStepsChange={setSteps}
-              guidanceScale={guidanceScale}
-              onGuidanceScaleChange={setGuidanceScale}
-              negativePrompt={negativePrompt}
-              onNegativePromptChange={setNegativePrompt}
-              compelEnabled={compelEnabled}
-              onCompelEnabledChange={setCompelEnabled}
-              compelWeights={compelWeights}
-              onCompelWeightsChange={setCompelWeights}
-              seed={seed}
-              onSeedChange={setSeed}
-            />
-          </div>
+          <SimplePromptInput
+            // Core props
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            mode={mode}
+            onModeChange={updateMode}
+            contentType={contentType}
+            onContentTypeChange={setContentType}
+            quality={quality}
+            onQualityChange={setQuality}
+            isGenerating={isGenerating}
+            onGenerate={generate}
+            // Reference images
+            referenceImage={referenceImage}
+            onReferenceImageChange={setReferenceImage}
+            referenceStrength={referenceStrength}
+            onReferenceStrengthChange={setReferenceStrength}
+            // Video controls
+            beginningRefImage={beginningRefImage}
+            onBeginningRefImageChange={setBeginningRefImage}
+            endingRefImage={endingRefImage}
+            onEndingRefImageChange={setEndingRefImage}
+            videoDuration={videoDuration}
+            onVideoDurationChange={setVideoDuration}
+            motionIntensity={motionIntensity}
+            onMotionIntensityChange={setMotionIntensity}
+            soundEnabled={soundEnabled}
+            onSoundToggle={setSoundEnabled}
+            // Control parameters
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={setAspectRatio}
+            shotType={shotType}
+            onShotTypeChange={setShotType}
+            cameraAngle={cameraAngle}
+            onCameraAngleChange={setCameraAngle}
+            style={style}
+            onStyleChange={setStyle}
+            styleRef={styleRef}
+            onStyleRefChange={setStyleRef}
+            // Enhancement
+            enhancementModel={enhancementModel}
+            onEnhancementModelChange={setEnhancementModel}
+            // Exact copy workflow
+            exactCopyMode={exactCopyMode}
+            onExactCopyModeChange={setExactCopyMode}
+            useOriginalParams={useOriginalParams}
+            onUseOriginalParamsChange={setUseOriginalParams}
+            lockSeed={lockSeed}
+            onLockSeedChange={setLockSeed}
+            referenceMetadata={referenceMetadata}
+            onReferenceMetadataChange={setReferenceMetadata}
+            workspaceAssets={workspaceAssets}
+            // Advanced SDXL settings
+            numImages={numImages}
+            onNumImagesChange={setNumImages}
+            steps={steps}
+            onStepsChange={setSteps}
+            guidanceScale={guidanceScale}
+            onGuidanceScaleChange={setGuidanceScale}
+            negativePrompt={negativePrompt}
+            onNegativePromptChange={setNegativePrompt}
+            compelEnabled={compelEnabled}
+            onCompelEnabledChange={setCompelEnabled}
+            compelWeights={compelWeights}
+            onCompelWeightsChange={setCompelWeights}
+            seed={seed}
+            onSeedChange={setSeed}
+          />
         </div>
       </div>
       
