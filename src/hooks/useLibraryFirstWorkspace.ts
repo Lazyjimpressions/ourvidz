@@ -652,13 +652,20 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   ]);
 
   const clearItem = useCallback(async (id: string, type: 'image' | 'video') => {
+    // Optimistic removal - snapshot and update immediately
+    const previousAssets = queryClient.getQueryData(['assets', true]);
+    
     try {
       console.log('🧹 STAGING-FIRST: Clearing item:', { id, type });
+
+      // Optimistically remove from cache
+      queryClient.setQueryData(['assets', true], (prev: any) => 
+        prev?.filter((asset: any) => asset.id !== id) || []
+      );
 
       await WorkspaceAssetService.clearAsset(id);
 
       console.log('✅ STAGING-FIRST: Item cleared successfully');
-      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       
       toast({
@@ -667,11 +674,18 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       });
     } catch (error) {
       console.error('❌ STAGING-FIRST: Clear failed:', error);
+      
+      // Rollback optimistic update on error
+      queryClient.setQueryData(['assets', true], previousAssets);
+      
       toast({
         title: "Clear Failed",
         description: "Failed to clear item",
         variant: "destructive",
       });
+    } finally {
+      // Reconcile with server
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
     }
   }, [queryClient, toast]);
 
@@ -713,11 +727,18 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
   // STAGING-FIRST: Workspace delete = discard from workspace_assets (use WorkspaceAssetService)
   const deleteItem = useCallback(async (id: string, type: 'image' | 'video') => {
+    // Optimistic removal - snapshot and update immediately
+    const previousAssets = queryClient.getQueryData(['assets', true]);
+    
     try {
       console.log('🗑️ STAGING-FIRST: Discarding staged asset:', { id, type });
       
+      // Optimistically remove from cache
+      queryClient.setQueryData(['assets', true], (prev: any) => 
+        prev?.filter((asset: any) => asset.id !== id) || []
+      );
+      
       await WorkspaceAssetService.discardAsset(id);
-      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       
       toast({
         title: "Item Discarded",
@@ -725,11 +746,18 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       });
     } catch (error) {
       console.error('❌ STAGING-FIRST: Discard failed:', error);
+      
+      // Rollback optimistic update on error
+      queryClient.setQueryData(['assets', true], previousAssets);
+      
       toast({
         title: "Discard Failed",
         description: "Failed to discard item",
         variant: "destructive",
       });
+    } finally {
+      // Reconcile with server
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
     }
   }, [queryClient, toast]);
 
@@ -789,6 +817,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       await WorkspaceAssetService.clearJob(jobId);
 
       console.log('✅ STAGING-FIRST: Job cleared successfully');
+      queryClient.invalidateQueries({ queryKey: ['assets', true] }); // Fix cache key
       queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
       queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Play, Edit, Trash2, Download, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock } from "lucide-react";
+import { RotateCcw, Play, Edit, Trash2, Download, Save, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnifiedAsset } from '@/lib/services/AssetService';
 
@@ -340,6 +340,25 @@ export const ContentCard: React.FC<ContentCardProps> = ({
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Create video from image</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {/* Save Button */}
+          {onSave && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className={`${buttonSize[size]} bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm`}
+                    onClick={(e) => handleActionClick(e, onSave)}
+                  >
+                    <Save className={iconSize[size]} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Save to library</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

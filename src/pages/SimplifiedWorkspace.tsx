@@ -163,7 +163,7 @@ export const SimplifiedWorkspace: React.FC = () => {
       });
       
       // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       
     } catch (error) {
@@ -177,50 +177,13 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   const handleDeleteItem = async (item: UnifiedAsset) => {
-    try {
-      await WorkspaceAssetService.discardAsset(item.id);
-      
-      toast({
-        title: "Asset deleted",
-        description: "Asset has been permanently deleted",
-      });
-      
-      // Note: Signed URLs cache now managed centrally in hook
-      
-      // Invalidate workspace query
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
-      
-    } catch (error) {
-      console.error('Failed to delete asset:', error);
-      toast({
-        title: "Delete failed",
-        description: "Failed to delete asset",
-        variant: "destructive",
-      });
-    }
+    // Use hook-provided action with optimistic removal
+    await deleteItem(item.id, item.type);
   };
 
   const handleClearItem = async (item: UnifiedAsset) => {
-    try {
-      await WorkspaceAssetService.clearAsset(item.id);
-      
-      toast({
-        title: "Asset cleared",
-        description: "Asset saved to library and removed from workspace",
-      });
-      
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
-      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
-      
-    } catch (error) {
-      console.error('Failed to clear asset:', error);
-      toast({
-        title: "Clear failed",
-        description: "Failed to clear asset",
-        variant: "destructive",
-      });
-    }
+    // Use hook-provided action with optimistic removal  
+    await clearItem(item.id, item.type);
   };
 
   const handleViewItem = (item: UnifiedAsset) => {
