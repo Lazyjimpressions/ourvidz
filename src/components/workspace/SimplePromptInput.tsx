@@ -2,20 +2,23 @@ import React, { useState } from 'react';
 import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
+import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
 
-// Compact reference upload component
+// Compact reference upload component with sizing
 const ReferenceImageUpload: React.FC<{
   file: File | null;
   onFileChange: (file: File | null) => void;
   label: string;
   imageUrl?: string | null;
   onImageUrlChange?: (url: string | null) => void;
+  sizeClass?: string;
 }> = ({
   file,
   onFileChange,
   label,
   imageUrl,
-  onImageUrlChange
+  onImageUrlChange,
+  sizeClass = "h-28 w-28"
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,7 +113,7 @@ const ReferenceImageUpload: React.FC<{
     }
   };
   const displayImage = file ? URL.createObjectURL(file) : imageUrl;
-  return <div className={`border border-border/30 bg-muted/10 rounded h-10 w-20 transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+  return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {displayImage ? <div className="relative w-full h-full">
           <img src={displayImage} alt={label} className="w-full h-full object-cover" />
           <button onClick={clearReference} className="absolute -top-0.5 -right-0.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full w-3 h-3 flex items-center justify-center text-[10px]">
@@ -264,6 +267,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   seed = null,
   onSeedChange
 }) => {
+  // Base negative prompt hook
+  const modelType = mode === 'image' ? 'sdxl' : 'ltx';
+  const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(modelType, contentType);
+  const [showBaseNegative, setShowBaseNegative] = useState(false);
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
   const [showAnglePopup, setShowAnglePopup] = useState(false);
@@ -429,18 +436,18 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
           <div className="space-y-2">
             {/* Row 1: IMAGE button, Reference tiles, Prompt input, Generate button */}
             <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3">
-              {/* IMAGE Button - Square, same height as other elements */}
+              {/* IMAGE Button - Square, matches row height */}
               <button 
                 onClick={() => onModeChange('image')} 
-                className={`flex items-center justify-center gap-1 px-2 py-2 rounded text-xs font-medium transition-colors h-10 w-16 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-28 w-28 md:h-32 md:w-32 ${
                   mode === 'image' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                <Image size={14} />
-                IMG
+                <Image size={18} />
+                <span className="mt-1">IMAGE</span>
               </button>
 
-              {/* Reference Images - Same height as prompt box */}
+              {/* Reference Images - Match row height */}
               <div className="flex gap-2">
                 {mode === 'image' ? (
                   <ReferenceImageUpload 
@@ -449,6 +456,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     imageUrl={referenceImageUrl} 
                     onImageUrlChange={handleReferenceUrlChange} 
                     label="REF" 
+                    sizeClass="h-28 w-28 md:h-32 md:w-32"
                   />
                 ) : (
                   <>
@@ -458,6 +466,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={beginningRefImageUrl} 
                       onImageUrlChange={onBeginningRefImageUrlChange} 
                       label="START" 
+                      sizeClass="h-28 w-20 md:h-32 md:w-24"
                     />
                     <ReferenceImageUpload 
                       file={endingRefImage || null} 
@@ -465,25 +474,25 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={endingRefImageUrl} 
                       onImageUrlChange={onEndingRefImageUrlChange} 
                       label="END" 
+                      sizeClass="h-28 w-20 md:h-32 md:w-24"
                     />
                   </>
                 )}
               </div>
 
-              {/* Prompt Input - Fixed height */}
+              {/* Prompt Input - Match row height, fit 3.5+ lines */}
               <div className="relative flex-1">
                 <textarea 
                   value={prompt} 
                   onChange={e => onPromptChange(e.target.value)} 
                   placeholder={exactCopyMode ? "Add modifications (optional)..." : "Describe what you want to generate..."} 
-                  className={`w-full h-10 px-3 py-2 pr-10 text-sm bg-muted/20 border border-border/30 rounded resize-none ${
+                  className={`w-full h-28 md:h-32 px-3 py-2 pr-10 text-sm bg-muted/20 border border-border/30 rounded resize-none ${
                     exactCopyMode ? 'border-orange-500/50 bg-orange-50/50' : ''
                   }`} 
                   style={{
                     fontSize: '14px',
-                    lineHeight: '18px'
+                    lineHeight: '20px'
                   }} 
-                  rows={1} 
                   onKeyDown={e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -500,28 +509,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </button>
               </div>
 
-              {/* Generate button */}
+              {/* Generate button - Match row height */}
               <button 
                 onClick={handleSubmit} 
                 disabled={isGenerating || (!prompt.trim() && !exactCopyMode)} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded w-10 h-10 flex items-center justify-center shrink-0"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-28 w-28 md:h-32 md:w-32 flex items-center justify-center shrink-0"
                 title="Generate"
               >
-                <Play size={16} fill="currentColor" />
+                <Play size={20} fill="currentColor" />
               </button>
             </div>
 
             {/* Row 2: VIDEO button and Controls */}
-            <div className="grid grid-cols-[auto_auto_1fr] items-center gap-3">
-              {/* VIDEO Button - Square, below IMAGE button */}
+            <div className="grid grid-cols-[auto_auto_1fr] items-start gap-3">
+              {/* VIDEO Button - Square, matches IMAGE button */}
               <button 
                 onClick={() => onModeChange('video')} 
-                className={`flex items-center justify-center gap-1 px-2 py-2 rounded text-xs font-medium transition-colors h-10 w-16 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-28 w-28 md:h-32 md:w-32 ${
                   mode === 'video' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                <Video size={14} />
-                VID
+                <Video size={18} />
+                <span className="mt-1">VIDEO</span>
               </button>
 
               <div></div> {/* Empty space to align with reference tiles */}
@@ -739,12 +748,40 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <input type="number" value={seed || ''} onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)} placeholder="Random" className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]" min="0" max="2147483647" />
                 </div>
 
-                {/* Negative Prompt */}
+                {/* Additional Negative Prompt */}
                 <div className="col-span-2">
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    Negative Prompt
-                  </label>
-                  <textarea value={negativePrompt} onChange={e => onNegativePromptChange?.(e.target.value)} placeholder="What to avoid..." className="w-full h-12 px-1 py-1 bg-background border border-input rounded text-[10px] resize-none" rows={2} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[10px] font-medium text-muted-foreground">
+                      Additional Negative Prompt
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!showBaseNegative && !baseNegativePrompt) {
+                          fetchBaseNegativePrompt();
+                        }
+                        setShowBaseNegative(!showBaseNegative);
+                      }}
+                      className="text-[9px] text-primary hover:text-primary/80"
+                    >
+                      {showBaseNegative ? 'Hide base' : 'View base'}
+                    </button>
+                  </div>
+                  <div className="text-[9px] text-muted-foreground mb-1">
+                    A base negative prompt for {modelType.toUpperCase()} {contentType.toUpperCase()} is applied automatically
+                  </div>
+                  {showBaseNegative && (
+                    <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
+                      {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
+                    </div>
+                  )}
+                  <textarea 
+                    value={negativePrompt} 
+                    onChange={e => onNegativePromptChange?.(e.target.value)} 
+                    placeholder="Additional negatives..." 
+                    className="w-full h-12 px-1 py-1 bg-background border border-input rounded text-[10px] resize-none" 
+                    rows={2} 
+                  />
                 </div>
 
                 {/* Compel Enhancement */}
