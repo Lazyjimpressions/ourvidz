@@ -140,11 +140,11 @@ export class WorkspaceAssetService {
   }
 
   /**
-   * Discard workspace asset (permanently delete)
+   * Delete workspace asset (permanently remove)
    */
   static async discardAsset(assetId: string): Promise<void> {
     try {
-      console.log('🗑️ Discarding workspace asset:', assetId);
+      console.log('🗑️ Deleting workspace asset:', assetId);
 
       const { error } = await supabase.functions.invoke('workspace-actions', {
         body: {
@@ -154,13 +154,13 @@ export class WorkspaceAssetService {
       });
 
       if (error) {
-        console.error('Error discarding asset:', error);
+        console.error('Error deleting asset:', error);
         throw error;
       }
 
-      console.log('✅ Asset discarded successfully');
+      console.log('✅ Asset deleted successfully');
     } catch (error) {
-      console.error('Failed to discard asset:', error);
+      console.error('Failed to delete asset:', error);
       throw error;
     }
   }

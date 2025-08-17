@@ -524,7 +524,20 @@ serve(async (req) => {
         .single()
 
       if (assetError || !asset) {
-        return new Response('Asset not found', { status: 404, headers: corsHeaders })
+        // Make function idempotent - if asset is already gone, return success
+        console.log(`🗑️ Asset ${actionRequest.assetId} already removed or not found`)
+        return new Response(
+          JSON.stringify({ 
+            success: true,
+            message: 'Asset already removed'
+          }),
+          {
+            headers: { 
+              ...corsHeaders, 
+              'Content-Type': 'application/json' 
+            },
+          },
+        )
       }
 
       // Remove from storage

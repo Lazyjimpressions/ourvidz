@@ -731,7 +731,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     const previousAssets = queryClient.getQueryData(['assets', true]);
     
     try {
-      console.log('🗑️ STAGING-FIRST: Discarding staged asset:', { id, type });
+      console.log('🗑️ STAGING-FIRST: Deleting staged asset:', { id, type });
       
       // Optimistically remove from cache
       queryClient.setQueryData(['assets', true], (prev: any) => 
@@ -741,18 +741,18 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       await WorkspaceAssetService.discardAsset(id);
       
       toast({
-        title: "Item Discarded",
+        title: "Item Deleted",
         description: "Item removed from workspace",
       });
     } catch (error) {
-      console.error('❌ STAGING-FIRST: Discard failed:', error);
+      console.error('❌ STAGING-FIRST: Delete failed:', error);
       
       // Rollback optimistic update on error
       queryClient.setQueryData(['assets', true], previousAssets);
       
       toast({
-        title: "Discard Failed",
-        description: "Failed to discard item",
+        title: "Delete Failed",
+        description: "Failed to delete item",
         variant: "destructive",
       });
     } finally {
