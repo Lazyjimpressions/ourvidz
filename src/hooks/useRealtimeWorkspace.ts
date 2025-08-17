@@ -173,6 +173,15 @@ export function useRealtimeWorkspace() {
             toast.error('Generation failed', {
               description: job.error_message || 'Unknown error occurred'
             });
+          } else if (job.status === 'completed') {
+            // Resilient fallback: invalidate workspace assets immediately and after 1s
+            console.log('🔄 Job completed, invalidating workspace assets as fallback');
+            queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+            
+            // Second invalidation after 1s to handle any lag
+            setTimeout(() => {
+              queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+            }, 1000);
           }
         }
       )
