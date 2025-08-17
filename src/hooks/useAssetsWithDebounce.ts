@@ -103,7 +103,7 @@ export const useAssetsWithDebounce = (options: UseAssetsWithDebounceOptions = {}
     staleTime: 2 * 60 * 1000, // 2 minutes - keep data fresh longer
     gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache longer
     refetchOnWindowFocus: false,
-    refetchOnMount: 'always', // Always refetch on mount to get latest data
+    refetchOnMount: false, // Prevent reload on navigation
     refetchInterval: false, // No polling - rely on real-time
     retry: (failureCount, error) => {
       console.log(`🔄 DEBOUNCED: Retry attempt ${failureCount + 1} for assets query`);

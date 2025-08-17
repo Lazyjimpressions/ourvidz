@@ -64,7 +64,9 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     generate,
     clearWorkspace,
     deleteItem,
-    setLightboxIndex
+    setLightboxIndex,
+    // URL Management
+    registerAssetRef
   } = useLibraryFirstWorkspace();
 
   // Workspace management handlers
@@ -170,6 +172,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
             onDelete={(item) => deleteItem(item.id, item.type)}
             onDismiss={(item) => deleteItem(item.id, item.type)} // Use delete for now
             isDeleting={new Set()}
+            registerAssetRef={registerAssetRef}
           />
         </div>
       </div>

@@ -113,7 +113,9 @@ export const SimplifiedWorkspace: React.FC = () => {
     setNegativePrompt,
     setCompelEnabled,
     setCompelWeights,
-    setSeed
+    setSeed,
+    // URL Management
+    registerAssetRef
   } = useLibraryFirstWorkspace();
 
   // Honor URL param mode
@@ -302,17 +304,18 @@ export const SimplifiedWorkspace: React.FC = () => {
               onDownload={handleDownloadItem}
               onEdit={handleEditItem}
               onSave={handleSaveItem}
-            onDelete={handleDeleteItem}
-            onDismiss={handleClearItem}
+              onDelete={handleDeleteItem}
+              onDismiss={handleClearItem}
               onView={handleViewItem}
               onUseAsReference={handleUseAsReference}
               onUseSeed={handleUseSeed}
-            // Job actions
-            onDeleteJob={deleteJob}
-            onDismissJob={clearJob}
+              // Job actions
+              onDeleteJob={deleteJob}
+              onDismissJob={clearJob}
               isDeleting={new Set()} // TODO: Track deleting state
               activeJobId={activeJobId}
               onJobSelect={selectJob}
+              registerAssetRef={registerAssetRef}
             />
           </div>
         </main>

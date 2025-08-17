@@ -317,7 +317,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     };
   }, [queryClient, debouncedInvalidate]);
 
-  // OPTIMIZED: Use the new optimized URL loading hook
+  // OPTIMIZED: Use the new optimized URL loading hook with preloading
   const {
     assets: assetsWithUrls,
     signedUrls,
@@ -325,14 +325,25 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     registerAssetRef,
     forceLoadAssetUrls,
     preloadNextAssets,
+    loadAssetUrlsBatch,
     invalidateAssetCache,
     clearAllCache,
     isLoading: isUrlLoading
   } = useOptimizedWorkspaceUrls(workspaceAssets, {
     enabled: true,
-    batchSize: 10,
-    prefetchThreshold: 0.5
+    batchSize: 12,
+    prefetchThreshold: 0.3
   });
+
+  // Preload first 24 assets on mount for immediate rendering
+  useEffect(() => {
+    if (workspaceAssets.length > 0) {
+      const firstAssets = workspaceAssets.slice(0, 24);
+      const assetIds = firstAssets.map(asset => asset.id);
+      console.log('🚀 WORKSPACE: Preloading first 24 assets:', assetIds);
+      loadAssetUrlsBatch(assetIds);
+    }
+  }, [workspaceAssets.length > 0, loadAssetUrlsBatch]);
 
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (

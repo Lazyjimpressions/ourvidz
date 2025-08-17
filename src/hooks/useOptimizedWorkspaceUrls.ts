@@ -181,13 +181,17 @@ export const useOptimizedWorkspaceUrls = (
     setSignedUrls(new Map());
   }, []);
 
-  // Return enhanced assets with URLs
-  const assetsWithUrls = assets.map(asset => ({
-    ...asset,
-    url: signedUrls.get(asset.id) || asset.url,
-    isUrlLoaded: signedUrls.has(asset.id),
-    isVisible: lazyAssets.find(la => la.id === asset.id)?.isVisible || false
-  }));
+  // Return enhanced assets with URLs - ensure original URL is preserved if no signed URL
+  const assetsWithUrls = assets.map(asset => {
+    const signedUrl = signedUrls.get(asset.id);
+    return {
+      ...asset,
+      url: signedUrl || asset.url, // Keep original URL if no signed URL generated yet
+      signedUrl, // Also provide the signed URL separately for debugging
+      isUrlLoaded: signedUrls.has(asset.id),
+      isVisible: lazyAssets.find(la => la.id === asset.id)?.isVisible || false
+    };
+  });
 
   return {
     assets: assetsWithUrls,

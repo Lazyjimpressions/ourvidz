@@ -27,6 +27,8 @@ interface WorkspaceGridProps {
   isDeleting: Set<string>;
   activeJobId?: string | null;
   onJobSelect?: (jobId: string | null) => void;
+  // URL Management
+  registerAssetRef?: (id: string, element: HTMLElement | null) => void;
 }
 
 export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
@@ -52,7 +54,9 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   onDismissJob,
   isDeleting,
   activeJobId,
-  onJobSelect
+  onJobSelect,
+  // URL Management
+  registerAssetRef
 }) => {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [hoveredJob, setHoveredJob] = useState<string | null>(null);
@@ -150,7 +154,12 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 w-full">
           {Object.entries(displayJobs).flatMap(([jobId, jobItems]) => 
             jobItems.map((item) => (
-              <div key={item.id} data-job-id={jobId} className="aspect-square relative group scroll-mt-24">
+              <div 
+                key={item.id} 
+                data-job-id={jobId} 
+                className="aspect-square relative group scroll-mt-24"
+                ref={(el) => registerAssetRef?.(item.id, el)}
+              >
                 <ContentCard
                   item={item}
                   // LTX-Style Actions
