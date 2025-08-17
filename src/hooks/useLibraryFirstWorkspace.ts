@@ -509,7 +509,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           : undefined,
         reference_strength: exactCopyMode ? 0.9 : referenceStrength,
         seed: finalSeed,
-        num_images: numImages,
+        num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
         guidance_scale: guidanceScale,
         negative_prompt: negativePrompt,

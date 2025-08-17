@@ -119,8 +119,8 @@ serve(async (req) => {
 
         if (enhanceResponse.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.strategy || enhanceResponse.data?.template_name || 'enhanced';
-          console.log('✅ Prompt enhanced successfully', { templateName });
+          templateName = enhanceResponse.data?.templateName || enhanceResponse.data?.strategy || enhanceResponse.data?.template_name || 'enhanced';
+          console.log('✅ Prompt enhanced successfully', { templateName: templateName });
         } else {
           console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
           enhancedPrompt = originalPrompt;
@@ -169,6 +169,11 @@ serve(async (req) => {
 
     // Determine queue based on job type
     const queueName = (jobRequest.job_type.startsWith('sdxl') || jobRequest.job_type.includes('image')) ? 'sdxl_queue' : 'wan_queue'
+    
+    // Translate job type for worker - WAN worker expects video_fast/video_high, not wan_video_fast/wan_video_high
+    const workerJobType = jobRequest.job_type.startsWith('wan_video_') 
+      ? jobRequest.job_type.replace('wan_video_', 'video_') 
+      : jobRequest.job_type
 
     // Enqueue to Redis
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')
@@ -195,11 +200,11 @@ serve(async (req) => {
 
     const queuePayload = {
       id: job.id,                    // Worker expects 'id' field
-      type: jobRequest.job_type,     // Worker expects 'type' field
+      type: workerJobType,           // Worker expects translated job type (video_fast instead of wan_video_fast)
       prompt: enhancedPrompt,        // Worker uses 'prompt' for generation
       user_id: user.id,              // snake_case for worker
       config: {
-        num_images: jobRequest.num_images || jobRequest.metadata?.num_images || 1,
+        num_images: dbFormat === 'video' ? 1 : (jobRequest.num_images || jobRequest.metadata?.num_images || 1),
         steps: jobRequest.steps || jobRequest.metadata?.steps || 25,
         guidance_scale: jobRequest.guidance_scale || jobRequest.metadata?.guidance_scale || 7.5,
         resolution: getResolutionFromAspectRatio(jobRequest.metadata?.aspect_ratio),
@@ -224,7 +229,8 @@ serve(async (req) => {
     }
 
     console.log(`📋 Enqueuing job ${job.id} to ${queueName}:`, {
-      type: jobRequest.job_type,
+      original_job_type: jobRequest.job_type,
+      worker_job_type: workerJobType,
       config: queuePayload.config,
       has_metadata: !!queuePayload.metadata,
       compel_enabled: queuePayload.compel_enabled,
