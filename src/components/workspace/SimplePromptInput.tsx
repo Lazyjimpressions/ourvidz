@@ -282,6 +282,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
   const [showAnglePopup, setShowAnglePopup] = useState(false);
   const [showStylePopup, setShowStylePopup] = useState(false);
+  const [showEnhancePopup, setShowEnhancePopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,16 +330,19 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     setShowShotTypePopup(!showShotTypePopup);
     setShowAnglePopup(false);
     setShowStylePopup(false);
+    setShowEnhancePopup(false);
   };
   const handleCameraAngleToggle = () => {
     setShowAnglePopup(!showAnglePopup);
     setShowShotTypePopup(false);
     setShowStylePopup(false);
+    setShowEnhancePopup(false);
   };
   const handleStyleToggle = () => {
     setShowStylePopup(!showStylePopup);
     setShowShotTypePopup(false);
     setShowAnglePopup(false);
+    setShowEnhancePopup(false);
   };
   const handleCameraAngleSelect = (angle: 'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye') => {
     onCameraAngleChange?.(angle);
@@ -570,38 +574,52 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {aspectRatio}
                     </button>
 
-                    {/* Enhancement Model Selection */}
-                    <div className="flex border border-border/30 rounded overflow-hidden">
-                      <button
-                        onClick={() => onEnhancementModelChange?.('qwen_instruct')}
-                        className={`px-2 py-1 text-[10px] font-medium transition-colors ${
-                          enhancementModel === 'qwen_instruct' 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
+                    {/* Enhancement Model Dropdown */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => {
+                          setShowEnhancePopup(!showEnhancePopup);
+                          setShowShotTypePopup(false);
+                          setShowAnglePopup(false);
+                          setShowStylePopup(false);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
                       >
-                        INSTRUCT
+                        {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
+                         enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
+                        <ChevronDown size={8} />
                       </button>
-                      <button
-                        onClick={() => onEnhancementModelChange?.('qwen_base')}
-                        className={`px-2 py-1 text-[10px] font-medium transition-colors border-l border-border/30 ${
-                          enhancementModel === 'qwen_base' 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        BASE
-                      </button>
-                      <button
-                        onClick={() => onEnhancementModelChange?.('none')}
-                        className={`px-2 py-1 text-[10px] font-medium transition-colors border-l border-border/30 ${
-                          enhancementModel === 'none' 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                        }`}
-                      >
-                        NONE
-                      </button>
+                      {showEnhancePopup && (
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('qwen_instruct');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            INSTRUCT
+                          </button>
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('qwen_base');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            BASE
+                          </button>
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('none');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            NONE
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Shot Type */}
