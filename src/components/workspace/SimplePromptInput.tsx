@@ -274,10 +274,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   // Refresh base negative prompt when contentType or mode changes
   useEffect(() => {
-    if (showBaseNegative) {
+    if (showBaseNegative && fetchBaseNegativePrompt) {
       fetchBaseNegativePrompt();
     }
-  }, [contentType, mode, showBaseNegative, fetchBaseNegativePrompt]);
+  }, [showBaseNegative, contentType, mode]);
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
   const [showAnglePopup, setShowAnglePopup] = useState(false);
@@ -439,14 +439,14 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const finalPromptPreview = exactCopyMode ? referenceMetadata?.originalEnhancedPrompt ? modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim() || '') : prompt.trim() ? `${prompt.trim()}, exact copy, high quality` : 'exact copy, high quality' : null;
   return <div className="fixed bottom-4 left-4 right-4 z-50">
       <div className="max-w-4xl mx-auto">
-        <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-3 py-2 relative">
-          <div className="space-y-2">
+        <div className="bg-background/80 backdrop-blur-sm border border-border/30 rounded-lg shadow-lg px-2 py-1 relative">
+          <div className="space-y-1">
             {/* Row 1: IMAGE button, Reference tiles, Prompt input, Generate button */}
-            <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3">
+            <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-2">
               {/* IMAGE Button - Square, compact size */}
               <button 
                 onClick={() => onModeChange('image')} 
-                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-16 w-16 md:h-16 md:w-16 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-14 w-14 ${
                   mode === 'image' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
@@ -463,7 +463,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     imageUrl={referenceImageUrl} 
                     onImageUrlChange={handleReferenceUrlChange} 
                     label="REF" 
-                    sizeClass="h-16 w-16"
+                    sizeClass="h-14 w-14"
                   />
                 ) : (
                   <>
@@ -473,7 +473,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={beginningRefImageUrl} 
                       onImageUrlChange={onBeginningRefImageUrlChange} 
                       label="START" 
-                      sizeClass="h-16 w-12"
+                      sizeClass="h-14 w-12"
                     />
                     <ReferenceImageUpload 
                       file={endingRefImage || null} 
@@ -481,7 +481,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={endingRefImageUrl} 
                       onImageUrlChange={onEndingRefImageUrlChange} 
                       label="END" 
-                      sizeClass="h-16 w-12"
+                      sizeClass="h-14 w-12"
                     />
                   </>
                 )}
@@ -494,7 +494,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   onChange={e => onPromptChange(e.target.value)} 
                   placeholder={exactCopyMode ? "Add modifications (optional)..." : "Describe what you want to generate..."} 
                   rows={3}
-                  className={`w-full h-16 px-1 py-1 pr-8 text-sm bg-muted/20 border border-border/30 rounded resize-none leading-tight ${
+                  className={`w-full h-14 px-1 py-0 pr-6 text-sm bg-muted/20 border border-border/30 rounded resize-none leading-4 ${
                     exactCopyMode ? 'border-orange-500/50 bg-orange-50/50' : ''
                   }`}
                   onKeyDown={e => {
@@ -507,7 +507,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <button 
                   type="button" 
                   onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
-                  className="absolute right-1 top-1 text-muted-foreground hover:text-foreground p-1 rounded"
+                  className="absolute right-0.5 top-0.5 text-muted-foreground hover:text-foreground p-0.5 rounded"
                 >
                   <Settings size={12} />
                 </button>
@@ -517,7 +517,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               <button 
                 onClick={handleSubmit} 
                 disabled={isGenerating || (!prompt.trim() && !exactCopyMode)} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-16 w-16 flex items-center justify-center shrink-0"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex items-center justify-center shrink-0"
                 title="Generate"
               >
                 <Play size={14} fill="currentColor" />
@@ -525,11 +525,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
             </div>
 
             {/* Row 2: VIDEO button and Controls */}
-            <div className="grid grid-cols-[auto_auto_1fr] items-start gap-3">
+            <div className="grid grid-cols-[auto_auto_1fr] items-end gap-2">
               {/* VIDEO Button - Square, compact size, fixed under IMAGE */}
               <button 
                 onClick={() => onModeChange('video')} 
-                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-16 w-16 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-14 w-14 ${
                   mode === 'video' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
@@ -538,7 +538,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               </button>
 
               <div></div> {/* Empty space to align with reference tiles */}
-              <div className="flex items-center gap-1 justify-end">
+              <div className="flex items-end gap-1 justify-end self-end pb-0.5">
                 {mode === 'image' ? (
                   /* Image mode controls */
                   <div className="flex items-center gap-1">

@@ -37,7 +37,7 @@ export const useBaseNegativePrompt = (
     } finally {
       setIsLoading(false);
     }
-  }, [modelType, contentMode, isLoading]);
+  }, [modelType, contentMode]);
 
   return {
     baseNegativePrompt,
