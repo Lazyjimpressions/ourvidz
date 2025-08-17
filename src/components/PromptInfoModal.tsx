@@ -47,14 +47,14 @@ export const PromptInfoModal = ({
   originalImageUrl,
   modelType
 }: PromptInfoModalProps) => {
-  const { fetchDetails, loading, details, reset } = useFetchImageDetails();
+  const { fetchDetails, loading, details } = useFetchImageDetails();
 
   // Reset details when modal closes
   React.useEffect(() => {
     if (!isOpen) {
-      reset();
+      // No reset function needed - details will be refreshed on next load
     }
-  }, [isOpen, reset]);
+  }, [isOpen]);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -247,13 +247,7 @@ export const PromptInfoModal = ({
                   <span className="ml-2">{details.templateName}</span>
                 </div>
               )}
-              {details?.tokenCount && (
-                <div>
-                  <span className="text-muted-foreground">Tokens:</span>
-                  <span className="ml-2">{details.tokenCount}/75</span>
-                </div>
-              )}
-              {details?.seed !== undefined && (
+              {details?.seed && (
                 <div>
                   <span className="text-muted-foreground">Seed:</span>
                   <span className="ml-2 font-mono">{details.seed}</span>
@@ -262,7 +256,7 @@ export const PromptInfoModal = ({
               {details?.generationTime && (
                 <div>
                   <span className="text-muted-foreground">Generation Time:</span>
-                  <span className="ml-2">{formatGenerationTime(details.generationTime)}</span>
+                  <span className="ml-2">{details.generationTime}</span>
                 </div>
               )}
             </div>

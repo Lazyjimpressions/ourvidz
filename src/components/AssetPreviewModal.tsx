@@ -286,6 +286,16 @@ export const AssetPreviewModal = ({
                       <span>{currentAsset.signedUrls.length} variations</span>
                     </div>
                   )}
+
+                  {/* Template Name - if available */}
+                  {currentAsset.tags?.find((tag: string) => tag.startsWith('tmpl:')) && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">Template:</span>
+                      <code className="text-xs bg-gray-800 px-2 py-1 rounded font-mono">
+                        {currentAsset.tags.find((tag: string) => tag.startsWith('tmpl:'))?.replace('tmpl:', '')}
+                      </code>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

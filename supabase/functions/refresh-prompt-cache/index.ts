@@ -111,19 +111,19 @@ serve(async (req) => {
       })
     }
 
-    // Organize templates into cache structure
+    // Build 5-tuple cache structure: enhancement[target_model][enhancer_model][job_type][use_case][content_mode]
     const templateCache: any = {
       enhancement: {},
       chat: {}
     }
 
-    // Group templates by job_type, content_mode, and mapped use_case
+    // Group templates by 5-tuple for enhancement and content_mode for chat
     for (const template of promptTemplates || []) {
-      const { enhancer_model, use_case, content_mode, job_type } = template
+      const { target_model, enhancer_model, job_type, use_case, content_mode } = template
       
-      // Map database use_case values to cache keys for chat templates
-      let mappedUseCase = use_case;
       if (job_type === 'chat') {
+        // Map database use_case values to cache keys for chat templates
+        let mappedUseCase = use_case;
         if (use_case === 'roleplay') {
           mappedUseCase = 'roleplay';
         } else if (use_case === 'chat_admin') {
@@ -133,23 +133,27 @@ serve(async (req) => {
         } else if (use_case === 'chat_general') {
           mappedUseCase = 'general';
         }
-      }
-      
-      if (job_type === 'chat') {
+        
         // Organize chat templates under chat[content_mode][mapped_use_case]
         if (!templateCache.chat[content_mode]) {
           templateCache.chat[content_mode] = {}
         }
         templateCache.chat[content_mode][mappedUseCase] = template;
       } else {
-        // Keep enhancement templates organized by use_case/model_type/content_mode
-        if (!templateCache[use_case]) {
-          templateCache[use_case] = {}
+        // Build 5-tuple cache structure for enhancement templates
+        if (!templateCache.enhancement[target_model]) {
+          templateCache.enhancement[target_model] = {}
         }
-        if (!templateCache[use_case][enhancer_model]) {
-          templateCache[use_case][enhancer_model] = {}
+        if (!templateCache.enhancement[target_model][enhancer_model]) {
+          templateCache.enhancement[target_model][enhancer_model] = {}
         }
-        templateCache[use_case][enhancer_model][content_mode] = template
+        if (!templateCache.enhancement[target_model][enhancer_model][job_type]) {
+          templateCache.enhancement[target_model][enhancer_model][job_type] = {}
+        }
+        if (!templateCache.enhancement[target_model][enhancer_model][job_type][use_case]) {
+          templateCache.enhancement[target_model][enhancer_model][job_type][use_case] = {}
+        }
+        templateCache.enhancement[target_model][enhancer_model][job_type][use_case][content_mode] = template
       }
     }
 

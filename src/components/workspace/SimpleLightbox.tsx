@@ -375,11 +375,13 @@ export function SimpleLightbox({
                   <span className="text-muted-foreground w-16">Created:</span>
                   <span className="text-foreground">{formatDate(currentItem.timestamp)}</span>
                 </div>
-                {/* Template Name - if available */}
-                {details?.templateName && (
+                {/* Template Name - available for both images and videos */}
+                {(details?.templateName || currentItem.metadata?.enhancement_metadata?.template_name) && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground w-16">Template:</span>
-                    <span className="text-foreground text-xs">{details.templateName}</span>
+                    <span className="text-foreground text-xs font-mono bg-muted/30 px-1.5 py-0.5 rounded">
+                      {details?.templateName || currentItem.metadata?.enhancement_metadata?.template_name}
+                    </span>
                   </div>
                 )}
               </div>

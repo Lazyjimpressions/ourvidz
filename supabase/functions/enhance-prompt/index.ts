@@ -266,10 +266,16 @@ class DynamicEnhancementOrchestrator {
       const modelType = this.getModelTypeFromJobType(request.job_type)
       console.log('🤖 Model type selected:', modelType)
 
-      // Try cache first, then database fallback
+      // Try cache first, then database fallback using 5-tuple
       let enhancementResult
       try {
-        const cachedTemplate = await this.getCachedTemplate(modelType, 'enhancement', contentMode)
+        const cachedTemplate = await this.getCachedTemplate(
+          modelType, 
+          request.selectedModel || 'qwen_instruct', 
+          this.mapJobTypeToCategory(request.job_type),
+          'enhancement', 
+          contentMode
+        )
         enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
         enhancementResult.fallback_level = 0
         console.log('✅ Using cached template')
@@ -277,7 +283,13 @@ class DynamicEnhancementOrchestrator {
         console.log('⚠️ Cache failed, trying database:', cacheError.message)
         
         try {
-          const template = await this.getDynamicTemplate(request.job_type, request.selectedModel, 'enhancement', contentMode)
+          const template = await this.getDynamicTemplate(
+            modelType,
+            request.selectedModel || 'qwen_instruct',
+            this.mapJobTypeToCategory(request.job_type),
+            'enhancement', 
+            contentMode
+          )
           enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
           enhancementResult.fallback_level = 1
         } catch (dbError) {
@@ -393,9 +405,13 @@ class DynamicEnhancementOrchestrator {
       }
     ];
 
+    // Calculate UI control token usage and adjust max_tokens
+    const uiControlTokens = this.calculateUIControlTokens(request.metadata);
+    const adjustedMaxTokens = Math.max(50, (template.token_limit || 200) - uiControlTokens);
+
     const payload = {
       messages: messages,
-      max_tokens: template.token_limit || 200,
+      max_tokens: adjustedMaxTokens,
       temperature: 0.7,
       top_p: 0.9
     };
@@ -405,6 +421,8 @@ class DynamicEnhancementOrchestrator {
       systemPromptLength: template.system_prompt.length,
       userPromptLength: request.prompt.length,
       maxTokens: payload.max_tokens,
+      originalTokenLimit: template.token_limit || 200,
+      uiControlTokens,
       templateName: template.template_name || 'unnamed'
     });
 

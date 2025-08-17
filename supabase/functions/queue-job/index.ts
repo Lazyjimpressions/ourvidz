@@ -119,8 +119,16 @@ serve(async (req) => {
 
         if (enhanceResponse.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.templateUsed || enhanceResponse.data?.strategy || enhanceResponse.data?.templateName || enhanceResponse.data?.template_name || 'enhanced';
-          console.log('✅ Prompt enhanced successfully', { templateName: templateName, enhancementData: enhanceResponse.data });
+          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 
+                         enhanceResponse.data?.templateUsed || 
+                         enhanceResponse.data?.strategy || 
+                         enhanceResponse.data?.templateName || 
+                         enhanceResponse.data?.template_name || 'enhanced';
+          console.log('✅ Prompt enhanced successfully', { 
+            templateName, 
+            tokenCount: enhanceResponse.data?.enhancement_metadata?.token_count,
+            enhancementData: enhanceResponse.data 
+          });
         } else {
           console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
           enhancedPrompt = originalPrompt;
@@ -156,7 +164,12 @@ serve(async (req) => {
           ...jobRequest.metadata,
           reference_image_url: jobRequest.reference_image_url,
           reference_strength: jobRequest.reference_strength,
-          seed: jobRequest.seed
+          seed: jobRequest.seed,
+          enhancement_metadata: {
+            template_name: templateName,
+            enhancement_model: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+            content_mode: jobRequest.metadata?.contentType || 'sfw'
+          }
         }
       })
       .select()

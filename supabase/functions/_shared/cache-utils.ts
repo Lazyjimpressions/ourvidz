@@ -10,7 +10,7 @@ export interface CacheData {
       sfw: Record<string, string>;
       nsfw: Record<string, string>;
     };
-    enhancement: Record<string, Record<string, any>>;
+    enhancement: Record<string, Record<string, Record<string, Record<string, Record<string, any>>>>>;
   };
   negativeCache: Record<string, Record<string, string[]>>;
   nsfwTerms: string[];
@@ -95,11 +95,13 @@ export async function getCachedData(): Promise<CacheData | null> {
 }
 
 /**
- * Get specific template from cache
+ * Get specific template from cache using 5-tuple
  */
 export function getTemplateFromCache(
   cache: CacheData | null,
-  modelType: string,
+  targetModel: string,
+  enhancerModel: string,
+  jobType: string,
   useCase: string,
   contentMode: string
 ): any {
@@ -119,16 +121,16 @@ export function getTemplateFromCache(
     return { system_prompt: chatTemplate };
   }
 
-  // Handle enhancement templates (existing logic with new structure)
-  const enhancementTemplate = cache.templateCache.enhancement?.[modelType]?.[contentMode];
+  // Handle enhancement templates using 5-tuple
+  const template = cache.templateCache.enhancement?.[targetModel]?.[enhancerModel]?.[jobType]?.[useCase]?.[contentMode];
   
-  if (!enhancementTemplate) {
-    console.warn(`⚠️ Enhancement template not found in cache: enhancement.${modelType}.${contentMode}`);
+  if (!template) {
+    console.warn(`⚠️ Enhancement template not found in cache: enhancement.${targetModel}.${enhancerModel}.${jobType}.${useCase}.${contentMode}`);
     return null;
   }
 
-  console.log(`✅ Enhancement template found in cache: enhancement.${modelType}.${contentMode}`);
-  return enhancementTemplate;
+  console.log(`✅ Enhancement template found in cache: enhancement.${targetModel}.${enhancerModel}.${jobType}.${useCase}.${contentMode}`);
+  return template;
 }
 
 /**
@@ -297,7 +299,7 @@ export async function getDatabaseTemplate(
   let query = supabase
     .from('prompt_templates')
     .select('*')
-    .is('target_model', targetModel)
+    .eq('target_model', targetModel)
     .eq('enhancer_model', enhancerModel)
     .eq('job_type', jobType)
     .eq('use_case', useCase)
@@ -316,7 +318,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .is('target_model', targetModel)
+      .eq('target_model', targetModel)
       .eq('enhancer_model', fallbackEnhancer)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
@@ -335,7 +337,7 @@ export async function getDatabaseTemplate(
     ({ data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .is('target_model', targetModel)
+      .eq('target_model', targetModel)
       .eq('enhancer_model', enhancerModel)
       .eq('job_type', jobType)
       .eq('use_case', useCase)
