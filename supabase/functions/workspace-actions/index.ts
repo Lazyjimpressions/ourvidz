@@ -89,8 +89,16 @@ serve(async (req) => {
       }
 
       // Copy file from workspace-temp to user-library bucket
-      const sourceKey = asset.temp_storage_path
+      let sourceKey = asset.temp_storage_path
+      
+      // Normalize source key - strip workspace-temp prefix if present
+      if (sourceKey.startsWith('workspace-temp/')) {
+        sourceKey = sourceKey.replace('workspace-temp/', '');
+      }
+      
       const destKey = `${user.id}/${asset.id}.${asset.mime_type.split('/')[1]}`
+
+      console.log('📁 Copying file:', { sourceKey, destKey, bucket: 'workspace-temp' });
 
       // Get file from workspace-temp
       const { data: fileData, error: downloadError } = await supabaseClient.storage
@@ -186,8 +194,16 @@ serve(async (req) => {
 
       // Save to library if not already saved
       if (!existingLibraryAsset) {
-        const sourceKey = asset.temp_storage_path
+        let sourceKey = asset.temp_storage_path
+        
+        // Normalize source key - strip workspace-temp prefix if present
+        if (sourceKey.startsWith('workspace-temp/')) {
+          sourceKey = sourceKey.replace('workspace-temp/', '');
+        }
+        
         const destKey = `${user.id}/${asset.id}.${asset.mime_type.split('/')[1]}`
+
+        console.log('📁 Copying file for clear:', { sourceKey, destKey, bucket: 'workspace-temp' });
 
         // Copy file from workspace-temp to user-library bucket
         const { data: fileData, error: downloadError } = await supabaseClient.storage
@@ -302,7 +318,13 @@ serve(async (req) => {
 
           // Save to library if not already saved
           if (!existingLibraryAsset) {
-            const sourceKey = asset.temp_storage_path
+            let sourceKey = asset.temp_storage_path
+            
+            // Normalize source key - strip workspace-temp prefix if present
+            if (sourceKey.startsWith('workspace-temp/')) {
+              sourceKey = sourceKey.replace('workspace-temp/', '');
+            }
+            
             const destKey = `${user.id}/${asset.id}.${asset.mime_type.split('/')[1]}`
 
             const { data: fileData, error: downloadError } = await supabaseClient.storage
@@ -416,7 +438,13 @@ serve(async (req) => {
 
           // Save to library if not already saved
           if (!existingLibraryAsset) {
-            const sourceKey = asset.temp_storage_path
+            let sourceKey = asset.temp_storage_path
+            
+            // Normalize source key - strip workspace-temp prefix if present
+            if (sourceKey.startsWith('workspace-temp/')) {
+              sourceKey = sourceKey.replace('workspace-temp/', '');
+            }
+            
             const destKey = `${user.id}/${asset.id}.${asset.mime_type.split('/')[1]}`
 
             const { data: fileData, error: downloadError } = await supabaseClient.storage
@@ -500,9 +528,16 @@ serve(async (req) => {
       }
 
       // Remove from storage
+      let sourceKey = asset.temp_storage_path
+      
+      // Normalize source key - strip workspace-temp prefix if present
+      if (sourceKey.startsWith('workspace-temp/')) {
+        sourceKey = sourceKey.replace('workspace-temp/', '');
+      }
+      
       const { error: storageError } = await supabaseClient.storage
         .from('workspace-temp')
-        .remove([asset.temp_storage_path])
+        .remove([sourceKey])
 
       if (storageError) {
         console.warn('Failed to remove from storage:', storageError)

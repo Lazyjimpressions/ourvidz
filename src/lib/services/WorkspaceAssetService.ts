@@ -68,12 +68,18 @@ export class WorkspaceAssetService {
    */
   static async generateSignedUrl(asset: any): Promise<string | null> {
     try {
-      // For workspace assets, the temp_storage_path contains the full path
-      const storagePath = asset.temp_storage_path;
+      // Normalize the storage path - remove workspace-temp prefix if present
+      let storagePath = asset.temp_storage_path || asset.tempStoragePath;
+      
+      // Strip workspace-temp/ prefix if present (for resilience)
+      if (storagePath.startsWith('workspace-temp/')) {
+        storagePath = storagePath.replace('workspace-temp/', '');
+      }
       
       console.log('🔗 Generating signed URL for workspace asset:', {
         assetId: asset.id,
-        storagePath,
+        originalPath: asset.temp_storage_path || asset.tempStoragePath,
+        normalizedPath: storagePath,
         bucket: 'workspace-temp'
       });
 
@@ -82,7 +88,10 @@ export class WorkspaceAssetService {
         .createSignedUrl(storagePath, 3600); // 1 hour expiry
 
       if (error) {
-        console.error('Error generating signed URL:', error);
+        console.error('Error generating signed URL:', error, {
+          storagePath,
+          assetType: asset.asset_type || asset.assetType
+        });
         return null;
       }
 

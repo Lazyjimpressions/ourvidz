@@ -171,33 +171,62 @@ serve(async (req) => {
       
       // Handle new SDXL worker format
       if (payload.assets) {
-        assetsToCreate = payload.assets.map((asset, index) => ({
-          user_id: finalUserId,
-          job_id: jobId,
-          asset_type: asset.type,
-          temp_storage_path: asset.url, // URL from new format
-          file_size_bytes: 0, // Will be updated when file is processed
-          mime_type: asset.type === 'image' ? 'image/png' : 'video/mp4',
-          duration_seconds: asset.type === 'video' ? 5 : undefined,
-          asset_index: index,
-          generation_seed: asset.metadata?.seed || job.metadata?.seed || Math.floor(Math.random() * 1000000),
-          original_prompt: job.original_prompt || job.prompt,
-          model_used: job.model_type || 'sdxl',
-          generation_settings: {
-            quality: job.quality,
-            format: job.format,
-            enhanced_prompt: job.enhanced_prompt,
-            template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
-            reference_image_url: job.metadata?.reference_image_url,
-            reference_strength: job.metadata?.reference_strength,
-            width: asset.metadata?.width,
-            height: asset.metadata?.height,
-            steps: asset.metadata?.steps,
-            guidance_scale: asset.metadata?.guidance_scale,
-            batch_size: asset.metadata?.batch_size,
-            ...payload.metadata
+        assetsToCreate = payload.assets.map((asset, index) => {
+          // Normalize temp_storage_path - strip workspace-temp prefix if present
+          let normalizedPath = asset.url;
+          if (normalizedPath.startsWith('workspace-temp/')) {
+            normalizedPath = normalizedPath.replace('workspace-temp/', '');
           }
-        }));
+
+          // Determine asset type and mime type
+          const assetType = asset.type;
+          let mimeType = asset.type === 'image' ? 'image/png' : 'video/mp4';
+          
+          // For video assets, ensure proper setup
+          if (assetType === 'video') {
+            mimeType = 'video/mp4';
+          }
+
+          console.log(`📝 Creating workspace asset:`, {
+            jobId,
+            assetType,
+            normalizedPath,
+            mimeType,
+            index
+          });
+
+          return {
+            user_id: finalUserId,
+            job_id: jobId,
+            asset_type: assetType,
+            temp_storage_path: normalizedPath,
+            file_size_bytes: 0, // Will be updated when file is processed
+            mime_type: mimeType,
+            duration_seconds: assetType === 'video' ? (payload.metadata?.frame_num ? Math.ceil(payload.metadata.frame_num / 16) : 5) : undefined,
+            asset_index: index,
+            generation_seed: asset.metadata?.seed || job.metadata?.seed || Math.floor(Math.random() * 1000000),
+            original_prompt: job.original_prompt || job.prompt,
+            model_used: job.model_type || (assetType === 'video' ? 'wan' : 'sdxl'),
+            generation_settings: {
+              quality: job.quality,
+              format: job.format,
+              enhanced_prompt: job.enhanced_prompt,
+              template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
+              reference_image_url: job.metadata?.reference_image_url,
+              reference_strength: job.metadata?.reference_strength,
+              width: asset.metadata?.width,
+              height: asset.metadata?.height,
+              steps: asset.metadata?.steps,
+              guidance_scale: asset.metadata?.guidance_scale,
+              batch_size: asset.metadata?.batch_size,
+              frame_num: payload.metadata?.frame_num,
+              wan_task: payload.metadata?.wan_task,
+              reference_mode: payload.metadata?.reference_mode,
+              generation_time: payload.metadata?.generation_time,
+              ...payload.metadata
+            }
+          };
+        });
       }
 
       // Create workspace assets
