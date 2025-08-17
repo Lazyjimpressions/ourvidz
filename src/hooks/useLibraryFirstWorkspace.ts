@@ -307,29 +307,38 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // Generate signed URLs for workspace assets
   useEffect(() => {
     let mounted = true;
-    
+
+    const isHttpUrl = (u?: string) => !!u && (u.startsWith('http://') || u.startsWith('https://'));
+
     const generateUrls = async () => {
       const newUrls = new Map<string, string>();
-      
+
       for (const asset of workspaceAssets) {
-        if (asset.url) {
-          // Already has a URL
-          newUrls.set(asset.id, asset.url);
-        } else {
-          // Generate signed URL for workspace asset using AssetService
-          try {
+        try {
+          let resolvedUrl: string | undefined;
+
+          // Accept only fully-qualified URLs as already usable
+          if (isHttpUrl(asset.url)) {
+            resolvedUrl = asset.url as string;
+          } else {
+            // Sign using storage path from DB by asset id
             const signedUrl = await AssetService.getAssetURL(asset.id, asset.type);
-            if (signedUrl && mounted) {
-              newUrls.set(asset.id, signedUrl);
+            if (signedUrl) {
+              resolvedUrl = signedUrl;
             }
-          } catch (error) {
-            console.error('Failed to generate signed URL for asset:', asset.id, error);
           }
+
+          if (mounted && resolvedUrl) {
+            newUrls.set(asset.id, resolvedUrl);
+          }
+        } catch (error) {
+          console.error('Failed to generate signed URL for asset:', asset.id, error);
         }
       }
-      
-      if (mounted) {
-        setSignedUrls(newUrls);
+
+      // Merge to preserve existing cache entries
+      if (mounted && newUrls.size > 0) {
+        setSignedUrls(prev => new Map([...prev, ...newUrls]));
       }
     };
 
@@ -899,7 +908,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     isGenerating,
     workspaceAssets: workspaceAssets.map(asset => ({
       ...asset,
-      url: signedUrls.get(asset.id) || asset.url
+      url: signedUrls.get(asset.id) || (asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://')) ? asset.url : undefined)
     })),
     activeJobId,
     lightboxIndex,
