@@ -72,18 +72,45 @@ export class LibraryAssetService {
   }
 
   /**
+   * Strip bucket prefix from storage path if it exists
+   */
+  private static stripBucketPrefix(storagePath: string): string {
+    if (!storagePath) return storagePath;
+    
+    // Remove leading slash if present
+    let cleanPath = storagePath.replace(/^\/+/, '');
+    
+    // Remove bucket prefix if it exists
+    if (cleanPath.startsWith('user-library/')) {
+      cleanPath = cleanPath.substring('user-library/'.length);
+    }
+    
+    console.log(`🧹 Storage path cleaned: "${storagePath}" → "${cleanPath}"`);
+    return cleanPath;
+  }
+
+  /**
    * Generate signed URL for a library asset
    */
   static async generateSignedUrl(asset: any): Promise<string> {
+    const cleanPath = this.stripBucketPrefix(asset.storage_path);
+    
+    console.log(`🔗 Generating signed URL for library asset ${asset.id}:`, {
+      originalPath: asset.storage_path,
+      cleanPath,
+      bucket: 'user-library'
+    });
+
     const { data, error } = await supabase.storage
       .from('user-library')
-      .createSignedUrl(asset.storage_path, 3600); // 1 hour expiry
+      .createSignedUrl(cleanPath, 3600); // 1 hour expiry
 
     if (error) {
       console.error('Error generating signed URL:', error);
       throw error;
     }
 
+    console.log(`✅ Successfully generated signed URL for asset ${asset.id}`);
     return data.signedUrl;
   }
 

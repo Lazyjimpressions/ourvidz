@@ -322,14 +322,31 @@ export class UnifiedUrlService {
     throw new Error(`Failed to generate signed URLs for asset ${asset.id} from any bucket`);
   }
 
+  /**
+   * Strip bucket prefix from storage path if it exists
+   */
+  private static stripBucketPrefix(storagePath: string): string {
+    if (!storagePath) return storagePath;
+    
+    // Remove leading slash if present
+    let cleanPath = storagePath.replace(/^\/+/, '');
+    
+    // Remove bucket prefix if it exists (for user-library assets)
+    if (cleanPath.startsWith('user-library/')) {
+      cleanPath = cleanPath.substring('user-library/'.length);
+    }
+    
+    return cleanPath;
+  }
+
   static getImagePath(asset: UnifiedAsset, pathType: 'primary' | 'thumbnail' | 'highres'): string | null {
     if (asset.type !== 'image') return null;
     
     const metadata = asset.metadata || {};
     
-    // Library assets: use exact storage_path
+    // Library assets: use exact storage_path with bucket prefix stripped
     if (metadata.storage_path) {
-      return String(metadata.storage_path).replace(/^\/+/, '');
+      return this.stripBucketPrefix(String(metadata.storage_path));
     }
     
     // Handle SDXL image arrays
@@ -354,9 +371,9 @@ export class UnifiedUrlService {
       return this.getImagePath(asset, pathType);
     } else if (asset.type === 'video') {
       const metadata = asset.metadata || {};
-      // Library videos: use storage_path directly
+      // Library videos: use storage_path with bucket prefix stripped
       if (metadata.storage_path) {
-        return String(metadata.storage_path).replace(/^\/+/, '');
+        return this.stripBucketPrefix(String(metadata.storage_path));
       }
       if (pathType === 'thumbnail' && asset.thumbnailUrl) {
         return asset.thumbnailUrl.replace(/^\/+/, '').replace(/^image_fast\//, '');

@@ -264,11 +264,11 @@ export const useLazyAssetsV3 = ({
       // Observe new element
       if (observerRef.current) {
         observerRef.current.observe(element);
-        console.log(`📱 MOBILE: Registered asset ${assetId} for lazy loading observation`);
+        console.log(`🔍 Registered asset ${assetId} for lazy loading observation`);
       }
     } else {
       assetRefs.current.delete(assetId);
-      console.log(`📱 MOBILE: Unregistered asset ${assetId} from lazy loading`);
+      console.log(`🔍 Unregistered asset ${assetId} from lazy loading`);
     }
   }, [enabled]);
 

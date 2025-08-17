@@ -330,23 +330,21 @@ export const OptimizedLibrary = () => {
             )}
           </div>
 
-          {/* Desktop Content Grid */}
-          <div className="hidden lg:grid lg:grid-cols-[260px_1fr] lg:gap-6 lg:min-h-0 overflow-hidden">
-            {/* Left Sidebar (Desktop Only) */}
-            <aside className="lg:block">
-              <div className="sticky space-y-4" style={{ top: stickyOffset + 8 }}>
-                <CompactLibraryFilters
-                  typeFilter={searchState.filters.contentType}
-                  onTypeFilterChange={(type) => updateFilters({ contentType: type })}
-                  statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
-                  onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
-                  counts={filterCounts}
-                />
-              </div>
-            </aside>
+          {/* Desktop Content - Full Width Grid */}
+          <div className="hidden lg:block">
+            {/* Desktop Filters moved to header area */}
+            <div className="mb-6">
+              <CompactLibraryFilters
+                typeFilter={searchState.filters.contentType}
+                onTypeFilterChange={(type) => updateFilters({ contentType: type })}
+                statusFilter={searchState.filters.status === 'generating' ? 'processing' : searchState.filters.status}
+                onStatusFilterChange={(status) => updateFilters({ status: status === 'processing' ? 'generating' : status })}
+                counts={filterCounts}
+              />
+            </div>
 
-            {/* Main Content Area */}
-            <main className="min-w-0">
+            {/* Main Content Area - Full Width */}
+            <main>
               {finalAssets.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-lg text-muted-foreground">
