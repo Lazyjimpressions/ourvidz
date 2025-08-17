@@ -570,6 +570,40 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {aspectRatio}
                     </button>
 
+                    {/* Enhancement Model Selection */}
+                    <div className="flex border border-border/30 rounded overflow-hidden">
+                      <button
+                        onClick={() => onEnhancementModelChange?.('qwen_instruct')}
+                        className={`px-2 py-1 text-[10px] font-medium transition-colors ${
+                          enhancementModel === 'qwen_instruct' 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        INSTRUCT
+                      </button>
+                      <button
+                        onClick={() => onEnhancementModelChange?.('qwen_base')}
+                        className={`px-2 py-1 text-[10px] font-medium transition-colors border-l border-border/30 ${
+                          enhancementModel === 'qwen_base' 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        BASE
+                      </button>
+                      <button
+                        onClick={() => onEnhancementModelChange?.('none')}
+                        className={`px-2 py-1 text-[10px] font-medium transition-colors border-l border-border/30 ${
+                          enhancementModel === 'none' 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        NONE
+                      </button>
+                    </div>
+
                     {/* Shot Type */}
                     <div className="relative">
                       <button 

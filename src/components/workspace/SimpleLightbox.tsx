@@ -80,6 +80,9 @@ export function SimpleLightbox({
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
+  // Local state for collapsible prompt sections
+  const [showOriginalPrompt, setShowOriginalPrompt] = useState(false);
+  const [showEnhancedPrompt, setShowEnhancedPrompt] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const { toast } = useToast();
 
@@ -271,52 +274,61 @@ export function SimpleLightbox({
               )}
             </div>
 
-            {/* Original and Enhanced Prompts as collapsibles */}
-            <Collapsible open={true}>
+            {/* Original Prompt - truly collapsible with copy button in header */}
+            <Collapsible open={showOriginalPrompt} onOpenChange={setShowOriginalPrompt}>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
-                  Original Prompt
-                  <ChevronDown className="w-3 h-3" />
+                  <span>Original Prompt</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 w-4 p-0 hover:bg-background/50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(details?.originalPrompt || currentItem.prompt);
+                      }}
+                      aria-label="Copy original prompt"
+                    >
+                      <Copy className="w-2.5 h-2.5" />
+                    </Button>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${showOriginalPrompt ? 'rotate-180' : ''}`} />
+                  </div>
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-1">
                 <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
-                  {/* Display the actual original prompt, or fall back to current prompt */}
                   {details?.originalPrompt || currentItem.prompt}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
-                    onClick={() => copyToClipboard(details?.originalPrompt || currentItem.prompt)}
-                    aria-label="Copy original prompt"
-                  >
-                    <Copy className="w-2.5 h-2.5" />
-                  </Button>
                 </div>
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Enhanced Prompt - only for images */}
+            {/* Enhanced Prompt - truly collapsible with copy button in header, only for images */}
             {currentItem.type === 'image' && currentItem.enhancedPrompt && (
-              <Collapsible>
+              <Collapsible open={showEnhancedPrompt} onOpenChange={setShowEnhancedPrompt}>
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
-                    Enhanced Prompt
-                    <ChevronDown className="w-3 h-3" />
+                    <span>Enhanced Prompt</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-4 w-4 p-0 hover:bg-background/50"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyToClipboard(currentItem.enhancedPrompt || '');
+                        }}
+                        aria-label="Copy enhanced prompt"
+                      >
+                        <Copy className="w-2.5 h-2.5" />
+                      </Button>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${showEnhancedPrompt ? 'rotate-180' : ''}`} />
+                    </div>
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pt-1">
                   <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
                     {currentItem.enhancedPrompt}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-1 h-4 w-4 p-0 hover:bg-background/50"
-                      onClick={() => copyToClipboard(currentItem.enhancedPrompt || '')}
-                      aria-label="Copy enhanced prompt"
-                    >
-                      <Copy className="w-2.5 h-2.5" />
-                    </Button>
                   </div>
                 </CollapsibleContent>
               </Collapsible>
@@ -546,16 +558,16 @@ export function SimpleLightbox({
 
       {/* Right Sidebar - Actions Panel */}
       <div className={`${rightPanelCollapsed ? 'w-6' : 'w-48'} bg-background/95 backdrop-blur-sm border-l border-border/20 transition-all duration-200`}>
-        {/* Right Panel Toggle - repositioned */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="absolute right-14 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
-          onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
-          aria-label={rightPanelCollapsed ? 'Expand right panel' : 'Collapse right panel'}
-        >
-          {rightPanelCollapsed ? <PanelRight className="w-3 h-3" /> : <PanelRight className="w-3 h-3 rotate-180" />}
-        </Button>
+      {/* Right Panel Toggle - moved further left to avoid overlap */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="absolute right-16 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
+        onClick={() => setRightPanelCollapsed(!rightPanelCollapsed)}
+        aria-label={rightPanelCollapsed ? 'Expand right panel' : 'Collapse right panel'}
+      >
+        {rightPanelCollapsed ? <PanelRight className="w-3 h-3" /> : <PanelRight className="w-3 h-3 rotate-180" />}
+      </Button>
 
         {!rightPanelCollapsed && (
           <div className="h-full overflow-y-auto p-4 space-y-3 pt-14">
