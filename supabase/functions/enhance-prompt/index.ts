@@ -269,29 +269,51 @@ class DynamicEnhancementOrchestrator {
       // Try cache first, then database fallback using 5-tuple
       let enhancementResult
       try {
-        const cachedTemplate = await this.getCachedTemplate(
-          modelType, 
-          request.selectedModel || 'qwen_instruct', 
-          this.mapJobTypeToCategory(request.job_type),
-          'enhancement', 
+        const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
+        const enhancerModel = request.selectedModel || 'qwen_instruct'
+        
+        console.log('🔍 Template lookup parameters:', {
+          targetModel: modelType,
+          enhancerModel,
+          jobType: jobTypeCategory,
+          useCase: 'enhancement',
           contentMode
+        })
+        
+        const cache = await getCachedData()
+        const cachedTemplate = getTemplateFromCache(
+          cache,
+          modelType,           // targetModel
+          enhancerModel,       // enhancerModel  
+          jobTypeCategory,     // jobType
+          'enhancement',       // useCase
+          contentMode         // contentMode
         )
-        enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
-        enhancementResult.fallback_level = 0
-        console.log('✅ Using cached template')
+        
+        if (cachedTemplate) {
+          enhancementResult = await this.enhanceWithTemplate(request, cachedTemplate, contentMode)
+          enhancementResult.fallback_level = 0
+          console.log('✅ Using cached template:', cachedTemplate.template_name || 'unnamed')
+        } else {
+          throw new Error('No cached template found')
+        }
       } catch (cacheError) {
         console.log('⚠️ Cache failed, trying database:', cacheError.message)
         
         try {
-          const template = await this.getDynamicTemplate(
-            modelType,
-            request.selectedModel || 'qwen_instruct',
-            this.mapJobTypeToCategory(request.job_type),
-            'enhancement', 
-            contentMode
+          const jobTypeCategory = this.mapJobTypeToCategory(request.job_type)
+          const enhancerModel = request.selectedModel || 'qwen_instruct'
+          
+          const template = await getDatabaseTemplate(
+            modelType,           // targetModel
+            enhancerModel,       // enhancerModel
+            jobTypeCategory,     // jobType  
+            'enhancement',       // useCase
+            contentMode         // contentMode
           )
           enhancementResult = await this.enhanceWithTemplate(request, template, contentMode)
           enhancementResult.fallback_level = 1
+          console.log('✅ Using database template:', template.template_name || 'unnamed')
         } catch (dbError) {
           console.log('⚠️ Database template failed, using hardcoded fallback:', dbError.message)
           enhancementResult = await this.enhanceWithHardcodedFallback(request, modelType, contentMode)
@@ -763,6 +785,25 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
+   * Map job type to category for database lookup
+   */
+  private mapJobTypeToCategory(jobType: string): string {
+    if (!jobType || typeof jobType !== 'string') {
+      console.warn('⚠️ Invalid job type provided:', jobType)
+      return 'image'
+    }
+    
+    if (jobType.includes('video')) {
+      return 'video'
+    } else if (jobType.includes('image') || jobType.includes('sdxl')) {
+      return 'image'
+    }
+    
+    console.log('🔄 Job type mapping:', { originalJobType: jobType, mappedCategory: 'image' })
+    return 'image' // Default fallback
+  }
+
+  /**
    * Get model type from job type with enhanced mapping
    */
   private getModelTypeFromJobType(jobType: string): string {
@@ -791,102 +832,8 @@ class DynamicEnhancementOrchestrator {
     return hasNsfwContent ? 'nsfw' : 'sfw';
   }
 
-  /**
-   * Get database template using direct database query
-   */
-  private async getDynamicTemplate(jobType: string, selectedModel: string, useCase: string, contentMode: string) {
-    try {
-      const supabase = createClient(
-        Deno.env.get('SUPABASE_URL') ?? '',
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-      );
-
-      // Extract target_model from job_type
-      let targetModel = 'sdxl';
-      if (jobType?.includes('wan') || jobType?.includes('video')) {
-        targetModel = 'wan';
-      } else if (jobType?.includes('sdxl')) {
-        targetModel = 'sdxl';
-      }
-
-      // Extract job_type category (image/video)
-      let jobTypeCategory = 'image';
-      if (jobType?.includes('video')) {
-        jobTypeCategory = 'video';
-      }
-
-      // Use actual selectedModel parameter
-      const enhancerModel = selectedModel || 'qwen_instruct';
-      
-      console.log('🔍 Template lookup with all fields:', { 
-        originalJobType: jobType,
-        targetModel,
-        enhancerModel,
-        jobTypeCategory,
-        useCase,
-        contentMode
-      });
-      
-      // Query database for template
-      const { data: templates, error } = await supabase
-        .from('prompt_templates')
-        .select('*')
-        .eq('target_model', targetModel)      // Use target_model (sdxl/wan)
-        .eq('enhancer_model', enhancerModel)  // Use enhancer_model (qwen_instruct)
-        .eq('use_case', useCase)
-        .eq('content_mode', contentMode)
-        .eq('is_active', true)
-        .order('version', { ascending: false })
-        .limit(1);
-      
-      if (error) {
-        console.error('❌ Database template query error:', error);
-        throw new Error(`Database query failed: ${error.message}`);
-      }
-      
-      if (!templates || templates.length === 0) {
-        throw new Error(`No template found for ${enhancerModel}/${useCase}/${contentMode}`);
-      }
-      
-      const template = templates[0];
-      console.log('✅ Template found:', { 
-        template_name: template.template_name,
-        model_type: template.model_type,
-        use_case: template.use_case,
-        content_mode: template.content_mode,
-        id: template.id
-      });
-      
-      return template;
-      
-    } catch (error) {
-      console.error('❌ getDynamicTemplate failed:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get cached template from system_config (cache-first approach)
-   */
-  private async getCachedTemplate(modelType: string, useCase: string, contentMode: string) {
-    try {
-      const cache = await getCachedData();
-      if (!cache) {
-        throw new Error('No cache data available');
-      }
-      
-      const template = getTemplateFromCache(cache, modelType, useCase, contentMode);
-      if (!template) {
-        throw new Error(`No cached template found for ${modelType}/${useCase}/${contentMode}`);
-      }
-      
-      console.log('✅ Using cached template:', template.template_name || 'unnamed');
-      return template;
-    } catch (error) {
-      console.log('❌ Cache template lookup failed:', error.message);
-      throw error;
-    }
-  }
+  // Removed getDynamicTemplate and getCachedTemplate methods
+  // These are now handled by getDatabaseTemplate and getTemplateFromCache from cache-utils
 
   /**
    * Select worker type based on model and user preference
