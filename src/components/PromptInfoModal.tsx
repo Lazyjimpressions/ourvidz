@@ -256,7 +256,7 @@ export const PromptInfoModal = ({
               {details?.generationTime && (
                 <div>
                   <span className="text-muted-foreground">Generation Time:</span>
-                  <span className="ml-2">{details.generationTime}</span>
+                  <span className="ml-2">{formatGenerationTime(details.generationTime)}</span>
                 </div>
               )}
             </div>

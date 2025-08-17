@@ -5,8 +5,9 @@ import { supabase } from '@/integrations/supabase/client';
 interface ImageDetails {
   originalPrompt?: string;
   enhancedPrompt?: string;
-  seed?: string;
-  generationTime?: string;
+  negativePrompt?: string;
+  seed?: number;
+  generationTime?: number;
   referenceStrength?: number;
   templateName?: string;
 }
@@ -41,9 +42,9 @@ export const useFetchImageDetails = () => {
         setDetails({
           originalPrompt: workspaceAsset.original_prompt,
           enhancedPrompt: settings?.enhancedPrompt,
-          seed: settings?.seed?.toString(),
-          generationTime: settings?.generationTime ? 
-            `${settings.generationTime}s` : undefined,
+          negativePrompt: settings?.negativePrompt,
+          seed: settings?.seed,
+          generationTime: settings?.generationTime,
           referenceStrength: settings?.referenceStrength,
           templateName: settings?.templateName
         });
@@ -72,7 +73,8 @@ export const useFetchImageDetails = () => {
         setDetails({
           originalPrompt: libraryAsset.original_prompt,
           enhancedPrompt: undefined, // Library doesn't store enhanced prompt
-          seed: libraryAsset.generation_seed?.toString(),
+          negativePrompt: undefined, // Library doesn't store negative prompt
+          seed: libraryAsset.generation_seed,
           generationTime: undefined, // Library doesn't store generation time  
           referenceStrength: undefined, // Library doesn't store reference strength
           templateName
