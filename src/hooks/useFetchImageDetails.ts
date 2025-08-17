@@ -39,14 +39,34 @@ export const useFetchImageDetails = () => {
       if (workspaceAsset) {
         console.log('✅ Found workspace asset:', workspaceAsset);
         const settings = workspaceAsset.generation_settings as any;
+        
+        let enhancedPrompt = settings?.enhancedPrompt;
+        let templateName = settings?.templateName;
+        
+        // If enhanced prompt or template name is missing and we have a job_id, try to backfill from jobs table
+        if ((!enhancedPrompt || !templateName) && workspaceAsset.job_id) {
+          console.log('🔍 Backfilling enhanced prompt from jobs table for job:', workspaceAsset.job_id);
+          const { data: jobData } = await supabase
+            .from('jobs')
+            .select('enhanced_prompt, template_name')
+            .eq('id', workspaceAsset.job_id)
+            .single();
+          
+          if (jobData) {
+            enhancedPrompt = enhancedPrompt || jobData.enhanced_prompt;
+            templateName = templateName || jobData.template_name;
+            console.log('✅ Backfilled from jobs table:', { enhancedPrompt: !!enhancedPrompt, templateName: !!templateName });
+          }
+        }
+        
         setDetails({
           originalPrompt: workspaceAsset.original_prompt,
-          enhancedPrompt: settings?.enhancedPrompt,
+          enhancedPrompt,
           negativePrompt: settings?.negativePrompt,
           seed: settings?.seed,
           generationTime: settings?.generationTime,
           referenceStrength: settings?.referenceStrength,
-          templateName: settings?.templateName
+          templateName
         });
         return;
       }

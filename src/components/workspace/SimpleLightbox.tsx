@@ -92,10 +92,10 @@ export function SimpleLightbox({
   const { fetchDetails, loading: loadingDetails, details } = useFetchImageDetails();
 
   useEffect(() => {
-    if (currentItem?.type === 'image' && currentItem.id) {
+    if (currentItem?.id) {
       fetchDetails(currentItem.id);
     }
-  }, [currentItem?.id, currentItem?.type, fetchDetails]);
+  }, [currentItem?.id, fetchDetails]);
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
@@ -303,8 +303,8 @@ export function SimpleLightbox({
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Enhanced Prompt - truly collapsible with copy button in header, only for images */}
-            {currentItem.type === 'image' && currentItem.enhancedPrompt && (
+            {/* Enhanced Prompt - truly collapsible with copy button in header */}
+            {(currentItem.enhancedPrompt || details?.enhancedPrompt) && (
               <Collapsible open={showEnhancedPrompt} onOpenChange={setShowEnhancedPrompt}>
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost" className="w-full justify-between p-0 h-auto text-xs font-medium text-foreground hover:bg-transparent">
@@ -316,7 +316,7 @@ export function SimpleLightbox({
                         className="h-4 w-4 p-0 hover:bg-background/50"
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyToClipboard(currentItem.enhancedPrompt || '');
+                          copyToClipboard(currentItem.enhancedPrompt || details?.enhancedPrompt || '');
                         }}
                         aria-label="Copy enhanced prompt"
                       >
@@ -328,7 +328,7 @@ export function SimpleLightbox({
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pt-1">
                   <div className="bg-muted/50 p-2 rounded text-xs text-foreground leading-relaxed">
-                    {currentItem.enhancedPrompt}
+                    {currentItem.enhancedPrompt || details?.enhancedPrompt}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
