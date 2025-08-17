@@ -305,11 +305,46 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   // STAGING-FIRST: Signed URL management for workspace assets
   const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
 
-  // Generate signed URLs for workspace assets
+  // Generate signed URLs and video thumbnails for workspace assets
   useEffect(() => {
     let mounted = true;
 
     const isHttpUrl = (u?: string) => !!u && (u.startsWith('http://') || u.startsWith('https://'));
+
+    const generateVideoThumbnail = async (videoUrl: string): Promise<string | null> => {
+      return new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.muted = true;
+        
+        video.onloadeddata = () => {
+          video.currentTime = 0.1; // Seek to 0.1s for first frame
+        };
+        
+        video.onseeked = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
+              resolve(thumbnailUrl);
+            } else {
+              resolve(null);
+            }
+          } catch (error) {
+            console.error('Error generating video thumbnail:', error);
+            resolve(null);
+          }
+        };
+        
+        video.onerror = () => resolve(null);
+        video.src = videoUrl;
+      });
+    };
 
     const generateUrls = async () => {
       const newUrls = new Map<string, string>();
@@ -331,6 +366,15 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
 
           if (mounted && resolvedUrl) {
             newUrls.set(asset.id, resolvedUrl);
+
+            // Generate thumbnail for videos
+            if (asset.type === 'video' && !asset.thumbnailUrl) {
+              const thumbnail = await generateVideoThumbnail(resolvedUrl);
+              if (thumbnail) {
+                // Update the asset with thumbnail in workspace state
+                asset.thumbnailUrl = thumbnail;
+              }
+            }
           }
         } catch (error) {
           console.error('Failed to generate signed URL for asset:', asset.id, error);

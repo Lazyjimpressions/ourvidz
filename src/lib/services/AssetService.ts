@@ -167,7 +167,10 @@ export class AssetService {
         seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
         generationParams: asset.generation_settings as Record<string, any>,
         status: 'completed',
-        metadata: (asset.generation_settings as Record<string, any>) || {},
+        metadata: {
+          ...(asset.generation_settings as Record<string, any>) || {},
+          job_id: asset.job_id // Include job_id for grouping
+        },
       }));
     } catch (error) {
       console.error('Error fetching workspace assets:', error);
@@ -265,7 +268,10 @@ export class AssetService {
           seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
           generationParams: asset.generation_settings as Record<string, any>,
           status: 'completed',
-          metadata: (asset.generation_settings as Record<string, any>) || {},
+          metadata: {
+            ...(asset.generation_settings as Record<string, any>) || {},
+            job_id: asset.job_id // Include job_id for grouping
+          },
         })));
       }
 
