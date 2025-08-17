@@ -63,7 +63,11 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     setEnhancementModel,        
     generate,
     clearWorkspace,
+    deleteAllWorkspace,
     deleteItem,
+    clearItem,
+    deleteJob,
+    clearJob,
     setLightboxIndex,
     // URL Management
     registerAssetRef
@@ -147,7 +151,10 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Fixed Header */}
-      <WorkspaceHeader onClearWorkspace={clearWorkspace} />
+      <WorkspaceHeader 
+        onClearWorkspace={clearWorkspace}
+        onDeleteAllWorkspace={deleteAllWorkspace}
+      />
       
       {/* Main Content Area */}
       <div className="pt-header">
@@ -157,8 +164,8 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
             items={workspaceAssets}
             activeJobId={null}
             onJobSelect={() => {}}
-            onDeleteJob={() => Promise.resolve()}
-            onDismissJob={() => Promise.resolve()}
+            onDeleteJob={(jobId) => deleteJob(jobId)}
+            onDismissJob={(jobId) => clearJob(jobId)}
             onIterateFromItem={handleUseAsReference}
             onRegenerateJob={() => Promise.resolve()}
             onCreateVideo={handleUseAsReference}
@@ -170,7 +177,7 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
             onUseAsReference={handleUseAsReference}
             onUseSeed={handleUseSeed}
             onDelete={(item) => deleteItem(item.id, item.type)}
-            onDismiss={(item) => deleteItem(item.id, item.type)} // Use delete for now
+            onDismiss={(item) => clearItem(item.id, item.type)}
             isDeleting={new Set()}
             registerAssetRef={registerAssetRef}
           />
