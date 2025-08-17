@@ -132,14 +132,7 @@ export function useRealtimeWorkspace() {
             });
           }
 
-          // Dispatch custom event for other components
-          window.dispatchEvent(new CustomEvent('generation-completed', {
-            detail: {
-              assetId: asset.id,
-              type: asset.asset_type,
-              jobId: asset.job_id
-            }
-          }));
+          // Note: Removed legacy custom event dispatch
         }
       )
       .subscribe();

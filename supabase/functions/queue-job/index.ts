@@ -10,7 +10,7 @@ const corsHeaders = {
 interface JobRequest {
   prompt: string;
   original_prompt?: string;
-  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high';
+  job_type: 'sdxl_image_fast' | 'sdxl_image_high' | 'video_fast' | 'video_high' | 'wan_video_fast' | 'wan_video_high';
   quality?: 'fast' | 'high';
   format?: string;
   model_type?: string;
@@ -66,7 +66,7 @@ serve(async (req) => {
     const jobRequest: JobRequest = await req.json()
 
     // Validate job_type
-    const validJobTypes = ['sdxl_image_fast', 'sdxl_image_high', 'video_fast', 'video_high'];
+    const validJobTypes = ['sdxl_image_fast', 'sdxl_image_high', 'video_fast', 'video_high', 'wan_video_fast', 'wan_video_high'];
     if (!jobRequest.job_type || !validJobTypes.includes(jobRequest.job_type)) {
       return new Response(`Invalid job_type. Must be one of: ${validJobTypes.join(', ')}`, { 
         status: 400, 
@@ -159,7 +159,7 @@ serve(async (req) => {
     }
 
     // Determine queue based on job type
-    const queueName = jobRequest.job_type.startsWith('sdxl') ? 'sdxl_queue' : 'wan_queue'
+    const queueName = (jobRequest.job_type.startsWith('sdxl') || jobRequest.job_type.includes('image')) ? 'sdxl_queue' : 'wan_queue'
 
     // Enqueue to Redis
     const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')

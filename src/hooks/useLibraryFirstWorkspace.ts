@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useToast } from '@/hooks/use-toast';
 import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
 import { GenerationFormat } from '@/types/generation';
@@ -9,7 +10,7 @@ import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 
-// LIBRARY-FIRST: Simplified workspace state using library assets
+// STAGING-FIRST: Simplified workspace state using staging assets
 export interface LibraryFirstWorkspaceState {
   // Core State
   mode: 'image' | 'video';
@@ -159,7 +160,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [compelWeights, setCompelWeights] = useState('');
   const [seed, setSeed] = useState<number | null>(null);
 
-  // LIBRARY-FIRST: Use debounced asset loading to prevent infinite loops
+  // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
     data: workspaceAssets = [], 
     isLoading: assetsLoading, 
@@ -308,80 +309,46 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     };
   }, [queryClient, debouncedInvalidate]);
 
-  // LIBRARY-FIRST: Listen for library events
+  // STAGING-FIRST: Signed URL management for workspace assets
+  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
+
+  // Generate signed URLs for workspace assets
   useEffect(() => {
-    const handleLibraryAssetsReady = (event: CustomEvent) => {
-      const { assets, sessionOnly } = event.detail;
+    let mounted = true;
+    
+    const generateUrls = async () => {
+      const newUrls = new Map<string, string>();
       
-      // Only process session assets for workspace
-      if (sessionOnly) {
-        console.log('🎉 WORKSPACE: Received library assets:', assets.length);
-        
-        // Reset cleared state when new content arrives
-        setWorkspaceCleared(false);
-        
-        // Refresh workspace data
-        queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-        
-        // Show toast notification with proper undefined check
-        if (assets && assets.length > 0) {
-          toast({
-            title: "New Content Ready",
-            description: `${assets.length} new ${assets[0]?.type || 'item'}${assets.length > 1 ? 's' : ''} generated`,
-          });
+      for (const asset of workspaceAssets) {
+        if (asset.url) {
+          // Already has a URL
+          newUrls.set(asset.id, asset.url);
+        } else {
+          // Generate signed URL for workspace asset using AssetService
+          try {
+            const signedUrl = await AssetService.getAssetURL(asset.id, asset.type);
+            if (signedUrl && mounted) {
+              newUrls.set(asset.id, signedUrl);
+            }
+          } catch (error) {
+            console.error('Failed to generate signed URL for asset:', asset.id, error);
+          }
         }
+      }
+      
+      if (mounted) {
+        setSignedUrls(newUrls);
       }
     };
 
-    const handleGenerationCompleted = (event: CustomEvent) => {
-      const { assetId, type, jobId } = event.detail;
-      
-      console.log('🎉 WORKSPACE: Received generation completed event:', { assetId, type, jobId });
-      
-      // Reset cleared state when new content arrives
-      setWorkspaceCleared(false);
-      
-      // Refresh workspace data to show new content
-      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-      
-      // Show toast notification
-      toast({
-        title: "New Content Ready",
-        description: `New ${type} generated and added to workspace`,
-      });
-    };
+    if (workspaceAssets.length > 0) {
+      generateUrls();
+    }
 
-    const handleGenerationBatchCompleted = (event: CustomEvent) => {
-      const { assetIds, type, jobId, totalCompleted, totalExpected } = event.detail;
-      
-      console.log('🎉 WORKSPACE: Received generation batch completed event:', { 
-        assetIds, type, jobId, totalCompleted, totalExpected 
-      });
-      
-      // Reset cleared state when new content arrives
-      setWorkspaceCleared(false);
-      
-      // Refresh workspace data to show new content
-      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-      
-      // Show toast notification
-      toast({
-        title: "New Content Ready",
-        description: `${totalCompleted} new ${type.replace('-batch', '')}${totalCompleted > 1 ? 's' : ''} generated`,
-      });
-    };
-
-    // Listen for both event types
-    window.addEventListener('library-assets-ready', handleLibraryAssetsReady as EventListener);
-    window.addEventListener('generation-completed', handleGenerationCompleted as EventListener);
-    window.addEventListener('generation-batch-completed', handleGenerationBatchCompleted as EventListener);
-    
     return () => {
-      window.removeEventListener('library-assets-ready', handleLibraryAssetsReady as EventListener);
-      window.removeEventListener('generation-completed', handleGenerationCompleted as EventListener);
-      window.removeEventListener('generation-batch-completed', handleGenerationBatchCompleted as EventListener);
+      mounted = false;
     };
-  }, [queryClient, toast]);
+  }, [workspaceAssets]);
 
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (
@@ -530,35 +497,24 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       const generationRequest = {
         job_type: (mode === 'image' 
           ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
-          : (quality === 'high' ? 'video_high' : 'video_fast')
+          : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast')
         ),
-        original_prompt: finalPrompt,
-        format: mode === 'image' ? 'png' : 'mp4',
+        prompt: finalPrompt,
+        quality: quality,
+        format: mode === 'image' ? 'image' : 'video',
+        model_type: mode === 'image' ? 'sdxl' : 'wan',
+        reference_image_url: (referenceImageUrl || referenceImage) 
+          ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
+          : undefined,
+        reference_strength: exactCopyMode ? 0.9 : referenceStrength,
+        seed: finalSeed,
         metadata: {
-          num_images: mode === 'image' ? 3 : 1,
-          // LIBRARY-FIRST: No destination needed - always goes to library tables
-          // Reference image data - FIXED: Use reference_url and signed URLs for private bucket
-          ...((referenceImageUrl || referenceImage) && {
-            reference_image: true,
-            reference_image_url: referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined),
-            reference_strength: exactCopyMode ? 0.9 : referenceStrength,
-            reference_type: (exactCopyMode ? 'composition' : 'character') as 'style' | 'composition' | 'character',
-            exact_copy_mode: exactCopyMode
-          }),
-          // Seed for character reproduction
-          ...(finalSeed && { seed: finalSeed }),
-          // Video-specific parameters
-          ...(mode === 'video' && {
-            duration: videoDuration,
-            motion_intensity: motionIntensity,
-            sound_enabled: soundEnabled
-          }),
-          // Video reference URLs (included in metadata for queue-job compatibility)
-          ...(mode === 'video' ? {
-            start_reference_url: startRefUrl,
-            end_reference_url: endRefUrl
-          } : {}),
-          // Control parameters (disabled in exact copy mode)
+          // STAGING-FIRST: All assets go to workspace_assets table
+          duration: mode === 'video' ? videoDuration : undefined,
+          motion_intensity: mode === 'video' ? motionIntensity : undefined,
+          start_reference_url: startRefUrl,
+          end_reference_url: endRefUrl,
+          // Control parameters
           aspect_ratio: finalAspectRatio,
           shot_type: finalShotType,
           camera_angle: finalCameraAngle,
@@ -572,16 +528,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           ...(exactCopyMode ? {
             num_inference_steps: 15,
             guidance_scale: 3.0,
-            negative_prompt: ''
-          } : {}),
-          // Pass reference metadata for exact copy mode
-          ...(exactCopyMode && referenceMetadata ? {
+            negative_prompt: '',
             exact_copy_mode: true,
-            originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt,
-            originalSeed: referenceMetadata.originalSeed,
-            originalStyle: referenceMetadata.originalStyle,
-            originalCameraAngle: referenceMetadata.originalCameraAngle,
-            originalShotType: referenceMetadata.originalShotType
+            originalEnhancedPrompt: referenceMetadata?.originalEnhancedPrompt,
+            originalSeed: referenceMetadata?.originalSeed,
+            originalStyle: referenceMetadata?.originalStyle,
+            originalCameraAngle: referenceMetadata?.originalCameraAngle,
+            originalShotType: referenceMetadata?.originalShotType
           } : {})
         }
       };
@@ -592,7 +545,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         referenceImageUrl: !!referenceImageUrl,
         exactCopyMode,
         hasReferenceData: !!(referenceImageUrl || referenceImage),
-        referenceMetadata: generationRequest.metadata?.reference_image_url ? 'URL set' : 'No URL',
+        referenceMetadata: generationRequest.reference_image_url ? 'URL set' : 'No URL',
         // DEBUG: Full metadata being sent
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
@@ -690,83 +643,62 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     }
   }, [queryClient, toast]);
 
-  // LIBRARY-FIRST: Workspace delete = delete from library (existing AssetService.deleteAsset)
+  // STAGING-FIRST: Workspace delete = discard from workspace_assets (use WorkspaceAssetService)
   const deleteItem = useCallback(async (id: string, type: 'image' | 'video') => {
     try {
-      console.log('🗑️ WORKSPACE: Deleting item:', { id, type });
+      console.log('🗑️ STAGING-FIRST: Discarding staged asset:', { id, type });
       
-      await AssetService.deleteAsset(id, type);
-      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+      await WorkspaceAssetService.discardAsset(id);
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       
       toast({
-        title: "Item Deleted",
-        description: "Item permanently removed",
+        title: "Item Discarded",
+        description: "Item removed from workspace",
       });
     } catch (error) {
-      console.error('❌ WORKSPACE: Delete failed:', error);
+      console.error('❌ STAGING-FIRST: Discard failed:', error);
       toast({
-        title: "Delete Failed",
-        description: "Failed to delete item",
+        title: "Discard Failed",
+        description: "Failed to discard item",
         variant: "destructive",
       });
     }
   }, [queryClient, toast]);
 
-  // LIBRARY-FIRST: Clear workspace = dismiss all today's items
+  // STAGING-FIRST: Clear workspace = discard all workspace assets
   const clearWorkspace = useCallback(async () => {
     try {
-      console.log('🧹 LIBRARY-FIRST: Clearing workspace (dismissing all today\'s items)');
+      console.log('🧹 STAGING-FIRST: Clearing workspace (discarding all assets)');
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
       // Set workspace as cleared immediately for better UX
       setWorkspaceCleared(true);
 
-      // Dismiss all today's items
-      const todayStart = getTodayStartUTC();
-      
-      // Get today's workspace assets and update them
-      const { data: assets } = await supabase
-        .from('workspace_assets')
-        .select('id, generation_settings')
-        .eq('user_id', user.id)
-        .gte('created_at', todayStart);
-
-      // Update assets with dismissed flag
-      if (assets) {
-        for (const asset of assets) {
-          const currentSettings = (asset.generation_settings as Record<string, any>) || {};
-          await supabase
-            .from('workspace_assets')
-            .update({ 
-              generation_settings: {
-                ...currentSettings,
-                workspace_dismissed: true,
-                dismissed_at: new Date().toISOString()
-              }
-            })
-            .eq('id', asset.id);
+      // Discard all workspace assets for current user
+      for (const asset of workspaceAssets) {
+        try {
+          await WorkspaceAssetService.discardAsset(asset.id);
+        } catch (error) {
+          console.error('Failed to discard asset:', asset.id, error);
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       
       toast({
         title: "Workspace Cleared",
-        description: "All items dismissed from workspace",
+        description: "All assets discarded from workspace",
       });
       
-      console.log('✅ WORKSPACE: Successfully cleared workspace');
+      console.log('✅ STAGING-FIRST: Successfully cleared workspace');
     } catch (error) {
-      console.error('❌ WORKSPACE: Clear failed:', error);
+      console.error('❌ STAGING-FIRST: Clear failed:', error);
       toast({
         title: "Clear Failed",
         description: "Failed to clear workspace",
         variant: "destructive",
       });
     }
-  }, [queryClient, toast]);
+  }, [workspaceAssets, queryClient, toast]);
 
   // Simplified job management (group by job_id from metadata)
   const selectJob = useCallback((jobId: string) => {
@@ -975,7 +907,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     style,
     styleRef,
     isGenerating,
-    workspaceAssets,
+    workspaceAssets: workspaceAssets.map(asset => ({
+      ...asset,
+      url: signedUrls.get(asset.id) || asset.url
+    })),
     activeJobId,
     lightboxIndex,
     referenceMetadata,
