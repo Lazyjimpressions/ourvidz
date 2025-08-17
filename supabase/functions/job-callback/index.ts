@@ -161,6 +161,7 @@ serve(async (req) => {
             quality: job.quality,
             format: job.format,
             enhanced_prompt: job.enhanced_prompt,
+            template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
             reference_image_url: job.metadata?.reference_image_url,
             reference_strength: job.metadata?.reference_strength,
             ...payload.metadata
@@ -186,6 +187,7 @@ serve(async (req) => {
             quality: job.quality,
             format: job.format,
             enhanced_prompt: job.enhanced_prompt,
+            template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
             reference_image_url: job.metadata?.reference_image_url,
             reference_strength: job.metadata?.reference_strength,
             width: asset.metadata?.width,

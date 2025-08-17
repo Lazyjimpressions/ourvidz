@@ -90,9 +90,13 @@ serve(async (req) => {
 
     // Handle prompt enhancement if needed
     let enhancedPrompt = jobRequest.enhanced_prompt;
-    const shouldEnhance = jobRequest.metadata?.user_requested_enhancement && 
-                         !jobRequest.metadata?.skip_enhancement &&
-                         jobRequest.metadata?.enhancement_model !== 'none';
+    let templateName = 'none'; // Default template name
+    
+    // Always enhance if user_requested_enhancement or exact_copy_mode (to get template name)
+    const shouldEnhance = (jobRequest.metadata?.user_requested_enhancement && 
+                          !jobRequest.metadata?.skip_enhancement &&
+                          jobRequest.metadata?.enhancement_model !== 'none') ||
+                          jobRequest.metadata?.exact_copy_mode;
 
     if (shouldEnhance && !enhancedPrompt) {
       try {
@@ -115,20 +119,24 @@ serve(async (req) => {
 
         if (enhanceResponse.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          console.log('✅ Prompt enhanced successfully');
+          templateName = enhanceResponse.data?.strategy || enhanceResponse.data?.template_name || 'enhanced';
+          console.log('✅ Prompt enhanced successfully', { templateName });
         } else {
           console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
           enhancedPrompt = originalPrompt;
+          templateName = 'enhancement_failed';
         }
       } catch (error) {
         console.error('❌ Enhancement failed:', error);
         enhancedPrompt = originalPrompt;
+        templateName = 'enhancement_error';
       }
     }
 
     // If no enhancement was requested or enhancement was skipped, use original prompt
     if (!enhancedPrompt) {
       enhancedPrompt = originalPrompt;
+      templateName = 'original_prompt';
     }
 
     // Create job record
@@ -140,6 +148,7 @@ serve(async (req) => {
         status: 'queued',
         original_prompt: originalPrompt,
         enhanced_prompt: enhancedPrompt || originalPrompt,
+        template_name: templateName,
         quality: quality,
         format: dbFormat,  // Store as 'image'/'video' in database
         model_type: jobRequest.model_type,
