@@ -111,8 +111,10 @@ export class WorkspaceAssetService {
       const { error } = await supabase.functions.invoke('workspace-actions', {
         body: {
           action: 'save_to_library',
-          asset_id: assetId,
-          options: options || {}
+          assetId,
+          customTitle: options?.customTitle,
+          collectionId: options?.collectionId,
+          tags: options?.tags
         }
       });
 
@@ -135,10 +137,12 @@ export class WorkspaceAssetService {
     try {
       console.log('🗑️ Discarding workspace asset:', assetId);
 
-      const { error } = await supabase
-        .from('workspace_assets')
-        .delete()
-        .eq('id', assetId);
+      const { error } = await supabase.functions.invoke('workspace-actions', {
+        body: {
+          action: 'discard_asset',
+          assetId
+        }
+      });
 
       if (error) {
         console.error('Error discarding asset:', error);

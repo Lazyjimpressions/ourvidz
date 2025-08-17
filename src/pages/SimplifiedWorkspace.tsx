@@ -1,14 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { UnifiedAsset } from '@/lib/services/AssetService';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
+import { useToast } from '@/hooks/use-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 /**
  * LIBRARY-FIRST: Desktop workspace using library-first generation architecture
@@ -24,6 +27,11 @@ import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
 export const SimplifiedWorkspace: React.FC = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Signed URL cache for workspace assets
+  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
 
   // Library-first workspace state
   const {
@@ -114,6 +122,37 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   }, [searchParams, updateMode]);
 
+  // Generate signed URLs for workspace assets
+  useEffect(() => {
+    const generateSignedUrls = async () => {
+      const newSignedUrls = new Map<string, string>();
+      
+      for (const asset of workspaceAssets) {
+        if (!signedUrls.has(asset.id)) {
+          try {
+            const url = await WorkspaceAssetService.generateSignedUrl({
+              id: asset.id,
+              temp_storage_path: asset.metadata?.tempStoragePath || `${asset.id}.${asset.type === 'video' ? 'mp4' : 'png'}`
+            });
+            if (url) {
+              newSignedUrls.set(asset.id, url);
+            }
+          } catch (error) {
+            console.error('Failed to generate signed URL for asset:', asset.id, error);
+          }
+        }
+      }
+      
+      if (newSignedUrls.size > 0) {
+        setSignedUrls(prev => new Map([...prev, ...newSignedUrls]));
+      }
+    };
+
+    if (workspaceAssets.length > 0) {
+      generateSignedUrls();
+    }
+  }, [workspaceAssets, signedUrls]);
+
   // Auth loading state
   if (loading) {
     return (
@@ -142,9 +181,55 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   const handleSaveItem = async (item: UnifiedAsset) => {
-    // For library-first approach, items are already in library
-    // This could trigger a collection organization flow in the future
-    console.log('Save item (already in library):', item.id);
+    try {
+      await WorkspaceAssetService.saveToLibrary(item.id);
+      
+      toast({
+        title: "Asset saved",
+        description: "Asset has been saved to your library",
+      });
+      
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      queryClient.invalidateQueries({ queryKey: ['library-assets'] });
+      
+    } catch (error) {
+      console.error('Failed to save asset:', error);
+      toast({
+        title: "Save failed",
+        description: "Failed to save asset to library",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDiscardItem = async (item: UnifiedAsset) => {
+    try {
+      await WorkspaceAssetService.discardAsset(item.id);
+      
+      toast({
+        title: "Asset discarded",
+        description: "Asset has been removed from workspace",
+      });
+      
+      // Remove from signed URLs cache
+      setSignedUrls(prev => {
+        const updated = new Map(prev);
+        updated.delete(item.id);
+        return updated;
+      });
+      
+      // Invalidate workspace query
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      
+    } catch (error) {
+      console.error('Failed to discard asset:', error);
+      toast({
+        title: "Discard failed",
+        description: "Failed to discard asset",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewItem = (item: UnifiedAsset) => {
@@ -156,13 +241,21 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleDownloadItem = async (item: UnifiedAsset) => {
     try {
-      if (!item.url) {
+      // Use signed URL from cache or item.url as fallback
+      const downloadUrl = signedUrls.get(item.id) || item.url;
+      
+      if (!downloadUrl) {
         console.error('Asset URL not available for download');
+        toast({
+          title: "Download failed",
+          description: "Asset URL not available",
+          variant: "destructive",
+        });
         return;
       }
       
       const link = document.createElement('a');
-      link.href = item.url;
+      link.href = downloadUrl;
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
       const filename = `${item.prompt?.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}.${item.type === 'video' ? 'mp4' : 'png'}`;
       link.download = filename;
@@ -171,18 +264,31 @@ export const SimplifiedWorkspace: React.FC = () => {
       document.body.removeChild(link);
     } catch (error) {
       console.error('Failed to download asset:', error);
+      toast({
+        title: "Download failed",
+        description: "Failed to download asset",
+        variant: "destructive",
+      });
     }
   };
 
   const handleUseAsReference = async (item: UnifiedAsset) => {
     try {
-      if (!item.url) {
+      // Use signed URL from cache or item.url as fallback
+      const referenceUrl = signedUrls.get(item.id) || item.url;
+      
+      if (!referenceUrl) {
         console.error('Asset URL not available for reference');
+        toast({
+          title: "Reference failed",
+          description: "Asset URL not available",
+          variant: "destructive",
+        });
         return;
       }
 
       // Convert item to blob and create File object
-      const response = await fetch(item.url);
+      const response = await fetch(referenceUrl);
       const blob = await response.blob();
       const file = new File([blob], `reference_${item.id}.${item.type === 'video' ? 'mp4' : 'png'}`, {
         type: item.type === 'video' ? 'video/mp4' : 'image/png'
@@ -200,8 +306,18 @@ export const SimplifiedWorkspace: React.FC = () => {
         // Apply asset parameters
         applyAssetParamsFromItem(item);
       }
+      
+      toast({
+        title: "Reference set",
+        description: "Asset is now being used as reference",
+      });
     } catch (error) {
       console.error('Failed to use item as reference:', error);
+      toast({
+        title: "Reference failed",
+        description: "Failed to set asset as reference",
+        variant: "destructive",
+      });
     }
   };
 
@@ -226,12 +342,15 @@ export const SimplifiedWorkspace: React.FC = () => {
         <main className="flex-1 pb-32">
           <div className="container mx-auto px-4 py-6">
             <WorkspaceGrid
-              items={workspaceAssets}
+              items={workspaceAssets.map(asset => ({
+                ...asset,
+                url: signedUrls.get(asset.id) || asset.url
+              }))}
               // Grid actions
               onDownload={handleDownloadItem}
               onEdit={handleEditItem}
               onSave={handleSaveItem}
-              onDelete={(item) => deleteItem(item.id, item.type)}
+              onDelete={handleDiscardItem}
               onDismiss={(item) => dismissItem(item.id, item.type)}
               onView={handleViewItem}
               onUseAsReference={handleUseAsReference}
@@ -324,7 +443,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         <SimpleLightbox
           items={workspaceAssets.map(asset => ({
             id: asset.id,
-            url: asset.url,
+            url: signedUrls.get(asset.id) || asset.url,
             prompt: asset.prompt,
             enhancedPrompt: asset.metadata?.enhancedPrompt,
             type: asset.type,
