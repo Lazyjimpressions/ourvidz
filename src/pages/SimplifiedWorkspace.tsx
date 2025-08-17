@@ -30,8 +30,7 @@ export const SimplifiedWorkspace: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // Signed URL cache for workspace assets
-  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
+  // Note: Signed URLs now handled centrally in useLibraryFirstWorkspace hook
 
   // Library-first workspace state
   const {
@@ -122,36 +121,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   }, [searchParams, updateMode]);
 
-  // Generate signed URLs for workspace assets
-  useEffect(() => {
-    const generateSignedUrls = async () => {
-      const newSignedUrls = new Map<string, string>();
-      
-      for (const asset of workspaceAssets) {
-        if (!signedUrls.has(asset.id)) {
-          try {
-            const url = await WorkspaceAssetService.generateSignedUrl({
-              id: asset.id,
-              temp_storage_path: asset.metadata?.tempStoragePath || `${asset.id}.${asset.type === 'video' ? 'mp4' : 'png'}`
-            });
-            if (url) {
-              newSignedUrls.set(asset.id, url);
-            }
-          } catch (error) {
-            console.error('Failed to generate signed URL for asset:', asset.id, error);
-          }
-        }
-      }
-      
-      if (newSignedUrls.size > 0) {
-        setSignedUrls(prev => new Map([...prev, ...newSignedUrls]));
-      }
-    };
-
-    if (workspaceAssets.length > 0) {
-      generateSignedUrls();
-    }
-  }, [workspaceAssets, signedUrls]);
+  // Note: Signed URL generation now handled centrally in useLibraryFirstWorkspace hook
 
   // Auth loading state
   if (loading) {
@@ -212,12 +182,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         description: "Asset has been removed from workspace",
       });
       
-      // Remove from signed URLs cache
-      setSignedUrls(prev => {
-        const updated = new Map(prev);
-        updated.delete(item.id);
-        return updated;
-      });
+      // Note: Signed URLs cache now managed centrally in hook
       
       // Invalidate workspace query
       queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
@@ -241,8 +206,8 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleDownloadItem = async (item: UnifiedAsset) => {
     try {
-      // Use signed URL from cache or item.url as fallback
-      const downloadUrl = signedUrls.get(item.id) || item.url;
+      // Use item.url which now includes signed URL from hook
+      const downloadUrl = item.url;
       
       if (!downloadUrl) {
         console.error('Asset URL not available for download');
@@ -274,8 +239,8 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleUseAsReference = async (item: UnifiedAsset) => {
     try {
-      // Use signed URL from cache or item.url as fallback
-      const referenceUrl = signedUrls.get(item.id) || item.url;
+      // Use item.url which now includes signed URL from hook
+      const referenceUrl = item.url;
       
       if (!referenceUrl) {
         console.error('Asset URL not available for reference');
@@ -342,10 +307,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         <main className="flex-1 pb-32">
           <div className="container mx-auto px-4 py-6">
             <WorkspaceGrid
-              items={workspaceAssets.map(asset => ({
-                ...asset,
-                url: signedUrls.get(asset.id) || asset.url
-              }))}
+              items={workspaceAssets}
               // Grid actions
               onDownload={handleDownloadItem}
               onEdit={handleEditItem}
@@ -443,7 +405,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         <SimpleLightbox
           items={workspaceAssets.map(asset => ({
             id: asset.id,
-            url: signedUrls.get(asset.id) || asset.url,
+            url: asset.url,
             prompt: asset.prompt,
             enhancedPrompt: asset.metadata?.enhancedPrompt,
             type: asset.type,

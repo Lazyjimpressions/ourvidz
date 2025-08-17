@@ -242,15 +242,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             pendingUpdates.add(`workspace-asset-insert-${asset.id}`);
             localDebouncedInvalidate();
             
-            // Emit completion event for other systems
-            window.dispatchEvent(new CustomEvent('generation-completed', {
-              detail: { 
-                assetId: asset.id,
-                type: asset.asset_type,
-                jobId: asset.job_id,
-                status: 'completed'
-              }
-            }));
+            // Note: Legacy custom event dispatch removed - relying on Supabase Realtime only
 
             // Show immediate toast notification
             toast({
@@ -501,7 +493,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
         ),
         prompt: finalPrompt,
         quality: quality,
-        format: mode === 'image' ? 'image' : 'video',
+        // format omitted - let edge function default based on job_type
         model_type: mode === 'image' ? 'sdxl' : 'wan',
         reference_image_url: (referenceImageUrl || referenceImage) 
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
@@ -779,15 +771,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       // Pick the earliest created image as the canonical reference
       const bestImage = jobAssets.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0];
 
-      // Dispatch an event so page-level components can consume and set URL-based reference
-      window.dispatchEvent(new CustomEvent('workspace-use-job-as-reference', {
-        detail: {
-          jobId,
-          url: bestImage.url,
-          assetId: bestImage.id,
-          type: 'image'
-        }
-      }));
+      // Note: Legacy custom event dispatch removed - direct state updates only
 
       toast({
         title: 'Reference Set',

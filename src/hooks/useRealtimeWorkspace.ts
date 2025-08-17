@@ -17,6 +17,9 @@ export function useRealtimeWorkspace() {
 
   // Local UI state for actions
   const [deletingTiles, setDeletingTiles] = useState<Set<string>>(new Set());
+  
+  // Signed URL cache for tiles
+  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
 
   // Build tiles for the UI
   const tiles: MediaTile[] = useMemo(() => {
@@ -24,7 +27,7 @@ export function useRealtimeWorkspace() {
       id: asset.id,
       originalAssetId: asset.id,
       type: asset.assetType,
-      url: undefined, // Signed URL can be generated lazily if needed
+      url: signedUrls.get(asset.id), // Use signed URL from cache
       prompt: asset.originalPrompt,
       timestamp: new Date(asset.createdAt),
       quality: 'high',
@@ -38,29 +41,44 @@ export function useRealtimeWorkspace() {
       seed: asset.generationSeed,
       generationParams: asset.generationSettings
     }));
-  }, [assets]);
+  }, [assets, signedUrls]);
 
-  // Optional: generate signed URLs lazily (kept simple to avoid perf hit right now)
+  // Generate signed URLs for workspace assets
   useEffect(() => {
     let mounted = true;
-    const loadUrls = async () => {
+    
+    const generateUrls = async () => {
+      const newUrls = new Map<string, string>();
+      
       for (const asset of assets) {
-        const signed = await WorkspaceAssetService.generateSignedUrl({
-          id: asset.id,
-          temp_storage_path: asset.tempStoragePath
-        });
-        if (!mounted) return;
-        // Directly mutating is avoided; components check url existence before using
-        // If needed, we could manage a map of urls and merge into tiles
+        if (!signedUrls.has(asset.id)) {
+          try {
+            const signedUrl = await WorkspaceAssetService.generateSignedUrl({
+              id: asset.id,
+              temp_storage_path: asset.tempStoragePath
+            });
+            if (signedUrl && mounted) {
+              newUrls.set(asset.id, signedUrl);
+            }
+          } catch (error) {
+            console.error('Failed to generate signed URL for asset:', asset.id, error);
+          }
+        }
+      }
+      
+      if (mounted && newUrls.size > 0) {
+        setSignedUrls(prev => new Map([...prev, ...newUrls]));
       }
     };
+
     if (assets.length > 0) {
-      loadUrls();
+      generateUrls();
     }
+
     return () => {
       mounted = false;
     };
-  }, [assets]);
+  }, [assets, signedUrls]);
 
   const deleteTile = useCallback(async (tile: MediaTile) => {
     setDeletingTiles(prev => new Set(prev).add(tile.id));
@@ -132,7 +150,7 @@ export function useRealtimeWorkspace() {
             });
           }
 
-          // Note: Removed legacy custom event dispatch
+          // Note: Legacy custom event dispatch removed - relying on Supabase Realtime only
         }
       )
       .subscribe();
