@@ -142,6 +142,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [workspaceCleared, setWorkspaceCleared] = useState(false);
+  // Optimistic placeholders for immediate UX feedback
+  const [optimisticAssets, setOptimisticAssets] = useState<UnifiedAsset[]>([]);
   // Exact copy workflow state
   const [exactCopyMode, setExactCopyMode] = useState<boolean>(false);
   const [referenceMetadata, setReferenceMetadata] = useState<ReferenceMetadata | null>(null);
@@ -242,6 +244,10 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
             console.log('🎉 NEW WORKSPACE ASSET - Adding to debounced update queue:', asset);
             pendingUpdates.add(`workspace-asset-insert-${asset.id}`);
             localDebouncedInvalidate();
+            // Remove any optimistic placeholders for this job
+            if (asset.job_id) {
+              setOptimisticAssets(prev => prev.filter(a => a.metadata?.job_id !== asset.job_id));
+            }
             
             // Note: Legacy custom event dispatch removed - relying on Supabase Realtime only
 
@@ -620,6 +626,28 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
       }
 
       console.log('✅ STAGING-FIRST: Generation request successful:', data);
+      const jobId = data?.jobId as string | undefined;
+      if (jobId) {
+        // Create optimistic placeholders immediately
+        const count = mode === 'image' ? numImages : 1;
+        const now = new Date();
+        const placeholders: UnifiedAsset[] = Array.from({ length: count }, (_, i) => ({
+          id: `optimistic-${jobId}-${i}`,
+          type: mode,
+          prompt: finalPrompt,
+          createdAt: now,
+          status: 'processing',
+          url: undefined,
+          modelType: mode === 'image' ? 'sdxl' : 'wan',
+          duration: mode === 'video' ? (videoDuration || undefined) : undefined,
+          metadata: {
+            job_id: jobId,
+            asset_index: i
+          }
+        }));
+        setOptimisticAssets(prev => [...placeholders, ...prev]);
+        setActiveJobId(jobId);
+      }
       
       toast({
         title: `${mode === 'image' ? 'Image' : 'Video'} Generation Started`,
@@ -648,7 +676,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     prompt, mode, referenceImage, referenceStrength, contentType, quality,
     beginningRefImage, endingRefImage, videoDuration, motionIntensity, soundEnabled,
     aspectRatio, shotType, cameraAngle, style, styleRef, exactCopyMode, referenceMetadata,
-    useOriginalParams, lockSeed, enhancementModel, toast
+    useOriginalParams, lockSeed, enhancementModel, toast, numImages, videoDuration
   ]);
 
   const clearItem = useCallback(async (id: string, type: 'image' | 'video') => {
@@ -1007,10 +1035,16 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     style,
     styleRef,
     isGenerating,
-    workspaceAssets: workspaceAssets.map(asset => ({
-      ...asset,
-      url: signedUrls.get(asset.id) || (asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://')) ? asset.url : undefined)
-    })),
+    workspaceAssets: (
+      // Merge optimistic placeholders (that haven't been replaced yet) with real assets
+      [
+        ...optimisticAssets.filter(opt => !workspaceAssets.some(real => real.metadata?.job_id && real.metadata?.job_id === opt.metadata?.job_id)),
+        ...workspaceAssets.map(asset => ({
+          ...asset,
+          url: signedUrls.get(asset.id) || (asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://')) ? asset.url : undefined)
+        }))
+      ]
+    ),
     activeJobId,
     lightboxIndex,
     referenceMetadata,

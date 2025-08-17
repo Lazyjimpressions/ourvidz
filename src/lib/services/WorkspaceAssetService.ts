@@ -1,5 +1,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
+import { UrlCache } from '@/lib/services/UrlCache';
 
 export interface UnifiedWorkspaceAsset {
   id: string;
@@ -83,20 +84,17 @@ export class WorkspaceAssetService {
         bucket: 'workspace-temp'
       });
 
-      const { data, error } = await supabase.storage
-        .from('workspace-temp')
-        .createSignedUrl(storagePath, 3600); // 1 hour expiry
-
-      if (error) {
+      try {
+        const signed = await UrlCache.getSignedUrl('workspace-temp', storagePath, 3600);
+        console.log('✅ Generated signed URL for workspace asset');
+        return signed;
+      } catch (error) {
         console.error('Error generating signed URL:', error, {
           storagePath,
           assetType: asset.asset_type || asset.assetType
         });
         return null;
       }
-
-      console.log('✅ Generated signed URL for workspace asset');
-      return data.signedUrl;
     } catch (error) {
       console.error('Failed to generate signed URL:', error);
       return null;

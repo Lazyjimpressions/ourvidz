@@ -25,7 +25,14 @@ import RoleplayChat from "@/pages/RoleplayChat";
 import NotFound from "@/pages/NotFound";
 import { useMobileDetection } from "@/hooks/useMobileDetection";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+    }
+  }
+});
 
 // Mobile-aware workspace component
 const WorkspaceWithMobileDetection = () => {

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { UrlCache } from '@/lib/services/UrlCache';
 import { toast } from 'sonner';
 
 // Updated unified asset interface for new schema
@@ -60,16 +61,14 @@ export class AssetService {
       // Add bucketHint for compatibility
       (asset as any).bucketHint = bucket;
       
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .createSignedUrl(storagePath, 3600); // 1 hour expiry
-
-      if (error) {
+      // Use shared cache for signing
+      try {
+        const signed = await UrlCache.getSignedUrl(bucket, storagePath, 3600);
+        return signed;
+      } catch (error) {
         console.error('Error generating signed URL:', error);
         return null;
       }
-
-      return data.signedUrl;
     } catch (error) {
       console.error('Error in generateURL:', error);
       return null;
@@ -88,16 +87,13 @@ export class AssetService {
       const bucket = this.getBucketByType(asset.type, asset.quality, false);
       const thumbnailPath = asset.thumbnailUrl || `${asset.userId}/${asset.id}_thumb.jpg`;
       
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .createSignedUrl(thumbnailPath, 3600);
-
-      if (error) {
+      try {
+        const signedThumb = await UrlCache.getSignedUrl(bucket, thumbnailPath, 3600);
+        return signedThumb;
+      } catch {
         // Fallback to main asset for videos without thumbnails
         return this.generateURL(asset);
       }
-
-      return data.signedUrl;
     } catch (error) {
       console.error('Error in generateThumbnailURL:', error);
       return null;
@@ -191,11 +187,10 @@ export class AssetService {
 
       if (workspaceAsset) {
         const bucket = 'workspace-temp';
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .createSignedUrl(workspaceAsset.temp_storage_path, 3600);
-
-        if (!error && data) return data.signedUrl;
+        try {
+          const signed = await UrlCache.getSignedUrl(bucket, workspaceAsset.temp_storage_path, 3600);
+          return signed;
+        } catch {}
       }
 
       // Try user_library
@@ -207,11 +202,10 @@ export class AssetService {
 
       if (libraryAsset) {
         const bucket = 'user-library';
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .createSignedUrl(libraryAsset.storage_path, 3600);
-
-        if (!error && data) return data.signedUrl;
+        try {
+          const signed = await UrlCache.getSignedUrl(bucket, libraryAsset.storage_path, 3600);
+          return signed;
+        } catch {}
       }
 
       return null;

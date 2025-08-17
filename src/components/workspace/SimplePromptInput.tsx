@@ -286,6 +286,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Require non-empty prompt for video mode to avoid queue-job 400s
+    if (mode === 'video' && !prompt.trim()) {
+      return;
+    }
     if (!isGenerating && (prompt.trim() || exactCopyMode)) {
       onGenerate();
     }
@@ -520,7 +524,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               {/* Generate button - Compact size */}
               <button 
                 onClick={handleSubmit} 
-                disabled={isGenerating || (!prompt.trim() && !exactCopyMode)} 
+                disabled={isGenerating || (mode === 'video' ? !prompt.trim() : (!prompt.trim() && !exactCopyMode))} 
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex items-center justify-center shrink-0"
                 title="Generate"
               >
