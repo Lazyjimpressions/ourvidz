@@ -119,8 +119,8 @@ serve(async (req) => {
 
         if (enhanceResponse.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.templateName || enhanceResponse.data?.strategy || enhanceResponse.data?.template_name || 'enhanced';
-          console.log('✅ Prompt enhanced successfully', { templateName: templateName });
+          templateName = enhanceResponse.data?.templateUsed || enhanceResponse.data?.strategy || enhanceResponse.data?.templateName || enhanceResponse.data?.template_name || 'enhanced';
+          console.log('✅ Prompt enhanced successfully', { templateName: templateName, enhancementData: enhanceResponse.data });
         } else {
           console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
           enhancedPrompt = originalPrompt;
