@@ -541,51 +541,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <span className="text-[10px] mt-0.5">VIDEO</span>
               </button>
 
-              {/* Enhancement Model for Video Mode - Added alongside VIDEO button */}
-              {mode === 'video' && (
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => setShowEnhancePopup(!showEnhancePopup)}
-                    className="flex items-center gap-1 px-2 py-1 bg-muted/50 text-muted-foreground hover:bg-muted/80 rounded text-xs font-medium transition-colors h-8"
-                  >
-                    <Zap size={12} />
-                    <span className="text-[10px]">
-                      {enhancementModel === 'qwen_instruct' ? 'QWEN+' : 
-                       enhancementModel === 'qwen_base' ? 'QWEN' : 'NONE'}
-                    </span>
-                    <ChevronDown size={10} />
-                  </button>
-
-                  {showEnhancePopup && (
-                    <div className="absolute top-full left-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[140px]">
-                      <div className="p-1">
-                        {[
-                          { value: 'qwen_instruct', label: 'Qwen Instruct', desc: 'Enhanced prompt processing' },
-                          { value: 'qwen_base', label: 'Qwen Base', desc: 'Basic enhancement' },
-                          { value: 'none', label: 'None', desc: 'No enhancement' }
-                        ].map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            onClick={() => {
-                              onEnhancementModelChange?.(option.value as any);
-                              setShowEnhancePopup(false);
-                            }}
-                            className={`w-full text-left px-2 py-1 rounded text-xs hover:bg-muted/50 transition-colors ${
-                              enhancementModel === option.value ? 'bg-primary/10 text-primary' : 'text-foreground'
-                            }`}
-                          >
-                            <div className="font-medium">{option.label}</div>
-                            <div className="text-[10px] text-muted-foreground">{option.desc}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div></div> {/* Empty space to align with reference tiles */}
               <div className="flex items-end gap-1 justify-end self-end pb-0.5">
                 {mode === 'image' ? (
@@ -786,6 +741,54 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     >
                       {aspectRatio}
                     </button>
+
+                    {/* Enhancement Model Dropdown - Same as image mode */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => {
+                          setShowEnhancePopup(!showEnhancePopup);
+                          setShowShotTypePopup(false);
+                          setShowAnglePopup(false);
+                          setShowStylePopup(false);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
+                      >
+                        {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
+                         enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
+                        <ChevronDown size={8} />
+                      </button>
+                      {showEnhancePopup && (
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('qwen_instruct');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            INSTRUCT
+                          </button>
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('qwen_base');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            BASE
+                          </button>
+                          <button 
+                            onClick={() => {
+                              onEnhancementModelChange?.('none');
+                              setShowEnhancePopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            NONE
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Sound Toggle */}
                     <button 
