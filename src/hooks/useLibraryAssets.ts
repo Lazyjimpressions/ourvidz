@@ -12,7 +12,7 @@ const COLLECTIONS_QUERY_KEY = ['user-collections'];
 export function useLibraryAssets() {
   return useQuery({
     queryKey: LIBRARY_ASSETS_QUERY_KEY,
-    queryFn: LibraryAssetService.getUserLibraryAssets,
+    queryFn: () => LibraryAssetService.getUserLibraryAssets(),
     staleTime: 60000, // 1 minute
     gcTime: 600000, // 10 minutes
     refetchOnWindowFocus: false,
@@ -34,7 +34,7 @@ export function useLibraryAssetUrl(asset: UnifiedLibraryAsset | null) {
         .from('user_library')
         .select('*')
         .eq('id', asset.id)
-        .single();
+        .maybeSingle();
       
       if (!libraryAsset) return null;
       

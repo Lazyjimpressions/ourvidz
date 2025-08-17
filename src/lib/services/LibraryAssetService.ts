@@ -68,7 +68,7 @@ export class LibraryAssetService {
       throw error;
     }
 
-    return (data || []).map(asset => this.transformLibraryAsset(asset as any));
+    return (data || []).map(asset => LibraryAssetService.transformLibraryAsset(asset as any));
   }
 
   /**
