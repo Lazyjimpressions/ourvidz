@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
@@ -18,7 +18,7 @@ const ReferenceImageUpload: React.FC<{
   label,
   imageUrl,
   onImageUrlChange,
-  sizeClass = "h-28 w-28"
+  sizeClass = "h-16 w-16"
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -271,6 +271,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const modelType = mode === 'image' ? 'sdxl' : 'ltx';
   const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(modelType, contentType);
   const [showBaseNegative, setShowBaseNegative] = useState(false);
+
+  // Refresh base negative prompt when contentType or mode changes
+  useEffect(() => {
+    if (showBaseNegative) {
+      fetchBaseNegativePrompt();
+    }
+  }, [contentType, mode, showBaseNegative, fetchBaseNegativePrompt]);
   // LTX-Style Popup States
   const [showShotTypePopup, setShowShotTypePopup] = useState(false);
   const [showAnglePopup, setShowAnglePopup] = useState(false);
@@ -436,15 +443,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
           <div className="space-y-2">
             {/* Row 1: IMAGE button, Reference tiles, Prompt input, Generate button */}
             <div className="grid grid-cols-[auto_auto_1fr_auto] items-center gap-3">
-              {/* IMAGE Button - Square, matches row height */}
+              {/* IMAGE Button - Square, compact size */}
               <button 
                 onClick={() => onModeChange('image')} 
-                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-28 w-28 md:h-32 md:w-32 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-16 w-16 md:h-16 md:w-16 ${
                   mode === 'image' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                <Image size={18} />
-                <span className="mt-1">IMAGE</span>
+                <Image size={14} />
+                <span className="text-[10px] mt-0.5">IMAGE</span>
               </button>
 
               {/* Reference Images - Match row height */}
@@ -456,7 +463,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     imageUrl={referenceImageUrl} 
                     onImageUrlChange={handleReferenceUrlChange} 
                     label="REF" 
-                    sizeClass="h-28 w-28 md:h-32 md:w-32"
+                    sizeClass="h-16 w-16"
                   />
                 ) : (
                   <>
@@ -466,7 +473,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={beginningRefImageUrl} 
                       onImageUrlChange={onBeginningRefImageUrlChange} 
                       label="START" 
-                      sizeClass="h-28 w-20 md:h-32 md:w-24"
+                      sizeClass="h-16 w-12"
                     />
                     <ReferenceImageUpload 
                       file={endingRefImage || null} 
@@ -474,25 +481,22 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       imageUrl={endingRefImageUrl} 
                       onImageUrlChange={onEndingRefImageUrlChange} 
                       label="END" 
-                      sizeClass="h-28 w-20 md:h-32 md:w-24"
+                      sizeClass="h-16 w-12"
                     />
                   </>
                 )}
               </div>
 
-              {/* Prompt Input - Match row height, fit 3.5+ lines */}
+              {/* Prompt Input - Compact size, 3 lines */}
               <div className="relative flex-1">
                 <textarea 
                   value={prompt} 
                   onChange={e => onPromptChange(e.target.value)} 
                   placeholder={exactCopyMode ? "Add modifications (optional)..." : "Describe what you want to generate..."} 
-                  className={`w-full h-28 md:h-32 px-3 py-2 pr-10 text-sm bg-muted/20 border border-border/30 rounded resize-none ${
+                  rows={3}
+                  className={`w-full h-16 px-1 py-1 pr-8 text-sm bg-muted/20 border border-border/30 rounded resize-none leading-tight ${
                     exactCopyMode ? 'border-orange-500/50 bg-orange-50/50' : ''
-                  }`} 
-                  style={{
-                    fontSize: '14px',
-                    lineHeight: '20px'
-                  }} 
+                  }`}
                   onKeyDown={e => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -503,34 +507,34 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <button 
                   type="button" 
                   onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded"
+                  className="absolute right-1 top-1 text-muted-foreground hover:text-foreground p-1 rounded"
                 >
-                  <Settings size={14} />
+                  <Settings size={12} />
                 </button>
               </div>
 
-              {/* Generate button - Match row height */}
+              {/* Generate button - Compact size */}
               <button 
                 onClick={handleSubmit} 
                 disabled={isGenerating || (!prompt.trim() && !exactCopyMode)} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-28 w-28 md:h-32 md:w-32 flex items-center justify-center shrink-0"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-16 w-16 flex items-center justify-center shrink-0"
                 title="Generate"
               >
-                <Play size={20} fill="currentColor" />
+                <Play size={14} fill="currentColor" />
               </button>
             </div>
 
             {/* Row 2: VIDEO button and Controls */}
             <div className="grid grid-cols-[auto_auto_1fr] items-start gap-3">
-              {/* VIDEO Button - Square, matches IMAGE button */}
+              {/* VIDEO Button - Square, compact size, fixed under IMAGE */}
               <button 
                 onClick={() => onModeChange('video')} 
-                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-28 w-28 md:h-32 md:w-32 ${
+                className={`flex flex-col items-center justify-center rounded text-xs font-medium transition-colors h-16 w-16 ${
                   mode === 'video' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
-                <Video size={18} />
-                <span className="mt-1">VIDEO</span>
+                <Video size={14} />
+                <span className="text-[10px] mt-0.5">VIDEO</span>
               </button>
 
               <div></div> {/* Empty space to align with reference tiles */}
