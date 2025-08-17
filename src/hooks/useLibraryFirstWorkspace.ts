@@ -152,7 +152,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
   const [userPreferredModel, setUserPreferredModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
 
   // Advanced SDXL Settings
-  const [numImages, setNumImages] = useState(1);
+  const [numImages, setNumImages] = useState(3);
   const [steps, setSteps] = useState(25);
   const [guidanceScale, setGuidanceScale] = useState(7.5);
   const [negativePrompt, setNegativePrompt] = useState('');
@@ -500,6 +500,12 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
           : undefined,
         reference_strength: exactCopyMode ? 0.9 : referenceStrength,
         seed: finalSeed,
+        num_images: numImages,
+        steps: steps,
+        guidance_scale: guidanceScale,
+        negative_prompt: negativePrompt,
+        compel_enabled: compelEnabled,
+        compel_weights: compelWeights,
         metadata: {
           // STAGING-FIRST: All assets go to workspace_assets table
           duration: mode === 'video' ? videoDuration : undefined,
