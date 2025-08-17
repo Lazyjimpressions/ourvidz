@@ -5,6 +5,7 @@ import { AssetService, UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useToast } from '@/hooks/use-toast';
 import { useAssetsWithDebounce } from '@/hooks/useAssetsWithDebounce';
+import { useOptimizedWorkspaceUrls } from '@/hooks/useOptimizedWorkspaceUrls';
 import { GenerationFormat } from '@/types/generation';
 import { ReferenceMetadata } from '@/types/workspace';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
@@ -41,6 +42,8 @@ export interface LibraryFirstWorkspaceState {
   lightboxIndex: number | null;
   referenceMetadata: ReferenceMetadata | null;
   workspaceCleared: boolean;
+  signedUrls: Map<string, string>;
+  isUrlLoading: boolean;
   // Exact copy workflow
   exactCopyMode: boolean;
   useOriginalParams: boolean;
@@ -109,6 +112,12 @@ export interface LibraryFirstWorkspaceActions {
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => any | null;
   getJobById: (jobId: string) => any | null;
+  // URL management
+  registerAssetRef: (assetId: string, element: HTMLElement | null) => void;
+  forceLoadAssetUrls: (assetId: string) => void;
+  preloadNextAssets: (count?: number) => void;
+  invalidateAssetCache: (assetId: string) => void;
+  clearAllCache: () => void;
 }
 
 export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & LibraryFirstWorkspaceActions => {
@@ -308,99 +317,22 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     };
   }, [queryClient, debouncedInvalidate]);
 
-  // STAGING-FIRST: Signed URL management for workspace assets
-  const [signedUrls, setSignedUrls] = useState<Map<string, string>>(new Map());
-
-  // Generate signed URLs and video thumbnails for workspace assets
-  useEffect(() => {
-    let mounted = true;
-
-    const isHttpUrl = (u?: string) => !!u && (u.startsWith('http://') || u.startsWith('https://'));
-
-    const generateVideoThumbnail = async (videoUrl: string): Promise<string | null> => {
-      return new Promise((resolve) => {
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        video.muted = true;
-        
-        video.onloadeddata = () => {
-          video.currentTime = 0.1; // Seek to 0.1s for first frame
-        };
-        
-        video.onseeked = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8);
-              resolve(thumbnailUrl);
-            } else {
-              resolve(null);
-            }
-          } catch (error) {
-            console.error('Error generating video thumbnail:', error);
-            resolve(null);
-          }
-        };
-        
-        video.onerror = () => resolve(null);
-        video.src = videoUrl;
-      });
-    };
-
-    const generateUrls = async () => {
-      const newUrls = new Map<string, string>();
-
-      for (const asset of workspaceAssets) {
-        try {
-          let resolvedUrl: string | undefined;
-
-          // Accept only fully-qualified URLs as already usable
-          if (isHttpUrl(asset.url)) {
-            resolvedUrl = asset.url as string;
-          } else {
-            // Sign using storage path from DB by asset id
-            const signedUrl = await AssetService.getAssetURL(asset.id, asset.type);
-            if (signedUrl) {
-              resolvedUrl = signedUrl;
-            }
-          }
-
-          if (mounted && resolvedUrl) {
-            newUrls.set(asset.id, resolvedUrl);
-
-            // Generate thumbnail for videos
-            if (asset.type === 'video' && !asset.thumbnailUrl) {
-              const thumbnail = await generateVideoThumbnail(resolvedUrl);
-              if (thumbnail) {
-                // Update the asset with thumbnail in workspace state
-                asset.thumbnailUrl = thumbnail;
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Failed to generate signed URL for asset:', asset.id, error);
-        }
-      }
-
-      // Merge to preserve existing cache entries
-      if (mounted && newUrls.size > 0) {
-        setSignedUrls(prev => new Map([...prev, ...newUrls]));
-      }
-    };
-
-    if (workspaceAssets.length > 0) {
-      generateUrls();
-    }
-
-    return () => {
-      mounted = false;
-    };
-  }, [workspaceAssets]);
+  // OPTIMIZED: Use the new optimized URL loading hook
+  const {
+    assets: assetsWithUrls,
+    signedUrls,
+    loadingUrls,
+    registerAssetRef,
+    forceLoadAssetUrls,
+    preloadNextAssets,
+    invalidateAssetCache,
+    clearAllCache,
+    isLoading: isUrlLoading
+  } = useOptimizedWorkspaceUrls(workspaceAssets, {
+    enabled: true,
+    batchSize: 10,
+    prefetchThreshold: 0.5
+  });
 
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (
@@ -1054,6 +986,8 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     useOriginalParams,
     lockSeed,
     workspaceCleared,
+    signedUrls,
+    isUrlLoading,
     // Advanced SDXL Settings
     numImages,
     steps,
@@ -1125,6 +1059,13 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     setSeed,
     getJobStats,
     getActiveJob,
-    getJobById
+    getJobById,
+    
+    // URL management
+    registerAssetRef,
+    forceLoadAssetUrls,
+    preloadNextAssets,
+    invalidateAssetCache,
+    clearAllCache
   };
 };

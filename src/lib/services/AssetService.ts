@@ -100,13 +100,33 @@ export class AssetService {
     }
   }
 
-  // Get user library assets (saved assets)
+  // Get user library assets (saved assets) - optimized with column filtering and user filtering
   static async getUserLibraryAssets(): Promise<UnifiedAsset[]> {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
       const { data, error } = await supabase
         .from('user_library')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(`
+          id,
+          asset_type,
+          original_prompt,
+          custom_title,
+          created_at,
+          model_used,
+          duration_seconds,
+          storage_path,
+          user_id,
+          file_size_bytes,
+          mime_type,
+          tags,
+          is_favorite,
+          generation_seed
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100); // Limit to prevent excessive loading
 
       if (error) throw error;
       if (!data) return [];
@@ -137,13 +157,32 @@ export class AssetService {
     }
   }
 
-  // Get workspace assets (temporary/session assets)
+  // Get workspace assets (temporary/session assets) - optimized with column filtering and user filtering
   static async getUserAssetsOptimized(sessionOnly: boolean = false): Promise<UnifiedAsset[]> {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return [];
+
       const { data, error } = await supabase
         .from('workspace_assets')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(`
+          id,
+          asset_type,
+          original_prompt,
+          created_at,
+          model_used,
+          duration_seconds,
+          temp_storage_path,
+          user_id,
+          file_size_bytes,
+          mime_type,
+          generation_seed,
+          generation_settings,
+          job_id
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200); // Limit to prevent excessive loading
 
       if (error) throw error;
       if (!data) return [];

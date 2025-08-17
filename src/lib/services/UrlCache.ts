@@ -58,6 +58,33 @@ class UrlCacheImpl {
     this.pending.set(k, promise);
     return promise;
   }
+
+  // Invalidate specific cached URLs
+  invalidate(bucket: string, storagePath: string): void {
+    const k = this.key(bucket, storagePath);
+    this.cache.delete(k);
+    this.pending.delete(k);
+  }
+
+  // Invalidate cache entries by pattern (e.g., all URLs for a user)
+  invalidateByPattern(pattern: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.includes(pattern)) {
+        this.cache.delete(key);
+      }
+    }
+    for (const key of this.pending.keys()) {
+      if (key.includes(pattern)) {
+        this.pending.delete(key);
+      }
+    }
+  }
+
+  // Clear all cached URLs
+  clearAll(): void {
+    this.cache.clear();
+    this.pending.clear();
+  }
 }
 
 export const UrlCache = new UrlCacheImpl();
