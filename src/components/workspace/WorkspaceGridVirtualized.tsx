@@ -22,7 +22,8 @@ import { MediaTile } from '@/types/workspace';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-interface VirtualizedMediaGridProps {
+// Export types
+export interface WorkspaceGridVirtualizedProps {
   onRegenerateItem?: (itemId: string) => void;
   onGenerateMoreLike?: (tile: MediaTile) => void;
   onClearWorkspace?: boolean;
@@ -245,12 +246,12 @@ const MediaTileComponent = React.memo(({
 
 MediaTileComponent.displayName = 'MediaTileComponent';
 
-export const VirtualizedMediaGrid = ({ 
+export const WorkspaceGridVirtualized = ({ 
   onRegenerateItem, 
   onGenerateMoreLike, 
   onClearWorkspace, 
   onImport 
-}: VirtualizedMediaGridProps) => {
+}: WorkspaceGridVirtualizedProps) => {
   const [selectedTile, setSelectedTile] = useState<MediaTile | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [showLibraryModal, setShowLibraryModal] = useState(false);

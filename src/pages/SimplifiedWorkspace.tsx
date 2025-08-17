@@ -5,7 +5,7 @@ import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { WorkspaceGrid } from '@/components/workspace/WorkspaceGrid';
+import { WorkspaceGrid } from '@/components/workspace';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
 import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
