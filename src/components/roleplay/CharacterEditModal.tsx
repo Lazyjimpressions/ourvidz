@@ -14,6 +14,7 @@ import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { uploadGeneratedImageToAvatars, uploadToAvatarsBucket } from '@/utils/avatarUtils';
 import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CharacterEditModalProps {
   isOpen: boolean;
@@ -61,7 +62,35 @@ export const CharacterEditModal = ({
 
       const onComplete = async (e: any) => {
         const detail = e?.detail || {};
-        if (detail.type !== 'image' || !detail.imageUrl) return;
+        if (detail.type !== 'image') return;
+        
+        let imageUrl = detail.imageUrl;
+        
+        // If no imageUrl, fetch from workspace_assets using assetId
+        if (!imageUrl && detail.assetId) {
+          try {
+            const { data: asset } = await supabase
+              .from('workspace_assets')
+              .select('temp_storage_path')
+              .eq('id', detail.assetId)
+              .single();
+            
+            if (asset?.temp_storage_path) {
+              imageUrl = asset.temp_storage_path;
+            }
+          } catch (error) {
+            console.error('Failed to fetch asset URL:', error);
+            toast({ title: 'Error', description: 'Could not load generated image', variant: 'destructive' });
+            window.removeEventListener('generation-completed', onComplete as any);
+            return;
+          }
+        }
+        
+        if (!imageUrl) {
+          console.error('No image URL available');
+          window.removeEventListener('generation-completed', onComplete as any);
+          return;
+        }
         
         // Ask user if they want to set as character image
         const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${formData.name}'s avatar image?`);
@@ -69,7 +98,7 @@ export const CharacterEditModal = ({
         if (shouldSetAsAvatar) {
           try {
             // Fetch the image and upload to avatars bucket
-            const response = await fetch(detail.imageUrl);
+            const response = await fetch(imageUrl);
             const imageBlob = await response.blob();
             
             const avatarUrl = await uploadGeneratedImageToAvatars(
@@ -84,7 +113,7 @@ export const CharacterEditModal = ({
           } catch (error) {
             console.error('Failed to upload to avatars bucket:', error);
             // Fallback to the temporary URL
-            setFormData(prev => ({ ...prev, image_url: detail.imageUrl }));
+            setFormData(prev => ({ ...prev, image_url: imageUrl }));
             toast({ title: 'Avatar updated', description: 'Using temporary URL' });
           }
         }
@@ -92,7 +121,7 @@ export const CharacterEditModal = ({
         // Save to character scenes
         const payload: any = {
           character_id: character.id,
-          image_url: detail.imageUrl,
+          image_url: imageUrl,
           scene_prompt: `${formData.name} portrait`,
           generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
         };
@@ -111,6 +140,12 @@ export const CharacterEditModal = ({
       };
 
       window.addEventListener('generation-completed', onComplete as any);
+      
+      // Add timeout to clear generating state if event doesn't fire
+      const timeout = setTimeout(() => {
+        window.removeEventListener('generation-completed', onComplete as any);
+        console.warn('Generation event timeout - clearing generating state');
+      }, 300000); // 5 minutes timeout
 
       await generateContent({
         format: 'sdxl_image_high',
@@ -121,6 +156,9 @@ export const CharacterEditModal = ({
           character_name: formData.name
         }
       });
+
+      // Clear timeout if generation starts successfully
+      setTimeout(() => clearTimeout(timeout), 1000);
     } catch (err) {
       console.error('Portrait generation failed', err);
       toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
