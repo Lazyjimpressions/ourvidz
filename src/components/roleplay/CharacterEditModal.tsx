@@ -12,6 +12,7 @@ import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { uploadGeneratedImageToAvatars, uploadToAvatarsBucket } from '@/utils/avatarUtils';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CharacterEditModalProps {
@@ -50,12 +51,13 @@ export const CharacterEditModal = ({
   const handleGeneratePortrait = async () => {
     if (!character?.id) return;
     try {
-      const tags = formData.appearance_tags.join(', ');
-      const base = `${formData.name}, portrait, cinematic headshot, sharp focus, soft lighting`;
-      const desc = formData.description ? `, ${formData.description}` : '';
-      const persona = formData.persona ? `, ${formData.persona}` : '';
-      const extra = tags ? `, ${tags}` : '';
-      const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
+      const prompt = buildCharacterPortraitPrompt({
+        name: formData.name,
+        description: formData.description,
+        persona: formData.persona,
+        traits: formData.traits,
+        appearance_tags: formData.appearance_tags
+      });
 
       const onComplete = async (e: any) => {
         const detail = e?.detail || {};
@@ -113,7 +115,11 @@ export const CharacterEditModal = ({
       await generateContent({
         format: 'sdxl_image_high',
         prompt,
-        metadata: { model_variant: 'lustify_sdxl' }
+        metadata: { 
+          source: 'character_portrait',
+          contentType: 'sfw',
+          character_name: formData.name
+        }
       });
     } catch (err) {
       console.error('Portrait generation failed', err);
