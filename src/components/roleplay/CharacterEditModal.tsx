@@ -6,9 +6,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Edit3, Save, X, Plus, Wand2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
-import { Edit3, Save, X, Plus } from 'lucide-react';
+import { useGeneration } from '@/hooks/useGeneration';
+import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 
 interface CharacterEditModalProps {
   isOpen: boolean;
@@ -36,7 +38,64 @@ export const CharacterEditModal = ({
   });
   const [newTag, setNewTag] = useState('');
   const { updateUserCharacter } = useUserCharacters();
+  const { generateContent, isGenerating } = useGeneration();
+  const { createScene } = useCharacterScenes(character?.id);
   const { toast } = useToast();
+
+  const handleGeneratePortrait = async () => {
+    if (!character?.id) return;
+    try {
+      const tags = formData.appearance_tags.join(', ');
+      const base = `${formData.name}, portrait, cinematic headshot, sharp focus, soft lighting`;
+      const desc = formData.description ? `, ${formData.description}` : '';
+      const persona = formData.persona ? `, ${formData.persona}` : '';
+      const extra = tags ? `, ${tags}` : '';
+      const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
+
+      const onComplete = (e: any) => {
+        const detail = e?.detail || {};
+        if (detail.type !== 'image' || !detail.imageUrl) return;
+        
+        // Ask user if they want to set as character image
+        const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${formData.name}'s avatar image?`);
+        
+        if (shouldSetAsAvatar) {
+          setFormData(prev => ({ ...prev, image_url: detail.imageUrl }));
+        }
+
+        // Save to character scenes
+        const payload: any = {
+          character_id: character.id,
+          image_url: detail.imageUrl,
+          scene_prompt: `${formData.name} portrait`,
+          generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
+        };
+        
+        createScene(payload)
+          .then(() => {
+            toast({ 
+              title: 'Portrait generated', 
+              description: shouldSetAsAvatar ? 'Set as avatar and saved to scenes' : 'Saved to character scenes'
+            });
+          })
+          .catch((err) => console.error('Failed to save portrait scene', err))
+          .finally(() => {
+            window.removeEventListener('generation-completed', onComplete as any);
+          });
+      };
+
+      window.addEventListener('generation-completed', onComplete as any);
+
+      await generateContent({
+        format: 'sdxl_image_high',
+        prompt,
+        metadata: { model_variant: 'lustify_sdxl' }
+      });
+    } catch (err) {
+      console.error('Portrait generation failed', err);
+      toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (character && isOpen) {
@@ -232,6 +291,19 @@ export const CharacterEditModal = ({
                 placeholder="https://..."
               />
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button 
+              type="button"
+              variant="outline" 
+              onClick={handleGeneratePortrait}
+              disabled={isGenerating || !formData.name.trim()}
+              className="flex-1"
+            >
+              <Wand2 className="w-4 h-4 mr-2" />
+              {isGenerating ? 'Generating...' : 'Generate Portrait'}
+            </Button>
           </div>
 
           <div className="flex gap-3 pt-4">

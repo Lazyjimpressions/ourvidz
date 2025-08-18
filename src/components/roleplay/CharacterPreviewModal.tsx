@@ -13,7 +13,8 @@ import {
   Heart, 
   Play,
   Users,
-  Sparkles
+  Sparkles,
+  Plus
 } from 'lucide-react';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -173,19 +174,30 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                 <Users className="w-4 h-4" />
                 Your Character
               </h3>
-              <Select value={selectedUserCharacter} onValueChange={setSelectedUserCharacter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose your character (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="anonymous">Anonymous User</SelectItem>
-                  {userCharacters.map((userChar) => (
-                    <SelectItem key={userChar.id} value={userChar.id}>
-                      {userChar.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {userCharacters.length > 0 ? (
+                <Select value={selectedUserCharacter} onValueChange={setSelectedUserCharacter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose your character" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {userCharacters.map((userChar) => (
+                      <SelectItem key={userChar.id} value={userChar.id}>
+                        {userChar.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="text-center py-6 border-2 border-dashed border-muted rounded-lg">
+                  <User className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm font-medium mb-1">No characters found</p>
+                  <p className="text-xs text-muted-foreground mb-3">Create a character to start roleplaying</p>
+                  <Button size="sm" variant="outline">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Character
+                  </Button>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">
                 Select your character to personalize the roleplay experience
               </p>
@@ -249,7 +261,8 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           </Button>
           <Button 
             onClick={handleStartChat}
-            className="flex-1 bg-primary hover:bg-primary/90"
+            disabled={!selectedUserCharacter}
+            className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-50"
           >
             <MessageSquare className="w-4 h-4 mr-2" />
             Start Chat
