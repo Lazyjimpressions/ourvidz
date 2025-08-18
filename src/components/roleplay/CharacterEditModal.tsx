@@ -11,6 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface CharacterEditModalProps {
   isOpen: boolean;
@@ -34,12 +36,14 @@ export const CharacterEditModal = ({
     mood: '',
     appearance_tags: [] as string[],
     image_url: '',
-    reference_image_url: ''
+    reference_image_url: '',
+    user_id: ''
   });
   const [newTag, setNewTag] = useState('');
   const { updateUserCharacter } = useUserCharacters();
   const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(character?.id);
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const handleGeneratePortrait = async () => {
@@ -52,7 +56,7 @@ export const CharacterEditModal = ({
       const extra = tags ? `, ${tags}` : '';
       const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
 
-      const onComplete = (e: any) => {
+      const onComplete = async (e: any) => {
         const detail = e?.detail || {};
         if (detail.type !== 'image' || !detail.imageUrl) return;
         
@@ -60,7 +64,26 @@ export const CharacterEditModal = ({
         const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${formData.name}'s avatar image?`);
         
         if (shouldSetAsAvatar) {
-          setFormData(prev => ({ ...prev, image_url: detail.imageUrl }));
+          try {
+            // Fetch the image and upload to avatars bucket
+            const response = await fetch(detail.imageUrl);
+            const imageBlob = await response.blob();
+            
+            const avatarUrl = await uploadGeneratedImageToAvatars(
+              imageBlob, 
+              user?.id || '', 
+              formData.name,
+              'character'
+            );
+            
+            setFormData(prev => ({ ...prev, image_url: avatarUrl }));
+            toast({ title: 'Avatar updated', description: 'Saved to avatars bucket!' });
+          } catch (error) {
+            console.error('Failed to upload to avatars bucket:', error);
+            // Fallback to the temporary URL
+            setFormData(prev => ({ ...prev, image_url: detail.imageUrl }));
+            toast({ title: 'Avatar updated', description: 'Using temporary URL' });
+          }
         }
 
         // Save to character scenes
@@ -108,7 +131,8 @@ export const CharacterEditModal = ({
         mood: character.mood || '',
         appearance_tags: character.appearance_tags || [],
         image_url: character.image_url || '',
-        reference_image_url: character.reference_image_url || ''
+        reference_image_url: character.reference_image_url || '',
+        user_id: character.user_id || ''
       });
     }
   }, [character, isOpen]);

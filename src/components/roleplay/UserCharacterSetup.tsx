@@ -13,6 +13,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserCharacter {
   id: string;
@@ -44,6 +46,7 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(selectedCharacterId);
+  const { user } = useAuth();
   const { toast } = useToast();
 
   // New character form state
@@ -74,7 +77,7 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
       const extra = tags ? `, ${tags}` : '';
       const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
 
-      const onComplete = (e: any) => {
+      const onComplete = async (e: any) => {
         const detail = e?.detail || {};
         if (detail.type !== 'image' || !detail.imageUrl) return;
         
@@ -82,13 +85,29 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
         const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${newCharacter.name}'s avatar image?`);
         
         if (shouldSetAsAvatar) {
-          setNewCharacter(prev => ({ ...prev, image_url: detail.imageUrl }));
+          try {
+            // Fetch the image and upload to avatars bucket
+            const response = await fetch(detail.imageUrl);
+            const imageBlob = await response.blob();
+            
+            const avatarUrl = await uploadGeneratedImageToAvatars(
+              imageBlob, 
+              user?.id || '', 
+              newCharacter.name,
+              'user'
+            );
+            
+            setNewCharacter(prev => ({ ...prev, image_url: avatarUrl }));
+            toast({ title: 'Portrait generated', description: 'Avatar updated and saved to avatars bucket!' });
+          } catch (error) {
+            console.error('Failed to upload to avatars bucket:', error);
+            // Fallback to the temporary URL
+            setNewCharacter(prev => ({ ...prev, image_url: detail.imageUrl }));
+            toast({ title: 'Portrait generated', description: 'Avatar updated (temporary URL)' });
+          }
+        } else {
+          toast({ title: 'Portrait generated', description: 'Portrait generated successfully' });
         }
-
-        toast({ 
-          title: 'Portrait generated', 
-          description: shouldSetAsAvatar ? 'Set as avatar image' : 'Portrait generated successfully'
-        });
         
         window.removeEventListener('generation-completed', onComplete as any);
       };
@@ -179,7 +198,7 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
       await loadUserCharacters();
       setSelectedCharacterId(data.id);
       setShowCreateNew(false);
-      setNewCharacter({ name: '', description: '', personality: '', background: '', appearance: '', image_url: '' });
+          setNewCharacter({ name: '', description: '', personality: '', background: '', appearance: '', image_url: '' });
 
       toast({
         title: "Success",

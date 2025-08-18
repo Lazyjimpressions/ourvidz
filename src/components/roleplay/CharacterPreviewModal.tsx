@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   MessageSquare, 
   Image as ImageIcon, 
@@ -14,7 +17,8 @@ import {
   Play,
   Users,
   Sparkles,
-  Plus
+  Plus,
+  AlertCircle
 } from 'lucide-react';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -57,14 +61,22 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 }) => {
   const [selectedUserCharacter, setSelectedUserCharacter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'scenes'>('overview');
+  const navigate = useNavigate();
   
-  const { scenes, isLoading: scenesLoading } = useCharacterScenes(character?.id);
-  const { characters: userCharacters, isLoading: userCharactersLoading } = useUserCharacters();
+  const { scenes, isLoading: scenesLoading, error: scenesError } = useCharacterScenes(character?.id);
+  const { characters: userCharacters, isLoading: userCharactersLoading, error: charactersError } = useUserCharacters();
 
   if (!character) return null;
 
   const handleStartChat = () => {
-    onStartChat(selectedUserCharacter || undefined);
+    if (selectedUserCharacter) {
+      onStartChat(selectedUserCharacter);
+    }
+  };
+
+  const handleCreateCharacter = () => {
+    onClose();
+    navigate('/roleplay/select');
   };
 
   const handleSceneSelect = (sceneId: string) => {
@@ -174,29 +186,55 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                 <Users className="w-4 h-4" />
                 Your Character
               </h3>
-              {userCharacters.length > 0 ? (
-                <Select value={selectedUserCharacter} onValueChange={setSelectedUserCharacter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose your character" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {userCharacters.map((userChar) => (
-                      <SelectItem key={userChar.id} value={userChar.id}>
-                        {userChar.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
+              {userCharactersLoading ? (
+                <Skeleton className="h-10 w-full" />
+              ) : charactersError ? (
+                <Alert className="border-red-900 bg-red-950/50">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Failed to load your characters. Please try again.
+                  </AlertDescription>
+                </Alert>
+              ) : userCharacters.length === 0 ? (
                 <div className="text-center py-6 border-2 border-dashed border-muted rounded-lg">
                   <User className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm font-medium mb-1">No characters found</p>
                   <p className="text-xs text-muted-foreground mb-3">Create a character to start roleplaying</p>
-                  <Button size="sm" variant="outline">
+                  <Button size="sm" variant="outline" onClick={handleCreateCharacter}>
                     <Plus className="w-4 h-4 mr-2" />
                     Create Character
                   </Button>
                 </div>
+              ) : (
+                <>
+                  <Select value={selectedUserCharacter} onValueChange={setSelectedUserCharacter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose your character" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userCharacters.map((userChar) => (
+                        <SelectItem key={userChar.id} value={userChar.id}>
+                          <div className="flex items-center space-x-2">
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={userChar.image_url} />
+                              <AvatarFallback>{userChar.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span>{userChar.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    size="sm" 
+                    variant="ghost"
+                    onClick={handleCreateCharacter}
+                    className="w-full text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    Create New Character
+                  </Button>
+                </>
               )}
               <p className="text-xs text-muted-foreground">
                 Select your character to personalize the roleplay experience
@@ -206,10 +244,18 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
           <TabsContent value="scenes" className="space-y-4">
             {scenesLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="text-sm text-muted-foreground mt-2">Loading scenes...</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-32 w-full" />
+                ))}
               </div>
+            ) : scenesError ? (
+              <Alert className="border-red-900 bg-red-950/50">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Failed to load character scenes. Please try again.
+                </AlertDescription>
+              </Alert>
             ) : scenes.length > 0 ? (
               <div className="grid gap-3">
                 {scenes.map((scene) => (
