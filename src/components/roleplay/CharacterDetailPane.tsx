@@ -27,6 +27,10 @@ import { SceneCard } from './SceneCard';
 import { MultiCharacterSceneCard } from './MultiCharacterSceneCard';
 import { SceneGenerationModal } from './SceneGenerationModal';
 import { CharacterEditModal } from './CharacterEditModal';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
+import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CharacterDetailPaneProps {
   characterId: string;
@@ -46,11 +50,14 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
   const [activeTab, setActiveTab] = useState<'details' | 'scenes' | 'voice' | 'history'>('details');
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const { character, isLoading, likeCharacter } = useCharacterData(characterId);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isGeneratingAvatar, setIsGeneratingAvatar] = useState(false);
+  const { character, isLoading, likeCharacter, loadCharacter } = useCharacterData(characterId);
   const { scenes, isLoading: scenesLoading, createScene } = useCharacterScenes(characterId);
   const { startSceneChat } = useSceneNavigation();
   const { generateContent, isGenerating, cancelGeneration } = useGeneration();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Don't return null - let the parent handle conditional rendering
 
@@ -91,49 +98,115 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
     }
   };
 
-  const handleGeneratePortrait = async () => {
-    if (!character) return;
+  const handleGenerateAvatar = async () => {
+    if (!character || !user) return;
+    
+    setIsGeneratingAvatar(true);
+    setAvatarPreview(null);
+    
     try {
-      const tags = Array.isArray((character as any).appearance_tags)
-        ? (character as any).appearance_tags.join(', ')
-        : '';
-      const base = `${character.name}, portrait, cinematic headshot, sharp focus, soft lighting`;
-      const desc = character.description ? `, ${character.description}` : '';
-      const persona = character.persona ? `, ${character.persona}` : '';
-      const extra = tags ? `, ${tags}` : '';
-      const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
+      const prompt = buildCharacterPortraitPrompt({
+        name: character.name,
+        description: character.description,
+        persona: character.persona,
+        traits: character.traits,
+        appearance_tags: character.appearance_tags || []
+      });
 
-      const onComplete = (e: any) => {
+      const onComplete = async (e: any) => {
         const detail = e?.detail || {};
-        if (detail.type !== 'image' || !detail.imageUrl) return;
-        const payload: any = {
-          character_id: character.id,
-          image_url: detail.imageUrl,
-          scene_prompt: `${character.name} portrait`,
-          generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
-        };
-        createScene(payload)
-          .then(() => {
-            toast({ title: 'Portrait generated', description: 'Added to Scenes' });
-            setActiveTab('scenes');
-          })
-          .catch((err) => console.error('Failed to save portrait scene', err))
-          .finally(() => {
+        if (detail.type !== 'image') return;
+        
+        let imageUrl = detail.imageUrl;
+        
+        // If no imageUrl, fetch from workspace_assets using assetId
+        if (!imageUrl && detail.assetId) {
+          try {
+            const { data: asset } = await supabase
+              .from('workspace_assets')
+              .select('temp_storage_path')
+              .eq('id', detail.assetId)
+              .single();
+            
+            if (asset?.temp_storage_path) {
+              imageUrl = asset.temp_storage_path;
+            }
+          } catch (error) {
+            console.error('Failed to fetch asset URL:', error);
+            toast({ title: 'Error', description: 'Could not load generated image', variant: 'destructive' });
+            setIsGeneratingAvatar(false);
             window.removeEventListener('generation-completed', onComplete as any);
-          });
+            return;
+          }
+        }
+        
+        if (imageUrl) {
+          setAvatarPreview(imageUrl);
+        }
+        setIsGeneratingAvatar(false);
+        window.removeEventListener('generation-completed', onComplete as any);
       };
 
       window.addEventListener('generation-completed', onComplete as any);
+      
+      // Add timeout to clear generating state
+      setTimeout(() => {
+        if (isGeneratingAvatar) {
+          setIsGeneratingAvatar(false);
+          window.removeEventListener('generation-completed', onComplete as any);
+        }
+      }, 300000); // 5 minutes timeout
 
       await generateContent({
         format: 'sdxl_image_high',
         prompt,
-        metadata: { model_variant: 'lustify_sdxl' }
+        metadata: { 
+          model_variant: 'lustify_sdxl',
+          character_name: character.name
+        }
       });
     } catch (err) {
-      console.error('Portrait generation failed', err);
-      toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
+      console.error('Avatar generation failed', err);
+      toast({ title: 'Generation failed', description: 'Could not generate avatar', variant: 'destructive' });
+      setIsGeneratingAvatar(false);
     }
+  };
+
+  const handleUseAvatar = async () => {
+    if (!avatarPreview || !character || !user) return;
+    
+    try {
+      // Fetch the image and upload to avatars bucket
+      const response = await fetch(avatarPreview);
+      const imageBlob = await response.blob();
+      
+      const avatarUrl = await uploadGeneratedImageToAvatars(
+        imageBlob,
+        user.id,
+        character.name,
+        'character'
+      );
+      
+      // Update character image_url in database
+      const { error } = await supabase
+        .from('characters')
+        .update({ image_url: avatarUrl })
+        .eq('id', character.id);
+      
+      if (error) throw error;
+      
+      // Reload character data to show new avatar
+      loadCharacter(character.id);
+      setAvatarPreview(null);
+      toast({ title: 'Avatar updated', description: 'Character avatar has been updated' });
+    } catch (error) {
+      console.error('Failed to update avatar:', error);
+      toast({ title: 'Error', description: 'Failed to update character avatar', variant: 'destructive' });
+    }
+  };
+
+  const handleRejectAvatar = () => {
+    setAvatarPreview(null);
   };
 
   return (
@@ -159,34 +232,67 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
 
         {/* Character Preview */}
         {character && (
-          <div className="flex items-start gap-2">
-            <img
-              src={character.reference_image_url || character.image_url || `https://api.dicebear.com/7.x/personas/svg?seed=${character.name}`}
-              alt={character.name}
-              className="w-10 h-10 rounded-full object-cover"
-            />
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-foreground truncate text-sm">{character.name}</h3>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                <span className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3" />
-                  {character.interaction_count}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Heart className="w-3 h-3" />
-                  {character.likes_count}
-                </span>
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <img
+                src={character.reference_image_url || character.image_url || `https://api.dicebear.com/7.x/personas/svg?seed=${character.name}`}
+                alt={character.name}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium text-foreground truncate text-sm">{character.name}</h3>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  <span className="flex items-center gap-1">
+                    <MessageSquare className="w-3 h-3" />
+                    {character.interaction_count}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Heart className="w-3 h-3" />
+                    {character.likes_count}
+                  </span>
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLikeCharacter}
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
+                title="Like character"
+              >
+                <Heart className="w-3 h-3" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLikeCharacter}
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-red-500"
-              title="Like character"
-            >
-              <Heart className="w-3 h-3" />
-            </Button>
+
+            {/* Avatar Preview */}
+            {avatarPreview && (
+              <div className="bg-muted rounded-lg p-2 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-foreground">New Avatar Preview</span>
+                </div>
+                <img
+                  src={avatarPreview}
+                  alt="Generated avatar preview"
+                  className="w-full aspect-square rounded-md object-cover"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleUseAvatar}
+                    className="flex-1 h-6 text-xs"
+                  >
+                    Use Avatar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleRejectAvatar}
+                    className="flex-1 h-6 text-xs"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -482,11 +588,11 @@ export const CharacterDetailPane: React.FC<CharacterDetailPaneProps> = ({
             variant="outline" 
             size="sm" 
             className="flex-1 h-7 text-xs"
-            onClick={handleGeneratePortrait}
-            disabled={isGenerating}
+            onClick={handleGenerateAvatar}
+            disabled={isGeneratingAvatar}
           >
             <Wand2 className="w-3 h-3 mr-1" />
-            {isGenerating ? 'Generating…' : 'Portrait'}
+            {isGeneratingAvatar ? 'Generating…' : 'Avatar'}
           </Button>
           <Button 
             variant="outline" 
