@@ -6,12 +6,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Edit3, Save, X, Plus, Wand2 } from 'lucide-react';
+import { Edit3, Save, X, Plus, Wand2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { useGeneration } from '@/hooks/useGeneration';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
-import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
+import { uploadGeneratedImageToAvatars, uploadToAvatarsBucket } from '@/utils/avatarUtils';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface CharacterEditModalProps {
@@ -40,6 +40,7 @@ export const CharacterEditModal = ({
     user_id: ''
   });
   const [newTag, setNewTag] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const { updateUserCharacter } = useUserCharacters();
   const { generateContent, isGenerating } = useGeneration();
   const { createScene } = useCharacterScenes(character?.id);
@@ -117,6 +118,30 @@ export const CharacterEditModal = ({
     } catch (err) {
       console.error('Portrait generation failed', err);
       toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+    
+    setIsUploading(true);
+    try {
+      const avatarUrl = await uploadToAvatarsBucket(file, user.id, 'character');
+      setFormData(prev => ({ ...prev, image_url: avatarUrl }));
+      toast({ 
+        title: 'Avatar uploaded', 
+        description: 'Image uploaded successfully to avatars bucket!' 
+      });
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      toast({ 
+        title: 'Upload failed', 
+        description: 'Failed to upload image. Please try again.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -328,6 +353,24 @@ export const CharacterEditModal = ({
               <Wand2 className="w-4 h-4 mr-2" />
               {isGenerating ? 'Generating...' : 'Generate Portrait'}
             </Button>
+            
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <Button 
+                type="button"
+                variant="outline"
+                disabled={isUploading}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {isUploading ? 'Uploading...' : 'Upload Avatar'}
+              </Button>
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">

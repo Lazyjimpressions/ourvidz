@@ -18,13 +18,19 @@ import {
   Users,
   Sparkles,
   Plus,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from 'lucide-react';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
+import { CharacterEditModal } from './CharacterEditModal';
+import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Character {
   id: string;
+  user_id?: string;
   name: string;
   description: string;
   persona?: string;
@@ -61,10 +67,27 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 }) => {
   const [selectedUserCharacter, setSelectedUserCharacter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'scenes'>('overview');
+  const [showEditModal, setShowEditModal] = useState(false);
   const navigate = useNavigate();
+  const { user } = useAuth();
   
   const { scenes, isLoading: scenesLoading, error: scenesError } = useCharacterScenes(character?.id);
   const { characters: userCharacters, isLoading: userCharactersLoading, error: charactersError } = useUserCharacters();
+
+  const { data: isAdmin } = useQuery({
+    queryKey: ['user-admin-role', user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    },
+    enabled: !!user,
+  });
 
   if (!character) return null;
 
@@ -90,6 +113,9 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   };
 
   const traits = character.traits ? character.traits.split(',').map(t => t.trim()) : [];
+  
+  // Check if current user can edit this character
+  const canEdit = isAdmin || (user?.id === character?.user_id);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -305,6 +331,16 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           <Button variant="outline" onClick={onClose} className="flex-1">
             Cancel
           </Button>
+          {canEdit && (
+            <Button 
+              variant="secondary"
+              onClick={() => setShowEditModal(true)}
+              className="flex-1"
+            >
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Character
+            </Button>
+          )}
           <Button 
             onClick={handleStartChat}
             disabled={!selectedUserCharacter}
@@ -314,6 +350,17 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
             Start Chat
           </Button>
         </div>
+        
+        {/* Edit Modal */}
+        <CharacterEditModal
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          character={character}
+          onCharacterUpdated={() => {
+            // Refresh character data if needed
+            setShowEditModal(false);
+          }}
+        />
       </DialogContent>
     </Dialog>
   );
