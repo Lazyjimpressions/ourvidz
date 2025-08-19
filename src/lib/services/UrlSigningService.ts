@@ -145,9 +145,9 @@ export class UrlSigningService {
 
     const results = await Promise.allSettled(promises);
     
-    for (const result of results) {
-      if (result.status === 'fulfilled') {
-        const { path, url } = result.value;
+    for (const res of results) {
+      if (res.status === 'fulfilled') {
+        const { path, url } = res.value;
         result[path] = url;
       }
     }

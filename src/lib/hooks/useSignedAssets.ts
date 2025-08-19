@@ -40,8 +40,9 @@ export function useSignedAssets(
     const originalPaths: string[] = [];
     
     for (const asset of assets) {
-      if (asset.thumbPath && !signedUrls[asset.id]?.thumbUrl) {
-        thumbPaths.push(asset.thumbPath);
+      const p = asset.thumbPath;
+      if (p && !p.startsWith('.') && p.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
+        thumbPaths.push(p);
       }
       // Don't pre-sign originals - they're signed on-demand in lightbox
     }
@@ -62,8 +63,9 @@ export function useSignedAssets(
         
         // Map paths to asset IDs
         for (const asset of assets) {
-          if (asset.thumbPath) {
-            pathToAssetMap.set(asset.thumbPath, asset.id);
+          const p = asset.thumbPath;
+          if (p && !p.startsWith('.') && p.includes('/')) {
+            pathToAssetMap.set(p, asset.id);
           }
         }
 

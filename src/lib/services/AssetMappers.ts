@@ -21,12 +21,14 @@ export type SharedAsset = {
 /**
  * Derive thumbnail path from original storage path
  */
-function deriveThumbnailPath(originalPath: string): string {
+function deriveThumbnailPath(originalPath: string | null | undefined): string | null {
+  if (!originalPath || !originalPath.trim()) {
+    return null;
+  }
   const lastDot = originalPath.lastIndexOf('.');
   if (lastDot === -1) {
     return `${originalPath}.thumb.webp`;
   }
-  
   const pathWithoutExt = originalPath.substring(0, lastDot);
   return `${pathWithoutExt}.thumb.webp`;
 }
