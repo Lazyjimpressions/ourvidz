@@ -46,7 +46,6 @@ serve(async (req) => {
     }
 
     // Early exit for exact-copy modes
-    const exactCopyMode = requestBody.metadata?.exact_copy_mode === true;
     const hasOriginalEnhancedPrompt = !!(requestBody.metadata?.originalEnhancedPrompt && requestBody.metadata.originalEnhancedPrompt.trim());
     const isUploadedPromptless = exactCopyMode && !hasOriginalEnhancedPrompt && (!requestBody.prompt || !requestBody.prompt.trim());
 
