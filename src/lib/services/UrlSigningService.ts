@@ -9,6 +9,48 @@ type CacheEntry = {
   expiresAt: number;
 };
 
+// Global concurrency limiter for URL signing
+class ConcurrencyLimiter {
+  private queue: Array<() => Promise<void>> = [];
+  private running = 0;
+  private readonly maxConcurrency = 4;
+
+  async execute<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const task = async () => {
+        try {
+          const result = await fn();
+          resolve(result);
+        } catch (error) {
+          reject(error);
+        } finally {
+          this.running--;
+          this.processQueue();
+        }
+      };
+
+      if (this.running < this.maxConcurrency) {
+        this.running++;
+        task();
+      } else {
+        this.queue.push(() => {
+          this.running++;
+          return task();
+        });
+      }
+    });
+  }
+
+  private processQueue(): void {
+    if (this.queue.length > 0 && this.running < this.maxConcurrency) {
+      const task = this.queue.shift()!;
+      task();
+    }
+  }
+}
+
+const concurrencyLimiter = new ConcurrencyLimiter();
+
 export class UrlSigningService {
   private cache = new Map<string, CacheEntry>();
   private inflightRequests = new Map<string, Promise<string>>();
@@ -208,32 +250,35 @@ export class UrlSigningService {
     bucket: 'workspace-temp' | 'user-library', 
     opts: SignOptions
   ): Promise<string> {
-    try {
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .createSignedUrl(path, opts.ttlSec);
+    // Use concurrency limiter to prevent overwhelming the system
+    return concurrencyLimiter.execute(async () => {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(path, opts.ttlSec);
 
-      if (error) {
-        console.error(`Failed to sign URL ${bucket}:${path}:`, error);
+        if (error) {
+          console.error(`Failed to sign URL ${bucket}:${path}:`, error);
+          throw error;
+        }
+
+        if (!data?.signedUrl) {
+          throw new Error(`No signed URL returned for ${bucket}:${path}`);
+        }
+
+        // Cache the result
+        const cacheKey = `${bucket}:${path}`;
+        this.cache.set(cacheKey, {
+          url: data.signedUrl,
+          expiresAt: Date.now() + (opts.ttlSec * 1000) - 60000 // Expire 1min early
+        });
+
+        return data.signedUrl;
+      } catch (error) {
+        console.error(`Error signing URL ${bucket}:${path}:`, error);
         throw error;
       }
-
-      if (!data?.signedUrl) {
-        throw new Error(`No signed URL returned for ${bucket}:${path}`);
-      }
-
-      // Cache the result
-      const cacheKey = `${bucket}:${path}`;
-      this.cache.set(cacheKey, {
-        url: data.signedUrl,
-        expiresAt: Date.now() + (opts.ttlSec * 1000) - 60000 // Expire 1min early
-      });
-
-      return data.signedUrl;
-    } catch (error) {
-      console.error(`Error signing URL ${bucket}:${path}:`, error);
-      throw error;
-    }
+    });
   }
 
   /**

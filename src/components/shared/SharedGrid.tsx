@@ -7,6 +7,48 @@ import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 
+// Global concurrency control for original image loading
+class OriginalImageLoader {
+  private queue: Array<() => Promise<void>> = [];
+  private running = 0;
+  private readonly maxConcurrency = 3;
+
+  async load(loadFn: () => Promise<void>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const task = async () => {
+        try {
+          await loadFn();
+          resolve();
+        } catch (error) {
+          reject(error);
+        } finally {
+          this.running--;
+          this.processQueue();
+        }
+      };
+
+      if (this.running < this.maxConcurrency) {
+        this.running++;
+        task();
+      } else {
+        this.queue.push(() => {
+          this.running++;
+          return task();
+        });
+      }
+    });
+  }
+
+  private processQueue(): void {
+    if (this.queue.length > 0 && this.running < this.maxConcurrency) {
+      const task = this.queue.shift()!;
+      task();
+    }
+  }
+}
+
+const originalImageLoader = new OriginalImageLoader();
+
 export type SharedGridProps = {
   assets: SignedAsset[];
   onPreview: (asset: SharedAsset) => void;
@@ -102,28 +144,47 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [isLoadingFallback, setIsLoadingFallback] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
   // Register ref for lazy loading
   React.useEffect(() => {
     registerRef?.(cardRef.current, asset.id);
   }, [registerRef, asset.id]);
 
-  // Load fallback URL when thumbUrl is null and asset is an image
+  // Intersection observer for visibility detection
   useEffect(() => {
-    if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback) {
+    if (!cardRef.current) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        setIsVisible(entry.isIntersecting);
+      },
+      { rootMargin: '300px' }
+    );
+    
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  // Load fallback URL only when visible, no thumbUrl, and asset is an image
+  useEffect(() => {
+    if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
       setIsLoadingFallback(true);
-      asset.signOriginal()
-        .then(url => {
+      
+      // Use concurrency-controlled loader
+      originalImageLoader.load(async () => {
+        try {
+          const url = await asset.signOriginal();
           setFallbackUrl(url);
-        })
-        .catch(err => {
+        } catch (err) {
           console.warn('Failed to load fallback image for asset', asset.id, err);
-        })
-        .finally(() => {
-          setIsLoadingFallback(false);
-        });
+        }
+      }).finally(() => {
+        setIsLoadingFallback(false);
+      });
     }
-  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, asset]);
+  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, asset, isVisible]);
 
   const handleSelect = useCallback((checked: boolean) => {
     selection?.onToggle(asset.id);
@@ -171,13 +232,17 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             loading="lazy"
             decoding="async"
             onError={() => {
-              // On thumbnail error, load original for images
-              if (asset.type === 'image' && !fallbackUrl && !isLoadingFallback) {
+              // On thumbnail error, load original for images with concurrency control
+              if (asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
                 setIsLoadingFallback(true);
-                asset.signOriginal()
-                  .then(setFallbackUrl)
-                  .catch(err => console.warn('Failed to load original for asset', asset.id, err))
-                  .finally(() => setIsLoadingFallback(false));
+                originalImageLoader.load(async () => {
+                  try {
+                    const url = await asset.signOriginal();
+                    setFallbackUrl(url);
+                  } catch (err) {
+                    console.warn('Failed to load original for asset', asset.id, err);
+                  }
+                }).finally(() => setIsLoadingFallback(false));
               }
             }}
           />

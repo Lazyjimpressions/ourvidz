@@ -24,7 +24,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(isMobile ? 16 : 24);
+  const [visibleCount, setVisibleCount] = useState(isMobile ? 8 : 12);
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -82,7 +82,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && visibleCount < filteredAssets.length) {
-          setVisibleCount(prev => Math.min(prev + (isMobile ? 16 : 24), filteredAssets.length));
+          setVisibleCount(prev => Math.min(prev + (isMobile ? 8 : 12), filteredAssets.length));
         }
       },
       { rootMargin: '600px' }
