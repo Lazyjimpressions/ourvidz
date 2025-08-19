@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceAssets } from '@/hooks/useWorkspaceAssets';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
@@ -19,6 +19,7 @@ import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 export const UpdatedSimplifiedWorkspace: React.FC = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -60,13 +61,29 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     enabled: !loading && !!user
   });
 
-  // Honor URL param mode
+  // Honor URL param mode and navigation state for "Use as Reference"
   useEffect(() => {
     const urlMode = searchParams.get('mode');
     if (urlMode === 'video' || urlMode === 'image') {
       updateMode(urlMode);
     }
-  }, [searchParams, updateMode]);
+
+    // Handle navigation state for "Use as Reference"
+    const navState = location.state as any;
+    if (navState?.referenceAsset) {
+      const { storagePath, prompt } = navState.referenceAsset;
+      if (storagePath) {
+        setReferenceImage(null); // Clear file, use storage path
+        // Set reference image URL - the hook should handle this
+        toast({
+          title: "Reference set",
+          description: prompt ? `Using "${prompt.slice(0, 50)}..." as reference` : "Reference image set",
+        });
+        // Clear the navigation state to prevent re-triggering
+        window.history.replaceState({}, '');
+      }
+    }
+  }, [searchParams, location.state, updateMode, setReferenceImage, toast]);
 
   // Selection handlers
   const handleToggleSelection = useCallback((assetId: string) => {

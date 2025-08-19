@@ -12,7 +12,7 @@ import Index from "@/pages/Index";
 import Auth from "@/pages/Auth";
 import Dashboard from "@/pages/Dashboard";
 import { UpdatedOptimizedLibrary } from "@/components/library/UpdatedOptimizedLibrary";
-import SimplifiedWorkspace from "@/pages/SimplifiedWorkspace";
+import { UpdatedSimplifiedWorkspace } from "@/pages/UpdatedSimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
 import Admin from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
@@ -39,7 +39,7 @@ const queryClient = new QueryClient({
 const WorkspaceWithMobileDetection = () => {
   const { isMobile } = useMobileDetection();
   
-  return isMobile ? <MobileSimplifiedWorkspace /> : <SimplifiedWorkspace />;
+  return isMobile ? <MobileSimplifiedWorkspace /> : <UpdatedSimplifiedWorkspace />;
 };
 
 function App() {

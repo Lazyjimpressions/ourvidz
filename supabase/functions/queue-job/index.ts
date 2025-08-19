@@ -94,8 +94,28 @@ serve(async (req) => {
     const userMetadata = jobRequest.metadata || {};
 
     const exactCopyMode = !!userMetadata.exact_copy_mode;
-    const referenceUrl = userMetadata.reference_image_url || jobRequest.reference_image_url || null;
+    let referenceUrl = userMetadata.reference_image_url || jobRequest.reference_image_url || null;
     const hasOriginalEnhancedPrompt = !!userMetadata.originalEnhancedPrompt;
+
+    // Queue-time signing optimization: sign storage path reference URLs
+    if (referenceUrl && (referenceUrl.startsWith('user-library/') || referenceUrl.startsWith('workspace-temp/'))) {
+      try {
+        const bucketName = referenceUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+        const { data: signedData, error: signError } = await supabaseClient.storage
+          .from(bucketName)
+          .createSignedUrl(referenceUrl.replace(`${bucketName}/`, ''), 3600); // 1 hour TTL
+
+        if (!signError && signedData?.signedUrl) {
+          referenceUrl = signedData.signedUrl;
+          console.log('✅ Queue-time reference URL signed:', { originalPath: referenceUrl, bucket: bucketName });
+        } else {
+          console.warn('⚠️ Failed to sign reference URL:', signError);
+        }
+      } catch (error) {
+        console.warn('⚠️ Reference URL signing failed:', error);
+        // Continue with original URL
+      }
+    }
     const userPromptTrim = (originalPrompt || '').trim();
 
     // Standardize strength: prefer denoise_strength; map reference_strength if sent
