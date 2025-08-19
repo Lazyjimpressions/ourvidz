@@ -14,6 +14,35 @@ export class UrlSigningService {
   private inflightRequests = new Map<string, Promise<string>>();
 
   /**
+   * Normalize storage path by removing bucket prefixes
+   */
+  private normalizePath(path: string, bucket: string): string {
+    if (!path || path.trim() === '') return path;
+    
+    // Handle absolute URLs - return as-is
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    
+    // Remove bucket prefix if present
+    const bucketPrefixes = [bucket, 'workspace-temp', 'user-library'];
+    for (const prefix of bucketPrefixes) {
+      if (path.startsWith(`${prefix}/`)) {
+        return path.substring(prefix.length + 1);
+      }
+    }
+    
+    return path;
+  }
+
+  /**
+   * Check if path is an absolute URL
+   */
+  private isAbsoluteUrl(path: string): boolean {
+    return path.startsWith('http://') || path.startsWith('https://');
+  }
+
+  /**
    * Get signed URLs for multiple storage paths, with batching and caching
    */
   async getSignedUrls(
@@ -26,7 +55,14 @@ export class UrlSigningService {
 
     // Check cache first
     for (const path of paths) {
-      const cacheKey = `${bucket}:${path}`;
+      // Handle absolute URLs
+      if (this.isAbsoluteUrl(path)) {
+        result[path] = path;
+        continue;
+      }
+      
+      const normalizedPath = this.normalizePath(path, bucket);
+      const cacheKey = `${bucket}:${normalizedPath}`;
       const cached = this.cache.get(cacheKey);
       
       if (cached && cached.expiresAt > Date.now()) {
@@ -59,7 +95,13 @@ export class UrlSigningService {
     bucket: 'workspace-temp' | 'user-library', 
     opts: SignOptions = { ttlSec: 3600 }
   ): Promise<string> {
-    const cacheKey = `${bucket}:${path}`;
+    // Handle absolute URLs
+    if (this.isAbsoluteUrl(path)) {
+      return path;
+    }
+    
+    const normalizedPath = this.normalizePath(path, bucket);
+    const cacheKey = `${bucket}:${normalizedPath}`;
     
     // Check cache
     const cached = this.cache.get(cacheKey);
@@ -73,7 +115,7 @@ export class UrlSigningService {
     }
 
     // Create new request
-    const request = this.createSignedUrl(path, bucket, opts);
+    const request = this.createSignedUrl(normalizedPath, bucket, opts);
     this.inflightRequests.set(cacheKey, request);
 
     try {
@@ -124,7 +166,13 @@ export class UrlSigningService {
     
     // Sign each path individually (Supabase doesn't have batch signing)
     const promises = paths.map(async (path) => {
-      const cacheKey = `${bucket}:${path}`;
+      // Handle absolute URLs
+      if (this.isAbsoluteUrl(path)) {
+        return { path, url: path };
+      }
+      
+      const normalizedPath = this.normalizePath(path, bucket);
+      const cacheKey = `${bucket}:${normalizedPath}`;
       
       // Check if already requesting
       if (this.inflightRequests.has(cacheKey)) {
@@ -132,7 +180,7 @@ export class UrlSigningService {
         return { path, url };
       }
 
-      const request = this.createSignedUrl(path, bucket, opts);
+      const request = this.createSignedUrl(normalizedPath, bucket, opts);
       this.inflightRequests.set(cacheKey, request);
 
       try {

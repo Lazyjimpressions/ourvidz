@@ -19,17 +19,39 @@ export type SharedAsset = {
 };
 
 /**
+ * Normalize storage path by removing bucket prefixes
+ */
+function normalizePath(path: string | null | undefined): string | null {
+  if (!path || !path.trim()) return null;
+  
+  // Handle absolute URLs - return as-is
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  
+  // Remove bucket prefix if present
+  const bucketPrefixes = ['workspace-temp/', 'user-library/'];
+  for (const prefix of bucketPrefixes) {
+    if (path.startsWith(prefix)) {
+      return path.substring(prefix.length);
+    }
+  }
+  
+  return path;
+}
+
+/**
  * Derive thumbnail path from original storage path
  */
 function deriveThumbnailPath(originalPath: string | null | undefined): string | null {
-  if (!originalPath || !originalPath.trim()) {
-    return null;
-  }
-  const lastDot = originalPath.lastIndexOf('.');
+  const normalized = normalizePath(originalPath);
+  if (!normalized) return null;
+  
+  const lastDot = normalized.lastIndexOf('.');
   if (lastDot === -1) {
-    return `${originalPath}.thumb.webp`;
+    return `${normalized}.thumb.webp`;
   }
-  const pathWithoutExt = originalPath.substring(0, lastDot);
+  const pathWithoutExt = normalized.substring(0, lastDot);
   return `${pathWithoutExt}.thumb.webp`;
 }
 
@@ -37,8 +59,11 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
  * Map workspace_assets row to SharedAsset
  */
 export function toSharedFromWorkspace(row: any): SharedAsset {
-  const originalPath = row.temp_storage_path || row.storage_path || '';
-  const thumbPath = row.thumbnail_path || deriveThumbnailPath(originalPath);
+  const rawOriginalPath = row.temp_storage_path || row.storage_path || '';
+  const rawThumbPath = row.thumbnail_path;
+  
+  const originalPath = normalizePath(rawOriginalPath) || '';
+  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
   
   return {
     id: row.id,
@@ -73,8 +98,11 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
  * Map user_library row to SharedAsset
  */
 export function toSharedFromLibrary(row: any): SharedAsset {
-  const originalPath = row.storage_path || '';
-  const thumbPath = row.thumbnail_path || deriveThumbnailPath(originalPath);
+  const rawOriginalPath = row.storage_path || '';
+  const rawThumbPath = row.thumbnail_path;
+  
+  const originalPath = normalizePath(rawOriginalPath) || '';
+  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
   
   return {
     id: row.id,
@@ -116,15 +144,19 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
                    asset.metadata?.bucket === 'user-library';
   
   const bucket = isLibrary ? 'user-library' : 'workspace-temp';
-  const originalPath = asset.metadata?.storage_path || 
-                      asset.storagePath || 
-                      asset.originalPath || 
-                      '';
+  const rawOriginalPath = asset.metadata?.storage_path || 
+                         asset.storagePath || 
+                         asset.originalPath || 
+                         '';
+  const rawThumbPath = asset.thumbnailPath || asset.metadata?.thumbnail_path;
+  
+  const originalPath = normalizePath(rawOriginalPath) || '';
+  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
   
   return {
     id: asset.id,
     type: asset.type === 'video' ? 'video' : 'image',
-    thumbPath: asset.thumbnailPath || asset.metadata?.thumbnail_path || deriveThumbnailPath(originalPath),
+    thumbPath,
     originalPath,
     title: asset.title || asset.customTitle || `${asset.type} asset`,
     prompt: asset.prompt || asset.originalPrompt,
