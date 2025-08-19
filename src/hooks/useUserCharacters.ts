@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
 
 export interface UserCharacter {
   id: string;
@@ -30,6 +31,21 @@ export const useUserCharacters = () => {
   const [characters, setCharacters] = useState<UserCharacter[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: isAdmin } = useQuery({
+    queryKey: ['user-admin-role', user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    },
+    enabled: !!user,
+  });
 
   const loadUserCharacters = async () => {
     if (!user?.id) return;
@@ -89,13 +105,17 @@ export const useUserCharacters = () => {
 
   const updateUserCharacter = async (id: string, updates: Partial<UserCharacter>) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('characters')
         .update(updates)
-        .eq('id', id)
-        .eq('user_id', user?.id)
-        .select()
-        .single();
+        .eq('id', id);
+      
+      // Only add user_id filter if not admin
+      if (!isAdmin) {
+        query = query.eq('user_id', user?.id);
+      }
+
+      const { data, error } = await query.select().single();
 
       if (error) throw error;
       

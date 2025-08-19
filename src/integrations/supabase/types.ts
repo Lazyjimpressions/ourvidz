@@ -489,13 +489,6 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "jobs_workspace_session_id_fkey"
-            columns: ["workspace_session_id"]
-            isOneToOne: false
-            referencedRelation: "workspace_sessions"
-            referencedColumns: ["id"]
-          },
         ]
       }
       messages: {
@@ -1155,6 +1148,7 @@ export type Database = {
           duration_seconds: number | null
           file_size_bytes: number
           generation_seed: number | null
+          height: number | null
           id: string
           is_favorite: boolean | null
           mime_type: string
@@ -1162,9 +1156,11 @@ export type Database = {
           original_prompt: string
           storage_path: string
           tags: string[] | null
+          thumbnail_path: string | null
           updated_at: string | null
           user_id: string
           visibility: string | null
+          width: number | null
         }
         Insert: {
           asset_type: string
@@ -1174,6 +1170,7 @@ export type Database = {
           duration_seconds?: number | null
           file_size_bytes: number
           generation_seed?: number | null
+          height?: number | null
           id?: string
           is_favorite?: boolean | null
           mime_type: string
@@ -1181,9 +1178,11 @@ export type Database = {
           original_prompt: string
           storage_path: string
           tags?: string[] | null
+          thumbnail_path?: string | null
           updated_at?: string | null
           user_id: string
           visibility?: string | null
+          width?: number | null
         }
         Update: {
           asset_type?: string
@@ -1193,6 +1192,7 @@ export type Database = {
           duration_seconds?: number | null
           file_size_bytes?: number
           generation_seed?: number | null
+          height?: number | null
           id?: string
           is_favorite?: boolean | null
           mime_type?: string
@@ -1200,9 +1200,11 @@ export type Database = {
           original_prompt?: string
           storage_path?: string
           tags?: string[] | null
+          thumbnail_path?: string | null
           updated_at?: string | null
           user_id?: string
           visibility?: string | null
+          width?: number | null
         }
         Relationships: [
           {
@@ -1245,13 +1247,16 @@ export type Database = {
           file_size_bytes: number
           generation_seed: number
           generation_settings: Json | null
+          height: number | null
           id: string
           job_id: string
           mime_type: string
           model_used: string
           original_prompt: string
           temp_storage_path: string
+          thumbnail_path: string | null
           user_id: string
+          width: number | null
         }
         Insert: {
           asset_index?: number
@@ -1262,13 +1267,16 @@ export type Database = {
           file_size_bytes: number
           generation_seed: number
           generation_settings?: Json | null
+          height?: number | null
           id?: string
           job_id: string
           mime_type: string
           model_used: string
           original_prompt: string
           temp_storage_path: string
+          thumbnail_path?: string | null
           user_id: string
+          width?: number | null
         }
         Update: {
           asset_index?: number
@@ -1279,147 +1287,18 @@ export type Database = {
           file_size_bytes?: number
           generation_seed?: number
           generation_settings?: Json | null
+          height?: number | null
           id?: string
           job_id?: string
           mime_type?: string
           model_used?: string
           original_prompt?: string
           temp_storage_path?: string
+          thumbnail_path?: string | null
           user_id?: string
+          width?: number | null
         }
         Relationships: []
-      }
-      workspace_items: {
-        Row: {
-          bucket_name: string | null
-          content_type: string
-          created_at: string | null
-          enhanced_prompt: string | null
-          generation_params: Json | null
-          id: string
-          job_id: string | null
-          metadata: Json | null
-          model_type: string | null
-          prompt: string
-          quality: string | null
-          reference_image_url: string | null
-          reference_strength: number | null
-          seed: number | null
-          session_id: string
-          status: string | null
-          storage_path: string | null
-          thumbnail_url: string | null
-          updated_at: string | null
-          url: string | null
-          user_id: string
-        }
-        Insert: {
-          bucket_name?: string | null
-          content_type: string
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          generation_params?: Json | null
-          id?: string
-          job_id?: string | null
-          metadata?: Json | null
-          model_type?: string | null
-          prompt: string
-          quality?: string | null
-          reference_image_url?: string | null
-          reference_strength?: number | null
-          seed?: number | null
-          session_id: string
-          status?: string | null
-          storage_path?: string | null
-          thumbnail_url?: string | null
-          updated_at?: string | null
-          url?: string | null
-          user_id: string
-        }
-        Update: {
-          bucket_name?: string | null
-          content_type?: string
-          created_at?: string | null
-          enhanced_prompt?: string | null
-          generation_params?: Json | null
-          id?: string
-          job_id?: string | null
-          metadata?: Json | null
-          model_type?: string | null
-          prompt?: string
-          quality?: string | null
-          reference_image_url?: string | null
-          reference_strength?: number | null
-          seed?: number | null
-          session_id?: string
-          status?: string | null
-          storage_path?: string | null
-          thumbnail_url?: string | null
-          updated_at?: string | null
-          url?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workspace_items_job_id_fkey"
-            columns: ["job_id"]
-            isOneToOne: false
-            referencedRelation: "jobs"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workspace_items_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "workspace_sessions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workspace_items_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      workspace_sessions: {
-        Row: {
-          created_at: string | null
-          id: string
-          is_active: boolean | null
-          metadata: Json | null
-          session_name: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          metadata?: Json | null
-          session_name?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          is_active?: boolean | null
-          metadata?: Json | null
-          session_name?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workspace_sessions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {

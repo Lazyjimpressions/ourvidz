@@ -287,14 +287,24 @@ export const useLazyAssetsV3 = ({
     
     try {
       console.log(`🔄 Preloading ${assetsToPreload.length} assets`);
-      await UnifiedUrlService.generateBatchUrls(assetsToPreload);
+      const updatedAssets = await UnifiedUrlService.generateBatchUrls(assetsToPreload);
       
-      // Update state
+      // Update state with returned URLs (do not just flip the flag)
       setLazyAssets(prev => 
         prev.map(asset => {
-          const preloaded = assetsToPreload.find(p => p.id === asset.id);
-          if (preloaded) {
-            return { ...asset, urlsLoaded: true, isLoading: false };
+          const updated = updatedAssets.find(u => u.id === asset.id);
+          if (updated) {
+            // Cache successful URLs
+            if (updated.url) {
+              sessionCache.cacheSignedUrl(asset.id, updated.url);
+            }
+            return {
+              ...asset,
+              ...updated,
+              urlsLoaded: !!(updated.url || updated.thumbnailUrl),
+              isLoading: false,
+              error: undefined
+            };
           }
           return asset;
         })

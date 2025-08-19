@@ -172,11 +172,10 @@ serve(async (req) => {
       // Handle new SDXL worker format
       if (payload.assets) {
         assetsToCreate = payload.assets.map((asset, index) => {
-          // Normalize temp_storage_path - strip workspace-temp prefix if present
-          let normalizedPath = asset.url;
-          if (normalizedPath.startsWith('workspace-temp/')) {
-            normalizedPath = normalizedPath.replace('workspace-temp/', '');
-          }
+          const thumbUrl = (asset as any).thumbnail_url || null;
+
+          // Normalize storage paths (strip 'workspace-temp/' if present)
+          const normalize = (p: string) => p?.startsWith('workspace-temp/') ? p.replace('workspace-temp/', '') : p;
 
           // Determine asset type and mime type
           const assetType = asset.type;
@@ -187,19 +186,20 @@ serve(async (req) => {
             mimeType = 'video/mp4';
           }
 
-          console.log(`📝 Creating workspace asset:`, {
+          console.log('🖼️ Workspace asset write', {
             jobId,
-            assetType,
-            normalizedPath,
-            mimeType,
-            index
+            idx: index,
+            hasThumb: !!thumbUrl,
+            path: normalize(asset.url),
+            thumb: thumbUrl ? normalize(thumbUrl) : null
           });
 
           return {
             user_id: finalUserId,
             job_id: jobId,
             asset_type: assetType,
-            temp_storage_path: normalizedPath,
+            temp_storage_path: normalize(asset.url),
+            thumbnail_path: thumbUrl ? normalize(thumbUrl) : null, // NEW
             file_size_bytes: 0, // Will be updated when file is processed
             mime_type: mimeType,
             duration_seconds: assetType === 'video' ? (payload.metadata?.frame_num ? Math.ceil(payload.metadata.frame_num / 16) : 5) : undefined,
@@ -213,16 +213,15 @@ serve(async (req) => {
               enhanced_prompt: job.enhanced_prompt,
               template_name: payload.metadata?.template_name || job.template_name || job.metadata?.enhancement_metadata?.template_name,
               reference_image_url: job.metadata?.reference_image_url,
-              reference_strength: job.metadata?.reference_strength,
+              reference_strength: job.metadata?.reference_strength, // legacy
+              denoise_strength: asset.metadata?.denoise_strength ?? payload.metadata?.denoise_strength ?? job.metadata?.denoise_strength ?? null, // NEW
+              guidance_scale: asset.metadata?.guidance_scale ?? payload.metadata?.guidance_scale ?? job.metadata?.guidance_scale ?? null, // NEW
+              steps: asset.metadata?.steps ?? payload.metadata?.steps ?? job.metadata?.steps ?? null, // NEW
               width: asset.metadata?.width,
               height: asset.metadata?.height,
-              steps: asset.metadata?.steps,
-              guidance_scale: asset.metadata?.guidance_scale,
-              batch_size: asset.metadata?.batch_size,
               frame_num: payload.metadata?.frame_num,
-              wan_task: payload.metadata?.wan_task,
               reference_mode: payload.metadata?.reference_mode,
-              generation_time: payload.metadata?.generation_time,
+              exact_copy_mode: payload.metadata?.exact_copy_mode ?? job.metadata?.exact_copy_mode ?? false,
               ...payload.metadata
             }
           };

@@ -8,9 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { User, Plus, Shield, ShieldOff } from 'lucide-react';
+import { User, Plus, Shield, ShieldOff, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useGeneration } from '@/hooks/useGeneration';
+import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { uploadGeneratedImageToAvatars } from '@/utils/avatarUtils';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UserCharacter {
   id: string;
@@ -40,6 +44,9 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
   const [showCreateNew, setShowCreateNew] = useState(false);
   const [contentMode, setContentMode] = useState<'sfw' | 'nsfw'>('sfw');
   const [isLoading, setIsLoading] = useState(false);
+  const { generateContent, isGenerating } = useGeneration();
+  const { createScene } = useCharacterScenes(selectedCharacterId);
+  const { user } = useAuth();
   const { toast } = useToast();
 
   // New character form state
@@ -48,8 +55,75 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
     description: '',
     personality: '',
     background: '',
-    appearance: ''
+    appearance: '',
+    image_url: ''
   });
+
+  const handleGeneratePortrait = async () => {
+    if (!newCharacter.name.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a character name first",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const tags = newCharacter.appearance ? newCharacter.appearance : '';
+      const base = `${newCharacter.name}, portrait, cinematic headshot, sharp focus, soft lighting`;
+      const desc = newCharacter.description ? `, ${newCharacter.description}` : '';
+      const persona = newCharacter.personality ? `, ${newCharacter.personality}` : '';
+      const extra = tags ? `, ${tags}` : '';
+      const prompt = `${base}${extra}${persona}${desc}`.slice(0, 400);
+
+      const onComplete = async (e: any) => {
+        const detail = e?.detail || {};
+        if (detail.type !== 'image' || !detail.imageUrl) return;
+        
+        // Ask user if they want to set as character image
+        const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${newCharacter.name}'s avatar image?`);
+        
+        if (shouldSetAsAvatar) {
+          try {
+            // Fetch the image and upload to avatars bucket
+            const response = await fetch(detail.imageUrl);
+            const imageBlob = await response.blob();
+            
+            const avatarUrl = await uploadGeneratedImageToAvatars(
+              imageBlob, 
+              user?.id || '', 
+              newCharacter.name,
+              'user'
+            );
+            
+            setNewCharacter(prev => ({ ...prev, image_url: avatarUrl }));
+            toast({ title: 'Portrait generated', description: 'Avatar updated and saved to avatars bucket!' });
+          } catch (error) {
+            console.error('Failed to upload to avatars bucket:', error);
+            // Fallback to the temporary URL
+            setNewCharacter(prev => ({ ...prev, image_url: detail.imageUrl }));
+            toast({ title: 'Portrait generated', description: 'Avatar updated (temporary URL)' });
+          }
+        } else {
+          toast({ title: 'Portrait generated', description: 'Portrait generated successfully' });
+        }
+        
+        window.removeEventListener('generation-completed', onComplete as any);
+      };
+
+      window.addEventListener('generation-completed', onComplete as any);
+
+      await generateContent({
+        format: 'sdxl_image_high',
+        prompt,
+        metadata: { model_variant: 'lustify_sdxl' }
+      });
+    } catch (err) {
+      console.error('Portrait generation failed', err);
+      toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -110,6 +184,7 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
           persona: newCharacter.personality,
           traits: newCharacter.background,
           appearance_tags: newCharacter.appearance.split(',').map(t => t.trim()).filter(Boolean),
+          image_url: newCharacter.image_url || null,
           role: 'user',
           user_id: user.data.user.id,
           is_public: false,
@@ -123,7 +198,7 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
       await loadUserCharacters();
       setSelectedCharacterId(data.id);
       setShowCreateNew(false);
-      setNewCharacter({ name: '', description: '', personality: '', background: '', appearance: '' });
+          setNewCharacter({ name: '', description: '', personality: '', background: '', appearance: '', image_url: '' });
 
       toast({
         title: "Success",
@@ -256,6 +331,29 @@ export const UserCharacterSetup: React.FC<UserCharacterSetupProps> = ({
                     onChange={(e) => setNewCharacter({...newCharacter, appearance: e.target.value})}
                     className="bg-gray-800 border-gray-600"
                   />
+                  <div className="flex gap-2">
+                    <Button 
+                      type="button"
+                      onClick={handleGeneratePortrait}
+                      disabled={isGenerating || !newCharacter.name.trim()}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                    >
+                      <Wand2 className="w-3 h-3 mr-1" />
+                      {isGenerating ? 'Generating...' : 'Generate Portrait'}
+                    </Button>
+                  </div>
+                  {newCharacter.image_url && (
+                    <div className="text-center">
+                      <img 
+                        src={newCharacter.image_url} 
+                        alt="Generated portrait" 
+                        className="w-20 h-20 rounded-full mx-auto object-cover"
+                      />
+                      <p className="text-xs text-green-400 mt-1">Portrait ready!</p>
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <Button 
                       onClick={createUserCharacter} 

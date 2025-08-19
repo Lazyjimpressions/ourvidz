@@ -133,7 +133,7 @@ export class GenerationService {
         body: {
           prompt: request.enhancedPrompt || request.originalPrompt || request.prompt,
           original_prompt: request.originalPrompt || request.prompt,
-          job_type: `${config.isSDXL ? 'sdxl' : 'video'}_${config.format.includes('high') ? 'high' : 'fast'}`,
+          job_type: request.format,
           quality: config.format.includes('high') ? 'high' : 'fast',
           format: config.isVideo ? 'mp4' : 'png',
           model_type: config.isSDXL ? 'sdxl' : 'wan',

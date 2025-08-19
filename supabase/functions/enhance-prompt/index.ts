@@ -45,6 +45,43 @@ serve(async (req) => {
       })
     }
 
+    // Early exit for exact-copy modes
+    const exactCopyMode = requestBody.metadata?.exact_copy_mode === true;
+    const hasOriginalEnhancedPrompt = !!(requestBody.metadata?.originalEnhancedPrompt && requestBody.metadata.originalEnhancedPrompt.trim());
+    const isUploadedPromptless = exactCopyMode && !hasOriginalEnhancedPrompt && (!requestBody.prompt || !requestBody.prompt.trim());
+
+    // Early exit for promptless exact copy: skip enhancement completely
+    if (isUploadedPromptless) {
+      return new Response(JSON.stringify({
+        success: true,
+        original_prompt: requestBody.prompt || '',
+        enhanced_prompt: requestBody.prompt || '',       // worker will ignore anyway in copy mode
+        enhancement_strategy: 'skip_for_exact_copy',
+        enhancement_metadata: { exact_copy_mode: true, template_name: 'skip', token_count: 0 }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Workspace/library reference with original prompt available
+    if (exactCopyMode && hasOriginalEnhancedPrompt) {
+      const mod = (requestBody.prompt || '').trim();
+      const base = requestBody.metadata.originalEnhancedPrompt;
+      // If you want subject-preserving mix when user typed a modification, compose here;
+      // else just return base unchanged to preserve original character/style faithfully.
+      const enhanced = mod ? `maintain the same subject; ${mod}` : base;
+
+      return new Response(JSON.stringify({
+        success: true,
+        original_prompt: requestBody.prompt || '',
+        enhanced_prompt: enhanced,
+        enhancement_strategy: mod ? 'subject_preserve_modify' : 'use_original_reference_prompt',
+        enhancement_metadata: { exact_copy_mode: true, template_name: mod ? 'subject_preserve' : 'original', token_count: Math.ceil(enhanced.length / 4) }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     console.log('🎯 ENHANCE-PROMPT DEBUG:', {
       prompt: prompt.length > 100 ? prompt.substring(0, 100) + '...' : prompt,
       jobType,
@@ -53,14 +90,13 @@ serve(async (req) => {
       contentType,
       exactCopyMode,
       promptLength: prompt.length,
-      // 🎯 EXACT COPY DEBUG: Additional logging for exact copy troubleshooting
       hasExactCopyMode: !!exactCopyMode,
       exactCopyModeValue: exactCopyMode,
       modificationKeywords: ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to'],
       isModificationPrompt: exactCopyMode ? prompt.toLowerCase().includes('change') || prompt.toLowerCase().includes('modify') || prompt.toLowerCase().includes('replace') : 'N/A'
     })
 
-    // FIXED: Enhanced exact copy mode handling for image-to-image references
+    // Legacy exact copy mode handling (kept for backward compatibility)
     if (exactCopyMode) {
       console.log('🎯 EXACT COPY MODE: Using subject preservation enhancement for image-to-image reference')
       

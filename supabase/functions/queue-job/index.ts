@@ -7,6 +7,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// I2I constants
+const DENOISE_COPY_MAX = 0.05;   // promptless exact copy
+const DENOISE_MOD_MIN = 0.10;    // reference modify
+const DENOISE_MOD_MAX = 0.25;
+const CFG_COPY = 1.0;
+const CFG_MOD_MIN = 4.0;
+const CFG_MOD_MAX = 7.0;
+const STEPS_COPY_MIN = 6;
+const STEPS_COPY_MAX = 10;
+const STEPS_MOD_MIN = 15;
+const STEPS_MOD_DEFAULT = 25;
+const STEPS_MOD_MAX = 30;
+
 interface JobRequest {
   prompt: string;
   original_prompt?: string;
@@ -17,6 +30,7 @@ interface JobRequest {
   enhanced_prompt?: string;
   reference_image_url?: string;
   reference_strength?: number;
+  denoise_strength?: number;
   seed?: number;
   metadata?: any;
   // Advanced SDXL settings
@@ -74,77 +88,151 @@ serve(async (req) => {
       })
     }
 
-    // Determine original prompt - prefer original_prompt, fallback to prompt
-    const originalPrompt = jobRequest.original_prompt || jobRequest.prompt;
-    if (!originalPrompt) {
-      return new Response('Missing required field: original_prompt or prompt', { 
-        status: 400, 
-        headers: corsHeaders 
-      })
-    }
+    // Normalize incoming fields
+    const body = jobRequest;
+    const originalPrompt = jobRequest.original_prompt || jobRequest.prompt || '';
+    const userMetadata = jobRequest.metadata || {};
+
+    const exactCopyMode = !!userMetadata.exact_copy_mode;
+    const referenceUrl = userMetadata.reference_image_url || jobRequest.reference_image_url || null;
+    const hasOriginalEnhancedPrompt = !!userMetadata.originalEnhancedPrompt;
+    const userPromptTrim = (originalPrompt || '').trim();
+
+    // Standardize strength: prefer denoise_strength; map reference_strength if sent
+    let denoise = typeof jobRequest.denoise_strength === 'number'
+      ? jobRequest.denoise_strength
+      : (typeof jobRequest.reference_strength === 'number' ? (1 - jobRequest.reference_strength) : undefined);
+
+    // Resolve guidance and steps (optional overrides)
+    let cfg = typeof jobRequest.guidance_scale === 'number'
+      ? jobRequest.guidance_scale
+      : (typeof userMetadata.guidance_scale === 'number' ? userMetadata.guidance_scale : undefined);
+
+    let steps = typeof jobRequest.steps === 'number'
+      ? jobRequest.steps
+      : (typeof userMetadata.steps === 'number' ? userMetadata.steps : undefined);
+
+    // Detect I2I branch with explicit, mutually exclusive predicates
+    const isPromptlessUploadedExactCopy =
+      exactCopyMode === true &&
+      !!referenceUrl &&
+      !hasOriginalEnhancedPrompt &&
+      userPromptTrim.length === 0;
+
+    const isReferenceModify =
+      exactCopyMode === true &&
+      !!referenceUrl &&
+      (
+        hasOriginalEnhancedPrompt ||           // workspace/library item
+        userPromptTrim.length > 0              // uploaded with a modification prompt
+      );
 
     // Determine database format (image/video) vs output format (png/mp4)
     const dbFormat = jobRequest.job_type.includes('image') ? 'image' : 'video';
     const outputFormat = jobRequest.format || (jobRequest.job_type.includes('image') ? 'png' : 'mp4');
     const quality = jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast');
 
-    // Handle prompt enhancement if needed
-    let enhancedPrompt = jobRequest.enhanced_prompt;
-    let templateName = 'none'; // Default template name
-    
-    // Always enhance if user_requested_enhancement or exact_copy_mode (to get template name)
-    const shouldEnhance = (jobRequest.metadata?.user_requested_enhancement && 
-                          !jobRequest.metadata?.skip_enhancement &&
-                          jobRequest.metadata?.enhancement_model !== 'none') ||
-                          jobRequest.metadata?.exact_copy_mode;
+    // Enhancement decision
+    let enhancedPrompt = jobRequest.enhanced_prompt || originalPrompt;
+    let templateName = 'original_prompt';
 
-    if (shouldEnhance && !enhancedPrompt) {
-      try {
-        console.log('🔧 Enhancing prompt before queuing job...', {
-          model: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
-          contentType: jobRequest.metadata?.contentType || 'sfw'
-        });
-        
+    if (isPromptlessUploadedExactCopy) {
+      // Skip enhancement entirely
+      enhancedPrompt = originalPrompt; // often empty; worker ignores prompt in copy branch
+      templateName = 'exact_copy_skip_enhance';
+    } else if (isReferenceModify) {
+      // Enhancement is optional. If you want subject-preserving rewrite for freeform uploads, keep; else skip when original prompt is present from metadata
+      const shouldEnhance =
+        !hasOriginalEnhancedPrompt && userPromptTrim.length > 0 &&
+        !(userMetadata.skip_enhancement === true);
+
+      if (shouldEnhance) {
         const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
           body: {
             prompt: originalPrompt,
             jobType: jobRequest.job_type,
-            format: dbFormat,
-            quality: quality,
-            selectedModel: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
-            contentType: jobRequest.metadata?.contentType || 'sfw',
-            metadata: jobRequest.metadata || {}
+            format: jobRequest.job_type.includes('image') ? 'image' : 'video',
+            quality: jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast'),
+            selectedModel: userMetadata?.enhancement_model || 'qwen_instruct',
+            contentType: userMetadata?.contentType || 'sfw',
+            metadata: { exact_copy_mode: true, ...userMetadata }
           }
         });
-
-        if (enhanceResponse.data?.enhanced_prompt) {
+        if (enhanceResponse?.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 
-                         enhanceResponse.data?.templateUsed || 
-                         enhanceResponse.data?.strategy || 
-                         enhanceResponse.data?.templateName || 
-                         enhanceResponse.data?.template_name || 'enhanced';
-          console.log('✅ Prompt enhanced successfully', { 
-            templateName, 
-            tokenCount: enhanceResponse.data?.enhancement_metadata?.token_count,
-            enhancementData: enhanceResponse.data 
-          });
-        } else {
-          console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
-          enhancedPrompt = originalPrompt;
-          templateName = 'enhancement_failed';
+          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 'enhanced_exact_copy_modify';
         }
-      } catch (error) {
-        console.error('❌ Enhancement failed:', error);
-        enhancedPrompt = originalPrompt;
-        templateName = 'enhancement_error';
+      } else {
+        // Use original prompt (from metadata if provided)
+        enhancedPrompt = userMetadata.originalEnhancedPrompt || originalPrompt;
+        templateName = hasOriginalEnhancedPrompt ? 'original_from_metadata' : 'original_prompt';
+      }
+    } else {
+      // Non-exact-copy flows (txt2img/video): keep existing enhancement logic
+      const shouldEnhance = (jobRequest.metadata?.user_requested_enhancement && 
+                            !jobRequest.metadata?.skip_enhancement &&
+                            jobRequest.metadata?.enhancement_model !== 'none');
+
+      if (shouldEnhance && !jobRequest.enhanced_prompt) {
+        try {
+          console.log('🔧 Enhancing prompt before queuing job...', {
+            model: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+            contentType: jobRequest.metadata?.contentType || 'sfw'
+          });
+          
+          const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
+            body: {
+              prompt: originalPrompt,
+              jobType: jobRequest.job_type,
+              format: dbFormat,
+              quality: quality,
+              selectedModel: jobRequest.metadata?.enhancement_model || 'qwen_instruct',
+              contentType: jobRequest.metadata?.contentType || 'sfw',
+              metadata: jobRequest.metadata || {}
+            }
+          });
+
+          if (enhanceResponse.data?.enhanced_prompt) {
+            enhancedPrompt = enhanceResponse.data.enhanced_prompt;
+            templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 
+                           enhanceResponse.data?.templateUsed || 
+                           enhanceResponse.data?.strategy || 
+                           enhanceResponse.data?.templateName || 
+                           enhanceResponse.data?.template_name || 'enhanced';
+            console.log('✅ Prompt enhanced successfully', { 
+              templateName, 
+              tokenCount: enhanceResponse.data?.enhancement_metadata?.token_count,
+              enhancementData: enhanceResponse.data 
+            });
+          } else {
+            console.warn('⚠️ Enhancement failed, using original prompt', enhanceResponse.error);
+            enhancedPrompt = originalPrompt;
+            templateName = 'enhancement_failed';
+          }
+        } catch (error) {
+          console.error('❌ Enhancement failed:', error);
+          enhancedPrompt = originalPrompt;
+          templateName = 'enhancement_error';
+        }
       }
     }
 
-    // If no enhancement was requested or enhancement was skipped, use original prompt
-    if (!enhancedPrompt) {
-      enhancedPrompt = originalPrompt;
-      templateName = 'original_prompt';
+    // Clamp and finalize denoise/cfg/steps
+    if (isPromptlessUploadedExactCopy) {
+      denoise = Math.min(typeof denoise === 'number' ? denoise : 0.04, DENOISE_COPY_MAX);
+      cfg = CFG_COPY;
+      steps = Math.max(STEPS_COPY_MIN, Math.min(typeof steps === 'number' ? steps : 8, STEPS_COPY_MAX));
+      // Remove negative prompts in this branch
+      jobRequest.negative_prompt = undefined;
+    } else if (isReferenceModify) {
+      const d = typeof denoise === 'number' ? denoise : 0.18;
+      denoise = Math.max(DENOISE_MOD_MIN, Math.min(d, DENOISE_MOD_MAX));
+
+      const g = typeof cfg === 'number' ? cfg : 6.0;
+      cfg = Math.max(CFG_MOD_MIN, Math.min(g, CFG_MOD_MAX));
+
+      const s = typeof steps === 'number' ? steps : STEPS_MOD_DEFAULT;
+      steps = Math.max(STEPS_MOD_MIN, Math.min(s, STEPS_MOD_MAX));
     }
 
     // Create job record
@@ -158,12 +246,15 @@ serve(async (req) => {
         enhanced_prompt: enhancedPrompt || originalPrompt,
         template_name: templateName,
         quality: quality,
-        format: dbFormat,  // Store as 'image'/'video' in database
+        format: dbFormat,
         model_type: jobRequest.model_type,
         metadata: {
           ...jobRequest.metadata,
           reference_image_url: jobRequest.reference_image_url,
           reference_strength: jobRequest.reference_strength,
+          denoise_strength: denoise,
+          guidance_scale: cfg,
+          steps: steps,
           seed: jobRequest.seed,
           enhancement_metadata: {
             template_name: templateName,
@@ -180,28 +271,10 @@ serve(async (req) => {
       return new Response('Failed to create job', { status: 500, headers: corsHeaders })
     }
 
-    // Determine queue based on job type
-    const queueName = (jobRequest.job_type.startsWith('sdxl') || jobRequest.job_type.includes('image')) ? 'sdxl_queue' : 'wan_queue'
-    
-    // Translate job type for worker - WAN worker expects video_fast/video_high, not wan_video_fast/wan_video_high
-    const workerJobType = jobRequest.job_type.startsWith('wan_video_') 
-      ? jobRequest.job_type.replace('wan_video_', 'video_') 
-      : jobRequest.job_type
+    // Build worker payload
+    const isImageJob = jobRequest.job_type.includes('image');
+    const pipeline = (isPromptlessUploadedExactCopy || isReferenceModify) ? 'img2img' : (isImageJob ? 'txt2img' : 'video');
 
-    // Enqueue to Redis
-    const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')
-    const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')
-
-    if (!redisUrl || !redisToken) {
-      console.error('Redis configuration missing')
-      return new Response('Queue service unavailable', { status: 503, headers: corsHeaders })
-    }
-
-    // Derive content type and NSFW optimization for worker
-    const contentType = jobRequest.metadata?.contentType || 'sfw';
-    const nsfwOptimization = contentType === 'nsfw';
-
-    // Helper function to derive resolution from aspect ratio
     const getResolutionFromAspectRatio = (ratio?: string): string => {
       switch (ratio) {
         case '1:1': return '1024x1024';
@@ -212,48 +285,63 @@ serve(async (req) => {
     };
 
     const queuePayload = {
-      id: job.id,                    // Worker expects 'id' field
-      type: workerJobType,           // Worker expects translated job type (video_fast instead of wan_video_fast)
-      prompt: enhancedPrompt,        // Worker uses 'prompt' for generation
-      user_id: user.id,              // snake_case for worker
+      id: job.id,
+      type: jobRequest.job_type.replace('wan_video_', 'video_'),
+      prompt: enhancedPrompt,
+      user_id: user.id,
       config: {
-        num_images: dbFormat === 'video' ? 1 : (jobRequest.num_images || jobRequest.metadata?.num_images || 1),
-        steps: jobRequest.steps || jobRequest.metadata?.steps || 25,
-        guidance_scale: jobRequest.guidance_scale || jobRequest.metadata?.guidance_scale || 7.5,
-        resolution: getResolutionFromAspectRatio(jobRequest.metadata?.aspect_ratio),
-        seed: jobRequest.seed || jobRequest.metadata?.seed,
-        negative_prompt: jobRequest.negative_prompt || jobRequest.metadata?.negative_prompt || undefined
+        pipeline,                 // 'img2img' for I2I branches
+        num_images: isImageJob ? (jobRequest.num_images || userMetadata.num_images || 1) : 1,
+        steps,
+        guidance_scale: cfg,
+        denoise_strength: denoise,
+        resolution: getResolutionFromAspectRatio(userMetadata?.aspect_ratio),
+        seed: jobRequest.seed || userMetadata.seed
       },
       metadata: {
-        ...jobRequest.metadata,
-        reference_image_url: jobRequest.reference_image_url,
-        reference_strength: jobRequest.reference_strength,
-        reference_type: jobRequest.metadata?.reference_type || 'style',
-        nsfw_optimization: nsfwOptimization
+        ...userMetadata,
+        exact_copy_mode: exactCopyMode,
+        reference_image_url: referenceUrl || undefined,
+        // Keep original prompt/seed context for pure-inference workers
+        originalEnhancedPrompt: userMetadata.originalEnhancedPrompt || undefined,
+        originalSeed: userMetadata.seed || undefined,
+        reference_type: userMetadata.reference_type || (isPromptlessUploadedExactCopy ? 'character' : 'style'),
+        nsfw_optimization: (userMetadata.contentType || 'sfw') === 'nsfw'
       },
-      compel_enabled: jobRequest.compel_enabled || jobRequest.metadata?.compel_enabled || false,
-      compel_weights: jobRequest.compel_weights || jobRequest.metadata?.compel_weights || undefined,
-      // Legacy fields for compatibility
+      compel_enabled: jobRequest.compel_enabled || userMetadata.compel_enabled || false,
+      compel_weights: jobRequest.compel_weights || userMetadata.compel_weights || undefined,
+      // Legacy for compatibility
       job_id: job.id,
       job_type: jobRequest.job_type,
-      quality: quality,
-      format: outputFormat,
-      content_type: contentType
+      quality: jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast'),
+      format: isImageJob ? 'image' : 'video',
+      content_type: userMetadata.contentType || 'sfw'
     }
 
-    console.log(`📋 Enqueuing job ${job.id} to ${queueName}:`, {
-      original_job_type: jobRequest.job_type,
-      worker_job_type: workerJobType,
-      config: queuePayload.config,
-      has_metadata: !!queuePayload.metadata,
-      compel_enabled: queuePayload.compel_enabled,
-      legacy_fields: {
-        job_type: jobRequest.job_type,
-        format: outputFormat,
-        quality: quality,
-        content_type: contentType
-      }
+    // Logging markers
+    console.log('🎯 I2I MODE RESOLUTION', {
+      job_id: job.id,
+      isPromptlessUploadedExactCopy,
+      isReferenceModify,
+      pipeline: queuePayload.config.pipeline,
+      denoise_strength: queuePayload.config.denoise_strength,
+      guidance_scale: queuePayload.config.guidance_scale,
+      steps: queuePayload.config.steps,
+      reference_url_present: !!referenceUrl,
+      hasOriginalEnhancedPrompt
     });
+
+    // Determine queue based on job type
+    const queueName = (jobRequest.job_type.startsWith('sdxl') || jobRequest.job_type.includes('image')) ? 'sdxl_queue' : 'wan_queue'
+    
+    // Enqueue to Redis
+    const redisUrl = Deno.env.get('UPSTASH_REDIS_REST_URL')
+    const redisToken = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')
+
+    if (!redisUrl || !redisToken) {
+      console.error('Redis configuration missing')
+      return new Response('Queue service unavailable', { status: 503, headers: corsHeaders })
+    }
 
     try {
       const enqueueResponse = await fetch(`${redisUrl}/rpush/${queueName}`, {

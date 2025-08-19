@@ -6,9 +6,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Edit3, Save, X, Plus, Wand2, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
-import { Edit3, Save, X, Plus } from 'lucide-react';
+import { useGeneration } from '@/hooks/useGeneration';
+import { useCharacterScenes } from '@/hooks/useCharacterScenes';
+import { uploadGeneratedImageToAvatars, uploadToAvatarsBucket } from '@/utils/avatarUtils';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CharacterEditModalProps {
   isOpen: boolean;
@@ -32,11 +38,156 @@ export const CharacterEditModal = ({
     mood: '',
     appearance_tags: [] as string[],
     image_url: '',
-    reference_image_url: ''
+    reference_image_url: '',
+    user_id: ''
   });
   const [newTag, setNewTag] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const { updateUserCharacter } = useUserCharacters();
+  const { generateContent, isGenerating } = useGeneration();
+  const { createScene } = useCharacterScenes(character?.id);
+  const { user } = useAuth();
   const { toast } = useToast();
+
+  const handleGeneratePortrait = async () => {
+    if (!character?.id) return;
+    try {
+      const prompt = buildCharacterPortraitPrompt({
+        name: formData.name,
+        description: formData.description,
+        persona: formData.persona,
+        traits: formData.traits,
+        appearance_tags: formData.appearance_tags
+      });
+
+      const onComplete = async (e: any) => {
+        const detail = e?.detail || {};
+        if (detail.type !== 'image') return;
+        
+        let imageUrl = detail.imageUrl;
+        
+        // If no imageUrl, fetch from workspace_assets using assetId
+        if (!imageUrl && detail.assetId) {
+          try {
+            const { data: asset } = await supabase
+              .from('workspace_assets')
+              .select('temp_storage_path')
+              .eq('id', detail.assetId)
+              .single();
+            
+            if (asset?.temp_storage_path) {
+              imageUrl = asset.temp_storage_path;
+            }
+          } catch (error) {
+            console.error('Failed to fetch asset URL:', error);
+            toast({ title: 'Error', description: 'Could not load generated image', variant: 'destructive' });
+            window.removeEventListener('generation-completed', onComplete as any);
+            return;
+          }
+        }
+        
+        if (!imageUrl) {
+          console.error('No image URL available');
+          window.removeEventListener('generation-completed', onComplete as any);
+          return;
+        }
+        
+        // Ask user if they want to set as character image
+        const shouldSetAsAvatar = window.confirm(`Portrait generated successfully! Would you like to set this as ${formData.name}'s avatar image?`);
+        
+        if (shouldSetAsAvatar) {
+          try {
+            // Fetch the image and upload to avatars bucket
+            const response = await fetch(imageUrl);
+            const imageBlob = await response.blob();
+            
+            const avatarUrl = await uploadGeneratedImageToAvatars(
+              imageBlob, 
+              user?.id || '', 
+              formData.name,
+              'character'
+            );
+            
+            setFormData(prev => ({ ...prev, image_url: avatarUrl }));
+            toast({ title: 'Avatar updated', description: 'Saved to avatars bucket!' });
+          } catch (error) {
+            console.error('Failed to upload to avatars bucket:', error);
+            // Fallback to the temporary URL
+            setFormData(prev => ({ ...prev, image_url: imageUrl }));
+            toast({ title: 'Avatar updated', description: 'Using temporary URL' });
+          }
+        }
+
+        // Save to character scenes
+        const payload: any = {
+          character_id: character.id,
+          image_url: imageUrl,
+          scene_prompt: `${formData.name} portrait`,
+          generation_metadata: { source: 'character_portrait', jobId: detail.jobId, prompt }
+        };
+        
+        createScene(payload)
+          .then(() => {
+            toast({ 
+              title: 'Portrait generated', 
+              description: shouldSetAsAvatar ? 'Set as avatar and saved to scenes' : 'Saved to character scenes'
+            });
+          })
+          .catch((err) => console.error('Failed to save portrait scene', err))
+          .finally(() => {
+            window.removeEventListener('generation-completed', onComplete as any);
+          });
+      };
+
+      window.addEventListener('generation-completed', onComplete as any);
+      
+      // Add timeout to clear generating state if event doesn't fire
+      const timeout = setTimeout(() => {
+        window.removeEventListener('generation-completed', onComplete as any);
+        console.warn('Generation event timeout - clearing generating state');
+      }, 300000); // 5 minutes timeout
+
+      await generateContent({
+        format: 'sdxl_image_high',
+        prompt,
+        metadata: { 
+          source: 'character_portrait',
+          contentType: 'sfw',
+          character_name: formData.name
+        }
+      });
+
+      // Clear timeout if generation starts successfully
+      setTimeout(() => clearTimeout(timeout), 1000);
+    } catch (err) {
+      console.error('Portrait generation failed', err);
+      toast({ title: 'Generation failed', description: 'Could not generate portrait', variant: 'destructive' });
+    }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.id) return;
+    
+    setIsUploading(true);
+    try {
+      const avatarUrl = await uploadToAvatarsBucket(file, user.id, 'character');
+      setFormData(prev => ({ ...prev, image_url: avatarUrl }));
+      toast({ 
+        title: 'Avatar uploaded', 
+        description: 'Image uploaded successfully to avatars bucket!' 
+      });
+    } catch (error) {
+      console.error('Failed to upload avatar:', error);
+      toast({ 
+        title: 'Upload failed', 
+        description: 'Failed to upload image. Please try again.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (character && isOpen) {
@@ -49,7 +200,8 @@ export const CharacterEditModal = ({
         mood: character.mood || '',
         appearance_tags: character.appearance_tags || [],
         image_url: character.image_url || '',
-        reference_image_url: character.reference_image_url || ''
+        reference_image_url: character.reference_image_url || '',
+        user_id: character.user_id || ''
       });
     }
   }, [character, isOpen]);
@@ -231,6 +383,37 @@ export const CharacterEditModal = ({
                 onChange={(e) => setFormData(prev => ({ ...prev, reference_image_url: e.target.value }))}
                 placeholder="https://..."
               />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button 
+              type="button"
+              variant="outline" 
+              onClick={handleGeneratePortrait}
+              disabled={isGenerating || !formData.name.trim()}
+              className="flex-1"
+            >
+              <Wand2 className="w-4 h-4 mr-2" />
+              {isGenerating ? 'Generating...' : 'Generate Portrait'}
+            </Button>
+            
+            <div className="relative">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <Button 
+                type="button"
+                variant="outline"
+                disabled={isUploading}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                {isUploading ? 'Uploading...' : 'Upload Avatar'}
+              </Button>
             </div>
           </div>
 
