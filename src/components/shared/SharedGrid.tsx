@@ -262,7 +262,15 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-          <Button size="sm" variant="secondary" className="gap-2">
+          <Button 
+            size="sm" 
+            variant="secondary" 
+            className="gap-2"
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePreview();
+            }}
+          >
             <Eye className="w-4 h-4" />
             View
           </Button>

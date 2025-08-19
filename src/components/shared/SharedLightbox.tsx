@@ -38,6 +38,11 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   const [originalUrls, setOriginalUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
 
+  // Reset currentIndex when startIndex changes
+  useEffect(() => {
+    setCurrentIndex(startIndex);
+  }, [startIndex]);
+
   const currentAsset = useMemo(() => assets[currentIndex] || null, [assets, currentIndex]);
 
   // Navigation
@@ -126,7 +131,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   const isWorkspace = currentAsset.metadata?.source === 'workspace';
 
   return (
-    <Dialog open onOpenChange={() => onClose()}>
+    <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 bg-black/95">
         <div className="relative flex flex-col h-full">
           {/* Header */}

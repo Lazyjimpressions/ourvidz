@@ -25,6 +25,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(isMobile ? 8 : 12);
+  const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -115,11 +116,17 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   // Asset actions
   const handlePreview = useCallback((asset: any) => {
+    // Ghost-click protection: ignore clicks for 200ms after lightbox closes
+    const now = Date.now();
+    if (now - lastLightboxClose < 200) {
+      return;
+    }
+    
     const index = filteredAssets.findIndex(a => a.id === asset.id);
     if (index !== -1) {
       setLightboxIndex(index);
     }
-  }, [filteredAssets]);
+  }, [filteredAssets, lastLightboxClose]);
 
   const handleDownload = useCallback(async (asset: any) => {
     try {
@@ -353,7 +360,10 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
         <SharedLightbox
           assets={filteredAssets as any}
           startIndex={lightboxIndex}
-          onClose={() => setLightboxIndex(null)}
+          onClose={() => {
+            setLightboxIndex(null);
+            setLastLightboxClose(Date.now());
+          }}
           onRequireOriginalUrl={handleRequireOriginalUrl}
           actionsSlot={(asset) => (
             <LibraryAssetActions
