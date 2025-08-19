@@ -5,6 +5,7 @@ import type { SharedAsset } from '@/lib/services/AssetMappers';
 export type SignedAsset = SharedAsset & { 
   thumbUrl: string | null; 
   url: string | null;
+  signOriginal: () => Promise<string>;
 };
 
 export type UseSignedAssetsOptions = {

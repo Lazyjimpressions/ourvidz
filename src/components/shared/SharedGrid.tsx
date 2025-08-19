@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Eye, Download, Save, Trash2, Image, Shuffle } from 'lucide-react';
@@ -100,11 +100,30 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
 }) => {
   const isSelected = selection?.selectedIds.has(asset.id) ?? false;
   const cardRef = useRef<HTMLDivElement>(null);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
+  const [isLoadingFallback, setIsLoadingFallback] = useState(false);
 
   // Register ref for lazy loading
   React.useEffect(() => {
     registerRef?.(cardRef.current, asset.id);
   }, [registerRef, asset.id]);
+
+  // Load fallback URL when thumbUrl is null and asset is an image
+  useEffect(() => {
+    if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback) {
+      setIsLoadingFallback(true);
+      asset.signOriginal()
+        .then(url => {
+          setFallbackUrl(url);
+        })
+        .catch(err => {
+          console.warn('Failed to load fallback image for asset', asset.id, err);
+        })
+        .finally(() => {
+          setIsLoadingFallback(false);
+        });
+    }
+  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, asset]);
 
   const handleSelect = useCallback((checked: boolean) => {
     selection?.onToggle(asset.id);
@@ -147,6 +166,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         {asset.thumbUrl ? (
           <img
             src={asset.thumbUrl}
+            alt={asset.title || 'Asset'}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : fallbackUrl && asset.type === 'image' ? (
+          <img
+            src={fallbackUrl}
             alt={asset.title || 'Asset'}
             className="w-full h-full object-cover"
             loading="lazy"
