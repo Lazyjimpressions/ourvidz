@@ -3,7 +3,9 @@
 **Last Updated:** August 3, 2025  
 **Purpose:** Track component usage and identify refactoring opportunities
 
-## 🎯 **MASSIVE WORKSPACE REFACTORING COMPLETED**
+## 🎯 **STATUS REASSESSMENT — Workspace/Library**
+
+Do not assume previous milestones are complete without verification. The following reflects current targets and consolidation work.
 
 ### **📊 Refactoring Summary**
 - **Files Removed**: 51 legacy files (8,526 lines deleted)
@@ -15,22 +17,22 @@
 
 ## **Component Usage Analysis**
 
-### **Workspace Page Components (Current - Post-Refactoring)**
+### **Workspace Page Components (to verify in code)**
 
-#### **Primary Components Used**
+#### **Primary Components (expected)**
 | Component | Size | Purpose | Status | Refactoring Priority |
 |-----------|------|---------|---------|---------------------|
-| `WorkspaceHeader.tsx` | 2.4KB | Page header with clear workspace | ✅ Working | Low |
+| `WorkspaceHeader.tsx` | 2.4KB | Page header | To Verify | Medium |
 | `WorkspaceGrid.tsx` | 8.2KB | Display workspace items in grid | ✅ Active | Low |
-| `useSimplifiedWorkspaceState.ts` | 12KB | Centralized workspace state management | ✅ Active | Low |
+| `useSimplifiedWorkspaceState.ts` | 12KB | Centralized workspace state management | To Verify | Medium |
 | `MobileSimplifiedWorkspace.tsx` | 6.8KB | Mobile workspace page | ✅ Active | Low |
 | `SimplifiedWorkspace.tsx` | 5.2KB | Desktop workspace page | ✅ Active | Low |
 | `MobileSimplePromptInput.tsx` | 15KB | Mobile prompt input controls | ✅ Working | Medium |
 
-#### **Legacy Components (REMOVED - August 3, 2025)**
+#### **Legacy Components (archived/retire candidates)**
 | Component | Size | Purpose | Status | Removal Date |
 |-----------|------|---------|---------|--------------|
-| `Workspace.tsx` | 38KB | Legacy workspace page | ❌ **DELETED** | Aug 3, 2025 |
+| `Workspace.tsx` | 38KB | Legacy workspace page | Archived/Remove | Aug 3, 2025 |
 | `useWorkspace.ts` | 8.9KB | Legacy workspace hook | ❌ **DELETED** | Aug 3, 2025 |
 | `useMediaGridWorkspace.ts` | 6.2KB | Legacy media grid hook | ❌ **DELETED** | Aug 3, 2025 |
 | `useVirtualizedWorkspace.ts` | 19KB | Legacy virtualized hook | ❌ **DELETED** | Aug 3, 2025 |
@@ -47,7 +49,7 @@
 | `UnifiedReferencePanel.tsx` | 11KB | Legacy unified reference | ❌ **DELETED** | Aug 3, 2025 |
 | `CompactReferenceUpload.tsx` | 5.0KB | Legacy reference upload | ❌ **DELETED** | Aug 3, 2025 |
 
-#### **Workspace Management Components (Active)**
+#### **Workspace Management Components (to verify)**
 | Component | Size | Purpose | Status | Refactoring Priority |
 |-----------|------|---------|---------|---------------------|
 | `WorkspaceGrid.tsx` | 8.2KB | Workspace items grid display | ✅ Active | Low |
@@ -55,12 +57,14 @@
 | `useSimplifiedWorkspaceState.ts` | 12KB | Workspace state management hook | ✅ Active | Low |
 | `useRealtimeWorkspace.ts` | 3.8KB | Real-time workspace updates | ✅ Active | Low |
 
-### **Components to Create (Future Phases)**
+### **Components to Create / Extract (Shared)**
 
 #### **Phase 7: Advanced Workspace Features**
 | Component | Purpose | Priority | Status |
 |-----------|---------|----------|---------|
-| `BulkActionBar.tsx` | Multi-select and batch operations | High | To Create |
+| `BulkActionBar.tsx` | Multi-select and batch operations | Medium | To Create |
+| `SharedGrid.tsx` | Shared grid for Workspace/Library | High | To Create |
+| `SharedLightbox.tsx` | Shared lightbox for images/videos | High | To Create |
 | `WorkspaceFilters.tsx` | Search and filter workspace items | Medium | To Create |
 | `WorkspaceTemplates.tsx` | Save and reuse workspace configs | Medium | To Create |
 | `WorkspaceAnalytics.tsx` | Usage tracking and insights | Low | To Create |

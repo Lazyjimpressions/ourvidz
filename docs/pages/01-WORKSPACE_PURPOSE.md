@@ -1,43 +1,35 @@
 ﻿# Workspace Page Purpose & Implementation Guide
 
-**Date:** 8/16/25  
-**Status:** ✅ **IMPLEMENTED - Staging-First Workspace with Two-Bucket Storage and Exact Copy Functionality**  
-**Phase:** Production, aligned with `workspace_assets` + `workspace-actions` flow  
-**Last Updated:** 8/16/25 - Updated storage, realtime, and rendering to staging-first model
+**Last Updated:** 2025-08-18  
+**Status:** In Progress — Reassessing post staging-first changes (do not assume implemented without verification)  
+**Phase:** Validation and alignment with Library-first architecture
 
 ## **🎯 CURRENT IMPLEMENTATION STATUS**
 
-### **📊 What's Actually Built**
-- **Staging-First Architecture**: Workers upload to `workspace-temp`; `job-callback` inserts into `workspace_assets`
-- **Realtime Workspace**: Workspace subscribes to `public.workspace_assets` (by `user_id`) and renders newly staged assets
-- **Unified Asset System**: Single `UnifiedAsset` type for images and videos
-- **LTX-Style Workspace System**: Job-level grouping with thumbnail selector
-- **Two-Level Deletion**: Dismiss (hide) vs Delete (permanent removal)
-- **Storage Path Normalization**: Fixed signed URL generation across all components
-- **Simplified Real-time**: Single subscription to `workspace_assets` for workspace page
-- **UI Components**: WorkspaceGrid, ContentCard, SimplePromptInput
-- **URL-Based Reference Images**: Support for drag & drop URL references
-- **Enhanced Control Parameters**: Aspect ratio, shot type, camera angle, style controls
-- **Mobile Responsive Design**: Optimized for both desktop and mobile devices
-- **Real-time Job Management**: Live updates for job status and progress
-- **🎯 EXACT COPY FUNCTIONALITY**: Advanced SDXL image-to-image with intelligent prompt modification
+### **Reality Check (to verify in code before claiming done)**
+- Workspace rendering, upload, and realtime updates: Needs verification in the current branch.
+- Staging-first vs library-first: Reassess final direction; staging-first changes caused regressions.
+- Exact-copy (I2I) promptless uploads: Known issue; do not mark as complete.
+- Shared components with Library (grid, lightbox): Desired; verify reuse feasibility.
+- Storage conventions and URL signing: Confirm current bucket names, TTL, and cache headers.
 
-### **🔧 Backend Infrastructure (COMPLETE)**
-- **Database Tables**: `workspace_assets` (staging index), `user_library` (permanent), `jobs`
-- **Edge Functions**: `queue-job` (enqueue), `job-callback` (insert staged assets), `workspace-actions` (save/discard)
-- **Realtime**: Subscribe to `public.workspace_assets` for INSERT/UPDATE/DELETE filtered by `user_id`
-- **Storage**: Two buckets — `workspace-temp` (staging), `user-library` (permanent)
-- **🎯 Exact Copy Edge Functions**: Enhanced prompt handling and reference image processing ✅
+### **🔧 Backend Infrastructure (status: needs validation)**
+- Database tables in scope: `workspace_assets` (or `workspace_items`), `user_library`, `jobs` — verify current schema and RLS.
+- Edge functions in scope: `queue-job`, `job-callback`, `workspace-actions` — verify payload fields and routing.
+- Realtime subscription: Confirm target table and filters by `user_id`.
+- Storage buckets: Expected `workspace-temp` (staging) and `user-library` (permanent) — confirm names, paths, and policies.
+- Exact copy handling: Treat as pending — uploaded promptless images not yet exact.
 
-### **🗄️ Storage & URL Conventions**
+### **🗄️ Storage & URL Conventions (proposed — confirm in Supabase before adoption)**
 - **Staging (Workspace)**
-  - bucket: `workspace-temp`
-  - key: `userId/jobId/{assetIndex}.{ext}` (e.g., `8d1f.../b4a2.../0.png`)
-  - access: create signed URL per item, or download to blob URL
+  - Bucket: `workspace-temp`
+  - Key: `userId/jobId/{index}.{ext}` (e.g., `8d1f.../b4a2.../0.png`)
+  - Access: time-bounded signed URL (recommend 15–60 min TTL), client caches blob URL
 - **Library (Saved)**
-  - bucket: `user-library`
-  - key: `userId/{assetId}.{ext}` (e.g., `8d1f.../c93d....png`)
-  - access: same signing/download pattern
+  - Bucket: `user-library`
+  - Key: `userId/{assetId}.{ext}`
+  - Access: time-bounded signed URL with Cache-Control: `public, max-age=31536000, immutable` when possible
+  - Thumbnails: prefer pre-generated `*.jpg` thumbnails for grid speed; lazy-load full asset on open
 
 ```ts
 // Example: create a signed URL for a workspace asset
@@ -47,14 +39,12 @@ const { data, error } = await supabase
   .createSignedUrl(temp_storage_path, 3600);
 ```
 
-### **🔁 Workspace Workflow Summary**
-1) User submits generation (same control box). Default SDXL batch: 3 images.
-2) Worker generates and uploads to `workspace-temp` using `userId/jobId/{index}.{ext}`.
-3) Worker calls `job-callback`; rows inserted into `workspace_assets`.
-4) Workspace subscribes to `workspace_assets`; on INSERT, it resolves a signed URL and appends cards to the grid.
-5) User action:
-   - Save to Library → `workspace-actions` action: `save_to_library` (copy to `user-library`, insert `user_library`).
-   - Discard → `workspace-actions` action: `discard_asset` (remove storage object + `workspace_assets` row).
+### **🔁 Workspace Workflow (target UX — confirm implementation)**
+1) User submits generation via control box (image/video). Batch size and quality per selection.
+2) Worker uploads outputs to `workspace-temp` under `userId/jobId/index.ext`.
+3) `job-callback` creates rows in workspace table for realtime display.
+4) Workspace subscribes, signs URLs, renders items with thumbnails, and enables actions.
+5) User can Save to Library (copy to `user-library`) or Discard (delete staging + row).
 
 ### **🧩 Rendering & UX**
 - Cards are 1x1 and appended inline to a responsive grid (not a rigid 1x3 row).
@@ -62,32 +52,29 @@ const { data, error } = await supabase
 - Videos show duration overlay; images show resolution overlay.
 - Each card: Save to Library, Discard, Copy link, Use as reference.
 
-### **🎨 UI/UX Features (COMPLETE)**
-- **LTX-Style Grid Layout**: Job-based grouping with dynamic grid sizing
-- **Thumbnail Selector**: Right-side navigation with hover-to-delete
-- **Content Cards**: Individual item actions (view, save, delete, dismiss)
-- **Prompt Input**: Enhanced with control parameters and URL reference support
-- **Camera Angle Selection**: 6-angle popup interface with visual icons
-- **Drag & Drop**: Support for files, URLs, and workspace items
-- **🎯 Exact Copy UI**: Original prompt display, modification preview, style control disabling
+### **🎨 UI/UX Scope (desired; verify usage and completeness)**
+- Grid layout and content cards with shared design system
+- Lightbox for previewing images/videos (shared with Library)
+- Prompt input with reference box (files, URLs, workspace items)
+- Style/camera controls (disabled in Exact Copy mode)
+- Visual state for Exact Copy (workspace vs uploaded reference)
 
 ---
 
-## **🎯 EXACT COPY FUNCTIONALITY - COMPREHENSIVE WALKTHROUGH**
+## **🎯 IMAGE-TO-IMAGE (I2I) & EXACT COPY — CURRENT STATUS AND PLAN**
 
 ### **Overview**
-The workspace now includes **advanced SDXL image-to-image exact copy functionality** that allows users to create precise modifications of existing images while maintaining character consistency and original generation parameters. This system supports two primary workflows:
-
-1. **Workspace/Library Reference Images**: Use existing generated content as reference for modifications
-2. **Uploaded Reference Images**: Upload new images for promptless exact copy generation
+- Do not assume exact copy is implemented. Uploaded promptless I2I is not producing identical copies and requires fixes.
+- Two intended workflows:
+  1) Reference from workspace/library item (with metadata)
+  2) Uploaded image (no metadata, promptless copy or minimal edits)
 
 ### **Core Features**
 
-#### **1. Intelligent Prompt Modification**
-- **Original Enhanced Prompt Preservation**: Uses the original enhanced prompt from reference images as the base
-- **Smart Element Replacement**: Intelligently replaces clothing, pose, background, and other elements
-- **Context-Aware Modifications**: Detects modification intent and applies appropriate changes
-- **Preservation of Original Structure**: Maintains the original prompt's quality and style modifiers
+#### **Planned Behavior (to implement/verify)**
+- Reference items: extract original prompt/seed when available; apply targeted modifications; disable style overrides.
+- Uploaded images: exact-copy branch that bypasses enhancement and uses ultra-low denoise with CFG ~1.0.
+- UI clearly indicates reference type (workspace vs uploaded) and mode (copy vs modify).
 
 #### **2. Metadata Extraction & Storage**
 - **Reference Metadata Extraction**: Automatically extracts original enhanced prompts, seeds, and generation parameters
@@ -107,33 +94,21 @@ The workspace now includes **advanced SDXL image-to-image exact copy functionali
 - **Visual Feedback**: Clear indication of exact copy mode with copy icon and styling
 - **Helpful Suggestions**: Provides modification examples when no prompt is entered
 
-### **Technical Implementation**
+### **Technical Notes (contract to verify)**
 
 #### **Core Components**
 ```typescript
-// New utility files for exact copy functionality
-src/utils/extractReferenceMetadata.ts     // Metadata extraction from reference images
-src/utils/promptModification.ts           // Intelligent prompt modification engine
-src/types/workspace.ts                    // ReferenceMetadata interface
+// Utilities in scope (verify presence/usage; keep simple where possible)
+src/utils/extractReferenceMetadata.ts     // Extract prompt/seed/params from assets (if present)
+src/utils/promptModification.ts           // Lightweight prompt adjustment helpers
+src/types/workspace.ts                    // ReferenceMetadata interface (minimal)
 ```
 
 #### **Enhanced Hook Integration**
 ```typescript
-// useLibraryFirstWorkspace.ts - Exact copy logic
-if (exactCopyMode && referenceMetadata) {
-  // Use original enhanced prompt as base
-  finalPrompt = referenceMetadata.originalEnhancedPrompt;
-  
-  // Apply user modification if provided
-  if (prompt.trim()) {
-    finalPrompt = modifyOriginalPrompt(finalPrompt, prompt.trim());
-  }
-  
-  // Use original seed and disable style controls
-  finalSeed = referenceMetadata.originalSeed;
-  finalStyle = referenceMetadata.originalStyle || '';
-  finalCameraAngle = referenceMetadata.originalCameraAngle || 'eye_level';
-  finalShotType = referenceMetadata.originalShotType || 'wide';
+// Pseudocode branch (to verify):
+if (exactCopyMode && referenceMetadata && referenceImageUrl) {
+  // Use original prompt/seed from metadata; apply targeted modification if provided
 }
 ```
 
@@ -160,7 +135,7 @@ if (exactCopyMode && referenceMetadata) {
 
 ---
 
-## **🎯 EXACT COPY WORKFLOWS - DETAILED WALKTHROUGH**
+## **🎯 WORKSPACE WORKFLOWS — TARGET UX**
 
 ### **Workflow 1: Workspace/Library Reference Images**
 
@@ -211,7 +186,7 @@ if (exactCopyMode && referenceMetadata) {
    - Uses original generation parameters
    ```
 
-**Expected Result**: Same subject, pose, lighting, and quality with only the outfit changed to red bikini.
+**Expected Result**: Same subject, pose, lighting, and quality with only the requested change applied.
 
 #### **Scenario B: Exact Copy with Empty Prompt**
 **Use Case**: User wants to create an identical copy of the reference image.
@@ -243,11 +218,11 @@ if (exactCopyMode && referenceMetadata) {
    - Bypasses enhancement
    ```
 
-**Expected Result**: Nearly identical image with same quality and characteristics.
+**Expected Result**: Nearly identical image with same quality and characteristics (subject to denoise/resize policy).
 
 ---
 
-### **Workflow 2: Uploaded Reference Images**
+### **Workflow 2: Uploaded Reference Images (Pending Fixes)**
 
 #### **Scenario A: Promptless Exact Copy**
 **Use Case**: User uploads an image and wants to create an exact copy without any modifications.
@@ -291,7 +266,7 @@ if (exactCopyMode && referenceMetadata) {
    - Uses composition reference type
    ```
 
-**Expected Result**: High-fidelity copy of the uploaded reference image.
+**Expected Result**: High-fidelity copy of the uploaded reference image (requires dedicated promptless exact-copy path).
 
 #### **Scenario B: Uploaded Image with Modification**
 **Use Case**: User uploads an image and wants to modify specific elements while preserving the overall composition.
@@ -328,11 +303,11 @@ if (exactCopyMode && referenceMetadata) {
    - Sets reference strength to 0.9
    ```
 
-**Expected Result**: Same subject and pose with beach background instead of original background.
+**Expected Result**: Same subject and pose with the requested background change.
 
 ---
 
-## **🔧 TECHNICAL IMPLEMENTATION DETAILS**
+## **🔧 TECHNICAL IMPLEMENTATION DETAILS (TO BE VERIFIED)**
 
 ### **Metadata Extraction Process**
 
@@ -361,18 +336,8 @@ export const extractReferenceMetadata = (asset: UnifiedAsset): ReferenceMetadata
 };
 ```
 
-#### **For Uploaded Images**
-```typescript
-// No metadata extraction for uploaded images
-// System uses minimal preservation prompt
-const getPreservationPrompt = (hasModification: boolean) => {
-  if (hasModification) {
-    return 'maintain the exact same subject, person, face, and body from the reference image, only apply the requested changes, keep all other details identical, same pose, same lighting, same composition';
-  } else {
-    return 'exact copy of the reference image, same subject, same pose, same lighting, high quality';
-  }
-};
-```
+#### **For Uploaded Images (promptless copy path)**
+Aim to bypass enhancement, set ultra-low denoise (≤0.05) and CFG ~1.0; avoid style/negative prompts; use img2img pipeline.
 
 ### **Prompt Modification Engine**
 
@@ -401,39 +366,11 @@ export const modifyOriginalPrompt = (originalPrompt: string, modification: strin
 
 ### **Edge Function Integration**
 
-#### **Queue-Job Edge Function**
-```typescript
-// queue-job/index.ts
-if (metadata?.exact_copy_mode) {
-  // Set exact copy parameters
-  config.reference_strength = 0.9;
-  config.reference_type = 'composition';
-  config.exact_copy_mode = true;
-  
-  // Disable style controls
-  config.style = '';
-  config.camera_angle = 'eye_level';
-  config.shot_type = 'wide';
-  
-  // Skip enhancement
-  config.skip_enhancement = true;
-  config.user_requested_enhancement = false;
-}
-```
+#### **Queue-Job Edge Function (policy — to implement/confirm)**
+- Explicit branch for: exact_copy_mode + uploaded reference + empty prompt → promptless copy settings (ultra-low denoise, CFG 1.0, skip enhancement, no negatives).
 
-#### **Enhance-Prompt Edge Function**
-```typescript
-// enhance-prompt/index.ts
-if (exactCopyMode) {
-  // Use subject preservation enhancement
-  const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition`;
-  
-  return {
-    enhanced_prompt: subjectPreservationPrompt,
-    enhancement_strategy: 'exact_copy_subject_preservation'
-  };
-}
-```
+#### **Enhance-Prompt Edge Function (policy — to implement/confirm)**
+- In promptless exact-copy branch, skip enhancement entirely.
 
 ---
 
@@ -487,7 +424,7 @@ A professional high-resolution shot of a teenage female model wearing a red biki
 
 ---
 
-## **🔍 TROUBLESHOOTING GUIDE**
+## **🔍 TROUBLESHOOTING GUIDE (KNOWN GAPS)**
 
 ### **Common Issues and Solutions**
 
@@ -522,23 +459,8 @@ console.log('🎯 EDGE FUNCTION:', {
 - System requires `referenceMetadata` to enable exact copy mode
 - Fallback logic not handling uploaded references properly
 
-**Solutions**:
-```typescript
-// ✅ MINIMAL FIX: System now handles uploaded references without metadata
-if (exactCopyMode && referenceMetadata) {
-  // Workspace/library reference with metadata (unchanged - already working)
-  finalPrompt = referenceMetadata.originalEnhancedPrompt;
-} else if (exactCopyMode && (referenceImageUrl || referenceImage) && !referenceMetadata) {
-  // ✅ Uploaded reference without metadata (NEW FIX)
-  finalPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional';
-}
-```
-
-**What Was Fixed**:
-- Added minimal case for uploaded images without metadata
-- Preserved all existing working functionality
-- No changes to reference strength values or style controls
-- Only fixed the specific broken case
+**Proposed Direction**:
+- Add explicit promptless exact-copy branch in edge; guard in worker; bypass enhancement; set ultra-low denoise and CFG 1.0.
 
 #### **Issue 3: Original Prompt Not Displayed**
 **Symptoms**: No original prompt shown in control panel
@@ -610,7 +532,7 @@ if (asset) {
 
 ---
 
-## **📊 EXPECTED BEHAVIOR MATRIX**
+## **📊 EXPECTED BEHAVIOR MATRIX (TARGET)**
 
 ### **Workspace/Library Reference Images**
 
@@ -625,7 +547,7 @@ if (asset) {
 
 | User Action | System Response | Expected Result |
 |-------------|----------------|-----------------|
-| Upload image + Enable exact copy | Set reference strength 0.9, disable controls | Ready for promptless copy |
+| Upload image + Enable exact copy | Trigger promptless exact-copy branch (skip enhancement, denoise ≤0.05, CFG 1.0) | Ready for promptless copy |
 | Enter modification prompt | Create subject-preserving prompt | Modified version |
 | Leave prompt empty | Use minimal preservation prompt | High-fidelity copy |
 | Disable exact copy | Normal generation flow | Standard I2I with style controls |
@@ -654,6 +576,40 @@ if (asset) {
 
 ---
 
-**Current Status**: ✅ **FULLY IMPLEMENTED** - Complete exact copy functionality with comprehensive workflows for both workspace/library and uploaded reference images
-**Next Phase**: Performance optimization and advanced features
-**Priority**: High - System is production-ready with complete exact copy capabilities
+**Current Status**: In Progress — verification and fixes pending
+**Next Phase**: Implement promptless exact-copy branch; unify shared components with Library
+**Priority**: High — unblock workspace UX and consistent I2I behavior
+
+---
+
+## Page Purpose & Component Inventory (per template)
+
+### Purpose Statement
+Provide a responsive workspace for generating, staging, previewing, iterating, and selectively saving assets to the Library.
+
+### User Intent
+- Primary: Generate and iterate rapidly; select best results to save.
+- Secondary: Use references (workspace/library or uploaded) for I2I; test small edits.
+
+### Core Functionality (to verify)
+1. Generation submission and realtime staging
+2. Grid display with preview (shared lightbox)
+3. Save to Library / Discard
+4. Reference box for I2I (workspace or uploaded)
+5. Promptless exact-copy for uploads (pending)
+
+### Known Issues
+- Promptless uploaded exact copy not accurate yet
+- Storage and URL cache policy needs confirmation
+- Component duplication between Workspace and Library
+
+### Components (inventory — verify presence/usage)
+- Workspace page: `src/pages/SimplifiedWorkspace.tsx`, `src/pages/MobileSimplifiedWorkspace.tsx`
+- Workspace UI: `src/components/workspace/MobileSimplePromptInput.tsx`, `src/components/workspace/ContentCard.tsx`, `src/components/workspace/SimpleLightbox.tsx`
+- Shared candidates: grid, lightbox, content card (align with Library equivalents)
+
+### Next Steps
+- Implement and verify promptless exact-copy branch (edge + worker guard)
+- Consolidate grid + lightbox into shared components used by both pages
+- Confirm storage/bucket conventions and signed URL TTL + Cache-Control
+- Archive legacy/unused workspace components in `docs/components/99-ARCHIVE_COMPONENTS.MD`

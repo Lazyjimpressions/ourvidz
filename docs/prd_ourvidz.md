@@ -3,7 +3,14 @@
 
 ## **Executive Summary**
 
-OurVidz.com is a web-based platform enabling users to generate personalized adult content using AI, with a phased approach to feature development. **Phase 1 is currently in active development** with core image generation, chat, roleplay, and video generation functionality implemented but requiring refinement. The platform uses advanced AI models including WAN 2.1 T2V 1.3B, SDXL Lustify, and Qwen 2.5-7B models running on RunPod RTX 6000 ADA infrastructure.
+OurVidz.com is a web-based platform enabling users to generate personalized adult content using AI, with a phased approach to feature development. 
+
+Note: Development status reassessment (2025-08-18)
+- Workspace & Library pages: do not assume milestones are complete without verification. Recent staging-first changes introduced regressions; status is being validated and brought back to green.
+- Image-to-Image (I2I) promptless exact-copy for uploaded images: not yet accurate; explicit fix path is planned (edge + worker guard, ultra-low denoise, skip enhancement). 
+- Shared UI components: grid and lightbox are to be unified across Workspace/Library to avoid divergence and improve UX consistency.
+
+The platform uses advanced AI models including WAN 2.1 T2V 1.3B, SDXL Lustify, and Qwen 2.5-7B models running on RunPod RTX 6000 ADA infrastructure.
 
 ---
 
