@@ -123,13 +123,44 @@ serve(async (req) => {
         return new Response('Failed to save to library', { status: 500, headers: corsHeaders })
       }
 
-      // Create library record
+      // Handle thumbnail copy
+      let thumbSrc = asset.thumbnail_path || null;
+      if (!thumbSrc) {
+        // Fallback naming based on temp_storage_path
+        const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+        thumbSrc = `${base}.thumb.webp`;
+      }
+
+      // Try to download thumbnail (best-effort)
+      let libraryThumbPath: string | null = null;
+      if (thumbSrc) {
+        const { data: thumbData } = await supabaseClient.storage
+          .from('workspace-temp')
+          .download(thumbSrc);
+        
+        if (thumbData) {
+          const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+          const { error: upThumbErr } = await supabaseClient.storage
+            .from('user-library')
+            .upload(thumbDest, thumbData, {
+              contentType: 'image/webp',
+              upsert: true
+            });
+          if (!upThumbErr) {
+            libraryThumbPath = thumbDest;
+            console.log('📁 Copying thumbnail:', { thumbSrc, thumbDest });
+          }
+        }
+      }
+
+      // Create library record with thumbnail_path
       const { data: libraryAsset, error: libraryError } = await supabaseClient
         .from('user_library')
         .insert({
           user_id: user.id,
           asset_type: asset.asset_type,
           storage_path: destKey,
+          thumbnail_path: libraryThumbPath,
           file_size_bytes: asset.file_size_bytes,
           mime_type: asset.mime_type,
           duration_seconds: asset.duration_seconds,
