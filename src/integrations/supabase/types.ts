@@ -1162,6 +1162,7 @@ export type Database = {
           original_prompt: string
           storage_path: string
           tags: string[] | null
+          thumbnail_path: string | null
           updated_at: string | null
           user_id: string
           visibility: string | null
@@ -1181,6 +1182,7 @@ export type Database = {
           original_prompt: string
           storage_path: string
           tags?: string[] | null
+          thumbnail_path?: string | null
           updated_at?: string | null
           user_id: string
           visibility?: string | null
@@ -1200,6 +1202,7 @@ export type Database = {
           original_prompt?: string
           storage_path?: string
           tags?: string[] | null
+          thumbnail_path?: string | null
           updated_at?: string | null
           user_id?: string
           visibility?: string | null
