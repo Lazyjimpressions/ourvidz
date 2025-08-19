@@ -1251,6 +1251,7 @@ export type Database = {
           model_used: string
           original_prompt: string
           temp_storage_path: string
+          thumbnail_path: string | null
           user_id: string
         }
         Insert: {
@@ -1268,6 +1269,7 @@ export type Database = {
           model_used: string
           original_prompt: string
           temp_storage_path: string
+          thumbnail_path?: string | null
           user_id: string
         }
         Update: {
@@ -1285,6 +1287,7 @@ export type Database = {
           model_used?: string
           original_prompt?: string
           temp_storage_path?: string
+          thumbnail_path?: string | null
           user_id?: string
         }
         Relationships: []
