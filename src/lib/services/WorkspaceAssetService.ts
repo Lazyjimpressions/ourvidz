@@ -38,15 +38,18 @@ export class WorkspaceAssetService {
         throw error;
       }
 
-      // Convert to unified format
-      return (assets || []).map((asset: any) => ({
+      // Convert to unified format - include all necessary fields
+      const mappedAssets = (assets || []).map((asset: any) => ({
         id: asset.id,
         userId: asset.user_id,
         jobId: asset.job_id,
         assetType: asset.asset_type as 'image' | 'video',
         tempStoragePath: asset.temp_storage_path,
+        thumbnailPath: asset.thumbnail_path || null, // Include thumbnail path
         fileSizeBytes: Number(asset.file_size_bytes),
         mimeType: asset.mime_type,
+        width: asset.width || null,
+        height: asset.height || null,
         durationSeconds: asset.duration_seconds ? Number(asset.duration_seconds) : undefined,
         assetIndex: Number(asset.asset_index),
         generationSeed: Number(asset.generation_seed),
@@ -58,6 +61,22 @@ export class WorkspaceAssetService {
         createdAt: asset.created_at,
         expiresAt: asset.expires_at
       }));
+      
+      // Diagnostic: Log path validation for sample assets
+      if (mappedAssets.length > 0) {
+        const sampleAsset = mappedAssets[0];
+        console.log('📊 Workspace assets loaded:', {
+          count: mappedAssets.length,
+          sampleAsset: {
+            id: sampleAsset.id,
+            tempStoragePath: sampleAsset.tempStoragePath,
+            thumbnailPath: sampleAsset.thumbnailPath,
+            hasValidPath: !!sampleAsset.tempStoragePath
+          }
+        });
+      }
+      
+      return mappedAssets;
     } catch (error) {
       console.error('Failed to fetch workspace assets:', error);
       throw error;

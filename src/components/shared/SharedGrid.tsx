@@ -233,16 +233,19 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             decoding="async"
             onError={() => {
               // On thumbnail error, load original for images with concurrency control
-              if (asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
+              if (asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible && asset.originalPath) {
                 setIsLoadingFallback(true);
+                console.log('🔄 Loading fallback original for asset:', { id: asset.id, originalPath: asset.originalPath });
                 originalImageLoader.load(async () => {
                   try {
                     const url = await asset.signOriginal();
                     setFallbackUrl(url);
                   } catch (err) {
-                    console.warn('Failed to load original for asset', asset.id, err);
+                    console.warn('❌ Failed to load original for asset', asset.id, err);
                   }
                 }).finally(() => setIsLoadingFallback(false));
+              } else if (!asset.originalPath) {
+                console.warn('🚫 No originalPath available for fallback loading:', asset.id);
               }
             }}
           />

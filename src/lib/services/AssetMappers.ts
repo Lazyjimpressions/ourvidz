@@ -57,82 +57,128 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
 
 /**
  * Map workspace_assets row to SharedAsset
+ * Handles both snake_case (DB) and camelCase (service) formats
  */
 export function toSharedFromWorkspace(row: any): SharedAsset {
-  const rawOriginalPath = row.temp_storage_path || row.storage_path || '';
-  const rawThumbPath = row.thumbnail_path;
+  // Handle both formats: snake_case from DB and camelCase from services
+  const rawOriginalPath = row.temp_storage_path || row.tempStoragePath || row.storage_path || row.storagePath || '';
+  const rawThumbPath = row.thumbnail_path || row.thumbnailPath || null;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  // Only set thumbPath if thumbnail_path exists in DB, otherwise null
   const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
-  return {
+  // Support both naming conventions
+  const assetType = row.asset_type || row.assetType || 'image';
+  const originalPrompt = row.original_prompt || row.originalPrompt || '';
+  const createdAt = row.created_at || row.createdAt;
+  const modelUsed = row.model_used || row.modelUsed || '';
+  const mimeType = row.mime_type || row.mimeType || '';
+  const generationSeed = row.generation_seed || row.generationSeed;
+  const jobId = row.job_id || row.jobId;
+  const generationSettings = row.generation_settings || row.generationSettings || {};
+  const fileSizeBytes = row.file_size_bytes || row.fileSizeBytes;
+  const durationSeconds = row.duration_seconds || row.durationSeconds;
+  const userId = row.user_id || row.userId;
+  const customTitle = row.custom_title || row.customTitle;
+  
+  const sharedAsset = {
     id: row.id,
-    type: row.asset_type === 'video' ? 'video' : 'image',
+    type: (assetType === 'video' ? 'video' : 'image') as 'image' | 'video',
     thumbPath,
     originalPath,
-    title: row.custom_title || `Generated ${row.asset_type}`,
-    prompt: row.original_prompt,
-    createdAt: new Date(row.created_at),
-    format: row.asset_type,
-    modelType: row.model_used,
+    title: customTitle || `Generated ${assetType}`,
+    prompt: originalPrompt,
+    createdAt: new Date(createdAt),
+    format: assetType,
+    modelType: modelUsed,
     metadata: {
       source: 'workspace',
       bucket: 'workspace-temp',
       storage_path: originalPath,
-      mime_type: row.mime_type,
-      seed: row.generation_seed,
-      job_id: row.job_id,
-      generation_settings: row.generation_settings,
-      ...row.generation_settings
+      mime_type: mimeType,
+      seed: generationSeed,
+      job_id: jobId,
+      generation_settings: generationSettings,
+      ...generationSettings
     },
     width: row.width,
     height: row.height,
-    duration: row.duration_seconds,
-    fileSize: row.file_size_bytes,
-    mimeType: row.mime_type,
-    userId: row.user_id
+    duration: durationSeconds,
+    fileSize: fileSizeBytes,
+    mimeType: mimeType,
+    userId: userId
   };
+  
+  // One-time diagnostic logging
+  if (Math.random() < 0.1) { // Log ~10% of assets for sampling
+    console.log('🔍 Asset mapped (workspace):', {
+      id: sharedAsset.id,
+      originalPath: sharedAsset.originalPath,
+      thumbPath: sharedAsset.thumbPath,
+      type: sharedAsset.type,
+      hasOriginalPath: !!sharedAsset.originalPath,
+      hasThumbPath: !!sharedAsset.thumbPath
+    });
+  }
+  
+  return sharedAsset;
 }
 
 /**
  * Map user_library row to SharedAsset
+ * Handles both snake_case (DB) and camelCase (service) formats
  */
 export function toSharedFromLibrary(row: any): SharedAsset {
-  const rawOriginalPath = row.storage_path || '';
-  const rawThumbPath = row.thumbnail_path;
+  // Handle both formats: snake_case from DB and camelCase from services
+  const rawOriginalPath = row.storage_path || row.storagePath || '';
+  const rawThumbPath = row.thumbnail_path || row.thumbnailPath || null;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  // Only set thumbPath if thumbnail_path exists in DB, otherwise null
   const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
+  
+  // Support both naming conventions
+  const assetType = row.asset_type || row.assetType || 'image';
+  const originalPrompt = row.original_prompt || row.originalPrompt || '';
+  const createdAt = row.created_at || row.createdAt;
+  const modelUsed = row.model_used || row.modelUsed || '';
+  const mimeType = row.mime_type || row.mimeType || '';
+  const generationSeed = row.generation_seed || row.generationSeed;
+  const fileSizeBytes = row.file_size_bytes || row.fileSizeBytes;
+  const durationSeconds = row.duration_seconds || row.durationSeconds;
+  const userId = row.user_id || row.userId;
+  const customTitle = row.custom_title || row.customTitle;
+  const tags = row.tags || [];
+  const isFavorite = row.is_favorite || row.isFavorite || false;
+  const collectionId = row.collection_id || row.collectionId;
+  const visibility = row.visibility || 'private';
   
   return {
     id: row.id,
-    type: row.asset_type === 'video' ? 'video' : 'image',
+    type: (assetType === 'video' ? 'video' : 'image') as 'image' | 'video',
     thumbPath,
     originalPath,
-    title: row.custom_title || `Saved ${row.asset_type}`,
-    prompt: row.original_prompt,
-    createdAt: new Date(row.created_at),
-    format: row.asset_type,
-    modelType: row.model_used,
+    title: customTitle || `Saved ${assetType}`,
+    prompt: originalPrompt,
+    createdAt: new Date(createdAt),
+    format: assetType,
+    modelType: modelUsed,
     metadata: {
       source: 'library',
       bucket: 'user-library',
       storage_path: originalPath,
-      mime_type: row.mime_type,
-      seed: row.generation_seed,
-      tags: row.tags,
-      is_favorite: row.is_favorite,
-      collection_id: row.collection_id,
-      visibility: row.visibility
+      mime_type: mimeType,
+      seed: generationSeed,
+      tags: tags,
+      is_favorite: isFavorite,
+      collection_id: collectionId,
+      visibility: visibility
     },
     width: row.width,
     height: row.height,
-    duration: row.duration_seconds,
-    fileSize: row.file_size_bytes,
-    mimeType: row.mime_type,
-    userId: row.user_id
+    duration: durationSeconds,
+    fileSize: fileSizeBytes,
+    mimeType: mimeType,
+    userId: userId
   };
 }
 

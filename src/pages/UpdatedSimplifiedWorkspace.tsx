@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWorkspaceAssets } from '@/hooks/useWorkspaceAssets';
@@ -46,16 +46,31 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     // ... other workspace state
   } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
 
-  // Fetch workspace assets
-  const { data: rawWorkspaceAssets = [], refetch } = useWorkspaceAssets();
-
-  // Convert to shared asset format
-  const sharedAssets = React.useMemo(() => 
-    rawWorkspaceAssets.map(toSharedFromWorkspace), 
-    [rawWorkspaceAssets]
-  );
-
-  // Get signed URLs for thumbnails
+  // Fetch workspace assets and convert to shared format
+  const { data: rawAssets = [], isLoading, error } = useWorkspaceAssets();
+  
+  // Map to shared format for consistent handling
+  const sharedAssets = useMemo(() => {
+    const mapped = rawAssets.map(toSharedFromWorkspace);
+    
+    // One-time diagnostic for first asset to verify mapping
+    if (mapped.length > 0 && Math.random() < 0.2) { // 20% chance to log
+      const firstAsset = mapped[0];
+      console.log('🔍 Workspace asset mapping check:', {
+        id: firstAsset.id,
+        originalPath: firstAsset.originalPath,
+        thumbPath: firstAsset.thumbPath,
+        type: firstAsset.type,
+        hasOriginalPath: !!firstAsset.originalPath,
+        hasThumbPath: !!firstAsset.thumbPath,
+        pathSample: firstAsset.originalPath?.substring(0, 50) + '...'
+      });
+    }
+    
+    return mapped;
+  }, [rawAssets]);
+  
+  // Get signed URLs for assets
   const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
     thumbTtlSec: 15 * 60, // 15 minutes for workspace
     enabled: !loading && !!user
@@ -129,7 +144,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
       });
       
       // Refresh workspace
-      refetch();
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
     } catch (error) {
       console.error('Failed to discard asset:', error);
       toast({
@@ -138,7 +153,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
         variant: "destructive",
       });
     }
-  }, [toast, refetch]);
+  }, [toast, queryClient]);
 
   const handlePreview = useCallback((asset: any) => {
     const index = signedAssets.findIndex(a => a.id === asset.id);
@@ -147,11 +162,27 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     }
   }, [signedAssets]);
 
-  // Sign original URL on demand for lightbox
+  // Handle requiring original URL for lightbox with validation
   const handleRequireOriginalUrl = useCallback(async (asset: any) => {
+    if (!asset.originalPath) {
+      console.warn('🚫 Cannot load original URL - no originalPath for asset:', asset.id);
+      return null;
+    }
+    
+    console.log('📸 Requesting original URL for asset:', {
+      id: asset.id,
+      originalPath: asset.originalPath,
+      bucket: asset.metadata?.bucket || 'workspace-temp'
+    });
+    
     // Use the signOriginal function added by useSignedAssets
     if ((asset as any).signOriginal) {
-      return (asset as any).signOriginal();
+      try {
+        return await (asset as any).signOriginal();
+      } catch (error) {
+        console.error('❌ Failed to sign original URL in lightbox:', error, { assetId: asset.id });
+        throw error;
+      }
     }
     throw new Error('Original URL signing not available');
   }, []);
