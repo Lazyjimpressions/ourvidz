@@ -120,7 +120,11 @@ export interface LibraryFirstWorkspaceActions {
   clearAllCache: () => void;
 }
 
-export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & LibraryFirstWorkspaceActions => {
+export interface LibraryFirstWorkspaceConfig {
+  disableUrlOptimization?: boolean;
+}
+
+export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {}): LibraryFirstWorkspaceState & LibraryFirstWorkspaceActions => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -317,7 +321,7 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     };
   }, [queryClient, debouncedInvalidate]);
 
-  // OPTIMIZED: Use the new optimized URL loading hook with preloading
+  // OPTIMIZED: Use the new optimized URL loading hook with preloading (configurable)
   const {
     assets: assetsWithUrls,
     signedUrls,
@@ -330,20 +334,20 @@ export const useLibraryFirstWorkspace = (): LibraryFirstWorkspaceState & Library
     clearAllCache,
     isLoading: isUrlLoading
   } = useOptimizedWorkspaceUrls(workspaceAssets, {
-    enabled: true,
+    enabled: !config.disableUrlOptimization,
     batchSize: 12,
     prefetchThreshold: 0.3
   });
 
-  // Preload first 24 assets on mount for immediate rendering
+  // Preload first 24 assets on mount for immediate rendering (if enabled)
   useEffect(() => {
-    if (workspaceAssets.length > 0) {
+    if (!config.disableUrlOptimization && workspaceAssets.length > 0) {
       const firstAssets = workspaceAssets.slice(0, 24);
       const assetIds = firstAssets.map(asset => asset.id);
       console.log('🚀 WORKSPACE: Preloading first 24 assets:', assetIds);
       loadAssetUrlsBatch(assetIds);
     }
-  }, [workspaceAssets.length > 0, loadAssetUrlsBatch]);
+  }, [workspaceAssets.length > 0, loadAssetUrlsBatch, config.disableUrlOptimization]);
 
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (

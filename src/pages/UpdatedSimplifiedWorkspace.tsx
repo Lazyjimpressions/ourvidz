@@ -25,7 +25,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
 
-  // Get workspace state from existing hook
+  // Get workspace state from existing hook with URL optimization disabled
   const {
     mode,
     prompt,
@@ -44,7 +44,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     clearWorkspace,
     deleteAllWorkspace,
     // ... other workspace state
-  } = useLibraryFirstWorkspace();
+  } = useLibraryFirstWorkspace({ disableUrlOptimization: true });
 
   // Fetch workspace assets
   const { data: rawWorkspaceAssets = [], refetch } = useWorkspaceAssets();

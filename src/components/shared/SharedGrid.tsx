@@ -170,6 +170,16 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             className="w-full h-full object-cover"
             loading="lazy"
             decoding="async"
+            onError={() => {
+              // On thumbnail error, load original for images
+              if (asset.type === 'image' && !fallbackUrl && !isLoadingFallback) {
+                setIsLoadingFallback(true);
+                asset.signOriginal()
+                  .then(setFallbackUrl)
+                  .catch(err => console.warn('Failed to load original for asset', asset.id, err))
+                  .finally(() => setIsLoadingFallback(false));
+              }
+            }}
           />
         ) : fallbackUrl && asset.type === 'image' ? (
           <img

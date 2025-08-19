@@ -63,7 +63,8 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   const rawThumbPath = row.thumbnail_path;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
+  // Only set thumbPath if thumbnail_path exists in DB, otherwise null
+  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
   return {
     id: row.id,
@@ -102,7 +103,8 @@ export function toSharedFromLibrary(row: any): SharedAsset {
   const rawThumbPath = row.thumbnail_path;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
+  // Only set thumbPath if thumbnail_path exists in DB, otherwise null
+  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
   return {
     id: row.id,
@@ -151,7 +153,8 @@ export function toSharedFromLegacy(asset: any): SharedAsset {
   const rawThumbPath = asset.thumbnailPath || asset.metadata?.thumbnail_path;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  const thumbPath = normalizePath(rawThumbPath) || deriveThumbnailPath(originalPath);
+  // Only set thumbPath if exists, otherwise null to prevent 404s
+  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
   return {
     id: asset.id,
