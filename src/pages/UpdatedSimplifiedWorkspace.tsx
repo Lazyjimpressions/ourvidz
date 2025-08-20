@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
+import { supabase } from '@/integrations/supabase/client';
 
 /**
  * Updated workspace using shared components and new asset mapping
@@ -105,6 +106,58 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
       window.history.replaceState({}, '');
     }
   }, [searchParams, location.state, updateMode, setReferenceImage, toast]);
+
+  // Real-time subscriptions for automatic workspace updates
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('🔄 Setting up real-time subscriptions for workspace updates');
+
+    const channel = supabase
+      .channel('workspace-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'workspace_assets',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('🆕 New workspace asset inserted:', payload);
+          queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+          
+          const assetType = payload.new?.asset_type;
+          const typeText = assetType === 'video' ? 'video' : 'image';
+          toast({
+            title: "New asset ready",
+            description: `Your ${typeText} has been added to the workspace`,
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          if (payload.new?.status === 'completed') {
+            console.log('✅ Job completed, refreshing workspace:', payload.new?.id);
+            queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🧹 Cleaning up workspace real-time subscriptions');
+      supabase.removeChannel(channel);
+    };
+  }, [user, queryClient, toast]);
 
   // Selection handlers
   const handleToggleSelection = useCallback((assetId: string) => {
