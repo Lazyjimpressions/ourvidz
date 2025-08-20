@@ -155,32 +155,51 @@ serve(async (req) => {
     // Enhancement decision
     let enhancedPrompt = jobRequest.enhanced_prompt || originalPrompt;
     let templateName = 'original_prompt';
+    let shouldEnhance = false; // Initialize to track enhancement attempts
 
     if (isPromptlessUploadedExactCopy) {
       // Skip enhancement entirely
       enhancedPrompt = originalPrompt; // often empty; worker ignores prompt in copy branch
       templateName = 'exact_copy_skip_enhance';
     } else if (isReferenceModify) {
-      // Enhancement is optional. If you want subject-preserving rewrite for freeform uploads, keep; else skip when original prompt is present from metadata
-      const shouldEnhance =
-        !hasOriginalEnhancedPrompt && userPromptTrim.length > 0 &&
+      // CRITICAL FIX: Always enhance when user provides modification, even with originalEnhancedPrompt
+      shouldEnhance = 
+        userPromptTrim.length > 0 && 
         !(userMetadata.skip_enhancement === true);
 
       if (shouldEnhance) {
-        const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
-          body: {
-            prompt: originalPrompt,
-            jobType: jobRequest.job_type,
-            format: jobRequest.job_type.includes('image') ? 'image' : 'video',
-            quality: jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast'),
-            selectedModel: userMetadata?.enhancement_model || 'qwen_instruct',
-            contentType: userMetadata?.contentType || 'sfw',
-            metadata: { reference_mode: 'modify', exact_copy_mode: false, ...userMetadata }
+        try {
+          const enhanceResponse = await supabaseClient.functions.invoke('enhance-prompt', {
+            body: {
+              prompt: originalPrompt,
+              jobType: jobRequest.job_type,
+              format: jobRequest.job_type.includes('image') ? 'image' : 'video',
+              quality: jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast'),
+              selectedModel: userMetadata?.enhancement_model || 'qwen_instruct',
+              contentType: userMetadata?.contentType || 'sfw',
+              metadata: { 
+                reference_mode: 'modify', 
+                exact_copy_mode: false, 
+                original_enhanced_prompt: userMetadata.originalEnhancedPrompt,
+                ...userMetadata 
+              }
+            }
+          });
+          if (enhanceResponse?.data?.enhanced_prompt) {
+            enhancedPrompt = enhanceResponse.data.enhanced_prompt;
+            templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 'enhanced_modify';
+          } else {
+            // Fallback: compose manually if enhancement fails
+            const basePrompt = userMetadata.originalEnhancedPrompt || 'maintain the same subject';
+            enhancedPrompt = `${basePrompt}, ${userPromptTrim}`;
+            templateName = 'manual_compose_fallback';
           }
-        });
-        if (enhanceResponse?.data?.enhanced_prompt) {
-          enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 'enhanced_modify';
+        } catch (error) {
+          console.warn('⚠️ Enhancement failed, using fallback composition:', error);
+          // Fallback: compose manually if enhancement errors
+          const basePrompt = userMetadata.originalEnhancedPrompt || 'maintain the same subject';
+          enhancedPrompt = `${basePrompt}, ${userPromptTrim}`;
+          templateName = 'manual_compose_error';
         }
       } else {
         // Use original prompt (from metadata if provided)
@@ -245,7 +264,7 @@ serve(async (req) => {
       // Remove negative prompts in this branch
       jobRequest.negative_prompt = undefined;
     } else if (isReferenceModify) {
-      const d = typeof denoise === 'number' ? denoise : 0.18;
+      const d = typeof denoise === 'number' ? denoise : 0.5; // FIXED: Default to 0.5 for better changes
       denoise = Math.max(DENOISE_MOD_MIN, Math.min(d, DENOISE_MOD_MAX));
 
       const g = typeof cfg === 'number' ? cfg : 6.0;
@@ -364,7 +383,13 @@ serve(async (req) => {
       metadata_reference_mode: queuePayload.metadata.reference_mode,
       metadata_denoise_strength: queuePayload.metadata.denoise_strength,
       metadata_reference_strength: queuePayload.metadata.reference_strength,
-      negative_prompt_included: !!queuePayload.negative_prompt
+      negative_prompt_included: !!queuePayload.negative_prompt,
+      // 🆕 ADDITIONAL LOGGING for troubleshooting
+      has_user_modification: userPromptTrim.length > 0,
+      user_prompt_length: userPromptTrim.length,
+      final_prompt_preview: enhancedPrompt.substring(0, 100),
+      template_name: templateName,
+      enhancement_attempted: shouldEnhance
     });
 
     // Determine queue based on job type
