@@ -304,6 +304,10 @@ serve(async (req) => {
       }
     };
 
+    // Clamp batch size to SDXL worker requirements [1, 3, 6]
+    const batchCount = isImageJob ? (jobRequest.num_images || userMetadata.num_images || 1) : 1;
+    const clampedBatchCount = batchCount <= 1 ? 1 : (batchCount <= 3 ? 3 : 6);
+
     const queuePayload = {
       id: job.id,
       type: jobRequest.job_type.replace('wan_video_', 'video_'),
@@ -311,8 +315,8 @@ serve(async (req) => {
       user_id: user.id,
       config: {
         pipeline,                 // 'img2img' for I2I branches
-        num_images: isImageJob ? (jobRequest.num_images || userMetadata.num_images || 1) : 1,
-        steps,
+        num_images: clampedBatchCount,
+        num_inference_steps: steps,  // ✅ FIXED: Worker expects num_inference_steps, not steps
         guidance_scale: cfg,
         denoise_strength: denoise,
         resolution: getResolutionFromAspectRatio(userMetadata?.aspect_ratio),
@@ -320,6 +324,9 @@ serve(async (req) => {
       },
       metadata: {
         ...userMetadata,
+        // ✅ CRITICAL: Include strength parameters for worker
+        denoise_strength: denoise,
+        reference_strength: jobRequest.reference_strength,
         exact_copy_mode: isPromptlessUploadedExactCopy,
         reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
         reference_image_url: referenceUrl || undefined,
@@ -329,6 +336,8 @@ serve(async (req) => {
         reference_type: userMetadata.reference_type || (isPromptlessUploadedExactCopy ? 'character' : 'style'),
         nsfw_optimization: (userMetadata.contentType || 'sfw') === 'nsfw'
       },
+      // ✅ FIXED: Only include negative_prompt for modify/txt2img flows
+      negative_prompt: isPromptlessUploadedExactCopy ? undefined : (jobRequest.negative_prompt || userMetadata.negative_prompt),
       compel_enabled: jobRequest.compel_enabled || userMetadata.compel_enabled || false,
       compel_weights: jobRequest.compel_weights || userMetadata.compel_weights || undefined,
       // Legacy for compatibility
@@ -339,7 +348,7 @@ serve(async (req) => {
       content_type: userMetadata.contentType || 'sfw'
     }
 
-    // Logging markers
+    // ✅ ENHANCED LOGGING: Detailed parameter verification before enqueueing
     console.log('🎯 I2I MODE RESOLUTION', {
       job_id: job.id,
       isPromptlessUploadedExactCopy,
@@ -347,11 +356,15 @@ serve(async (req) => {
       pipeline: queuePayload.config.pipeline,
       denoise_strength: queuePayload.config.denoise_strength,
       guidance_scale: queuePayload.config.guidance_scale,
-      steps: queuePayload.config.steps,
+      num_inference_steps: queuePayload.config.num_inference_steps, // ✅ FIXED FIELD NAME
+      num_images: queuePayload.config.num_images,
       reference_url_present: !!referenceUrl,
       hasOriginalEnhancedPrompt,
       metadata_exact_copy_mode: queuePayload.metadata.exact_copy_mode,
-      metadata_reference_mode: queuePayload.metadata.reference_mode
+      metadata_reference_mode: queuePayload.metadata.reference_mode,
+      metadata_denoise_strength: queuePayload.metadata.denoise_strength,
+      metadata_reference_strength: queuePayload.metadata.reference_strength,
+      negative_prompt_included: !!queuePayload.negative_prompt
     });
 
     // Determine queue based on job type
