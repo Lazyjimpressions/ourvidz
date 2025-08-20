@@ -125,18 +125,22 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
+          // Add proper type guards for payload data
+          const newRecord = payload.new as any;
+          const oldRecord = payload.old as any;
+          
           console.log('🆕 Workspace asset change detected:', {
             event: payload.eventType,
-            assetId: payload.new?.id || payload.old?.id,
-            assetType: payload.new?.asset_type || payload.old?.asset_type
+            assetId: newRecord?.id || oldRecord?.id || 'unknown',
+            assetType: newRecord?.asset_type || oldRecord?.asset_type || 'unknown'
           });
           
           // Invalidate workspace assets query for any change
           queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
           
           // Show appropriate notification based on event type
-          if (payload.eventType === 'INSERT') {
-            const assetType = payload.new?.asset_type;
+          if (payload.eventType === 'INSERT' && newRecord) {
+            const assetType = newRecord.asset_type;
             const typeText = assetType === 'video' ? 'video' : 'image';
             toast({
               title: "New asset ready",
@@ -165,6 +169,8 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
         },
         (payload) => {
           const job = payload.new as any;
+          if (!job) return;
+          
           console.log('🔄 Job status update:', {
             jobId: job.id,
             status: job.status,
