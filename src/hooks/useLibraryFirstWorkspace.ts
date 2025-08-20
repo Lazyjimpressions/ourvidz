@@ -677,6 +677,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         return;
       }
 
+      const itemCount = workspaceAssets.length;
+
+      // Optimistic update: immediately clear the workspace grid
+      queryClient.setQueryData(['assets', true], []);
+
       // Delete all assets permanently
       const deletions = workspaceAssets.map(async (asset) => {
         return WorkspaceAssetService.discardAsset(asset.id);
@@ -685,14 +690,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       await Promise.all(deletions);
 
       console.log('✅ STAGING-FIRST: Deleted all workspace items');
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
       queryClient.invalidateQueries({ queryKey: ['assets', true] });
       
       toast({
         title: "Workspace Deleted",
-        description: `${workspaceAssets.length} items permanently deleted`
+        description: `${itemCount} items permanently deleted`
       });
     } catch (error) {
       console.error('❌ STAGING-FIRST: Delete all failed:', error);
+      // Restore on error
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       toast({
         title: "Delete Failed",
         description: "Failed to delete workspace items",
@@ -750,9 +758,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         return;
       }
 
+      // Optimistic update: immediately clear the workspace grid
+      queryClient.setQueryData(['assets', true], []);
+
       await WorkspaceAssetService.clearWorkspace();
 
       console.log('✅ STAGING-FIRST: Cleared workspace items');
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
       queryClient.invalidateQueries({ queryKey: ['assets', true] });
       queryClient.invalidateQueries({ queryKey: ['library-assets'] });
       
@@ -762,6 +774,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       });
     } catch (error) {
       console.error('❌ STAGING-FIRST: Clear failed:', error);
+      // Restore on error
+      queryClient.invalidateQueries({ queryKey: ['assets', true] });
       toast({
         title: "Clear Failed",
         description: "Failed to clear workspace",
