@@ -82,3 +82,6 @@ verify_jwt = false
 
 [functions.delete-workspace-item]
 verify_jwt = true
+
+[functions.replicate-image]
+verify_jwt = true

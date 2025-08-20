@@ -287,7 +287,10 @@ export class GenerationService {
             ...request.metadata,
             model_type: 'realistic_vision_v51',
             credits: config.credits,
-            prompt: request.prompt
+            prompt: request.prompt,
+            skip_enhancement: true,
+            enhancement_model: 'none',
+            negative_prompt: request.metadata?.negative_prompt
           }
         }
       });

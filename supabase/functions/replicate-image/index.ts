@@ -93,9 +93,7 @@ serve(async (req) => {
         guidance: quality === 'high' ? 7 : 5,
         scheduler: "EulerA",
         seed: 0
-      },
-      webhook: `${SUPABASE_URL}/functions/v1/replicate-callback`,
-      webhook_events_filter: ["completed", "failed"]
+      }
     }
 
     console.log('📤 Calling Replicate API...')
@@ -131,7 +129,6 @@ serve(async (req) => {
     await supabase
       .from('jobs')
       .update({ 
-        external_id: prediction.id,
         status: 'processing',
         metadata: {
           ...jobData.metadata,
@@ -140,6 +137,9 @@ serve(async (req) => {
         }
       })
       .eq('id', jobId)
+
+    // Start background polling task
+    EdgeRuntime.waitUntil(pollReplicateCompletion(prediction.id, jobId, supabase, REPLICATE_API_TOKEN))
 
     return new Response(
       JSON.stringify({ 
@@ -164,3 +164,166 @@ serve(async (req) => {
     )
   }
 })
+
+async function pollReplicateCompletion(predictionId: string, jobId: string, supabase: any, apiToken: string) {
+  console.log('🔄 Starting background polling for prediction:', predictionId)
+  
+  const maxRetries = 60 // 5 minutes max (5s intervals)
+  let retries = 0
+  
+  while (retries < maxRetries) {
+    await new Promise(resolve => setTimeout(resolve, 5000)) // Wait 5 seconds
+    retries++
+    
+    try {
+      // Check prediction status
+      const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+        headers: {
+          'Authorization': `Token ${apiToken}`,
+        },
+      })
+      
+      if (!response.ok) {
+        console.error('❌ Failed to check prediction status:', response.status)
+        continue
+      }
+      
+      const prediction = await response.json()
+      console.log(`🔄 Prediction status (attempt ${retries}):`, prediction.status)
+      
+      if (prediction.status === 'succeeded') {
+        console.log('✅ Prediction completed successfully')
+        
+        // Download and store the image
+        const imageUrl = prediction.output[0]
+        if (!imageUrl) {
+          throw new Error('No image URL in prediction output')
+        }
+        
+        // Download the image
+        const imageResponse = await fetch(imageUrl)
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download image: ${imageResponse.status}`)
+        }
+        
+        const imageBlob = await imageResponse.blob()
+        const imageBuffer = await imageBlob.arrayBuffer()
+        
+        // Upload to Supabase storage
+        const fileName = `${jobId}_${Date.now()}.png`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('workspace-temp')
+          .upload(fileName, imageBuffer, {
+            contentType: 'image/png',
+            upsert: false
+          })
+        
+        if (uploadError) {
+          throw new Error(`Failed to upload image: ${uploadError.message}`)
+        }
+        
+        console.log('📁 Image uploaded to storage:', uploadData.path)
+        
+        // Get job data for workspace asset creation
+        const { data: jobData } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('id', jobId)
+          .single()
+        
+        // Create workspace asset
+        const { error: assetError } = await supabase
+          .from('workspace_assets')
+          .insert({
+            user_id: jobData.user_id,
+            job_id: jobId,
+            asset_type: 'image',
+            temp_storage_path: uploadData.path,
+            original_prompt: jobData.metadata.prompt,
+            model_used: 'realistic_vision_v51',
+            file_size_bytes: imageBuffer.byteLength,
+            mime_type: 'image/png',
+            generation_seed: 0,
+            width: 512,
+            height: 728,
+            asset_index: 0,
+            generation_settings: {
+              model: 'realistic_vision_v51',
+              steps: prediction.input.steps,
+              guidance: prediction.input.guidance,
+              scheduler: prediction.input.scheduler
+            }
+          })
+        
+        if (assetError) {
+          console.error('❌ Failed to create workspace asset:', assetError)
+          throw new Error(`Failed to create workspace asset: ${assetError.message}`)
+        }
+        
+        // Update job status to completed
+        await supabase
+          .from('jobs')
+          .update({ 
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            metadata: {
+              ...jobData.metadata,
+              prediction_id: predictionId,
+              replicate_status: 'succeeded',
+              output_url: imageUrl,
+              storage_path: uploadData.path
+            }
+          })
+          .eq('id', jobId)
+        
+        console.log('✅ Job completed successfully:', jobId)
+        return
+        
+      } else if (prediction.status === 'failed') {
+        console.error('❌ Prediction failed:', prediction.error)
+        
+        // Update job status to failed
+        await supabase
+          .from('jobs')
+          .update({ 
+            status: 'failed',
+            error_message: `Replicate prediction failed: ${prediction.error || 'Unknown error'}`,
+            metadata: {
+              ...jobData.metadata,
+              prediction_id: predictionId,
+              replicate_status: 'failed'
+            }
+          })
+          .eq('id', jobId)
+        
+        return
+      }
+      
+      // Update job with current status
+      await supabase
+        .from('jobs')
+        .update({ 
+          metadata: {
+            ...jobData.metadata,
+            prediction_id: predictionId,
+            replicate_status: prediction.status
+          }
+        })
+        .eq('id', jobId)
+      
+    } catch (error) {
+      console.error('❌ Error in polling loop:', error)
+      // Continue polling unless we've exceeded max retries
+    }
+  }
+  
+  // If we get here, we've exceeded max retries
+  console.error('❌ Polling timeout exceeded for prediction:', predictionId)
+  await supabase
+    .from('jobs')
+    .update({ 
+      status: 'failed',
+      error_message: 'Generation timed out after 5 minutes'
+    })
+    .eq('id', jobId)
+}
