@@ -107,34 +107,54 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     }
   }, [searchParams, location.state, updateMode, setReferenceImage, toast]);
 
-  // Real-time subscriptions for automatic workspace updates
+  // Enhanced real-time subscriptions for automatic workspace updates
   useEffect(() => {
     if (!user) return;
 
-    console.log('🔄 Setting up real-time subscriptions for workspace updates');
+    console.log('🔄 Setting up enhanced real-time subscriptions for workspace updates');
 
-    const channel = supabase
-      .channel('workspace-updates')
+    // Main workspace subscription - listen to all changes
+    const workspaceChannel = supabase
+      .channel('workspace-updates-main')
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
           table: 'workspace_assets',
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('🆕 New workspace asset inserted:', payload);
+          console.log('🆕 Workspace asset change detected:', {
+            event: payload.eventType,
+            assetId: payload.new?.id || payload.old?.id,
+            assetType: payload.new?.asset_type || payload.old?.asset_type
+          });
+          
+          // Invalidate workspace assets query for any change
           queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
           
-          const assetType = payload.new?.asset_type;
-          const typeText = assetType === 'video' ? 'video' : 'image';
-          toast({
-            title: "New asset ready",
-            description: `Your ${typeText} has been added to the workspace`,
-          });
+          // Show appropriate notification based on event type
+          if (payload.eventType === 'INSERT') {
+            const assetType = payload.new?.asset_type;
+            const typeText = assetType === 'video' ? 'video' : 'image';
+            toast({
+              title: "New asset ready",
+              description: `Your ${typeText} has been added to the workspace`,
+            });
+          } else if (payload.eventType === 'DELETE') {
+            toast({
+              title: "Asset removed",
+              description: "Asset has been removed from workspace",
+            });
+          }
         }
       )
+      .subscribe();
+
+    // Jobs subscription for completion status
+    const jobsChannel = supabase
+      .channel('workspace-jobs-updates')
       .on(
         'postgres_changes',
         {
@@ -144,18 +164,55 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          if (payload.new?.status === 'completed') {
-            console.log('✅ Job completed, refreshing workspace:', payload.new?.id);
+          const job = payload.new as any;
+          console.log('🔄 Job status update:', {
+            jobId: job.id,
+            status: job.status,
+            jobType: job.job_type
+          });
+          
+          if (job.status === 'completed') {
+            console.log('✅ Job completed, refreshing workspace assets');
             queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+            
+            // Additional fallback refresh after 2 seconds to handle any delays
+            setTimeout(() => {
+              console.log('🔄 Fallback refresh for completed job');
+              queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+            }, 2000);
+          } else if (job.status === 'failed') {
+            toast({
+              title: "Generation failed",
+              description: job.error_message || "Unknown error occurred",
+              variant: "destructive",
+            });
+          } else if (job.status === 'processing') {
+            console.log('⚙️ Job is processing:', job.id);
+            // Periodic refresh while job is processing
+            const refreshInterval = setInterval(() => {
+              queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+            }, 3000);
+            
+            // Clear interval after 30 seconds
+            setTimeout(() => {
+              clearInterval(refreshInterval);
+            }, 30000);
           }
         }
       )
       .subscribe();
 
-    // Cleanup subscription on unmount
+    // Log subscription status
+    console.log('📡 Real-time subscriptions established:', {
+      workspaceChannel: workspaceChannel.state,
+      jobsChannel: jobsChannel.state
+    });
+
+    // Cleanup subscriptions on unmount
     return () => {
       console.log('🧹 Cleaning up workspace real-time subscriptions');
-      supabase.removeChannel(channel);
+      supabase.removeChannel(workspaceChannel);
+      supabase.removeChannel(jobsChannel);
     };
   }, [user, queryClient, toast]);
 
