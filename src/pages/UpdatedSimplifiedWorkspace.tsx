@@ -24,6 +24,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
   const queryClient = useQueryClient();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
 
   // Get workspace state from existing hook with URL optimization disabled
   const {
@@ -85,18 +86,21 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
 
     // Handle navigation state for "Use as Reference"
     const navState = location.state as any;
-    if (navState?.referenceAsset) {
-      const { storagePath, prompt } = navState.referenceAsset;
-      if (storagePath) {
-        setReferenceImage(null); // Clear file, use storage path
-        // Set reference image URL - the hook should handle this
-        toast({
-          title: "Reference set",
-          description: prompt ? `Using "${prompt.slice(0, 50)}..." as reference` : "Reference image set",
-        });
-        // Clear the navigation state to prevent re-triggering
-        window.history.replaceState({}, '');
-      }
+    if (navState?.referenceUrl) {
+      // We received a signed URL from the library page
+      setReferenceImage(null); // Ensure file state is cleared
+      setReferenceImageUrl(navState.referenceUrl);
+      toast({
+        title: 'Reference set',
+        description: navState.prompt ? `Using "${navState.prompt.slice(0, 50)}..." as reference` : 'Reference image set',
+      });
+      // Clear the navigation state to prevent re-triggering on refresh
+      window.history.replaceState({}, '');
+    } else if (navState?.referenceAsset?.storagePath) {
+      // Fallback: if only storagePath was provided (older flow), just notify
+      setReferenceImage(null);
+      toast({ title: 'Reference detected', description: 'Open the image again if not visible.' });
+      window.history.replaceState({}, '');
     }
   }, [searchParams, location.state, updateMode, setReferenceImage, toast]);
 
@@ -187,6 +191,9 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     throw new Error('Original URL signing not available');
   }, []);
 
+  // Generate wrapper to include referenceImageUrl when present
+  const handleGenerate = useCallback(() => generate(referenceImageUrl), [generate, referenceImageUrl]);
+
   // Auth loading state
   if (loading) {
     return (
@@ -253,9 +260,11 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
             quality={quality}
             onQualityChange={setQuality}
             isGenerating={isGenerating}
-            onGenerate={generate}
+            onGenerate={handleGenerate}
             referenceImage={referenceImage}
             onReferenceImageChange={setReferenceImage}
+            referenceImageUrl={referenceImageUrl}
+            onReferenceImageUrlChange={setReferenceImageUrl}
             referenceStrength={referenceStrength}
             onReferenceStrengthChange={setReferenceStrength}
             // ... other prompt input props (truncated for brevity)

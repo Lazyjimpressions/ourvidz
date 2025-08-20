@@ -176,19 +176,32 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
-      // Navigate to workspace with reference asset data
-      navigate(`/?mode=${asset.type}`, { 
-        state: { 
-          referenceAsset: {
-            id: asset.id,
-            storagePath: asset.originalPath,
-            bucket: 'user-library',
-            metadata: asset.metadata,
-            prompt: asset.prompt
+      // Prefer existing signed original URL if available; otherwise sign on demand
+      let referenceUrl: string | null = (asset as any).url || null;
+      if (!referenceUrl && typeof (asset as any).signOriginal === 'function') {
+        referenceUrl = await (asset as any).signOriginal();
+      }
+      if (!referenceUrl) {
+        toast.error('Could not get a URL for this asset');
+        return;
+      }
+
+      // Navigate to the workspace with proper route and carry the signed URL
+      navigate(`/workspace?mode=${asset.type === 'video' ? 'video' : 'image'}`,
+        {
+          state: {
+            referenceUrl,
+            prompt: asset.prompt,
+            // extra context if needed later
+            referenceAsset: {
+              id: asset.id,
+              storagePath: asset.originalPath,
+              bucket: 'user-library'
+            }
           }
-        } 
-      });
-      toast.success('Navigated to workspace with reference asset');
+        }
+      );
+      toast.success('Opened workspace with reference image');
     } catch (error) {
       console.error('Failed to use as reference:', error);
       toast.error('Failed to use asset as reference');
