@@ -88,6 +88,14 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     if (urlMode === 'video' || urlMode === 'image') {
       updateMode(urlMode);
     }
+    
+    // Honor URL param model for convenience
+    const urlModel = searchParams.get('model');
+    if (urlModel === 'rv51') {
+      setModelType('replicate_rv51');
+    } else if (urlModel === 'sdxl') {
+      setModelType('sdxl');
+    }
 
     // Handle navigation state for "Use as Reference"
     const navState = location.state as any;
@@ -107,7 +115,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
       toast({ title: 'Reference detected', description: 'Open the image again if not visible.' });
       window.history.replaceState({}, '');
     }
-  }, [searchParams, location.state, updateMode, setReferenceImage, toast]);
+  }, [searchParams, location.state, updateMode, setReferenceImage, setModelType, toast]);
 
   // Enhanced real-time subscriptions for automatic workspace updates
   useEffect(() => {

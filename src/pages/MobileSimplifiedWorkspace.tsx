@@ -38,6 +38,9 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     // Enhancement Model        
     enhancementModel,
     
+    // Model Type
+    modelType,
+    
     // UI State
     isGenerating,
     workspaceAssets,
@@ -60,7 +63,8 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
     setCameraAngle,
     setStyle,
     setStyleRef,
-    setEnhancementModel,        
+    setEnhancementModel,
+    setModelType,        
     generate,
     clearWorkspace,
     deleteAllWorkspace,
@@ -220,6 +224,8 @@ export const MobileSimplifiedWorkspace: React.FC = () => {
         onStyleChange={setStyle}
         styleRef={styleRef}
         onStyleRefChange={setStyleRef}
+        modelType={modelType}
+        onModelTypeChange={setModelType}
         enhancementModel={enhancementModel}
         onEnhancementModelChange={setEnhancementModel}
       />

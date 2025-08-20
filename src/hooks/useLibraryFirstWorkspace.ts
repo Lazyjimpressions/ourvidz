@@ -137,7 +137,30 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceStrength, setReferenceStrength] = useState(0.5);
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
-  const [modelType, setModelType] = useState<'sdxl' | 'replicate_rv51'>('sdxl');
+  // Model type state (SDXL vs RV5.1) - persist to localStorage  
+  const initializeModelType = (): 'sdxl' | 'replicate_rv51' => {
+    // Check URL param first
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlModel = urlParams.get('model');
+    if (urlModel === 'rv51') return 'replicate_rv51';
+    if (urlModel === 'sdxl') return 'sdxl';
+    
+    // Check localStorage
+    const saved = localStorage.getItem('workspace-model-type');
+    if (saved === 'replicate_rv51' || saved === 'sdxl') return saved;
+    
+    // Default
+    return 'sdxl';
+  };
+  
+  const [modelType, setModelTypeInternal] = useState<'sdxl' | 'replicate_rv51'>(initializeModelType);
+  
+  // Wrapper to persist changes
+  const setModelType = useCallback((newModelType: 'sdxl' | 'replicate_rv51') => {
+    console.log('🔄 Model type changed to:', newModelType);
+    localStorage.setItem('workspace-model-type', newModelType);
+    setModelTypeInternal(newModelType);
+  }, []);
   
   // Video-specific State
   const [beginningRefImage, setBeginningRefImage] = useState<File | null>(null);
@@ -586,9 +609,21 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
       }
 
-      // STAGING-FIRST: Route to appropriate edge function based on model type
+      // STAGING-FIRST: Route strictly by modelType - RV5.1 goes to replicate-image, SDXL goes to queue-job
       const edgeFunction = modelType === 'replicate_rv51' ? 'replicate-image' : 'queue-job';
-      console.log('🎯 ROUTING: Using edge function:', edgeFunction, 'for model:', modelType);
+      
+      console.log('🚀 ROUTING:', {
+        modelType,
+        edgeFunction,
+        job_type: generationRequest.job_type,
+        enhancementModel: generationRequest.metadata?.enhancement_model
+      });
+      
+      // Defensive guard - prevent RV5.1 from using queue-job
+      if (modelType === 'replicate_rv51' && edgeFunction !== 'replicate-image') {
+        console.error('❌ ROUTING ERROR: RV5.1 attempting to use queue-job!');
+        throw new Error('RV5.1 must use replicate-image edge function');
+      }
       
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: generationRequest
@@ -617,7 +652,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           createdAt: now,
           status: 'processing',
           url: undefined,
-          modelType: mode === 'image' ? 'sdxl' : 'wan',
+          modelType: mode === 'image' ? (modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL') : 'WAN',
           duration: mode === 'video' ? (videoDuration || undefined) : undefined,
           metadata: {
             job_id: jobId,
@@ -628,9 +663,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         setActiveJobId(jobId);
       }
       
+      // Show success message with model info
+      const modelLabel = modelType === 'replicate_rv51' ? 'RV5.1 (replicate)' : 'SDXL/WAN (workers)';
       toast({
         title: `${mode === 'image' ? 'Image' : 'Video'} Generation Started`,
-        description: "Your content is being generated and will appear in the workspace when ready",
+        description: `Generating with ${modelLabel}...`,
       });
 
       // Clear exact copy mode after generation

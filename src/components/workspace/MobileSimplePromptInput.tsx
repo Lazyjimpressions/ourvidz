@@ -53,6 +53,8 @@ interface MobileSimplePromptInputProps {
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
+  modelType?: 'sdxl' | 'replicate_rv51';
+  onModelTypeChange?: (model: 'sdxl' | 'replicate_rv51') => void;
   isGenerating: boolean;
   onGenerate: () => void;
   referenceImage: File | null;
@@ -95,6 +97,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   contentType,
   quality,
   onQualityChange,
+  modelType = 'sdxl',
+  onModelTypeChange,
   isGenerating,
   onGenerate,
   referenceImage,
@@ -282,6 +286,24 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
       {/* Controls */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         
+        {/* Model Toggle - Only for Image Mode */}
+        {mode === 'image' && (
+          <button
+            onClick={() => {
+              const newModel = modelType === 'sdxl' ? 'replicate_rv51' : 'sdxl';
+              console.log('🎯 Mobile model toggle clicked:', { from: modelType, to: newModel });
+              onModelTypeChange?.(newModel);
+            }}
+            className={`py-2 rounded text-sm font-medium transition-colors ${
+              modelType === 'replicate_rv51'
+                ? 'bg-accent text-accent-foreground'
+                : 'bg-gray-700 text-gray-300'
+            }`}
+          >
+            {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
+          </button>
+        )}
+        
         {/* SFW Button */}
         <button
           onClick={() => onContentTypeChange(contentType === 'sfw' ? 'nsfw' : 'sfw')}
@@ -294,19 +316,44 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
           SFW
         </button>
 
-        {/* Enhancement Model Dropdown */}
-        <div className="relative">
-          <select
-            value={enhancementModel}
-            onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
-            className="w-full py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm appearance-none"
-          >
-            <option value="qwen_instruct">Instruct</option>
-            <option value="qwen_base">Base</option>
-            <option value="none">None</option>
-          </select>
-          <ChevronDown size={12} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
-        </div>
+        {/* Enhancement Model Dropdown - Hidden for RV5.1 */}
+        {mode === 'image' && modelType !== 'replicate_rv51' && (
+          <div className="relative">
+            <select
+              value={enhancementModel}
+              onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
+              className="w-full py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm appearance-none"
+            >
+              <option value="qwen_instruct">Instruct</option>
+              <option value="qwen_base">Base</option>
+              <option value="none">None</option>
+            </select>
+            <ChevronDown size={12} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+        )}
+
+        {/* For RV5.1, show NONE enhancement label */}
+        {mode === 'image' && modelType === 'replicate_rv51' && (
+          <div className="py-2 px-3 bg-gray-700/50 text-gray-400 rounded text-sm text-center">
+            NONE
+          </div>
+        )}
+
+        {/* Video mode always shows enhancement */}
+        {mode === 'video' && (
+          <div className="relative">
+            <select
+              value={enhancementModel}
+              onChange={(e) => onEnhancementModelChange?.(e.target.value as 'qwen_base' | 'qwen_instruct' | 'none')}
+              className="w-full py-2 px-3 bg-gray-700 text-gray-300 border border-gray-600 rounded text-sm appearance-none"
+            >
+              <option value="qwen_instruct">Instruct</option>
+              <option value="qwen_base">Base</option>
+              <option value="none">None</option>
+            </select>
+            <ChevronDown size={12} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
+        )}
 
         {/* Mode-specific controls */}
         {mode === 'image' ? (

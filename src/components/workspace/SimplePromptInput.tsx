@@ -290,6 +290,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('🎯 Generate clicked with modelType:', modelType);
     // Require non-empty prompt for video mode to avoid queue-job 400s
     if (mode === 'video' && !prompt.trim()) {
       return;
@@ -525,14 +526,18 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </button>
               </div>
 
-              {/* Generate button - Compact size */}
+              {/* Generate button - Show current model and add logging */}
               <button 
-                onClick={handleSubmit} 
+                onClick={(e) => {
+                  console.log('🎯 Generate clicked with modelType:', modelType);
+                  handleSubmit(e);
+                }}
                 disabled={isGenerating || (mode === 'video' ? !prompt.trim() : (!prompt.trim() && !exactCopyMode))} 
-                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex items-center justify-center shrink-0"
-                title="Generate"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex flex-col items-center justify-center shrink-0"
+                title={`Generate with ${modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}`}
               >
                 <Play size={14} fill="currentColor" />
+                <span className="text-[8px] mt-0.5">{modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}</span>
               </button>
             </div>
 
@@ -554,15 +559,19 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 {mode === 'image' ? (
                   /* Image mode controls */
                    <div className="flex items-center gap-1">
-                     {/* Model Toggle */}
-                     <button 
-                       onClick={() => onModelTypeChange?.(modelType === 'sdxl' ? 'replicate_rv51' : 'sdxl')} 
-                       className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                         modelType === 'replicate_rv51' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                       }`}
-                     >
-                       {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
-                     </button>
+                      {/* Model Toggle with logging */}
+                      <button 
+                        onClick={() => {
+                          const newModel = modelType === 'sdxl' ? 'replicate_rv51' : 'sdxl';
+                          console.log('🎯 Model toggle clicked:', { from: modelType, to: newModel });
+                          onModelTypeChange?.(newModel);
+                        }}
+                        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                          modelType === 'replicate_rv51' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                        }`}
+                      >
+                        {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
+                      </button>
 
                      {/* Quality Toggle */}
                      <button 
