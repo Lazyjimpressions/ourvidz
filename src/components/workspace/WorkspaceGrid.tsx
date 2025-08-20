@@ -21,6 +21,7 @@ interface WorkspaceGridProps {
   // NEW: Separate iterate and regenerate actions
   onIterateFromItem?: (item: UnifiedAsset) => void;
   onRegenerateJob?: (jobId: string) => void;
+  onSendToRef?: (item: UnifiedAsset) => void;
   // Job-level Actions
   onDeleteJob?: (jobId: string) => void;
   onDismissJob?: (jobId: string) => void;
@@ -49,6 +50,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
   // NEW: Separate iterate and regenerate actions
   onIterateFromItem,
   onRegenerateJob,
+  onSendToRef,
   // Job-level Actions
   onDeleteJob,
   onDismissJob,
@@ -178,6 +180,7 @@ export const WorkspaceGrid: React.FC<WorkspaceGridProps> = ({
                   // NEW: Separate iterate and regenerate actions
                   onIterateFromItem={onIterateFromItem ? () => onIterateFromItem(item) : undefined}
                   onRegenerateJob={onRegenerateJob ? () => onRegenerateJob(item.metadata?.job_id) : undefined}
+                  onSendToRef={onSendToRef ? () => onSendToRef(item) : undefined}
                   isDeleting={isDeleting.has(item.id)}
                   size="lg"
                 />

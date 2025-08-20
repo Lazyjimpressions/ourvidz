@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { RotateCcw, Play, Edit, Trash2, Download, Save, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock } from "lucide-react";
+import { RotateCcw, Play, Edit, Trash2, Download, Save, Eye, X, Image as ImageIcon, Video as VideoIcon, Clock, ArrowRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { UnifiedAsset } from '@/lib/services/AssetService';
 
@@ -22,6 +22,7 @@ interface ContentCardProps {
   // NEW: Separate iterate and regenerate actions
   onIterateFromItem?: () => void;
   onRegenerateJob?: () => void;
+  onSendToRef?: () => void;
   isDeleting?: boolean;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
@@ -45,6 +46,7 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   // NEW: Separate iterate and regenerate actions
   onIterateFromItem,
   onRegenerateJob,
+  onSendToRef,
   isDeleting = false,
   className = "",
   size = 'md'
@@ -288,6 +290,24 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
         {/* Bottom-Right Corner Actions - LTX-Style Small Icons */}
         <div className="absolute bottom-2 right-2 flex gap-1">
+          {/* Send to Ref Button - Small icon for both images and videos */}
+          {onSendToRef && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    className="w-5 h-5 bg-orange-600/80 hover:bg-orange-700/90 text-white rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-sm"
+                    onClick={(e) => handleActionClick(e, onSendToRef)}
+                  >
+                    <ArrowRight className="w-2.5 h-2.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Send to ref box</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {/* NEW: Use as Reference Button (Edit icon) - Only for images */}
           {onIterateFromItem && item.type === 'image' && (
             <TooltipProvider>

@@ -25,6 +25,8 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
+  const [beginningRefImageUrl, setBeginningRefImageUrl] = useState<string | null>(null);
+  const [endingRefImageUrl, setEndingRefImageUrl] = useState<string | null>(null);
 
   // Get workspace state from existing hook with URL optimization disabled
   const {
@@ -191,8 +193,58 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     throw new Error('Original URL signing not available');
   }, []);
 
-  // Generate wrapper to include referenceImageUrl when present
-  const handleGenerate = useCallback(() => generate(referenceImageUrl), [generate, referenceImageUrl]);
+  // Handle sending asset to reference box
+  const handleSendToRef = useCallback(async (asset: any) => {
+    try {
+      // Get signed original URL
+      let signedUrl: string | null = null;
+      if (typeof asset.signOriginal === 'function') {
+        signedUrl = await asset.signOriginal();
+      }
+      
+      if (!signedUrl) {
+        toast({
+          title: "Reference failed",
+          description: "Could not get URL for reference",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Set reference based on current mode and asset type
+      if (mode === 'image' || asset.type === 'image') {
+        setReferenceImageUrl(signedUrl);
+        setReferenceImage(null); // Clear file state
+        toast({
+          title: "Reference set",
+          description: "Image sent to reference box",
+        });
+      } else if (mode === 'video') {
+        // For video mode, use as beginning reference
+        setBeginningRefImageUrl(signedUrl);
+        toast({
+          title: "Reference set", 
+          description: "Image sent to beginning reference",
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send to reference:', error);
+      toast({
+        title: "Reference failed",
+        description: "Failed to send to reference",
+        variant: "destructive",
+      });
+    }
+  }, [mode, setReferenceImage, toast]);
+
+  // Generate wrapper to include reference URLs when present
+  const handleGenerate = useCallback(() => {
+    if (mode === 'image') {
+      generate(referenceImageUrl);
+    } else {
+      generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl);
+    }
+  }, [generate, referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, mode]);
 
   // Auth loading state
   if (loading) {
@@ -233,7 +285,8 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
               }}
               actions={{
                 onSaveToLibrary: handleSaveToLibrary,
-                onDiscard: handleDiscardAsset
+                onDiscard: handleDiscardAsset,
+                onSendToRef: handleSendToRef,
               }}
               isLoading={isSigning}
               emptyState={
@@ -265,6 +318,10 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
             onReferenceImageChange={setReferenceImage}
             referenceImageUrl={referenceImageUrl}
             onReferenceImageUrlChange={setReferenceImageUrl}
+            beginningRefImageUrl={beginningRefImageUrl}
+            onBeginningRefImageUrlChange={setBeginningRefImageUrl}
+            endingRefImageUrl={endingRefImageUrl}
+            onEndingRefImageUrlChange={setEndingRefImageUrl}
             referenceStrength={referenceStrength}
             onReferenceStrengthChange={setReferenceStrength}
             // ... other prompt input props (truncated for brevity)

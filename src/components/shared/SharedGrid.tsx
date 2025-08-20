@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -61,6 +61,7 @@ export type SharedGridProps = {
     // For Workspace
     onSaveToLibrary?: (asset: SharedAsset) => void;
     onDiscard?: (asset: SharedAsset) => void;
+    onSendToRef?: (asset: SharedAsset) => void;
     // For Library
     onDelete?: (asset: SharedAsset) => void;
     onDownload?: (asset: SharedAsset) => void;
@@ -308,6 +309,21 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
       {/* Action buttons */}
       <div className="absolute bottom-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {/* Workspace actions */}
+        {isWorkspace && actions?.onSendToRef && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 w-6 p-0 bg-background/80 backdrop-blur-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.onSendToRef!(asset);
+            }}
+            title="Send to ref box"
+          >
+            <ArrowRight className="w-2.5 h-2.5" />
+          </Button>
+        )}
+        
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button
             size="sm"
