@@ -840,6 +840,23 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} className="w-full" />
                 </div>
 
+                {/* Reference Strength (only show when reference image present) */}
+                {(referenceImage || referenceImageUrl) && (
+                  <div>
+                    <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                      Ref Strength: {referenceStrength.toFixed(2)} (Denoise: {(1 - referenceStrength).toFixed(2)})
+                    </label>
+                    <Slider 
+                      value={[referenceStrength]} 
+                      onValueChange={value => onReferenceStrengthChange?.(value[0])} 
+                      min={0.1} 
+                      max={0.9} 
+                      step={0.1} 
+                      className="w-full" 
+                    />
+                  </div>
+                )}
+
                 {/* Guidance Scale */}
                 <div>
                   <label className="block text-[10px] font-medium text-muted-foreground mb-1">

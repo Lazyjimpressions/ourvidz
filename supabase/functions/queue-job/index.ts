@@ -9,8 +9,8 @@ const corsHeaders = {
 
 // I2I constants
 const DENOISE_COPY_MAX = 0.05;   // promptless exact copy
-const DENOISE_MOD_MIN = 0.10;    // reference modify
-const DENOISE_MOD_MAX = 0.25;
+const DENOISE_MOD_MIN = 0.35;    // reference modify - increased for better changes
+const DENOISE_MOD_MAX = 0.65;    // reference modify - increased for better changes
 const CFG_COPY = 1.0;
 const CFG_MOD_MIN = 4.0;
 const CFG_MOD_MAX = 7.0;

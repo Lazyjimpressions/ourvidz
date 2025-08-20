@@ -31,7 +31,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
     positivePrompt: basePrompt,
     negativePrompt: defaultNegativePrompt,
     keepSeed: true,
-    referenceStrength: 0.7,
+    referenceStrength: 0.5,
     isModified: false
   }));
 
@@ -80,6 +80,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       metadata: {
         reference_image: true,
         reference_strength: state.referenceStrength,
+        denoise_strength: 1 - state.referenceStrength,
         reference_type: 'composition',
         negative_prompt: state.negativePrompt.trim() || undefined,
         ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),

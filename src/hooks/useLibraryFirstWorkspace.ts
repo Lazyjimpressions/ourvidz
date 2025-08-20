@@ -132,7 +132,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
-  const [referenceStrength, setReferenceStrength] = useState(0.8);
+  const [referenceStrength, setReferenceStrength] = useState(0.5);
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   
@@ -506,6 +506,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
           : undefined,
         reference_strength: exactCopyMode ? 0.9 : referenceStrength,
+        denoise_strength: exactCopyMode ? 0.05 : (1 - referenceStrength),
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
@@ -921,7 +922,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       if (gen.style) setStyle(gen.style);
 
       // Reference strength for exact copy
-      setReferenceStrength(0.1);
+      setReferenceStrength(0.9);
       setExactCopyMode(true);
       setUseOriginalParams(true);
       // Ensure image mode
