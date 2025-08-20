@@ -320,7 +320,8 @@ serve(async (req) => {
       },
       metadata: {
         ...userMetadata,
-        exact_copy_mode: exactCopyMode,
+        exact_copy_mode: isPromptlessUploadedExactCopy,
+        reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
         reference_image_url: referenceUrl || undefined,
         // Keep original prompt/seed context for pure-inference workers
         originalEnhancedPrompt: userMetadata.originalEnhancedPrompt || undefined,
@@ -348,7 +349,9 @@ serve(async (req) => {
       guidance_scale: queuePayload.config.guidance_scale,
       steps: queuePayload.config.steps,
       reference_url_present: !!referenceUrl,
-      hasOriginalEnhancedPrompt
+      hasOriginalEnhancedPrompt,
+      metadata_exact_copy_mode: queuePayload.metadata.exact_copy_mode,
+      metadata_reference_mode: queuePayload.metadata.reference_mode
     });
 
     // Determine queue based on job type

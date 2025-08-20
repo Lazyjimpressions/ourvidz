@@ -45,12 +45,13 @@ serve(async (req) => {
       })
     }
 
-    // Early exit for exact-copy modes
+    // Early exit for promptless uploaded exact copy only
     const hasOriginalEnhancedPrompt = !!(requestBody.metadata?.originalEnhancedPrompt && requestBody.metadata.originalEnhancedPrompt.trim());
-    const isUploadedPromptless = exactCopyMode && !hasOriginalEnhancedPrompt && (!requestBody.prompt || !requestBody.prompt.trim());
+    const isPromptlessUploadedExactCopy = exactCopyMode && !hasOriginalEnhancedPrompt && (!requestBody.prompt || !requestBody.prompt.trim());
+    const referenceMode = requestBody.metadata?.reference_mode;
 
     // Early exit for promptless exact copy: skip enhancement completely
-    if (isUploadedPromptless) {
+    if (isPromptlessUploadedExactCopy) {
       return new Response(JSON.stringify({
         success: true,
         original_prompt: requestBody.prompt || '',
@@ -62,20 +63,38 @@ serve(async (req) => {
       });
     }
 
-    // Workspace/library reference with original prompt available
-    if (exactCopyMode && hasOriginalEnhancedPrompt) {
-      const mod = (requestBody.prompt || '').trim();
-      const base = requestBody.metadata.originalEnhancedPrompt;
-      // If you want subject-preserving mix when user typed a modification, compose here;
-      // else just return base unchanged to preserve original character/style faithfully.
-      const enhanced = mod ? `maintain the same subject; ${mod}` : base;
+    // Handle modify flows (reference_mode: 'modify')
+    if (referenceMode === 'modify') {
+      console.log('🔄 Processing modify flow - reference_mode: modify');
+      const userMod = (requestBody.prompt || '').trim();
+      const base = requestBody.metadata?.originalEnhancedPrompt || '';
+      
+      let enhanced: string;
+      if (userMod && base) {
+        // User typed modification with existing base prompt
+        enhanced = `maintain the same subject; ${userMod}`;
+      } else if (userMod) {
+        // User typed modification without base prompt
+        enhanced = `maintain the same subject; ${userMod}`;
+      } else if (base) {
+        // No user modification, use base
+        enhanced = base;
+      } else {
+        // Fallback
+        enhanced = requestBody.prompt || '';
+      }
 
       return new Response(JSON.stringify({
         success: true,
         original_prompt: requestBody.prompt || '',
         enhanced_prompt: enhanced,
-        enhancement_strategy: mod ? 'subject_preserve_modify' : 'use_original_reference_prompt',
-        enhancement_metadata: { exact_copy_mode: true, template_name: mod ? 'subject_preserve' : 'original', token_count: Math.ceil(enhanced.length / 4) }
+        enhancement_strategy: userMod ? 'reference_modify_with_prompt' : 'reference_modify_base_only',
+        enhancement_metadata: { 
+          exact_copy_mode: false, 
+          reference_mode: 'modify',
+          template_name: 'modify_flow', 
+          token_count: Math.ceil(enhanced.length / 4) 
+        }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
@@ -95,115 +114,7 @@ serve(async (req) => {
       isModificationPrompt: exactCopyMode ? prompt.toLowerCase().includes('change') || prompt.toLowerCase().includes('modify') || prompt.toLowerCase().includes('replace') : 'N/A'
     })
 
-    // Legacy exact copy mode handling (kept for backward compatibility)
-    if (exactCopyMode) {
-      console.log('🎯 EXACT COPY MODE: Using subject preservation enhancement for image-to-image reference')
-      
-      // Check if this is an uploaded reference (no original enhanced prompt) vs workspace/library reference
-      const hasOriginalEnhancedPrompt = requestBody.metadata?.originalEnhancedPrompt && requestBody.metadata.originalEnhancedPrompt.trim().length > 0;
-      
-      if (hasOriginalEnhancedPrompt) {
-        // ✅ WORKSPACE/LIBRARY REFERENCE: Use original enhanced prompt as base
-        console.log('🎯 EXACT COPY MODE: Using original enhanced prompt from reference metadata')
-        
-        // Detect if this is a modification prompt (change, add, remove, etc.)
-        const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
-        const isModificationPrompt = modificationKeywords.some(keyword => 
-          prompt.toLowerCase().includes(keyword)
-        )
-        
-        let enhancedPrompt: string
-        
-        if (isModificationPrompt && prompt.trim().length > 3) {
-          // This is a modification request - enhance while preserving subject
-          console.log('🔄 Processing modification prompt in exact copy mode')
-          
-          // Create subject-preserving enhancement
-          const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition`
-          
-          enhancedPrompt = subjectPreservationPrompt
-        } else {
-          // Empty or minimal prompt - use original enhanced prompt as-is
-          enhancedPrompt = requestBody.metadata.originalEnhancedPrompt
-        }
-        
-        return new Response(JSON.stringify({
-          success: true,
-          original_prompt: prompt,
-          enhanced_prompt: enhancedPrompt,
-          enhancement_strategy: 'exact_copy_original_prompt',
-          enhancement_metadata: {
-            original_length: prompt.length,
-            enhanced_length: enhancedPrompt.length,
-            expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
-            job_type: jobType,
-            format,
-            quality,
-            content_mode: contentType || 'nsfw',
-            template_name: 'exact_copy_workspace_reference',
-            model_used: 'reference_metadata',
-            token_count: Math.ceil(enhancedPrompt.length / 4),
-            compression_applied: false,
-            fallback_level: 0,
-            exact_copy_mode: true,
-            is_modification_prompt: isModificationPrompt,
-            execution_time_ms: 5
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      } else {
-        // ✅ UPLOADED REFERENCE: No original enhanced prompt available
-        console.log('🎯 EXACT COPY MODE: Uploaded reference - no original enhanced prompt available')
-        
-        // Detect if this is a modification prompt (change, add, remove, etc.)
-        const modificationKeywords = ['change', 'modify', 'replace', 'swap', 'add', 'remove', 'alter', 'different', 'new', 'wearing', 'in', 'to']
-        const isModificationPrompt = modificationKeywords.some(keyword => 
-          prompt.toLowerCase().includes(keyword)
-        )
-        
-        let enhancedPrompt: string
-        
-        if (isModificationPrompt && prompt.trim().length > 3) {
-          // This is a modification request - enhance while preserving subject
-          console.log('🔄 Processing modification prompt for uploaded reference')
-          
-          // Create subject-preserving enhancement for uploaded reference
-          const subjectPreservationPrompt = `maintain the exact same subject, person, face, and body from the reference image, only ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`
-          
-          enhancedPrompt = subjectPreservationPrompt
-        } else {
-          // Empty or minimal prompt - just preserve the subject exactly
-          enhancedPrompt = 'exact copy of the reference image, same subject, same pose, same lighting, same composition, high quality, detailed, professional'
-        }
-        
-        return new Response(JSON.stringify({
-          success: true,
-          original_prompt: prompt,
-          enhanced_prompt: enhancedPrompt,
-          enhancement_strategy: 'exact_copy_uploaded_reference',
-          enhancement_metadata: {
-            original_length: prompt.length,
-            enhanced_length: enhancedPrompt.length,
-            expansion_percentage: ((enhancedPrompt.length / Math.max(prompt.length, 1)) * 100).toFixed(1),
-            job_type: jobType,
-            format,
-            quality,
-            content_mode: contentType || 'nsfw',
-            template_name: 'exact_copy_uploaded_reference',
-            model_used: 'subject_preservation',
-            token_count: Math.ceil(enhancedPrompt.length / 4),
-            compression_applied: false,
-            fallback_level: 0,
-            exact_copy_mode: true,
-            is_modification_prompt: isModificationPrompt,
-            execution_time_ms: 5
-          }
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
-    }
+    // Legacy exact copy handling removed - now handled by reference_mode logic above
 
     // Initialize Dynamic Enhancement Orchestrator
     const orchestrator = new DynamicEnhancementOrchestrator()
