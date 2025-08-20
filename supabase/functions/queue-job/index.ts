@@ -140,8 +140,8 @@ serve(async (req) => {
       userPromptTrim.length === 0;
 
     const isReferenceModify =
-      exactCopyMode === true &&
       !!referenceUrl &&
+      !isPromptlessUploadedExactCopy &&
       (
         hasOriginalEnhancedPrompt ||           // workspace/library item
         userPromptTrim.length > 0              // uploaded with a modification prompt
@@ -175,12 +175,12 @@ serve(async (req) => {
             quality: jobRequest.quality || (jobRequest.job_type.includes('high') ? 'high' : 'fast'),
             selectedModel: userMetadata?.enhancement_model || 'qwen_instruct',
             contentType: userMetadata?.contentType || 'sfw',
-            metadata: { exact_copy_mode: true, ...userMetadata }
+            metadata: { reference_mode: 'modify', exact_copy_mode: false, ...userMetadata }
           }
         });
         if (enhanceResponse?.data?.enhanced_prompt) {
           enhancedPrompt = enhanceResponse.data.enhanced_prompt;
-          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 'enhanced_exact_copy_modify';
+          templateName = enhanceResponse.data?.enhancement_metadata?.template_name || 'enhanced_modify';
         }
       } else {
         // Use original prompt (from metadata if provided)
@@ -270,7 +270,7 @@ serve(async (req) => {
         model_type: jobRequest.model_type,
         metadata: {
           ...jobRequest.metadata,
-          reference_image_url: jobRequest.reference_image_url,
+          reference_image_url: referenceUrl || jobRequest.reference_image_url,
           reference_strength: jobRequest.reference_strength,
           denoise_strength: denoise,
           guidance_scale: cfg,

@@ -139,8 +139,13 @@ export class GenerationService {
           model_type: config.isSDXL ? 'sdxl' : 'wan',
           enhanced_prompt: request.enhancedPrompt,
           num_images: request.batchCount || 1,
+          reference_image_url: request.referenceImageUrl,
+          reference_strength: request.metadata?.reference_strength,
+          negative_prompt: request.metadata?.negative_prompt || undefined,
           metadata: {
             ...sanitizedBody.metadata,
+            reference_image_url: request.referenceImageUrl,
+            reference_strength: request.metadata?.reference_strength,
             user_requested_enhancement: !request.metadata?.exact_copy_mode && 
                                       request.metadata?.enhancement_model !== 'none' &&
                                       request.metadata?.skip_enhancement !== true,
