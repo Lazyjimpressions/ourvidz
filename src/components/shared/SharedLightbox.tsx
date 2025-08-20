@@ -130,74 +130,111 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
   const isWorkspace = currentAsset.metadata?.source === 'workspace';
 
+  // Touch handlers for swipe navigation
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe && canGoNext) {
+      goToNext();
+    }
+    if (isRightSwipe && canGoPrevious) {
+      goToPrevious();
+    }
+  };
+
   return (
     <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="max-w-[95vw] max-h-[95vh] w-auto h-auto p-0 bg-black/95">
-        <div className="relative flex flex-col h-full">
-          {/* Header */}
-          <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-white/10 text-white border-white/20">
-                {currentAsset.type === 'video' ? 'Video' : 'Image'}
-              </Badge>
-              <span className="text-white/80 text-sm">
-                {currentIndex + 1} of {assets.length}
-              </span>
+      <DialogContent className="max-w-[98vw] max-h-[96vh] w-auto h-auto p-0 bg-black/95">
+        <div className="relative w-full h-[96vh] flex flex-col">
+          {/* Header - more compact */}
+          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
+            <div className="flex items-center justify-between p-3 bg-gradient-to-b from-black/60 to-transparent">
+              <div className="flex items-center gap-2 pointer-events-auto">
+                <Badge variant="secondary" className="bg-white/10 text-white border-white/20 text-xs px-2 py-1">
+                  {currentAsset.type === 'video' ? 'Video' : 'Image'}
+                </Badge>
+                <span className="text-white/70 text-xs">
+                  {currentIndex + 1} of {assets.length}
+                </span>
+              </div>
+              
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-white hover:bg-white/10"
-            >
-              <X className="w-5 h-5" />
-            </Button>
           </div>
 
-          {/* Navigation buttons */}
-          {canGoPrevious && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToPrevious}
-              className="absolute left-4 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/10"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </Button>
-          )}
+          {/* Navigation buttons - smaller and more discrete */}
+          <div className="absolute inset-0 z-10 pointer-events-none">
+            {canGoPrevious && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goToPrevious}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+            )}
 
-          {canGoNext && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goToNext}
-              className="absolute right-4 top-1/2 -translate-y-1/2 z-10 text-white hover:bg-white/10"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </Button>
-          )}
+            {canGoNext && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goToNext}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
 
-          {/* Main content area */}
-          <div className="flex-1 flex items-center justify-center p-16">
+          {/* Main content area - expanded */}
+          <div 
+            className="flex-1 flex items-center justify-center p-4"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
             {isLoading ? (
               <div className="flex items-center justify-center">
-                <div className="animate-spin w-8 h-8 border-4 border-white/20 border-t-white rounded-full" />
+                <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
               </div>
             ) : currentOriginalUrl ? (
-              <div className="max-w-full max-h-full">
+              <div className="max-w-[95vw] max-h-[90vh] flex items-center justify-center">
                 {currentAsset.type === 'video' ? (
                   <video
                     src={currentOriginalUrl}
                     controls
-                    className="max-w-full max-h-full"
+                    className="max-w-full max-h-full object-contain rounded-lg"
                     poster={(currentAsset as any).thumbUrl || undefined}
                   />
                 ) : (
                   <img
                     src={currentOriginalUrl}
                     alt={currentAsset.title || 'Asset'}
-                    className="max-w-full max-h-full object-contain"
+                    className="max-w-full max-h-full object-contain rounded-lg"
                   />
                 )}
               </div>
@@ -208,54 +245,42 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
             )}
           </div>
 
-          {/* Bottom panel */}
-          <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-6">
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Asset details */}
-              <div className="flex-1 space-y-2">
-                <h3 className="text-white font-medium text-lg">
-                  {currentAsset.title}
-                </h3>
-                
-                {currentAsset.prompt && (
-                  <p className="text-white/80 text-sm line-clamp-3">
-                    {currentAsset.prompt}
-                  </p>
-                )}
+          {/* Floating bottom actions bar - compact */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+            <div className="bg-black/80 backdrop-blur-sm rounded-lg border border-white/10 p-2">
+              <div className="flex items-center gap-1">
+                {/* Asset info - compact */}
+                <div className="flex flex-col px-3 py-1">
+                  <h3 className="text-white text-sm font-medium truncate max-w-[200px]">
+                    {currentAsset.title}
+                  </h3>
+                  {currentAsset.prompt && (
+                    <p className="text-white/70 text-xs truncate max-w-[300px]">
+                      {currentAsset.prompt}
+                    </p>
+                  )}
+                </div>
 
-                {/* Metadata */}
-                <div className="flex flex-wrap gap-3 text-xs text-white/60">
+                {/* Metadata - compact icons */}
+                <div className="flex items-center gap-1 px-2 border-l border-white/10">
                   {currentAsset.modelType && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 text-white/60">
                       <Palette className="w-3 h-3" />
-                      {currentAsset.modelType}
+                      <span className="text-xs">{currentAsset.modelType}</span>
                     </div>
                   )}
                   {currentAsset.width && currentAsset.height && (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 text-white/60">
                       <Zap className="w-3 h-3" />
-                      {currentAsset.width}×{currentAsset.height}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {currentAsset.createdAt.toLocaleDateString()}
-                  </div>
-                  {currentAsset.metadata?.seed && (
-                    <div className="flex items-center gap-1">
-                      <Copy className="w-3 h-3" />
-                      Seed: {currentAsset.metadata.seed}
+                      <span className="text-xs">{currentAsset.width}×{currentAsset.height}</span>
                     </div>
                   )}
                 </div>
 
-                {/* Custom details slot */}
-                {detailsSlot?.(currentAsset)}
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex items-end gap-2">
-                {actionsSlot?.(currentAsset)}
+                {/* Action buttons - compact */}
+                <div className="flex items-center gap-1 px-2 border-l border-white/10">
+                  {actionsSlot?.(currentAsset)}
+                </div>
               </div>
             </div>
           </div>
@@ -265,7 +290,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   );
 };
 
-// Default action buttons for workspace assets
+// Default action buttons for workspace assets - compact icons only
 export const WorkspaceAssetActions: React.FC<{
   asset: SharedAsset;
   onSave?: () => void;
@@ -274,27 +299,24 @@ export const WorkspaceAssetActions: React.FC<{
 }> = ({ asset, onSave, onDiscard, onDownload }) => (
   <>
     {onSave && (
-      <Button size="sm" variant="secondary" onClick={onSave} className="gap-2">
-        <Save className="w-4 h-4" />
-        Save to Library
+      <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
+        <Save className="w-3 h-3" />
       </Button>
     )}
     {onDownload && (
-      <Button size="sm" variant="outline" onClick={onDownload} className="gap-2">
-        <Download className="w-4 h-4" />
-        Download
+      <Button size="sm" variant="outline" onClick={onDownload} className="h-7 w-7 p-0" title="Download">
+        <Download className="w-3 h-3" />
       </Button>
     )}
     {onDiscard && (
-      <Button size="sm" variant="outline" onClick={onDiscard} className="gap-2">
-        <Trash2 className="w-4 h-4" />
-        Discard
+      <Button size="sm" variant="outline" onClick={onDiscard} className="h-7 w-7 p-0" title="Discard">
+        <Trash2 className="w-3 h-3" />
       </Button>
     )}
   </>
 );
 
-// Default action buttons for library assets
+// Default action buttons for library assets - compact icons only
 export const LibraryAssetActions: React.FC<{
   asset: SharedAsset;
   onDelete?: () => void;
@@ -303,21 +325,18 @@ export const LibraryAssetActions: React.FC<{
 }> = ({ asset, onDelete, onDownload, onUseAsReference }) => (
   <>
     {onUseAsReference && (
-      <Button size="sm" variant="secondary" onClick={onUseAsReference} className="gap-2">
-        <Shuffle className="w-4 h-4" />
-        Use as Reference
+      <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
+        <Shuffle className="w-3 h-3" />
       </Button>
     )}
     {onDownload && (
-      <Button size="sm" variant="outline" onClick={onDownload} className="gap-2">
-        <Download className="w-4 h-4" />
-        Download
+      <Button size="sm" variant="outline" onClick={onDownload} className="h-7 w-7 p-0" title="Download">
+        <Download className="w-3 h-3" />
       </Button>
     )}
     {onDelete && (
-      <Button size="sm" variant="outline" onClick={onDelete} className="gap-2">
-        <Trash2 className="w-4 h-4" />
-        Delete
+      <Button size="sm" variant="outline" onClick={onDelete} className="h-7 w-7 p-0" title="Delete">
+        <Trash2 className="w-3 h-3" />
       </Button>
     )}
   </>

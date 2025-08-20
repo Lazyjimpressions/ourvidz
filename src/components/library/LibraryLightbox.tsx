@@ -150,80 +150,80 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="max-w-none w-full h-full max-h-[95vh] p-0 bg-background/95 border-border">
+      <DialogContent className="max-w-[98vw] w-full h-full max-h-[96vh] p-0 bg-background/95 border-border">
         <div className="relative w-full h-full flex">
           {/* Main Content Area */}
           <div className="flex-1 flex items-center justify-center relative">
-            {/* Header Controls */}
-            <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
-              <div className="flex items-center gap-2 bg-background/80 rounded-lg px-3 py-2 backdrop-blur-sm">
+            {/* Header Controls - compact */}
+            <div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-center">
+              <div className="flex items-center gap-2 bg-background/80 rounded-lg px-2 py-1 backdrop-blur-sm">
                 {currentAsset.type === 'image' ? (
-                  <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                  <ImageIcon className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <VideoIcon className="h-5 w-5 text-muted-foreground" />
+                  <VideoIcon className="h-4 w-4 text-muted-foreground" />
                 )}
-                <span className="text-sm font-medium truncate max-w-[240px]">
+                <span className="text-sm font-medium truncate max-w-[200px]">
                   {currentAsset.title || 'Asset Preview'}
                 </span>
               </div>
               
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowDetails(!showDetails)}
-                  className="bg-background/80 backdrop-blur-sm h-9 w-9 p-0"
+                  className="bg-background/80 backdrop-blur-sm h-8 w-8 p-0"
                   aria-label="Toggle details"
                 >
-                  <Info className="h-5 w-5" />
+                  <Info className="h-4 w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={onClose}
-                  className="bg-background/80 backdrop-blur-sm h-9 w-9 p-0"
+                  className="bg-background/80 backdrop-blur-sm h-8 w-8 p-0"
                   aria-label="Close"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             </div>
 
-            {/* Navigation Arrows */}
+            {/* Navigation Arrows - smaller and more discrete */}
             {currentIndex > 0 && (
               <Button
                 variant="ghost"
-                size="lg"
+                size="sm"
                 onClick={handlePrevious}
-                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-12 w-12 p-0"
+                className="absolute left-3 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-8 w-8 p-0"
                 aria-label="Previous"
               >
-                <ChevronLeft className="h-7 w-7" />
+                <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
 
             {currentIndex < assets.length - 1 && (
               <Button
                 variant="ghost"
-                size="lg"
+                size="sm"
                 onClick={handleNext}
-                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-12 w-12 p-0"
+                className="absolute right-3 top-1/2 z-20 -translate-y-1/2 bg-background/80 backdrop-blur-sm hover:bg-background/90 h-8 w-8 p-0"
                 aria-label="Next"
               >
-                <ChevronRight className="h-7 w-7" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             )}
 
-            {/* Media Container */}
+            {/* Media Container - expanded */}
             <div 
-              className="relative flex items-center justify-center min-h-[70vh] w-full px-6 sm:px-16"
+              className="relative flex items-center justify-center min-h-[90vh] w-full px-4"
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
             >
               {isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/30 border-t-primary"></div>
                 </div>
               )}
               
@@ -233,7 +233,7 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                     ref={imageRef}
                     src={currentAsset.url}
                     alt={currentAsset.prompt}
-                    className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-lg"
+                    className="max-h-[90vh] max-w-[95vw] object-contain rounded-lg"
                     onLoad={handleImageLoad}
                     onError={handleImageError}
                     style={{ opacity: isLoading ? 0 : 1 }}
@@ -244,7 +244,7 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                   <video
                     src={currentAsset.url}
                     controls
-                    className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-lg"
+                    className="max-h-[90vh] max-w-[95vw] object-contain rounded-lg"
                     poster={currentAsset.thumbnailUrl}
                     onLoadedData={handleImageLoad}
                     onError={handleImageError}
@@ -266,9 +266,9 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                   ) : (
                     <div className="text-center">
                       {currentAsset.type === 'image' ? (
-                        <ImageIcon className="h-12 w-12 mx-auto mb-2" />
+                        <ImageIcon className="h-8 w-8 mx-auto mb-2" />
                       ) : (
-                        <VideoIcon className="h-12 w-12 mx-auto mb-2" />
+                        <VideoIcon className="h-8 w-8 mx-auto mb-2" />
                       )}
                       <div>Preview not available</div>
                       <div className="text-sm capitalize">Status: {currentAsset.status}</div>
@@ -278,9 +278,9 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
               )}
             </div>
 
-            {/* Footer Controls */}
-            <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 flex items-center gap-4">
-              <div className="bg-background/80 backdrop-blur-sm rounded-lg px-4 py-2 text-sm font-medium">
+            {/* Footer Controls - compact */}
+            <div className="absolute bottom-3 left-1/2 z-20 -translate-x-1/2 flex items-center gap-2">
+              <div className="bg-background/80 backdrop-blur-sm rounded-lg px-3 py-1 text-xs font-medium">
                 {currentIndex + 1} of {assets.length}
               </div>
               
@@ -288,10 +288,10 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
                 <Button
                   onClick={() => onDownload(currentAsset)}
                   size="sm"
-                  className="bg-primary/90 hover:bg-primary h-9 px-4"
+                  className="bg-primary/90 hover:bg-primary h-7 w-7 p-0"
+                  title="Download"
                 >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download
+                  <Download className="h-3 w-3" />
                 </Button>
               )}
             </div>

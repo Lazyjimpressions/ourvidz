@@ -236,24 +236,24 @@ export function SimpleLightbox({
 
   return (
     <div className="fixed inset-0 bg-black/95 z-50 flex">
-      {/* Close Button - elevated to avoid overlaps */}
+      {/* Close Button - smaller and more discrete */}
       <Button
         variant="ghost"
         size="sm"
-        className="absolute right-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
+        className="absolute right-3 top-3 h-7 w-7 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
         onClick={onClose}
         aria-label="Close lightbox"
       >
-        <X className="w-4 h-4" />
+        <X className="w-3 h-3" />
       </Button>
 
       {/* Left Sidebar - Information Panel */}
       <div className={`${leftPanelCollapsed ? 'w-6' : 'w-64'} bg-background/95 backdrop-blur-sm border-r border-border/20 transition-all duration-200`}>
-        {/* Left Panel Toggle - repositioned */}
+        {/* Left Panel Toggle - smaller */}
         <Button
           variant="ghost"
           size="sm"
-          className="absolute left-4 top-4 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
+          className="absolute left-3 top-3 h-7 w-7 p-0 bg-background/20 hover:bg-background/40 text-white z-[60]"
           onClick={() => setLeftPanelCollapsed(!leftPanelCollapsed)}
           aria-label={leftPanelCollapsed ? 'Expand left panel' : 'Collapse left panel'}
         >
@@ -476,28 +476,28 @@ export function SimpleLightbox({
 
       {/* Center - Media Display */}
       <div className="flex-1 flex items-center justify-center p-3 relative">
-        {/* Navigation Buttons */}
+        {/* Navigation Buttons - smaller and more discrete */}
         {items.length > 1 && (
           <>
             <Button
               variant="ghost"
               size="sm"
-              className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
+              className="absolute left-4 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
               onClick={handlePrevious}
               disabled={currentIndex === 0}
               aria-label="Previous item"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
+              className="absolute right-4 top-1/2 -translate-y-1/2 h-8 w-8 p-0 bg-background/20 hover:bg-background/40 text-white z-[50]"
               onClick={handleNext}
               disabled={currentIndex === items.length - 1}
               aria-label="Next item"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-4 h-4" />
             </Button>
           </>
         )}
