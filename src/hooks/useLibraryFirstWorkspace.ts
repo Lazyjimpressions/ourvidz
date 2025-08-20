@@ -563,8 +563,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
       });
 
-      // STAGING-FIRST: Use queue-job directly for new staging-first architecture
-      const { data, error } = await supabase.functions.invoke('queue-job', {
+      // STAGING-FIRST: Route to appropriate edge function based on model type
+      const edgeFunction = modelType === 'replicate_rv51' ? 'replicate-image' : 'queue-job';
+      console.log('🎯 ROUTING: Using edge function:', edgeFunction, 'for model:', modelType);
+      
+      const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: generationRequest
       });
 

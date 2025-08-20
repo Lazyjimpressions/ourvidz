@@ -209,8 +209,8 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
         const imageBlob = await imageResponse.blob()
         const imageBuffer = await imageBlob.arrayBuffer()
         
-        // Upload to Supabase storage
-        const fileName = `${jobId}_${Date.now()}.png`
+        // Upload to Supabase storage with user-scoped path
+        const fileName = `${jobData.user_id}/${jobId}_${Date.now()}.png`
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('workspace-temp')
           .upload(fileName, imageBuffer, {
@@ -299,12 +299,18 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
         return
       }
       
-      // Update job with current status
+      // Update job with current status (get fresh job data first)
+      const { data: currentJobData } = await supabase
+        .from('jobs')
+        .select('metadata')
+        .eq('id', jobId)
+        .single()
+      
       await supabase
         .from('jobs')
         .update({ 
           metadata: {
-            ...jobData.metadata,
+            ...(currentJobData?.metadata || {}),
             prediction_id: predictionId,
             replicate_status: prediction.status
           }
