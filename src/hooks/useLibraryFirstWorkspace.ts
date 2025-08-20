@@ -20,6 +20,7 @@ export interface LibraryFirstWorkspaceState {
   referenceStrength: number;
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
+  modelType: 'sdxl' | 'replicate_rv51';
   
   // Video-specific State
   beginningRefImage: File | null;
@@ -71,6 +72,7 @@ export interface LibraryFirstWorkspaceActions {
   setReferenceStrength: (strength: number) => void;
   setContentType: (type: 'sfw' | 'nsfw') => void;
   setQuality: (quality: 'fast' | 'high') => void;
+  setModelType: (model: 'sdxl' | 'replicate_rv51') => void;
   setBeginningRefImage: (image: File | null) => void;
   setEndingRefImage: (image: File | null) => void;
   setVideoDuration: (duration: number) => void;
@@ -135,6 +137,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceStrength, setReferenceStrength] = useState(0.5);
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
+  const [modelType, setModelType] = useState<'sdxl' | 'replicate_rv51'>('sdxl');
   
   // Video-specific State
   const [beginningRefImage, setBeginningRefImage] = useState<File | null>(null);
@@ -495,13 +498,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       const generationRequest = {
         job_type: (mode === 'image' 
-          ? (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast')
+          ? (modelType === 'replicate_rv51' 
+              ? (quality === 'high' ? 'replicate_rv51_high' : 'replicate_rv51_fast')
+              : (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'))
           : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast')
         ),
         prompt: finalPrompt,
         quality: quality,
         // format omitted - let edge function default based on job_type
-        model_type: mode === 'image' ? 'sdxl' : 'wan',
+        model_type: mode === 'image' ? (modelType === 'replicate_rv51' ? 'realistic_vision_v51' : 'sdxl') : 'wan',
         reference_image_url: (referenceImageUrl || referenceImage) 
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
           : undefined,
@@ -525,11 +530,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           shot_type: finalShotType,
           camera_angle: finalCameraAngle,
           style: finalStyle,
-          enhancement_model: exactCopyMode ? 'none' : enhancementModel,
+          enhancement_model: exactCopyMode || modelType === 'replicate_rv51' ? 'none' : enhancementModel,
           contentType: contentType,
-          // Skip enhancement in exact copy mode
-          user_requested_enhancement: exactCopyMode ? false : (enhancementModel !== 'none'),
-          skip_enhancement: exactCopyMode ? true : (enhancementModel === 'none'),
+          // Skip enhancement in exact copy mode or for replicate models
+          user_requested_enhancement: exactCopyMode || modelType === 'replicate_rv51' ? false : (enhancementModel !== 'none'),
+          skip_enhancement: exactCopyMode || modelType === 'replicate_rv51' ? true : (enhancementModel === 'none'),
           // Exact copy parameter overrides
           ...(exactCopyMode ? {
             num_inference_steps: 15,
@@ -986,6 +991,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     referenceStrength,
     contentType,
     quality,
+    modelType,
     beginningRefImage,
     endingRefImage,
     videoDuration,
@@ -1034,6 +1040,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setReferenceStrength,
     setContentType,
     setQuality,
+    setModelType,
     setBeginningRefImage,
     setEndingRefImage,
     setVideoDuration,

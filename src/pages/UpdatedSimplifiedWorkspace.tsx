@@ -37,6 +37,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     referenceStrength,
     contentType,
     quality,
+    modelType,
     isGenerating,
     updateMode,
     setPrompt,
@@ -44,6 +45,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     setReferenceStrength,
     setContentType,
     setQuality,
+    setModelType,
     generate,
     clearWorkspace,
     deleteAllWorkspace,
@@ -433,7 +435,9 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
             referenceImage={referenceImage}
             onReferenceImageChange={setReferenceImage}
             referenceImageUrl={referenceImageUrl}
-            onReferenceImageUrlChange={setReferenceImageUrl}
+          onReferenceImageUrlChange={setReferenceImageUrl}
+          modelType={modelType}
+          onModelTypeChange={setModelType}
             beginningRefImageUrl={beginningRefImageUrl}
             onBeginningRefImageUrlChange={setBeginningRefImageUrl}
             endingRefImageUrl={endingRefImageUrl}
