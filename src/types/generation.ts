@@ -2,6 +2,8 @@
 export type GenerationFormat = 
   | 'sdxl_image_fast' 
   | 'sdxl_image_high'
+  | 'replicate_rv51_fast'
+  | 'replicate_rv51_high'
   | 'image_fast' 
   | 'image_high' 
   | 'video_fast' 
@@ -47,6 +49,28 @@ export const GENERATION_CONFIGS: Record<GenerationFormat, GenerationConfig> = {
     isSDXL: true,
     bucket: 'sdxl_image_high',
     queue: 'sdxl_queue'
+  },
+  replicate_rv51_fast: {
+    format: 'replicate_rv51_fast',
+    displayName: 'RV5.1 Fast',
+    description: 'Fast realistic image generation via Replicate',
+    estimatedTime: '10 seconds',
+    credits: 1,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'workspace-temp',
+    queue: 'replicate_queue'
+  },
+  replicate_rv51_high: {
+    format: 'replicate_rv51_high',
+    displayName: 'RV5.1 High',
+    description: 'High-quality realistic image generation via Replicate',
+    estimatedTime: '15 seconds',
+    credits: 2,
+    isVideo: false,
+    isSDXL: false,
+    bucket: 'workspace-temp',
+    queue: 'replicate_queue'
   },
   image_fast: {
     format: 'image_fast',

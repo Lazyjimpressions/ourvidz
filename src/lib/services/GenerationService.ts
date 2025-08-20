@@ -33,6 +33,13 @@ export class GenerationService {
       estimatedTime: config.estimatedTime
     });
 
+    // Route Replicate requests to new edge function
+    if (request.format.startsWith('replicate_')) {
+      return await this.queueReplicateGeneration(request, config);
+    }
+
+    // Continue with existing logic for SDXL/WAN
+
     // Sanitize request to remove circular references
     const sanitizeRequest = (obj: any): any => {
       if (obj === null || obj === undefined) return obj;
@@ -263,6 +270,38 @@ export class GenerationService {
 
     if (error) {
       throw new Error(`Failed to cancel generation: ${error.message}`);
+    }
+  }
+
+  static async queueReplicateGeneration(request: GenerationRequest, config: any): Promise<string> {
+    console.log('🔥 Routing to Replicate generation:', request.format);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('replicate-image', {
+        body: {
+          prompt: request.prompt,
+          original_prompt: request.originalPrompt || request.prompt,
+          format: request.format,
+          quality: config.displayName.includes('High') ? 'high' : 'fast',
+          metadata: {
+            ...request.metadata,
+            model_type: 'realistic_vision_v51',
+            credits: config.credits,
+            prompt: request.prompt
+          }
+        }
+      });
+
+      if (error) {
+        console.error('❌ Replicate generation error:', error);
+        throw new Error(`Replicate generation failed: ${error.message}`);
+      }
+
+      console.log('✅ Replicate job queued:', data.jobId);
+      return data.jobId;
+    } catch (error) {
+      console.error('Replicate generation request failed:', error);
+      throw new Error(`Replicate generation failed: ${error.message}`);
     }
   }
 }

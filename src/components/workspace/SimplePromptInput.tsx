@@ -133,6 +133,8 @@ interface SimplePromptInputProps {
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
+  modelType?: 'sdxl' | 'replicate_rv51';
+  onModelTypeChange?: (model: 'sdxl' | 'replicate_rv51') => void;
   isGenerating: boolean;
   onGenerate: () => void;
   referenceImage: File | null;
@@ -265,11 +267,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   compelWeights = '',
   onCompelWeightsChange,
   seed = null,
-  onSeedChange
+  onSeedChange,
+  modelType = 'sdxl',
+  onModelTypeChange
 }) => {
-  // Base negative prompt hook
-  const modelType = mode === 'image' ? 'sdxl' : 'ltx';
-  const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(modelType, contentType);
+  // Base negative prompt hook - use actual modelType based on mode and user selection
+  const baseModelType = mode === 'video' ? 'ltx' : (modelType === 'replicate_rv51' ? 'realistic_vision' : 'sdxl');
+  const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(baseModelType, contentType);
   const [showBaseNegative, setShowBaseNegative] = useState(false);
 
   // Refresh base negative prompt when contentType or mode changes
@@ -549,16 +553,26 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               <div className="flex items-end gap-1 justify-end self-end pb-0.5">
                 {mode === 'image' ? (
                   /* Image mode controls */
-                  <div className="flex items-center gap-1">
-                    {/* Quality Toggle */}
-                    <button 
-                      onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')} 
-                      className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                        quality === 'high' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                      }`}
-                    >
-                      {quality === 'high' ? 'HIGH' : 'FAST'}
-                    </button>
+                   <div className="flex items-center gap-1">
+                     {/* Model Toggle */}
+                     <button 
+                       onClick={() => onModelTypeChange?.(modelType === 'sdxl' ? 'replicate_rv51' : 'sdxl')} 
+                       className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                         modelType === 'replicate_rv51' ? 'bg-accent text-accent-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                       }`}
+                     >
+                       {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
+                     </button>
+
+                     {/* Quality Toggle */}
+                     <button 
+                       onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')} 
+                       className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                         quality === 'high' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                       }`}
+                     >
+                       {quality === 'high' ? 'HIGH' : 'FAST'}
+                     </button>
 
                     {/* Content Type */}
                     <button 
@@ -578,53 +592,62 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {aspectRatio}
                     </button>
 
-                    {/* Enhancement Model Dropdown */}
-                    <div className="relative">
-                      <button 
-                        onClick={() => {
-                          setShowEnhancePopup(!showEnhancePopup);
-                          setShowShotTypePopup(false);
-                          setShowAnglePopup(false);
-                          setShowStylePopup(false);
-                        }}
-                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
-                      >
-                        {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
-                         enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
-                        <ChevronDown size={8} />
-                      </button>
-                      {showEnhancePopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_instruct');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            INSTRUCT
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('qwen_base');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            BASE
-                          </button>
-                          <button 
-                            onClick={() => {
-                              onEnhancementModelChange?.('none');
-                              setShowEnhancePopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            NONE
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                     {/* Enhancement Model Dropdown - Only show for SDXL */}
+                     {modelType === 'sdxl' && (
+                       <div className="relative">
+                         <button 
+                           onClick={() => {
+                             setShowEnhancePopup(!showEnhancePopup);
+                             setShowShotTypePopup(false);
+                             setShowAnglePopup(false);
+                             setShowStylePopup(false);
+                           }}
+                           className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
+                         >
+                           {enhancementModel === 'qwen_instruct' ? 'INSTRUCT' : 
+                            enhancementModel === 'qwen_base' ? 'BASE' : 'NONE'}
+                           <ChevronDown size={8} />
+                         </button>
+                         {showEnhancePopup && (
+                           <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                             <button 
+                               onClick={() => {
+                                 onEnhancementModelChange?.('qwen_instruct');
+                                 setShowEnhancePopup(false);
+                               }}
+                               className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                             >
+                               INSTRUCT
+                             </button>
+                             <button 
+                               onClick={() => {
+                                 onEnhancementModelChange?.('qwen_base');
+                                 setShowEnhancePopup(false);
+                               }}
+                               className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                             >
+                               BASE
+                             </button>
+                             <button 
+                               onClick={() => {
+                                 onEnhancementModelChange?.('none');
+                                 setShowEnhancePopup(false);
+                               }}
+                               className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                             >
+                               NONE
+                             </button>
+                           </div>
+                         )}
+                       </div>
+                     )}
+
+                     {/* For Replicate models, show NONE enhancement */}
+                     {modelType === 'replicate_rv51' && (
+                       <div className="px-2 py-1 bg-muted/50 text-muted-foreground rounded text-[10px] font-medium">
+                         NONE
+                       </div>
+                     )}
 
                     {/* Shot Type */}
                     <div className="relative">
@@ -892,9 +915,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {showBaseNegative ? 'Hide base' : 'View base'}
                     </button>
                   </div>
-                  <div className="text-[9px] text-muted-foreground mb-1">
-                    A base negative prompt for {modelType.toUpperCase()} {contentType.toUpperCase()} is applied automatically
-                  </div>
+                   <div className="text-[9px] text-muted-foreground mb-1">
+                     A base negative prompt for {baseModelType.toUpperCase()} {contentType.toUpperCase()} is applied automatically
+                   </div>
                   {showBaseNegative && (
                     <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
                       {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
