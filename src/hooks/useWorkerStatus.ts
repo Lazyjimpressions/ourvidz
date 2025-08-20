@@ -95,7 +95,13 @@ export const useWorkerStatus = () => {
   };
 
   useEffect(() => {
-    fetchWorkerStatus();
+    // Run health check immediately on mount, then fetch status
+    const initializeHealth = async () => {
+      await runHealthCheck();
+      await fetchWorkerStatus();
+    };
+    
+    initializeHealth();
 
     // Set up real-time updates for system_config changes with unique channel name
     const channelName = `worker-status-updates-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -115,11 +121,18 @@ export const useWorkerStatus = () => {
       .subscribe();
 
     // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchWorkerStatus, 30000);
+    const statusInterval = setInterval(fetchWorkerStatus, 30000);
+    
+    // Run health check every 60 seconds to proactively detect worker downtime
+    const healthInterval = setInterval(async () => {
+      await runHealthCheck();
+      await fetchWorkerStatus();
+    }, 60000);
 
     return () => {
       console.log(`🔕 Cleaning up worker status channel: ${channelName}`);
-      clearInterval(interval);
+      clearInterval(statusInterval);
+      clearInterval(healthInterval);
       supabase.removeChannel(channel);
     };
   }, []);

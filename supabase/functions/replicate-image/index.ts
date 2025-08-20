@@ -54,12 +54,16 @@ serve(async (req) => {
       promptLength: prompt.length 
     })
 
+    // Accept both job_type and format, with safe default
+    const jobType = body.job_type ?? format ?? 'replicate_rv51_fast';
+    console.log('🎯 Using job_type:', jobType, 'from format:', format)
+
     // Create job record first
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
         user_id: user.id,
-        job_type: format,
+        job_type: jobType,
         status: 'queued',
         metadata: {
           ...metadata,
@@ -138,8 +142,8 @@ serve(async (req) => {
       })
       .eq('id', jobId)
 
-    // Start background polling task
-    EdgeRuntime.waitUntil(pollReplicateCompletion(prediction.id, jobId, supabase, REPLICATE_API_TOKEN))
+    // Start background polling task with user ID
+    EdgeRuntime.waitUntil(pollReplicateCompletion(prediction.id, jobId, user.id, supabase, REPLICATE_API_TOKEN))
 
     return new Response(
       JSON.stringify({ 
@@ -165,7 +169,7 @@ serve(async (req) => {
   }
 })
 
-async function pollReplicateCompletion(predictionId: string, jobId: string, supabase: any, apiToken: string) {
+async function pollReplicateCompletion(predictionId: string, jobId: string, userId: string, supabase: any, apiToken: string) {
   console.log('🔄 Starting background polling for prediction:', predictionId)
   
   const maxRetries = 60 // 5 minutes max (5s intervals)
@@ -210,7 +214,7 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
         const imageBuffer = await imageBlob.arrayBuffer()
         
         // Upload to Supabase storage with user-scoped path
-        const fileName = `${jobData.user_id}/${jobId}_${Date.now()}.png`
+        const fileName = `${userId}/${jobId}_${Date.now()}.png`
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('workspace-temp')
           .upload(fileName, imageBuffer, {
@@ -219,27 +223,33 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
           })
         
         if (uploadError) {
+          console.error('❌ Storage upload error:', uploadError)
           throw new Error(`Failed to upload image: ${uploadError.message}`)
         }
         
         console.log('📁 Image uploaded to storage:', uploadData.path)
         
-        // Get job data for workspace asset creation
-        const { data: jobData } = await supabase
+        // Get fresh job data for workspace asset creation
+        const { data: currentJobData, error: jobFetchError } = await supabase
           .from('jobs')
           .select('*')
           .eq('id', jobId)
           .single()
         
-        // Create workspace asset
+        if (jobFetchError || !currentJobData) {
+          console.error('❌ Failed to fetch job data:', jobFetchError)
+          throw new Error(`Failed to fetch job data: ${jobFetchError?.message}`)
+        }
+        
+        // Create workspace asset using fetched job data
         const { error: assetError } = await supabase
           .from('workspace_assets')
           .insert({
-            user_id: jobData.user_id,
+            user_id: currentJobData.user_id,
             job_id: jobId,
             asset_type: 'image',
             temp_storage_path: uploadData.path,
-            original_prompt: jobData.metadata.prompt,
+            original_prompt: currentJobData.metadata?.prompt || 'Generated image',
             model_used: 'realistic_vision_v51',
             file_size_bytes: imageBuffer.byteLength,
             mime_type: 'image/png',
@@ -260,14 +270,14 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
           throw new Error(`Failed to create workspace asset: ${assetError.message}`)
         }
         
-        // Update job status to completed
+        // Update job status to completed using fresh job data
         await supabase
           .from('jobs')
           .update({ 
             status: 'completed',
             completed_at: new Date().toISOString(),
             metadata: {
-              ...jobData.metadata,
+              ...currentJobData.metadata,
               prediction_id: predictionId,
               replicate_status: 'succeeded',
               output_url: imageUrl,
@@ -282,6 +292,13 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
       } else if (prediction.status === 'failed') {
         console.error('❌ Prediction failed:', prediction.error)
         
+        // Get current job data for metadata
+        const { data: failedJobData } = await supabase
+          .from('jobs')
+          .select('metadata')
+          .eq('id', jobId)
+          .single()
+        
         // Update job status to failed
         await supabase
           .from('jobs')
@@ -289,7 +306,7 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, supa
             status: 'failed',
             error_message: `Replicate prediction failed: ${prediction.error || 'Unknown error'}`,
             metadata: {
-              ...jobData.metadata,
+              ...(failedJobData?.metadata || {}),
               prediction_id: predictionId,
               replicate_status: 'failed'
             }
