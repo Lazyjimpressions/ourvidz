@@ -91,20 +91,51 @@ serve(async (req) => {
     const jobId = jobData.id
     console.log('✅ Job created:', jobId)
 
-    // Prepare Replicate API request
+    // Get dynamic model configuration
+    const modelSlug = Deno.env.get('REPLICATE_MODEL_SLUG') || 'fofr/realistic-vision-v5.1'
+    let modelVersion = Deno.env.get('REPLICATE_MODEL_VERSION')
+    
+    // If no version specified, fetch latest from Replicate API
+    if (!modelVersion) {
+      console.log('🔍 Fetching latest version for model:', modelSlug)
+      const modelResponse = await fetch(`https://api.replicate.com/v1/models/${modelSlug}`, {
+        headers: {
+          'Authorization': `Token ${REPLICATE_API_TOKEN}`,
+        },
+      })
+      
+      if (!modelResponse.ok) {
+        const errorText = await modelResponse.text()
+        console.error('❌ Failed to fetch model info:', errorText)
+        throw new Error(`Failed to fetch model ${modelSlug}: ${errorText}`)
+      }
+      
+      const modelInfo = await modelResponse.json()
+      modelVersion = modelInfo.latest_version?.id
+      
+      if (!modelVersion) {
+        throw new Error(`No version found for model ${modelSlug}`)
+      }
+    }
+    
+    console.log('🎯 Using model:', modelSlug, 'version:', modelVersion)
+
+    // Prepare Replicate API request with RV5.1 compatible parameters
     const replicateBody = {
-      version: "cd1b02cfc27b86fa88b9e63a5b34ed88e49a3e6b8e98e3b2edea5c9c6e40b0ce",
+      version: modelVersion,
       input: {
         prompt: prompt,
         negative_prompt: metadata.negative_prompt || "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck",
         width: 512,
         height: 728,
-        steps: quality === 'high' ? 30 : 20,
-        guidance: quality === 'high' ? 7 : 5,
+        num_inference_steps: quality === 'high' ? 30 : 20, // RV5.1 uses num_inference_steps not steps
+        guidance_scale: quality === 'high' ? 7 : 5, // RV5.1 uses guidance_scale not guidance
         scheduler: "EulerA",
         seed: 0
       }
     }
+    
+    console.log('📋 Replicate payload keys:', Object.keys(replicateBody.input))
 
     console.log('📤 Calling Replicate API...')
     const replicateResponse = await fetch('https://api.replicate.com/v1/predictions', {
@@ -265,8 +296,8 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
             asset_index: 0,
             generation_settings: {
               model: 'realistic_vision_v51',
-              steps: prediction.input.steps,
-              guidance: prediction.input.guidance,
+              num_inference_steps: prediction.input.num_inference_steps,
+              guidance_scale: prediction.input.guidance_scale,
               scheduler: prediction.input.scheduler
             }
           })
