@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -161,6 +161,8 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   return (
     <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <DialogContent className="max-w-[98vw] max-h-[96vh] w-auto h-auto p-0 bg-black/95">
+        <DialogTitle className="sr-only">Asset preview</DialogTitle>
+        <DialogDescription className="sr-only">Use left and right arrow keys to navigate. Press Escape to close.</DialogDescription>
         <div className="relative w-full h-[96vh] flex flex-col">
           {/* Header - more compact */}
           <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">

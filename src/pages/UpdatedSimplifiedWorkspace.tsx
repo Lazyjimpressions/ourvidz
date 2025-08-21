@@ -4,11 +4,12 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
 import { OptimizedDeleteModal } from '@/components/workspace/OptimizedDeleteModal';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
+import { WorkspaceHeader } from '@/components/WorkspaceHeader';
+import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
 
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
@@ -175,60 +176,48 @@ export const UpdatedSimplifiedWorkspace = () => {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-        {/* Header Section */}
-        <div className="flex-none border-b bg-card">
-          <div className="p-6 pb-4">
-            <SimplePromptInput
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-              currentMode={currentMode}
-              onModeToggle={handleModeChange}
-            />
-          </div>
-          
+        {/* Top Header */}
+        <WorkspaceHeader />
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden p-6 pt-16 pb-40 space-y-4">
           {/* Progress Indicator */}
           {isGenerating && (
-            <div className="px-6 pb-4">
-              <GenerationProgressIndicator 
-                status={currentJob?.status || 'queued'}
-                progress={progress}
-              />
-            </div>
+            <GenerationProgressIndicator 
+              status={currentJob?.status || 'queued'}
+              progress={progress}
+            />
           )}
 
           {/* Bulk Actions Bar */}
           {selectedAssets.length > 0 && (
-            <div className="px-6 pb-4">
-              <Card>
-                <CardContent className="flex items-center justify-between p-3">
-                  <span className="text-sm font-medium text-muted-foreground">
-                    {selectedAssets.length} item{selectedAssets.length === 1 ? '' : 's'} selected
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setShowDeleteModal(true)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Delete ({selectedAssets.length})
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedAssets([])}
-                    >
-                      Clear Selection
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <Card>
+              <CardContent className="flex items-center justify-between p-3">
+                <span className="text-sm font-medium text-muted-foreground">
+                  {selectedAssets.length} item{selectedAssets.length === 1 ? '' : 's'} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setShowDeleteModal(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete ({selectedAssets.length})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSelectedAssets([])}
+                  >
+                    Clear Selection
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           )}
-        </div>
 
-        {/* Content Grid */}
-        <div className="flex-1 overflow-hidden p-6">
+          {/* Grid */}
           <SharedGrid
             assets={signedAssets as any}
             onPreview={handlePreview}
@@ -244,6 +233,14 @@ export const UpdatedSimplifiedWorkspace = () => {
             isLoading={isLoadingRaw || isSigning}
           />
         </div>
+
+        {/* Fixed bottom control bar */}
+        <MobileSimplePromptInput
+          onGenerate={handleGenerate}
+          isGenerating={isGenerating}
+          currentMode={currentMode}
+          onModeToggle={handleModeChange}
+        />
 
         {/* Lightbox */}
         {lightboxIndex !== null && (signedAssets?.length || 0) > 0 && (
