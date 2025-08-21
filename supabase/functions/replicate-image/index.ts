@@ -196,9 +196,18 @@ serve(async (req) => {
     }
     
     // Configure webhook URL for instant completion notification
+    const WEBHOOK_SECRET = Deno.env.get('REPLICATE_WEBHOOK_SECRET')
     const webhookUrl = `${SUPABASE_URL}/functions/v1/replicate-webhook`
     replicateBody.webhook = webhookUrl
     replicateBody.webhook_events_filter = ["start", "completed"]
+    
+    // Add webhook secret for signature verification
+    if (WEBHOOK_SECRET) {
+      replicateBody.webhook_secret = WEBHOOK_SECRET
+      console.log('🔐 Webhook security configured with secret')
+    } else {
+      console.log('⚠️ Webhook secret not configured - using unsigned webhooks')
+    }
     
     console.log('🔔 Webhook configured:', webhookUrl)
     console.log('📋 Using', isFlux ? 'FLUX' : 'RV5.1', 'parameters with keys:', Object.keys(replicateBody.input))

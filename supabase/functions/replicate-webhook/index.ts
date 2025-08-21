@@ -14,7 +14,48 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const WEBHOOK_SECRET = Deno.env.get('REPLICATE_WEBHOOK_SECRET')
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    // Verify webhook signature if secret is configured
+    if (WEBHOOK_SECRET) {
+      const signature = req.headers.get('replicate-signature')
+      if (!signature) {
+        console.error('❌ Missing signature header for secured webhook')
+        return new Response('Unauthorized: Missing signature', { status: 401, headers: corsHeaders })
+      }
+
+      // Read raw body for signature verification
+      const rawBody = await req.clone().arrayBuffer()
+      const rawBodyString = new TextDecoder().decode(rawBody)
+      
+      // Verify HMAC signature
+      const encoder = new TextEncoder()
+      const keyData = encoder.encode(WEBHOOK_SECRET)
+      const messageData = encoder.encode(rawBodyString)
+      
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'HMAC', hash: 'SHA-256' },
+        false,
+        ['sign']
+      )
+      
+      const signatureBytes = await crypto.subtle.sign('HMAC', cryptoKey, messageData)
+      const expectedSignature = 'sha256=' + Array.from(new Uint8Array(signatureBytes))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('')
+      
+      if (signature !== expectedSignature) {
+        console.error('❌ Signature verification failed:', { received: signature.substring(0, 20), expected: expectedSignature.substring(0, 20) })
+        return new Response('Unauthorized: Invalid signature', { status: 401, headers: corsHeaders })
+      }
+      
+      console.log('✅ Signature verified successfully')
+    } else {
+      console.log('⚠️ Webhook signature verification disabled (no secret configured)')
+    }
 
     const webhookPayload = await req.json()
     console.log('🔔 Replicate webhook received:', {
