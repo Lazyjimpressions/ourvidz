@@ -4,7 +4,6 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
 import { SharedGrid } from '@/components/shared/SharedGrid';
 import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
@@ -175,8 +174,7 @@ export const UpdatedSimplifiedWorkspace = () => {
   }, [deleteAsset, selectedAsset]);
 
   return (
-    <OurVidzDashboardLayout>
-      <div className="flex flex-col h-screen bg-background">
+    <div className="flex flex-col h-screen bg-background">
         {/* Header Section */}
         <div className="flex-none border-b bg-card">
           <div className="p-6 pb-4">
@@ -291,6 +289,5 @@ export const UpdatedSimplifiedWorkspace = () => {
           count={selectedAssets.length}
         />
       </div>
-    </OurVidzDashboardLayout>
   );
 };
