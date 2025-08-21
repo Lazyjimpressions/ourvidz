@@ -689,7 +689,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       setIsGenerating(false);
     }
   }, [
-    prompt, mode, referenceImage, referenceStrength, contentType, quality,
+    prompt, mode, referenceImage, referenceStrength, contentType, quality, modelType,
     beginningRefImage, endingRefImage, videoDuration, motionIntensity, soundEnabled,
     aspectRatio, shotType, cameraAngle, style, styleRef, exactCopyMode, referenceMetadata,
     useOriginalParams, lockSeed, enhancementModel, toast, numImages, videoDuration
