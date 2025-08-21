@@ -24,6 +24,7 @@ import RoleplayCharacterSelection from "@/pages/RoleplayCharacterSelection";
 
 import NotFound from "@/pages/NotFound";
 import { useMobileDetection } from "@/hooks/useMobileDetection";
+import { GeneratedMediaProvider } from "@/contexts/GeneratedMediaContext";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,7 +56,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/workspace" element={<ProtectedRoute><WorkspaceWithMobileDetection /></ProtectedRoute>} />
+              <Route path="/workspace" element={<ProtectedRoute><GeneratedMediaProvider><WorkspaceWithMobileDetection /></GeneratedMediaProvider></ProtectedRoute>} />
               <Route path="/library" element={<ProtectedRoute><UpdatedOptimizedLibrary /></ProtectedRoute>} />
               <Route path="/storyboard" element={<ProtectedRoute><Storyboard /></ProtectedRoute>} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
