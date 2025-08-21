@@ -195,6 +195,12 @@ serve(async (req) => {
       }
     }
     
+    // Configure webhook URL for instant completion notification
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/replicate-webhook`
+    replicateBody.webhook = webhookUrl
+    replicateBody.webhook_events_filter = ["start", "completed"]
+    
+    console.log('🔔 Webhook configured:', webhookUrl)
     console.log('📋 Using', isFlux ? 'FLUX' : 'RV5.1', 'parameters with keys:', Object.keys(replicateBody.input))
 
     console.log('📤 Calling Replicate API...')
@@ -239,7 +245,7 @@ serve(async (req) => {
       })
       .eq('id', jobId)
 
-    // Start background polling task with user ID
+    // Keep background polling as fallback (reduced frequency)
     EdgeRuntime.waitUntil(pollReplicateCompletion(prediction.id, jobId, user.id, supabase, REPLICATE_API_TOKEN))
 
     return new Response(
