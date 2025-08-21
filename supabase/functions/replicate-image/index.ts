@@ -294,10 +294,46 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
       if (prediction.status === 'succeeded') {
         console.log('✅ Prediction completed successfully')
         
-        // Download and store the image
-        const imageUrl = prediction.output[0]
-        if (!imageUrl) {
-          throw new Error('No image URL in prediction output')
+        // Extract image URL from various output formats
+        console.log('📦 Raw output type:', typeof prediction.output, 'Preview:', 
+          typeof prediction.output === 'string' 
+            ? prediction.output.substring(0, 100) 
+            : JSON.stringify(prediction.output).substring(0, 100))
+        
+        let imageUrl: string | null = null
+        
+        if (typeof prediction.output === 'string') {
+          // Direct string URL
+          imageUrl = prediction.output
+        } else if (Array.isArray(prediction.output)) {
+          if (prediction.output.length > 0) {
+            const firstItem = prediction.output[0]
+            if (typeof firstItem === 'string') {
+              // Array of string URLs
+              imageUrl = firstItem
+            } else if (typeof firstItem === 'object' && firstItem?.url) {
+              // Array of objects with url property
+              imageUrl = firstItem.url
+            }
+          }
+        } else if (typeof prediction.output === 'object' && prediction.output?.url) {
+          // Single object with url property
+          imageUrl = prediction.output.url
+        }
+        
+        if (!imageUrl || !imageUrl.startsWith('http')) {
+          console.error('❌ Invalid or missing image URL:', imageUrl)
+          
+          // Mark job as failed with download error
+          await supabase
+            .from('jobs')
+            .update({ 
+              status: 'failed',
+              error_message: `Invalid image URL received from Replicate: ${imageUrl}`
+            })
+            .eq('id', jobId)
+          
+          return
         }
         
         // Download the image
@@ -385,6 +421,7 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
               prediction_id: predictionId,
               replicate_status: 'succeeded',
               output_url: imageUrl,
+              output_snapshot: JSON.stringify(prediction.output).substring(0, 500), // Truncated output for debugging
               storage_path: uploadData.path
             }
           })
