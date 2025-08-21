@@ -291,52 +291,18 @@ export const useOptimizedWorkspace = () => {
   }, [queryClient]);
 
   return {
-    // Data properties
     assets: formattedAssets,
     isLoading,
-    loadMore: () => console.log('LoadMore not implemented yet'),
-    hasMore: false,
-    refreshAssets: () => queryClient.invalidateQueries({ queryKey: ['workspace-assets'] }),
-    deleteAsset: async (itemId: string) => {
-      const tile = assets.find(t => t.id === itemId);
-      if (tile) {
-        await deleteTile(tile);
-      }
-    },
-    deleteMultipleAssets: async (itemIds: string[]) => {
-      for (const itemId of itemIds) {
-        const tile = assets.find(t => t.id === itemId);
-        if (tile) {
-          await deleteTile(tile);
-        }
-      }
-    },
-    
-    // State properties
-    deletingItems,
-    deletingJobs,
-    
-    // Action methods
-    clearFromWorkspace: async (itemId: string, itemType: 'image' | 'video') => {
-      console.log('Clear from workspace not fully implemented');
-      return true;
-    },
-    deleteItemPermanently: async (itemId: string, itemType: 'image' | 'video') => {
-      console.log('Delete permanently not fully implemented');
-      return true;
-    },
-    clearJobFromWorkspace: async (jobId: string) => {
-      console.log('Clear job from workspace not fully implemented');
-      return true;
-    },
-    deleteJobPermanently: async (jobId: string) => {
-      console.log('Delete job permanently not fully implemented');
-      return true;
-    },
-    clearWorkspace: clearWorkspaceRealtime,
-    deleteAllWorkspace: async () => {
-      console.log('Delete all workspace not fully implemented');
-      return true;
-    }
+    loadMore: () => {}, // No-op for now
+    hasMore: false, // No pagination for now
+    refreshAssets,
+    deleteAsset,
+    deleteMultipleAssets,
+    clearFromWorkspace,
+    deleteItemPermanently,
+    clearJobFromWorkspace,
+    deleteJobPermanently,
+    clearWorkspace,
+    deleteAllWorkspace
   };
 };

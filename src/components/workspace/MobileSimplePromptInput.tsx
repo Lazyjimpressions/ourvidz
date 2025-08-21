@@ -32,7 +32,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
   // Set default models when data loads
   useEffect(() => {
-    if (imageModels && !selectedImageModel) {
+    if (imageModels && imageModels.length > 0 && !selectedImageModel) {
       const defaultModel = imageModels.find(m => m.is_default) || imageModels[0];
       if (defaultModel) {
         setSelectedImageModel(defaultModel.id);
@@ -41,7 +41,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   }, [imageModels, selectedImageModel]);
 
   useEffect(() => {
-    if (videoModels && !selectedVideoModel) {
+    if (videoModels && videoModels.length > 0 && !selectedVideoModel) {
       const defaultModel = videoModels.find(m => m.is_default) || videoModels[0];
       if (defaultModel) {
         setSelectedVideoModel(defaultModel.id);
@@ -54,15 +54,15 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     if (!prompt.trim() || isGenerating) return;
 
     const selectedModelId = currentMode === 'image' ? selectedImageModel : selectedVideoModel;
-    if (!selectedModelId) {
-      toast.error('Please select a model');
-      return;
-    }
-
-    onGenerate(prompt.trim(), {
+    
+    const options = {
       mode: currentMode,
-      apiModelId: selectedModelId
-    });
+      ...(selectedModelId && { apiModelId: selectedModelId })
+    };
+    
+    // Allow generation even without model selection (fallback to default)
+    console.log('🎯 MOBILE PROMPT INPUT: Generating with options:', options);
+    onGenerate(prompt.trim(), options);
     setPrompt('');
   };
 

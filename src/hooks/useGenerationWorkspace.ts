@@ -8,11 +8,18 @@ import { useGeneratedMediaContext } from '@/contexts/GeneratedMediaContext';
 export const useGenerationWorkspace = () => {
   const [progress, setProgress] = useState(0);
   
+  // Safely get context - add safety check
+  const context = useGeneratedMediaContext();
+  if (!context) {
+    console.error('🚨 useGenerationWorkspace: Context not available - ensure component is wrapped with GeneratedMediaProvider');
+    throw new Error('useGenerationWorkspace must be used within a GeneratedMediaProvider');
+  }
+  
   const { 
     isGenerating, 
     generateContent: contextGenerateContent,
     currentJob 
-  } = useGeneratedMediaContext();
+  } = context;
 
   const generateContent = useCallback(async (prompt: string, options?: any) => {
     console.log('🎯 GENERATION WORKSPACE: Starting generation with prompt:', prompt);

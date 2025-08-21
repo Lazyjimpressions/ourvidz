@@ -6,7 +6,7 @@ export interface WorkspaceGridVirtualizedProps {
     id: string;
     url: string;
     type: 'image' | 'video';
-    prompt: string;
+    prompt?: string; // Make prompt optional to match data format
     created_at: string;
     metadata?: any;
   }>;
@@ -60,7 +60,7 @@ export const WorkspaceGridVirtualized: React.FC<WorkspaceGridVirtualizedProps> =
           <div className="aspect-square bg-muted rounded-lg overflow-hidden">
             <img
               src={asset.url}
-              alt={asset.prompt}
+              alt={asset.prompt || 'Generated asset'}
               className="w-full h-full object-cover"
             />
           </div>

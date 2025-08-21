@@ -32,7 +32,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   // Set default models when data loads
   useEffect(() => {
-    if (imageModels && !selectedImageModel) {
+    if (imageModels && imageModels.length > 0 && !selectedImageModel) {
       const defaultModel = imageModels.find(m => m.is_default) || imageModels[0];
       if (defaultModel) {
         setSelectedImageModel(defaultModel.id);
@@ -41,7 +41,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   }, [imageModels, selectedImageModel]);
 
   useEffect(() => {
-    if (videoModels && !selectedVideoModel) {
+    if (videoModels && videoModels.length > 0 && !selectedVideoModel) {
       const defaultModel = videoModels.find(m => m.is_default) || videoModels[0];
       if (defaultModel) {
         setSelectedVideoModel(defaultModel.id);
