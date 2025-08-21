@@ -66,14 +66,15 @@ serve(async (req) => {
       .insert({
         user_id: user.id,
         job_type: normalizedJobType,
-        format: 'replicate_rv51',
+        format: 'image',
         quality: normalizedQuality,
-        model_type: 'replicate_rv51',
+        model_type: 'default',
         status: 'queued',
         metadata: {
           ...metadata,
           model_type: 'replicate_rv51',
           provider: 'replicate',
+          actual_model: 'realistic_vision_v51',
           original_format: format,
           original_quality: quality,
           prompt: prompt.substring(0, 500) // Truncate for storage
