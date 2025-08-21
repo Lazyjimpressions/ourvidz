@@ -14,8 +14,8 @@ import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { toast } from 'sonner';
 
 const MobileSimplifiedWorkspace = () => {
-  const [selectedAsset, setSelectedAsset] = useState(null);
   const [currentMode, setCurrentMode] = useState<'image' | 'video'>('image');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   
   const { assets, isLoading, loadMore, hasMore, refreshAssets, deleteAsset } = useOptimizedWorkspace();
   const { 
@@ -24,6 +24,16 @@ const MobileSimplifiedWorkspace = () => {
     currentJob,
     progress 
   } = useGenerationWorkspace();
+
+  // Workspace assets for shared components
+  const { data: rawAssets = [], isLoading: isLoadingRaw, refetch } = useWorkspaceAssets();
+
+  // Map to shared format and sign thumbnails
+  const sharedAssets = useMemo(() => rawAssets.map(toSharedFromWorkspace), [rawAssets]);
+  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
+    thumbTtlSec: 15 * 60,
+    enabled: true
+  });
 
   const handleGenerate = async (prompt: string, options?: any) => {
     console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', prompt);
@@ -36,6 +46,43 @@ const MobileSimplifiedWorkspace = () => {
     console.log('🔄 MOBILE WORKSPACE: Mode changed to:', mode);
     setCurrentMode(mode);
   };
+
+  // Preview handler for SharedGrid
+  const handlePreview = useCallback((asset: any) => {
+    const index = signedAssets.findIndex(a => a.id === asset.id);
+    if (index !== -1) setLightboxIndex(index);
+  }, [signedAssets]);
+
+  // Require original URL on demand
+  const handleRequireOriginalUrl = useCallback(async (asset: any) => {
+    if (typeof (asset as any).signOriginal === 'function') {
+      return (asset as any).signOriginal();
+    }
+    throw new Error('Original URL signing not available');
+  }, []);
+
+  // Workspace actions
+  const handleSaveToLibrary = useCallback(async (asset: any) => {
+    try {
+      await WorkspaceAssetService.saveToLibrary(asset.id);
+      toast.success('Saved to library');
+      refetch();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save to library');
+    }
+  }, [refetch]);
+
+  const handleDiscard = useCallback(async (asset: any) => {
+    try {
+      await WorkspaceAssetService.discardAsset(asset.id);
+      toast.success('Discarded');
+      refetch();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to discard');
+    }
+  }, [refetch]);
 
   return (
     <OurVidzDashboardLayout>
@@ -53,14 +100,14 @@ const MobileSimplifiedWorkspace = () => {
           )}
 
           {/* Content Grid */}
-          <WorkspaceGridVirtualized
-            assets={assets}
-            isLoading={isLoading}
-            onLoadMore={loadMore}
-            hasMore={hasMore}
-            onRefresh={refreshAssets}
-            onDelete={deleteAsset}
-            onAssetClick={setSelectedAsset}
+          <SharedGrid
+            assets={signedAssets as any}
+            onPreview={handlePreview}
+            actions={{
+              onSaveToLibrary: handleSaveToLibrary as any,
+              onDiscard: handleDiscard as any
+            }}
+            isLoading={isLoadingRaw || isSigning}
           />
         </div>
 
@@ -73,14 +120,38 @@ const MobileSimplifiedWorkspace = () => {
         />
 
         {/* Lightbox */}
-        {selectedAsset && (
-          <SimpleLightbox
-            asset={selectedAsset}
-            onClose={() => setSelectedAsset(null)}
-            onDelete={() => {
-              deleteAsset(selectedAsset.id);
-              setSelectedAsset(null);
-            }}
+        {lightboxIndex !== null && (signedAssets?.length || 0) > 0 && (
+          <SharedLightbox
+            assets={signedAssets as any}
+            startIndex={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onRequireOriginalUrl={handleRequireOriginalUrl}
+            actionsSlot={(asset) => (
+              <WorkspaceAssetActions
+                asset={asset}
+                onSave={() => handleSaveToLibrary(asset)}
+                onDiscard={() => handleDiscard(asset)}
+                onDownload={async () => {
+                  try {
+                    const url = await handleRequireOriginalUrl(asset);
+                    const res = await fetch(url);
+                    const blob = await res.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = objectUrl;
+                    a.download = `${asset.title || asset.id}.${asset.format === 'video' ? 'mp4' : 'jpg'}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    URL.revokeObjectURL(objectUrl);
+                    document.body.removeChild(a);
+                    toast.success('Download started');
+                  } catch (e) {
+                    console.error('Download failed:', e);
+                    toast.error('Download failed');
+                  }
+                }}
+              />
+            )}
           />
         )}
       </div>
