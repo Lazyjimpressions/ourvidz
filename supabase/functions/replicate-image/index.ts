@@ -54,23 +54,28 @@ serve(async (req) => {
       promptLength: prompt.length 
     })
 
-    // Accept both job_type and format, with safe default
-    const jobType = body.job_type ?? format ?? 'replicate_rv51_fast';
-    console.log('🎯 Using job_type:', jobType, 'from format:', format)
+    // Normalize quality and job_type for DB constraints
+    const normalizedQuality = quality === 'high' ? 'high' : 'fast';
+    const normalizedJobType = `image_${normalizedQuality}`;
+    
+    console.log('🎯 Normalized job_type:', normalizedJobType, 'quality:', normalizedQuality, 'for RV5.1')
 
     // Create job record first
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
         user_id: user.id,
-        job_type: jobType,
+        job_type: normalizedJobType,
+        format: 'replicate_rv51',
+        quality: normalizedQuality,
+        model_type: 'replicate_rv51',
         status: 'queued',
         metadata: {
           ...metadata,
-          model_type: 'realistic_vision_v51',
+          model_type: 'replicate_rv51',
           provider: 'replicate',
-          format,
-          quality,
+          original_format: format,
+          original_quality: quality,
           prompt: prompt.substring(0, 500) // Truncate for storage
         }
       })
