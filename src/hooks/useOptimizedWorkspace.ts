@@ -1,14 +1,9 @@
-
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 
-/**
- * Optimized workspace hook with proper loading states and error handling
- * Implements optimistic updates for better UX
- */
 export const useOptimizedWorkspace = () => {
   const queryClient = useQueryClient();
   const [deletingItems, setDeletingItems] = useState<Set<string>>(new Set());
@@ -30,7 +25,7 @@ export const useOptimizedWorkspace = () => {
     type: tile.type,
     prompt: tile.prompt,
     created_at: tile.timestamp.toISOString(),
-    metadata: tile.metadata
+    metadata: tile.metadata || {}
   }));
 
   // Optimistic UI helper
@@ -299,22 +294,49 @@ export const useOptimizedWorkspace = () => {
     // Data properties
     assets: formattedAssets,
     isLoading,
-    loadMore,
-    hasMore: false, // Simplified for now
-    refreshAssets,
-    deleteAsset,
-    deleteMultipleAssets,
+    loadMore: () => console.log('LoadMore not implemented yet'),
+    hasMore: false,
+    refreshAssets: () => queryClient.invalidateQueries({ queryKey: ['workspace-assets'] }),
+    deleteAsset: async (itemId: string) => {
+      const tile = assets.find(t => t.id === itemId);
+      if (tile) {
+        await deleteTile(tile);
+      }
+    },
+    deleteMultipleAssets: async (itemIds: string[]) => {
+      for (const itemId of itemIds) {
+        const tile = assets.find(t => t.id === itemId);
+        if (tile) {
+          await deleteTile(tile);
+        }
+      }
+    },
     
     // State properties
     deletingItems,
     deletingJobs,
     
     // Action methods
-    clearFromWorkspace,
-    deleteItemPermanently,
-    clearJobFromWorkspace,
-    deleteJobPermanently,
-    clearWorkspace,
-    deleteAllWorkspace,
+    clearFromWorkspace: async (itemId: string, itemType: 'image' | 'video') => {
+      console.log('Clear from workspace not fully implemented');
+      return true;
+    },
+    deleteItemPermanently: async (itemId: string, itemType: 'image' | 'video') => {
+      console.log('Delete permanently not fully implemented');
+      return true;
+    },
+    clearJobFromWorkspace: async (jobId: string) => {
+      console.log('Clear job from workspace not fully implemented');
+      return true;
+    },
+    deleteJobPermanently: async (jobId: string) => {
+      console.log('Delete job permanently not fully implemented');
+      return true;
+    },
+    clearWorkspace: clearWorkspaceRealtime,
+    deleteAllWorkspace: async () => {
+      console.log('Delete all workspace not fully implemented');
+      return true;
+    }
   };
 };

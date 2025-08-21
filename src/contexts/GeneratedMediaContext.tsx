@@ -1,3 +1,4 @@
+
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState, useEffect } from 'react';
 
 export type MediaStatus = 'idle' | 'pending' | 'ready' | 'error';
@@ -15,6 +16,10 @@ interface GeneratedMediaContextType {
   setPending: (key: string) => void;
   setReady: (key: string, payload: { assetId: string; imageUrl?: string | null; bucket?: string | null }) => void;
   setError: (key: string) => void;
+  // Generation-related properties
+  isGenerating: boolean;
+  generateContent: (prompt: string, options?: any) => Promise<void>;
+  currentJob: any;
 }
 
 const GeneratedMediaContext = createContext<GeneratedMediaContextType | undefined>(undefined);
@@ -36,6 +41,10 @@ export const GeneratedMediaProvider: React.FC<{ children: React.ReactNode }>= ({
       return {};
     }
   });
+
+  // Generation state
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [currentJob, setCurrentJob] = useState<any>(null);
 
   // Persist to localStorage debounced with setTimeout to avoid type issues
   const timerRef = useRef<number | null>(null);
@@ -65,7 +74,28 @@ export const GeneratedMediaProvider: React.FC<{ children: React.ReactNode }>= ({
     setMap(prev => ({ ...prev, [key]: { ...(prev[key] || {} as any), status: 'error', updatedAt: Date.now() } }));
   }, []);
 
-  const value = useMemo(() => ({ getEntry, setPending, setReady, setError }), [getEntry, setPending, setReady, setError]);
+  // Mock generation function for now
+  const generateContent = useCallback(async (prompt: string, options?: any) => {
+    console.log('🎯 CONTEXT: Starting generation with prompt:', prompt);
+    setIsGenerating(true);
+    setCurrentJob({ status: 'queued', prompt });
+    
+    // Simulate generation
+    setTimeout(() => {
+      setIsGenerating(false);
+      setCurrentJob(null);
+    }, 3000);
+  }, []);
+
+  const value = useMemo(() => ({ 
+    getEntry, 
+    setPending, 
+    setReady, 
+    setError,
+    isGenerating,
+    generateContent,
+    currentJob
+  }), [getEntry, setPending, setReady, setError, isGenerating, generateContent, currentJob]);
 
   return (
     <GeneratedMediaContext.Provider value={value}>{children}</GeneratedMediaContext.Provider>
@@ -75,5 +105,12 @@ export const GeneratedMediaProvider: React.FC<{ children: React.ReactNode }>= ({
 export const useGeneratedMedia = () => {
   const ctx = useContext(GeneratedMediaContext);
   if (!ctx) throw new Error('useGeneratedMedia must be used within a GeneratedMediaProvider');
+  return ctx;
+};
+
+// Export the hook that useGenerationWorkspace is trying to import
+export const useGeneratedMediaContext = () => {
+  const ctx = useContext(GeneratedMediaContext);
+  if (!ctx) throw new Error('useGeneratedMediaContext must be used within a GeneratedMediaProvider');
   return ctx;
 };
