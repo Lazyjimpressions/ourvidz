@@ -25,7 +25,7 @@ export const useOptimizedWorkspace = () => {
     type: tile.type,
     prompt: tile.prompt,
     created_at: tile.timestamp.toISOString(),
-    metadata: tile.metadata || {}
+    metadata: tile.generationParams || {}
   }));
 
   // Optimistic UI helper
