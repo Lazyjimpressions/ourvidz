@@ -54,11 +54,76 @@ serve(async (req) => {
       promptLength: prompt.length 
     })
 
+    // Get dynamic model configuration with fallback
+    const modelSlug = Deno.env.get('REPLICATE_MODEL_SLUG') || 'black-forest-labs/flux-schnell'
+    let modelVersion = Deno.env.get('REPLICATE_MODEL_VERSION')
+    let actualModelSlug = modelSlug
+    let usedFallback = false
+    
+    // If no version specified, fetch latest from Replicate API
+    if (!modelVersion) {
+      console.log('🔍 Fetching latest version for model:', modelSlug)
+      
+      try {
+        const modelResponse = await fetch(`https://api.replicate.com/v1/models/${modelSlug}`, {
+          headers: {
+            'Authorization': `Token ${REPLICATE_API_TOKEN}`,
+          },
+        })
+        
+        if (!modelResponse.ok) {
+          const errorText = await modelResponse.text()
+          console.error('❌ Failed to fetch model info:', errorText)
+          
+          // Fallback to flux-schnell if primary model fails
+          if (modelSlug !== 'black-forest-labs/flux-schnell') {
+            console.log('🔄 Falling back to flux-schnell')
+            actualModelSlug = 'black-forest-labs/flux-schnell'
+            usedFallback = true
+            
+            const fallbackResponse = await fetch(`https://api.replicate.com/v1/models/${actualModelSlug}`, {
+              headers: {
+                'Authorization': `Token ${REPLICATE_API_TOKEN}`,
+              },
+            })
+            
+            if (!fallbackResponse.ok) {
+              throw new Error(`Both primary model ${modelSlug} and fallback failed`)
+            }
+            
+            const fallbackInfo = await fallbackResponse.json()
+            modelVersion = fallbackInfo.latest_version?.id
+          } else {
+            throw new Error(`Failed to fetch model ${modelSlug}: ${errorText}`)
+          }
+        } else {
+          const modelInfo = await modelResponse.json()
+          modelVersion = modelInfo.latest_version?.id
+        }
+        
+        if (!modelVersion) {
+          throw new Error(`No version found for model ${actualModelSlug}`)
+        }
+      } catch (error) {
+        console.error('❌ Model lookup failed:', error.message)
+        throw error
+      }
+    }
+    
+    console.log('🎯 Using model:', actualModelSlug, 'version:', modelVersion)
+    if (usedFallback) {
+      console.log('⚠️ Used fallback model due to primary model failure')
+    }
+
+    // Determine model characteristics
+    const isFlux = actualModelSlug.includes('flux')
+    const isRV51 = actualModelSlug.includes('realistic-vision')
+
     // Normalize quality and job_type for DB constraints
     const normalizedQuality = quality === 'high' ? 'high' : 'fast';
     const normalizedJobType = `image_${normalizedQuality}`;
     
-    console.log('🎯 Normalized job_type:', normalizedJobType, 'quality:', normalizedQuality, 'for RV5.1')
+    console.log('🎯 Normalized job_type:', normalizedJobType, 'quality:', normalizedQuality, 'for', isFlux ? 'FLUX' : 'RV5.1')
 
     // Create job record first
     const { data: jobData, error: jobError } = await supabase
@@ -72,9 +137,12 @@ serve(async (req) => {
         status: 'queued',
         metadata: {
           ...metadata,
-          model_type: 'replicate_rv51',
+          model_slug: actualModelSlug,
+          model_version: modelVersion,
+          model_type: isFlux ? 'replicate_flux' : 'replicate_rv51',
           provider: 'replicate',
-          actual_model: 'realistic_vision_v51',
+          actual_model: isFlux ? 'flux_schnell' : 'realistic_vision_v51',
+          used_fallback: usedFallback,
           original_format: format,
           original_quality: quality,
           prompt: prompt.substring(0, 500) // Truncate for storage
@@ -91,51 +159,42 @@ serve(async (req) => {
     const jobId = jobData.id
     console.log('✅ Job created:', jobId)
 
-    // Get dynamic model configuration
-    const modelSlug = Deno.env.get('REPLICATE_MODEL_SLUG') || 'fofr/realistic-vision-v5.1'
-    let modelVersion = Deno.env.get('REPLICATE_MODEL_VERSION')
+    // Prepare Replicate API request with model-appropriate parameters
     
-    // If no version specified, fetch latest from Replicate API
-    if (!modelVersion) {
-      console.log('🔍 Fetching latest version for model:', modelSlug)
-      const modelResponse = await fetch(`https://api.replicate.com/v1/models/${modelSlug}`, {
-        headers: {
-          'Authorization': `Token ${REPLICATE_API_TOKEN}`,
-        },
-      })
-      
-      if (!modelResponse.ok) {
-        const errorText = await modelResponse.text()
-        console.error('❌ Failed to fetch model info:', errorText)
-        throw new Error(`Failed to fetch model ${modelSlug}: ${errorText}`)
+    let replicateBody
+    if (isFlux) {
+      // FLUX model parameters
+      replicateBody = {
+        version: modelVersion,
+        input: {
+          prompt: prompt,
+          go_fast: true,
+          megapixels: "1",
+          num_outputs: 1,
+          aspect_ratio: "1:1",
+          output_format: "webp",
+          output_quality: quality === 'high' ? 90 : 80,
+          num_inference_steps: quality === 'high' ? 8 : 4
+        }
       }
-      
-      const modelInfo = await modelResponse.json()
-      modelVersion = modelInfo.latest_version?.id
-      
-      if (!modelVersion) {
-        throw new Error(`No version found for model ${modelSlug}`)
-      }
-    }
-    
-    console.log('🎯 Using model:', modelSlug, 'version:', modelVersion)
-
-    // Prepare Replicate API request with RV5.1 compatible parameters
-    const replicateBody = {
-      version: modelVersion,
-      input: {
-        prompt: prompt,
-        negative_prompt: metadata.negative_prompt || "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck",
-        width: 512,
-        height: 728,
-        num_inference_steps: quality === 'high' ? 30 : 20, // RV5.1 uses num_inference_steps not steps
-        guidance_scale: quality === 'high' ? 7 : 5, // RV5.1 uses guidance_scale not guidance
-        scheduler: "EulerA",
-        seed: 0
+    } else {
+      // RV5.1 or other model parameters
+      replicateBody = {
+        version: modelVersion,
+        input: {
+          prompt: prompt,
+          negative_prompt: metadata.negative_prompt || "(deformed iris, deformed pupils, semi-realistic, cgi, 3d, render, sketch, cartoon, drawing, anime:1.4), text, close up, cropped, out of frame, worst quality, low quality, jpeg artifacts, ugly, duplicate, morbid, mutilated, extra fingers, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, dehydrated, bad anatomy, bad proportions, extra limbs, cloned face, disfigured, gross proportions, malformed limbs, missing arms, missing legs, extra arms, extra legs, fused fingers, too many fingers, long neck",
+          width: 512,
+          height: 728,
+          num_inference_steps: quality === 'high' ? 30 : 20,
+          guidance_scale: quality === 'high' ? 7 : 5,
+          scheduler: "EulerA",
+          seed: 0
+        }
       }
     }
     
-    console.log('📋 Replicate payload keys:', Object.keys(replicateBody.input))
+    console.log('📋 Using', isFlux ? 'FLUX' : 'RV5.1', 'parameters with keys:', Object.keys(replicateBody.input))
 
     console.log('📤 Calling Replicate API...')
     const replicateResponse = await fetch('https://api.replicate.com/v1/predictions', {
@@ -250,22 +309,6 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
         const imageBlob = await imageResponse.blob()
         const imageBuffer = await imageBlob.arrayBuffer()
         
-        // Upload to Supabase storage with user-scoped path
-        const fileName = `${userId}/${jobId}_${Date.now()}.png`
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('workspace-temp')
-          .upload(fileName, imageBuffer, {
-            contentType: 'image/png',
-            upsert: false
-          })
-        
-        if (uploadError) {
-          console.error('❌ Storage upload error:', uploadError)
-          throw new Error(`Failed to upload image: ${uploadError.message}`)
-        }
-        
-        console.log('📁 Image uploaded to storage:', uploadData.path)
-        
         // Get fresh job data for workspace asset creation
         const { data: currentJobData, error: jobFetchError } = await supabase
           .from('jobs')
@@ -277,8 +320,31 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
           console.error('❌ Failed to fetch job data:', jobFetchError)
           throw new Error(`Failed to fetch job data: ${jobFetchError?.message}`)
         }
+
+        // Determine model characteristics from job metadata
+        const jobMetadata = currentJobData.metadata || {}
+        const isFlux = jobMetadata.model_slug?.includes('flux') || false
+        const actualModel = jobMetadata.actual_model || 'unknown_model'
+        const fileExtension = isFlux ? 'webp' : 'png'
+        const mimeType = isFlux ? 'image/webp' : 'image/png'
         
-        // Create workspace asset using fetched job data
+        // Upload to Supabase storage with user-scoped path and correct extension
+        const fileName = `${userId}/${jobId}_${Date.now()}.${fileExtension}`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('workspace-temp')
+          .upload(fileName, imageBuffer, {
+            contentType: mimeType,
+            upsert: false
+          })
+        
+        if (uploadError) {
+          console.error('❌ Storage upload error:', uploadError)
+          throw new Error(`Failed to upload image: ${uploadError.message}`)
+        }
+        
+        console.log('📁 Image uploaded to storage:', uploadData.path)
+        
+        // Create workspace asset using fetched job data and correct model info
         const { error: assetError } = await supabase
           .from('workspace_assets')
           .insert({
@@ -286,19 +352,20 @@ async function pollReplicateCompletion(predictionId: string, jobId: string, user
             job_id: jobId,
             asset_type: 'image',
             temp_storage_path: uploadData.path,
-            original_prompt: currentJobData.metadata?.prompt || 'Generated image',
-            model_used: 'realistic_vision_v51',
+            original_prompt: jobMetadata?.prompt || 'Generated image',
+            model_used: actualModel,
             file_size_bytes: imageBuffer.byteLength,
-            mime_type: 'image/png',
-            generation_seed: 0,
-            width: 512,
-            height: 728,
+            mime_type: mimeType,
+            generation_seed: prediction.input.seed || 0,
+            width: prediction.input.width || (isFlux ? 1024 : 512),
+            height: prediction.input.height || (isFlux ? 1024 : 728),
             asset_index: 0,
             generation_settings: {
-              model: 'realistic_vision_v51',
-              num_inference_steps: prediction.input.num_inference_steps,
-              guidance_scale: prediction.input.guidance_scale,
-              scheduler: prediction.input.scheduler
+              model_slug: jobMetadata.model_slug,
+              model_version: jobMetadata.model_version,
+              model: actualModel,
+              used_fallback: jobMetadata.used_fallback || false,
+              ...prediction.input
             }
           })
         
