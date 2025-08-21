@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
-import { useUser } from '@supabase/auth-helpers-react';
-import { useRouter } from 'next/router';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 import { SystemHealthMonitor } from '@/components/admin/SystemHealthMonitor';
@@ -12,23 +13,21 @@ import { ContentModerationTab } from '@/components/admin/ContentModerationTab';
 import { SystemConfigTab } from '@/components/admin/SystemConfigTab';
 import { PromptManagementTab } from '@/components/admin/PromptManagementTab';
 import { PromptTestingTab } from '@/components/admin/PromptTestingTab';
-import { JobManagement } from '@/components/admin/JobManagement';
 import { AdminDatabaseManager } from '@/components/admin/AdminDatabaseManager';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { ApiProvidersTab } from '@/components/admin/ApiProvidersTab';
 import { ApiModelsTab } from '@/components/admin/ApiModelsTab';
 
 export const Admin = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const user = useUser();
-  const router = useRouter();
-  const supabase = useSupabaseClient();
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (!user) {
-        router.push('/login');
+        navigate('/login');
         return;
       }
 
@@ -40,17 +39,13 @@ export const Admin = () => {
 
       if (error) {
         console.error('Error fetching profile:', error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch user profile.",
-          variant: "destructive",
-        });
+        toast.error('Failed to fetch user profile.');
         setIsLoading(false);
         return;
       }
 
       if (!data?.is_admin) {
-        router.push('/');
+        navigate('/');
         return;
       }
 
@@ -58,7 +53,7 @@ export const Admin = () => {
     };
 
     checkAdminStatus();
-  }, [user, router, supabase]);
+  }, [user, navigate]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
@@ -75,7 +70,6 @@ export const Admin = () => {
     { id: 'prompt-testing', label: 'Prompt Testing', component: <PromptTestingTab /> },
     { id: 'api-providers', label: 'API Providers', component: <ApiProvidersTab /> },
     { id: 'api-models', label: 'API Models', component: <ApiModelsTab /> },
-    { id: 'job-management', label: 'Job Management', component: <JobManagement /> },
     { id: 'database', label: 'Database Manager', component: <AdminDatabaseManager /> }
   ];
 
@@ -100,3 +94,5 @@ export const Admin = () => {
     </div>
   );
 };
+
+export default Admin;

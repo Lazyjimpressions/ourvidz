@@ -1,4 +1,3 @@
-
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,7 +13,7 @@ import Dashboard from "@/pages/Dashboard";
 import { UpdatedOptimizedLibrary } from "@/components/library/UpdatedOptimizedLibrary";
 import { UpdatedSimplifiedWorkspace } from "@/pages/UpdatedSimplifiedWorkspace";
 import MobileSimplifiedWorkspace from "@/pages/MobileSimplifiedWorkspace";
-import Admin from "@/pages/Admin";
+import { Admin } from "@/pages/Admin";
 import Storyboard from "@/pages/Storyboard";
 import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
