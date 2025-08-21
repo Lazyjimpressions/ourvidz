@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
 import { WorkspaceGridVirtualized } from '@/components/workspace/WorkspaceGridVirtualized';
 import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
-import { GeneratedMediaContext } from '@/contexts/GeneratedMediaContext';
+import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 
 const MobileSimplifiedWorkspace = () => {
@@ -17,7 +17,6 @@ const MobileSimplifiedWorkspace = () => {
   const { 
     isGenerating, 
     generateContent, 
-    generatedItems, 
     currentJob,
     progress 
   } = useGenerationWorkspace();
@@ -34,15 +33,8 @@ const MobileSimplifiedWorkspace = () => {
     setCurrentMode(mode);
   };
 
-  const contextValue = {
-    generatedItems,
-    isGenerating,
-    currentJob,
-    progress
-  };
-
   return (
-    <GeneratedMediaContext.Provider value={contextValue}>
+    <GeneratedMediaProvider>
       <OurVidzDashboardLayout>
         <div className="flex flex-col min-h-screen bg-background">
           {/* Main Content */}
@@ -51,8 +43,7 @@ const MobileSimplifiedWorkspace = () => {
             {isGenerating && (
               <div className="mb-4">
                 <GenerationProgressIndicator 
-                  isGenerating={isGenerating}
-                  currentJob={currentJob}
+                  status={currentJob?.status || 'queued'}
                   progress={progress}
                 />
               </div>
@@ -91,7 +82,7 @@ const MobileSimplifiedWorkspace = () => {
           )}
         </div>
       </OurVidzDashboardLayout>
-    </GeneratedMediaContext.Provider>
+    </GeneratedMediaProvider>
   );
 };
 

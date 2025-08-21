@@ -19,6 +19,9 @@ interface GeneratedMediaContextType {
 
 const GeneratedMediaContext = createContext<GeneratedMediaContextType | undefined>(undefined);
 
+// Export the context so it can be used elsewhere if needed
+export { GeneratedMediaContext };
+
 const STORAGE_KEY = 'generated-media-map-v1';
 
 export const GeneratedMediaProvider: React.FC<{ children: React.ReactNode }>= ({ children }) => {

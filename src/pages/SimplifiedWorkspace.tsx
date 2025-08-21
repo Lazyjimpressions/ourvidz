@@ -1,8 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
-import { Trash2, RefreshCcw, Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
@@ -14,7 +13,7 @@ import { GenerationProgressIndicator } from '@/components/GenerationProgressIndi
 
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
-import { GeneratedMediaContext } from '@/contexts/GeneratedMediaContext';
+import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 
 interface ContentItem {
   id: string;
@@ -46,7 +45,6 @@ const SimplifiedWorkspace = () => {
   const { 
     isGenerating, 
     generateContent, 
-    generatedItems, 
     currentJob,
     progress 
   } = useGenerationWorkspace();
@@ -97,15 +95,8 @@ const SimplifiedWorkspace = () => {
     );
   };
 
-  const contextValue = {
-    generatedItems,
-    isGenerating,
-    currentJob,
-    progress
-  };
-
   return (
-    <GeneratedMediaContext.Provider value={contextValue}>
+    <GeneratedMediaProvider>
       <OurVidzDashboardLayout>
         <div className="flex flex-col h-screen bg-background">
           {/* Header with Prompt Input */}
@@ -121,8 +112,7 @@ const SimplifiedWorkspace = () => {
             {isGenerating && (
               <div className="mt-4">
                 <GenerationProgressIndicator 
-                  isGenerating={isGenerating}
-                  currentJob={currentJob}
+                  status={currentJob?.status || 'queued'}
                   progress={progress}
                 />
               </div>
@@ -189,7 +179,7 @@ const SimplifiedWorkspace = () => {
           />
         </div>
       </OurVidzDashboardLayout>
-    </GeneratedMediaContext.Provider>
+    </GeneratedMediaProvider>
   );
 };
 

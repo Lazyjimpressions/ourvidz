@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Trash2, RotateCw, Download, Grid, List } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
@@ -13,7 +13,7 @@ import { GenerationProgressIndicator } from '@/components/GenerationProgressIndi
 
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
-import { GeneratedMediaContext } from '@/contexts/GeneratedMediaContext';
+import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 
 interface ContentItem {
   id: string;
@@ -48,7 +48,6 @@ export const UpdatedSimplifiedWorkspace = () => {
   const { 
     isGenerating, 
     generateContent, 
-    generatedItems, 
     currentJob,
     progress 
   } = useGenerationWorkspace();
@@ -123,15 +122,8 @@ export const UpdatedSimplifiedWorkspace = () => {
     }
   }, [deleteAsset, selectedAsset]);
 
-  const contextValue = {
-    generatedItems,
-    isGenerating,
-    currentJob,
-    progress
-  };
-
   return (
-    <GeneratedMediaContext.Provider value={contextValue}>
+    <GeneratedMediaProvider>
       <OurVidzDashboardLayout>
         <div className="flex flex-col h-screen bg-background">
           {/* Header Section */}
@@ -149,8 +141,7 @@ export const UpdatedSimplifiedWorkspace = () => {
             {isGenerating && (
               <div className="px-6 pb-4">
                 <GenerationProgressIndicator 
-                  isGenerating={isGenerating}
-                  currentJob={currentJob}
+                  status={currentJob?.status || 'queued'}
                   progress={progress}
                 />
               </div>
@@ -220,6 +211,6 @@ export const UpdatedSimplifiedWorkspace = () => {
           />
         </div>
       </OurVidzDashboardLayout>
-    </GeneratedMediaContext.Provider>
+    </GeneratedMediaProvider>
   );
 };
