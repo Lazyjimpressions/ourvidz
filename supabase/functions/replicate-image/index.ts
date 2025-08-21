@@ -135,6 +135,7 @@ serve(async (req) => {
         quality: normalizedQuality,
         model_type: 'default',
         status: 'queued',
+        original_prompt: prompt, // Store full prompt in original_prompt column
         metadata: {
           ...metadata,
           model_slug: actualModelSlug,
@@ -145,7 +146,7 @@ serve(async (req) => {
           used_fallback: usedFallback,
           original_format: format,
           original_quality: quality,
-          prompt: prompt.substring(0, 500) // Truncate for storage
+          prompt: prompt.substring(0, 500) // Truncated for backward compatibility
         }
       })
       .select()

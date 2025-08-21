@@ -59,6 +59,15 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
   const sharedAssets = useMemo(() => {
     const mapped = rawAssets.map(toSharedFromWorkspace);
     
+    // Diagnostic logging for workspace state
+    if (mapped.length === 0 && !isLoading) {
+      console.log('📊 Workspace diagnostic: No assets found', {
+        rawAssetsLength: rawAssets.length,
+        isLoading,
+        error: error?.message || 'none'
+      });
+    }
+    
     // One-time diagnostic for first asset to verify mapping
     if (mapped.length > 0 && Math.random() < 0.2) { // 20% chance to log
       const firstAsset = mapped[0];
@@ -74,7 +83,7 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     }
     
     return mapped;
-  }, [rawAssets]);
+  }, [rawAssets, isLoading, error]);
   
   // Get signed URLs for assets
   const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
@@ -363,14 +372,29 @@ export const UpdatedSimplifiedWorkspace: React.FC = () => {
     }
   }, [mode, setReferenceImage, toast]);
 
-  // Generate wrapper to include reference URLs when present
-  const handleGenerate = useCallback(() => {
+  // Generate wrapper to include reference URLs when present and add early invalidation
+  const handleGenerate = useCallback(async () => {
+    let result;
     if (mode === 'image') {
-      generate(referenceImageUrl);
+      result = await generate(referenceImageUrl);
     } else {
-      generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl);
+      result = await generate(referenceImageUrl, beginningRefImageUrl, endingRefImageUrl);
     }
-  }, [generate, referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, mode]);
+    
+    // Early invalidation when generation starts processing
+    if (result?.status === 'processing') {
+      console.log('🚀 Generation started, early workspace refresh');
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      
+      // Delayed invalidation as fallback
+      setTimeout(() => {
+        console.log('🔄 Delayed workspace refresh for reliability');
+        queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      }, 5000);
+    }
+    
+    return result;
+  }, [generate, referenceImageUrl, beginningRefImageUrl, endingRefImageUrl, mode, queryClient]);
 
   // Auth loading state
   if (loading) {
