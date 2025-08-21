@@ -13,7 +13,6 @@ import { GenerationProgressIndicator } from '@/components/GenerationProgressIndi
 
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
-import { GeneratedMediaProvider } from '@/contexts/GeneratedMediaContext';
 
 interface ContentItem {
   id: string;
@@ -123,94 +122,92 @@ export const UpdatedSimplifiedWorkspace = () => {
   }, [deleteAsset, selectedAsset]);
 
   return (
-    <GeneratedMediaProvider>
-      <OurVidzDashboardLayout>
-        <div className="flex flex-col h-screen bg-background">
-          {/* Header Section */}
-          <div className="flex-none border-b bg-card">
-            <div className="p-6 pb-4">
-              <SimplePromptInput
-                onGenerate={handleGenerate}
-                isGenerating={isGenerating}
-                currentMode={currentMode}
-                onModeToggle={handleModeChange}
+    <OurVidzDashboardLayout>
+      <div className="flex flex-col h-screen bg-background">
+        {/* Header Section */}
+        <div className="flex-none border-b bg-card">
+          <div className="p-6 pb-4">
+            <SimplePromptInput
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
+              currentMode={currentMode}
+              onModeToggle={handleModeChange}
+            />
+          </div>
+          
+          {/* Progress Indicator */}
+          {isGenerating && (
+            <div className="px-6 pb-4">
+              <GenerationProgressIndicator 
+                status={currentJob?.status || 'queued'}
+                progress={progress}
               />
             </div>
-            
-            {/* Progress Indicator */}
-            {isGenerating && (
-              <div className="px-6 pb-4">
-                <GenerationProgressIndicator 
-                  status={currentJob?.status || 'queued'}
-                  progress={progress}
-                />
-              </div>
-            )}
-
-            {/* Bulk Actions Bar */}
-            {selectedAssets.length > 0 && (
-              <div className="px-6 pb-4">
-                <Card>
-                  <CardContent className="flex items-center justify-between p-3">
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {selectedAssets.length} item{selectedAssets.length === 1 ? '' : 's'} selected
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => setShowDeleteModal(true)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete ({selectedAssets.length})
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedAssets([])}
-                      >
-                        Clear Selection
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-
-          {/* Content Grid */}
-          <div className="flex-1 overflow-hidden">
-            <WorkspaceGridVirtualized
-              assets={assets}
-              isLoading={isLoading}
-              onLoadMore={loadMore}
-              hasMore={hasMore}
-              onRefresh={refreshAssets}
-              onDelete={handleDeleteSingle}
-              onAssetClick={handleAssetClick}
-              selectedAssets={selectedAssets}
-              onSelectAsset={handleSelectAsset}
-            />
-          </div>
-
-          {/* Lightbox Modal */}
-          {selectedAsset && (
-            <SimpleLightbox
-              asset={selectedAsset}
-              onClose={() => setSelectedAsset(null)}
-              onDelete={() => handleDeleteSingle(selectedAsset.id)}
-            />
           )}
 
-          {/* Delete Confirmation Modal */}
-          <OptimizedDeleteModal
-            isOpen={showDeleteModal}
-            onClose={() => setShowDeleteModal(false)}
-            onConfirm={handleDeleteSelected}
-            count={selectedAssets.length}
+          {/* Bulk Actions Bar */}
+          {selectedAssets.length > 0 && (
+            <div className="px-6 pb-4">
+              <Card>
+                <CardContent className="flex items-center justify-between p-3">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {selectedAssets.length} item{selectedAssets.length === 1 ? '' : 's'} selected
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete ({selectedAssets.length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedAssets([])}
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+
+        {/* Content Grid */}
+        <div className="flex-1 overflow-hidden">
+          <WorkspaceGridVirtualized
+            assets={assets}
+            isLoading={isLoading}
+            onLoadMore={loadMore}
+            hasMore={hasMore}
+            onRefresh={refreshAssets}
+            onDelete={handleDeleteSingle}
+            onAssetClick={handleAssetClick}
+            selectedAssets={selectedAssets}
+            onSelectAsset={handleSelectAsset}
           />
         </div>
-      </OurVidzDashboardLayout>
-    </GeneratedMediaProvider>
+
+        {/* Lightbox Modal */}
+        {selectedAsset && (
+          <SimpleLightbox
+            asset={selectedAsset}
+            onClose={() => setSelectedAsset(null)}
+            onDelete={() => handleDeleteSingle(selectedAsset.id)}
+          />
+        )}
+
+        {/* Delete Confirmation Modal */}
+        <OptimizedDeleteModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleDeleteSelected}
+          count={selectedAssets.length}
+        />
+      </div>
+    </OurVidzDashboardLayout>
   );
 };
