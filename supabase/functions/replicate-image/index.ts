@@ -125,6 +125,9 @@ serve(async (req) => {
     
     console.log('🎯 Normalized job_type:', normalizedJobType, 'quality:', normalizedQuality, 'for', isFlux ? 'FLUX' : 'RV5.1')
 
+    // Determine proper model type classification
+    const modelType = isFlux ? 'flux' : 'rv51';
+    
     // Create job record first
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
@@ -133,7 +136,7 @@ serve(async (req) => {
         job_type: normalizedJobType,
         format: 'image',
         quality: normalizedQuality,
-        model_type: 'default',
+        model_type: modelType,
         status: 'queued',
         original_prompt: prompt, // Store full prompt in original_prompt column
         metadata: {
