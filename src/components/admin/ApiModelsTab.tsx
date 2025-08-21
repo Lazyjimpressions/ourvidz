@@ -82,7 +82,7 @@ export const ApiModelsTab = () => {
 
   // Create model mutation
   const createModelMutation = useMutation({
-    mutationFn: async (model: Partial<ApiModel>) => {
+    mutationFn: async (model: Omit<ApiModel, 'id'>) => {
       const { data, error } = await supabase
         .from('api_models')
         .insert([model])
@@ -149,22 +149,22 @@ export const ApiModelsTab = () => {
 
   const ModelForm = ({ model, onSubmit, onCancel }: {
     model?: ApiModel;
-    onSubmit: (data: Partial<ApiModel>) => void;
+    onSubmit: (data: Omit<ApiModel, 'id'>) => void;
     onCancel: () => void;
   }) => {
-    const [formData, setFormData] = useState<Partial<ApiModel>>({
+    const [formData, setFormData] = useState<Omit<ApiModel, 'id'>>({
       provider_id: model?.provider_id || '',
       model_key: model?.model_key || '',
-      version: model?.version || '',
+      version: model?.version || null,
       display_name: model?.display_name || '',
       modality: model?.modality || 'image',
       task: model?.task || 'generation',
-      model_family: model?.model_family || '',
-      endpoint_path: model?.endpoint_path || '',
+      model_family: model?.model_family || null,
+      endpoint_path: model?.endpoint_path || null,
       input_defaults: model?.input_defaults || {},
       capabilities: model?.capabilities || {},
       pricing: model?.pricing || {},
-      output_format: model?.output_format || '',
+      output_format: model?.output_format || null,
       is_active: model?.is_active ?? true,
       is_default: model?.is_default ?? false,
       priority: model?.priority || 0
