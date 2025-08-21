@@ -65,6 +65,132 @@ export type Database = {
         }
         Relationships: []
       }
+      api_models: {
+        Row: {
+          capabilities: Json
+          created_at: string
+          created_by: string | null
+          display_name: string
+          endpoint_path: string | null
+          id: string
+          input_defaults: Json
+          is_active: boolean
+          is_default: boolean
+          modality: string
+          model_family: string | null
+          model_key: string
+          output_format: string | null
+          pricing: Json
+          priority: number
+          provider_id: string
+          task: string
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          capabilities?: Json
+          created_at?: string
+          created_by?: string | null
+          display_name: string
+          endpoint_path?: string | null
+          id?: string
+          input_defaults?: Json
+          is_active?: boolean
+          is_default?: boolean
+          modality: string
+          model_family?: string | null
+          model_key: string
+          output_format?: string | null
+          pricing?: Json
+          priority?: number
+          provider_id: string
+          task: string
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          capabilities?: Json
+          created_at?: string
+          created_by?: string | null
+          display_name?: string
+          endpoint_path?: string | null
+          id?: string
+          input_defaults?: Json
+          is_active?: boolean
+          is_default?: boolean
+          modality?: string
+          model_family?: string | null
+          model_key?: string
+          output_format?: string | null
+          pricing?: Json
+          priority?: number
+          provider_id?: string
+          task?: string
+          updated_at?: string
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_models_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_models_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "api_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_providers: {
+        Row: {
+          auth_header_name: string | null
+          auth_scheme: string
+          base_url: string | null
+          created_at: string
+          display_name: string
+          docs_url: string | null
+          id: string
+          is_active: boolean
+          name: string
+          rate_limits: Json
+          secret_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_header_name?: string | null
+          auth_scheme?: string
+          base_url?: string | null
+          created_at?: string
+          display_name: string
+          docs_url?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          rate_limits?: Json
+          secret_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_header_name?: string | null
+          auth_scheme?: string
+          base_url?: string | null
+          created_at?: string
+          display_name?: string
+          docs_url?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          rate_limits?: Json
+          secret_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       character_scenes: {
         Row: {
           character_id: string | null
@@ -360,6 +486,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          api_model_id: string | null
           attempts: number | null
           compel_weights: Json | null
           completed_at: string | null
@@ -396,6 +523,7 @@ export type Database = {
           workspace_session_id: string | null
         }
         Insert: {
+          api_model_id?: string | null
           attempts?: number | null
           compel_weights?: Json | null
           completed_at?: string | null
@@ -432,6 +560,7 @@ export type Database = {
           workspace_session_id?: string | null
         }
         Update: {
+          api_model_id?: string | null
           attempts?: number | null
           compel_weights?: Json | null
           completed_at?: string | null
@@ -468,6 +597,13 @@ export type Database = {
           workspace_session_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "jobs_api_model_id_fkey"
+            columns: ["api_model_id"]
+            isOneToOne: false
+            referencedRelation: "api_models"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "jobs_project_id_fkey"
             columns: ["project_id"]
