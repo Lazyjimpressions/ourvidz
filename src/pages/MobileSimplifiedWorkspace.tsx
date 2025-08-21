@@ -1,12 +1,17 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
-import { WorkspaceGridVirtualized } from '@/components/workspace/WorkspaceGridVirtualized';
-import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
+import { SharedGrid } from '@/components/shared/SharedGrid';
+import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
+import { useWorkspaceAssets } from '@/hooks/useWorkspaceAssets';
+import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
+import { toast } from 'sonner';
 
 const MobileSimplifiedWorkspace = () => {
   const [selectedAsset, setSelectedAsset] = useState(null);

@@ -1,18 +1,22 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { WorkspaceGridVirtualized } from '@/components/workspace/WorkspaceGridVirtualized';
-import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
+import { SharedGrid } from '@/components/shared/SharedGrid';
+import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
 import { OptimizedDeleteModal } from '@/components/workspace/OptimizedDeleteModal';
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
 
 import { useOptimizedWorkspace } from '@/hooks/useOptimizedWorkspace';
 import { useGenerationWorkspace } from '@/hooks/useGenerationWorkspace';
+import { useWorkspaceAssets } from '@/hooks/useWorkspaceAssets';
+import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
 interface ContentItem {
   id: string;
@@ -60,6 +64,55 @@ export const UpdatedSimplifiedWorkspace = () => {
     currentMode
   });
 
+  // Workspace assets for shared components
+  const { data: rawAssets = [], isLoading: isLoadingRaw, refetch } = useWorkspaceAssets();
+
+  // Map to shared format and sign thumbnails
+  const sharedAssets = useMemo(() => rawAssets.map(toSharedFromWorkspace), [rawAssets]);
+  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
+    thumbTtlSec: 15 * 60,
+    enabled: true
+  });
+
+  // Lightbox index for SharedLightbox
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Preview handler for SharedGrid
+  const handlePreview = useCallback((asset: any) => {
+    const index = signedAssets.findIndex(a => a.id === asset.id);
+    if (index !== -1) setLightboxIndex(index);
+  }, [signedAssets]);
+
+  // Require original URL on demand
+  const handleRequireOriginalUrl = useCallback(async (asset: any) => {
+    if (typeof (asset as any).signOriginal === 'function') {
+      return (asset as any).signOriginal();
+    }
+    throw new Error('Original URL signing not available');
+  }, []);
+
+  // Workspace actions
+  const handleSaveToLibrary = useCallback(async (asset: any) => {
+    try {
+      await WorkspaceAssetService.saveToLibrary(asset.id);
+      toast.success('Saved to library');
+      refetch();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to save to library');
+    }
+  }, [refetch]);
+
+  const handleDiscard = useCallback(async (asset: any) => {
+    try {
+      await WorkspaceAssetService.discardAsset(asset.id);
+      toast.success('Discarded');
+      refetch();
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to discard');
+    }
+  }, [refetch]);
   const handleGenerate = useCallback(async (prompt: string, options?: any) => {
     console.log('🎯 UPDATED WORKSPACE: Starting generation with prompt:', prompt);
     console.log('🎯 UPDATED WORKSPACE: Generation options:', options);
@@ -177,26 +230,56 @@ export const UpdatedSimplifiedWorkspace = () => {
         </div>
 
         {/* Content Grid */}
-        <div className="flex-1 overflow-hidden">
-          <WorkspaceGridVirtualized
-            assets={assets}
-            isLoading={isLoading}
-            onLoadMore={loadMore}
-            hasMore={hasMore}
-            onRefresh={refreshAssets}
-            onDelete={handleDeleteSingle}
-            onAssetClick={handleAssetClick}
-            selectedAssets={selectedAssets}
-            onSelectAsset={handleSelectAsset}
+        <div className="flex-1 overflow-hidden p-6">
+          <SharedGrid
+            assets={signedAssets as any}
+            onPreview={handlePreview}
+            selection={{
+              enabled: true,
+              selectedIds: new Set(selectedAssets),
+              onToggle: (id: string) => handleSelectAsset(id)
+            }}
+            actions={{
+              onSaveToLibrary: handleSaveToLibrary as any,
+              onDiscard: handleDiscard as any
+            }}
+            isLoading={isLoadingRaw || isSigning}
           />
         </div>
 
-        {/* Lightbox Modal */}
-        {selectedAsset && (
-          <SimpleLightbox
-            asset={selectedAsset}
-            onClose={() => setSelectedAsset(null)}
-            onDelete={() => handleDeleteSingle(selectedAsset.id)}
+        {/* Lightbox */}
+        {lightboxIndex !== null && (signedAssets?.length || 0) > 0 && (
+          <SharedLightbox
+            assets={signedAssets as any}
+            startIndex={lightboxIndex}
+            onClose={() => setLightboxIndex(null)}
+            onRequireOriginalUrl={handleRequireOriginalUrl}
+            actionsSlot={(asset) => (
+              <WorkspaceAssetActions
+                asset={asset}
+                onSave={() => handleSaveToLibrary(asset)}
+                onDiscard={() => handleDiscard(asset)}
+                onDownload={async () => {
+                  try {
+                    const url = await handleRequireOriginalUrl(asset);
+                    const res = await fetch(url);
+                    const blob = await res.blob();
+                    const objectUrl = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = objectUrl;
+                    a.download = `${asset.title || asset.id}.${asset.format === 'video' ? 'mp4' : 'jpg'}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    URL.revokeObjectURL(objectUrl);
+                    document.body.removeChild(a);
+                    toast.success('Download started');
+                  } catch (e) {
+                    console.error('Download failed:', e);
+                    toast.error('Download failed');
+                  }
+                }}
+              />
+            )}
           />
         )}
 
