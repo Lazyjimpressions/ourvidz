@@ -19,9 +19,9 @@ serve(async (req) => {
 
     // Verify webhook signature if secret is configured
     if (WEBHOOK_SECRET) {
-      const signature = req.headers.get('replicate-signature')
+      const signature = req.headers.get('Replicate-Signature')
       if (!signature) {
-        console.error('❌ Missing signature header for secured webhook')
+        console.error('❌ Missing Replicate-Signature header')
         return new Response('Unauthorized: Missing signature', { status: 401, headers: corsHeaders })
       }
 
@@ -29,7 +29,7 @@ serve(async (req) => {
       const rawBody = await req.clone().arrayBuffer()
       const rawBodyString = new TextDecoder().decode(rawBody)
       
-      // Verify HMAC signature
+      // Verify HMAC signature using Replicate's format
       const encoder = new TextEncoder()
       const keyData = encoder.encode(WEBHOOK_SECRET)
       const messageData = encoder.encode(rawBodyString)
@@ -48,13 +48,13 @@ serve(async (req) => {
         .join('')
       
       if (signature !== expectedSignature) {
-        console.error('❌ Signature verification failed:', { received: signature.substring(0, 20), expected: expectedSignature.substring(0, 20) })
+        console.error('❌ Signature verification failed')
         return new Response('Unauthorized: Invalid signature', { status: 401, headers: corsHeaders })
       }
       
-      console.log('✅ Signature verified successfully')
+      console.log('✅ Webhook signature verified')
     } else {
-      console.log('⚠️ Webhook signature verification disabled (no secret configured)')
+      console.log('⚠️ Webhook verification disabled (no secret configured)')
     }
 
     const webhookPayload = await req.json()
