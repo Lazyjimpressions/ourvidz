@@ -1,7 +1,9 @@
+
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useRealtimeWorkspace } from '@/hooks/useRealtimeWorkspace';
 
 /**
  * Optimized workspace hook with proper loading states and error handling
@@ -11,6 +13,25 @@ export const useOptimizedWorkspace = () => {
   const queryClient = useQueryClient();
   const [deletingItems, setDeletingItems] = useState<Set<string>>(new Set());
   const [deletingJobs, setDeletingJobs] = useState<Set<string>>(new Set());
+
+  // Use the realtime workspace for actual data
+  const {
+    tiles: assets,
+    isLoading,
+    deleteTile,
+    addToWorkspace,
+    clearWorkspace: clearWorkspaceRealtime
+  } = useRealtimeWorkspace();
+
+  // Convert tiles to assets format for compatibility
+  const formattedAssets = assets.map(tile => ({
+    id: tile.id,
+    url: tile.url || '',
+    type: tile.type,
+    prompt: tile.prompt,
+    created_at: tile.timestamp.toISOString(),
+    metadata: tile.metadata
+  }));
 
   // Optimistic UI helper
   const withOptimisticUpdate = useCallback(async <T>(
@@ -43,6 +64,31 @@ export const useOptimizedWorkspace = () => {
         return newSet;
       });
     }
+  }, [queryClient]);
+
+  // Simple delete asset function
+  const deleteAsset = useCallback(async (itemId: string) => {
+    const tile = assets.find(t => t.id === itemId);
+    if (tile) {
+      await deleteTile(tile);
+    }
+  }, [assets, deleteTile]);
+
+  // Delete multiple assets
+  const deleteMultipleAssets = useCallback(async (itemIds: string[]) => {
+    for (const itemId of itemIds) {
+      await deleteAsset(itemId);
+    }
+  }, [deleteAsset]);
+
+  // Mock functions for compatibility
+  const loadMore = useCallback(() => {
+    // This would be implemented with pagination
+    console.log('LoadMore not implemented yet');
+  }, []);
+
+  const refreshAssets = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
   }, [queryClient]);
 
   // Clear item from workspace (library-first approach)
@@ -204,57 +250,8 @@ export const useOptimizedWorkspace = () => {
 
   // Clear all workspace (hide all items) - Fixed to remove date filter bug
   const clearWorkspace = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    try {
-      console.log('🧹 OPTIMIZED: Clearing workspace via metadata.workspace_dismissed');
-      console.log('🧹 USER ID:', user.id);
-      
-      // Get ALL completed workspace assets (simplified schema)
-      const { data: assets, error: assetsError } = await supabase
-        .from('workspace_assets')
-        .select('id, generation_settings, created_at, original_prompt')
-        .eq('user_id', user.id);
-
-      console.log('🧹 QUERY RESULTS:', { 
-        assets: assets?.length || 0,
-        assetsError,
-        sampleAssets: assets?.slice(0, 3)
-      });
-
-      // Update assets with dismissed flag
-      if (assets && assets.length > 0) {
-        for (const asset of assets) {
-          const currentSettings = (asset.generation_settings as Record<string, any>) || {};
-          const updatedSettings = {
-            ...currentSettings,
-            workspace_dismissed: true,
-            dismissed_at: new Date().toISOString()
-          };
-
-          await supabase
-            .from('workspace_assets')
-            .update({ generation_settings: updatedSettings })
-            .eq('id', asset.id);
-        }
-        
-        console.log(`✅ Dismissed ${assets.length} assets from workspace`);
-      }
-
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ['assets'] });
-      queryClient.invalidateQueries({ queryKey: ['library-workspace-items'] });
-
-      const totalCleared = assets?.length || 0;
-      toast.success(`Workspace cleared (${totalCleared} items)`);
-      return true;
-    } catch (error) {
-      console.error('Failed to clear workspace:', error);
-      toast.error('Failed to clear workspace');
-      return false;
-    }
-  }, [queryClient]);
+    await clearWorkspaceRealtime();
+  }, [clearWorkspaceRealtime]);
 
   // Delete all workspace items permanently
   const deleteAllWorkspace = useCallback(async () => {
@@ -299,8 +296,20 @@ export const useOptimizedWorkspace = () => {
   }, [queryClient]);
 
   return {
+    // Data properties
+    assets: formattedAssets,
+    isLoading,
+    loadMore,
+    hasMore: false, // Simplified for now
+    refreshAssets,
+    deleteAsset,
+    deleteMultipleAssets,
+    
+    // State properties
     deletingItems,
     deletingJobs,
+    
+    // Action methods
     clearFromWorkspace,
     deleteItemPermanently,
     clearJobFromWorkspace,

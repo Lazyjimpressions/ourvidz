@@ -1,3 +1,4 @@
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,8 +14,9 @@ interface OptimizedDeleteModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  title: string;
-  description: string;
+  count: number;
+  title?: string;
+  description?: string;
   confirmText?: string;
   isLoading?: boolean;
 }
@@ -23,20 +25,24 @@ export const OptimizedDeleteModal = ({
   isOpen,
   onClose,
   onConfirm,
+  count,
   title,
   description,
   confirmText = "Delete",
   isLoading = false,
 }: OptimizedDeleteModalProps) => {
+  const defaultTitle = `Delete ${count} item${count === 1 ? '' : 's'}?`;
+  const defaultDescription = `This action cannot be undone. This will permanently delete ${count} item${count === 1 ? '' : 's'}.`;
+
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-lg font-semibold">
-            {title}
+            {title || defaultTitle}
           </AlertDialogTitle>
           <AlertDialogDescription className="text-sm text-muted-foreground">
-            {description}
+            {description || defaultDescription}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="gap-2">
