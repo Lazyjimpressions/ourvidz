@@ -1,9 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import React from 'react';
+import { AdminRoute } from '@/components/AdminRoute';
 
 import { SystemHealthMonitor } from '@/components/admin/SystemHealthMonitor';
 import { SystemMetricsTab } from '@/components/admin/SystemMetricsTab';
@@ -19,31 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiProvidersTab } from '@/components/admin/ApiProvidersTab';
 import { ApiModelsTab } from '@/components/admin/ApiModelsTab';
 
-export const Admin = () => {
-  const [isLoading, setIsLoading] = useState(true);
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!user) {
-        navigate('/login');
-        return;
-      }
-
-      // For now, we'll check if user exists in auth. Later we can add role checks.
-      // This assumes admin access is granted through some other mechanism
-      // (e.g., environment variable, direct database role, etc.)
-      
-      setIsLoading(false);
-    };
-
-    checkAdminStatus();
-  }, [user, navigate]);
-
-  if (isLoading) {
-    return <div className="flex justify-center items-center h-screen">Loading...</div>;
-  }
+const AdminContent = () => {
 
   const tabs = [
     { id: 'system-health', label: 'System Health', component: <SystemHealthMonitor /> },
@@ -78,6 +51,14 @@ export const Admin = () => {
         ))}
       </Tabs>
     </div>
+  );
+};
+
+export const Admin = () => {
+  return (
+    <AdminRoute>
+      <AdminContent />
+    </AdminRoute>
   );
 };
 

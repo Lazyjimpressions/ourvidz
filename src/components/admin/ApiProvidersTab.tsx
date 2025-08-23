@@ -71,9 +71,14 @@ export const ApiProvidersTab: React.FC = () => {
       resetForm();
       toast.success('API provider added successfully');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error adding provider:', error);
-      toast.error('Failed to add API provider');
+      const message = error?.message || 'Failed to add API provider';
+      if (message.includes('duplicate key')) {
+        toast.error('A provider with this name already exists');
+      } else {
+        toast.error(message);
+      }
     }
   });
 
@@ -95,9 +100,14 @@ export const ApiProvidersTab: React.FC = () => {
       resetForm();
       toast.success('API provider updated successfully');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error updating provider:', error);
-      toast.error('Failed to update API provider');
+      const message = error?.message || 'Failed to update API provider';
+      if (message.includes('duplicate key')) {
+        toast.error('A provider with this name already exists');
+      } else {
+        toast.error(message);
+      }
     }
   });
 
@@ -114,9 +124,14 @@ export const ApiProvidersTab: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['api-providers'] });
       toast.success('API provider deleted successfully');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error deleting provider:', error);
-      toast.error('Failed to delete API provider');
+      const message = error?.message || 'Failed to delete API provider';
+      if (message.includes('foreign key')) {
+        toast.error('Cannot delete provider - it has associated models');
+      } else {
+        toast.error(message);
+      }
     }
   });
 
@@ -133,13 +148,34 @@ export const ApiProvidersTab: React.FC = () => {
     });
   };
 
+  const sanitizeFormData = (data: typeof formData) => {
+    return {
+      name: data.name.trim(),
+      display_name: data.display_name.trim(),
+      base_url: data.base_url.trim() || null,
+      docs_url: data.docs_url.trim() || null,
+      auth_scheme: data.auth_scheme,
+      auth_header_name: data.auth_header_name.trim() || null,
+      secret_name: data.secret_name.trim() || null,
+      is_active: data.is_active
+    };
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate required fields
+    if (!formData.name.trim() || !formData.display_name.trim()) {
+      toast.error('Name and Display Name are required');
+      return;
+    }
+    
+    const sanitizedData = sanitizeFormData(formData);
+    
     if (editingId) {
-      updateProviderMutation.mutate({ id: editingId, ...formData });
+      updateProviderMutation.mutate({ id: editingId, ...sanitizedData });
     } else {
-      addProviderMutation.mutate(formData);
+      addProviderMutation.mutate(sanitizedData);
     }
   };
 
