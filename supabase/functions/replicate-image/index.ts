@@ -181,6 +181,7 @@ serve(async (req) => {
 
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
+    const webhookSecret = Deno.env.get('REPLICATE_WEBHOOK_SECRET');
     
     console.log('🔧 Creating prediction with model:', modelIdentifier);
     console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
@@ -190,7 +191,8 @@ serve(async (req) => {
         model: modelIdentifier,
         input: modelInput,
         webhook: webhookUrl,
-        webhook_events_filter: ["start", "completed"]
+        webhook_events_filter: ["start", "completed"],
+        ...(webhookSecret ? { webhook_secret: webhookSecret } : {})
       });
 
       console.log("🚀 Prediction created successfully:", { 
@@ -210,7 +212,8 @@ serve(async (req) => {
             prediction_id: prediction.id,
             actual_model: modelIdentifier,
             input_used: modelInput,
-            webhook_url: webhookUrl
+            webhook_url: webhookUrl,
+            webhook_secret_used: !!webhookSecret
           }
         })
         .eq('id', jobData.id);
@@ -226,18 +229,81 @@ serve(async (req) => {
       
     } catch (predictionError) {
       console.error("❌ Failed to create Replicate prediction:", predictionError);
-      
-      // Update job to failed state
+
+      // If the configured model is not found (404), try a safe fallback model
+      const status = (predictionError as any)?.response?.status;
+      if (status === 404) {
+        try {
+          const fallbackModel = 'black-forest-labs/flux-schnell';
+          const fallbackInput = { prompt: body.prompt };
+          console.warn(`⚠️ Primary model ${modelIdentifier} returned 404. Falling back to ${fallbackModel}.`);
+
+          const prediction = await replicate.predictions.create({
+            model: fallbackModel,
+            input: fallbackInput,
+            webhook: webhookUrl,
+            webhook_events_filter: ["start", "completed"],
+            ...(webhookSecret ? { webhook_secret: webhookSecret } : {})
+          });
+
+          console.log("🚀 Fallback prediction created successfully:", { id: prediction.id, status: prediction.status });
+
+          await supabase
+            .from('jobs')
+            .update({
+              status: 'processing',
+              started_at: new Date().toISOString(),
+              metadata: {
+                ...jobData.metadata,
+                prediction_id: prediction.id,
+                actual_model: fallbackModel,
+                input_used: fallbackInput,
+                webhook_url: webhookUrl,
+                fallback_used: true,
+                primary_error: (predictionError as any)?.message || 'unknown'
+              }
+            })
+            .eq('id', jobData.id);
+
+          return new Response(JSON.stringify({
+            jobId: jobData.id,
+            predictionId: prediction.id,
+            status: 'queued',
+            fallbackModel
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          });
+        } catch (fallbackError) {
+          console.error('❌ Fallback model also failed:', fallbackError);
+          await supabase
+            .from('jobs')
+            .update({
+              status: 'failed',
+              error_message: `Primary 404, fallback failed: ${(fallbackError as any)?.message}`
+            })
+            .eq('id', jobData.id);
+
+          return new Response(JSON.stringify({
+            error: `Primary 404, fallback failed: ${(fallbackError as any)?.message}`
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 500,
+          });
+        }
+      }
+
+      // Non-404 errors: mark failed
       await supabase
         .from('jobs')
         .update({
           status: 'failed',
-          error_message: `Prediction creation failed: ${predictionError.message}`
+          error_message: `Prediction creation failed: ${(predictionError as any).message}`
         })
         .eq('id', jobData.id);
-      
+
       return new Response(JSON.stringify({ 
-        error: `Prediction creation failed: ${predictionError.message}` 
+        error: `Prediction creation failed: ${(predictionError as any).message}` 
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500,
