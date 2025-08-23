@@ -1,6 +1,9 @@
 
 import React from 'react';
 import { AdminRoute } from '@/components/AdminRoute';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 import { SystemHealthMonitor } from '@/components/admin/SystemHealthMonitor';
 import { SystemMetricsTab } from '@/components/admin/SystemMetricsTab';
@@ -34,6 +37,15 @@ const AdminContent = () => {
 
   return (
     <div className="container mx-auto py-10">
+      <div className="flex items-center gap-4 mb-6">
+        <Button variant="outline" asChild>
+          <Link to="/dashboard" className="flex items-center gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Dashboard
+          </Link>
+        </Button>
+      </div>
+      
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
 
       <Tabs defaultValue="system-health" className="w-full">
