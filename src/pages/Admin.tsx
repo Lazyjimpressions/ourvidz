@@ -37,9 +37,9 @@ const AdminContent = () => {
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
 
       <Tabs defaultValue="system-health" className="w-full">
-        <TabsList>
+        <TabsList className="w-full flex flex-wrap justify-start gap-2 h-auto p-2">
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
+            <TabsTrigger key={tab.id} value={tab.id} className="flex-shrink-0">
               {tab.label}
             </TabsTrigger>
           ))}
