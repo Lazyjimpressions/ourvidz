@@ -12,7 +12,10 @@
     "jsdoc:generate": "node scripts/generate-jsdoc.js",
     "docs:update": "node scripts/update-docs.js",
     "docs:status": "node scripts/update-docs.js status",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync:schema": "node scripts/sync-schema-safe.js",
+    "sync:schema:local": "node scripts/sync-supabase-schema.js",
+    "query:supabase": "node scripts/query-supabase.js"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.4",
