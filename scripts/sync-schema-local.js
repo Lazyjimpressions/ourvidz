@@ -27,41 +27,46 @@ async function fetchTableSchema(tableName) {
   console.log(`  📋 Fetching schema for: ${tableName}`);
   
   try {
-    // Query information_schema directly for complete column info
-    const { data, error } = await supabase.rpc('sql', {
-      query: `
-        SELECT 
-          column_name,
-          data_type,
-          is_nullable,
-          column_default,
-          character_maximum_length,
-          numeric_precision,
-          numeric_scale
-        FROM information_schema.columns 
-        WHERE table_schema = 'public' 
-        AND table_name = '${tableName}'
-        ORDER BY ordinal_position;
-      `
-    });
+    // Try to get a sample row to understand the structure
+    const { data: sampleData, error: sampleError } = await supabase
+      .from(tableName)
+      .select('*')
+      .limit(1);
+    
+    if (sampleError) {
+      console.warn(`    ⚠️ Could not fetch data from ${tableName}: ${sampleError.message}`);
+      return null;
+    }
 
-    if (error) {
-      // Fallback: Try direct table query with LIMIT 0 to get structure
-      const { data: sampleData, error: sampleError } = await supabase
+    // If we got data, extract column information
+    if (sampleData && sampleData.length > 0) {
+      const row = sampleData[0];
+      const columns = Object.keys(row).map(key => ({
+        column_name: key,
+        data_type: typeof row[key],
+        sample_value: row[key],
+        is_nullable: row[key] === null ? 'YES' : 'UNKNOWN'
+      }));
+      return columns;
+    }
+    
+    // If no data but no error, table exists but is empty
+    // Try a different approach - get the table structure without data
+    try {
+      const { error: structureError } = await supabase
         .from(tableName)
         .select('*')
         .limit(0);
       
-      if (sampleError) {
-        console.warn(`    ⚠️ Could not fetch schema for ${tableName}: ${sampleError.message}`);
-        return null;
+      if (!structureError) {
+        // Table exists but is empty, we can't determine structure
+        return [];
       }
-
-      // If we get here, we have an empty result but can infer from the query structure
-      return [];
+    } catch (err) {
+      // Table might not be accessible
     }
 
-    return data || [];
+    return null;
   } catch (err) {
     console.warn(`    ⚠️ Error with table ${tableName}: ${err.message}`);
     return null;
@@ -69,30 +74,39 @@ async function fetchTableSchema(tableName) {
 }
 
 async function fetchAllTables() {
-  console.log('📊 Fetching all tables from local database...');
+  console.log('📊 Using known table list from TypeScript types...');
   
-  try {
-    // Get all table names from information_schema
-    const { data, error } = await supabase.rpc('sql', {
-      query: `
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_type = 'BASE TABLE'
-        ORDER BY table_name;
-      `
-    });
-
-    if (error) {
-      console.error('Error fetching table list:', error);
-      return null;
-    }
-
-    return data.map(row => row.table_name);
-  } catch (err) {
-    console.error('Failed to fetch table list:', err);
-    return null;
-  }
+  // Use the known table list from your types.ts file
+  const knownTables = [
+    'admin_development_progress',
+    'api_models',
+    'api_providers', 
+    'character_scenes',
+    'characters',
+    'compel_configs',
+    'conversations',
+    'enhancement_presets',
+    'jobs',
+    'messages',
+    'model_config_history',
+    'model_performance_logs',
+    'model_test_results',
+    'negative_prompts',
+    'profiles',
+    'projects',
+    'prompt_ab_tests',
+    'prompt_templates',
+    'scenes',
+    'system_config',
+    'usage_logs',
+    'user_activity_log',
+    'user_collections',
+    'user_library',
+    'user_roles',
+    'workspace_assets'
+  ];
+  
+  return knownTables.sort();
 }
 
 async function fetchStorageBuckets() {
@@ -162,20 +176,22 @@ Run \`npm run sync:schema:local\` to update.
     md += `### ${tableName}\n\n`;
     
     if (columns && columns.length > 0) {
-      md += `| Column | Type | Nullable | Default | Length/Precision |\n`;
-      md += `|--------|------|----------|---------|------------------|\n`;
+      md += `| Column | Type | Sample Value |\n`;
+      md += `|--------|------|---------------|\n`;
       
       for (const col of columns) {
         const type = col.data_type || 'unknown';
-        const nullable = col.is_nullable === 'YES' ? '✅' : '❌';
-        const defaultVal = col.column_default || '-';
-        const length = col.character_maximum_length 
-          ? `${col.character_maximum_length}` 
-          : col.numeric_precision 
-          ? `${col.numeric_precision}${col.numeric_scale ? ',' + col.numeric_scale : ''}`
-          : '-';
+        let sampleValue = '-';
         
-        md += `| ${col.column_name} | \`${type}\` | ${nullable} | ${defaultVal} | ${length} |\n`;
+        if (col.sample_value !== null && col.sample_value !== undefined) {
+          if (typeof col.sample_value === 'object') {
+            sampleValue = JSON.stringify(col.sample_value).substring(0, 50) + '...';
+          } else {
+            sampleValue = String(col.sample_value).substring(0, 50);
+          }
+        }
+        
+        md += `| ${col.column_name} | \`${type}\` | ${sampleValue} |\n`;
       }
     } else {
       md += `*No columns found or access restricted*\n`;
