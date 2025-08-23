@@ -25,3 +25,9 @@ dist-ssr
 
 # Local environment variables (never commit!)
 .env.local
+
+# Supabase local development
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+supabase/.env.local
