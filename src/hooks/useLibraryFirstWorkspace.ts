@@ -586,28 +586,6 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
       });
 
-      // Check worker health for SDXL/WAN models before generation
-      if (modelType !== 'replicate_rv51') {
-        const { data: healthData } = await supabase
-          .from('system_config')
-          .select('config')
-          .eq('id', 1)
-          .single();
-        
-        const workerHealthCache = (healthData?.config as any)?.workerHealthCache || {};
-        const workerType = modelType.includes('wan') ? 'wanWorker' : 'chatWorker';
-        const isWorkerHealthy = workerHealthCache[workerType]?.isHealthy;
-        
-        if (!isWorkerHealthy) {
-          console.warn('🚫 Worker unhealthy, blocking generation:', workerType);
-          toast({
-            title: "Worker Unavailable",
-            description: `The ${workerType === 'wanWorker' ? 'WAN' : 'SDXL'} worker is currently unavailable. Please try again later.`,
-            variant: "destructive",
-          });
-          return;
-        }
-      }
 
       // STAGING-FIRST: Route strictly by modelType - RV5.1 goes to replicate-image, SDXL goes to queue-job
       const edgeFunction = modelType === 'replicate_rv51' ? 'replicate-image' : 'queue-job';
