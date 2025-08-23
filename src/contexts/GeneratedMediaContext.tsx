@@ -8,6 +8,10 @@ interface GeneratedMediaContextType {
   isGenerating: boolean;
   generateContent: (prompt: string, options?: any) => Promise<void>;
   currentJob: any;
+  // Additional properties expected by components
+  getEntry: (id: string) => any;
+  setPending: (id: string) => void;
+  setReady: (id: string, data?: any) => void;
 }
 
 const GeneratedMediaContext = createContext<GeneratedMediaContextType | undefined>(undefined);
@@ -18,7 +22,17 @@ export const GeneratedMediaProvider: React.FC<{ children: ReactNode }> = ({ chil
     generateContent: async () => {
       console.warn('GeneratedMediaProvider: This is a stub implementation. Use useLibraryFirstWorkspace for actual generation.');
     },
-    currentJob: null
+    currentJob: null,
+    getEntry: (id: string) => {
+      console.warn('getEntry: stub implementation');
+      return null;
+    },
+    setPending: (id: string) => {
+      console.warn('setPending: stub implementation');
+    },
+    setReady: (id: string, data?: any) => {
+      console.warn('setReady: stub implementation', id, data);
+    }
   };
 
   return (

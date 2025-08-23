@@ -162,7 +162,13 @@ const MobileSimplifiedWorkspace = () => {
             assets={workspaceAssets as any}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
-            onRequireOriginalUrl={async (asset) => asset.url}
+            onRequireOriginalUrl={async (asset) => {
+              // Use signOriginal if available, otherwise fallback to url
+              if ((asset as any).signOriginal) {
+                return (asset as any).signOriginal();
+              }
+              return (asset as any).thumbUrl || (asset as any).originalPath || '';
+            }}
             actionsSlot={(asset) => (
               <WorkspaceAssetActions
                 asset={asset}
@@ -170,7 +176,13 @@ const MobileSimplifiedWorkspace = () => {
                 onDiscard={() => handleDiscard(asset)}
                 onDownload={async () => {
                   try {
-                    const url = await handleRequireOriginalUrl(asset);
+                    // Use the same logic as onRequireOriginalUrl
+                    let url: string;
+                    if ((asset as any).signOriginal) {
+                      url = await (asset as any).signOriginal();
+                    } else {
+                      url = (asset as any).thumbUrl || (asset as any).originalPath || '';
+                    }
                     const res = await fetch(url);
                     const blob = await res.blob();
                     const objectUrl = URL.createObjectURL(blob);
