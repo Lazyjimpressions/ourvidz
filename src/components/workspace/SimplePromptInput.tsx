@@ -176,6 +176,9 @@ export interface SimplePromptInputProps {
   // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
+  // Model type selection (SDXL vs Replicate RV5.1)
+  modelType?: 'sdxl' | 'replicate_rv51';
+  onModelTypeChange?: (model: 'sdxl' | 'replicate_rv51') => void;
   // Exact copy workflow
   exactCopyMode?: boolean;
   onExactCopyModeChange?: (on: boolean) => void;
@@ -247,6 +250,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onStyleRefChange,
   enhancementModel = 'qwen_instruct',
   onEnhancementModelChange,
+  modelType = 'sdxl',
+  onModelTypeChange,
   exactCopyMode = false,
   onExactCopyModeChange,
   useOriginalParams = false,
@@ -272,9 +277,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   seed = null,
   onSeedChange
 }) => {
-  // Base negative prompt hook
-  const modelType = mode === 'image' ? 'sdxl' : 'ltx';
-  const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(modelType, contentType);
+  // Base negative prompt hook - use prop modelType for image mode, fallback to 'ltx' for video
+  const negativePromptModelType = mode === 'image' ? modelType : 'ltx';
+  const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(negativePromptModelType, contentType);
 
   const [showBaseNegative, setShowBaseNegative] = useState(false);
 
@@ -290,6 +295,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showAnglePopup, setShowAnglePopup] = useState(false);
   const [showStylePopup, setShowStylePopup] = useState(false);
   const [showEnhancePopup, setShowEnhancePopup] = useState(false);
+  const [showModelPopup, setShowModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -529,6 +535,45 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     >
                       {quality === 'high' ? 'HIGH' : 'FAST'}
                     </button>
+
+                    {/* Model Selection */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => {
+                          setShowModelPopup(!showModelPopup);
+                          setShowEnhancePopup(false);
+                          setShowShotTypePopup(false);
+                          setShowAnglePopup(false);
+                          setShowStylePopup(false);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
+                      >
+                        {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
+                        <ChevronDown size={8} />
+                      </button>
+                      {showModelPopup && (
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                          <button 
+                            onClick={() => {
+                              onModelTypeChange?.('sdxl');
+                              setShowModelPopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            SDXL
+                          </button>
+                          <button 
+                            onClick={() => {
+                              onModelTypeChange?.('replicate_rv51');
+                              setShowModelPopup(false);
+                            }}
+                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                          >
+                            RV5.1
+                          </button>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Content Type */}
                     <button 
