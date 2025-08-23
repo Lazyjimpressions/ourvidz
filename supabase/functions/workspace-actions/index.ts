@@ -723,12 +723,40 @@ serve(async (req) => {
         }
       }
 
+      // Create a job record first (required for workspace_assets.job_id)
+      const jobId = crypto.randomUUID()
+      const { data: job, error: jobError } = await supabaseClient
+        .from('jobs')
+        .insert({
+          id: jobId,
+          user_id: user.id,
+          job_type: `${libraryAsset.asset_type}_library_copy`,
+          status: 'completed',
+          destination: 'workspace',
+          completed_at: new Date().toISOString(),
+          original_prompt: libraryAsset.original_prompt,
+          model_type: libraryAsset.model_used,
+          quality: 'high',
+          metadata: {
+            source: 'library_copy',
+            library_asset_id: libraryAsset.id
+          }
+        })
+        .select()
+        .single()
+
+      if (jobError) {
+        console.error('Failed to create job record:', jobError)
+        return new Response('Failed to create job record', { status: 500, headers: corsHeaders })
+      }
+
       // Create workspace record
       const { data: workspaceAsset, error: workspaceError } = await supabaseClient
         .from('workspace_assets')
         .insert({
           id: workspaceAssetId,
           user_id: user.id,
+          job_id: jobId,
           asset_type: libraryAsset.asset_type,
           temp_storage_path: destKey,
           thumbnail_path: workspaceThumbPath,

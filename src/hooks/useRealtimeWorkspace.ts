@@ -113,10 +113,32 @@ export function useRealtimeWorkspace() {
     }
   }, [assets, queryClient]);
 
-  const addToWorkspace = useCallback((assetIds: string[]) => {
-    console.log('ℹ️ Import to workspace requested (not yet implemented):', assetIds);
-    toast.message('Import from library coming soon');
-  }, []);
+  const addToWorkspace = useCallback(async (assetIds: string[]) => {
+    console.log('ℹ️ Import to workspace requested:', assetIds);
+    
+    try {
+      for (const assetId of assetIds) {
+        const { error } = await supabase.functions.invoke('workspace-actions', {
+          body: {
+            action: 'copy_to_workspace',
+            libraryAssetId: assetId
+          }
+        });
+        
+        if (error) {
+          console.error('Failed to copy asset to workspace:', error);
+          throw error;
+        }
+      }
+      
+      // Refresh workspace after copying
+      queryClient.invalidateQueries({ queryKey: ['workspace-assets'] });
+      toast.success(`Added ${assetIds.length} asset${assetIds.length > 1 ? 's' : ''} to workspace`);
+    } catch (error) {
+      console.error('Failed to add assets to workspace:', error);
+      toast.error('Failed to add assets to workspace');
+    }
+  }, [queryClient]);
 
   // Keep existing real-time subscriptions (refresh query on inserts and job failures)
   useEffect(() => {

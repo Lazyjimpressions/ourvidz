@@ -155,19 +155,16 @@ export const SimplifiedWorkspace: React.FC = () => {
           });
           setReferenceImage(file);
           
-          // If we have reference asset metadata, extract it
-          if (state.referenceAsset?.id) {
-            const metadata = await extractReferenceMetadata(state.referenceAsset.id);
-            if (metadata) {
-              setReferenceMetadata(metadata);
-              setExactCopyMode(true);
-            }
-          }
+          // Set reference strength for better results
+          setReferenceStrength(0.8);
           
-          toast.success('Reference image loaded from library');
+          // Ensure image mode is active
+          updateMode('image');
+          
+          toast({ title: "Reference image loaded from library" });
         } catch (error) {
           console.error('Failed to load reference image:', error);
-          toast.error('Failed to load reference image');
+          toast({ title: "Failed to load reference image", variant: "destructive" });
         }
       };
 
