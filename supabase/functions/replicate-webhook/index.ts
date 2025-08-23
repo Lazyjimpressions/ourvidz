@@ -19,9 +19,10 @@ serve(async (req) => {
 
     // Verify webhook signature if secret is configured
     if (WEBHOOK_SECRET) {
-      const signature = req.headers.get('Replicate-Signature')
+      // Check for both possible signature header names
+      const signature = req.headers.get('X-Replicate-Signature') || req.headers.get('Replicate-Signature')
       if (!signature) {
-        console.error('❌ Missing Replicate-Signature header')
+        console.error('❌ Missing webhook signature header (checked X-Replicate-Signature and Replicate-Signature)')
         return new Response('Unauthorized: Missing signature', { status: 401, headers: corsHeaders })
       }
 

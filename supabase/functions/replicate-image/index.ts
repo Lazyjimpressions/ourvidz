@@ -145,7 +145,7 @@ serve(async (req) => {
 
     console.log('✅ Job created:', jobData.id);
 
-    // Prepare model input
+    // Prepare model input with safer defaults
     let modelInput;
     let modelIdentifier;
     
@@ -165,14 +165,16 @@ serve(async (req) => {
       const fallbackModel = Deno.env.get('REPLICATE_MODEL_SLUG') || 'lucataco/realistic-vision-v5.1';
       const fallbackVersion = Deno.env.get('REPLICATE_MODEL_VERSION');
       modelIdentifier = fallbackVersion ? `${fallbackModel}:${fallbackVersion}` : fallbackModel;
+      
+      // Use minimal, safe input for fallback model to avoid 422 validation errors
       modelInput = {
-        prompt: body.prompt,
-        negative_prompt: "worst quality, low quality, blurry, nsfw",
-        num_outputs: 1,
-        num_inference_steps: 20,
-        guidance_scale: 7.5,
-        ...body.input
+        prompt: body.prompt
       };
+      
+      // Only add negative_prompt if provided
+      if (body.input?.negative_prompt) {
+        modelInput.negative_prompt = body.input.negative_prompt;
+      }
     }
 
     console.log('🔧 Model input configuration:', modelInput);
@@ -180,43 +182,67 @@ serve(async (req) => {
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
     
-    const prediction = await replicate.predictions.create({
-      model: modelIdentifier,
-      input: modelInput,
-      webhook: webhookUrl,
-      webhook_events_filter: ["start", "completed"]
-    });
+    console.log('🔧 Creating prediction with model:', modelIdentifier);
+    console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
+    
+    try {
+      const prediction = await replicate.predictions.create({
+        model: modelIdentifier,
+        input: modelInput,
+        webhook: webhookUrl,
+        webhook_events_filter: ["start", "completed"]
+      });
 
-    console.log("🚀 Prediction created:", { 
-      id: prediction.id, 
-      status: prediction.status,
-      webhook: webhookUrl
-    });
+      console.log("🚀 Prediction created successfully:", { 
+        id: prediction.id, 
+        status: prediction.status,
+        webhook: webhookUrl
+      });
 
-    // Update job with prediction info
-    await supabase
-      .from('jobs')
-      .update({
-        status: 'processing',
-        started_at: new Date().toISOString(),
-        metadata: {
-          ...jobData.metadata,
-          prediction_id: prediction.id,
-          actual_model: modelIdentifier,
-          input_used: modelInput,
-          webhook_url: webhookUrl
-        }
-      })
-      .eq('id', jobData.id);
+      // Update job with prediction info
+      await supabase
+        .from('jobs')
+        .update({
+          status: 'processing',
+          started_at: new Date().toISOString(),
+          metadata: {
+            ...jobData.metadata,
+            prediction_id: prediction.id,
+            actual_model: modelIdentifier,
+            input_used: modelInput,
+            webhook_url: webhookUrl
+          }
+        })
+        .eq('id', jobData.id);
 
-    return new Response(JSON.stringify({ 
-      jobId: jobData.id,
-      predictionId: prediction.id,
-      status: 'queued'
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200,
-    });
+      return new Response(JSON.stringify({ 
+        jobId: jobData.id,
+        predictionId: prediction.id,
+        status: 'queued'
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
+      
+    } catch (predictionError) {
+      console.error("❌ Failed to create Replicate prediction:", predictionError);
+      
+      // Update job to failed state
+      await supabase
+        .from('jobs')
+        .update({
+          status: 'failed',
+          error_message: `Prediction creation failed: ${predictionError.message}`
+        })
+        .eq('id', jobData.id);
+      
+      return new Response(JSON.stringify({ 
+        error: `Prediction creation failed: ${predictionError.message}` 
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
+      });
+    }
 
   } catch (error) {
     console.error("❌ Error in replicate function:", error);
