@@ -1,6 +1,6 @@
 # Supabase Schema Reference
 
-> Last Updated: 2025-08-23T14:00:30.874Z
+> Last Updated: 2025-08-23T18:07:12.835Z
 > Project ID: ulmdmzhcdwfadbvfpckt
 > URL: https://ulmdmzhcdwfadbvfpckt.supabase.co
 
@@ -40,29 +40,29 @@ To update: `npm run sync:schema:direct`
 
 ### characters
 
-| Column | Type | Sample Value |
-|--------|------|---------------|
-| id | string | 310002b8-c4a4-4540-be72-c8d521c8809e |
-| user_id | object | - |
-| name | string | Mei Chen |
-| description | string | Playful, curious, romantic. Background: Mei is an  |
-| traits | string | Speaking Style: Bubbly, flirtatious, and a little  |
-| appearance_tags | object | ["Asian","Long black hair","Youthful","Petite fram |
-| image_url | object | - |
-| created_at | string | 2025-08-08T03:50:57.274692+00:00 |
-| updated_at | string | 2025-08-18T01:27:44.536261+00:00 |
-| persona | string | Playful, curious, romantic, horny |
-| system_prompt | object | - |
-| voice_tone | string | bubbly |
-| mood | string | playful |
-| creator_id | object | - |
-| likes_count | number | 0 |
-| interaction_count | number | 522 |
-| reference_image_url | object | - |
-| is_public | boolean | true |
-| gender | string | female |
-| content_rating | string | nsfw |
-| role | string | ai |
+| Column | Type | Nullable | Default | Max Length |
+|--------|------|----------|---------|------------|
+| id | string | - | - | - |
+| user_id | object | - | - | - |
+| name | string | - | - | - |
+| description | string | - | - | - |
+| traits | string | - | - | - |
+| appearance_tags | object | - | - | - |
+| image_url | object | - | - | - |
+| created_at | string | - | - | - |
+| updated_at | string | - | - | - |
+| persona | string | - | - | - |
+| system_prompt | object | - | - | - |
+| voice_tone | string | - | - | - |
+| mood | string | - | - | - |
+| creator_id | object | - | - | - |
+| likes_count | number | - | - | - |
+| interaction_count | number | - | - | - |
+| reference_image_url | object | - | - | - |
+| is_public | boolean | - | - | - |
+| gender | string | - | - | - |
+| content_rating | string | - | - | - |
+| role | string | - | - | - |
 
 ### character_scenes
 
@@ -140,7 +140,7 @@ To update: `npm run sync:schema:direct`
 
 *Schema not available*
 
-## Edge Functions (23 functions)
+## Edge Functions (25 functions)
 
 - `delete-workspace-item` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/delete-workspace-item
 - `enhance-prompt` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/enhance-prompt
@@ -149,8 +149,10 @@ To update: `npm run sync:schema:direct`
 - `generate-avatars` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/generate-avatars
 - `generate-content` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/generate-content
 - `get-active-worker-url` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/get-active-worker-url
+- `get-all-tables` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/get-all-tables
 - `get-negative-prompt` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/get-negative-prompt
 - `get-schema-info` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/get-schema-info
+- `get-table-schema` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/get-table-schema
 - `health-check-workers` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/health-check-workers
 - `job-callback` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/job-callback
 - `playground-chat` → https://ulmdmzhcdwfadbvfpckt.supabase.co/functions/v1/playground-chat

@@ -13,7 +13,7 @@
     "docs:update": "node scripts/update-docs.js",
     "docs:status": "node scripts/update-docs.js status",
     "preview": "vite preview",
-    "sync:schema": "node scripts/fetch-schema-direct.js",
+    "sync:schema": "node scripts/sync-schema-local.js",
     "sync:schema:cli": "node scripts/sync-schema-cli.js",
     "sync:schema:edge": "node scripts/sync-schema-safe.js",
     "sync:schema:local": "node scripts/sync-supabase-schema.js",
