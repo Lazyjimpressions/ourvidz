@@ -22,45 +22,67 @@ serve(async (req) => {
     console.log('🎬 Replicate request received:', {
       prompt: body.prompt?.slice(0, 100),
       apiModelId: body.apiModelId,
-      jobId: body.jobId
+      jobType: body.jobType
     });
 
-    // Get API model configuration
-    const { data: apiModel, error: modelError } = await supabase
-      .from('api_models')
-      .select(`
-        *,
-        api_providers!inner(*)
-      `)
-      .eq('id', body.apiModelId)
-      .eq('is_active', true)
-      .single();
-
-    if (modelError || !apiModel) {
-      console.error('❌ API model not found:', modelError);
+    // Get authenticated user
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'API model not found or inactive' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        JSON.stringify({ error: 'Authorization required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Verify it's a Replicate provider
-    if (apiModel.api_providers.name !== 'replicate') {
-      console.error('❌ Invalid provider for replicate-image function:', apiModel.api_providers.name);
+    const { data: { user }, error: userError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (userError || !user) {
+      console.error('❌ User authentication failed:', userError);
       return new Response(
-        JSON.stringify({ error: 'Invalid provider for this function' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        JSON.stringify({ error: 'Authentication failed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    // Get Replicate API key from provider secret configuration
-    const replicateApiKey = Deno.env.get(apiModel.api_providers.secret_name);
+    // Get API model configuration or use fallback
+    let apiModel = null;
+    let replicateApiKey = null;
+    
+    if (body.apiModelId) {
+      const { data: model, error: modelError } = await supabase
+        .from('api_models')
+        .select(`
+          *,
+          api_providers!inner(*)
+        `)
+        .eq('id', body.apiModelId)
+        .eq('is_active', true)
+        .single();
+
+      if (modelError || !model) {
+        console.error('❌ API model not found, using fallback:', modelError);
+      } else if (model.api_providers.name !== 'replicate') {
+        console.error('❌ Invalid provider for replicate-image function:', model.api_providers.name);
+        return new Response(
+          JSON.stringify({ error: 'Invalid provider for this function' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
+      } else {
+        apiModel = model;
+        replicateApiKey = Deno.env.get(model.api_providers.secret_name);
+      }
+    }
+    
+    // Fallback to environment variables if no model configuration
     if (!replicateApiKey) {
-      console.error('❌ Replicate API key not configured:', apiModel.api_providers.secret_name);
-      return new Response(
-        JSON.stringify({ error: 'API provider not configured' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
+      console.log('🔄 Using fallback Replicate configuration from environment');
+      replicateApiKey = Deno.env.get('REPLICATE_API_TOKEN');
+      if (!replicateApiKey) {
+        console.error('❌ No Replicate API key available');
+        return new Response(
+          JSON.stringify({ error: 'API provider not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        );
+      }
     }
 
     const replicate = new Replicate({ auth: replicateApiKey });
@@ -89,50 +111,108 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🎨 Generating with model: ${apiModel.display_name} (${apiModel.model_key})`);
+    // Create job first
+    const jobType = body.jobType || 'replicate_rv51_fast';
+    const quality = body.quality || 'fast';
+    
+    const { data: jobData, error: jobError } = await supabase
+      .from('jobs')
+      .insert({
+        user_id: user.id,
+        job_type: jobType,
+        original_prompt: body.prompt,
+        status: 'queued',
+        quality: quality,
+        api_model_id: apiModel?.id || null,
+        model_type: apiModel?.model_family || 'realistic_vision_v51',
+        metadata: {
+          ...body.metadata,
+          api_model_configured: !!apiModel,
+          model_display_name: apiModel?.display_name || 'RV5.1 (fallback)'
+        }
+      })
+      .select()
+      .single();
 
-    // Prepare input with defaults from api_model configuration
-    const modelInput = {
-      prompt: body.prompt,
-      ...apiModel.input_defaults,
-      // Allow request to override defaults
-      ...body.input
-    };
+    if (jobError || !jobData) {
+      console.error('❌ Failed to create job:', jobError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to create job' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    console.log('✅ Job created:', jobData.id);
+
+    // Prepare model input
+    let modelInput;
+    let modelIdentifier;
+    
+    if (apiModel) {
+      console.log(`🎨 Generating with configured model: ${apiModel.display_name} (${apiModel.model_key})`);
+      modelInput = {
+        prompt: body.prompt,
+        ...apiModel.input_defaults,
+        ...body.input
+      };
+      modelIdentifier = apiModel.model_key;
+      if (apiModel.version) {
+        modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
+      }
+    } else {
+      console.log('🎨 Generating with fallback RV5.1 model');
+      const fallbackModel = Deno.env.get('REPLICATE_MODEL_SLUG') || 'lucataco/realistic-vision-v5.1';
+      const fallbackVersion = Deno.env.get('REPLICATE_MODEL_VERSION');
+      modelIdentifier = fallbackVersion ? `${fallbackModel}:${fallbackVersion}` : fallbackModel;
+      modelInput = {
+        prompt: body.prompt,
+        negative_prompt: "worst quality, low quality, blurry, nsfw",
+        num_outputs: 1,
+        num_inference_steps: 20,
+        guidance_scale: 7.5,
+        ...body.input
+      };
+    }
 
     console.log('🔧 Model input configuration:', modelInput);
 
-    // Run prediction with configured model
-    let modelIdentifier = apiModel.model_key;
-    if (apiModel.version) {
-      modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
-    }
-
-    const output = await replicate.run(modelIdentifier, { input: modelInput });
-
-    console.log("✅ Generation response:", { 
-      modelUsed: modelIdentifier,
-      outputType: typeof output,
-      hasOutput: !!output 
+    // Create prediction with webhook
+    const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
+    
+    const prediction = await replicate.predictions.create({
+      model: modelIdentifier,
+      input: modelInput,
+      webhook: webhookUrl,
+      webhook_events_filter: ["start", "completed", "failed"]
     });
 
-    // Update job with model information
-    if (body.jobId) {
-      await supabase
-        .from('jobs')
-        .update({
-          api_model_id: apiModel.id,
-          model_type: apiModel.model_family || apiModel.display_name.toLowerCase(),
-          metadata: {
-            actual_model: modelIdentifier,
-            model_display_name: apiModel.display_name,
-            provider: apiModel.api_providers.display_name,
-            input_used: modelInput
-          }
-        })
-        .eq('id', body.jobId);
-    }
+    console.log("🚀 Prediction created:", { 
+      id: prediction.id, 
+      status: prediction.status,
+      webhook: webhookUrl
+    });
 
-    return new Response(JSON.stringify({ output }), {
+    // Update job with prediction info
+    await supabase
+      .from('jobs')
+      .update({
+        status: 'processing',
+        started_at: new Date().toISOString(),
+        metadata: {
+          ...jobData.metadata,
+          prediction_id: prediction.id,
+          actual_model: modelIdentifier,
+          input_used: modelInput,
+          webhook_url: webhookUrl
+        }
+      })
+      .eq('id', jobData.id);
+
+    return new Response(JSON.stringify({ 
+      jobId: jobData.id,
+      predictionId: prediction.id,
+      status: 'queued'
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

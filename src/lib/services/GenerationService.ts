@@ -277,20 +277,59 @@ export class GenerationService {
     console.log('🔥 Routing to Replicate generation:', request.format);
 
     try {
+      // Fetch the active Replicate image generation model
+      const { data: apiModels, error: modelError } = await supabase
+        .from('api_models')
+        .select(`
+          id,
+          display_name,
+          model_key,
+          version,
+          input_defaults,
+          api_providers!inner(name)
+        `)
+        .eq('is_active', true)
+        .eq('modality', 'image')
+        .eq('task', 'generation')
+        .eq('api_providers.name', 'replicate')
+        .order('priority', { ascending: false })
+        .limit(1);
+
+      if (modelError || !apiModels || apiModels.length === 0) {
+        console.error('❌ No active Replicate model found:', modelError);
+        throw new Error('Replicate model not available');
+      }
+
+      const apiModel = apiModels[0];
+      console.log('🎨 Using Replicate model:', apiModel.display_name, apiModel.id);
+
+      // Build input from model defaults + request overrides
+      const modelDefaults = (apiModel.input_defaults && typeof apiModel.input_defaults === 'object') 
+        ? apiModel.input_defaults as Record<string, any>
+        : {};
+      
+      const input = {
+        ...modelDefaults,
+        // Request-specific overrides
+        negative_prompt: request.metadata?.negative_prompt,
+        num_outputs: request.batchCount || 1,
+        num_inference_steps: request.metadata?.steps || 20,
+        guidance_scale: request.metadata?.guidance_scale || 7.5,
+        seed: request.metadata?.seed ? Number(request.metadata.seed) : undefined
+      };
+
       const { data, error } = await supabase.functions.invoke('replicate-image', {
         body: {
           prompt: request.prompt,
-          original_prompt: request.originalPrompt || request.prompt,
-          format: request.format,
+          apiModelId: apiModel.id,
+          input: input,
+          jobType: request.format,
           quality: config.displayName.includes('High') ? 'high' : 'fast',
           metadata: {
             ...request.metadata,
             model_type: 'realistic_vision_v51',
             credits: config.credits,
-            prompt: request.prompt,
-            skip_enhancement: true,
-            enhancement_model: 'none',
-            negative_prompt: request.metadata?.negative_prompt
+            original_prompt: request.originalPrompt || request.prompt
           }
         }
       });
@@ -300,7 +339,7 @@ export class GenerationService {
         throw new Error(`Replicate generation failed: ${error.message}`);
       }
 
-      console.log('✅ Replicate job queued:', data.jobId);
+      console.log('✅ Replicate job queued:', { jobId: data.jobId, predictionId: data.predictionId });
       return data.jobId;
     } catch (error) {
       console.error('Replicate generation request failed:', error);
