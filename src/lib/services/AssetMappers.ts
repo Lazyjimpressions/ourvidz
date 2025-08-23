@@ -61,11 +61,11 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
  */
 export function toSharedFromWorkspace(row: any): SharedAsset {
   // Handle both formats: snake_case from DB and camelCase from services
-  const rawOriginalPath = row.temp_storage_path || row.tempStoragePath || row.storage_path || row.storagePath || '';
-  const rawThumbPath = row.thumbnail_path || row.thumbnailPath || null;
+  const rawOriginalPath = row.temp_storage_path || row.tempStoragePath || row.storage_path || row.storagePath || row.url || '';
+  const rawThumbPath = row.thumbnail_path || row.thumbnailPath || row.thumbnailUrl || null;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
+  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : deriveThumbnailPath(originalPath);
   
   // Support both naming conventions
   const assetType = row.asset_type || row.assetType || 'image';

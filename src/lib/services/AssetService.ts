@@ -163,7 +163,7 @@ export class AssetService {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return [];
 
-      const { data, error } = await supabase
+        const { data, error } = await supabase
         .from('workspace_assets')
         .select(`
           id,
@@ -173,6 +173,9 @@ export class AssetService {
           model_used,
           duration_seconds,
           temp_storage_path,
+          thumbnail_path,
+          width,
+          height,
           user_id,
           file_size_bytes,
           mime_type,
@@ -196,6 +199,7 @@ export class AssetService {
         modelType: asset.model_used,
         duration: asset.duration_seconds || undefined,
         url: asset.temp_storage_path,
+        thumbnailUrl: asset.thumbnail_path,
         userId: asset.user_id,
         fileSize: Number(asset.file_size_bytes),
         mimeType: asset.mime_type,
@@ -204,7 +208,9 @@ export class AssetService {
         status: 'completed',
         metadata: {
           ...(asset.generation_settings as Record<string, any>) || {},
-          job_id: asset.job_id // Include job_id for grouping
+          job_id: asset.job_id,
+          width: asset.width,
+          height: asset.height
         },
       }));
     } catch (error) {
