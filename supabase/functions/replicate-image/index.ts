@@ -112,7 +112,7 @@ serve(async (req) => {
     }
 
     // Create job first
-    const jobType = body.jobType || 'rv51_fast';
+    const jobType = body.jobType || body.job_type || 'rv51_fast';
     const quality = body.quality || 'fast';
     
     const { data: jobData, error: jobError } = await supabase
@@ -184,7 +184,7 @@ serve(async (req) => {
       model: modelIdentifier,
       input: modelInput,
       webhook: webhookUrl,
-      webhook_events_filter: ["start", "completed", "failed"]
+      webhook_events_filter: ["start", "completed"]
     });
 
     console.log("🚀 Prediction created:", { 
