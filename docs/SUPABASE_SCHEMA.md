@@ -1,6 +1,6 @@
 # Supabase Schema Reference
 
-> Last Updated: 2025-08-23T18:16:39.258Z
+> Last Updated: 2025-08-23T18:22:44.617Z
 > Project ID: ulmdmzhcdwfadbvfpckt (Local Mirror)
 > Local URL: http://127.0.0.1:54321
 
