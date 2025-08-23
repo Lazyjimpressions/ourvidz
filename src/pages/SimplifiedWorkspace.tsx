@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState, useMemo } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { UnifiedAsset } from '@/lib/services/AssetService';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { SimplePromptInput } from '@/components/workspace/SimplePromptInput';
-import { WorkspaceGrid } from '@/components/workspace';
+import { SharedGrid } from '@/components/shared/SharedGrid';
 import { WorkspaceHeader } from '@/components/WorkspaceHeader';
-import { SimpleLightbox } from '@/components/workspace/SimpleLightbox';
+import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/SharedLightbox';
 import { uploadReferenceImage as uploadReferenceFile, getReferenceImageUrl } from '@/lib/storage';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
+import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -25,13 +27,18 @@ import { useQueryClient } from '@tanstack/react-query';
  * - Full generation controls
  */
 export const SimplifiedWorkspace: React.FC = () => {
+  console.log('🚀 SimplifiedWorkspace: Component rendering...');
+  
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
   // Note: Signed URLs now handled centrally in useLibraryFirstWorkspace hook
 
+  console.log('🚀 SimplifiedWorkspace: About to call useLibraryFirstWorkspace...');
+  
   // Library-first workspace state
   const {
     // Core State
@@ -127,6 +134,60 @@ export const SimplifiedWorkspace: React.FC = () => {
       updateMode(urlMode);
     }
   }, [searchParams, updateMode]);
+
+  // Handle incoming reference image from library
+  useEffect(() => {
+    console.log('🖼️ Workspace: Checking location.state:', location.state);
+    const state = location.state as any;
+    if (state?.referenceUrl && state?.prompt) {
+      console.log('🖼️ Setting reference image from library:', state);
+      
+      // Set the prompt from the reference asset
+      setPrompt(state.prompt);
+      
+      // Convert the signed URL to a File object for the reference image
+      const setReferenceFromUrl = async () => {
+        try {
+          const response = await fetch(state.referenceUrl);
+          const blob = await response.blob();
+          const file = new File([blob], `reference.${blob.type.split('/')[1]}`, {
+            type: blob.type
+          });
+          setReferenceImage(file);
+          
+          // If we have reference asset metadata, extract it
+          if (state.referenceAsset?.id) {
+            const metadata = await extractReferenceMetadata(state.referenceAsset.id);
+            if (metadata) {
+              setReferenceMetadata(metadata);
+              setExactCopyMode(true);
+            }
+          }
+          
+          toast.success('Reference image loaded from library');
+        } catch (error) {
+          console.error('Failed to load reference image:', error);
+          toast.error('Failed to load reference image');
+        }
+      };
+
+      setReferenceFromUrl();
+      
+      // Clear the navigation state to avoid re-triggering
+      window.history.replaceState({}, '', location.pathname + location.search);
+    }
+  }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, toast]);
+
+  // Convert workspace assets to shared format and sign URLs
+  const sharedAssets = useMemo(() => 
+    workspaceAssets.map(toSharedFromWorkspace), 
+    [workspaceAssets]
+  );
+  
+  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
+    thumbTtlSec: 15 * 60, // 15 minutes for workspace
+    enabled: true
+  });
 
   // Note: Signed URL generation now handled centrally in useLibraryFirstWorkspace hook
 
@@ -300,23 +361,19 @@ export const SimplifiedWorkspace: React.FC = () => {
         {/* Main content area with bottom padding for fixed control bar */}
         <main className="flex-1 pb-32">
           <div className="container mx-auto px-4 py-6">
-            <WorkspaceGrid
-              items={workspaceAssets}
-              // Grid actions
-              onDownload={handleDownloadItem}
-              onEdit={handleEditItem}
-              onSave={handleSaveItem}
-              onDelete={handleDeleteItem}
-              onDismiss={handleClearItem}
-              onView={handleViewItem}
-              onUseAsReference={handleUseAsReference}
-              onUseSeed={handleUseSeed}
-              // Job actions
-              onDeleteJob={deleteJob}
-              onDismissJob={clearJob}
-              isDeleting={new Set()} // TODO: Track deleting state
-              activeJobId={activeJobId}
-              onJobSelect={selectJob}
+            <SharedGrid
+              assets={signedAssets}
+              onPreview={(asset) => {
+                const index = workspaceAssets.findIndex(a => a.id === asset.id);
+                if (index !== -1) setLightboxIndex(index);
+              }}
+              actions={{
+                onSaveToLibrary: handleSaveItem,
+                onDiscard: handleDeleteItem,
+                onDownload: handleDownloadItem,
+                onUseAsReference: handleUseAsReference
+              }}
+              isLoading={isSigning}
               registerAssetRef={registerAssetRef}
             />
           </div>
@@ -391,33 +448,21 @@ export const SimplifiedWorkspace: React.FC = () => {
       </div>
       
       {/* Lightbox */}
-      {lightboxIndex !== null && workspaceAssets.length > 0 && (
-        <SimpleLightbox
-          items={workspaceAssets.map(asset => ({
-            id: asset.id,
-            url: asset.url,
-            prompt: asset.prompt,
-            enhancedPrompt: asset.metadata?.enhancedPrompt || asset.metadata?.enhanced_prompt,
-            type: asset.type,
-            quality: asset.metadata?.quality || 'fast',
-            aspectRatio: asset.metadata?.aspectRatio || asset.metadata?.aspect_ratio,
-            modelType: asset.modelType,
-            timestamp: asset.createdAt.toISOString(),
-            originalAssetId: asset.id,
-            seed: asset.metadata?.seed?.toString(),
-            metadata: asset.metadata
-          }))}
-          currentIndex={lightboxIndex}
+      {lightboxIndex !== null && signedAssets.length > 0 && (
+        <SharedLightbox
+          assets={signedAssets}
+          startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
-          onIndexChange={setLightboxIndex}
-          onEdit={(item) => {
-            const asset = workspaceAssets.find(a => a.id === item.id);
-            if (asset) handleEditItem(asset);
-          }}
-          onDownload={(item) => {
-            const asset = workspaceAssets.find(a => a.id === item.id);
-            if (asset) handleDownloadItem(asset);
-          }}
+          onRequireOriginalUrl={async (asset) => asset.url}
+          actionsSlot={(asset) => (
+            <WorkspaceAssetActions
+              asset={asset}
+              onSave={() => handleSaveItem(asset)}
+              onDiscard={() => handleDeleteItem(asset)}
+              onDownload={() => handleDownloadItem(asset)}
+              onUseAsReference={() => handleUseAsReference(asset)}
+            />
+          )}
         />
       )}
     </>

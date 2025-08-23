@@ -66,6 +66,7 @@ export type SharedGridProps = {
     onDelete?: (asset: SharedAsset) => void;
     onDownload?: (asset: SharedAsset) => void;
     onUseAsReference?: (asset: SharedAsset) => void;
+    onAddToWorkspace?: (asset: SharedAsset) => void;
   };
   isLoading?: boolean;
   emptyState?: React.ReactNode;
@@ -382,6 +383,21 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             title="Use as Reference"
           >
             <Shuffle className="w-3 h-3" />
+          </Button>
+        )}
+
+        {isLibrary && actions?.onAddToWorkspace && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.onAddToWorkspace!(asset);
+            }}
+            title="Add to Workspace"
+          >
+            <ArrowRight className="w-3 h-3" />
           </Button>
         )}
 

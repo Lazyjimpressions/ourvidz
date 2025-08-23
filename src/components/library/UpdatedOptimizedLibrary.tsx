@@ -50,6 +50,12 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     enabled: true
   });
 
+  // Debug: Log signed assets
+  console.log('📚 Library: signedAssets count:', signedAssets.length);
+  if (signedAssets.length > 0) {
+    console.log('📚 Library: First signed asset:', signedAssets[0]);
+  }
+
   // Search and filtering
   const {
     searchState,
@@ -176,12 +182,20 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
 
   const handleUseAsReference = useCallback(async (asset: any) => {
     try {
-      // Prefer existing signed original URL if available; otherwise sign on demand
-      let referenceUrl: string | null = (asset as any).url || null;
-      if (!referenceUrl && typeof (asset as any).signOriginal === 'function') {
-        referenceUrl = await (asset as any).signOriginal();
+      console.log('🖼️ Use as Reference clicked for asset:', asset);
+      
+      // The asset should be a SignedAsset with signOriginal function
+      let referenceUrl: string | null = asset.url || null;
+      console.log('🖼️ Initial referenceUrl:', referenceUrl);
+      
+      if (!referenceUrl && typeof asset.signOriginal === 'function') {
+        console.log('🖼️ Calling signOriginal function...');
+        referenceUrl = await asset.signOriginal();
+        console.log('🖼️ After signOriginal, referenceUrl:', referenceUrl);
       }
+      
       if (!referenceUrl) {
+        console.error('🖼️ No reference URL available for asset:', asset);
         toast.error('Could not get a URL for this asset');
         return;
       }
@@ -305,9 +319,18 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
               }
               handleClearSelection();
             }}
-            onAddToWorkspace={() => {
-              toast.info('Add to workspace feature coming soon');
-              handleClearSelection();
+            onAddToWorkspace={async () => {
+              const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
+              try {
+                await Promise.all(
+                  selectedAssetList.map(asset => LibraryAssetService.addToWorkspace(asset.id))
+                );
+                toast.success(`Added ${selectedAssetList.length} assets to workspace`);
+                handleClearSelection();
+              } catch (error) {
+                console.error('Failed to add assets to workspace:', error);
+                toast.error('Failed to add assets to workspace');
+              }
             }}
           />
           )}
@@ -338,7 +361,20 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                   actions={{
                     onDelete: handleDelete,
                     onDownload: handleDownload,
-                    onUseAsReference: handleUseAsReference
+                    onUseAsReference: handleUseAsReference,
+                    onAddToWorkspace: async (asset) => {
+                      try {
+                        console.log('📋 Adding asset to workspace:', asset);
+                        console.log('📋 Asset ID:', asset.id);
+                        console.log('📋 Asset type:', asset.type);
+                        console.log('📋 Asset properties:', Object.keys(asset));
+                        await LibraryAssetService.addToWorkspace(asset.id);
+                        toast.success('Asset added to workspace');
+                      } catch (error) {
+                        console.error('Failed to add asset to workspace:', error);
+                        toast.error('Failed to add asset to workspace');
+                      }
+                    }
                   }}
                 />
                 {/* Infinite scroll sentinel */}

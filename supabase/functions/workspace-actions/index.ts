@@ -36,7 +36,12 @@ interface ClearWorkspaceRequest {
   action: 'clear_workspace';
 }
 
-type WorkspaceActionRequest = SaveToLibraryRequest | DiscardAssetRequest | ClearAssetRequest | ClearJobRequest | ClearWorkspaceRequest;
+interface CopyToWorkspaceRequest {
+  action: 'copy_to_workspace';
+  libraryAssetId: string;
+}
+
+type WorkspaceActionRequest = SaveToLibraryRequest | DiscardAssetRequest | ClearAssetRequest | ClearJobRequest | ClearWorkspaceRequest | CopyToWorkspaceRequest;
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -606,6 +611,155 @@ serve(async (req) => {
         JSON.stringify({ 
           success: true,
           message: 'Asset discarded'
+        }),
+        {
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json' 
+          },
+        },
+      )
+    
+    } else if (actionRequest.action === 'copy_to_workspace') {
+      // Copy library asset to workspace
+      const { data: libraryAsset, error: libraryError } = await supabaseClient
+        .from('user_library')
+        .select('*')
+        .eq('id', actionRequest.libraryAssetId)
+        .eq('user_id', user.id)
+        .single()
+
+      if (libraryError || !libraryAsset) {
+        return new Response('Library asset not found', { status: 404, headers: corsHeaders })
+      }
+
+      // Check if asset already exists in workspace
+      const { data: existingWorkspaceAsset } = await supabaseClient
+        .from('workspace_assets')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('original_prompt', libraryAsset.original_prompt)
+        .eq('generation_seed', libraryAsset.generation_seed)
+        .eq('model_used', libraryAsset.model_used)
+        .maybeSingle()
+
+      if (existingWorkspaceAsset) {
+        return new Response(
+          JSON.stringify({ 
+            success: true,
+            workspaceAssetId: existingWorkspaceAsset.id,
+            message: 'Asset already exists in workspace'
+          }),
+          {
+            headers: { 
+              ...corsHeaders, 
+              'Content-Type': 'application/json' 
+            },
+          },
+        )
+      }
+
+      // Copy file from user-library to workspace-temp bucket
+      let sourceKey = libraryAsset.storage_path
+      
+      // Normalize source key
+      if (sourceKey.startsWith('user-library/')) {
+        sourceKey = sourceKey.replace('user-library/', '');
+      }
+
+      // Generate unique workspace path
+      const workspaceAssetId = crypto.randomUUID()
+      const destKey = `${user.id}/${workspaceAssetId}.${libraryAsset.mime_type.split('/')[1]}`
+
+      console.log('📁 Copying file from library to workspace:', { sourceKey, destKey });
+
+      // Get file from user-library
+      const { data: fileData, error: downloadError } = await supabaseClient.storage
+        .from('user-library')
+        .download(sourceKey)
+
+      if (downloadError) {
+        console.error('Failed to download from user-library:', downloadError)
+        return new Response('Failed to access library file', { status: 500, headers: corsHeaders })
+      }
+
+      // Upload to workspace-temp
+      const { error: uploadError } = await supabaseClient.storage
+        .from('workspace-temp')
+        .upload(destKey, fileData, {
+          contentType: libraryAsset.mime_type,
+          upsert: true
+        })
+
+      if (uploadError) {
+        console.error('Failed to upload to workspace-temp:', uploadError)
+        return new Response('Failed to copy to workspace', { status: 500, headers: corsHeaders })
+      }
+
+      // Handle thumbnail copy
+      let workspaceThumbPath: string | null = null;
+      if (libraryAsset.thumbnail_path) {
+        let thumbSrc = libraryAsset.thumbnail_path;
+        if (thumbSrc.startsWith('user-library/')) {
+          thumbSrc = thumbSrc.replace('user-library/', '');
+        }
+
+        const { data: thumbData } = await supabaseClient.storage
+          .from('user-library')
+          .download(thumbSrc);
+        
+        if (thumbData) {
+          const thumbDest = `${user.id}/${workspaceAssetId}.thumb.webp`;
+          const { error: upThumbErr } = await supabaseClient.storage
+            .from('workspace-temp')
+            .upload(thumbDest, thumbData, {
+              contentType: 'image/webp',
+              upsert: true
+            });
+          if (!upThumbErr) {
+            workspaceThumbPath = thumbDest;
+            console.log('📁 Copying thumbnail to workspace:', { thumbSrc, thumbDest });
+          }
+        }
+      }
+
+      // Create workspace record
+      const { data: workspaceAsset, error: workspaceError } = await supabaseClient
+        .from('workspace_assets')
+        .insert({
+          id: workspaceAssetId,
+          user_id: user.id,
+          asset_type: libraryAsset.asset_type,
+          temp_storage_path: destKey,
+          thumbnail_path: workspaceThumbPath,
+          file_size_bytes: libraryAsset.file_size_bytes,
+          mime_type: libraryAsset.mime_type,
+          duration_seconds: libraryAsset.duration_seconds,
+          original_prompt: libraryAsset.original_prompt,
+          model_used: libraryAsset.model_used,
+          generation_seed: libraryAsset.generation_seed,
+          // Copy generation settings if available
+          generation_settings: {
+            source: 'library_copy',
+            library_asset_id: libraryAsset.id,
+            ...(libraryAsset.tags && { tags: libraryAsset.tags })
+          }
+        })
+        .select()
+        .single()
+
+      if (workspaceError) {
+        console.error('Failed to create workspace record:', workspaceError)
+        return new Response('Failed to create workspace record', { status: 500, headers: corsHeaders })
+      }
+
+      console.log(`✅ Library asset ${actionRequest.libraryAssetId} copied to workspace as ${workspaceAsset.id}`)
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          workspaceAssetId: workspaceAsset.id,
+          message: 'Asset copied to workspace'
         }),
         {
           headers: { 

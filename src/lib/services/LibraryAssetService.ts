@@ -207,6 +207,46 @@ export class LibraryAssetService {
   }
 
   /**
+   * Add library asset to workspace
+   */
+  static async addToWorkspace(libraryAssetId: string): Promise<void> {
+    try {
+      console.log('📋 Adding library asset to workspace:', { libraryAssetId });
+
+      // First verify the asset exists
+      const { data: asset, error: fetchError } = await supabase
+        .from('user_library')
+        .select('id, asset_type, storage_path')
+        .eq('id', libraryAssetId)
+        .single();
+
+      if (fetchError || !asset) {
+        console.error('📋 Library asset not found:', { libraryAssetId, fetchError });
+        throw new Error('Library asset not found');
+      }
+
+      console.log('📋 Found library asset:', asset);
+
+      const { error } = await supabase.functions.invoke('workspace-actions', {
+        body: {
+          action: 'copy_to_workspace',
+          libraryAssetId
+        }
+      });
+
+      if (error) {
+        console.error('Error adding to workspace:', error);
+        throw error;
+      }
+
+      console.log('✅ Asset added to workspace successfully');
+    } catch (error) {
+      console.error('Failed to add asset to workspace:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Transform library asset to unified format
    */
   private static transformLibraryAsset(asset: LibraryAsset): UnifiedLibraryAsset {
