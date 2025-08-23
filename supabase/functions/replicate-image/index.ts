@@ -112,7 +112,7 @@ serve(async (req) => {
     }
 
     // Create job first
-    const jobType = body.jobType || 'replicate_rv51_fast';
+    const jobType = body.jobType || 'rv51_fast';
     const quality = body.quality || 'fast';
     
     const { data: jobData, error: jobError } = await supabase
@@ -124,7 +124,8 @@ serve(async (req) => {
         status: 'queued',
         quality: quality,
         api_model_id: apiModel?.id || null,
-        model_type: apiModel?.model_family || 'realistic_vision_v51',
+        model_type: apiModel?.model_family || 'rv51',
+        format: 'image',
         metadata: {
           ...body.metadata,
           api_model_configured: !!apiModel,

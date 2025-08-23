@@ -34,7 +34,7 @@ export class GenerationService {
     });
 
     // Route Replicate requests to new edge function
-    if (request.format.startsWith('replicate_')) {
+    if (request.format === 'rv51_fast' || request.format === 'rv51_high') {
       return await this.queueReplicateGeneration(request, config);
     }
 

@@ -522,14 +522,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       const generationRequest = {
         job_type: (mode === 'image' 
           ? (modelType === 'replicate_rv51' 
-              ? (quality === 'high' ? 'replicate_rv51_high' : 'replicate_rv51_fast')
+              ? (quality === 'high' ? 'rv51_high' : 'rv51_fast')
               : (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'))
           : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast')
         ),
         prompt: finalPrompt,
         quality: quality,
         // format omitted - let edge function default based on job_type
-        model_type: mode === 'image' ? (modelType === 'replicate_rv51' ? 'realistic_vision_v51' : 'sdxl') : 'wan',
+        model_type: mode === 'image' ? (modelType === 'replicate_rv51' ? 'rv51' : 'sdxl') : 'wan',
         reference_image_url: (referenceImageUrl || referenceImage) 
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
           : undefined,
