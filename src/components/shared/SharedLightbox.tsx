@@ -298,21 +298,27 @@ export const WorkspaceAssetActions: React.FC<{
   onSave?: () => void;
   onDiscard?: () => void;
   onDownload?: () => void;
-}> = ({ asset, onSave, onDiscard, onDownload }) => (
+  onUseAsReference?: () => void;
+}> = ({ asset, onSave, onDiscard, onDownload, onUseAsReference }) => (
   <>
     {onSave && (
       <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
         <Save className="w-3 h-3" />
       </Button>
     )}
+    {onDiscard && (
+      <Button size="sm" variant="destructive" onClick={onDiscard} className="h-7 w-7 p-0" title="Discard">
+        <Trash2 className="w-3 h-3" />
+      </Button>
+    )}
     {onDownload && (
-      <Button size="sm" variant="outline" onClick={onDownload} className="h-7 w-7 p-0" title="Download">
+      <Button size="sm" variant="secondary" onClick={onDownload} className="h-7 w-7 p-0" title="Download">
         <Download className="w-3 h-3" />
       </Button>
     )}
-    {onDiscard && (
-      <Button size="sm" variant="outline" onClick={onDiscard} className="h-7 w-7 p-0" title="Discard">
-        <Trash2 className="w-3 h-3" />
+    {onUseAsReference && (
+      <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
+        <Copy className="w-3 h-3" />
       </Button>
     )}
   </>

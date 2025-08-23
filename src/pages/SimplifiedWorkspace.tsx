@@ -365,13 +365,13 @@ export const SimplifiedWorkspace: React.FC = () => {
                 if (index !== -1) setLightboxIndex(index);
               }}
               actions={{
-                onSaveToLibrary: handleSaveItem,
-                onDiscard: handleDeleteItem,
-                onDownload: handleDownloadItem,
-                onUseAsReference: handleUseAsReference
+                onSaveToLibrary: (asset: any) => handleSaveItem(asset as UnifiedAsset),
+                onDiscard: (asset: any) => handleDeleteItem(asset as UnifiedAsset),
+                onDownload: (asset: any) => handleDownloadItem(asset as UnifiedAsset),
+                onUseAsReference: (asset: any) => handleUseAsReference(asset as UnifiedAsset)
               }}
               isLoading={isSigning}
-              registerAssetRef={registerAssetRef}
+              registerAssetRef={(element: HTMLElement, assetId: string) => registerAssetRef(assetId, element)}
             />
           </div>
         </main>
@@ -450,14 +450,20 @@ export const SimplifiedWorkspace: React.FC = () => {
           assets={signedAssets}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
-          onRequireOriginalUrl={async (asset) => asset.url}
-          actionsSlot={(asset) => (
+          onRequireOriginalUrl={async (asset: any) => {
+            // Use signOriginal function if available, otherwise fallback to url
+            if ((asset as any).signOriginal) {
+              return (asset as any).signOriginal();
+            }
+            return (asset as any).url || asset.url;
+          }}
+          actionsSlot={(asset: any) => (
             <WorkspaceAssetActions
               asset={asset}
-              onSave={() => handleSaveItem(asset)}
-              onDiscard={() => handleDeleteItem(asset)}
-              onDownload={() => handleDownloadItem(asset)}
-              onUseAsReference={() => handleUseAsReference(asset)}
+              onSave={() => handleSaveItem(asset as UnifiedAsset)}
+              onDiscard={() => handleDeleteItem(asset as UnifiedAsset)}
+              onDownload={() => handleDownloadItem(asset as UnifiedAsset)}
+              onUseAsReference={() => handleUseAsReference(asset as UnifiedAsset)}
             />
           )}
         />

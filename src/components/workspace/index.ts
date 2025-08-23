@@ -1,6 +1,4 @@
 // Workspace Components Barrel Export
-export { WorkspaceGrid } from './WorkspaceGrid';
-export { ContentCard } from './ContentCard';
 export { SimplePromptInput } from './SimplePromptInput';
 export { MobileSimplePromptInput } from './MobileSimplePromptInput';
 export { SimpleLightbox } from './SimpleLightbox';
