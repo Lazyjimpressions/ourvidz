@@ -606,14 +606,54 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         enhancementModel: generationRequest.metadata?.enhancement_model
       });
       
-      // Defensive guard - prevent Replicate from using queue-job
-      if (selectedModel?.type === 'replicate' && edgeFunction !== 'replicate-image') {
-        console.error('❌ ROUTING ERROR: Replicate model attempting to use queue-job!');
-        throw new Error('Replicate models must use replicate-image edge function');
+      let requestPayload;
+      
+      if (selectedModel?.type === 'replicate') {
+        // Guard: Check if model ID is valid
+        if (!selectedModel.id || selectedModel.id === 'legacy-rv51') {
+          toast({
+            title: "Model Selection Required",
+            description: "Please reselect the model and try again",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // Convert aspect ratio to width/height
+        const aspectRatioMap: Record<string, { width: number; height: number }> = {
+          '1:1': { width: 1024, height: 1024 },
+          '16:9': { width: 1344, height: 768 },
+          '9:16': { width: 768, height: 1344 },
+          '3:2': { width: 1216, height: 832 },
+          '2:3': { width: 832, height: 1216 }
+        };
+        const dimensions = aspectRatioMap[finalAspectRatio] || { width: 1024, height: 1024 };
+        
+        // Build Replicate-specific payload
+        requestPayload = {
+          prompt: finalPrompt,
+          apiModelId: selectedModel.id,
+          jobType: generationRequest.job_type,
+          quality: quality,
+          input: {
+            steps: steps,
+            guidance_scale: guidanceScale,
+            negative_prompt: negativePrompt,
+            seed: finalSeed,
+            width: dimensions.width,
+            height: dimensions.height,
+            num_outputs: numImages,
+            scheduler: 'EulerA'
+          },
+          metadata: generationRequest.metadata
+        };
+      } else {
+        // Use original payload for SDXL/WAN
+        requestPayload = generationRequest;
       }
       
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
-        body: generationRequest
+        body: requestPayload
       });
 
       if (error) {
