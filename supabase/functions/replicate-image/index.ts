@@ -145,12 +145,34 @@ serve(async (req) => {
     
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
-    console.log('🎯 RV5.1 job parameters validated:', {
+    // Normalize model_type for database constraint compatibility
+    const normalizeModelType = (modelFamily: string | null, modelKey: string): string => {
+      if (!modelFamily) return 'rv51'; // Default fallback
+      
+      const family = modelFamily.toLowerCase();
+      const key = modelKey.toLowerCase();
+      
+      // Map model families to valid database enum values
+      if (family.includes('rv') || key.includes('realistic')) return 'rv51';
+      if (family.includes('flux') || key.includes('flux')) return 'flux';
+      if (family.includes('sdxl') || key.includes('sdxl')) return 'sdxl';
+      if (jobType.includes('rv51')) return 'rv51'; // Fallback from job_type
+      
+      // Final fallback
+      return 'rv51';
+    };
+    
+    const normalizedModelType = normalizeModelType(apiModel.model_family, apiModel.model_key);
+    
+    console.log('🎯 Job parameters validated:', {
       jobType_from_body: body.job_type,
       jobType_legacy: body.jobType,
       final_jobType: jobType,
       quality_from_body: body.quality,
-      final_quality: quality
+      final_quality: quality,
+      model_family_raw: apiModel.model_family,
+      model_key: apiModel.model_key,
+      normalized_model_type: normalizedModelType
     });
     
     const { data: jobData, error: jobError } = await supabase
@@ -162,7 +184,7 @@ serve(async (req) => {
         status: 'queued',
         quality: quality,
         api_model_id: apiModel.id, // Always populated from database
-        model_type: apiModel.model_family || 'rv51', // Use model_family from DB, fallback to rv51
+        model_type: normalizedModelType, // Normalized lowercase value
         format: 'image',
         metadata: {
           ...body.metadata,
@@ -178,7 +200,10 @@ serve(async (req) => {
     if (jobError || !jobData) {
       console.error('❌ Failed to create job:', jobError);
       return new Response(
-        JSON.stringify({ error: 'Failed to create job' }),
+        JSON.stringify({ 
+          error: 'Failed to create job',
+          details: jobError?.message || 'Unknown job creation error'
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
