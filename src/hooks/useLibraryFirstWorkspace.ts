@@ -152,7 +152,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
   };
   
-  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate'; display_name: string }>(initializeSelectedModel);
+  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate'; display_name: string }>(() => {
+    try {
+      return initializeSelectedModel();
+    } catch (error) {
+      console.error('Failed to initialize selectedModel, using default:', error);
+      return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
+    }
+  });
   
   // Wrapper to persist changes
   const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => {
