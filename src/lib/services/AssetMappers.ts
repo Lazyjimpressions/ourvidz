@@ -18,9 +18,7 @@ export type SharedAsset = {
   userId?: string;
 };
 
-/**
- * Normalize storage path by removing bucket prefixes
- */
+// Utility functions for path manipulation and type detection
 function normalizePath(path: string | null | undefined): string | null {
   if (!path || !path.trim()) return null;
   
@@ -53,6 +51,33 @@ function deriveThumbnailPath(originalPath: string | null | undefined): string | 
   }
   const pathWithoutExt = normalized.substring(0, lastDot);
   return `${pathWithoutExt}.thumb.webp`;
+}
+
+// Robust type detection based on mime type and file extension
+function detectAssetType(assetType: string | null, mimeType: string | null, path: string | null): 'image' | 'video' {
+  // First check mime type (most reliable)
+  if (mimeType) {
+    if (mimeType.startsWith('video/')) return 'video';
+    if (mimeType.startsWith('image/')) return 'image';
+  }
+  
+  // Then check file extension
+  if (path) {
+    const normalized = normalizePath(path);
+    if (normalized) {
+      if (normalized.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) return 'video';
+      if (normalized.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)) return 'image';
+    }
+  }
+  
+  // Finally fallback to asset_type, but fix obvious mistakes
+  if (assetType) {
+    if (assetType.includes('video') || assetType === 'video') return 'video';
+    if (assetType.includes('image') || assetType === 'image') return 'image';
+  }
+  
+  // Default to image if we can't determine
+  return 'image';
 }
 
 /**
@@ -91,15 +116,18 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   const userId = row.user_id || row.userId;
   const customTitle = row.custom_title || row.customTitle;
   
+  // Robust type detection based on mime type and file extension
+  const type = detectAssetType(assetType, mimeType, originalPath);
+  
   const sharedAsset = {
     id: row.id,
-    type: (assetType === 'video' ? 'video' : 'image') as 'image' | 'video',
+    type,
     thumbPath,
     originalPath,
-    title: customTitle || `Generated ${assetType}`,
+    title: customTitle || `Generated ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: assetType,
+    format: type,
     modelType: modelUsed,
     metadata: {
       source: 'workspace',
@@ -163,15 +191,18 @@ export function toSharedFromLibrary(row: any): SharedAsset {
   const collectionId = row.collection_id || row.collectionId;
   const visibility = row.visibility || 'private';
   
+  // Robust type detection based on mime type and file extension
+  const type = detectAssetType(assetType, mimeType, originalPath);
+  
   return {
     id: row.id,
-    type: (assetType === 'video' ? 'video' : 'image') as 'image' | 'video',
+    type,
     thumbPath,
     originalPath,
-    title: customTitle || `Saved ${assetType}`,
+    title: customTitle || `Saved ${type}`,
     prompt: originalPrompt,
     createdAt: new Date(createdAt),
-    format: assetType,
+    format: type,
     modelType: modelUsed,
     metadata: {
       source: 'library',

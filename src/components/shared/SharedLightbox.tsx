@@ -225,20 +225,31 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
               </div>
             ) : currentOriginalUrl ? (
               <div className="max-w-[95vw] max-h-[90vh] flex items-center justify-center">
-                {currentAsset.type === 'video' ? (
-                  <video
-                    src={currentOriginalUrl}
-                    controls
-                    className="max-w-full max-h-full object-contain rounded-lg"
-                    poster={(currentAsset as any).thumbUrl || undefined}
-                  />
-                ) : (
-                  <img
-                    src={currentOriginalUrl}
-                    alt={currentAsset.title || 'Asset'}
-                    className="max-w-full max-h-full object-contain rounded-lg"
-                  />
-                )}
+                {(() => {
+                  // Defensive type detection - check if asset should be video despite being marked as image
+                  const isVideoByMime = currentAsset.metadata?.mimeType?.startsWith('video/') || currentAsset.mimeType?.startsWith('video/');
+                  const isVideoByUrl = currentOriginalUrl?.match(/\.(mp4|avi|mov|wmv|webm|m4v)(\?.*)?$/i);
+                  const shouldRenderAsVideo = currentAsset.type === 'video' || isVideoByMime || isVideoByUrl;
+                  
+                  if (shouldRenderAsVideo) {
+                    return (
+                      <video
+                        src={currentOriginalUrl}
+                        controls
+                        className="max-w-full max-h-full object-contain rounded-lg"
+                        poster={(currentAsset as any).thumbUrl || undefined}
+                      />
+                    );
+                  } else {
+                    return (
+                      <img
+                        src={currentOriginalUrl}
+                        alt={currentAsset.title || 'Asset'}
+                        className="max-w-full max-h-full object-contain rounded-lg"
+                      />
+                    );
+                  }
+                })()}
               </div>
             ) : (
               <div className="text-white/60 text-center">

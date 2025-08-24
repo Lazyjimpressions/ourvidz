@@ -131,25 +131,38 @@ export class AssetService {
       if (error) throw error;
       if (!data) return [];
 
-      return data.map(asset => ({
-        id: asset.id,
-        type: (asset.asset_type.includes('video') ? 'video' : 'image') as 'image' | 'video',
-        title: asset.custom_title || asset.original_prompt.substring(0, 50) + '...',
-        prompt: asset.original_prompt,
-        createdAt: new Date(asset.created_at),
-        modelType: asset.model_used,
-        duration: asset.duration_seconds || undefined,
-        url: asset.storage_path,
-        userId: asset.user_id,
-        fileSize: Number(asset.file_size_bytes),
-        mimeType: asset.mime_type,
-        tags: asset.tags,
-        isFavorite: asset.is_favorite,
-        customTitle: asset.custom_title,
-        seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
-        status: 'completed',
-        metadata: {},
-      }));
+      return data.map(asset => {
+        // Robust type detection based on mime type and file extension
+        let type: 'image' | 'video' = 'image';
+        if (asset.mime_type?.startsWith('video/')) {
+          type = 'video';
+        } else if (asset.storage_path?.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) {
+          type = 'video';
+        } else if (asset.asset_type?.includes('video')) {
+          type = 'video';
+        }
+        
+        return {
+          id: asset.id,
+          type,
+          title: asset.custom_title || asset.original_prompt.substring(0, 50) + '...',
+          prompt: asset.original_prompt,
+          createdAt: new Date(asset.created_at),
+          modelType: asset.model_used,
+          duration: asset.duration_seconds || undefined,
+          url: asset.storage_path,
+          userId: asset.user_id,
+          fileSize: Number(asset.file_size_bytes),
+          mimeType: asset.mime_type,
+          tags: asset.tags,
+          isFavorite: asset.is_favorite,
+          customTitle: asset.custom_title,
+          seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
+          status: 'completed',
+          metadata: {},
+          bucketHint: 'user-library',
+        };
+      });
     } catch (error) {
       console.error('Error fetching user library assets:', error);
       toast.error('Failed to load library assets');
@@ -190,29 +203,42 @@ export class AssetService {
       if (error) throw error;
       if (!data) return [];
 
-      return data.map(asset => ({
-        id: asset.id,
-        type: (asset.asset_type.includes('video') ? 'video' : 'image') as 'image' | 'video',
-        title: asset.original_prompt.substring(0, 50) + '...',
-        prompt: asset.original_prompt,
-        createdAt: new Date(asset.created_at),
-        modelType: asset.model_used,
-        duration: asset.duration_seconds || undefined,
-        url: asset.temp_storage_path,
-        thumbnailUrl: asset.thumbnail_path,
-        userId: asset.user_id,
-        fileSize: Number(asset.file_size_bytes),
-        mimeType: asset.mime_type,
-        seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
-        generationParams: asset.generation_settings as Record<string, any>,
-        status: 'completed',
-        metadata: {
-          ...(asset.generation_settings as Record<string, any>) || {},
-          job_id: asset.job_id,
-          width: asset.width,
-          height: asset.height
-        },
-      }));
+      return data.map(asset => {
+        // Robust type detection based on mime type and file extension
+        let type: 'image' | 'video' = 'image';
+        if (asset.mime_type?.startsWith('video/')) {
+          type = 'video';
+        } else if (asset.temp_storage_path?.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) {
+          type = 'video';
+        } else if (asset.asset_type?.includes('video')) {
+          type = 'video';
+        }
+        
+        return {
+          id: asset.id,
+          type,
+          title: asset.original_prompt.substring(0, 50) + '...',
+          prompt: asset.original_prompt,
+          createdAt: new Date(asset.created_at),
+          modelType: asset.model_used,
+          duration: asset.duration_seconds || undefined,
+          url: asset.temp_storage_path,
+          thumbnailUrl: asset.thumbnail_path,
+          userId: asset.user_id,
+          fileSize: Number(asset.file_size_bytes),
+          mimeType: asset.mime_type,
+          seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
+          generationParams: asset.generation_settings as Record<string, any>,
+          status: 'completed',
+          metadata: {
+            ...(asset.generation_settings as Record<string, any>) || {},
+            job_id: asset.job_id,
+            width: asset.width,
+            height: asset.height
+          },
+          bucketHint: 'workspace-temp',
+        };
+      });
     } catch (error) {
       console.error('Error fetching workspace assets:', error);
       toast.error('Failed to load workspace assets');
@@ -292,49 +318,75 @@ export class AssetService {
 
       // Process workspace assets
       if (workspaceData.data) {
-        assets.push(...workspaceData.data.map(asset => ({
-          id: asset.id,
-          type: (asset.asset_type.includes('video') ? 'video' : 'image') as 'image' | 'video',
-          title: asset.original_prompt.substring(0, 50) + '...',
-          prompt: asset.original_prompt,
-          createdAt: new Date(asset.created_at),
-          modelType: asset.model_used,
-          duration: asset.duration_seconds || undefined,
-          url: asset.temp_storage_path,
-          userId: asset.user_id,
-          fileSize: Number(asset.file_size_bytes),
-          mimeType: asset.mime_type,
-          seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
-          generationParams: asset.generation_settings as Record<string, any>,
-          status: 'completed',
-          metadata: {
-            ...(asset.generation_settings as Record<string, any>) || {},
-            job_id: asset.job_id // Include job_id for grouping
-          },
-        })));
+        assets.push(...workspaceData.data.map(asset => {
+          // Robust type detection based on mime type and file extension
+          let type: 'image' | 'video' = 'image';
+          if (asset.mime_type?.startsWith('video/')) {
+            type = 'video';
+          } else if (asset.temp_storage_path?.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) {
+            type = 'video';
+          } else if (asset.asset_type?.includes('video')) {
+            type = 'video';
+          }
+          
+          return {
+            id: asset.id,
+            type,
+            title: asset.original_prompt.substring(0, 50) + '...',
+            prompt: asset.original_prompt,
+            createdAt: new Date(asset.created_at),
+            modelType: asset.model_used,
+            duration: asset.duration_seconds || undefined,
+            url: asset.temp_storage_path,
+            userId: asset.user_id,
+            fileSize: Number(asset.file_size_bytes),
+            mimeType: asset.mime_type,
+            seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
+            generationParams: asset.generation_settings as Record<string, any>,
+            status: 'completed',
+            metadata: {
+              ...(asset.generation_settings as Record<string, any>) || {},
+              job_id: asset.job_id // Include job_id for grouping
+            },
+            bucketHint: 'workspace-temp',
+          };
+        }));
       }
 
       // Process library assets
       if (libraryData.data) {
-        assets.push(...libraryData.data.map(asset => ({
-          id: asset.id,
-          type: (asset.asset_type.includes('video') ? 'video' : 'image') as 'image' | 'video',
-          title: asset.custom_title || asset.original_prompt.substring(0, 50) + '...',
-          prompt: asset.original_prompt,
-          createdAt: new Date(asset.created_at),
-          modelType: asset.model_used,
-          duration: asset.duration_seconds || undefined,
-          url: asset.storage_path,
-          userId: asset.user_id,
-          fileSize: Number(asset.file_size_bytes),
-          mimeType: asset.mime_type,
-          tags: asset.tags,
-          isFavorite: asset.is_favorite,
-          customTitle: asset.custom_title,
-          seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
-          status: 'completed',
-          metadata: {},
-        })));
+        assets.push(...libraryData.data.map(asset => {
+          // Robust type detection based on mime type and file extension
+          let type: 'image' | 'video' = 'image';
+          if (asset.mime_type?.startsWith('video/')) {
+            type = 'video';
+          } else if (asset.storage_path?.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) {
+            type = 'video';
+          } else if (asset.asset_type?.includes('video')) {
+            type = 'video';
+          }
+          
+          return {
+            id: asset.id,
+            type,
+            title: asset.custom_title || asset.original_prompt.substring(0, 50) + '...',
+            prompt: asset.original_prompt,
+            createdAt: new Date(asset.created_at),
+            modelType: asset.model_used,
+            duration: asset.duration_seconds || undefined,
+            url: asset.storage_path,
+            userId: asset.user_id,
+            fileSize: Number(asset.file_size_bytes),
+            mimeType: asset.mime_type,
+            tags: asset.tags,
+            isFavorite: asset.is_favorite,
+            customTitle: asset.custom_title,
+            seed: asset.generation_seed ? Number(asset.generation_seed) : undefined,
+            status: 'completed',
+            metadata: {},
+            bucketHint: 'user-library',
+          };
+        }));
       }
 
       return assets;

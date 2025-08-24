@@ -177,9 +177,19 @@ serve(async (req) => {
           // Normalize storage paths (strip 'workspace-temp/' if present)
           const normalize = (p: string) => p?.startsWith('workspace-temp/') ? p.replace('workspace-temp/', '') : p;
 
-          // Determine asset type and mime type
-          const assetType = asset.type;
+          // Determine asset type and mime type with robust detection
+          let assetType = asset.type;
           let mimeType = asset.type === 'image' ? 'image/png' : 'video/mp4';
+          
+          // Normalize asset type based on URL extension (defensive fix for incorrect worker output)
+          const normalizedPath = normalize(asset.url);
+          if (normalizedPath?.match(/\.(mp4|avi|mov|wmv|webm|m4v)$/i)) {
+            assetType = 'video';
+            mimeType = 'video/mp4';
+          } else if (normalizedPath?.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/i)) {
+            assetType = 'image';
+            mimeType = normalizedPath.match(/\.png$/i) ? 'image/png' : 'image/jpeg';
+          }
           
           // For video assets, ensure proper setup
           if (assetType === 'video') {
