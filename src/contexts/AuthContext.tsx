@@ -11,6 +11,9 @@ interface Profile {
   token_balance: number;
   created_at: string;
   updated_at: string;
+  age_verified: boolean;
+  birth_date?: string;
+  age_verification_date?: string;
 }
 
 interface AuthContextType {
@@ -20,6 +23,7 @@ interface AuthContextType {
   loading: boolean;
   isSubscribed: boolean;
   isAdmin: boolean;
+  isAgeVerified: boolean;
   signUp: (email: string, password: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<{ error: any }>;
@@ -51,6 +55,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 
   const isSubscribed = profile?.subscription_status !== 'inactive';
+  const isAgeVerified = profile?.age_verified || false;
 
   // Check if user has admin role
   const checkAdminRole = useCallback(async (userId: string) => {
@@ -161,7 +166,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, subscription_status, token_balance, created_at, updated_at')
+        .select('id, username, subscription_status, token_balance, created_at, updated_at, age_verified, birth_date, age_verification_date')
         .eq('id', userId)
         .single();
       
@@ -184,7 +189,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Type cast the subscription_status to ensure it matches our interface
         const typedProfile: Profile = {
           ...data,
-          subscription_status: data.subscription_status as 'inactive' | 'starter' | 'pro' | 'creator'
+          subscription_status: data.subscription_status as 'inactive' | 'starter' | 'pro' | 'creator',
+          age_verified: data.age_verified || false
         };
         setProfile(typedProfile);
         setProfileFetchAttempts(0); // Reset attempts on success
@@ -460,6 +466,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     loading,
     isSubscribed,
     isAdmin,
+    isAgeVerified,
     signUp,
     signIn,
     signInWithGoogle,

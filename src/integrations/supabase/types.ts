@@ -893,7 +893,9 @@ export type Database = {
       }
       profiles: {
         Row: {
+          age_verification_date: string | null
           age_verified: boolean | null
+          birth_date: string | null
           created_at: string | null
           id: string
           subscription_status: string | null
@@ -902,7 +904,9 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          age_verification_date?: string | null
           age_verified?: boolean | null
+          birth_date?: string | null
           created_at?: string | null
           id: string
           subscription_status?: string | null
@@ -911,7 +915,9 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          age_verification_date?: string | null
           age_verified?: boolean | null
+          birth_date?: string | null
           created_at?: string | null
           id?: string
           subscription_status?: string | null
@@ -1483,6 +1489,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: string
+      }
+      verify_user_age: {
+        Args: { user_birth_date: string }
+        Returns: boolean
       }
     }
     Enums: {

@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Search, Star, Users, MessageSquare, Heart, Shield, ShieldOff } from 'lucide-react';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useAuth } from '@/contexts/AuthContext';
+import { AgeVerificationModal } from '@/components/AgeVerificationModal';
 
 interface CharacterBrowserProps {
   onCharacterSelect: (characterId: string) => void;
@@ -17,7 +19,9 @@ export const CharacterBrowser: React.FC<CharacterBrowserProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [showNSFW, setShowNSFW] = useState(false);
+  const [showAgeVerification, setShowAgeVerification] = useState(false);
   const { characters, isLoading, likeCharacter } = usePublicCharacters();
+  const { user, isAgeVerified } = useAuth();
 
   // Transform database characters to display format with content filtering
   const displayCharacters = useMemo(() => {
@@ -92,7 +96,18 @@ export const CharacterBrowser: React.FC<CharacterBrowserProps> = ({
         <Switch
           id="nsfw-toggle"
           checked={showNSFW}
-          onCheckedChange={setShowNSFW}
+          onCheckedChange={(checked) => {
+            if (checked && !isAgeVerified) {
+              if (user) {
+                setShowAgeVerification(true);
+              } else {
+                // Handle non-authenticated users
+                return;
+              }
+            } else {
+              setShowNSFW(checked);
+            }
+          }}
         />
       </div>
 
@@ -237,6 +252,17 @@ export const CharacterBrowser: React.FC<CharacterBrowserProps> = ({
           ))}
         </div>
       )}
+
+      {/* Age Verification Modal */}
+      <AgeVerificationModal
+        isOpen={showAgeVerification}
+        onClose={() => {
+          setShowAgeVerification(false);
+          if (isAgeVerified) {
+            setShowNSFW(true);
+          }
+        }}
+      />
 
       {!isLoading && filteredCharacters.length === 0 && (
         <div className="text-center py-12">
