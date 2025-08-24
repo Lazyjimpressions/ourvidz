@@ -48,7 +48,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     referenceStrength,
     contentType,
     quality,
-    modelType,
+    selectedModel,
     // Video State
     beginningRefImage,
     endingRefImage,
@@ -86,7 +86,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     setReferenceStrength,
     setContentType,
     setQuality,
-    setModelType,
+    setSelectedModel,
     setBeginningRefImage,
     setEndingRefImage,
     setVideoDuration,
@@ -415,8 +415,8 @@ export const SimplifiedWorkspace: React.FC = () => {
             onStyleRefChange={setStyleRef}
             enhancementModel={enhancementModel}
             onEnhancementModelChange={setEnhancementModel}
-            modelType={modelType}
-            onModelTypeChange={setModelType}
+            selectedModel={selectedModel}
+            onSelectedModelChange={setSelectedModel}
             exactCopyMode={exactCopyMode}
             onExactCopyModeChange={setExactCopyMode}
             useOriginalParams={useOriginalParams}

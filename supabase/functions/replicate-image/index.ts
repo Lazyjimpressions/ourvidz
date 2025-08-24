@@ -67,30 +67,11 @@ serve(async (req) => {
       }
       apiModel = model;
     } else {
-      // Use default model for replicate image generation
-      const { data: model, error: modelError } = await supabase
-        .from('api_models')
-        .select(`
-          *,
-          api_providers!inner(*)
-        `)
-        .eq('modality', 'image')
-        .eq('task', 'generation')
-        .eq('is_active', true)
-        .eq('is_default', true)
-        .eq('api_providers.name', 'replicate')
-        .order('priority', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (modelError || !model) {
-        console.error('❌ No default Replicate image model configured:', modelError);
-        return new Response(
-          JSON.stringify({ error: 'No default Replicate image generation model configured in database' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-        );
-      }
-      apiModel = model;
+      // Use default model for replicate image generation - REQUIRE apiModelId instead
+      return new Response(
+        JSON.stringify({ error: 'apiModelId is required for Replicate image generation' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
     }
     
     // Validate provider and get API key
@@ -152,12 +133,12 @@ serve(async (req) => {
       );
     }
 
-    // Extract and validate job parameters - ONLY rv51 jobs allowed
+    // Extract and validate job parameters - Accept any Replicate image model job type
     const jobType = body.job_type || body.jobType;
-    if (!jobType || !jobType.startsWith('rv51')) {
-      console.error('❌ Invalid job type for replicate-image function:', jobType);
+    if (!jobType) {
+      console.error('❌ Missing job type for replicate-image function');
       return new Response(
-        JSON.stringify({ error: 'This function only handles RV5.1 model jobs. Use queue-job for SDXL models.' }),
+        JSON.stringify({ error: 'Job type is required' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }

@@ -5,6 +5,7 @@ import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy
 import { Slider } from '@/components/ui/slider';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
+import { useImageModels } from '@/hooks/useApiModels';
 
 // Compact reference upload component with sizing
 const ReferenceImageUpload: React.FC<{
@@ -176,9 +177,9 @@ export interface SimplePromptInputProps {
   // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
-  // Model type selection (SDXL vs Replicate RV5.1)
-  modelType?: 'sdxl' | 'replicate_rv51';
-  onModelTypeChange?: (model: 'sdxl' | 'replicate_rv51') => void;
+  // Model selection (SDXL or Replicate models from database)
+  selectedModel?: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
+  onSelectedModelChange?: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => void;
   // Exact copy workflow
   exactCopyMode?: boolean;
   onExactCopyModeChange?: (on: boolean) => void;
@@ -250,8 +251,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onStyleRefChange,
   enhancementModel = 'qwen_instruct',
   onEnhancementModelChange,
-  modelType = 'sdxl',
-  onModelTypeChange,
+  selectedModel = { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' },
+  onSelectedModelChange,
   exactCopyMode = false,
   onExactCopyModeChange,
   useOriginalParams = false,
@@ -277,8 +278,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   seed = null,
   onSeedChange
 }) => {
-  // Base negative prompt hook - use prop modelType for image mode, fallback to 'ltx' for video
-  const negativePromptModelType = mode === 'image' ? modelType : 'ltx';
+  // Fetch available image models from API
+  const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();
+
+  // Base negative prompt hook - use selectedModel type for image mode, fallback to 'ltx' for video  
+  const negativePromptModelType = mode === 'image' ? (selectedModel?.type === 'replicate' ? 'sdxl' : 'sdxl') : 'ltx';
   const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(negativePromptModelType, contentType);
 
   const [showBaseNegative, setShowBaseNegative] = useState(false);
@@ -548,29 +552,45 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         }}
                         className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
                       >
-                        {modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL'}
+                        {selectedModel?.display_name || 'SDXL'}
                         <ChevronDown size={8} />
                       </button>
                       {showModelPopup && (
-                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[80px]">
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[120px] max-h-32 overflow-y-auto">
+                          {/* Built-in SDXL option */}
                           <button 
                             onClick={() => {
-                              onModelTypeChange?.('sdxl');
+                              onSelectedModelChange?.({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
                               setShowModelPopup(false);
                             }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
+                            className={`w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors ${
+                              selectedModel?.id === 'sdxl' ? 'bg-muted' : ''
+                            }`}
                           >
                             SDXL
                           </button>
-                          <button 
-                            onClick={() => {
-                              onModelTypeChange?.('replicate_rv51');
-                              setShowModelPopup(false);
-                            }}
-                            className="w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors"
-                          >
-                            RV5.1
-                          </button>
+                          {/* Replicate models from database */}
+                          {!modelsLoading && imageModels.map((model) => (
+                            <button 
+                              key={model.id}
+                              onClick={() => {
+                                onSelectedModelChange?.({ 
+                                  id: model.id, 
+                                  type: 'replicate', 
+                                  display_name: model.display_name 
+                                });
+                                setShowModelPopup(false);
+                              }}
+                              className={`w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors ${
+                                selectedModel?.id === model.id ? 'bg-muted' : ''
+                              }`}
+                            >
+                              {model.display_name}
+                            </button>
+                          ))}
+                          {modelsLoading && (
+                            <div className="px-2 py-1 text-[10px] text-muted-foreground">Loading models...</div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -908,9 +928,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       {showBaseNegative ? 'Hide base' : 'View base'}
                     </button>
                   </div>
-                  <div className="text-[9px] text-muted-foreground mb-1">
-                    A base negative prompt for {modelType.toUpperCase()} {contentType.toUpperCase()} is applied automatically
-                  </div>
+                   <div className="text-[9px] text-muted-foreground mb-1">
+                     A base negative prompt for {selectedModel?.type?.toUpperCase() || 'SDXL'} {contentType.toUpperCase()} is applied automatically
+                   </div>
                   {showBaseNegative && (
                     <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
                       {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}

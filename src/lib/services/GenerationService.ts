@@ -277,57 +277,38 @@ export class GenerationService {
     console.log('🔥 Routing to Replicate generation:', request.format);
 
     try {
-      // Fetch the active Replicate image generation model
-      const { data: apiModels, error: modelError } = await supabase
-        .from('api_models')
-        .select(`
-          id,
-          display_name,
-          model_key,
-          version,
-          input_defaults,
-          api_providers!inner(name)
-        `)
-        .eq('is_active', true)
-        .eq('modality', 'image')
-        .eq('task', 'generation')
-        .eq('api_providers.name', 'replicate')
-        .order('priority', { ascending: false })
-        .limit(1);
-
-      if (modelError || !apiModels || apiModels.length === 0) {
-        console.error('❌ No active Replicate model found:', modelError);
-        throw new Error('Replicate model not available');
+      // Use the provided apiModelId from metadata instead of fetching default
+      const apiModelId = request.metadata?.apiModelId;
+      
+      if (!apiModelId) {
+        console.error('❌ No apiModelId provided for Replicate generation');
+        throw new Error('Model ID required for Replicate generation');
       }
 
-      const apiModel = apiModels[0];
-      console.log('🎨 Using Replicate model:', apiModel.display_name, apiModel.id);
+      console.log('🎨 Using Replicate model ID:', apiModelId);
 
-      // Build input from model defaults + request overrides
-      const modelDefaults = (apiModel.input_defaults && typeof apiModel.input_defaults === 'object') 
-        ? apiModel.input_defaults as Record<string, any>
-        : {};
-      
+      // Build input with request-specific overrides
       const input = {
-        ...modelDefaults,
-        // Request-specific overrides
+        // Request-specific overrides  
         negative_prompt: request.metadata?.negative_prompt,
         num_outputs: request.batchCount || 1,
-        num_inference_steps: request.metadata?.steps || 20,
+        steps: request.metadata?.steps || 20,
         guidance_scale: request.metadata?.guidance_scale || 7.5,
-        seed: request.metadata?.seed ? Number(request.metadata.seed) : undefined
+        seed: request.metadata?.seed ? Number(request.metadata.seed) : undefined,
+        width: request.metadata?.width || 1024,
+        height: request.metadata?.height || 1024,
+        scheduler: request.metadata?.scheduler || 'EulerA'
       };
 
       const { data, error } = await supabase.functions.invoke('replicate-image', {
         body: {
           prompt: request.prompt,
-          apiModelId: apiModel.id,
+          apiModelId: apiModelId,
           input: input,
           jobType: request.format,
-          quality: config.displayName.includes('High') ? 'high' : 'fast',
+          quality: config.displayName?.includes('High') ? 'high' : 'fast',
           metadata: {
             ...request.metadata,
-            model_type: 'realistic_vision_v51',
             credits: config.credits,
             original_prompt: request.originalPrompt || request.prompt
           }

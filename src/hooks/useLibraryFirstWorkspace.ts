@@ -20,7 +20,7 @@ export interface LibraryFirstWorkspaceState {
   referenceStrength: number;
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
-  modelType: 'sdxl' | 'replicate_rv51';
+  selectedModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
   
   // Video-specific State
   beginningRefImage: File | null;
@@ -72,7 +72,7 @@ export interface LibraryFirstWorkspaceActions {
   setReferenceStrength: (strength: number) => void;
   setContentType: (type: 'sfw' | 'nsfw') => void;
   setQuality: (quality: 'fast' | 'high') => void;
-  setModelType: (model: 'sdxl' | 'replicate_rv51') => void;
+  setSelectedModel: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => void;
   setBeginningRefImage: (image: File | null) => void;
   setEndingRefImage: (image: File | null) => void;
   setVideoDuration: (duration: number) => void;
@@ -137,29 +137,31 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceStrength, setReferenceStrength] = useState(0.5);
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
-  // Model type state (SDXL vs RV5.1) - persist to localStorage  
-  const initializeModelType = (): 'sdxl' | 'replicate_rv51' => {
-    // Check URL param first
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlModel = urlParams.get('model');
-    if (urlModel === 'rv51') return 'replicate_rv51';
-    if (urlModel === 'sdxl') return 'sdxl';
-    
+  // Model Type Selection
+  const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate'; display_name: string } => {
     // Check localStorage
     const saved = localStorage.getItem('workspace-model-type');
-    if (saved === 'replicate_rv51' || saved === 'sdxl') return saved;
+    if (saved === 'replicate_rv51') {
+      // Legacy compatibility - convert to RV5.1 model format
+      return { id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' };
+    } else if (saved === 'sdxl') {
+      return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
+    }
     
-    // Default
-    return 'sdxl';
+    // Default to SDXL
+    return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
   };
   
-  const [modelType, setModelTypeInternal] = useState<'sdxl' | 'replicate_rv51'>(initializeModelType);
+  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate'; display_name: string }>(initializeSelectedModel);
   
   // Wrapper to persist changes
-  const setModelType = useCallback((newModelType: 'sdxl' | 'replicate_rv51') => {
-    console.log('🔄 Model type changed to:', newModelType);
-    localStorage.setItem('workspace-model-type', newModelType);
-    setModelTypeInternal(newModelType);
+  const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => {
+    if (!newModel) return;
+    console.log('🔄 Model selection changed to:', newModel);
+    // Save simplified format for backwards compatibility
+    const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
+    localStorage.setItem('workspace-model-type', saveValue);
+    setSelectedModelInternal(newModel);
   }, []);
   
   // Video-specific State
@@ -521,7 +523,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       const generationRequest = {
         job_type: (mode === 'image' 
-          ? (modelType === 'replicate_rv51' 
+          ? (selectedModel?.type === 'replicate' 
               ? (quality === 'high' ? 'rv51_high' : 'rv51_fast')
               : (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'))
           : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast')
@@ -529,7 +531,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         prompt: finalPrompt,
         quality: quality,
         // format omitted - let edge function default based on job_type
-        model_type: mode === 'image' ? (modelType === 'replicate_rv51' ? 'rv51' : 'sdxl') : 'wan',
+        model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
         reference_image_url: (referenceImageUrl || referenceImage) 
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
           : undefined,
@@ -553,11 +555,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           shot_type: finalShotType,
           camera_angle: finalCameraAngle,
           style: finalStyle,
-          enhancement_model: exactCopyMode || modelType === 'replicate_rv51' ? 'none' : enhancementModel,
+          enhancement_model: exactCopyMode || selectedModel?.type === 'replicate' ? 'none' : enhancementModel,
           contentType: contentType,
           // Skip enhancement in exact copy mode or for replicate models
-          user_requested_enhancement: exactCopyMode || modelType === 'replicate_rv51' ? false : (enhancementModel !== 'none'),
-          skip_enhancement: exactCopyMode || modelType === 'replicate_rv51' ? true : (enhancementModel === 'none'),
+          user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
+          skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
           // Exact copy parameter overrides
           ...(exactCopyMode ? {
             num_inference_steps: 15,
@@ -587,20 +589,20 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       });
 
 
-      // STAGING-FIRST: Route strictly by modelType - RV5.1 goes to replicate-image, SDXL goes to queue-job
-      const edgeFunction = modelType === 'replicate_rv51' ? 'replicate-image' : 'queue-job';
+      // STAGING-FIRST: Route strictly by selectedModel - Replicate goes to replicate-image, SDXL goes to queue-job
+      const edgeFunction = selectedModel?.type === 'replicate' ? 'replicate-image' : 'queue-job';
       
       console.log('🚀 ROUTING:', {
-        modelType,
+        selectedModel,
         edgeFunction,
         job_type: generationRequest.job_type,
         enhancementModel: generationRequest.metadata?.enhancement_model
       });
       
-      // Defensive guard - prevent RV5.1 from using queue-job
-      if (modelType === 'replicate_rv51' && edgeFunction !== 'replicate-image') {
-        console.error('❌ ROUTING ERROR: RV5.1 attempting to use queue-job!');
-        throw new Error('RV5.1 must use replicate-image edge function');
+      // Defensive guard - prevent Replicate from using queue-job
+      if (selectedModel?.type === 'replicate' && edgeFunction !== 'replicate-image') {
+        console.error('❌ ROUTING ERROR: Replicate model attempting to use queue-job!');
+        throw new Error('Replicate models must use replicate-image edge function');
       }
       
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
@@ -630,7 +632,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           createdAt: now,
           status: 'processing',
           url: undefined,
-          modelType: mode === 'image' ? (modelType === 'replicate_rv51' ? 'RV5.1' : 'SDXL') : 'WAN',
+          modelType: mode === 'image' ? (selectedModel?.type === 'replicate' ? selectedModel.display_name : 'SDXL') : 'WAN',
           duration: mode === 'video' ? (videoDuration || undefined) : undefined,
           metadata: {
             job_id: jobId,
@@ -642,7 +644,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       }
       
       // Show success message with model info
-      const modelLabel = modelType === 'replicate_rv51' ? 'RV5.1 (replicate)' : 'SDXL/WAN (workers)';
+      const modelLabel = selectedModel?.type === 'replicate' ? `${selectedModel.display_name} (replicate)` : 'SDXL/WAN (workers)';
       toast({
         title: `${mode === 'image' ? 'Image' : 'Video'} Generation Started`,
         description: `Generating with ${modelLabel}...`,
@@ -667,7 +669,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       setIsGenerating(false);
     }
   }, [
-    prompt, mode, referenceImage, referenceStrength, contentType, quality, modelType,
+    prompt, mode, referenceImage, referenceStrength, contentType, quality, selectedModel,
     beginningRefImage, endingRefImage, videoDuration, motionIntensity, soundEnabled,
     aspectRatio, shotType, cameraAngle, style, styleRef, exactCopyMode, referenceMetadata,
     useOriginalParams, lockSeed, enhancementModel, toast, numImages, videoDuration
@@ -1032,7 +1034,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     referenceStrength,
     contentType,
     quality,
-    modelType,
+    selectedModel,
     beginningRefImage,
     endingRefImage,
     videoDuration,
@@ -1084,7 +1086,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setReferenceStrength,
     setContentType,
     setQuality,
-    setModelType,
+    setSelectedModel,
     setBeginningRefImage,
     setEndingRefImage,
     setVideoDuration,
