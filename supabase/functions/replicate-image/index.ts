@@ -115,9 +115,17 @@ serve(async (req) => {
       );
     }
 
-    // Create job first
-    const jobType = body.jobType || body.job_type || 'rv51_fast';
-    const quality = body.quality || 'fast';
+    // Extract job parameters from request body (use provided job_type from UI)
+    const jobType = body.job_type || body.jobType || 'rv51_fast'; // UI sends job_type
+    const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
+    
+    console.log('🎯 Job parameters extracted:', {
+      jobType_from_body: body.job_type,
+      jobType_legacy: body.jobType,
+      final_jobType: jobType,
+      quality_from_body: body.quality,
+      final_quality: quality
+    });
     
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
@@ -128,7 +136,7 @@ serve(async (req) => {
         status: 'queued',
         quality: quality,
         api_model_id: apiModel?.id || null,
-        model_type: apiModel?.model_family || 'SDXL',
+        model_type: 'rv51', // Always rv51 for this function (normalized lowercase)
         format: 'image',
         metadata: {
           ...body.metadata,
