@@ -43,11 +43,11 @@ serve(async (req) => {
       );
     }
 
-    // Get API model configuration
+    // Resolve API model configuration - REQUIRED, no fallbacks
     let apiModel = null;
-    let replicateApiKey = null;
     
     if (body.apiModelId) {
+      // Use specific model by ID
       const { data: model, error: modelError } = await supabase
         .from('api_models')
         .select(`
@@ -59,35 +59,72 @@ serve(async (req) => {
         .single();
 
       if (modelError || !model) {
-        console.error('❌ API model not found:', modelError);
+        console.error('❌ Specified API model not found:', modelError);
         return new Response(
-          JSON.stringify({ error: 'API model not found or inactive' }),
+          JSON.stringify({ error: 'Specified API model not found or inactive' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
-      } else if (model.api_providers.name !== 'replicate') {
-        console.error('❌ Invalid provider for replicate-image function:', model.api_providers.name);
-        return new Response(
-          JSON.stringify({ error: 'Invalid provider for this function' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      } else {
-        apiModel = model;
-        replicateApiKey = Deno.env.get(model.api_providers.secret_name);
       }
-    }
-    
-    // Fallback to environment variables if no model configuration
-    if (!replicateApiKey) {
-      console.log('🔄 Using fallback Replicate configuration from environment');
-      replicateApiKey = Deno.env.get('REPLICATE_API_TOKEN');
-      if (!replicateApiKey) {
-        console.error('❌ No Replicate API key available');
+      apiModel = model;
+    } else {
+      // Use default model for replicate image generation
+      const { data: model, error: modelError } = await supabase
+        .from('api_models')
+        .select(`
+          *,
+          api_providers!inner(*)
+        `)
+        .eq('modality', 'image')
+        .eq('task', 'generation')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .eq('api_providers.name', 'replicate')
+        .order('priority', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (modelError || !model) {
+        console.error('❌ No default Replicate image model configured:', modelError);
         return new Response(
-          JSON.stringify({ error: 'API provider not configured' }),
+          JSON.stringify({ error: 'No default Replicate image generation model configured in database' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
       }
+      apiModel = model;
     }
+    
+    // Validate provider and get API key
+    if (apiModel.api_providers.name !== 'replicate') {
+      console.error('❌ Invalid provider for replicate-image function:', apiModel.api_providers.name);
+      return new Response(
+        JSON.stringify({ error: 'Model provider must be Replicate for this function' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+    
+    if (!apiModel.version) {
+      console.error('❌ Model version required for Replicate API:', apiModel.model_key);
+      return new Response(
+        JSON.stringify({ error: 'Model version is required in api_models table for Replicate models' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+    
+    const replicateApiKey = Deno.env.get(apiModel.api_providers.secret_name);
+    if (!replicateApiKey) {
+      console.error('❌ Replicate API key not found for secret:', apiModel.api_providers.secret_name);
+      return new Response(
+        JSON.stringify({ error: 'Replicate API key not configured in environment secrets' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+    
+    console.log('✅ Using Replicate model from database:', {
+      model_key: apiModel.model_key,
+      version: apiModel.version,
+      display_name: apiModel.display_name,
+      provider: apiModel.api_providers.name
+    });
 
     const replicate = new Replicate({ auth: replicateApiKey });
 
@@ -115,11 +152,19 @@ serve(async (req) => {
       );
     }
 
-    // Extract job parameters from request body (use provided job_type from UI)
-    const jobType = body.job_type || body.jobType || 'rv51_fast'; // UI sends job_type
+    // Extract and validate job parameters - ONLY rv51 jobs allowed
+    const jobType = body.job_type || body.jobType;
+    if (!jobType || !jobType.startsWith('rv51')) {
+      console.error('❌ Invalid job type for replicate-image function:', jobType);
+      return new Response(
+        JSON.stringify({ error: 'This function only handles RV5.1 model jobs. Use queue-job for SDXL models.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+    
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
-    console.log('🎯 Job parameters extracted:', {
+    console.log('🎯 RV5.1 job parameters validated:', {
       jobType_from_body: body.job_type,
       jobType_legacy: body.jobType,
       final_jobType: jobType,
@@ -135,13 +180,15 @@ serve(async (req) => {
         original_prompt: body.prompt,
         status: 'queued',
         quality: quality,
-        api_model_id: apiModel?.id || null,
-        model_type: 'rv51', // Always rv51 for this function (normalized lowercase)
+        api_model_id: apiModel.id, // Always populated from database
+        model_type: apiModel.model_family || 'rv51', // Use model_family from DB, fallback to rv51
         format: 'image',
         metadata: {
           ...body.metadata,
-          api_model_configured: !!apiModel,
-          model_display_name: apiModel?.display_name || 'RV5.1 (fallback)'
+          provider_name: apiModel.api_providers.name,
+          model_key: apiModel.model_key,
+          version: apiModel.version,
+          api_model_configured: true
         }
       })
       .select()
@@ -157,80 +204,53 @@ serve(async (req) => {
 
     console.log('✅ Job created:', jobData.id);
 
-    // Prepare model input using API model configuration
-    let modelInput;
-    let modelIdentifier;
+    // Build Replicate request using database model configuration
+    console.log(`🎨 Generating with database model: ${apiModel.display_name} (${apiModel.model_key}:${apiModel.version})`);
     
-    if (apiModel) {
-      console.log(`🎨 Generating with configured model: ${apiModel.display_name} (${apiModel.model_key})`);
-      
-      // Start with defaults from API model configuration
-      modelInput = {
-        prompt: body.prompt,
-        ...apiModel.input_defaults
-      };
-      
-      // Map control inputs to RV5.1's expected parameter names
-      if (body.input) {
-        // Map steps (UI uses 'steps', RV5.1 uses 'steps')
-        if (body.input.steps !== undefined) {
-          modelInput.steps = Math.min(Math.max(body.input.steps, 1), 100);
-        }
-        
-        // Map guidance (UI uses 'guidance_scale', RV5.1 uses 'guidance')  
-        if (body.input.guidance_scale !== undefined) {
-          modelInput.guidance = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
-        }
-        
-        // Map dimensions (UI uses 'width'/'height', RV5.1 uses 'width'/'height')
-        if (body.input.width !== undefined) {
-          modelInput.width = Math.min(Math.max(body.input.width, 64), 1920);
-        }
-        if (body.input.height !== undefined) {
-          modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
-        }
-        
-        // Map negative prompt (UI uses 'negative_prompt', RV5.1 uses 'negative_prompt')
-        if (body.input.negative_prompt !== undefined) {
-          modelInput.negative_prompt = body.input.negative_prompt;
-        }
-        
-        // Map seed (UI uses 'seed', RV5.1 uses 'seed')
-        if (body.input.seed !== undefined) {
-          modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
-        }
-        
-        // Map scheduler (UI uses 'scheduler', RV5.1 uses 'scheduler')
-        if (body.input.scheduler !== undefined && ['EulerA', 'MultistepDPM-Solver'].includes(body.input.scheduler)) {
-          modelInput.scheduler = body.input.scheduler;
-        }
+    // Start with defaults from API model configuration
+    const modelInput = {
+      prompt: body.prompt,
+      ...apiModel.input_defaults
+    };
+    
+    // Apply user input overrides with validation
+    if (body.input) {
+      // Map steps (UI uses 'steps', model uses 'steps')
+      if (body.input.steps !== undefined) {
+        modelInput.steps = Math.min(Math.max(body.input.steps, 1), 100);
       }
       
-      modelIdentifier = apiModel.model_key;
-      if (apiModel.version) {
-        modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
+      // Map guidance (UI uses 'guidance_scale', model uses 'guidance')  
+      if (body.input.guidance_scale !== undefined) {
+        modelInput.guidance = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
       }
-    } else {
-      console.log('🎨 Generating with fallback model configuration');
-      const fallbackModel = 'lucataco/realistic-vision-v5.1';
-      const fallbackVersion = '2c8e954decbf70b7607a4414e5785ef9e4de4b8c51d50fb8b8b349160e0ef6bb';
-      modelIdentifier = `${fallbackModel}:${fallbackVersion}`;
       
-      // Use minimal, safe input for fallback model
-      modelInput = {
-        prompt: body.prompt,
-        steps: 20,
-        guidance: 5,
-        width: 1024,
-        height: 1024,
-        scheduler: 'EulerA'
-      };
+      // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
+      if (body.input.width !== undefined) {
+        modelInput.width = Math.min(Math.max(body.input.width, 64), 1920);
+      }
+      if (body.input.height !== undefined) {
+        modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
+      }
       
-      // Only add negative_prompt if provided
-      if (body.input?.negative_prompt) {
+      // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')
+      if (body.input.negative_prompt !== undefined) {
         modelInput.negative_prompt = body.input.negative_prompt;
       }
+      
+      // Map seed (UI uses 'seed', model uses 'seed')
+      if (body.input.seed !== undefined) {
+        modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
+      }
+      
+      // Map scheduler (UI uses 'scheduler', model uses 'scheduler')
+      if (body.input.scheduler !== undefined && ['EulerA', 'MultistepDPM-Solver'].includes(body.input.scheduler)) {
+        modelInput.scheduler = body.input.scheduler;
+      }
     }
+    
+    // Build model identifier from database fields
+    const modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
 
     console.log('🔧 Model input configuration:', modelInput);
 
@@ -263,7 +283,7 @@ serve(async (req) => {
           metadata: {
             ...jobData.metadata,
             prediction_id: prediction.id,
-            actual_model: modelIdentifier,
+            model_identifier: modelIdentifier,
             input_used: modelInput,
             webhook_url: webhookUrl
           }
