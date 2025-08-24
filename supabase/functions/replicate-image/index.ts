@@ -181,18 +181,17 @@ serve(async (req) => {
 
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
-    const webhookSecret = Deno.env.get('REPLICATE_WEBHOOK_SECRET');
     
     console.log('🔧 Creating prediction with model:', modelIdentifier);
     console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
-    
+    console.log('🔧 NOT sending webhook_secret (configured on Replicate dashboard)');
+
     try {
       const prediction = await replicate.predictions.create({
         model: modelIdentifier,
         input: modelInput,
         webhook: webhookUrl,
-        webhook_events_filter: ["start", "completed"],
-        ...(webhookSecret ? { webhook_secret: webhookSecret } : {})
+        webhook_events_filter: ["start", "completed"]
       });
 
       console.log("🚀 Prediction created successfully:", { 
@@ -212,8 +211,7 @@ serve(async (req) => {
             prediction_id: prediction.id,
             actual_model: modelIdentifier,
             input_used: modelInput,
-            webhook_url: webhookUrl,
-            webhook_secret_used: !!webhookSecret
+            webhook_url: webhookUrl
           }
         })
         .eq('id', jobData.id);
@@ -242,8 +240,7 @@ serve(async (req) => {
             model: fallbackModel,
             input: fallbackInput,
             webhook: webhookUrl,
-            webhook_events_filter: ["start", "completed"],
-            ...(webhookSecret ? { webhook_secret: webhookSecret } : {})
+            webhook_events_filter: ["start", "completed"]
           });
 
           console.log("🚀 Fallback prediction created successfully:", { id: prediction.id, status: prediction.status });
