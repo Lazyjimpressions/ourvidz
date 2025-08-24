@@ -128,12 +128,17 @@ serve(async (req) => {
         return new Response('Failed to save to library', { status: 500, headers: corsHeaders })
       }
 
-      // Handle thumbnail copy
+      // Handle thumbnail copy with proper path handling
       let thumbSrc = asset.thumbnail_path || null;
       if (!thumbSrc) {
         // Fallback naming based on temp_storage_path
         const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
         thumbSrc = `${base}.thumb.webp`;
+      }
+
+      // Normalize thumbnail path - strip workspace-temp prefix if present
+      if (thumbSrc && thumbSrc.startsWith('workspace-temp/')) {
+        thumbSrc = thumbSrc.replace('workspace-temp/', '');
       }
 
       // Try to download thumbnail (best-effort)
@@ -153,7 +158,7 @@ serve(async (req) => {
             });
           if (!upThumbErr) {
             libraryThumbPath = thumbDest;
-            console.log('📁 Copying thumbnail:', { thumbSrc, thumbDest });
+            console.log('📁 Copied thumbnail:', { thumbSrc, thumbDest });
           }
         }
       }
@@ -263,6 +268,41 @@ serve(async (req) => {
           return new Response('Failed to save to library', { status: 500, headers: corsHeaders })
         }
 
+        // Handle thumbnail copy for clear_asset
+        let libraryThumbPath: string | null = null;
+        let thumbSrc = asset.thumbnail_path || null;
+        if (!thumbSrc) {
+          // Fallback naming based on temp_storage_path
+          const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+          thumbSrc = `${base}.thumb.webp`;
+        }
+
+        // Normalize thumbnail path - strip workspace-temp prefix if present
+        if (thumbSrc && thumbSrc.startsWith('workspace-temp/')) {
+          thumbSrc = thumbSrc.replace('workspace-temp/', '');
+        }
+
+        // Try to download and copy thumbnail (best-effort)
+        if (thumbSrc) {
+          const { data: thumbData } = await supabaseClient.storage
+            .from('workspace-temp')
+            .download(thumbSrc);
+          
+          if (thumbData) {
+            const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+            const { error: upThumbErr } = await supabaseClient.storage
+              .from('user-library')
+              .upload(thumbDest, thumbData, {
+                contentType: 'image/webp',
+                upsert: true
+              });
+            if (!upThumbErr) {
+              libraryThumbPath = thumbDest;
+              console.log('📁 Copied thumbnail for clear:', { thumbSrc, thumbDest });
+            }
+          }
+        }
+
         // Create library record
         const { data: libraryAsset, error: libraryError } = await supabaseClient
           .from('user_library')
@@ -270,6 +310,7 @@ serve(async (req) => {
             user_id: user.id,
             asset_type: asset.asset_type,
             storage_path: destKey,
+            thumbnail_path: libraryThumbPath,
             file_size_bytes: asset.file_size_bytes,
             mime_type: asset.mime_type,
             duration_seconds: asset.duration_seconds,
@@ -291,7 +332,7 @@ serve(async (req) => {
         libraryAssetId = libraryAsset.id
       }
 
-      // Remove from workspace (but keep temp file for now)
+      // Remove from workspace database
       const { error: deleteError } = await supabaseClient
         .from('workspace_assets')
         .delete()
@@ -301,6 +342,40 @@ serve(async (req) => {
       if (deleteError) {
         console.error('Failed to clear workspace asset:', deleteError)
         return new Response('Failed to clear asset', { status: 500, headers: corsHeaders })
+      }
+
+      // Now clean up workspace-temp files (main + thumbnail)
+      let sourceKey = asset.temp_storage_path
+      if (sourceKey.startsWith('workspace-temp/')) {
+        sourceKey = sourceKey.replace('workspace-temp/', '');
+      }
+
+      const filesToRemove = [sourceKey];
+
+      // Add thumbnail to removal list
+      let thumbSrcForRemoval = asset.thumbnail_path || null;
+      if (!thumbSrcForRemoval) {
+        const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+        thumbSrcForRemoval = `${base}.thumb.webp`;
+      }
+      
+      if (thumbSrcForRemoval) {
+        if (thumbSrcForRemoval.startsWith('workspace-temp/')) {
+          thumbSrcForRemoval = thumbSrcForRemoval.replace('workspace-temp/', '');
+        }
+        filesToRemove.push(thumbSrcForRemoval);
+      }
+
+      // Remove files from workspace-temp (best effort)
+      const { error: storageError } = await supabaseClient.storage
+        .from('workspace-temp')
+        .remove(filesToRemove);
+
+      if (storageError) {
+        console.warn('Failed to remove files from workspace-temp:', storageError);
+        // Continue anyway, DB cleanup was successful
+      } else {
+        console.log('📁 Cleaned up workspace-temp files:', filesToRemove);
       }
 
       console.log(`✅ Asset ${actionRequest.assetId} cleared from workspace${libraryAssetId ? ' and saved to library' : ''}`)
@@ -376,12 +451,44 @@ serve(async (req) => {
                 })
 
               if (!uploadError) {
+                // Handle thumbnail copy for clear_job
+                let libraryThumbPath: string | null = null;
+                let thumbSrc = asset.thumbnail_path || null;
+                if (!thumbSrc) {
+                  const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+                  thumbSrc = `${base}.thumb.webp`;
+                }
+
+                if (thumbSrc && thumbSrc.startsWith('workspace-temp/')) {
+                  thumbSrc = thumbSrc.replace('workspace-temp/', '');
+                }
+
+                if (thumbSrc) {
+                  const { data: thumbData } = await supabaseClient.storage
+                    .from('workspace-temp')
+                    .download(thumbSrc);
+                  
+                  if (thumbData) {
+                    const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+                    const { error: upThumbErr } = await supabaseClient.storage
+                      .from('user-library')
+                      .upload(thumbDest, thumbData, {
+                        contentType: 'image/webp',
+                        upsert: true
+                      });
+                    if (!upThumbErr) {
+                      libraryThumbPath = thumbDest;
+                    }
+                  }
+                }
+
                 const { error: libraryError } = await supabaseClient
                   .from('user_library')
                   .insert({
                     user_id: user.id,
                     asset_type: asset.asset_type,
                     storage_path: destKey,
+                    thumbnail_path: libraryThumbPath,
                     file_size_bytes: asset.file_size_bytes,
                     mime_type: asset.mime_type,
                     duration_seconds: asset.duration_seconds,
@@ -397,12 +504,41 @@ serve(async (req) => {
             }
           }
 
-          // Remove from workspace
+          // Remove from workspace database
           await supabaseClient
             .from('workspace_assets')
             .delete()
             .eq('id', asset.id)
             .eq('user_id', user.id)
+
+          // Clean up workspace-temp files (main + thumbnail) for clear_job
+          const filesToRemove = [];
+          
+          let sourceKeyForRemoval = asset.temp_storage_path;
+          if (sourceKeyForRemoval.startsWith('workspace-temp/')) {
+            sourceKeyForRemoval = sourceKeyForRemoval.replace('workspace-temp/', '');
+          }
+          filesToRemove.push(sourceKeyForRemoval);
+
+          // Add thumbnail to removal list
+          let thumbForRemoval = asset.thumbnail_path || null;
+          if (!thumbForRemoval) {
+            const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+            thumbForRemoval = `${base}.thumb.webp`;
+          }
+          
+          if (thumbForRemoval) {
+            if (thumbForRemoval.startsWith('workspace-temp/')) {
+              thumbForRemoval = thumbForRemoval.replace('workspace-temp/', '');
+            }
+            filesToRemove.push(thumbForRemoval);
+          }
+
+          // Remove files (best effort, continue on error)
+          await supabaseClient.storage
+            .from('workspace-temp')
+            .remove(filesToRemove)
+            .catch(err => console.warn('Failed to remove workspace-temp files for asset', asset.id, err))
 
         } catch (error) {
           errors.push(`Asset ${asset.id}: ${error.message}`)
@@ -496,12 +632,44 @@ serve(async (req) => {
                 })
 
               if (!uploadError) {
+                // Handle thumbnail copy for clear_workspace
+                let libraryThumbPath: string | null = null;
+                let thumbSrc = asset.thumbnail_path || null;
+                if (!thumbSrc) {
+                  const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+                  thumbSrc = `${base}.thumb.webp`;
+                }
+
+                if (thumbSrc && thumbSrc.startsWith('workspace-temp/')) {
+                  thumbSrc = thumbSrc.replace('workspace-temp/', '');
+                }
+
+                if (thumbSrc) {
+                  const { data: thumbData } = await supabaseClient.storage
+                    .from('workspace-temp')
+                    .download(thumbSrc);
+                  
+                  if (thumbData) {
+                    const thumbDest = `${user.id}/${asset.id}.thumb.webp`;
+                    const { error: upThumbErr } = await supabaseClient.storage
+                      .from('user-library')
+                      .upload(thumbDest, thumbData, {
+                        contentType: 'image/webp',
+                        upsert: true
+                      });
+                    if (!upThumbErr) {
+                      libraryThumbPath = thumbDest;
+                    }
+                  }
+                }
+
                 const { error: libraryError } = await supabaseClient
                   .from('user_library')
                   .insert({
                     user_id: user.id,
                     asset_type: asset.asset_type,
                     storage_path: destKey,
+                    thumbnail_path: libraryThumbPath,
                     file_size_bytes: asset.file_size_bytes,
                     mime_type: asset.mime_type,
                     duration_seconds: asset.duration_seconds,
@@ -516,12 +684,42 @@ serve(async (req) => {
               }
             }
           }
+
+          // Clean up workspace-temp files (main + thumbnail) for clear_workspace
+          const filesToRemove = [];
+          
+          let sourceKeyForRemoval = asset.temp_storage_path;
+          if (sourceKeyForRemoval.startsWith('workspace-temp/')) {
+            sourceKeyForRemoval = sourceKeyForRemoval.replace('workspace-temp/', '');
+          }
+          filesToRemove.push(sourceKeyForRemoval);
+
+          // Add thumbnail to removal list
+          let thumbForRemoval = asset.thumbnail_path || null;
+          if (!thumbForRemoval) {
+            const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+            thumbForRemoval = `${base}.thumb.webp`;
+          }
+          
+          if (thumbForRemoval) {
+            if (thumbForRemoval.startsWith('workspace-temp/')) {
+              thumbForRemoval = thumbForRemoval.replace('workspace-temp/', '');
+            }
+            filesToRemove.push(thumbForRemoval);
+          }
+
+          // Remove files (best effort, continue on error)
+          await supabaseClient.storage
+            .from('workspace-temp')
+            .remove(filesToRemove)
+            .catch(err => console.warn('Failed to remove workspace-temp files for asset', asset.id, err))
+
         } catch (error) {
           errors.push(`Asset ${asset.id}: ${error.message}`)
         }
       }
 
-      // Remove all workspace assets
+      // Remove all workspace assets from database
       const { error: deleteError } = await supabaseClient
         .from('workspace_assets')
         .delete()
@@ -576,24 +774,7 @@ serve(async (req) => {
         )
       }
 
-      // Remove from storage
-      let sourceKey = asset.temp_storage_path
-      
-      // Normalize source key - strip workspace-temp prefix if present
-      if (sourceKey.startsWith('workspace-temp/')) {
-        sourceKey = sourceKey.replace('workspace-temp/', '');
-      }
-      
-      const { error: storageError } = await supabaseClient.storage
-        .from('workspace-temp')
-        .remove([sourceKey])
-
-      if (storageError) {
-        console.warn('Failed to remove from storage:', storageError)
-        // Continue anyway, database cleanup is more important
-      }
-
-      // Remove from database
+      // Remove from database first
       const { error: deleteError } = await supabaseClient
         .from('workspace_assets')
         .delete()
@@ -603,6 +784,40 @@ serve(async (req) => {
       if (deleteError) {
         console.error('Failed to delete workspace asset:', deleteError)
         return new Response('Failed to discard asset', { status: 500, headers: corsHeaders })
+      }
+
+      // Now remove from storage (main + thumbnail)
+      let sourceKey = asset.temp_storage_path
+      if (sourceKey.startsWith('workspace-temp/')) {
+        sourceKey = sourceKey.replace('workspace-temp/', '');
+      }
+
+      const filesToRemove = [sourceKey];
+
+      // Add thumbnail to removal list
+      let thumbSrc = asset.thumbnail_path || null;
+      if (!thumbSrc) {
+        const base = asset.temp_storage_path.replace(/\.(png|jpg|jpeg|mp4)$/i, '');
+        thumbSrc = `${base}.thumb.webp`;
+      }
+      
+      if (thumbSrc) {
+        if (thumbSrc.startsWith('workspace-temp/')) {
+          thumbSrc = thumbSrc.replace('workspace-temp/', '');
+        }
+        filesToRemove.push(thumbSrc);
+      }
+
+      // Remove files from workspace-temp (best effort)
+      const { error: storageError } = await supabaseClient.storage
+        .from('workspace-temp')
+        .remove(filesToRemove);
+
+      if (storageError) {
+        console.warn('Failed to remove files from workspace-temp:', storageError);
+        // Continue anyway, database cleanup was successful
+      } else {
+        console.log('📁 Cleaned up workspace-temp files:', filesToRemove);
       }
 
       console.log(`✅ Asset ${actionRequest.assetId} discarded`)

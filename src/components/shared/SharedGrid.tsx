@@ -60,6 +60,7 @@ export type SharedGridProps = {
   actions?: {
     // For Workspace
     onSaveToLibrary?: (asset: SharedAsset) => void;
+    onClear?: (asset: SharedAsset) => void; // Save to library then remove
     onDiscard?: (asset: SharedAsset) => void;
     onSendToRef?: (asset: SharedAsset) => void;
     // For Library
@@ -340,6 +341,21 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           </Button>
         )}
         
+        {isWorkspace && actions?.onClear && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.onClear!(asset);
+            }}
+            title="Clear (save to library then remove)"
+          >
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        )}
+        
         {isWorkspace && actions?.onDiscard && (
           <Button
             size="sm"
@@ -349,7 +365,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
               e.stopPropagation();
               actions.onDiscard!(asset);
             }}
-            title="Discard"
+            title="Delete permanently"
           >
             <Trash2 className="w-3 h-3" />
           </Button>

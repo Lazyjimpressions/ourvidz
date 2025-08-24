@@ -296,18 +296,24 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 export const WorkspaceAssetActions: React.FC<{
   asset: SharedAsset;
   onSave?: () => void;
+  onClear?: () => void;
   onDiscard?: () => void;
   onDownload?: () => void;
   onUseAsReference?: () => void;
-}> = ({ asset, onSave, onDiscard, onDownload, onUseAsReference }) => (
+}> = ({ asset, onSave, onClear, onDiscard, onDownload, onUseAsReference }) => (
   <>
     {onSave && (
       <Button size="sm" variant="secondary" onClick={onSave} className="h-7 w-7 p-0" title="Save to Library">
         <Save className="w-3 h-3" />
       </Button>
     )}
+    {onClear && (
+      <Button size="sm" variant="secondary" onClick={onClear} className="h-7 w-7 p-0" title="Clear (save to library then remove)">
+        <ChevronRight className="w-3 h-3" />
+      </Button>
+    )}
     {onDiscard && (
-      <Button size="sm" variant="destructive" onClick={onDiscard} className="h-7 w-7 p-0" title="Discard">
+      <Button size="sm" variant="destructive" onClick={onDiscard} className="h-7 w-7 p-0" title="Delete permanently">
         <Trash2 className="w-3 h-3" />
       </Button>
     )}
