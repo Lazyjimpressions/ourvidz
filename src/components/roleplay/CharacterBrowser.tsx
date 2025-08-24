@@ -21,7 +21,7 @@ export const CharacterBrowser: React.FC<CharacterBrowserProps> = ({
   const [showNSFW, setShowNSFW] = useState(false);
   const [showAgeVerification, setShowAgeVerification] = useState(false);
   const { characters, isLoading, likeCharacter } = usePublicCharacters();
-  const { user, isAgeVerified } = useAuth();
+  const { user, isAgeVerified, isAdmin } = useAuth();
 
   // Transform database characters to display format with content filtering
   const displayCharacters = useMemo(() => {
@@ -97,6 +97,12 @@ export const CharacterBrowser: React.FC<CharacterBrowserProps> = ({
           id="nsfw-toggle"
           checked={showNSFW}
           onCheckedChange={(checked) => {
+            // Admins bypass age verification
+            if (isAdmin) {
+              setShowNSFW(checked);
+              return;
+            }
+            
             if (checked && !isAgeVerified) {
               if (user) {
                 setShowAgeVerification(true);

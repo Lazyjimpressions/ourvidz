@@ -20,7 +20,7 @@ export const AgeVerificationModal: React.FC<AgeVerificationModalProps> = ({
 }) => {
   const [birthDate, setBirthDate] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile, updateProfile, isAdmin } = useAuth();
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -79,6 +79,11 @@ export const AgeVerificationModal: React.FC<AgeVerificationModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  // Don't render modal for admins
+  if (isAdmin) {
+    return null;
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
