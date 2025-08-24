@@ -68,6 +68,15 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   // Only use thumbPath if explicitly provided (SDXL worker creates thumbnails, Replicate does not)
   const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
+  // Add warning if originalPath is empty to prevent future regressions
+  if (!originalPath) {
+    console.warn('⚠️ AssetMappers.toSharedFromWorkspace: Empty originalPath detected', {
+      id: row.id,
+      rawOriginalPath,
+      availableFields: Object.keys(row).filter(k => k.includes('path') || k.includes('url'))
+    });
+  }
+  
   // Support both naming conventions
   const assetType = row.asset_type || row.assetType || 'image';
   const originalPrompt = row.original_prompt || row.originalPrompt || '';

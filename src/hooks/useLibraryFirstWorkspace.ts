@@ -1050,7 +1050,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         ...optimisticAssets.filter(opt => !workspaceAssets.some(real => real.metadata?.job_id && real.metadata?.job_id === opt.metadata?.job_id)),
         ...workspaceAssets.map(asset => ({
           ...asset,
-          url: signedUrls.get(asset.id) || (asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://')) ? asset.url : undefined)
+          // Preserve original storage path for signing, add signedUrl if available
+          signedUrl: signedUrls.get(asset.id),
+          // Keep original url (storage path) intact for AssetMappers to use
+          url: asset.url
         }))
       ]
     ),
