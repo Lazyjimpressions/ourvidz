@@ -90,6 +90,20 @@ serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
+    // Validate version format (Replicate uses a 32-64 char hex hash)
+    const versionId: string = apiModel.version;
+    const versionFormatOk = /^[a-f0-9]{32,64}$/i.test(versionId);
+    if (!versionFormatOk) {
+      console.error('❌ Invalid Replicate version format. Expected hex hash, got:', versionId);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid Replicate version format',
+          details: 'api_models.version must be the version ID (hash), not a model slug or name',
+          provided: versionId
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
     
     const replicateApiKey = Deno.env.get(apiModel.api_providers.secret_name);
     if (!replicateApiKey) {
@@ -263,12 +277,12 @@ serve(async (req) => {
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
     
-    console.log('🔧 Creating prediction with model:', modelIdentifier);
+    console.log('🔧 Creating prediction with version:', versionId, 'for model_key:', apiModel.model_key);
     console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
 
     try {
       const prediction = await replicate.predictions.create({
-        model: modelIdentifier,
+        version: versionId,
         input: modelInput,
         webhook: webhookUrl,
         webhook_events_filter: ["start", "completed"]
@@ -290,6 +304,7 @@ serve(async (req) => {
             ...jobData.metadata,
             prediction_id: prediction.id,
             model_identifier: modelIdentifier,
+            version_id: versionId,
             input_used: modelInput,
             webhook_url: webhookUrl
           }
@@ -306,22 +321,38 @@ serve(async (req) => {
       });
       
     } catch (predictionError) {
-      console.error("❌ Failed to create Replicate prediction:", predictionError);
+      const err: any = predictionError;
+      const status = err?.response?.status;
+      const url = err?.request?.url;
+      console.error("❌ Failed to create Replicate prediction:", {
+        message: err?.message,
+        status,
+        url,
+      });
 
-      // Mark job as failed
+      // Mark job as failed with richer error info
+      const errorPayload: Record<string, unknown> = {
+        error: 'Prediction creation failed',
+        message: err?.message,
+        status,
+        url,
+        model_key: apiModel.model_key,
+        version_id: versionId,
+        hint: status === 404 ? 'Verify the version_id exists and is accessible to your API token' : undefined,
+        code: status === 404 ? 'MODEL_VERSION_NOT_FOUND' : 'PREDICTION_CREATE_ERROR',
+      };
+
       await supabase
         .from('jobs')
         .update({
           status: 'failed',
-          error_message: `Prediction creation failed: ${(predictionError as any).message}`
+          error_message: JSON.stringify(errorPayload).slice(0, 1000),
         })
         .eq('id', jobData.id);
 
-      return new Response(JSON.stringify({ 
-        error: `Prediction creation failed: ${(predictionError as any).message}` 
-      }), {
+      return new Response(JSON.stringify(errorPayload), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
+        status: status && Number.isInteger(status) ? status : 500,
       });
     }
 
