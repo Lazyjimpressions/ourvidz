@@ -1,4 +1,3 @@
-
 export type GenerationFormat = 
   | 'sdxl_image_fast' 
   | 'sdxl_image_high'

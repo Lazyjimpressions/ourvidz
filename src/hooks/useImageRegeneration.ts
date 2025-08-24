@@ -70,7 +70,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       return;
     }
 
-    const format = currentTile.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+    const format = currentTile.quality === 'high' ? 'rv51_high' : 'rv51_fast';
     
     const generationRequest: GenerationRequest = {
       format,
@@ -88,7 +88,13 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
         num_images: 1,
         // Mark as regeneration to enable cache-busting and variations
         regeneration: true,
-        cache_bust: Date.now().toString()
+        cache_bust: Date.now().toString(),
+        // Pass control settings for proper mapping in edge function
+        steps: 20, // Default for RV5.1
+        guidance_scale: 5, // Will be mapped to 'guidance' in edge function
+        width: 1024,
+        height: 1024,
+        scheduler: 'EulerA'
       }
     };
 
@@ -96,7 +102,8 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       originalImageId: currentTile.id,
       keepSeed: state.keepSeed,
       seed: state.keepSeed ? originalDetails?.seed : 'random',
-      referenceStrength: state.referenceStrength
+      referenceStrength: state.referenceStrength,
+      format: format
     });
 
     try {

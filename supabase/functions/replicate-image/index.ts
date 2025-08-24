@@ -43,7 +43,7 @@ serve(async (req) => {
       );
     }
 
-    // Get API model configuration or use fallback
+    // Get API model configuration
     let apiModel = null;
     let replicateApiKey = null;
     
@@ -59,7 +59,11 @@ serve(async (req) => {
         .single();
 
       if (modelError || !model) {
-        console.error('❌ API model not found, using fallback:', modelError);
+        console.error('❌ API model not found:', modelError);
+        return new Response(
+          JSON.stringify({ error: 'API model not found or inactive' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        );
       } else if (model.api_providers.name !== 'replicate') {
         console.error('❌ Invalid provider for replicate-image function:', model.api_providers.name);
         return new Response(
@@ -124,7 +128,7 @@ serve(async (req) => {
         status: 'queued',
         quality: quality,
         api_model_id: apiModel?.id || null,
-        model_type: apiModel?.model_family || 'rv51',
+        model_type: apiModel?.model_family || 'SDXL',
         format: 'image',
         metadata: {
           ...body.metadata,
@@ -145,30 +149,73 @@ serve(async (req) => {
 
     console.log('✅ Job created:', jobData.id);
 
-    // Prepare model input with safer defaults
+    // Prepare model input using API model configuration
     let modelInput;
     let modelIdentifier;
     
     if (apiModel) {
       console.log(`🎨 Generating with configured model: ${apiModel.display_name} (${apiModel.model_key})`);
+      
+      // Start with defaults from API model configuration
       modelInput = {
         prompt: body.prompt,
-        ...apiModel.input_defaults,
-        ...body.input
+        ...apiModel.input_defaults
       };
+      
+      // Map control inputs to RV5.1's expected parameter names
+      if (body.input) {
+        // Map steps (UI uses 'steps', RV5.1 uses 'steps')
+        if (body.input.steps !== undefined) {
+          modelInput.steps = Math.min(Math.max(body.input.steps, 1), 100);
+        }
+        
+        // Map guidance (UI uses 'guidance_scale', RV5.1 uses 'guidance')  
+        if (body.input.guidance_scale !== undefined) {
+          modelInput.guidance = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        }
+        
+        // Map dimensions (UI uses 'width'/'height', RV5.1 uses 'width'/'height')
+        if (body.input.width !== undefined) {
+          modelInput.width = Math.min(Math.max(body.input.width, 64), 1920);
+        }
+        if (body.input.height !== undefined) {
+          modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
+        }
+        
+        // Map negative prompt (UI uses 'negative_prompt', RV5.1 uses 'negative_prompt')
+        if (body.input.negative_prompt !== undefined) {
+          modelInput.negative_prompt = body.input.negative_prompt;
+        }
+        
+        // Map seed (UI uses 'seed', RV5.1 uses 'seed')
+        if (body.input.seed !== undefined) {
+          modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
+        }
+        
+        // Map scheduler (UI uses 'scheduler', RV5.1 uses 'scheduler')
+        if (body.input.scheduler !== undefined && ['EulerA', 'MultistepDPM-Solver'].includes(body.input.scheduler)) {
+          modelInput.scheduler = body.input.scheduler;
+        }
+      }
+      
       modelIdentifier = apiModel.model_key;
       if (apiModel.version) {
         modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
       }
     } else {
-      console.log('🎨 Generating with fallback RV5.1 model');
-      const fallbackModel = Deno.env.get('REPLICATE_MODEL_SLUG') || 'lucataco/realistic-vision-v5.1';
-      const fallbackVersion = Deno.env.get('REPLICATE_MODEL_VERSION');
-      modelIdentifier = fallbackVersion ? `${fallbackModel}:${fallbackVersion}` : fallbackModel;
+      console.log('🎨 Generating with fallback model configuration');
+      const fallbackModel = 'lucataco/realistic-vision-v5.1';
+      const fallbackVersion = '2c8e954decbf70b7607a4414e5785ef9e4de4b8c51d50fb8b8b349160e0ef6bb';
+      modelIdentifier = `${fallbackModel}:${fallbackVersion}`;
       
-      // Use minimal, safe input for fallback model to avoid 422 validation errors
+      // Use minimal, safe input for fallback model
       modelInput = {
-        prompt: body.prompt
+        prompt: body.prompt,
+        steps: 20,
+        guidance: 5,
+        width: 1024,
+        height: 1024,
+        scheduler: 'EulerA'
       };
       
       // Only add negative_prompt if provided
@@ -184,7 +231,6 @@ serve(async (req) => {
     
     console.log('🔧 Creating prediction with model:', modelIdentifier);
     console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
-    console.log('🔧 NOT sending webhook_secret (configured on Replicate dashboard)');
 
     try {
       const prediction = await replicate.predictions.create({
@@ -228,69 +274,7 @@ serve(async (req) => {
     } catch (predictionError) {
       console.error("❌ Failed to create Replicate prediction:", predictionError);
 
-      // If the configured model is not found (404), try a safe fallback model
-      const status = (predictionError as any)?.response?.status;
-      if (status === 404) {
-        try {
-          const fallbackModel = 'black-forest-labs/flux-schnell';
-          const fallbackInput = { prompt: body.prompt };
-          console.warn(`⚠️ Primary model ${modelIdentifier} returned 404. Falling back to ${fallbackModel}.`);
-
-          const prediction = await replicate.predictions.create({
-            model: fallbackModel,
-            input: fallbackInput,
-            webhook: webhookUrl,
-            webhook_events_filter: ["start", "completed"]
-          });
-
-          console.log("🚀 Fallback prediction created successfully:", { id: prediction.id, status: prediction.status });
-
-          await supabase
-            .from('jobs')
-            .update({
-              status: 'processing',
-              started_at: new Date().toISOString(),
-              metadata: {
-                ...jobData.metadata,
-                prediction_id: prediction.id,
-                actual_model: fallbackModel,
-                input_used: fallbackInput,
-                webhook_url: webhookUrl,
-                fallback_used: true,
-                primary_error: (predictionError as any)?.message || 'unknown'
-              }
-            })
-            .eq('id', jobData.id);
-
-          return new Response(JSON.stringify({
-            jobId: jobData.id,
-            predictionId: prediction.id,
-            status: 'queued',
-            fallbackModel
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 200,
-          });
-        } catch (fallbackError) {
-          console.error('❌ Fallback model also failed:', fallbackError);
-          await supabase
-            .from('jobs')
-            .update({
-              status: 'failed',
-              error_message: `Primary 404, fallback failed: ${(fallbackError as any)?.message}`
-            })
-            .eq('id', jobData.id);
-
-          return new Response(JSON.stringify({
-            error: `Primary 404, fallback failed: ${(fallbackError as any)?.message}`
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 500,
-          });
-        }
-      }
-
-      // Non-404 errors: mark failed
+      // Mark job as failed
       await supabase
         .from('jobs')
         .update({
