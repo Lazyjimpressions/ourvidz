@@ -65,7 +65,8 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
   const rawThumbPath = row.thumbnail_path || row.thumbnailPath || row.thumbnailUrl || null;
   
   const originalPath = normalizePath(rawOriginalPath) || '';
-  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : deriveThumbnailPath(originalPath);
+  // Only use thumbPath if explicitly provided (SDXL worker creates thumbnails, Replicate does not)
+  const thumbPath = rawThumbPath ? normalizePath(rawThumbPath) : null;
   
   // Support both naming conventions
   const assetType = row.asset_type || row.assetType || 'image';
@@ -117,7 +118,8 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
       thumbPath: sharedAsset.thumbPath,
       type: sharedAsset.type,
       hasOriginalPath: !!sharedAsset.originalPath,
-      hasThumbPath: !!sharedAsset.thumbPath
+      hasThumbPath: !!sharedAsset.thumbPath,
+      willUseOriginalAsThumb: !sharedAsset.thumbPath && sharedAsset.type === 'image'
     });
   }
   
