@@ -1,123 +1,138 @@
-# Supabase Inventory – Single Command
+# Supabase Inventory – Working SQL Commands
 
-Run this one SQL in Supabase online to generate the definitive inventory (one row per base table in `public`) with aggregated columns, primary keys, foreign keys, unique and check constraints, and indexes.
+Run these SQL commands in Supabase online SQL editor to get current schema information.
+
+## 1. Simple Table List (Start Here)
 
 ```sql
-with base_tables as (
-  select table_name
-  from information_schema.tables
-  where table_schema = 'public' and table_type = 'BASE TABLE'
-),
-column_info as (
-  select
-    c.table_name,
-    json_agg(
-      json_build_object(
-        'ordinal_position', c.ordinal_position,
-        'column_name', c.column_name,
-        'data_type', c.data_type,
-        'udt', c.udt_name,
-        'is_nullable', c.is_nullable,
-        'column_default', c.column_default
-      ) order by c.ordinal_position
-    ) as columns
-  from information_schema.columns c
-  where c.table_schema = 'public'
-  group by c.table_name
-),
-pk_info as (
-  select
-    tc.table_name,
-    json_agg(kcu.column_name order by kcu.ordinal_position) as primary_key
-  from information_schema.table_constraints tc
-  join information_schema.key_column_usage kcu
-    on kcu.constraint_name = tc.constraint_name
-    and kcu.table_schema = tc.table_schema
-  where tc.table_schema = 'public' and tc.constraint_type = 'PRIMARY KEY'
-  group by tc.table_name
-),
-fk_info as (
-  select
-    tc.table_name,
-    json_agg(
-      json_build_object(
-        'column', kcu.column_name,
-        'foreign_table', ccu.table_name,
-        'foreign_column', ccu.column_name,
-        'constraint_name', tc.constraint_name
-      ) order by kcu.ordinal_position
-    ) as foreign_keys
-  from information_schema.table_constraints tc
-  join information_schema.key_column_usage kcu
-    on kcu.constraint_name = tc.constraint_name
-    and kcu.table_schema = tc.table_schema
-  join information_schema.constraint_column_usage ccu
-    on ccu.constraint_name = tc.constraint_name
-    and ccu.table_schema = tc.table_schema
-  where tc.table_schema = 'public' and tc.constraint_type = 'FOREIGN KEY'
-  group by tc.table_name
-),
-unique_info as (
-  select
-    tc.table_name,
-    json_agg(
-      json_build_object(
-        'constraint_name', tc.constraint_name,
-        'columns', (
-          select json_agg(k2.column_name order by k2.ordinal_position)
-          from information_schema.key_column_usage k2
-          where k2.constraint_name = tc.constraint_name
-            and k2.table_schema = tc.table_schema
-        )
-      ) order by tc.constraint_name
-    ) as unique_constraints
-  from information_schema.table_constraints tc
-  where tc.table_schema = 'public' and tc.constraint_type = 'UNIQUE'
-  group by tc.table_name
-),
-check_info as (
-  select
-    tc.table_name,
-    json_agg(
-      json_build_object(
-        'constraint_name', tc.constraint_name,
-        'definition', pg_get_constraintdef(pc.oid, true)
-      ) order by tc.constraint_name
-    ) as check_constraints
-  from information_schema.table_constraints tc
-  join pg_constraint pc on pc.conname = tc.constraint_name
-  join pg_class rel on rel.oid = pc.conrelid
-  join pg_namespace n on n.oid = rel.relnamespace
-  where tc.table_schema = 'public' and tc.constraint_type = 'CHECK' and n.nspname = 'public'
-  group by tc.table_name
-),
-index_info as (
-  select
-    tablename as table_name,
-    json_agg(
-      json_build_object(
-        'index_name', indexname,
-        'indexdef', indexdef
-      ) order by indexname
-    ) as indexes
-  from pg_indexes
-  where schemaname = 'public'
-  group by tablename
-)
-select
-  t.table_name,
-  coalesce(ci.columns, '[]'::json) as columns,
-  coalesce(pk.primary_key, '[]'::json) as primary_key,
-  coalesce(fk.foreign_keys, '[]'::json) as foreign_keys,
-  coalesce(uq.unique_constraints, '[]'::json) as unique_constraints,
-  coalesce(ch.check_constraints, '[]'::json) as check_constraints,
-  coalesce(ix.indexes, '[]'::json) as indexes
-from base_tables t
-left join column_info ci on ci.table_name = t.table_name
-left join pk_info pk on pk.table_name = t.table_name
-left join fk_info fk on fk.table_name = t.table_name
-left join unique_info uq on uq.table_name = t.table_name
-left join check_info ch on ch.table_name = t.table_name
-left join index_info ix on ix.table_name = t.table_name
-order by t.table_name;
+-- Get all tables in public schema
+SELECT 
+    table_name,
+    (SELECT COUNT(*) FROM information_schema.columns 
+     WHERE table_schema = 'public' AND table_name = t.table_name) as column_count
+FROM information_schema.tables t
+WHERE table_schema = 'public' 
+    AND table_type = 'BASE TABLE'
+ORDER BY table_name;
 ```
+
+## 2. Detailed Table Information
+
+```sql
+-- Get detailed information for a specific table (replace 'table_name' with actual table)
+SELECT 
+    column_name,
+    data_type,
+    is_nullable,
+    column_default,
+    ordinal_position
+FROM information_schema.columns 
+WHERE table_schema = 'public' 
+    AND table_name = 'profiles'  -- Change this to the table you want
+ORDER BY ordinal_position;
+```
+
+## 3. All Tables with Column Counts
+
+```sql
+-- Get all tables with their column information
+SELECT 
+    t.table_name,
+    json_agg(
+        json_build_object(
+            'column_name', c.column_name,
+            'data_type', c.data_type,
+            'is_nullable', c.is_nullable,
+            'column_default', c.column_default,
+            'ordinal_position', c.ordinal_position
+        ) ORDER BY c.ordinal_position
+    ) as columns
+FROM information_schema.tables t
+LEFT JOIN information_schema.columns c 
+    ON c.table_name = t.table_name 
+    AND c.table_schema = t.table_schema
+WHERE t.table_schema = 'public' 
+    AND t.table_type = 'BASE TABLE'
+GROUP BY t.table_name
+ORDER BY t.table_name;
+```
+
+## 4. Foreign Key Relationships
+
+```sql
+-- Get foreign key relationships
+SELECT 
+    tc.table_name,
+    kcu.column_name,
+    ccu.table_name AS foreign_table_name,
+    ccu.column_name AS foreign_column_name,
+    tc.constraint_name
+FROM information_schema.table_constraints AS tc 
+JOIN information_schema.key_column_usage AS kcu
+    ON tc.constraint_name = kcu.constraint_name
+    AND tc.table_schema = kcu.table_schema
+JOIN information_schema.constraint_column_usage AS ccu
+    ON ccu.constraint_name = tc.constraint_name
+    AND ccu.table_schema = tc.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY' 
+    AND tc.table_schema = 'public'
+ORDER BY tc.table_name, kcu.column_name;
+```
+
+## 5. Primary Keys
+
+```sql
+-- Get primary keys
+SELECT 
+    tc.table_name,
+    kcu.column_name
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+    ON kcu.constraint_name = tc.constraint_name
+    AND kcu.table_schema = tc.table_schema
+WHERE tc.constraint_type = 'PRIMARY KEY' 
+    AND tc.table_schema = 'public'
+ORDER BY tc.table_name, kcu.ordinal_position;
+```
+
+## 6. Indexes
+
+```sql
+-- Get indexes
+SELECT 
+    tablename,
+    indexname,
+    indexdef
+FROM pg_indexes
+WHERE schemaname = 'public'
+ORDER BY tablename, indexname;
+```
+
+## 7. Storage Buckets
+
+```sql
+-- Get storage bucket information
+SELECT 
+    name,
+    public,
+    file_size_limit,
+    allowed_mime_types
+FROM storage.buckets
+ORDER BY name;
+```
+
+## Usage Instructions
+
+1. **Start with command #1** to see all your tables
+2. **Use command #2** to get details for specific tables (change the table name)
+3. **Use command #3** to get all tables with their columns in JSON format
+4. **Use commands #4-6** to get relationships, keys, and indexes
+5. **Use command #7** to get storage bucket information
+
+## For Documentation Updates
+
+After running these commands, you can:
+1. Copy the results and update the individual table documentation files
+2. Use the JSON output from command #3 to populate schema sections
+3. Use the foreign key information to document relationships
+4. Use the bucket information to update bucket documentation files
