@@ -157,8 +157,11 @@ export const SimplifiedWorkspace: React.FC = () => {
           });
           setReferenceImage(file);
           
-          // Set reference strength for better results
-          setReferenceStrength(0.8);
+          // Set reference strength for modify mode (default from library)
+          setReferenceStrength(0.6);
+          
+          // Explicitly set modify mode for library references
+          setExactCopyMode(false);
           
           // Ensure image mode is active
           updateMode('image');

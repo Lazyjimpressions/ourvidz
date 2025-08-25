@@ -317,12 +317,18 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Auto-enable exact copy when reference image is set
+  // Auto-enable exact copy when reference image is set (only if prompt is empty)
   const handleReferenceFileChange = (file: File | null) => {
     onReferenceImageChange(file);
     if (file) {
-      onExactCopyModeChange?.(true);
-      onReferenceStrengthChange(0.8); // High strength for exact copying
+      // Only auto-enable Exact Copy if prompt is empty, otherwise default to Modify
+      if (prompt.trim() === '') {
+        onExactCopyModeChange?.(true);
+        onReferenceStrengthChange(0.8); // High strength for exact copying
+      } else {
+        onExactCopyModeChange?.(false);
+        onReferenceStrengthChange(0.6); // Moderate strength for modify
+      }
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed

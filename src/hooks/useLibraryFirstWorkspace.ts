@@ -546,8 +546,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         reference_image_url: (referenceImageUrl || referenceImage) 
           ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
           : undefined,
-        reference_strength: exactCopyMode ? 0.9 : referenceStrength,
-        denoise_strength: exactCopyMode ? 0.05 : (1 - referenceStrength),
+        reference_strength: exactCopyMode ? 0.9 : Math.min(referenceStrength, 0.7), // Clamp for modify mode
+        denoise_strength: exactCopyMode ? 0.05 : (1 - Math.min(referenceStrength, 0.7)),
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
@@ -571,6 +571,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           // Skip enhancement in exact copy mode or for replicate models
           user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
           skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
+          // Add reference mode and entry path for server classification
+          reference_mode: exactCopyMode ? 'copy' : (referenceImageUrl || referenceImage ? 'modify' : undefined),
           // Exact copy parameter overrides
           ...(exactCopyMode ? {
             num_inference_steps: 15,
@@ -591,8 +593,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         referenceImage: !!referenceImage,
         referenceImageUrl: !!referenceImageUrl,
         exactCopyMode,
+        lockSeed,
+        seed: finalSeed,
+        referenceStrength: generationRequest.reference_strength,
+        denoise: generationRequest.denoise_strength,
         hasReferenceData: !!(referenceImageUrl || referenceImage),
         referenceMetadata: generationRequest.reference_image_url ? 'URL set' : 'No URL',
+        reference_mode: generationRequest.metadata?.reference_mode,
+        client_clamped_strength: exactCopyMode ? false : (referenceStrength !== Math.min(referenceStrength, 0.7)),
         // DEBUG: Full metadata being sent
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,

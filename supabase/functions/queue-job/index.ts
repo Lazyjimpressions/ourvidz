@@ -328,6 +328,9 @@ serve(async (req) => {
     const batchCount = isImageJob ? (jobRequest.num_images || userMetadata.num_images || 1) : 1;
     const clampedBatchCount = batchCount <= 1 ? 1 : (batchCount <= 3 ? 3 : 6);
 
+    // Force modify behavior - compute reference_strength from denoise for modify mode
+    const finalReferenceStrength = isReferenceModify ? (1 - denoise) : jobRequest.reference_strength;
+    
     const queuePayload = {
       id: job.id,
       type: jobRequest.job_type.replace('wan_video_', 'video_'),
@@ -346,7 +349,7 @@ serve(async (req) => {
         ...userMetadata,
         // ✅ CRITICAL: Include strength parameters for worker
         denoise_strength: denoise,
-        reference_strength: jobRequest.reference_strength,
+        reference_strength: finalReferenceStrength,  // Override for modify mode
         exact_copy_mode: isPromptlessUploadedExactCopy,
         reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
         reference_image_url: referenceUrl || undefined,
@@ -354,7 +357,8 @@ serve(async (req) => {
         originalEnhancedPrompt: userMetadata.originalEnhancedPrompt || undefined,
         originalSeed: userMetadata.seed || undefined,
         reference_type: userMetadata.reference_type || (isPromptlessUploadedExactCopy ? 'character' : 'style'),
-        nsfw_optimization: (userMetadata.contentType || 'sfw') === 'nsfw'
+        nsfw_optimization: (userMetadata.contentType || 'sfw') === 'nsfw',
+        reference_strength_overridden: isReferenceModify && (finalReferenceStrength !== jobRequest.reference_strength)
       },
       // ✅ FIXED: Only include negative_prompt for modify/txt2img flows
       negative_prompt: isPromptlessUploadedExactCopy ? undefined : (jobRequest.negative_prompt || userMetadata.negative_prompt),
