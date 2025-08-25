@@ -390,7 +390,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
   // Generate content (simplified - always goes to library)
   const generate = useCallback(async (
-    referenceImageUrl?: string | null,
+    overrideReferenceImageUrl?: string | null,
     beginningRefImageUrl?: string | null, 
     endingRefImageUrl?: string | null,
     seed?: number | null
@@ -532,6 +532,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
         : undefined;
 
+      // FIX: Compute effective reference URL (not shadowed by parameter)
+      const effRefUrl = (overrideReferenceImageUrl || referenceImageUrl || referenceImage) 
+        ? (overrideReferenceImageUrl || referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
+        : undefined;
+
       const generationRequest = {
         job_type: (mode === 'image' 
           ? (selectedModel?.type === 'replicate' 
@@ -543,9 +548,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         quality: quality,
         // format omitted - let edge function default based on job_type
         model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
-        reference_image_url: (referenceImageUrl || referenceImage) 
-          ? (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
-          : undefined,
+        reference_image_url: effRefUrl,
         reference_strength: exactCopyMode ? 0.9 : Math.min(referenceStrength, 0.7), // Clamp for modify mode
         denoise_strength: exactCopyMode ? 0.05 : (1 - Math.min(referenceStrength, 0.7)),
         seed: finalSeed,
@@ -561,6 +564,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           motion_intensity: mode === 'video' ? motionIntensity : undefined,
           start_reference_url: startRefUrl,
           end_reference_url: endRefUrl,
+          // FIX: Add reference_image_url to metadata for server-side logging
+          reference_image_url: effRefUrl,
           // Control parameters
           aspect_ratio: finalAspectRatio,
           shot_type: finalShotType,
@@ -572,7 +577,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
           skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
           // Add reference mode and entry path for server classification
-          reference_mode: exactCopyMode ? 'copy' : (referenceImageUrl || referenceImage ? 'modify' : undefined),
+          reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
           // Exact copy parameter overrides
           ...(exactCopyMode ? {
             num_inference_steps: 15,
@@ -588,19 +593,29 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
       };
       
-      // DEBUG: Log reference image handling
+      // DEBUG: Enhanced logging for reference URL troubleshooting
       console.log('🎯 GENERATION REQUEST FINAL DEBUG:', {
-        referenceImage: !!referenceImage,
-        referenceImageUrl: !!referenceImageUrl,
-        exactCopyMode,
-        lockSeed,
-        seed: finalSeed,
-        referenceStrength: generationRequest.reference_strength,
-        denoise: generationRequest.denoise_strength,
-        hasReferenceData: !!(referenceImageUrl || referenceImage),
-        referenceMetadata: generationRequest.reference_image_url ? 'URL set' : 'No URL',
-        reference_mode: generationRequest.metadata?.reference_mode,
-        client_clamped_strength: exactCopyMode ? false : (referenceStrength !== Math.min(referenceStrength, 0.7)),
+        parameterValues: {
+          overrideReferenceImageUrl: !!overrideReferenceImageUrl,
+          stateReferenceImageUrl: !!referenceImageUrl,
+          stateReferenceImage: !!referenceImage
+        },
+        computed: {
+          effRefUrl: !!effRefUrl,
+          effRefUrlValue: effRefUrl ? 'URL_SET' : 'NO_URL'
+        },
+        requestData: {
+          reference_image_url: !!generationRequest.reference_image_url,
+          reference_mode: generationRequest.metadata?.reference_mode,
+          referenceStrength: generationRequest.reference_strength,
+          denoise: generationRequest.denoise_strength
+        },
+        mode: {
+          exactCopyMode,
+          lockSeed,
+          seed: finalSeed,
+          client_clamped_strength: exactCopyMode ? false : (referenceStrength !== Math.min(referenceStrength, 0.7))
+        },
         // DEBUG: Full metadata being sent
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
