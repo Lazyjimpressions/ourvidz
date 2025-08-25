@@ -110,6 +110,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,
+    applyExactCopyParamsFromItem,
     setExactCopyMode,
     setUseOriginalParams,
     setLockSeed,
@@ -320,12 +321,12 @@ export const SimplifiedWorkspace: React.FC = () => {
         setExactCopyMode(true);
         
         // Apply exact copy parameters
-        applyAssetParamsFromItem(item);
+        applyExactCopyParamsFromItem(item);
       }
       
       toast({
         title: "Reference set",
-        description: "Asset is now being used as reference",
+        description: "Asset is now being used as reference (exact copy mode)",
       });
     } catch (error) {
       console.error('Failed to use item as reference:', error);
@@ -383,9 +384,8 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleUseSeed = (item: UnifiedAsset) => {
     if (item.metadata?.seed) {
-      // Apply seed and enable lock
+      // Apply seed and enable lock (modify mode, not exact copy)
       setLockSeed(true);
-      setExactCopyMode(true);
       applyAssetParamsFromItem(item);
     }
   };

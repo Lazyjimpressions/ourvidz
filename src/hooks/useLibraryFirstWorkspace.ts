@@ -1031,10 +1031,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       if (gen.cameraAngle) setCameraAngle(gen.cameraAngle);
       if (gen.style) setStyle(gen.style);
 
-      // Reference strength for exact copy
-      setReferenceStrength(0.9);
-      setExactCopyMode(true);
-      setUseOriginalParams(true);
+      // Default to modify mode (not exact copy)
+      setReferenceStrength(0.6);
       // Ensure image mode
       setMode('image');
     } catch (e) {
