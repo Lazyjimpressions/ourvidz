@@ -83,6 +83,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     updateMode,
     setPrompt,
     setReferenceImage,
+    setReferenceImageUrl,
     setReferenceStrength,
     setContentType,
     setQuality,
@@ -339,44 +340,37 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   // New handler for sending to ref box (modify mode)
-  const handleSendToRef = async (item: UnifiedAsset) => {
+  const handleSendToRef = (item: UnifiedAsset) => {
     try {
-      // Use item.url which now includes signed URL from hook
-      const referenceUrl = item.url;
-      
-      if (!referenceUrl) {
-        console.error('Asset URL not available for reference');
-        toast({
-          title: "Reference failed",
-          description: "Asset URL not available",
-          variant: "destructive",
+      if (item.url) {
+        setReferenceImageUrl(item.url);
+        setReferenceImage(null);
+        
+        // Explicitly set modify mode (not exact copy)
+        setExactCopyMode(false);
+        setLockSeed(false);
+        setReferenceStrength(0.6);
+        
+        // Apply parameters
+        applyAssetParamsFromItem(item);
+        
+        console.log('🎯 SEND TO REF: Applied modify parameters', {
+          exactCopyMode: false,
+          lockSeed: false,
+          referenceStrength: 0.6,
+          entryPath: 'tile_add_to_ref'
         });
-        return;
+        
+        toast({
+          title: "Reference set",
+          description: "Asset added to reference box (modify mode)",
+        });
       }
-
-      // Convert item to blob and create File object
-      const response = await fetch(referenceUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `reference_${item.id}.${item.type === 'video' ? 'mp4' : 'png'}`, {
-        type: item.type === 'video' ? 'video/mp4' : 'image/png'
-      });
-
-      // Set as reference image in modify mode
-      setReferenceImage(file);
-      setReferenceStrength(0.6); // Modify-friendly strength
-      
-      // Apply basic parameters only (not exact copy)
-      applyAssetParamsFromItem(item);
-      
-      toast({
-        title: "Reference set",
-        description: "Asset added to ref box for modification",
-      });
     } catch (error) {
-      console.error('Failed to send item to ref:', error);
+      console.error('Failed to set reference:', error);
       toast({
-        title: "Reference failed",
-        description: "Failed to send asset to ref box",
+        title: "Error",
+        description: "Failed to set reference image",
         variant: "destructive",
       });
     }
@@ -384,9 +378,16 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleUseSeed = (item: UnifiedAsset) => {
     if (item.metadata?.seed) {
-      // Apply seed and enable lock (modify mode, not exact copy)
+      // Apply seed and enable lock (stay in current mode)
       setLockSeed(true);
       applyAssetParamsFromItem(item);
+      
+      console.log('🎯 USE SEED: Applied seed lock', {
+        seed: item.metadata.seed,
+        lockSeed: true,
+        exactCopyMode: exactCopyMode, // Keep current mode
+        entryPath: 'use_seed'
+      });
     }
   };
 

@@ -17,6 +17,7 @@ export interface LibraryFirstWorkspaceState {
   mode: 'image' | 'video';
   prompt: string;
   referenceImage: File | null;
+  referenceImageUrl: string | null;
   referenceStrength: number;
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
@@ -69,6 +70,7 @@ export interface LibraryFirstWorkspaceActions {
   updateMode: (newMode: 'image' | 'video') => void;
   setPrompt: (prompt: string) => void;
   setReferenceImage: (image: File | null) => void;
+  setReferenceImageUrl: (url: string | null) => void;
   setReferenceStrength: (strength: number) => void;
   setContentType: (type: 'sfw' | 'nsfw') => void;
   setQuality: (quality: 'fast' | 'high') => void;
@@ -135,6 +137,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
+  const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [referenceStrength, setReferenceStrength] = useState(0.6); // Default to modify-friendly strength
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
@@ -991,42 +994,21 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
   // Apply original generation parameters from an asset's metadata
   const applyAssetParamsFromItem = useCallback((item: UnifiedAsset) => {
+    console.log('📋 Applying asset parameters from item (modify-friendly):', item);
+    
     try {
-      const gen = (item.metadata as any)?.generationParams || (item.metadata as any) || {};
-
-      // Seed
-      const seedFromItem: number | undefined = gen.seed ?? (item as any).seed ?? undefined;
-      if (seedFromItem !== undefined && seedFromItem !== null) {
-        // Lock seed if available; consume when generate() is called via passed seed parameter
-        setLockSeed(true);
-      } else {
-        setLockSeed(false);
+      // Apply model type only
+      if (item.metadata?.modelType) {
+        setSelectedModel({ 
+          id: item.metadata.modelType === 'replicate' ? 'rv51' : 'sdxl',
+          type: item.metadata.modelType === 'replicate' ? 'replicate' : 'sdxl',
+          display_name: item.metadata.modelType === 'replicate' ? 'RV5.1' : 'SDXL'
+        });
       }
 
-      // Aspect ratio mapping from width/height or explicit aspect
-      let nextAspect: '16:9' | '1:1' | '9:16' = aspectRatio;
-      if (gen.aspectRatio) {
-        if (gen.aspectRatio === '16:9' || gen.aspectRatio === '1:1' || gen.aspectRatio === '9:16') {
-          nextAspect = gen.aspectRatio;
-        }
-      } else if (gen.width && gen.height) {
-        const w = Number(gen.width), h = Number(gen.height);
-        if (w && h) {
-          const r = w / h;
-          if (Math.abs(r - 16/9) < 0.05) nextAspect = '16:9';
-          else if (Math.abs(r - 9/16) < 0.05) nextAspect = '9:16';
-          else if (Math.abs(r - 1) < 0.05) nextAspect = '1:1';
-        }
-      }
-      setAspectRatio(nextAspect);
-
-      // Quality/content type
-      if (item.quality === 'high' || item.quality === 'fast') setQuality(item.quality as any);
-      if ((item.metadata as any)?.contentType === 'sfw' || (item.metadata as any)?.contentType === 'nsfw') {
-        setContentType((item.metadata as any).contentType);
-      }
-
-      // Shot / angle / style
+      // Apply generation parameters from metadata
+      const gen = item.metadata?.generationParams || {};
+      if (gen.aspectRatio) setAspectRatio(gen.aspectRatio);
       if (gen.shotType) setShotType(gen.shotType);
       if (gen.cameraAngle) setCameraAngle(gen.cameraAngle);
       if (gen.style) setStyle(gen.style);
@@ -1035,10 +1017,47 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       setReferenceStrength(0.6);
       // Ensure image mode
       setMode('image');
+      
+      // IMPORTANT: Do not touch seed or lockSeed in modify-friendly function
     } catch (e) {
-      console.warn('applyAssetParamsFromItem failed', e);
+      console.warn('Failed to apply asset parameters:', e);
     }
-  }, [aspectRatio, setAspectRatio, setQuality, setContentType, setShotType, setCameraAngle, setStyle]);
+  }, [setMode, setReferenceStrength, setSelectedModel, setAspectRatio, setShotType, setCameraAngle, setStyle]);
+
+  const applyExactCopyParamsFromItem = useCallback((item: UnifiedAsset) => {
+    console.log('🎯 Applying exact copy parameters from item:', item);
+    
+    try {
+      // Apply seed and lock it for exact copy
+      if (item.metadata?.seed) {
+        setLockSeed(true);
+      }
+      
+      if (item.metadata?.modelType) {
+        setSelectedModel({ 
+          id: item.metadata.modelType === 'replicate' ? 'rv51' : 'sdxl',
+          type: item.metadata.modelType === 'replicate' ? 'replicate' : 'sdxl',
+          display_name: item.metadata.modelType === 'replicate' ? 'RV5.1' : 'SDXL'
+        });
+      }
+
+      // Apply generation parameters from metadata
+      const gen = item.metadata?.generationParams || {};
+      if (gen.aspectRatio) setAspectRatio(gen.aspectRatio);
+      if (gen.shotType) setShotType(gen.shotType);
+      if (gen.cameraAngle) setCameraAngle(gen.cameraAngle);
+      if (gen.style) setStyle(gen.style);
+
+      // High strength for exact copy
+      setReferenceStrength(0.9);
+      setExactCopyMode(true);
+      setUseOriginalParams(true);
+      // Ensure image mode
+      setMode('image');
+    } catch (e) {
+      console.warn('Failed to apply exact copy parameters:', e);
+    }
+  }, [setMode, setReferenceStrength, setExactCopyMode, setUseOriginalParams, setLockSeed, setSelectedModel, setAspectRatio, setShotType, setCameraAngle, setStyle]);
 
   // Helper functions
   const getJobStats = useCallback(() => {
@@ -1077,6 +1096,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     mode,
     prompt,
     referenceImage,
+    referenceImageUrl,
     referenceStrength,
     contentType,
     quality,
@@ -1129,6 +1149,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     updateMode: setMode,
     setPrompt,
     setReferenceImage,
+    setReferenceImageUrl,
     setReferenceStrength,
     setContentType,
     setQuality,
@@ -1156,43 +1177,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,
-    applyExactCopyParamsFromItem: (item: UnifiedAsset) => {
-      console.log('🎯 EXACT COPY: Applying exact copy params from item:', item);
-      
-      try {
-        if (item.metadata?.seed !== undefined) {
-          const seedValue = typeof item.metadata.seed === 'string' ? 
-            parseInt(item.metadata.seed) : item.metadata.seed;
-          if (!isNaN(seedValue)) {
-            setSeed(seedValue);
-            console.log('✅ Applied seed:', seedValue);
-          }
-        }
-        
-        if (item.metadata?.steps !== undefined) {
-          setSteps(Number(item.metadata.steps) || 25);
-        }
-        
-        if (item.metadata?.guidance_scale !== undefined) {
-          setGuidanceScale(Number(item.metadata.guidance_scale) || 7.5);
-        }
-        
-        if (item.metadata?.negative_prompt !== undefined) {
-          setNegativePrompt(item.metadata.negative_prompt || '');
-        }
-        
-        if (item.metadata?.aspectRatio !== undefined) {
-          setAspectRatio(item.metadata.aspectRatio as '16:9' | '1:1' | '9:16');
-        }
-        
-        // Set reference strength to exact copy
-        setReferenceStrength(0.8);
-        
-        console.log('✅ Exact copy parameters applied successfully');
-      } catch (error) {
-        console.error('❌ Failed to apply exact copy parameters:', error);
-      }
-    },
+    applyExactCopyParamsFromItem,
     setExactCopyMode: (on: boolean) => {
       setExactCopyMode(on);
       // Auto-set enhancement model based on exact copy mode

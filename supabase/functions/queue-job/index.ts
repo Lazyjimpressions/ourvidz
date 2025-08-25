@@ -143,8 +143,9 @@ serve(async (req) => {
       !!referenceUrl &&
       !isPromptlessUploadedExactCopy &&
       (
-        hasOriginalEnhancedPrompt ||           // workspace/library item
-        userPromptTrim.length > 0              // uploaded with a modification prompt
+        userMetadata.reference_mode === 'modify' ||  // explicit override from client
+        hasOriginalEnhancedPrompt ||                 // workspace/library item
+        userPromptTrim.length > 0                    // uploaded with a modification prompt
       );
 
     // Determine database format (image/video) vs output format (png/mp4)
@@ -389,7 +390,13 @@ serve(async (req) => {
       user_prompt_length: userPromptTrim.length,
       final_prompt_preview: enhancedPrompt.substring(0, 100),
       template_name: templateName,
-      enhancement_attempted: shouldEnhance
+      enhancement_attempted: shouldEnhance,
+      // 🆕 NEW: Classification tracking
+      classification_source: userMetadata.reference_mode === 'modify' ? 'override_reference_mode' : 
+                           (hasOriginalEnhancedPrompt ? 'originalEnhancedPrompt' : 
+                           (userPromptTrim.length > 0 ? 'user_prompt' : 'default')),
+      exact_copy_mode_input: exactCopyMode,
+      reference_mode_override: userMetadata.reference_mode
     });
 
     // Determine queue based on job type

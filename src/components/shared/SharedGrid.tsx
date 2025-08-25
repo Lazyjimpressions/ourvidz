@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -229,7 +229,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
               e.stopPropagation();
               actions.onSendToRef!(asset);
             }}
-            title="Add to ref box"
+            title="Add to REF (Modify)"
           >
             <ArrowRight className="w-2.5 h-2.5" />
           </Button>
@@ -400,9 +400,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
               e.stopPropagation();
               actions.onUseAsReference!(asset);
             }}
-            title="Use as Reference"
+            title="Exact Copy"
           >
-            <Shuffle className="w-3 h-3" />
+            <Copy className="w-3 h-3" />
           </Button>
         )}
 

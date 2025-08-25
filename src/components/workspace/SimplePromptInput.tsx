@@ -331,12 +331,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Handle reference image URL changes (for drag-and-drop) - don't auto-enable exact copy
+  // Handle reference image URL changes (for drag-and-drop) - default to modify mode
   const handleReferenceUrlChange = (url: string | null) => {
     onReferenceImageUrlChange?.(url);
     if (url) {
-      // Set to modify-friendly strength (don't auto-enable exact copy for URLs)
+      // Set to modify-friendly strength and ensure modify mode
       onReferenceStrengthChange(0.6);
+      onExactCopyModeChange?.(false); // Explicitly set modify mode for drag-drop
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -425,6 +426,16 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     { value: 'close', label: 'Close', icon: '🔬' }
   ];
 
+  // Detect if reference strength is high in modify mode (potential near-copy)
+  const isHighStrengthModify = !exactCopyMode && (referenceImage || referenceImageUrl) && referenceStrength > 0.8;
+  
+  // Auto-clamp high strength in modify mode
+  React.useEffect(() => {
+    if (isHighStrengthModify && onReferenceStrengthChange) {
+      onReferenceStrengthChange(0.7);
+    }
+  }, [isHighStrengthModify, onReferenceStrengthChange]);
+
   // Previews for Exact Copy mode
   const originalPromptPreview = exactCopyMode ? referenceMetadata?.originalEnhancedPrompt || null : null;
   const finalPromptPreview = exactCopyMode ? referenceMetadata?.originalEnhancedPrompt ? modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim() || '') : prompt.trim() ? `${prompt.trim()}, exact copy, high quality` : 'exact copy, high quality' : null;
@@ -447,18 +458,53 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               </button>
 
               {/* Reference Images - Match row height */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 items-center">
                 {mode === 'image' ? (
-                  <ReferenceImageUpload 
-                    file={referenceImage} 
-                    onFileChange={handleReferenceFileChange} 
-                    imageUrl={referenceImageUrl} 
-                    onImageUrlChange={handleReferenceUrlChange} 
-                    label="REF" 
-                    sizeClass="h-14 w-14"
-                    exactCopyMode={exactCopyMode}
-                    setExactCopyMode={onExactCopyModeChange}
-                  />
+                  <div className="relative">
+                    <ReferenceImageUpload 
+                      file={referenceImage} 
+                      onFileChange={handleReferenceFileChange} 
+                      imageUrl={referenceImageUrl} 
+                      onImageUrlChange={handleReferenceUrlChange} 
+                      label="REF" 
+                      sizeClass="h-14 w-14"
+                      exactCopyMode={exactCopyMode}
+                      setExactCopyMode={onExactCopyModeChange}
+                    />
+                    {/* Mode toggle and status badges */}
+                    {(referenceImage || referenceImageUrl) && (
+                      <div className="absolute -bottom-1 -right-1 flex flex-col gap-0.5">
+                        {/* Mode toggle */}
+                        <button
+                          onClick={() => onExactCopyModeChange?.(!exactCopyMode)}
+                          className={`text-[8px] px-1 py-0.5 rounded text-center font-medium transition-colors ${
+                            exactCopyMode 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-secondary text-secondary-foreground'
+                          }`}
+                          title={exactCopyMode ? "Switch to Modify mode" : "Switch to Exact Copy mode"}
+                        >
+                          {exactCopyMode ? 'COPY' : 'MOD'}
+                        </button>
+                        {/* High strength warning in modify mode */}
+                        {isHighStrengthModify && (
+                          <div className="text-[7px] px-1 bg-orange-500 text-white rounded text-center" title="High strength can cause near-copies. Auto-lowered to 0.7">
+                            ⚠
+                          </div>
+                        )}
+                        {/* Seed lock indicator in modify mode */}
+                        {!exactCopyMode && lockSeed && (
+                          <button
+                            onClick={() => onLockSeedChange?.(false)}
+                            className="text-[7px] px-1 bg-yellow-500 text-white rounded text-center hover:bg-yellow-600"
+                            title="Seed locked - results may be very similar. Click to unlock."
+                          >
+                            🔒
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <ReferenceImageUpload 
