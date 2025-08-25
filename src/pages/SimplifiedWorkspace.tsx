@@ -45,6 +45,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     mode,
     prompt,
     referenceImage,
+    referenceImageUrl,
     referenceStrength,
     contentType,
     quality,
@@ -308,29 +309,28 @@ export const SimplifiedWorkspace: React.FC = () => {
         return;
       }
 
-      // Convert item to blob and create File object
-      const response = await fetch(referenceUrl);
-      const blob = await response.blob();
-      const file = new File([blob], `reference_${item.id}.${item.type === 'video' ? 'mp4' : 'png'}`, {
-        type: item.type === 'video' ? 'video/mp4' : 'image/png'
+      // Set as reference URL (modify mode by default)
+      setReferenceImageUrl(referenceUrl);
+      setReferenceImage(null);
+      
+      // Explicitly set modify mode (not exact copy)
+      setExactCopyMode(false);
+      setLockSeed(false);
+      setReferenceStrength(0.6);
+      
+      // Apply parameters for modify mode
+      applyAssetParamsFromItem(item);
+      
+      console.log('🎯 LIGHTBOX USE AS REF: Applied modify parameters', {
+        exactCopyMode: false,
+        lockSeed: false,
+        referenceStrength: 0.6,
+        entryPath: 'lightbox_use_as_ref'
       });
-
-      // Set as reference image
-      setReferenceImage(file);
-
-      // Extract and apply metadata for exact copy
-      if (item.metadata) {
-        const metadata = await extractReferenceMetadata(item.id);
-        setReferenceMetadata(metadata);
-        setExactCopyMode(true);
-        
-        // Apply exact copy parameters
-        applyExactCopyParamsFromItem(item);
-      }
       
       toast({
         title: "Reference set",
-        description: "Asset is now being used as reference (exact copy mode)",
+        description: "Asset added to reference box (modify mode)",
       });
     } catch (error) {
       console.error('Failed to use item as reference:', error);
@@ -427,21 +427,23 @@ export const SimplifiedWorkspace: React.FC = () => {
 
         {/* Fixed bottom control bar */}
         <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t border-border z-40">
-          <SimplePromptInput
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            mode={mode}
-            onModeChange={updateMode}
-            contentType={contentType}
-            onContentTypeChange={setContentType}
-            quality={quality}
-            onQualityChange={setQuality}
-            isGenerating={isGenerating}
-            onGenerate={generate}
-            referenceImage={referenceImage}
-            onReferenceImageChange={setReferenceImage}
-            referenceStrength={referenceStrength}
-            onReferenceStrengthChange={setReferenceStrength}
+            <SimplePromptInput
+              prompt={prompt}
+              onPromptChange={setPrompt}
+              mode={mode}
+              onModeChange={updateMode}
+              contentType={contentType}
+              onContentTypeChange={setContentType}
+              quality={quality}
+              onQualityChange={setQuality}
+              isGenerating={isGenerating}
+              onGenerate={generate}
+              referenceImage={referenceImage}
+              onReferenceImageChange={setReferenceImage}
+              referenceImageUrl={referenceImageUrl}
+              onReferenceImageUrlChange={setReferenceImageUrl}
+              referenceStrength={referenceStrength}
+              onReferenceStrengthChange={setReferenceStrength}
             beginningRefImage={beginningRefImage}
             onBeginningRefImageChange={setBeginningRefImage}
             endingRefImage={endingRefImage}

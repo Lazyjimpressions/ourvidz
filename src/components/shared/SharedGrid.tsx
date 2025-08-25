@@ -224,14 +224,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-6 w-6 p-0 bg-background/80 backdrop-blur-sm opacity-70 hover:opacity-100 transition-opacity"
+            className="h-3.5 w-3.5 p-0 bg-background/80 backdrop-blur-sm opacity-70 hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               actions.onSendToRef!(asset);
             }}
             title="Add to REF (Modify)"
           >
-            <ArrowRight className="w-2.5 h-2.5" />
+            <ArrowRight className="w-2 h-2" />
           </Button>
         </div>
       )}
