@@ -319,7 +319,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         setReferenceMetadata(metadata);
         setExactCopyMode(true);
         
-        // Apply asset parameters
+        // Apply exact copy parameters
         applyAssetParamsFromItem(item);
       }
       
@@ -332,6 +332,50 @@ export const SimplifiedWorkspace: React.FC = () => {
       toast({
         title: "Reference failed",
         description: "Failed to set asset as reference",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // New handler for sending to ref box (modify mode)
+  const handleSendToRef = async (item: UnifiedAsset) => {
+    try {
+      // Use item.url which now includes signed URL from hook
+      const referenceUrl = item.url;
+      
+      if (!referenceUrl) {
+        console.error('Asset URL not available for reference');
+        toast({
+          title: "Reference failed",
+          description: "Asset URL not available",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Convert item to blob and create File object
+      const response = await fetch(referenceUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `reference_${item.id}.${item.type === 'video' ? 'mp4' : 'png'}`, {
+        type: item.type === 'video' ? 'video/mp4' : 'image/png'
+      });
+
+      // Set as reference image in modify mode
+      setReferenceImage(file);
+      setReferenceStrength(0.6); // Modify-friendly strength
+      
+      // Apply basic parameters only (not exact copy)
+      applyAssetParamsFromItem(item);
+      
+      toast({
+        title: "Reference set",
+        description: "Asset added to ref box for modification",
+      });
+    } catch (error) {
+      console.error('Failed to send item to ref:', error);
+      toast({
+        title: "Reference failed",
+        description: "Failed to send asset to ref box",
         variant: "destructive",
       });
     }
@@ -367,6 +411,7 @@ export const SimplifiedWorkspace: React.FC = () => {
               actions={{
                 onSaveToLibrary: (asset: any) => handleSaveItem(asset as UnifiedAsset),
                 onDiscard: (asset: any) => handleDeleteItem(asset as UnifiedAsset),
+                onSendToRef: (asset: any) => handleSendToRef(asset as UnifiedAsset),
                 onDownload: (asset: any) => handleDownloadItem(asset as UnifiedAsset),
                 onUseAsReference: (asset: any) => handleUseAsReference(asset as UnifiedAsset)
               }}

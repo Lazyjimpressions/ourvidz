@@ -218,6 +218,24 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         </div>
       )}
 
+      {/* Send to ref icon - always visible top-left for workspace items when no selection */}
+      {isWorkspace && actions?.onSendToRef && !selection?.enabled && (
+        <div className="absolute top-2 left-2 z-10">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 w-6 p-0 bg-background/80 backdrop-blur-sm opacity-70 hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.onSendToRef!(asset);
+            }}
+            title="Add to ref box"
+          >
+            <ArrowRight className="w-2.5 h-2.5" />
+          </Button>
+        </div>
+      )}
+
       {/* Asset type badge */}
       <div className="absolute top-2 right-2 z-10">
         <Badge variant="secondary" className="text-xs bg-background/80 backdrop-blur-sm">
@@ -308,23 +326,9 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
         </div>
       </div>
 
-      {/* Action buttons */}
+       {/* Action buttons */}
       <div className="absolute bottom-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {/* Workspace actions */}
-        {isWorkspace && actions?.onSendToRef && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 w-6 p-0 bg-background/80 backdrop-blur-sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              actions.onSendToRef!(asset);
-            }}
-            title="Send to ref box"
-          >
-            <ArrowRight className="w-2.5 h-2.5" />
-          </Button>
-        )}
         
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button

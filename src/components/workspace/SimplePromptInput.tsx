@@ -15,13 +15,17 @@ const ReferenceImageUpload: React.FC<{
   imageUrl?: string | null;
   onImageUrlChange?: (url: string | null) => void;
   sizeClass?: string;
+  exactCopyMode?: boolean;
+  setExactCopyMode?: (mode: boolean) => void;
 }> = ({
   file,
   onFileChange,
   label,
   imageUrl,
   onImageUrlChange,
-  sizeClass = "h-16 w-16"
+  sizeClass = "h-16 w-16",
+  exactCopyMode,
+  setExactCopyMode
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -327,12 +331,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Handle reference image URL changes (for drag-and-drop)
+  // Handle reference image URL changes (for drag-and-drop) - don't auto-enable exact copy
   const handleReferenceUrlChange = (url: string | null) => {
     onReferenceImageUrlChange?.(url);
     if (url) {
-      onExactCopyModeChange?.(true);
-      onReferenceStrengthChange(0.8);
+      // Set to modify-friendly strength (don't auto-enable exact copy for URLs)
+      onReferenceStrengthChange(0.6);
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -452,6 +456,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     onImageUrlChange={handleReferenceUrlChange} 
                     label="REF" 
                     sizeClass="h-14 w-14"
+                    exactCopyMode={exactCopyMode}
+                    setExactCopyMode={onExactCopyModeChange}
                   />
                 ) : (
                   <>
@@ -480,7 +486,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <textarea 
                   value={prompt} 
                   onChange={e => onPromptChange(e.target.value)} 
-                  placeholder={exactCopyMode ? "Add modifications (optional)..." : "Describe what you want to generate..."}
+                  placeholder={exactCopyMode ? "Add modifications (optional)..." : (referenceImage ? "Describe how to modify the reference..." : "Describe what you want to generate...")}
                   rows={3}
                   className={`w-full h-14 px-1 py-0 pr-6 text-sm bg-muted/20 border border-border/30 rounded resize-none leading-4 ${
                     exactCopyMode ? 'border-orange-500/50 bg-orange-50/50' : ''

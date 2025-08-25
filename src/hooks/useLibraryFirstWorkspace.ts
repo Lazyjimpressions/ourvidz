@@ -98,6 +98,7 @@ export interface LibraryFirstWorkspaceActions {
   saveJob: (jobId: string) => Promise<void>;
   useJobAsReference: (jobId: string) => void;
   applyAssetParamsFromItem: (item: UnifiedAsset) => void;
+  applyExactCopyParamsFromItem: (item: UnifiedAsset) => void;
   setExactCopyMode: (on: boolean) => void;
   setUseOriginalParams: (on: boolean) => void;
   setLockSeed: (on: boolean) => void;
@@ -134,7 +135,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [mode, setMode] = useState<'image' | 'video'>('image');
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
-  const [referenceStrength, setReferenceStrength] = useState(0.5);
+  const [referenceStrength, setReferenceStrength] = useState(0.6); // Default to modify-friendly strength
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   // Model Type Selection
@@ -1157,6 +1158,43 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     saveJob,
     useJobAsReference,
     applyAssetParamsFromItem,
+    applyExactCopyParamsFromItem: (item: UnifiedAsset) => {
+      console.log('🎯 EXACT COPY: Applying exact copy params from item:', item);
+      
+      try {
+        if (item.metadata?.seed !== undefined) {
+          const seedValue = typeof item.metadata.seed === 'string' ? 
+            parseInt(item.metadata.seed) : item.metadata.seed;
+          if (!isNaN(seedValue)) {
+            setSeed(seedValue);
+            console.log('✅ Applied seed:', seedValue);
+          }
+        }
+        
+        if (item.metadata?.steps !== undefined) {
+          setSteps(Number(item.metadata.steps) || 25);
+        }
+        
+        if (item.metadata?.guidance_scale !== undefined) {
+          setGuidanceScale(Number(item.metadata.guidance_scale) || 7.5);
+        }
+        
+        if (item.metadata?.negative_prompt !== undefined) {
+          setNegativePrompt(item.metadata.negative_prompt || '');
+        }
+        
+        if (item.metadata?.aspectRatio !== undefined) {
+          setAspectRatio(item.metadata.aspectRatio as '16:9' | '1:1' | '9:16');
+        }
+        
+        // Set reference strength to exact copy
+        setReferenceStrength(0.8);
+        
+        console.log('✅ Exact copy parameters applied successfully');
+      } catch (error) {
+        console.error('❌ Failed to apply exact copy parameters:', error);
+      }
+    },
     setExactCopyMode: (on: boolean) => {
       setExactCopyMode(on);
       // Auto-set enhancement model based on exact copy mode
