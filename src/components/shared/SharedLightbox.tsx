@@ -334,7 +334,7 @@ export const WorkspaceAssetActions: React.FC<{
       </Button>
     )}
     {onUseAsReference && (
-      <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Use as Reference">
+      <Button size="sm" variant="secondary" onClick={onUseAsReference} className="h-7 w-7 p-0" title="Add to REF (Modify)">
         <Copy className="w-3 h-3" />
       </Button>
     )}

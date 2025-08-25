@@ -296,21 +296,23 @@ export const SimplifiedWorkspace: React.FC = () => {
 
   const handleUseAsReference = async (item: UnifiedAsset) => {
     try {
-      // Use item.url which now includes signed URL from hook
-      const referenceUrl = item.url;
+      // Sign the original image to get the proper URL
+      let originalUrl = item.url;
+      if ((item as any).signOriginal) {
+        originalUrl = await (item as any).signOriginal();
+      }
       
-      if (!referenceUrl) {
-        console.error('Asset URL not available for reference');
+      if (!originalUrl) {
         toast({
-          title: "Reference failed",
-          description: "Asset URL not available",
+          title: "Error",
+          description: "Could not find image URL for reference",
           variant: "destructive",
         });
         return;
       }
 
       // Set as reference URL (modify mode by default)
-      setReferenceImageUrl(referenceUrl);
+      setReferenceImageUrl(originalUrl);
       setReferenceImage(null);
       
       // Explicitly set modify mode (not exact copy)
@@ -325,6 +327,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         exactCopyMode: false,
         lockSeed: false,
         referenceStrength: 0.6,
+        originalUrl,
         entryPath: 'lightbox_use_as_ref'
       });
       
@@ -343,10 +346,16 @@ export const SimplifiedWorkspace: React.FC = () => {
   };
 
   // New handler for sending to ref box (modify mode)
-  const handleSendToRef = (item: UnifiedAsset) => {
+  const handleSendToRef = async (item: UnifiedAsset) => {
     try {
-      if (item.url) {
-        setReferenceImageUrl(item.url);
+      // Sign the original image to get the proper URL
+      let originalUrl = item.url;
+      if ((item as any).signOriginal) {
+        originalUrl = await (item as any).signOriginal();
+      }
+      
+      if (originalUrl) {
+        setReferenceImageUrl(originalUrl);
         setReferenceImage(null);
         
         // Explicitly set modify mode (not exact copy)
@@ -361,6 +370,7 @@ export const SimplifiedWorkspace: React.FC = () => {
           exactCopyMode: false,
           lockSeed: false,
           referenceStrength: 0.6,
+          originalUrl,
           entryPath: 'tile_add_to_ref'
         });
         

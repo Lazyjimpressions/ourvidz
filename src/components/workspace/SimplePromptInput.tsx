@@ -538,7 +538,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <textarea 
                   value={prompt} 
                   onChange={e => onPromptChange(e.target.value)} 
-                  placeholder={exactCopyMode ? "Add modifications (optional)..." : (referenceImage ? "Describe how to modify the reference..." : "Describe what you want to generate...")}
+                  placeholder={exactCopyMode ? "Add modifications (optional)..." : ((referenceImage || referenceImageUrl) ? "Describe how to modify the reference..." : "Describe what you want to generate...")}
                   rows={3}
                   className={`w-full h-14 px-1 py-0 pr-6 text-sm bg-muted/20 border border-border/30 rounded resize-none leading-4 ${
                     exactCopyMode ? 'border-orange-500/50 bg-orange-50/50' : ''
