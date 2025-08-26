@@ -201,6 +201,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceMetadata, setReferenceMetadata] = useState<ReferenceMetadata | null>(null);
   const [useOriginalParams, setUseOriginalParams] = useState<boolean>(false);
   const [lockSeed, setLockSeed] = useState<boolean>(false);
+  const [wasSetByExactCopy, setWasSetByExactCopy] = useState<boolean>(false);
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
@@ -422,7 +423,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
       // Reference strength defaults - align with worker's denoise_strength defaults
-      const modifyStrength = 0.5; // Modify mode strength (worker default denoise = 0.5)
+      const modifyStrength = 0.4; // Modify mode strength - reduced for stronger modification effect
       const copyStrength = 0.95; // Copy mode strength (worker will clamp denoise to ≤0.05)
       
       // EXACT COPY MODE: Use original enhanced prompt as base
@@ -514,18 +515,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         if (referenceMetadata && prompt.trim()) {
           // Workspace item with metadata and user modification
           console.log('🎯 MODIFY MODE: Workspace item with modification');
-          finalPrompt = `maintain the same subject, person, face, and body from the reference image, ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
         } else if (prompt.trim()) {
           // Uploaded image or workspace item without metadata, with user modification
           console.log('🎯 MODIFY MODE: Reference image with modification');
-          finalPrompt = `maintain the same subject, person, face, and body from the reference image, ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
         } else {
           // Reference image but no modification prompt
           console.log('🎯 MODIFY MODE: Reference image without modification');
-          finalPrompt = 'maintain the same subject, person, face, and body from the reference image, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional';
+          finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
         }
         
-        finalSeed = lockSeed && seed ? seed : undefined;
+        // Guard against seed-based near copies: clear lockSeed if it was set by exact copy
+        finalSeed = (lockSeed && seed && !wasSetByExactCopy) ? seed : undefined;
         
         console.log('🎯 MODIFY MODE - ACTIVE:', {
           finalPrompt,
@@ -572,7 +574,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // format omitted - let edge function default based on job_type
         model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
         reference_image_url: effRefUrl,
-        reference_strength: exactCopyMode ? copyStrength : Math.min(referenceStrength, modifyStrength), // Use mode-appropriate strength
+         reference_strength: exactCopyMode ? copyStrength : (() => {
+           // Dynamic nudging for color/swap prompts
+           const lowerPrompt = prompt.toLowerCase();
+           const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
+           return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
+         })(), // Use mode-appropriate strength with dynamic nudging
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
@@ -629,35 +636,24 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         })()
       };
       
-      // DEBUG: Enhanced logging for reference URL troubleshooting
-      console.log('🎯 GENERATION REQUEST FINAL DEBUG:', {
-        parameterValues: {
-          overrideReferenceImageUrl: !!overrideReferenceImageUrl,
-          stateReferenceImageUrl: !!referenceImageUrl,
-          stateReferenceImage: !!referenceImage
-        },
-        computed: {
-          effRefUrl: !!effRefUrl,
-          effRefUrlValue: effRefUrl ? 'URL_SET' : 'NO_URL'
-        },
-        requestData: {
-          reference_image_url: !!generationRequest.reference_image_url,
-          reference_mode: generationRequest.metadata?.reference_mode,
-          referenceStrength: generationRequest.reference_strength,
-          denoise: 'worker_handled' // Worker converts reference_strength to denoise_strength
-        },
-        mode: {
-          exactCopyMode,
-          lockSeed,
-          seed: finalSeed,
-          client_clamped_strength: exactCopyMode ? false : (referenceStrength !== Math.min(referenceStrength, 0.7))
-        },
-        // DEBUG: Full metadata being sent
-        fullMetadata: generationRequest.metadata,
-        exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
-        originalEnhancedPromptInMetadata: 'originalEnhancedPrompt' in (generationRequest.metadata || {}) 
-          ? (generationRequest.metadata as any).originalEnhancedPrompt 
-          : undefined
+      // 🎯 PRECISION LOGGING: Debug key parameters for modify mode troubleshooting
+      const computedReferenceStrength = exactCopyMode ? copyStrength : (() => {
+        const lowerPrompt = prompt.toLowerCase();
+        const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
+        return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
+      })();
+      
+      console.log('🎯 GENERATION DEBUG:', {
+        mode: exactCopyMode ? 'EXACT_COPY' : 'MODIFY',
+        exact_copy_mode: generationRequest.metadata?.exact_copy_mode,
+        reference_mode: generationRequest.metadata?.reference_mode,
+        reference_strength: computedReferenceStrength,
+        denoise_strength: `${1 - computedReferenceStrength} (computed by worker)`,
+        lockSeed,
+        seed_present: !!finalSeed,
+        prompt_preview: finalPrompt.substring(0, 80) + '...',
+        has_reference_image: !!effRefUrl,
+        was_set_by_exact_copy: wasSetByExactCopy || false
       });
 
       // 🆕 CRITICAL DEBUG: Check exact_copy_mode flag
@@ -777,6 +773,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         setReferenceMetadata(null);
         setUseOriginalParams(false);
         setLockSeed(false);
+        setWasSetByExactCopy(false);
       }
 
     } catch (error: any) {
@@ -1101,6 +1098,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       // Apply seed and lock it for exact copy
       if (item.metadata?.seed) {
         setLockSeed(true);
+        setWasSetByExactCopy(true); // Track that this was set by exact copy
       }
       
       if (item.metadata?.modelType) {
@@ -1258,6 +1256,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       } else {
         // Restore user's preferred model
         setEnhancementModel(userPreferredModel);
+        // Clear seed lock when switching from exact copy to modify mode
+        if (wasSetByExactCopy) {
+          setLockSeed(false);
+          setWasSetByExactCopy(false);
+        }
       }
     },
     setUseOriginalParams,
