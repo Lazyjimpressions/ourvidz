@@ -101,15 +101,21 @@ const MobileSimplifiedWorkspace = () => {
   // Process workspace assets through proper mappers - use centralized signing
   const sharedAssets = useMemo(() => {
     const mapped = workspaceAssets.map(toSharedFromWorkspace);
-    // Build compatible asset array using centralized signedUrls
-    return mapped.map(asset => ({
-      ...asset,
-      url: signedUrls[asset.id]?.original || '',
-      thumbUrl: signedUrls[asset.id]?.thumb || asset.originalPath,
-      signedUrl: signedUrls[asset.id]?.original,
-      signedThumbUrl: signedUrls[asset.id]?.thumb,
-      signOriginal: async () => signedUrls[asset.id]?.original || asset.originalPath
-    }));
+    // Build compatible asset array using centralized signedUrls Map
+    return mapped.map(asset => {
+      const signedOriginal = signedUrls.get(asset.id);
+      return {
+        ...asset,
+        url: signedOriginal || null,
+        thumbUrl: signedOriginal || null, // Use original for both thumb and full
+        signOriginal: async () => {
+          const existing = signedUrls.get(asset.id);
+          if (existing) return existing;
+          // Fallback - should rarely be needed with proper lazy loading
+          return asset.originalPath || '';
+        }
+      };
+    });
   }, [workspaceAssets, signedUrls]);
 
   // Preview handler for SharedGrid
