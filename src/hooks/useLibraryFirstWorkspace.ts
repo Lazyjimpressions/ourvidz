@@ -655,7 +655,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // DEBUG: Full metadata being sent
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
-        originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
+        originalEnhancedPromptInMetadata: 'originalEnhancedPrompt' in (generationRequest.metadata || {}) 
+          ? (generationRequest.metadata as any).originalEnhancedPrompt 
+          : undefined
       });
 
       // 🆕 CRITICAL DEBUG: Check exact_copy_mode flag
