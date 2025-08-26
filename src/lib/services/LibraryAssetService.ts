@@ -227,7 +227,7 @@ export class LibraryAssetService {
 
       console.log('📋 Found library asset:', asset);
 
-      const { error } = await supabase.functions.invoke('workspace-actions', {
+      const { data, error } = await supabase.functions.invoke('workspace-actions', {
         body: {
           action: 'copy_to_workspace',
           libraryAssetId
@@ -236,7 +236,11 @@ export class LibraryAssetService {
 
       if (error) {
         console.error('Error adding to workspace:', error);
-        throw error;
+        // Try to parse error details from the response
+        const errorMessage = data?.error 
+          ? `${data.error}${data.details ? ': ' + data.details : ''}` 
+          : error.message || 'Failed to add to workspace';
+        throw new Error(errorMessage);
       }
 
       console.log('✅ Asset added to workspace successfully');

@@ -845,7 +845,13 @@ serve(async (req) => {
         .single()
 
       if (libraryError || !libraryAsset) {
-        return new Response('Library asset not found', { status: 404, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Library asset not found',
+            details: libraryError?.message || 'Asset does not exist or access denied'
+          }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       // Check if asset already exists in workspace
@@ -877,14 +883,26 @@ serve(async (req) => {
       // Copy file from user-library to workspace-temp bucket
       let sourceKey = libraryAsset.storage_path
       
-      // Normalize source key
-      if (sourceKey.startsWith('user-library/')) {
+      // Normalize source key (handle both direct paths and full URLs)
+      if (sourceKey.startsWith('http')) {
+        // Extract path after 'user-library/' from URL
+        const match = sourceKey.match(/\/user-library\/(.+?)(?:\?|$)/);
+        sourceKey = match ? match[1] : sourceKey;
+      } else if (sourceKey.startsWith('user-library/')) {
         sourceKey = sourceKey.replace('user-library/', '');
+      }
+
+      // Safe file extension derivation
+      let fileExtension = 'png'; // default
+      if (libraryAsset.mime_type && libraryAsset.mime_type.includes('/')) {
+        fileExtension = libraryAsset.mime_type.split('/')[1];
+      } else if (sourceKey.match(/\.(png|jpg|jpeg|mp4|webp)$/i)) {
+        fileExtension = sourceKey.match(/\.(png|jpg|jpeg|mp4|webp)$/i)[1];
       }
 
       // Generate unique workspace path
       const workspaceAssetId = crypto.randomUUID()
-      const destKey = `${user.id}/${workspaceAssetId}.${libraryAsset.mime_type.split('/')[1]}`
+      const destKey = `${user.id}/${workspaceAssetId}.${fileExtension}`
 
       console.log('📁 Copying file from library to workspace:', { sourceKey, destKey });
 
@@ -895,7 +913,13 @@ serve(async (req) => {
 
       if (downloadError) {
         console.error('Failed to download from user-library:', downloadError)
-        return new Response('Failed to access library file', { status: 500, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to access library file',
+            details: downloadError.message || 'File not accessible in storage'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       // Upload to workspace-temp
@@ -908,7 +932,13 @@ serve(async (req) => {
 
       if (uploadError) {
         console.error('Failed to upload to workspace-temp:', uploadError)
-        return new Response('Failed to copy to workspace', { status: 500, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to copy to workspace',
+            details: uploadError.message || 'Upload to workspace storage failed'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       // Handle thumbnail copy
@@ -939,13 +969,18 @@ serve(async (req) => {
       }
 
       // Create a job record first (required for workspace_assets.job_id)
+      // Use valid job_type based on asset type and assume high quality for library copies
+      const jobType = libraryAsset.asset_type.startsWith('image') 
+        ? (libraryAsset.model_used === 'sdxl' ? 'sdxl_image_high' : 'image_high')
+        : 'video_high';
+        
       const jobId = crypto.randomUUID()
       const { data: job, error: jobError } = await supabaseClient
         .from('jobs')
         .insert({
           id: jobId,
           user_id: user.id,
-          job_type: `${libraryAsset.asset_type}_library_copy`,
+          job_type: jobType,
           status: 'completed',
           destination: 'workspace',
           completed_at: new Date().toISOString(),
@@ -962,7 +997,13 @@ serve(async (req) => {
 
       if (jobError) {
         console.error('Failed to create job record:', jobError)
-        return new Response('Failed to create job record', { status: 500, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to create job record',
+            details: jobError.message || 'Database insert failed for job'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       // Create workspace record
@@ -993,7 +1034,13 @@ serve(async (req) => {
 
       if (workspaceError) {
         console.error('Failed to create workspace record:', workspaceError)
-        return new Response('Failed to create workspace record', { status: 500, headers: corsHeaders })
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to create workspace record',
+            details: workspaceError.message || 'Database insert failed for workspace asset'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
       }
 
       console.log(`✅ Library asset ${actionRequest.libraryAssetId} copied to workspace as ${workspaceAsset.id}`)
