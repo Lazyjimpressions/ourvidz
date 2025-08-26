@@ -507,15 +507,36 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           finalPrompt,
           hasModification: !!prompt.trim()
         });
-      } else {
-        // Normal generation flow
-        finalPrompt = prompt.trim() || '';
+      } else if (!exactCopyMode && (referenceImageUrl || referenceImage)) {
+        // MODIFY MODE: Handle reference images for modification
+        console.log('🎯 MODIFY MODE: Processing reference image for modification');
+        
+        if (referenceMetadata && prompt.trim()) {
+          // Workspace item with metadata and user modification
+          console.log('🎯 MODIFY MODE: Workspace item with modification');
+          finalPrompt = `maintain the same subject, person, face, and body from the reference image, ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+        } else if (prompt.trim()) {
+          // Uploaded image or workspace item without metadata, with user modification
+          console.log('🎯 MODIFY MODE: Reference image with modification');
+          finalPrompt = `maintain the same subject, person, face, and body from the reference image, ${prompt.trim()}, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional`;
+        } else {
+          // Reference image but no modification prompt
+          console.log('🎯 MODIFY MODE: Reference image without modification');
+          finalPrompt = 'maintain the same subject, person, face, and body from the reference image, keep all other details identical, same pose, same lighting, same composition, high quality, detailed, professional';
+        }
+        
         finalSeed = lockSeed && seed ? seed : undefined;
         
-        // If user provided an uploaded/URL reference without metadata, guide the model to preserve subject
-        if (exactCopyMode && !referenceMetadata) {
-          finalPrompt = finalPrompt ? `${finalPrompt}, exact copy, high quality` : 'exact copy, high quality';
-        }
+        console.log('🎯 MODIFY MODE - ACTIVE:', {
+          finalPrompt,
+          finalSeed,
+          hasReferenceMetadata: !!referenceMetadata,
+          userModification: prompt.trim()
+        });
+      } else {
+        // Normal generation flow (no reference image)
+        finalPrompt = prompt.trim() || '';
+        finalSeed = lockSeed && seed ? seed : undefined;
         
         console.log('🎯 NORMAL GENERATION MODE:', {
           finalPrompt,
@@ -559,39 +580,53 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         negative_prompt: negativePrompt,
         compel_enabled: compelEnabled,
         compel_weights: compelWeights,
-        metadata: {
-          // STAGING-FIRST: All assets go to workspace_assets table
-          duration: mode === 'video' ? videoDuration : undefined,
-          motion_intensity: mode === 'video' ? motionIntensity : undefined,
-          start_reference_url: startRefUrl,
-          end_reference_url: endRefUrl,
-          // FIX: Add reference_image_url to metadata for server-side logging
-          reference_image_url: effRefUrl,
-          // Control parameters
-          aspect_ratio: finalAspectRatio,
-          shot_type: finalShotType,
-          camera_angle: finalCameraAngle,
-          style: finalStyle,
-          enhancement_model: exactCopyMode || selectedModel?.type === 'replicate' ? 'none' : enhancementModel,
-          contentType: contentType,
-          // Skip enhancement in exact copy mode or for replicate models
-          user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
-          skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
-          // Add reference mode and entry path for server classification
-          reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
-          // Exact copy parameter overrides
-          ...(exactCopyMode ? {
-            num_inference_steps: 15,
-            guidance_scale: 1.0, // Copy mode: minimal guidance
-            negative_prompt: '',
-            exact_copy_mode: true,
-            originalEnhancedPrompt: referenceMetadata?.originalEnhancedPrompt,
-            originalSeed: referenceMetadata?.originalSeed,
-            originalStyle: referenceMetadata?.originalStyle,
-            originalCameraAngle: referenceMetadata?.originalCameraAngle,
-            originalShotType: referenceMetadata?.originalShotType
-          } : {})
-        }
+        metadata: (() => {
+          const baseMetadata = {
+            // STAGING-FIRST: All assets go to workspace_assets table
+            duration: mode === 'video' ? videoDuration : undefined,
+            motion_intensity: mode === 'video' ? motionIntensity : undefined,
+            start_reference_url: startRefUrl,
+            end_reference_url: endRefUrl,
+            // FIX: Add reference_image_url to metadata for server-side logging
+            reference_image_url: effRefUrl,
+            // Control parameters
+            aspect_ratio: finalAspectRatio,
+            shot_type: finalShotType,
+            camera_angle: finalCameraAngle,
+            style: finalStyle,
+            enhancement_model: exactCopyMode || selectedModel?.type === 'replicate' ? 'none' : enhancementModel,
+            contentType: contentType,
+            // Skip enhancement in exact copy mode or for replicate models
+            user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
+            skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
+            // Add reference mode and entry path for server classification
+            reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
+            // Mode-specific parameter overrides
+            exact_copy_mode: exactCopyMode, // Always set this flag
+          };
+
+          if (exactCopyMode) {
+            // Copy mode parameters
+            return {
+              ...baseMetadata,
+              num_inference_steps: 15,
+              guidance_scale: 1.0, // Copy mode: minimal guidance
+              negative_prompt: '',
+              ...(referenceMetadata?.originalEnhancedPrompt && { originalEnhancedPrompt: referenceMetadata.originalEnhancedPrompt }),
+              ...(referenceMetadata?.originalSeed && { originalSeed: referenceMetadata.originalSeed }),
+              ...(referenceMetadata?.originalStyle && { originalStyle: referenceMetadata.originalStyle }),
+              ...(referenceMetadata?.originalCameraAngle && { originalCameraAngle: referenceMetadata.originalCameraAngle }),
+              ...(referenceMetadata?.originalShotType && { originalShotType: referenceMetadata.originalShotType })
+            };
+          } else {
+            // Modify mode parameters
+            return {
+              ...baseMetadata,
+              guidance_scale: 7.5, // Modify mode: standard guidance
+              negative_prompt: negativePrompt || undefined
+            };
+          }
+        })()
       };
       
       // DEBUG: Enhanced logging for reference URL troubleshooting
@@ -621,6 +656,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         fullMetadata: generationRequest.metadata,
         exactCopyInMetadata: generationRequest.metadata?.exact_copy_mode,
         originalEnhancedPromptInMetadata: generationRequest.metadata?.originalEnhancedPrompt
+      });
+
+      // 🆕 CRITICAL DEBUG: Check exact_copy_mode flag
+      console.log('🎯 CRITICAL DEBUG - exact_copy_mode flag:', {
+        exactCopyMode,
+        metadataExactCopyMode: generationRequest.metadata?.exact_copy_mode,
+        referenceMode: generationRequest.metadata?.reference_mode,
+        hasReferenceImage: !!effRefUrl,
+        finalPrompt: finalPrompt.substring(0, 100) + '...'
       });
 
 
