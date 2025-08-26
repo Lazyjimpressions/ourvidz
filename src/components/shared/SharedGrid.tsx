@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -227,9 +227,10 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
   return (
     <div
       ref={cardRef}
-      className={`group relative bg-card rounded-lg overflow-hidden border transition-all duration-200 hover:shadow-lg ${
-        isSelected ? 'ring-2 ring-primary' : 'hover:border-primary/50'
+      className={`group relative bg-card rounded-lg overflow-hidden transition-all duration-200 hover:shadow-lg cursor-pointer ${
+        isSelected ? 'ring-2 ring-primary' : 'hover:ring-1 hover:ring-primary/50'
       }`}
+      onClick={handlePreview}
     >
       {/* Selection checkbox */}
       {selection?.enabled && (
@@ -238,6 +239,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             checked={isSelected}
             onCheckedChange={handleSelect}
             className="bg-background/80 backdrop-blur-sm"
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
@@ -248,27 +250,20 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-3.5 w-3.5 p-0 bg-background/80 backdrop-blur-sm opacity-70 hover:opacity-100 transition-opacity"
+            className="h-5 w-5 p-0 bg-background/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               actions.onSendToRef!(asset);
             }}
             title="Add to REF (Modify)"
           >
-            <ArrowRight className="w-2 h-2" />
+            <ExternalLink className="w-2.5 h-2.5" />
           </Button>
         </div>
       )}
 
-      {/* Asset type badge */}
-      <div className="absolute top-2 right-2 z-10">
-        <Badge variant="secondary" className="text-xs bg-background/80 backdrop-blur-sm">
-          {asset.type === 'video' ? 'Video' : 'Image'}
-        </Badge>
-      </div>
-
-      {/* Main image/thumbnail */}
-      <div className="aspect-square bg-muted relative cursor-pointer" onClick={handlePreview}>
+      {/* Main image/thumbnail - fills entire card */}
+      <div className="aspect-square bg-muted relative">
         {asset.thumbUrl ? (
           <img
             src={asset.thumbUrl}
@@ -304,68 +299,26 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
-            <Image className="w-8 h-8 text-muted-foreground" />
+            <Image className="w-6 h-6 text-muted-foreground/50" />
           </div>
         )}
-        
-        {/* Hover overlay */}
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-          <Button 
-            size="sm" 
-            variant="secondary" 
-            className="gap-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePreview();
-            }}
-          >
-            <Eye className="w-4 h-4" />
-            View
-          </Button>
-        </div>
       </div>
 
-      {/* Content area */}
-      <div className="p-3 space-y-2">
-        {/* Title */}
-        <h3 className="font-medium text-sm line-clamp-1" title={asset.title}>
-          {asset.title}
-        </h3>
-        
-        {/* Prompt preview */}
-        {asset.prompt && (
-          <p className="text-xs text-muted-foreground line-clamp-2" title={asset.prompt}>
-            {asset.prompt}
-          </p>
-        )}
-
-        {/* Metadata */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {asset.modelType && (
-            <span className="truncate">{asset.modelType}</span>
-          )}
-          {asset.width && asset.height && (
-            <span>{asset.width}×{asset.height}</span>
-          )}
-        </div>
-      </div>
-
-       {/* Action buttons */}
-      <div className="absolute bottom-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      {/* Action buttons - smaller and positioned at bottom-right */}
+      <div className="absolute bottom-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
         {/* Workspace actions */}
-        
         {isWorkspace && actions?.onSaveToLibrary && (
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onSaveToLibrary!(asset);
             }}
             title="Save to Library"
           >
-            <Save className="w-3 h-3" />
+            <Save className="w-2.5 h-2.5" />
           </Button>
         )}
         
@@ -373,14 +326,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onClear!(asset);
             }}
-            title="Clear (save to library then remove)"
+            title="Clear from workspace"
           >
-            <ArrowRight className="w-3 h-3" />
+            <XCircle className="w-2.5 h-2.5" />
           </Button>
         )}
         
@@ -388,14 +341,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onDiscard!(asset);
             }}
             title="Delete permanently"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-2.5 h-2.5" />
           </Button>
         )}
 
@@ -404,14 +357,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onDownload!(asset);
             }}
             title="Download"
           >
-            <Download className="w-3 h-3" />
+            <Download className="w-2.5 h-2.5" />
           </Button>
         )}
 
@@ -419,14 +372,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onUseAsReference!(asset);
             }}
             title="Exact Copy"
           >
-            <Copy className="w-3 h-3" />
+            <Copy className="w-2.5 h-2.5" />
           </Button>
         )}
 
@@ -434,14 +387,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onAddToWorkspace!(asset);
             }}
             title="Add to Workspace"
           >
-            <ArrowRight className="w-3 h-3" />
+            <ArrowRight className="w-2.5 h-2.5" />
           </Button>
         )}
 
@@ -449,14 +402,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 w-8 p-0 bg-background/80 backdrop-blur-sm"
+            className="h-6 w-6 p-0 bg-background/90 backdrop-blur-sm hover:bg-background"
             onClick={(e) => {
               e.stopPropagation();
               actions.onDelete!(asset);
             }}
             title="Delete"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-2.5 h-2.5" />
           </Button>
         )}
       </div>
