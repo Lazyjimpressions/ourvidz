@@ -64,74 +64,153 @@ const { data, error } = await supabase
 ## **🎯 IMAGE-TO-IMAGE (I2I) & EXACT COPY — CURRENT STATUS AND PLAN**
 
 ### **Overview**
-- Do not assume exact copy is implemented. Uploaded promptless I2I is not producing identical copies and requires fixes.
-- Two intended workflows:
-  1) Reference from workspace/library item (with metadata)
-  2) Uploaded image (no metadata, promptless copy or minimal edits)
+- **Primary Use Case**: Modify existing images while preserving subject/pose/composition
+- **Secondary Use Case**: Exact copying (manual selection only)
+- **Default Behavior**: Always "modify" mode - user must explicitly choose "copy" mode
+- **Focus**: Position/pose preservation for modifications, not exact copying
 
-### **Core Features**
+### **Core Use Cases**
 
-#### **Planned Behavior (to implement/verify)**
-- Reference items: extract original prompt/seed when available; apply targeted modifications; disable style overrides.
-- Uploaded images: exact-copy branch that bypasses enhancement and uses ultra-low denoise with CFG ~1.0.
-- UI clearly indicates reference type (workspace vs uploaded) and mode (copy vs modify).
+#### **Primary Use Case: Subject Modification**
+**Scenario**: User generates "woman in black dress" → wants to modify specific elements
+1. **"Change black dress to red"** → Same woman, same pose, red dress
+2. **"Woman kissing her friend"** → Same woman, same pose, kissing scenario
 
-#### **2. Metadata Extraction & Storage**
-- **Reference Metadata Extraction**: Automatically extracts original enhanced prompts, seeds, and generation parameters
-- **Multiple Source Fallbacks**: Tries enhanced_prompt → enhancedPrompt → prompt for maximum compatibility
-- **Generation Parameter Preservation**: Stores and reuses original style, camera angle, shot type, and aspect ratio
-- **Seed Locking**: Preserves original seeds for character consistency across generations
+#### **Secondary Use Case: Exact Copying**
+**Scenario**: User wants identical copy (manual selection required)
+- Workspace items: Preserve original prompt/seed for consistency
+- Uploaded images: High-fidelity composition preservation
 
-#### **3. Complete Enhancement Bypass**
-- **Style Control Disabling**: Automatically disables style controls when in exact copy mode
-- **Enhancement Skipping**: Bypasses prompt enhancement to preserve original quality
-- **Original Parameter Restoration**: Uses original generation parameters instead of current UI settings
-- **Reference Strength Optimization**: Sets reference strength to 0.9 for maximum preservation
+### **Default Behavior & User Workflow**
 
-#### **4. Advanced User Experience**
-- **Original Prompt Display**: Shows the original enhanced prompt when exact copy mode is active
-- **Modification Preview**: Real-time preview of how the final prompt will look after modification
-- **Visual Feedback**: Clear indication of exact copy mode with copy icon and styling
-- **Helpful Suggestions**: Provides modification examples when no prompt is entered
+#### **Workspace/Library Items**
+1. **Select as Reference** → Auto-enable "modify" mode
+2. **Reference Strength**: 0.7 (preserve subject, allow changes)
+3. **Enhancement**: Enabled (normal generation flow)
+4. **User Types Modification** → System preserves subject/pose, applies changes
 
-### **Technical Notes (contract to verify)**
+#### **Uploaded Images**
+1. **Upload Image** → Auto-enable "modify" mode (NOT copy mode)
+2. **Reference Strength**: 0.7 (preserve composition, allow changes)
+3. **Enhancement**: Enabled (normal generation flow)
+4. **User Types Modification** → System preserves composition, applies changes
 
-#### **Core Components**
+#### **Manual Copy Mode**
+1. **User Must Explicitly Toggle** to "copy" mode
+2. **Reference Strength**: 0.9 (maximum preservation)
+3. **Enhancement**: Disabled (skip enhancement)
+4. **SDXL Parameters**: denoise_strength: 0.05, guidance_scale: 1.0
+
+### **Technical Implementation**
+
+#### **Mode Switching Defaults**
 ```typescript
-// Utilities in scope (verify presence/usage; keep simple where possible)
-src/utils/extractReferenceMetadata.ts     // Extract prompt/seed/params from assets (if present)
-src/utils/promptModification.ts           // Lightweight prompt adjustment helpers
-src/types/workspace.ts                    // ReferenceMetadata interface (minimal)
+// Modify Mode (Default)
+const modifyDefaults = {
+  referenceStrength: 0.7,
+  enhancementEnabled: true,
+  styleControlsEnabled: true,
+  denoiseStrength: 0.3,
+  guidanceScale: 7.5
+};
+
+// Copy Mode (Manual Selection Only)
+const copyDefaults = {
+  referenceStrength: 0.9,
+  enhancementEnabled: false,
+  styleControlsEnabled: false,
+  denoiseStrength: 0.05,
+  guidanceScale: 1.0
+};
 ```
 
-#### **Enhanced Hook Integration**
+#### **Edge Function Behavior**
 ```typescript
-// Pseudocode branch (to verify):
-if (exactCopyMode && referenceMetadata && referenceImageUrl) {
-  // Use original prompt/seed from metadata; apply targeted modification if provided
+// queue-job edge function
+if (exactCopyMode) {
+  // Skip enhancement entirely
+  skip_enhancement: true,
+  // Use copy-optimized parameters
+  denoise_strength: 0.05,
+  guidance_scale: 1.0,
+  negative_prompt: '', // No negative prompts
+  style: '' // No style controls
+} else {
+  // Normal modify mode
+  skip_enhancement: false,
+  // Use standard parameters
+  denoise_strength: 1 - reference_strength,
+  guidance_scale: 7.5
 }
 ```
 
-#### **UI Integration**
-```typescript
-// SimplePromptInput.tsx - Exact copy UI
-{exactCopyMode && referenceMetadata && (
-  <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
-    <div className="font-medium text-foreground">Original Prompt:</div>
-    <div className="text-muted-foreground text-[10px] max-h-8 overflow-y-auto">
-      {referenceMetadata.originalEnhancedPrompt}
-    </div>
-    {prompt.trim() && (
-      <>
-        <div className="font-medium text-foreground">Final Prompt:</div>
-        <div className="text-primary text-[10px] max-h-8 overflow-y-auto">
-          {modifyOriginalPrompt(referenceMetadata.originalEnhancedPrompt, prompt.trim())}
-        </div>
-      </>
-    )}
-  </div>
-)}
+#### **SDXL Worker Parameters**
+```python
+# For exact copy mode
+if job.get('exact_copy_mode'):
+    denoise_strength = 0.05  # Ultra-low denoise
+    guidance_scale = 1.0     # Minimal guidance
+    negative_prompt = ""     # No negatives
+    # Skip all enhancement and style controls
+else:
+    # Normal modify mode
+    denoise_strength = 1 - reference_strength
+    guidance_scale = 7.5
+    # Apply normal enhancement and style controls
 ```
+
+### **UI/UX Specifications**
+
+#### **Default State**
+- **Mode**: Always "modify" (never default to copy)
+- **Visual**: Clear "MOD" indicator
+- **Behavior**: User must manually toggle to "COPY"
+
+#### **Upload Behavior**
+- **Upload Image** → Auto-enable "modify" mode
+- **Reference Strength**: 0.7
+- **No Auto-switch** to copy mode
+
+#### **Mode Toggle**
+- **MOD → COPY**: Sets reference strength to 0.9, disables enhancement
+- **COPY → MOD**: Sets reference strength to 0.7, enables enhancement
+- **Visual Feedback**: Clear mode indicators with appropriate styling
+
+#### **Reference Selection**
+- **Workspace Items**: Drag-and-drop or "Use as Reference" → Auto-modify mode
+- **Uploaded Images**: Upload → Auto-modify mode
+- **Metadata Extraction**: Only for workspace items (preserve original prompt/seed)
+
+### **Expected Behavior Matrix**
+
+| User Action | System Response | Expected Result |
+|-------------|----------------|-----------------|
+| Select workspace item as reference | Auto-enable modify mode, strength 0.7 | Ready for subject modification |
+| Upload image | Auto-enable modify mode, strength 0.7 | Ready for composition modification |
+| Type "change dress to red" | Preserve subject/pose, modify dress | Same woman, red dress |
+| Type "woman kissing friend" | Preserve subject/pose, modify scenario | Same woman, kissing scenario |
+| Manually toggle to copy mode | Set strength 0.9, disable enhancement | High-fidelity preservation |
+| Leave prompt empty in copy mode | Use original prompt (workspace) or minimal prompt (uploaded) | Near-identical copy |
+
+### **Implementation Priority**
+
+#### **Phase 1: Core Modify Functionality**
+1. ✅ **Default to modify mode** for all references
+2. ✅ **Reference strength 0.7** for modifications
+3. ✅ **Subject/pose preservation** for workspace items
+4. ✅ **Composition preservation** for uploaded images
+
+#### **Phase 2: Manual Copy Mode**
+1. 🔄 **Manual copy toggle** (user must explicitly select)
+2. 🔄 **Copy-optimized parameters** (denoise 0.05, CFG 1.0)
+3. 🔄 **Enhancement bypass** for copy mode
+4. 🔄 **Style control disabling** for copy mode
+
+#### **Phase 3: Advanced Features**
+1. 📋 **Metadata extraction** for workspace items
+2. 📋 **Original prompt preservation** for workspace items
+3. 📋 **Seed locking** for character consistency
+4. 📋 **Prompt modification engine** for intelligent changes
 
 ---
 
@@ -428,39 +507,76 @@ A professional high-resolution shot of a teenage female model wearing a red biki
 
 ### **Common Issues and Solutions**
 
-#### **Issue 1: Exact Copy Mode Not Working**
-**Symptoms**: Style controls still active, enhancement still applied
-**Causes**: 
-- Reference metadata not extracted properly
-- Exact copy mode not enabled
-- Edge function not receiving exact copy flag
+#### **Issue 1: System Defaulting to Copy Mode**
+**Symptoms**: System automatically enables copy mode instead of modify mode
+**Expected Behavior**: 
+- All references should default to "modify" mode
+- User must manually toggle to "copy" mode
+- Uploaded images should default to modify mode
 
 **Solutions**:
 ```typescript
-// Check metadata extraction
-console.log('🎯 METADATA EXTRACTION:', {
-  extracted: !!metadata,
-  originalPrompt: metadata?.originalEnhancedPrompt,
-  exactCopyMode: exactCopyMode
+// Check default behavior
+console.log('🎯 DEFAULT MODE CHECK:', {
+  uploadedImageMode: 'should be modify',
+  workspaceItemMode: 'should be modify',
+  userToggleRequired: 'for copy mode'
 });
 
-// Verify edge function parameters
-console.log('🎯 EDGE FUNCTION:', {
-  exact_copy_mode: metadata?.exact_copy_mode,
-  reference_strength: metadata?.reference_strength,
-  skip_enhancement: metadata?.skip_enhancement
+// Verify mode switching
+console.log('🎯 MODE SWITCHING:', {
+  modifyDefaults: { referenceStrength: 0.7, enhancementEnabled: true },
+  copyDefaults: { referenceStrength: 0.9, enhancementEnabled: false }
 });
 ```
 
-#### **Issue 2: Uploaded Images Not Working in Exact Copy Mode**
-**Symptoms**: Uploaded images don't produce exact copies, system falls back to normal generation
-**Causes**: 
-- Uploaded images have no metadata (no `originalEnhancedPrompt`)
-- System requires `referenceMetadata` to enable exact copy mode
-- Fallback logic not handling uploaded references properly
+#### **Issue 2: Reference Strength Not Appropriate**
+**Symptoms**: Reference strength too high for modifications, too low for copies
+**Expected Behavior**:
+- Modify mode: 0.7 (preserve subject, allow changes)
+- Copy mode: 0.9 (maximum preservation)
 
-**Proposed Direction**:
-- Add explicit promptless exact-copy branch in edge; guard in worker; bypass enhancement; set ultra-low denoise and CFG 1.0.
+**Solutions**:
+```typescript
+// Check reference strength settings
+console.log('🎯 REFERENCE STRENGTH:', {
+  modifyMode: 'should be 0.7',
+  copyMode: 'should be 0.9',
+  currentStrength: referenceStrength
+});
+```
+
+#### **Issue 3: Enhancement Not Bypassed in Copy Mode**
+**Symptoms**: Enhancement still applied when copy mode is enabled
+**Expected Behavior**:
+- Copy mode: skip enhancement entirely
+- Modify mode: normal enhancement flow
+
+**Solutions**:
+```typescript
+// Check enhancement bypass
+console.log('🎯 ENHANCEMENT BYPASS:', {
+  exactCopyMode: exactCopyMode,
+  skipEnhancement: exactCopyMode ? true : false,
+  enhancementEnabled: !exactCopyMode
+});
+```
+
+#### **Issue 4: SDXL Parameters Not Optimized for Copy Mode**
+**Symptoms**: Copy mode not using optimal parameters for exact copying
+**Expected Behavior**:
+- Copy mode: denoise_strength: 0.05, guidance_scale: 1.0
+- Modify mode: denoise_strength: 0.3, guidance_scale: 7.5
+
+**Solutions**:
+```typescript
+// Check SDXL parameters
+console.log('🎯 SDXL PARAMETERS:', {
+  exactCopyMode: exactCopyMode,
+  denoiseStrength: exactCopyMode ? 0.05 : 0.3,
+  guidanceScale: exactCopyMode ? 1.0 : 7.5
+});
+```
 
 #### **Issue 3: Original Prompt Not Displayed**
 **Symptoms**: No original prompt shown in control panel
@@ -534,23 +650,33 @@ if (asset) {
 
 ## **📊 EXPECTED BEHAVIOR MATRIX (TARGET)**
 
-### **Workspace/Library Reference Images**
+### **Primary Use Cases: Subject Modification**
 
 | User Action | System Response | Expected Result |
 |-------------|----------------|-----------------|
-| Select reference + Enable exact copy | Extract metadata, set reference strength 0.9 | Ready for modification |
-| Enter "change to red dress" | Modify original prompt, preserve structure | Same subject with red dress |
-| Leave prompt empty | Use original prompt as-is | Identical copy |
-| Disable exact copy | Normal generation flow | Standard I2I with style controls |
+| Select workspace item as reference | Auto-enable modify mode, strength 0.7 | Ready for subject modification |
+| Upload image | Auto-enable modify mode, strength 0.7 | Ready for composition modification |
+| Type "change black dress to red" | Preserve subject/pose, modify dress | Same woman, red dress |
+| Type "woman kissing her friend" | Preserve subject/pose, modify scenario | Same woman, kissing scenario |
+| Type "change background to beach" | Preserve subject/pose, modify background | Same woman, beach background |
 
-### **Uploaded Reference Images**
+### **Secondary Use Cases: Exact Copying (Manual Selection)**
 
 | User Action | System Response | Expected Result |
 |-------------|----------------|-----------------|
-| Upload image + Enable exact copy | Trigger promptless exact-copy branch (skip enhancement, denoise ≤0.05, CFG 1.0) | Ready for promptless copy |
-| Enter modification prompt | Create subject-preserving prompt | Modified version |
-| Leave prompt empty | Use minimal preservation prompt | High-fidelity copy |
-| Disable exact copy | Normal generation flow | Standard I2I with style controls |
+| Manually toggle to copy mode | Set strength 0.9, disable enhancement | High-fidelity preservation |
+| Leave prompt empty in copy mode (workspace) | Use original prompt, preserve seed | Near-identical copy |
+| Leave prompt empty in copy mode (uploaded) | Use minimal preservation prompt | High-fidelity copy |
+| Toggle back to modify mode | Set strength 0.7, enable enhancement | Ready for modifications |
+
+### **Mode Switching Behavior**
+
+| Current Mode | User Action | New Mode | Reference Strength | Enhancement | SDXL Parameters |
+|--------------|-------------|----------|-------------------|-------------|-----------------|
+| Modify | Toggle to copy | Copy | 0.9 | Disabled | denoise: 0.05, CFG: 1.0 |
+| Copy | Toggle to modify | Modify | 0.7 | Enabled | denoise: 0.3, CFG: 7.5 |
+| None | Upload image | Modify | 0.7 | Enabled | denoise: 0.3, CFG: 7.5 |
+| None | Select workspace item | Modify | 0.7 | Enabled | denoise: 0.3, CFG: 7.5 |
 
 ---
 
