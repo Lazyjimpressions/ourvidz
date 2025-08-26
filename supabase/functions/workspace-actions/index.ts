@@ -968,11 +968,39 @@ serve(async (req) => {
         }
       }
 
-      // Create a job record first (required for workspace_assets.job_id)
-      // Use valid job_type based on asset type and assume high quality for library copies
-      const jobType = libraryAsset.asset_type.startsWith('image') 
-        ? (libraryAsset.model_used === 'sdxl' ? 'sdxl_image_high' : 'image_high')
-        : 'video_high';
+      // Normalize model_used to valid model_type for DB constraints
+      function getModelFamily(modelUsed: string): string {
+        const model = modelUsed.toLowerCase();
+        if (model.includes('sdxl')) return 'sdxl';
+        if (model.includes('realistic_vision') || model.includes('rv51') || model.includes('realistic-vision')) return 'rv51';
+        if (model.includes('wan')) return 'wan';
+        if (model.includes('flux')) return 'flux';
+        return 'sdxl'; // safe fallback
+      }
+
+      const modelFamily = getModelFamily(libraryAsset.model_used);
+      
+      // Create job_type based on asset_type and model family to satisfy DB constraints
+      let jobType: string;
+      if (libraryAsset.asset_type.startsWith('image')) {
+        switch (modelFamily) {
+          case 'sdxl': jobType = 'sdxl_image_high'; break;
+          case 'rv51': jobType = 'rv51_high'; break;
+          default: jobType = 'image_high'; break;
+        }
+      } else {
+        // video
+        switch (modelFamily) {
+          case 'wan': jobType = 'wan_video_high'; break;
+          default: jobType = 'video_high'; break;
+        }
+      }
+
+      console.log('📝 Model mapping:', { 
+        original_model_used: libraryAsset.model_used, 
+        normalized_model_type: modelFamily, 
+        job_type: jobType 
+      });
         
       const jobId = crypto.randomUUID()
       const { data: job, error: jobError } = await supabaseClient
@@ -985,7 +1013,7 @@ serve(async (req) => {
           destination: 'workspace',
           completed_at: new Date().toISOString(),
           original_prompt: libraryAsset.original_prompt,
-          model_type: libraryAsset.model_used,
+          model_type: modelFamily,
           quality: 'high',
           metadata: {
             source: 'library_copy',

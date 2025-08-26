@@ -322,10 +322,21 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
             onAddToWorkspace={async () => {
               const selectedAssetList = filteredAssets.filter(asset => selectedAssets.has(asset.id));
               try {
-                await Promise.all(
+                const results = await Promise.allSettled(
                   selectedAssetList.map(asset => LibraryAssetService.addToWorkspace(asset.id))
                 );
-                toast.success(`Added ${selectedAssetList.length} assets to workspace`);
+                
+                const successes = results.filter(r => r.status === 'fulfilled').length;
+                const failures = results.filter(r => r.status === 'rejected').length;
+                
+                if (failures === 0) {
+                  toast.success(`Added ${successes} assets to workspace`);
+                } else if (successes === 0) {
+                  const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+                  toast.error(`Failed to add assets: ${firstError?.reason?.message || 'Unknown error'}`);
+                } else {
+                  toast.success(`Added ${successes} · Failed ${failures}`);
+                }
                 handleClearSelection();
               } catch (error) {
                 console.error('Failed to add assets to workspace:', error);
@@ -365,14 +376,12 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
                     onAddToWorkspace: async (asset) => {
                       try {
                         console.log('📋 Adding asset to workspace:', asset);
-                        console.log('📋 Asset ID:', asset.id);
-                        console.log('📋 Asset type:', asset.type);
-                        console.log('📋 Asset properties:', Object.keys(asset));
                         await LibraryAssetService.addToWorkspace(asset.id);
                         toast.success('Asset added to workspace');
                       } catch (error) {
                         console.error('Failed to add asset to workspace:', error);
-                        toast.error('Failed to add asset to workspace');
+                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                        toast.error(`Failed to add asset: ${errorMessage}`);
                       }
                     }
                   }}
