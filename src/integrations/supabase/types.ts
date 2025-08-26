@@ -144,6 +144,13 @@ export type Database = {
             referencedRelation: "api_providers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "api_models_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "public_api_providers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       api_providers: {
@@ -1444,7 +1451,42 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_api_providers: {
+        Row: {
+          auth_scheme: string | null
+          base_url: string | null
+          created_at: string | null
+          display_name: string | null
+          docs_url: string | null
+          id: string | null
+          is_active: boolean | null
+          name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auth_scheme?: string | null
+          base_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          docs_url?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auth_scheme?: string | null
+          base_url?: string | null
+          created_at?: string | null
+          display_name?: string | null
+          docs_url?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       clean_orphaned_jobs: {
