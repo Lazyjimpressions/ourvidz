@@ -6,6 +6,7 @@ import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 // Global concurrency control for original image loading
 class OriginalImageLoader {
@@ -170,24 +171,47 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  // Helper to safely get original URL with fallback to direct signing
+  const signOriginalSafely = useCallback(async (asset: SignedAsset): Promise<string> => {
+    // First try using asset.signOriginal if available
+    if (typeof asset.signOriginal === 'function') {
+      try {
+        return await asset.signOriginal();
+      } catch (err) {
+        console.warn('🔄 asset.signOriginal failed, falling back to direct signing:', err);
+      }
+    } else {
+      console.log('🔄 asset.signOriginal not available, using direct signing for asset:', asset.id);
+    }
+    
+    // Fallback: directly sign the originalPath using UrlSigningService
+    if (asset.originalPath) {
+      const bucket = asset.metadata?.source === 'library' ? 'user-library' : 'workspace-temp';
+      console.log('🔄 Direct signing fallback:', { assetId: asset.id, originalPath: asset.originalPath, bucket });
+      return await urlSigningService.getSignedUrl(asset.originalPath, bucket);
+    }
+    
+    throw new Error('No original path available for signing');
+  }, []);
+
   // Load fallback URL only when visible, no thumbUrl, and asset is an image
   useEffect(() => {
     if (!asset.thumbUrl && asset.type === 'image' && !fallbackUrl && !isLoadingFallback && isVisible) {
       setIsLoadingFallback(true);
       
-      // Use concurrency-controlled loader
+      // Use concurrency-controlled loader with safe signing
       originalImageLoader.load(async () => {
         try {
-          const url = await asset.signOriginal();
+          const url = await signOriginalSafely(asset);
           setFallbackUrl(url);
         } catch (err) {
-          console.warn('Failed to load fallback image for asset', asset.id, err);
+          console.warn('❌ Failed to load fallback image for asset', asset.id, err);
         }
       }).finally(() => {
         setIsLoadingFallback(false);
       });
     }
-  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, asset, isVisible]);
+  }, [asset.thumbUrl, asset.type, asset.id, fallbackUrl, isLoadingFallback, isVisible, signOriginalSafely]);
 
   const handleSelect = useCallback((checked: boolean) => {
     selection?.onToggle(asset.id);
@@ -259,7 +283,7 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
                 console.log('🔄 Loading fallback original for asset:', { id: asset.id, originalPath: asset.originalPath });
                 originalImageLoader.load(async () => {
                   try {
-                    const url = await asset.signOriginal();
+                    const url = await signOriginalSafely(asset);
                     setFallbackUrl(url);
                   } catch (err) {
                     console.warn('❌ Failed to load original for asset', asset.id, err);

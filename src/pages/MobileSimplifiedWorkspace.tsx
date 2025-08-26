@@ -9,6 +9,8 @@ import { SharedLightbox, WorkspaceAssetActions } from '@/components/shared/Share
 import { GenerationProgressIndicator } from '@/components/GenerationProgressIndicator';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
+import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -89,14 +91,18 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode]);
 
+  // Process workspace assets through proper mappers and signing
+  const sharedAssets = workspaceAssets.map(toSharedFromWorkspace);
+  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp');
+
   // Preview handler for SharedGrid
   const handlePreview = useCallback((asset: any) => {
-    const index = workspaceAssets.findIndex(a => a.id === asset.id);
+    const index = signedAssets.findIndex(a => a.id === asset.id);
     if (index !== -1) {
       setLightboxIndex(index);
       setWorkspaceLightboxIndex(index);
     }
-  }, [workspaceAssets, setWorkspaceLightboxIndex]);
+  }, [signedAssets, setWorkspaceLightboxIndex]);
 
   // Workspace actions
   const handleSaveToLibrary = useCallback(async (asset: any) => {
@@ -138,13 +144,13 @@ const MobileSimplifiedWorkspace = () => {
 
           {/* Content Grid */}
           <SharedGrid
-            assets={workspaceAssets as any}
+            assets={signedAssets}
             onPreview={handlePreview}
             actions={{
               onSaveToLibrary: handleSaveToLibrary as any,
               onDiscard: handleDiscard as any
             }}
-            isLoading={false}
+            isLoading={isSigning}
           />
         </div>
 
@@ -157,9 +163,9 @@ const MobileSimplifiedWorkspace = () => {
         />
 
         {/* Lightbox */}
-        {lightboxIndex !== null && (workspaceAssets?.length || 0) > 0 && (
+        {lightboxIndex !== null && (signedAssets.length || 0) > 0 && (
           <SharedLightbox
-            assets={workspaceAssets as any}
+            assets={signedAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onRequireOriginalUrl={async (asset) => {
