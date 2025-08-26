@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Trash2, Plus, Edit } from 'lucide-react';
+import { useAdminApiProviders } from '@/hooks/useApiProviders';
 
 interface ApiProvider {
   id: string;
@@ -41,18 +42,7 @@ export const ApiProvidersTab: React.FC = () => {
 
   const queryClient = useQueryClient();
 
-  const { data: providers, isLoading } = useQuery({
-    queryKey: ['api-providers'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('api_providers')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as ApiProvider[];
-    }
-  });
+  const { data: providers, isLoading } = useAdminApiProviders();
 
   const addProviderMutation = useMutation({
     mutationFn: async (provider: Omit<ApiProvider, 'id' | 'created_at'>) => {
@@ -66,7 +56,7 @@ export const ApiProvidersTab: React.FC = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-providers'] });
+      queryClient.invalidateQueries({ queryKey: ['api-providers-admin'] });
       setIsAdding(false);
       resetForm();
       toast.success('API provider added successfully');
@@ -95,7 +85,7 @@ export const ApiProvidersTab: React.FC = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-providers'] });
+      queryClient.invalidateQueries({ queryKey: ['api-providers-admin'] });
       setEditingId(null);
       resetForm();
       toast.success('API provider updated successfully');
@@ -121,7 +111,7 @@ export const ApiProvidersTab: React.FC = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['api-providers'] });
+      queryClient.invalidateQueries({ queryKey: ['api-providers-admin'] });
       toast.success('API provider deleted successfully');
     },
     onError: (error: any) => {
