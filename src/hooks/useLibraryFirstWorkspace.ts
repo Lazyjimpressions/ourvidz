@@ -569,6 +569,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         ? (overrideReferenceImageUrl || referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
         : undefined;
 
+      // CRITICAL FIX: Compute reference strength BEFORE using it in generation request
+      const computedReferenceStrength = exactCopyMode ? copyStrength : (() => {
+        const lowerPrompt = prompt.toLowerCase();
+        const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
+        return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
+      })();
+
       const generationRequest = {
         job_type: (mode === 'image' 
           ? (selectedModel?.type === 'replicate' 
@@ -581,12 +588,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // format omitted - let edge function default based on job_type
         model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
         reference_image_url: effRefUrl,
-         reference_strength: exactCopyMode ? copyStrength : (() => {
-           // Dynamic nudging for color/swap prompts
-           const lowerPrompt = prompt.toLowerCase();
-           const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
-           return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
-         })(), // Use mode-appropriate strength with dynamic nudging
+        reference_strength: computedReferenceStrength,
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
@@ -646,13 +648,6 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           }
         })()
       };
-      
-      // 🎯 PRECISION LOGGING: Debug key parameters for modify mode troubleshooting
-      const computedReferenceStrength = exactCopyMode ? copyStrength : (() => {
-        const lowerPrompt = prompt.toLowerCase();
-        const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
-        return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
-      })();
       
       console.log('🎯 GENERATION DEBUG:', {
         mode: exactCopyMode ? 'EXACT_COPY' : 'MODIFY',
