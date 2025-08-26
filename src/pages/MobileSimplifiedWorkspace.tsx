@@ -1,6 +1,6 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
 import { MobileSimplePromptInput } from '@/components/workspace/MobileSimplePromptInput';
@@ -15,6 +15,8 @@ import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
+  const processedRef = useRef(false);
   
   // Use the proper library-first workspace hook with RV5.1 routing
   const {
@@ -49,11 +51,12 @@ const MobileSimplifiedWorkspace = () => {
     updateMode(mode);
   };
 
-  // Handle incoming reference image from library
+  // Handle incoming reference image from library - prevent re-processing
   useEffect(() => {
     const state = location.state as any;
-    if (state?.referenceUrl && state?.prompt) {
+    if (state?.referenceUrl && state?.prompt && !processedRef.current) {
       console.log('🖼️ MOBILE: Setting reference image from library:', state);
+      processedRef.current = true;
       
       // Set the prompt from the reference asset
       setPrompt(state.prompt);
@@ -86,10 +89,10 @@ const MobileSimplifiedWorkspace = () => {
 
       setReferenceFromUrl();
       
-      // Clear the navigation state to avoid re-triggering
-      window.history.replaceState({}, '', location.pathname + location.search);
+      // Clear the navigation state properly for React Router
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode]);
+  }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
   // Process workspace assets through proper mappers and signing
   const sharedAssets = workspaceAssets.map(toSharedFromWorkspace);

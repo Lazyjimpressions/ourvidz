@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { useSearchParams, useLocation } from 'react-router-dom';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { UnifiedAsset } from '@/lib/services/AssetService';
@@ -32,8 +32,10 @@ export const SimplifiedWorkspace: React.FC = () => {
   const { user, loading } = useAuth();
   const [searchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const processedRef = useRef(false);
   
   // Note: Signed URLs now handled centrally in useLibraryFirstWorkspace hook
 
@@ -130,20 +132,21 @@ export const SimplifiedWorkspace: React.FC = () => {
     registerAssetRef
   } = useLibraryFirstWorkspace();
 
-  // Honor URL param mode
+  // Honor URL param mode - stable sync
   useEffect(() => {
     const urlMode = searchParams.get('mode');
-    if (urlMode === 'video' || urlMode === 'image') {
+    if ((urlMode === 'video' || urlMode === 'image') && urlMode !== mode) {
       updateMode(urlMode);
     }
-  }, [searchParams, updateMode]);
+  }, [location.search, mode, updateMode]);
 
-  // Handle incoming reference image from library
+  // Handle incoming reference image from library - prevent re-processing
   useEffect(() => {
     console.log('🖼️ Workspace: Checking location.state:', location.state);
     const state = location.state as any;
-    if (state?.referenceUrl && state?.prompt) {
+    if (state?.referenceUrl && state?.prompt && !processedRef.current) {
       console.log('🖼️ Setting reference image from library:', state);
+      processedRef.current = true;
       
       // Set the prompt from the reference asset
       setPrompt(state.prompt);
@@ -176,10 +179,10 @@ export const SimplifiedWorkspace: React.FC = () => {
 
       setReferenceFromUrl();
       
-      // Clear the navigation state to avoid re-triggering
-      window.history.replaceState({}, '', location.pathname + location.search);
+      // Clear the navigation state properly for React Router
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
-  }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, toast]);
+  }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, toast, navigate, location.pathname, location.search, updateMode, setReferenceStrength]);
 
   // Convert workspace assets to shared format and sign URLs
   const sharedAssets = useMemo(() => 
