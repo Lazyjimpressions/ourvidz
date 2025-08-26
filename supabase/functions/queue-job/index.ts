@@ -7,18 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// I2I constants
-const DENOISE_COPY_MAX = 0.05;   // promptless exact copy
-const DENOISE_MOD_MIN = 0.35;    // reference modify - increased for better changes
-const DENOISE_MOD_MAX = 0.65;    // reference modify - increased for better changes
-const CFG_COPY = 1.0;
-const CFG_MOD_MIN = 4.0;
-const CFG_MOD_MAX = 7.0;
-const STEPS_COPY_MIN = 6;
-const STEPS_COPY_MAX = 10;
-const STEPS_MOD_MIN = 15;
-const STEPS_MOD_DEFAULT = 25;
-const STEPS_MOD_MAX = 30;
+// I2I constants - Simplified to work with SDXL worker defaults
+const DENOISE_COPY_MAX = 0.05;   // exact copy mode (worker will clamp)
+const DENOISE_MOD_DEFAULT = 0.5; // modify mode (worker default)
+const CFG_COPY = 1.0;            // copy mode: minimal guidance
+const CFG_MOD_DEFAULT = 7.5;     // modify mode: standard guidance
+const STEPS_COPY_DEFAULT = 15;   // copy mode: standard steps
+const STEPS_MOD_DEFAULT = 25;    // modify mode: standard steps
 
 interface JobRequest {
   prompt: string;
@@ -257,22 +252,19 @@ serve(async (req) => {
       }
     }
 
-    // Clamp and finalize denoise/cfg/steps
+    // Simplified parameter setting - let worker handle defaults
     if (isPromptlessUploadedExactCopy) {
-      denoise = Math.min(typeof denoise === 'number' ? denoise : 0.04, DENOISE_COPY_MAX);
+      // Exact copy mode: let worker handle clamping
+      denoise = typeof denoise === 'number' ? denoise : DENOISE_COPY_MAX;
       cfg = CFG_COPY;
-      steps = Math.max(STEPS_COPY_MIN, Math.min(typeof steps === 'number' ? steps : 8, STEPS_COPY_MAX));
+      steps = typeof steps === 'number' ? steps : STEPS_COPY_DEFAULT;
       // Remove negative prompts in this branch
       jobRequest.negative_prompt = undefined;
     } else if (isReferenceModify) {
-      const d = typeof denoise === 'number' ? denoise : 0.5; // FIXED: Default to 0.5 for better changes
-      denoise = Math.max(DENOISE_MOD_MIN, Math.min(d, DENOISE_MOD_MAX));
-
-      const g = typeof cfg === 'number' ? cfg : 6.0;
-      cfg = Math.max(CFG_MOD_MIN, Math.min(g, CFG_MOD_MAX));
-
-      const s = typeof steps === 'number' ? steps : STEPS_MOD_DEFAULT;
-      steps = Math.max(STEPS_MOD_MIN, Math.min(s, STEPS_MOD_MAX));
+      // Modify mode: use worker defaults with edge function overrides
+      denoise = typeof denoise === 'number' ? denoise : DENOISE_MOD_DEFAULT;
+      cfg = typeof cfg === 'number' ? cfg : CFG_MOD_DEFAULT;
+      steps = typeof steps === 'number' ? steps : STEPS_MOD_DEFAULT;
     }
 
     // Create job record

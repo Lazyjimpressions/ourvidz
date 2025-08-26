@@ -317,18 +317,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     }
   };
 
-  // Auto-enable exact copy when reference image is set (only if prompt is empty)
+  // Auto-enable modify mode when reference image is set (default behavior)
   const handleReferenceFileChange = (file: File | null) => {
     onReferenceImageChange(file);
     if (file) {
-      // Only auto-enable Exact Copy if prompt is empty, otherwise default to Modify
-      if (prompt.trim() === '') {
-        onExactCopyModeChange?.(true);
-        onReferenceStrengthChange(0.8); // High strength for exact copying
-      } else {
-        onExactCopyModeChange?.(false);
-        onReferenceStrengthChange(0.6); // Moderate strength for modify
-      }
+      // Always default to modify mode (never auto-enable exact copy)
+      onExactCopyModeChange?.(false);
+      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -341,9 +336,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const handleReferenceUrlChange = (url: string | null) => {
     onReferenceImageUrlChange?.(url);
     if (url) {
-      // Set to modify-friendly strength and ensure modify mode
-      onReferenceStrengthChange(0.6);
-      onExactCopyModeChange?.(false); // Explicitly set modify mode for drag-drop
+      // Always default to modify mode for all references
+      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
+      onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -438,9 +433,23 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   // Auto-clamp high strength in modify mode
   React.useEffect(() => {
     if (isHighStrengthModify && onReferenceStrengthChange) {
-      onReferenceStrengthChange(0.7);
+      onReferenceStrengthChange(0.5); // Worker default denoise = 0.5
     }
   }, [isHighStrengthModify, onReferenceStrengthChange]);
+
+  // Mode toggle handler with proper defaults
+  const handleModeToggle = () => {
+    const newMode = !exactCopyMode;
+    onExactCopyModeChange?.(newMode);
+    
+    if (newMode) {
+      // Switching to copy mode
+      onReferenceStrengthChange(0.95); // Copy mode strength (worker will clamp denoise to ≤0.05)
+    } else {
+      // Switching to modify mode
+      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
+    }
+  };
 
   // Previews for Exact Copy mode
   const originalPromptPreview = exactCopyMode ? referenceMetadata?.originalEnhancedPrompt || null : null;
@@ -482,7 +491,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <div className="absolute -bottom-1 -right-1 flex flex-col gap-0.5">
                         {/* Mode toggle */}
                         <button
-                          onClick={() => onExactCopyModeChange?.(!exactCopyMode)}
+                          onClick={handleModeToggle}
                           className={`text-[8px] px-1 py-0.5 rounded text-center font-medium transition-colors ${
                             exactCopyMode 
                               ? 'bg-primary text-primary-foreground' 

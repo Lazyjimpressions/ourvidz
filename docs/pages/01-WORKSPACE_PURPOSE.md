@@ -105,22 +105,22 @@ const { data, error } = await supabase
 
 #### **Mode Switching Defaults**
 ```typescript
-// Modify Mode (Default)
+// Modify Mode (Default) - Uses SDXL worker defaults
 const modifyDefaults = {
-  referenceStrength: 0.7,
+  referenceStrength: 0.5,        // Worker converts to denoise_strength = 0.5
   enhancementEnabled: true,
   styleControlsEnabled: true,
-  denoiseStrength: 0.3,
-  guidanceScale: 7.5
+  guidanceScale: 7.5,            // Worker default for high quality
+  steps: 25                      // Worker default for high quality
 };
 
-// Copy Mode (Manual Selection Only)
+// Copy Mode (Manual Selection Only) - Uses SDXL worker exact copy mode
 const copyDefaults = {
-  referenceStrength: 0.9,
+  referenceStrength: 0.95,       // Worker clamps denoise_strength to ≤0.05
   enhancementEnabled: false,
   styleControlsEnabled: false,
-  denoiseStrength: 0.05,
-  guidanceScale: 1.0
+  guidanceScale: 1.0,            // Worker exact copy mode
+  steps: 15                      // Worker exact copy mode
 };
 ```
 
@@ -128,19 +128,15 @@ const copyDefaults = {
 ```typescript
 // queue-job edge function
 if (exactCopyMode) {
-  // Skip enhancement entirely
+  // Set exact_copy_mode flag - worker handles optimization
+  exact_copy_mode: true,
   skip_enhancement: true,
-  // Use copy-optimized parameters
-  denoise_strength: 0.05,
-  guidance_scale: 1.0,
-  negative_prompt: '', // No negative prompts
-  style: '' // No style controls
+  // Worker will clamp denoise_strength to ≤0.05, set CFG=1.0
 } else {
-  // Normal modify mode
+  // Normal modify mode - use worker defaults
+  exact_copy_mode: false,
   skip_enhancement: false,
-  // Use standard parameters
-  denoise_strength: 1 - reference_strength,
-  guidance_scale: 7.5
+  // Worker uses denoise_strength = 0.5 (default), CFG=7.5
 }
 ```
 
@@ -148,14 +144,14 @@ if (exactCopyMode) {
 ```python
 # For exact copy mode
 if job.get('exact_copy_mode'):
-    denoise_strength = 0.05  # Ultra-low denoise
+    denoise_strength = min(denoise_strength, 0.05)  # Clamp to ≤0.05
     guidance_scale = 1.0     # Minimal guidance
     negative_prompt = ""     # No negatives
     # Skip all enhancement and style controls
 else:
-    # Normal modify mode
-    denoise_strength = 1 - reference_strength
-    guidance_scale = 7.5
+    # Normal modify mode - use worker defaults
+    denoise_strength = 0.5   # Worker default for i2i
+    guidance_scale = 7.5     # Worker default for high quality
     # Apply normal enhancement and style controls
 ```
 
@@ -211,6 +207,227 @@ else:
 2. 📋 **Original prompt preservation** for workspace items
 3. 📋 **Seed locking** for character consistency
 4. 📋 **Prompt modification engine** for intelligent changes
+
+---
+
+## **🧪 TESTING PLAN**
+
+### **Test Suite 1: Default Behavior Validation**
+
+#### **Test 1.1: Upload Image Default Mode**
+**Steps:**
+1. Upload an image to reference box
+2. Verify mode is "MOD" (modify)
+3. Verify reference strength is 0.5
+4. Verify enhancement is enabled
+
+**Expected Results:**
+- Mode: "MOD" (not "COPY")
+- Reference Strength: 0.5 (worker default denoise = 0.5)
+- Enhancement: Enabled
+- Console Log: "Auto-enable modify mode"
+
+#### **Test 1.2: Workspace Item Default Mode**
+**Steps:**
+1. Drag workspace item to reference box
+2. Verify mode is "MOD" (modify)
+3. Verify reference strength is 0.5
+4. Verify enhancement is enabled
+
+**Expected Results:**
+- Mode: "MOD" (not "COPY")
+- Reference Strength: 0.5 (worker default denoise = 0.5)
+- Enhancement: Enabled
+- Console Log: "Auto-enable modify mode"
+
+### **Test Suite 2: Mode Switching Validation**
+
+#### **Test 2.1: MOD → COPY Toggle**
+**Steps:**
+1. Set reference image (should be in MOD mode)
+2. Click mode toggle button
+3. Verify mode changes to "COPY"
+4. Verify reference strength changes to 0.9
+
+**Expected Results:**
+- Mode: "COPY"
+- Reference Strength: 0.9
+- Enhancement: Disabled
+- Console Log: "Switching to copy mode"
+
+#### **Test 2.2: COPY → MOD Toggle**
+**Steps:**
+1. Set reference image and toggle to COPY mode
+2. Click mode toggle button again
+3. Verify mode changes back to "MOD"
+4. Verify reference strength changes back to 0.7
+
+**Expected Results:**
+- Mode: "MOD"
+- Reference Strength: 0.7
+- Enhancement: Enabled
+- Console Log: "Switching to modify mode"
+
+### **Test Suite 3: Parameter Validation**
+
+#### **Test 3.1: Modify Mode Parameters**
+**Steps:**
+1. Set reference image (MOD mode)
+2. Generate with modification prompt
+3. Check edge function logs
+
+**Expected Results:**
+- Reference Strength: 0.7
+- Denoise Strength: 0.3
+- Guidance Scale: 7.5
+- Steps: 25
+- Enhancement: Enabled
+- Reference Mode: "modify"
+
+#### **Test 3.2: Copy Mode Parameters**
+**Steps:**
+1. Set reference image and toggle to COPY mode
+2. Generate with empty prompt
+3. Check edge function logs
+
+**Expected Results:**
+- Reference Strength: 0.9
+- Denoise Strength: 0.05
+- Guidance Scale: 1.0
+- Steps: 15
+- Enhancement: Disabled
+- Reference Mode: "copy"
+
+### **Test Suite 4: Use Case Validation**
+
+#### **Test 4.1: Subject Modification (Workspace Item)**
+**Steps:**
+1. Generate "woman in black dress"
+2. Use as reference (should be MOD mode)
+3. Type "change to red dress"
+4. Generate
+
+**Expected Results:**
+- Same woman, same pose
+- Red dress instead of black
+- Preserved lighting and composition
+- Console Log: "Applying modification to original prompt"
+
+#### **Test 4.2: Subject Modification (Uploaded Image)**
+**Steps:**
+1. Upload image of woman in black dress
+2. Verify MOD mode (not COPY)
+3. Type "change to red dress"
+4. Generate
+
+**Expected Results:**
+- Same woman, same pose
+- Red dress instead of black
+- Preserved composition
+- Console Log: "Composition modification"
+
+#### **Test 4.3: Exact Copy (Manual Selection)**
+**Steps:**
+1. Set reference image
+2. Manually toggle to COPY mode
+3. Leave prompt empty
+4. Generate
+
+**Expected Results:**
+- Near-identical copy
+- High fidelity preservation
+- Console Log: "Exact copy mode - no modification"
+
+### **Test Suite 5: Edge Function Validation**
+
+#### **Test 5.1: enhance-prompt Bypass**
+**Steps:**
+1. Enable COPY mode
+2. Generate
+3. Check enhance-prompt logs
+
+**Expected Results:**
+- Early exit for exact copy
+- Skip enhancement entirely
+- Template: "skip_for_exact_copy"
+
+#### **Test 5.2: queue-job Parameter Setting**
+**Steps:**
+1. Generate in both MOD and COPY modes
+2. Check queue-job logs
+
+**Expected Results:**
+- Correct denoise/CFG/steps values
+- Proper reference mode classification
+- Correct enhancement bypass
+
+### **Test Suite 6: Error Handling**
+
+#### **Test 6.1: Invalid Mode Transitions**
+**Steps:**
+1. Try to enable COPY mode without reference
+2. Try to generate without prompt in MOD mode
+
+**Expected Results:**
+- Appropriate error messages
+- Graceful fallbacks
+- No crashes
+
+### **Debug Commands for Testing**
+
+#### **Browser Console Commands**
+```javascript
+// Check current state
+console.log('🎯 CURRENT STATE:', {
+  exactCopyMode: window.workspaceState?.exactCopyMode,
+  referenceStrength: window.workspaceState?.referenceStrength,
+  referenceImageUrl: window.workspaceState?.referenceImageUrl,
+  enhancementEnabled: window.workspaceState?.enhancementModel !== 'none'
+});
+
+// Test mode toggle
+window.workspaceState?.setExactCopyMode(!window.workspaceState.exactCopyMode);
+
+// Check generation parameters
+console.log('🎯 GENERATION PARAMS:', {
+  referenceStrength: window.workspaceState?.referenceStrength,
+  denoiseStrength: 1 - window.workspaceState?.referenceStrength,
+  guidanceScale: window.workspaceState?.exactCopyMode ? 1.0 : 7.5
+});
+```
+
+#### **Edge Function Log Patterns**
+```bash
+# enhance-prompt logs
+grep "skip_for_exact_copy" logs
+grep "reference_mode: modify" logs
+grep "reference_mode: copy" logs
+
+# queue-job logs
+grep "I2I MODE RESOLUTION" logs
+grep "denoise_strength: 0.05" logs
+grep "guidance_scale: 1.0" logs
+```
+
+### **Success Criteria**
+
+#### **Phase 1 Success (Core Modify)**
+- ✅ All references default to MOD mode
+- ✅ Reference strength 0.7 for modifications
+- ✅ Subject/pose preservation working
+- ✅ Enhancement enabled in MOD mode
+
+#### **Phase 2 Success (Manual Copy)**
+- ✅ Manual toggle to COPY mode works
+- ✅ Copy parameters (denoise 0.05, CFG 1.0) applied
+- ✅ Enhancement bypassed in COPY mode
+- ✅ High-fidelity copies produced
+
+#### **Phase 3 Success (Advanced Features)**
+- ✅ Metadata extraction working
+- ✅ Original prompt preservation
+- ✅ Seed locking for consistency
+- ✅ Intelligent prompt modifications
 
 ---
 

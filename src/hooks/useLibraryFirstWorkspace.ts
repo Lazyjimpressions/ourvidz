@@ -421,7 +421,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       };
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
-      const preserveStrength = 0.8; // High strength for exact copying
+      // Reference strength defaults - align with worker's denoise_strength defaults
+      const modifyStrength = 0.5; // Modify mode strength (worker default denoise = 0.5)
+      const copyStrength = 0.95; // Copy mode strength (worker will clamp denoise to ≤0.05)
       
       // EXACT COPY MODE: Use original enhanced prompt as base
       let finalPrompt: string;
@@ -549,8 +551,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // format omitted - let edge function default based on job_type
         model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
         reference_image_url: effRefUrl,
-        reference_strength: exactCopyMode ? 0.9 : Math.min(referenceStrength, 0.7), // Clamp for modify mode
-        denoise_strength: exactCopyMode ? 0.05 : (1 - Math.min(referenceStrength, 0.7)),
+        reference_strength: exactCopyMode ? copyStrength : Math.min(referenceStrength, modifyStrength), // Use mode-appropriate strength
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
@@ -581,7 +582,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           // Exact copy parameter overrides
           ...(exactCopyMode ? {
             num_inference_steps: 15,
-            guidance_scale: 3.0,
+            guidance_scale: 1.0, // Copy mode: minimal guidance
             negative_prompt: '',
             exact_copy_mode: true,
             originalEnhancedPrompt: referenceMetadata?.originalEnhancedPrompt,
@@ -608,7 +609,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           reference_image_url: !!generationRequest.reference_image_url,
           reference_mode: generationRequest.metadata?.reference_mode,
           referenceStrength: generationRequest.reference_strength,
-          denoise: generationRequest.denoise_strength
+          denoise: 'worker_handled' // Worker converts reference_strength to denoise_strength
         },
         mode: {
           exactCopyMode,
