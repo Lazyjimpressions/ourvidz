@@ -379,6 +379,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     prefetchThreshold: 0.3
   });
 
+  // Preload first 24 assets for better UX
+  useEffect(() => {
+    if (workspaceAssets.length > 0) {
+      preloadNextAssets(24);
+    }
+  }, [workspaceAssets.length > 0, preloadNextAssets]);
+
   // Preload first 24 assets on mount for immediate rendering (if enabled)
   useEffect(() => {
     if (!config.disableUrlOptimization && workspaceAssets.length > 0) {
@@ -626,11 +633,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               ...(referenceMetadata?.originalShotType && { originalShotType: referenceMetadata.originalShotType })
             };
           } else {
-            // Modify mode parameters
+            // Modify mode parameters - CRITICAL: set denoise_strength for i2i
             return {
               ...baseMetadata,
+              num_inference_steps: 25, // Modify mode: standard steps
               guidance_scale: 7.5, // Modify mode: standard guidance
-              negative_prompt: negativePrompt || undefined
+              denoise_strength: 1 - computedReferenceStrength, // CRITICAL: explicit denoise for modify
+              negative_prompt: negativePrompt || undefined,
+              exact_copy_mode: false, // Ensure modify mode
+              reference_mode: 'modify' // Explicit modify mode
             };
           }
         })()
@@ -709,7 +720,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             steps: steps,
             guidance_scale: guidanceScale,
             negative_prompt: negativePrompt,
-            seed: finalSeed,
+            seed: lockSeed ? finalSeed : undefined, // Only send seed if locked
             width: dimensions.width,
             height: dimensions.height,
             num_outputs: numImages,

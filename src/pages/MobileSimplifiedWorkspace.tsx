@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLibraryFirstWorkspace } from '@/hooks/useLibraryFirstWorkspace';
 import { extractReferenceMetadata } from '@/utils/extractReferenceMetadata';
@@ -10,7 +10,7 @@ import { GenerationProgressIndicator } from '@/components/GenerationProgressIndi
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
-import { useSignedAssets } from '@/lib/hooks/useSignedAssets';
+
 
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -35,7 +35,11 @@ const MobileSimplifiedWorkspace = () => {
     generate,
     deleteItem,
     clearItem,
-    setLightboxIndex: setWorkspaceLightboxIndex
+    setLightboxIndex: setWorkspaceLightboxIndex,
+    // URL Management
+    signedUrls,
+    isUrlLoading,
+    registerAssetRef
   } = useLibraryFirstWorkspace();
 
   const handleGenerate = async (prompt: string, options?: any) => {
@@ -94,18 +98,28 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, navigate, location.pathname, location.search]);
 
-  // Process workspace assets through proper mappers and signing
-  const sharedAssets = workspaceAssets.map(toSharedFromWorkspace);
-  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp');
+  // Process workspace assets through proper mappers - use centralized signing
+  const sharedAssets = useMemo(() => {
+    const mapped = workspaceAssets.map(toSharedFromWorkspace);
+    // Build compatible asset array using centralized signedUrls
+    return mapped.map(asset => ({
+      ...asset,
+      url: signedUrls[asset.id]?.original || '',
+      thumbUrl: signedUrls[asset.id]?.thumb || asset.originalPath,
+      signedUrl: signedUrls[asset.id]?.original,
+      signedThumbUrl: signedUrls[asset.id]?.thumb,
+      signOriginal: async () => signedUrls[asset.id]?.original || asset.originalPath
+    }));
+  }, [workspaceAssets, signedUrls]);
 
   // Preview handler for SharedGrid
   const handlePreview = useCallback((asset: any) => {
-    const index = signedAssets.findIndex(a => a.id === asset.id);
+    const index = sharedAssets.findIndex(a => a.id === asset.id);
     if (index !== -1) {
       setLightboxIndex(index);
       setWorkspaceLightboxIndex(index);
     }
-  }, [signedAssets, setWorkspaceLightboxIndex]);
+  }, [sharedAssets, setWorkspaceLightboxIndex]);
 
   // Workspace actions
   const handleSaveToLibrary = useCallback(async (asset: any) => {
@@ -147,13 +161,14 @@ const MobileSimplifiedWorkspace = () => {
 
           {/* Content Grid */}
           <SharedGrid
-            assets={signedAssets}
+            assets={sharedAssets}
             onPreview={handlePreview}
             actions={{
-              onSaveToLibrary: handleSaveToLibrary as any,
-              onDiscard: handleDiscard as any
+              onSaveToLibrary: handleSaveToLibrary,
+              onDiscard: handleDiscard
             }}
-            isLoading={isSigning}
+            isLoading={isGenerating || isUrlLoading}
+            registerAssetRef={(element, assetId) => registerAssetRef(assetId, element)}
           />
         </div>
 
@@ -166,9 +181,9 @@ const MobileSimplifiedWorkspace = () => {
         />
 
         {/* Lightbox */}
-        {lightboxIndex !== null && (signedAssets.length || 0) > 0 && (
+        {lightboxIndex !== null && (sharedAssets.length || 0) > 0 && (
           <SharedLightbox
-            assets={signedAssets}
+            assets={sharedAssets}
             startIndex={lightboxIndex}
             onClose={() => setLightboxIndex(null)}
             onRequireOriginalUrl={async (asset) => {

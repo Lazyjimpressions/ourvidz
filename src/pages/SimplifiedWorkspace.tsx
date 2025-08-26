@@ -129,7 +129,9 @@ export const SimplifiedWorkspace: React.FC = () => {
     setCompelWeights,
     setSeed,
     // URL Management
-    registerAssetRef
+    registerAssetRef,
+    signedUrls,
+    isUrlLoading
   } = useLibraryFirstWorkspace();
 
   // Honor URL param mode - stable sync
@@ -184,16 +186,19 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   }, [location.state, setPrompt, setReferenceImage, setReferenceMetadata, setExactCopyMode, toast, navigate, location.pathname, location.search, updateMode, setReferenceStrength]);
 
-  // Convert workspace assets to shared format and sign URLs
-  const sharedAssets = useMemo(() => 
-    workspaceAssets.map(toSharedFromWorkspace), 
-    [workspaceAssets]
-  );
-  
-  const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'workspace-temp', {
-    thumbTtlSec: 15 * 60, // 15 minutes for workspace
-    enabled: true
-  });
+  // Convert workspace assets to shared format - use centralized signing
+  const sharedAssets = useMemo(() => {
+    const mapped = workspaceAssets.map(toSharedFromWorkspace);
+    // Build compatible asset array using centralized signedUrls
+    return mapped.map(asset => ({
+      ...asset,
+      url: signedUrls[asset.id]?.original || '',
+      thumbUrl: signedUrls[asset.id]?.thumb || asset.originalPath,
+      signedUrl: signedUrls[asset.id]?.original,
+      signedThumbUrl: signedUrls[asset.id]?.thumb,
+      signOriginal: async () => signedUrls[asset.id]?.original || asset.originalPath
+    }));
+  }, [workspaceAssets, signedUrls]);
 
   // Note: Signed URL generation now handled centrally in useLibraryFirstWorkspace hook
 
@@ -420,19 +425,19 @@ export const SimplifiedWorkspace: React.FC = () => {
         <main className="flex-1 pb-32">
           <div className="container mx-auto px-4 py-6">
             <SharedGrid
-              assets={signedAssets}
-              onPreview={(asset) => {
-                const index = workspaceAssets.findIndex(a => a.id === asset.id);
-                if (index !== -1) setLightboxIndex(index);
-              }}
-              actions={{
-                onSaveToLibrary: (asset: any) => handleSaveItem(asset as UnifiedAsset),
-                onDiscard: (asset: any) => handleDeleteItem(asset as UnifiedAsset),
-                onSendToRef: (asset: any) => handleSendToRef(asset as UnifiedAsset),
-                onDownload: (asset: any) => handleDownloadItem(asset as UnifiedAsset),
-                onUseAsReference: (asset: any) => handleUseAsReference(asset as UnifiedAsset)
-              }}
-              isLoading={isSigning}
+          assets={sharedAssets}
+          onPreview={(asset) => {
+            const index = workspaceAssets.findIndex(a => a.id === asset.id);
+            if (index !== -1) setLightboxIndex(index);
+          }}
+          actions={{
+            onSaveToLibrary: (asset: any) => handleSaveItem(asset as UnifiedAsset),
+            onDiscard: (asset: any) => handleDeleteItem(asset as UnifiedAsset),
+            onSendToRef: (asset: any) => handleSendToRef(asset as UnifiedAsset),
+            onDownload: (asset: any) => handleDownloadItem(asset as UnifiedAsset),
+            onUseAsReference: (asset: any) => handleUseAsReference(asset as UnifiedAsset)
+          }}
+          isLoading={isUrlLoading}
               registerAssetRef={(element: HTMLElement, assetId: string) => registerAssetRef(assetId, element)}
             />
           </div>
@@ -509,9 +514,9 @@ export const SimplifiedWorkspace: React.FC = () => {
       </div>
       
       {/* Lightbox */}
-      {lightboxIndex !== null && signedAssets.length > 0 && (
+      {lightboxIndex !== null && sharedAssets.length > 0 && (
         <SharedLightbox
-          assets={signedAssets}
+          assets={sharedAssets}
           startIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onRequireOriginalUrl={async (asset: any) => {

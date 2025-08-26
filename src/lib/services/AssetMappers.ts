@@ -147,18 +147,8 @@ export function toSharedFromWorkspace(row: any): SharedAsset {
     userId: userId
   };
   
-  // One-time diagnostic logging
-  if (Math.random() < 0.1) { // Log ~10% of assets for sampling
-    console.log('🔍 Asset mapped (workspace):', {
-      id: sharedAsset.id,
-      originalPath: sharedAsset.originalPath,
-      thumbPath: sharedAsset.thumbPath,
-      type: sharedAsset.type,
-      hasOriginalPath: !!sharedAsset.originalPath,
-      hasThumbPath: !!sharedAsset.thumbPath,
-      willUseOriginalAsThumb: !sharedAsset.thumbPath && sharedAsset.type === 'image'
-    });
-  }
+  // Disable verbose logging to reduce console noise
+  // Uncomment for debugging: console.log('🔍 Asset mapped (workspace):', {...})
   
   return sharedAsset;
 }
