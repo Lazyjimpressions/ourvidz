@@ -135,31 +135,61 @@ export class GenerationService {
         throw new Error('Unable to sanitize request for serialization');
       }
 
-      // Use queue-job instead of deprecated generate-content
-      const { data, error } = await supabase.functions.invoke('queue-job', {
-        body: {
-          prompt: request.enhancedPrompt || request.originalPrompt || request.prompt,
-          original_prompt: request.originalPrompt || request.prompt,
-          job_type: request.format,
-          quality: config.format.includes('high') ? 'high' : 'fast',
-          format: config.isVideo ? 'mp4' : 'png',
-          model_type: config.isSDXL ? 'sdxl' : 'wan',
-          enhanced_prompt: request.enhancedPrompt,
-          num_images: request.batchCount || 1,
+      // CRITICAL: Prepare complete payload with top-level settings for SDXL worker
+      const queueJobPayload = {
+        prompt: request.enhancedPrompt || request.originalPrompt || request.prompt,
+        original_prompt: request.originalPrompt || request.prompt,
+        job_type: request.format,
+        quality: config.format.includes('high') ? 'high' : 'fast',
+        format: config.isVideo ? 'mp4' : 'png',
+        model_type: config.isSDXL ? 'sdxl' : 'wan',
+        enhanced_prompt: request.enhancedPrompt,
+        num_images: request.batchCount || 1,
+        reference_image_url: request.referenceImageUrl,
+        reference_strength: request.metadata?.reference_strength,
+        negative_prompt: request.metadata?.negative_prompt || undefined,
+        // CRITICAL: Pass top-level settings for SDXL worker (complete settings)
+        steps: request.metadata?.steps,
+        guidance_scale: request.metadata?.guidance_scale,
+        denoise_strength: request.metadata?.denoise_strength,
+        seed: request.metadata?.seed,
+        metadata: {
+          ...sanitizedBody.metadata,
           reference_image_url: request.referenceImageUrl,
           reference_strength: request.metadata?.reference_strength,
-          negative_prompt: request.metadata?.negative_prompt || undefined,
-          metadata: {
-            ...sanitizedBody.metadata,
-            reference_image_url: request.referenceImageUrl,
-            reference_strength: request.metadata?.reference_strength,
-            user_requested_enhancement: !request.metadata?.exact_copy_mode && 
-                                      request.metadata?.enhancement_model !== 'none' &&
-                                      request.metadata?.skip_enhancement !== true,
-            enhancement_model: request.metadata?.enhancement_model || 'qwen_instruct',
-            skip_enhancement: request.metadata?.skip_enhancement || request.metadata?.exact_copy_mode
-          }
+          user_requested_enhancement: !request.metadata?.exact_copy_mode && 
+                                    request.metadata?.enhancement_model !== 'none' &&
+                                    request.metadata?.skip_enhancement !== true,
+          enhancement_model: request.metadata?.enhancement_model || 'qwen_instruct',
+          skip_enhancement: request.metadata?.skip_enhancement || request.metadata?.exact_copy_mode
         }
+      };
+
+      // 🐛 DEBUG: Log the complete payload before sending to queue-job
+      console.log('🔍 GENERATION SERVICE DEBUG - Complete queue-job payload:', {
+        hasReferenceImage: !!queueJobPayload.reference_image_url,
+        topLevelSettings: {
+          steps: queueJobPayload.steps,
+          guidance_scale: queueJobPayload.guidance_scale,
+          denoise_strength: queueJobPayload.denoise_strength,
+          reference_strength: queueJobPayload.reference_strength,
+          seed: queueJobPayload.seed
+        },
+        metadataFlags: {
+          exact_copy_mode: queueJobPayload.metadata?.exact_copy_mode,
+          reference_mode: queueJobPayload.metadata?.reference_mode,
+          skip_enhancement: queueJobPayload.metadata?.skip_enhancement
+        },
+        promptInfo: {
+          prompt: queueJobPayload.prompt?.substring(0, 100) + '...',
+          original_prompt: queueJobPayload.original_prompt?.substring(0, 50) + '...',
+          enhanced_prompt: queueJobPayload.enhanced_prompt?.substring(0, 50) + '...'
+        }
+      });
+
+      // Use queue-job instead of deprecated generate-content
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: queueJobPayload
       });
 
       if (error) {

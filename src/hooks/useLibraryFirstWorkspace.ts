@@ -430,8 +430,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
       // Reference strength defaults - align with worker's denoise_strength defaults
-      const modifyStrength = 0.4; // Modify mode strength - reduced for stronger modification effect
+      const modifyStrength = 0.35; // Modify mode strength - reduced for stronger modification effect
       const copyStrength = 0.95; // Copy mode strength (worker will clamp denoise to ≤0.05)
+      
+      // CRITICAL: Calculate denoise strength for modify mode (worker expects complete settings)
+      const computedDenoiseStrength = exactCopyMode ? 0.05 : (1 - modifyStrength); // 0.65 for modify mode
       
       // EXACT COPY MODE: Use original enhanced prompt as base
       let finalPrompt: string;
@@ -592,8 +595,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
-        guidance_scale: guidanceScale,
+        guidance_scale: exactCopyMode ? 1.0 : 6.0, // CRITICAL: Lower guidance for modify mode
         negative_prompt: negativePrompt,
+        // CRITICAL: Pass top-level denoise_strength for SDXL worker  
+        denoise_strength: computedDenoiseStrength,
         compel_enabled: compelEnabled,
         compel_weights: compelWeights,
         metadata: (() => {

@@ -83,21 +83,22 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       metadata: {
         reference_image: true,
         reference_strength: state.referenceStrength,
-        denoise_strength: state.denoiseStrength, // Use direct denoise value instead of calculation
+        denoise_strength: state.denoiseStrength, // CRITICAL: Pass complete denoise value
         reference_type: 'composition',
         negative_prompt: state.negativePrompt.trim() || undefined,
-        ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),
         credits: currentTile.quality === 'high' ? 2 : 1,
         num_images: 1,
         // Mark as regeneration to enable cache-busting and variations
         regeneration: true,
         cache_bust: Date.now().toString(),
-        // Pass control settings for proper mapping in edge function
-        steps: 20, // Default for RV5.1
+        // CRITICAL: Pass complete top-level settings for SDXL worker
+        steps: 20,
         guidance_scale: 6, // Reduced from 7.5 to allow more variation
         width: 1024,
         height: 1024,
-        scheduler: 'EulerA'
+        scheduler: 'EulerA',
+        exact_copy_mode: false, // Always false for i2i modify
+        seed: state.keepSeed && originalDetails?.seed ? originalDetails.seed : undefined
       }
     };
 
