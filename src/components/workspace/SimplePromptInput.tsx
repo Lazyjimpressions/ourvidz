@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
 
 import { Slider } from '@/components/ui/slider';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
 import { useImageModels } from '@/hooks/useApiModels';
@@ -327,7 +328,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (file) {
       // Always default to modify mode (never auto-enable exact copy)
       onExactCopyModeChange?.(false);
-      onReferenceStrengthChange(0.75); // Better default for modify mode
+      onReferenceStrengthChange(0.80); // Better default for character mode
       onReferenceTypeChange?.('character'); // Default to character for most use cases
       onModeChange('image');
     } else {
@@ -342,7 +343,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     onReferenceImageUrlChange?.(url);
     if (url) {
       // Always default to modify mode for all references
-      onReferenceStrengthChange(0.75); // Better default for modify mode
+      onReferenceStrengthChange(0.80); // Better default for character mode
       onReferenceTypeChange?.('character'); // Default to character for most use cases
       onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
@@ -436,10 +437,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   // Detect if reference strength is high in modify mode (potential near-copy)
   const isHighStrengthModify = !exactCopyMode && (referenceImage || referenceImageUrl) && referenceStrength > 0.8;
   
-  // Auto-clamp high strength in modify mode
+  // Auto-clamp high strength in modify mode (prevent near-copies)
   React.useEffect(() => {
     if (isHighStrengthModify && onReferenceStrengthChange) {
-      onReferenceStrengthChange(0.5); // Worker default denoise = 0.5
+      onReferenceStrengthChange(0.75); // Better default for modify mode
     }
   }, [isHighStrengthModify, onReferenceStrengthChange]);
 
@@ -453,7 +454,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
       onReferenceStrengthChange(0.95); // Copy mode strength (worker will clamp denoise to ≤0.05)
     } else {
       // Switching to modify mode
-      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
+      onReferenceStrengthChange(0.80); // Better default for character mode
     }
   };
 
@@ -493,22 +494,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       setExactCopyMode={onExactCopyModeChange}
                     />
                     
-                    {/* Reference Type Segmented Control - Show when reference image is present */}
+                    {/* Reference Type Segmented Control - Only show chip under REF */}
                     {(referenceImage || referenceImageUrl) && (
                       <div className="absolute -bottom-6 left-0 right-0 flex bg-background/95 backdrop-blur-sm border border-border/30 rounded text-[8px] overflow-hidden">
-                        {(['character', 'style', 'composition'] as const).map((type) => (
-                          <button
-                            key={type}
-                            onClick={() => onReferenceTypeChange?.(type)}
-                            className={`flex-1 px-1 py-0.5 font-medium transition-colors capitalize ${
-                              referenceType === type 
-                                ? 'bg-primary text-primary-foreground' 
-                                : 'bg-background text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            {type}
-                          </button>
-                        ))}
+                        <div className="flex-1 px-1 py-0.5 font-medium text-center text-muted-foreground">
+                          {referenceType?.toUpperCase() || 'CHARACTER'}
+                        </div>
                       </div>
                     )}
                     
@@ -940,21 +931,159 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
           {/* Advanced Settings Modal */}
           {showAdvancedSettings && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-2 z-50">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-medium text-foreground">Controls</h3>
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-3 z-50">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-foreground">Controls</h3>
                 <button onClick={() => setShowAdvancedSettings(false)} className="text-muted-foreground hover:text-foreground">
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               </div>
               
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              {/* Reference Type Selection and Presets - Only show when reference image present */}
+              {(referenceImage || referenceImageUrl) && (
+                <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-medium text-foreground">Reference Type</h4>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="w-3 h-3 rounded-full bg-muted-foreground/30 flex items-center justify-center text-[8px] text-muted-foreground cursor-help">
+                            ?
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-48 text-xs">
+                          <p><strong>Character:</strong> Preserves identity/face best</p>
+                          <p><strong>Style:</strong> Transfers overall look & lighting</p>
+                          <p><strong>Composition:</strong> Follows pose/framing</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  
+                  {/* Reference Type Radio Buttons */}
+                  <div className="flex gap-1 mb-3">
+                    {(['character', 'style', 'composition'] as const).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          onReferenceTypeChange?.(type);
+                          // Apply defaults for the selected type
+                          if (type === 'character') {
+                            onReferenceStrengthChange?.(0.80);
+                            onGuidanceScaleChange?.(6.0);
+                            onStepsChange?.(25);
+                          } else if (type === 'style') {
+                            onReferenceStrengthChange?.(0.70);
+                            onGuidanceScaleChange?.(7.0);
+                            onStepsChange?.(25);
+                          } else if (type === 'composition') {
+                            onReferenceStrengthChange?.(0.65);
+                            onGuidanceScaleChange?.(5.5);
+                            onStepsChange?.(22);
+                          }
+                          onExactCopyModeChange?.(false);
+                        }}
+                        className={`flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors capitalize ${
+                          referenceType === type 
+                            ? 'bg-primary text-primary-foreground' 
+                            : 'bg-background border border-border text-muted-foreground hover:text-foreground hover:border-border'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Preset Buttons */}
+                  <div className="flex gap-1 mb-2">
+                    <button
+                      onClick={() => {
+                        onExactCopyModeChange?.(true);
+                        onReferenceStrengthChange?.(0.95);
+                        onGuidanceScaleChange?.(1.0);
+                        onStepsChange?.(15);
+                        onLockSeedChange?.(true);
+                      }}
+                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
+                        exactCopyMode 
+                          ? 'bg-orange-500 text-white' 
+                          : 'bg-background border border-border text-muted-foreground hover:bg-orange-50 hover:text-orange-600'
+                      }`}
+                    >
+                      COPY
+                    </button>
+                    <button
+                      onClick={() => {
+                        onExactCopyModeChange?.(false);
+                        onReferenceTypeChange?.('character');
+                        onReferenceStrengthChange?.(0.80);
+                        onGuidanceScaleChange?.(6.0);
+                        onStepsChange?.(25);
+                        onLockSeedChange?.(false);
+                      }}
+                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
+                        !exactCopyMode && referenceType === 'character'
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      }`}
+                    >
+                      CHARACTER
+                    </button>
+                    <button
+                      onClick={() => {
+                        onExactCopyModeChange?.(false);
+                        onReferenceTypeChange?.('style');
+                        onReferenceStrengthChange?.(0.70);
+                        onGuidanceScaleChange?.(7.0);
+                        onStepsChange?.(25);
+                        onLockSeedChange?.(false);
+                      }}
+                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
+                        !exactCopyMode && referenceType === 'style'
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      }`}
+                    >
+                      STYLE
+                    </button>
+                    <button
+                      onClick={() => {
+                        onExactCopyModeChange?.(false);
+                        onReferenceTypeChange?.('composition');
+                        onReferenceStrengthChange?.(0.65);
+                        onGuidanceScaleChange?.(5.5);
+                        onStepsChange?.(22);
+                        onLockSeedChange?.(false);
+                      }}
+                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
+                        !exactCopyMode && referenceType === 'composition'
+                          ? 'bg-primary text-primary-foreground' 
+                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
+                      }`}
+                    >
+                      COMPOSITION
+                    </button>
+                  </div>
+                  
+                  {/* Profile Summary */}
+                  <div className="text-[9px] text-muted-foreground text-center">
+                    {exactCopyMode ? 'Copy' : referenceType?.charAt(0).toUpperCase() + referenceType?.slice(1)} • 
+                    Strength {referenceStrength.toFixed(2)} • 
+                    Denoise {(1 - referenceStrength).toFixed(2)} • 
+                    CFG {guidanceScale} • 
+                    Steps {steps}
+                    {lockSeed && ' • Seed Locked'}
+                  </div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 {/* Batch Size */}
                 <div>
                   <label className="block text-[10px] font-medium text-muted-foreground mb-1">
                     Batch Size
                   </label>
-                  <select value={numImages} onChange={e => onNumImagesChange?.(parseInt(e.target.value))} className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]" disabled={mode === 'video'}>
+                  <select value={numImages} onChange={e => onNumImagesChange?.(parseInt(e.target.value))} className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" disabled={mode === 'video'}>
                     <option value={1}>1</option>
                     <option value={3}>3</option>
                     <option value={6}>6</option>
@@ -963,24 +1092,51 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
                 {/* Steps */}
                 <div>
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    Steps: {steps}
-                  </label>
-                  <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} className="w-full" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Steps
+                    </label>
+                    <input 
+                      type="number" 
+                      value={steps} 
+                      onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
+                      className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                      min="10" 
+                      max="50"
+                    />
+                  </div>
+                  <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full" />
                 </div>
 
                 {/* Reference Strength (only show when reference image present) */}
                 {(referenceImage || referenceImageUrl) && (
                   <div>
-                    <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                      Ref Strength: {referenceStrength.toFixed(2)} (Denoise: {(1 - referenceStrength).toFixed(2)})
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-medium text-muted-foreground">
+                        Ref Strength
+                      </label>
+                      <input 
+                        type="number" 
+                        value={referenceStrength.toFixed(2)} 
+                        onChange={e => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val) && val >= 0.1 && val <= 0.9) {
+                            onReferenceStrengthChange?.(val);
+                          }
+                        }} 
+                        className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        min="0.1" 
+                        max="0.9"
+                        step="0.05"
+                      />
+                    </div>
                     <Slider 
                       value={[referenceStrength]} 
                       onValueChange={value => onReferenceStrengthChange?.(value[0])} 
                       min={0.1} 
                       max={0.9} 
-                      step={0.1} 
+                      step={0.05} 
+                      size="xs"
                       className="w-full" 
                     />
                   </div>
@@ -988,18 +1144,58 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
                 {/* Guidance Scale */}
                 <div>
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    CFG: {guidanceScale}
-                  </label>
-                  <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} className="w-full" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      CFG
+                    </label>
+                    <input 
+                      type="number" 
+                      value={guidanceScale} 
+                      onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
+                      className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                      min="1" 
+                      max="20"
+                      step="0.5"
+                    />
+                  </div>
+                  <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full" />
                 </div>
 
                 {/* Seed */}
-                <div>
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    Seed
-                  </label>
-                  <input type="number" value={seed || ''} onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)} placeholder="Random" className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]" min="0" max="2147483647" />
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Seed
+                    </label>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() => onLockSeedChange?.(!lockSeed)}
+                            className={`px-1.5 py-0.5 rounded text-[8px] font-medium transition-colors ${
+                              lockSeed 
+                                ? 'bg-yellow-500 text-white' 
+                                : 'bg-muted text-muted-foreground hover:bg-yellow-100 hover:text-yellow-600'
+                            }`}
+                          >
+                            {lockSeed ? '🔒' : '🔓'}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {lockSeed ? 'Seed locked - unlock for variation' : 'Click to lock seed'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <input 
+                    type="number" 
+                    value={seed || ''} 
+                    onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)} 
+                    placeholder="Random" 
+                    className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" 
+                    min="0" 
+                    max="2147483647" 
+                  />
                 </div>
 
                 {/* Additional Negative Prompt */}
@@ -1033,21 +1229,21 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     value={negativePrompt} 
                     onChange={e => onNegativePromptChange?.(e.target.value)} 
                     placeholder="Additional negatives..." 
-                    className="w-full h-12 px-1 py-1 bg-background border border-input rounded text-[10px] resize-none"
+                    className="w-full h-12 px-2 py-1 bg-background border border-input rounded text-[10px] resize-none"
                     rows={2} 
                   />
                 </div>
 
                 {/* Compel Enhancement */}
                 <div className="col-span-2">
-                  <label className="flex items-center gap-1 mb-1">
+                  <label className="flex items-center gap-2 mb-1">
                     <input type="checkbox" checked={compelEnabled} onChange={e => onCompelEnabledChange?.(e.target.checked)} className="w-3 h-3" />
                     <span className="text-[10px] font-medium text-muted-foreground">
                       Compel Enhancement
                     </span>
                   </label>
                   {compelEnabled && (
-                    <input type="text" value={compelWeights} onChange={e => onCompelWeightsChange?.(e.target.value)} placeholder="(woman:1.2), (beautiful:0.8)" className="w-full h-6 px-1 bg-background border border-input rounded text-[10px]" />
+                    <input type="text" value={compelWeights} onChange={e => onCompelWeightsChange?.(e.target.value)} placeholder="(woman:1.2), (beautiful:0.8)" className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" />
                   )}
                 </div>
               </div>

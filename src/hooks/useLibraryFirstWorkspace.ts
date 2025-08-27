@@ -142,7 +142,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
-  const [referenceStrength, setReferenceStrength] = useState(0.75); // Better for modify mode - results in denoise_strength = 0.25
+  const [referenceStrength, setReferenceStrength] = useState(0.80); // Better default for character mode
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   // Model Type Selection
@@ -645,7 +645,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               ...(referenceMetadata?.originalSeed && { originalSeed: referenceMetadata.originalSeed }),
               ...(referenceMetadata?.originalStyle && { originalStyle: referenceMetadata.originalStyle }),
               ...(referenceMetadata?.originalCameraAngle && { originalCameraAngle: referenceMetadata.originalCameraAngle }),
-              ...(referenceMetadata?.originalShotType && { originalShotType: referenceMetadata.originalShotType })
+              ...(referenceMetadata?.originalShotType && { originalShotType: referenceMetadata.originalShotType }),
+              // Add reference profile for copy mode too
+              reference_profile: {
+                type: 'copy',
+                reference_strength: computedReferenceStrength,
+                denoise_strength: 1 - computedReferenceStrength,
+                guidance_scale: 1.0,
+                steps: 15,
+                seed_locked: lockSeed,
+                exact_copy_mode: true
+              }
             };
           } else {
             // Modify mode parameters - CRITICAL: set denoise_strength for i2i
@@ -657,7 +667,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               negative_prompt: negativePrompt || undefined,
               exact_copy_mode: false, // Ensure modify mode
               reference_mode: 'modify', // Explicit modify mode
-              reference_type: referenceType // Pass reference type to worker
+              reference_type: referenceType, // Pass reference type to worker
+              // Add reference profile for metadata preservation
+              reference_profile: {
+                type: referenceType,
+                reference_strength: computedReferenceStrength,
+                denoise_strength: 1 - computedReferenceStrength,
+                guidance_scale: guidanceScale,
+                steps: steps,
+                seed_locked: lockSeed,
+                exact_copy_mode: false
+              }
             };
           }
         })()

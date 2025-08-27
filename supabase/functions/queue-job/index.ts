@@ -320,8 +320,8 @@ serve(async (req) => {
     const batchCount = isImageJob ? (jobRequest.num_images || userMetadata.num_images || 1) : 1;
     const clampedBatchCount = batchCount <= 1 ? 1 : (batchCount <= 3 ? 3 : 6);
 
-    // Force modify behavior - compute reference_strength from denoise for modify mode
-    const finalReferenceStrength = isReferenceModify ? (1 - denoise) : jobRequest.reference_strength;
+    // Use explicit reference_strength from frontend (no override logic)
+    const finalReferenceStrength = jobRequest.reference_strength;
     
     const queuePayload = {
       id: job.id,
@@ -364,7 +364,7 @@ serve(async (req) => {
       content_type: userMetadata.contentType || 'sfw'
     }
 
-    // ✅ ENHANCED I2I DEBUGGING: Detailed parameter verification before enqueueing
+    // Enhanced I2I debugging: Detailed parameter verification before enqueueing
     console.log('🎯 I2I PARAMETERS DEBUG:', {
       job_id: job.id,
       mode: isPromptlessUploadedExactCopy ? 'EXACT_COPY' : (isReferenceModify ? 'MODIFY' : 'TXT2IMG'),
@@ -377,7 +377,8 @@ serve(async (req) => {
       has_reference_url: !!referenceUrl,
       user_modification_length: userPromptTrim.length,
       final_prompt_preview: enhancedPrompt.substring(0, 100) + '...',
-      template_name: templateName
+      template_name: templateName,
+      reference_profile: queuePayload.metadata.reference_profile
     });
 
     // Determine queue based on job type
