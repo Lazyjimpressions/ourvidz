@@ -14,7 +14,8 @@ import {
   Clock,
   Palette,
   Zap,
-  Maximize2
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 
@@ -40,6 +41,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
   const [imageFitMode, setImageFitMode] = useState<'contain' | 'cover'>('contain');
   const [uiVisible, setUiVisible] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Reset currentIndex when startIndex changes
   useEffect(() => {
@@ -67,6 +69,11 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
     setUiVisible(prev => !prev);
   }, []);
 
+  // Toggle fullscreen
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen(prev => !prev);
+  }, []);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -83,6 +90,11 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
         case ' ':
           e.preventDefault();
           toggleUiVisibility();
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
           break;
       }
     };
@@ -175,9 +187,16 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
     }
   };
 
-  return (
+    return (
     <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="max-w-[100vw] max-h-[100vh] w-full h-full p-0 bg-black border-none">
+      <DialogContent 
+        className={
+          isFullscreen 
+            ? "max-w-[100vw] max-h-[100vh] w-full h-full p-0 bg-black border-none rounded-none sm:rounded-none" 
+            : "max-w-[92vw] max-h-[92vh] p-0 bg-black border-none rounded-lg"
+        }
+        hideClose
+      >
         <DialogTitle className="sr-only">Asset preview</DialogTitle>
         <DialogDescription className="sr-only">Use left and right arrow keys to navigate. Press Escape to close.</DialogDescription>
         <div className="relative w-full h-full flex flex-col group">
@@ -191,6 +210,17 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                   {currentIndex + 1} of {assets.length}
                 </span>
                 
+                 {/* Fullscreen toggle */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={toggleFullscreen}
+                  className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                  title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                >
+                  {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </Button>
+                
                 {/* Fit/Fill toggle for images on mobile */}
                 {currentAsset.type !== 'video' && (
                   <Button
@@ -200,7 +230,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                     className="text-white hover:bg-white/20 h-8 w-8 p-0 md:hidden"
                     title={imageFitMode === 'contain' ? 'Fill screen' : 'Fit to screen'}
                   >
-                    <Maximize2 className="w-4 h-4" />
+                    {imageFitMode === 'contain' ? 'Fill' : 'Fit'}
                   </Button>
                 )}
               </div>
@@ -243,9 +273,9 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
             )}
           </div>
 
-          {/* Main content area - full screen */}
+          {/* Main content area */}
           <div 
-            className="flex-1 flex items-center justify-center cursor-pointer"
+            className="flex-1 flex items-center justify-center"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
