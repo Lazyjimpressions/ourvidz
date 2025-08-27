@@ -13,7 +13,8 @@ import {
   Copy,
   Clock,
   Palette,
-  Zap
+  Zap,
+  Maximize2
 } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 
@@ -37,6 +38,8 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
   const [currentIndex, setCurrentIndex] = useState(startIndex);
   const [originalUrls, setOriginalUrls] = useState<Record<string, string>>({});
   const [loadingUrls, setLoadingUrls] = useState<Set<string>>(new Set());
+  const [imageFitMode, setImageFitMode] = useState<'contain' | 'cover'>('contain');
+  const [uiVisible, setUiVisible] = useState(false);
 
   // Reset currentIndex when startIndex changes
   useEffect(() => {
@@ -54,6 +57,16 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
     setCurrentIndex(prev => Math.min(assets.length - 1, prev + 1));
   }, [assets.length]);
 
+  // Toggle fit mode for images
+  const toggleImageFitMode = useCallback(() => {
+    setImageFitMode(prev => prev === 'contain' ? 'cover' : 'contain');
+  }, []);
+
+  // Toggle UI visibility
+  const toggleUiVisibility = useCallback(() => {
+    setUiVisible(prev => !prev);
+  }, []);
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -67,12 +80,16 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
         case 'ArrowRight':
           goToNext();
           break;
+        case ' ':
+          e.preventDefault();
+          toggleUiVisibility();
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, goToPrevious, goToNext]);
+  }, [onClose, goToPrevious, goToNext, toggleUiVisibility]);
 
   // Load original URL for current asset
   const loadOriginalUrl = useCallback(async (asset: SharedAsset) => {
@@ -164,13 +181,28 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
         <DialogTitle className="sr-only">Asset preview</DialogTitle>
         <DialogDescription className="sr-only">Use left and right arrow keys to navigate. Press Escape to close.</DialogDescription>
         <div className="relative w-full h-full flex flex-col group">
-          {/* Header - hidden by default, shows on hover */}
-          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          {/* Header - shows on hover on desktop, toggle on mobile */}
+          <div className={`absolute top-0 left-0 right-0 z-20 pointer-events-none transition-opacity duration-300 ${
+            uiVisible ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+          }`}>
             <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent">
               <div className="flex items-center gap-3 pointer-events-auto">
                 <span className="text-white/70 text-sm">
                   {currentIndex + 1} of {assets.length}
                 </span>
+                
+                {/* Fit/Fill toggle for images on mobile */}
+                {currentAsset.type !== 'video' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={toggleImageFitMode}
+                    className="text-white hover:bg-white/20 h-8 w-8 p-0 md:hidden"
+                    title={imageFitMode === 'contain' ? 'Fill screen' : 'Fit to screen'}
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
               
               <Button
@@ -184,8 +216,10 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
             </div>
           </div>
 
-          {/* Navigation buttons - hidden by default, shows on hover */}
-          <div className="absolute inset-0 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          {/* Navigation buttons - shows on hover on desktop, toggle on mobile */}
+          <div className={`absolute inset-0 z-10 pointer-events-none transition-opacity duration-300 ${
+            uiVisible ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+          }`}>
             {canGoPrevious && (
               <Button
                 variant="ghost"
@@ -211,10 +245,12 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
           {/* Main content area - full screen */}
           <div 
-            className="flex-1 flex items-center justify-center"
+            className="flex-1 flex items-center justify-center cursor-pointer"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            onClick={toggleUiVisibility}
+            onDoubleClick={currentAsset.type !== 'video' ? toggleImageFitMode : undefined}
           >
             {isLoading ? (
               <div className="flex items-center justify-center">
@@ -242,7 +278,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <img
                         src={currentOriginalUrl}
                         alt=""
-                        className="w-full h-full object-contain"
+                        className={`w-full h-full ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                       />
                     );
                   }
@@ -255,8 +291,10 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
             )}
           </div>
 
-          {/* Floating bottom actions bar - hidden by default, shows on hover */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          {/* Floating bottom actions bar - shows on hover on desktop, toggle on mobile */}
+          <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-20 transition-opacity duration-300 ${
+            uiVisible ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
+          }`}>
             <div className="bg-black/80 backdrop-blur-sm rounded-lg border border-white/10 p-3">
               <div className="flex items-center gap-3">
                 {/* Asset info - compact */}
