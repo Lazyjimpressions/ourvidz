@@ -479,45 +479,49 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 <span className="text-[10px] mt-0.5">IMAGE</span>
               </button>
 
-              {/* Reference Images - Match row height */}
+               {/* Reference Images - Match row height */}
               <div className="flex gap-2 items-center">
                 {mode === 'image' ? (
                    <div className="relative">
-                    <ReferenceImageUpload 
-                      file={referenceImage} 
-                      onFileChange={handleReferenceFileChange} 
-                      imageUrl={referenceImageUrl} 
-                      onImageUrlChange={handleReferenceUrlChange} 
-                      label="REF" 
-                      sizeClass="h-14 w-14"
-                      exactCopyMode={exactCopyMode}
-                      setExactCopyMode={onExactCopyModeChange}
-                    />
-                    
-                    {/* Reference Type Segmented Control - Only show chip under REF */}
-                    {(referenceImage || referenceImageUrl) && (
-                      <div className="absolute -bottom-6 left-0 right-0 flex bg-background/95 backdrop-blur-sm border border-border/30 rounded text-[8px] overflow-hidden">
-                        <div className="flex-1 px-1 py-0.5 font-medium text-center text-muted-foreground">
-                          {referenceType?.toUpperCase() || 'CHARACTER'}
+                    {/* Make REF tile clickable when image is present */}
+                    <div
+                      onClick={() => {
+                        if (referenceImage || referenceImageUrl) {
+                          setShowAdvancedSettings(true);
+                        }
+                      }}
+                      className={`${(referenceImage || referenceImageUrl) ? 'cursor-pointer' : ''}`}
+                    >
+                      <ReferenceImageUpload 
+                        file={referenceImage} 
+                        onFileChange={handleReferenceFileChange} 
+                        imageUrl={referenceImageUrl} 
+                        onImageUrlChange={handleReferenceUrlChange} 
+                        label="REF" 
+                        sizeClass="h-14 w-14"
+                        exactCopyMode={exactCopyMode}
+                        setExactCopyMode={onExactCopyModeChange}
+                      />
+                      
+                      {/* In-tile badge - visible and clickable */}
+                      {(referenceImage || referenceImageUrl) && (
+                        <div 
+                          className="absolute bottom-0 inset-x-0 h-4 bg-background/95 backdrop-blur-sm border-t border-border/30 flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAdvancedSettings(true);
+                          }}
+                        >
+                          <span className="text-[8px] font-medium text-muted-foreground">
+                            {referenceType?.toUpperCase() || 'CHARACTER'} • {exactCopyMode ? 'COPY' : 'MOD'}
+                          </span>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                     
                     {/* Mode toggle and status badges */}
                     {(referenceImage || referenceImageUrl) && (
-                      <div className="absolute -bottom-1 -right-1 flex flex-col gap-0.5">
-                        {/* Mode toggle */}
-                        <button
-                          onClick={handleModeToggle}
-                          className={`text-[8px] px-1 py-0.5 rounded text-center font-medium transition-colors ${
-                            exactCopyMode 
-                              ? 'bg-primary text-primary-foreground' 
-                              : 'bg-secondary text-secondary-foreground'
-                          }`}
-                          title={exactCopyMode ? "Switch to Modify mode" : "Switch to Exact Copy mode"}
-                        >
-                          {exactCopyMode ? 'COPY' : 'MOD'}
-                        </button>
+                      <div className="absolute -top-1 -right-1 flex flex-col gap-0.5">
                         {/* High strength warning in modify mode */}
                         {isHighStrengthModify && (
                           <div className="text-[7px] px-1 bg-orange-500 text-white rounded text-center" title="High strength can cause near-copies. Auto-lowered to 0.7">
@@ -576,13 +580,22 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     }
                   }} 
                 />
-                <button 
-                  type="button" 
-                  onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
-                  className="absolute right-0.5 top-0.5 text-muted-foreground hover:text-foreground p-0.5 rounded"
-                >
-                  <Settings size={12} />
-                </button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowAdvancedSettings(!showAdvancedSettings)} 
+                        className="absolute right-0.5 top-0.5 text-muted-foreground hover:text-foreground p-0.5 rounded"
+                      >
+                        <Settings size={12} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      Controls
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
 
               {/* Generate button - Compact size */}
@@ -931,7 +944,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
           {/* Advanced Settings Modal */}
           {showAdvancedSettings && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-3 z-50">
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-background/95 backdrop-blur-sm border border-border/30 rounded shadow-md p-3 z-50 max-h-80 overflow-y-auto">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-foreground">Controls</h3>
                 <button onClick={() => setShowAdvancedSettings(false)} className="text-muted-foreground hover:text-foreground">
@@ -939,7 +952,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </button>
               </div>
               
-              {/* Reference Type Selection and Presets - Only show when reference image present */}
+              {/* Reference Type Selection and Presets - Always show at top when reference image present */}
               {(referenceImage || referenceImageUrl) && (
                 <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
                   <div className="flex items-center justify-between mb-2">
@@ -963,34 +976,45 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   {/* Reference Type Radio Buttons */}
                   <div className="flex gap-1 mb-3">
                     {(['character', 'style', 'composition'] as const).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => {
-                          onReferenceTypeChange?.(type);
-                          // Apply defaults for the selected type
-                          if (type === 'character') {
-                            onReferenceStrengthChange?.(0.80);
-                            onGuidanceScaleChange?.(6.0);
-                            onStepsChange?.(25);
-                          } else if (type === 'style') {
-                            onReferenceStrengthChange?.(0.70);
-                            onGuidanceScaleChange?.(7.0);
-                            onStepsChange?.(25);
-                          } else if (type === 'composition') {
-                            onReferenceStrengthChange?.(0.65);
-                            onGuidanceScaleChange?.(5.5);
-                            onStepsChange?.(22);
-                          }
-                          onExactCopyModeChange?.(false);
-                        }}
-                        className={`flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors capitalize ${
-                          referenceType === type 
-                            ? 'bg-primary text-primary-foreground' 
-                            : 'bg-background border border-border text-muted-foreground hover:text-foreground hover:border-border'
-                        }`}
-                      >
-                        {type}
-                      </button>
+                      <TooltipProvider key={type}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => {
+                                onReferenceTypeChange?.(type);
+                                // Apply defaults for the selected type
+                                if (type === 'character') {
+                                  onReferenceStrengthChange?.(0.80);
+                                  onGuidanceScaleChange?.(6.0);
+                                  onStepsChange?.(25);
+                                } else if (type === 'style') {
+                                  onReferenceStrengthChange?.(0.70);
+                                  onGuidanceScaleChange?.(7.0);
+                                  onStepsChange?.(25);
+                                } else if (type === 'composition') {
+                                  onReferenceStrengthChange?.(0.65);
+                                  onGuidanceScaleChange?.(5.5);
+                                  onStepsChange?.(22);
+                                }
+                                onExactCopyModeChange?.(false);
+                                onLockSeedChange?.(false);
+                              }}
+                              className={`flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors capitalize ${
+                                referenceType === type 
+                                  ? 'bg-primary text-primary-foreground' 
+                                  : 'bg-background border border-border text-muted-foreground hover:text-foreground hover:border-border'
+                              }`}
+                            >
+                              {type}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="text-xs">
+                            {type === 'character' && 'Preserves identity; lighter denoise (≈0.20)'}
+                            {type === 'style' && 'Transfers look, color, lighting'}
+                            {type === 'composition' && 'Follows pose/framing; higher denoise (≈0.35)'}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     ))}
                   </div>
                   
@@ -1077,39 +1101,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </div>
               )}
               
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                {/* Batch Size */}
-                <div>
-                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
-                    Batch Size
-                  </label>
-                  <select value={numImages} onChange={e => onNumImagesChange?.(parseInt(e.target.value))} className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" disabled={mode === 'video'}>
-                    <option value={1}>1</option>
-                    <option value={3}>3</option>
-                    <option value={6}>6</option>
-                  </select>
-                </div>
-
-                {/* Steps */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-medium text-muted-foreground">
-                      Steps
-                    </label>
-                    <input 
-                      type="number" 
-                      value={steps} 
-                      onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
-                      className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
-                      min="10" 
-                      max="50"
-                    />
+              {/* Compact 3-column layout for reference controls */}
+              {(referenceImage || referenceImageUrl) && (
+                <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+                  {/* Steps */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-medium text-muted-foreground">
+                        Steps
+                      </label>
+                      <input 
+                        type="number" 
+                        value={steps} 
+                        onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
+                        className="w-14 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        min="10" 
+                        max="50"
+                      />
+                    </div>
+                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full" />
                   </div>
-                  <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full" />
-                </div>
 
-                {/* Reference Strength (only show when reference image present) */}
-                {(referenceImage || referenceImageUrl) && (
+                  {/* Reference Strength */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[10px] font-medium text-muted-foreground">
@@ -1124,7 +1137,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                             onReferenceStrengthChange?.(val);
                           }
                         }} 
-                        className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        className="w-14 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
                         min="0.1" 
                         max="0.9"
                         step="0.05"
@@ -1140,25 +1153,39 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       className="w-full" 
                     />
                   </div>
-                )}
 
-                {/* Guidance Scale */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] font-medium text-muted-foreground">
-                      CFG
-                    </label>
-                    <input 
-                      type="number" 
-                      value={guidanceScale} 
-                      onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
-                      className="w-12 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
-                      min="1" 
-                      max="20"
-                      step="0.5"
-                    />
+                  {/* Guidance Scale */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-medium text-muted-foreground">
+                        CFG
+                      </label>
+                      <input 
+                        type="number" 
+                        value={guidanceScale} 
+                        onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
+                        className="w-16 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        min="1" 
+                        max="20"
+                        step="0.5"
+                      />
+                    </div>
+                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full" />
                   </div>
-                  <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full" />
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {/* Batch Size */}
+                <div>
+                  <label className="block text-[10px] font-medium text-muted-foreground mb-1">
+                    Batch Size
+                  </label>
+                  <select value={numImages} onChange={e => onNumImagesChange?.(parseInt(e.target.value))} className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" disabled={mode === 'video'}>
+                    <option value={1}>1</option>
+                    <option value={3}>3</option>
+                    <option value={6}>6</option>
+                  </select>
                 </div>
 
                 {/* Seed */}
