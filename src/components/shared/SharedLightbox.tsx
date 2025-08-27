@@ -160,18 +160,15 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
   return (
     <Dialog open={true} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="max-w-[98vw] max-h-[96vh] w-auto h-auto p-0 bg-black/95">
+      <DialogContent className="max-w-[100vw] max-h-[100vh] w-full h-full p-0 bg-black border-none">
         <DialogTitle className="sr-only">Asset preview</DialogTitle>
         <DialogDescription className="sr-only">Use left and right arrow keys to navigate. Press Escape to close.</DialogDescription>
-        <div className="relative w-full h-[96vh] flex flex-col">
-          {/* Header - more compact */}
-          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none">
-            <div className="flex items-center justify-between p-3 bg-gradient-to-b from-black/60 to-transparent">
-              <div className="flex items-center gap-2 pointer-events-auto">
-                <Badge variant="secondary" className="bg-white/10 text-white border-white/20 text-xs px-2 py-1">
-                  {currentAsset.type === 'video' ? 'Video' : 'Image'}
-                </Badge>
-                <span className="text-white/70 text-xs">
+        <div className="relative w-full h-full flex flex-col group">
+          {/* Header - hidden by default, shows on hover */}
+          <div className="absolute top-0 left-0 right-0 z-20 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="flex items-center justify-between p-4 bg-gradient-to-b from-black/60 to-transparent">
+              <div className="flex items-center gap-3 pointer-events-auto">
+                <span className="text-white/70 text-sm">
                   {currentIndex + 1} of {assets.length}
                 </span>
               </div>
@@ -180,23 +177,23 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+                className="text-white hover:bg-white/20 h-10 w-10 p-0 pointer-events-auto"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </Button>
             </div>
           </div>
 
-          {/* Navigation buttons - smaller and more discrete */}
-          <div className="absolute inset-0 z-10 pointer-events-none">
+          {/* Navigation buttons - hidden by default, shows on hover */}
+          <div className="absolute inset-0 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
             {canGoPrevious && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={goToPrevious}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 p-0 pointer-events-auto"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-6 h-6" />
               </Button>
             )}
 
@@ -205,16 +202,16 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={goToNext}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white hover:bg-white/10 h-8 w-8 p-0 pointer-events-auto"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:bg-white/20 h-12 w-12 p-0 pointer-events-auto"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-6 h-6" />
               </Button>
             )}
           </div>
 
-          {/* Main content area - expanded */}
+          {/* Main content area - full screen */}
           <div 
-            className="flex-1 flex items-center justify-center p-4"
+            className="flex-1 flex items-center justify-center"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -224,7 +221,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
               </div>
             ) : currentOriginalUrl ? (
-              <div className="max-w-[95vw] max-h-[90vh] flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center">
                 {(() => {
                   // Defensive type detection - check if asset should be video despite being marked as image
                   const isVideoByMime = currentAsset.metadata?.mimeType?.startsWith('video/') || currentAsset.mimeType?.startsWith('video/');
@@ -236,7 +233,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <video
                         src={currentOriginalUrl}
                         controls
-                        className="max-w-full max-h-full object-contain rounded-lg"
+                        className="w-full h-full object-contain"
                         poster={(currentAsset as any).thumbUrl || undefined}
                       />
                     );
@@ -244,8 +241,8 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                     return (
                       <img
                         src={currentOriginalUrl}
-                        alt={currentAsset.title || 'Asset'}
-                        className="max-w-full max-h-full object-contain rounded-lg"
+                        alt=""
+                        className="w-full h-full object-contain"
                       />
                     );
                   }
@@ -258,40 +255,37 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
             )}
           </div>
 
-          {/* Floating bottom actions bar - compact */}
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
-            <div className="bg-black/80 backdrop-blur-sm rounded-lg border border-white/10 p-2">
-              <div className="flex items-center gap-1">
+          {/* Floating bottom actions bar - hidden by default, shows on hover */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+            <div className="bg-black/80 backdrop-blur-sm rounded-lg border border-white/10 p-3">
+              <div className="flex items-center gap-3">
                 {/* Asset info - compact */}
                 <div className="flex flex-col px-3 py-1">
-                  <h3 className="text-white text-sm font-medium truncate max-w-[200px]">
-                    {currentAsset.title}
-                  </h3>
                   {currentAsset.prompt && (
-                    <p className="text-white/70 text-xs truncate max-w-[300px]">
+                    <p className="text-white/70 text-sm truncate max-w-[400px]">
                       {currentAsset.prompt}
                     </p>
                   )}
                 </div>
 
                 {/* Metadata - compact icons */}
-                <div className="flex items-center gap-1 px-2 border-l border-white/10">
+                <div className="flex items-center gap-2 px-3 border-l border-white/10">
                   {currentAsset.modelType && (
                     <div className="flex items-center gap-1 text-white/60">
-                      <Palette className="w-3 h-3" />
-                      <span className="text-xs">{currentAsset.modelType}</span>
+                      <Palette className="w-4 h-4" />
+                      <span className="text-sm">{currentAsset.modelType}</span>
                     </div>
                   )}
                   {currentAsset.width && currentAsset.height && (
                     <div className="flex items-center gap-1 text-white/60">
-                      <Zap className="w-3 h-3" />
-                      <span className="text-xs">{currentAsset.width}×{currentAsset.height}</span>
+                      <Zap className="w-4 h-4" />
+                      <span className="text-sm">{currentAsset.width}×{currentAsset.height}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Action buttons - compact */}
-                <div className="flex items-center gap-1 px-2 border-l border-white/10">
+                <div className="flex items-center gap-2 px-3 border-l border-white/10">
                   {actionsSlot?.(currentAsset)}
                 </div>
               </div>
