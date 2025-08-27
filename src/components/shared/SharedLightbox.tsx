@@ -193,13 +193,14 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
         className={
           isFullscreen 
             ? "max-w-[100vw] max-h-[100vh] w-full h-full p-0 bg-black border-none rounded-none sm:rounded-none" 
-            : "max-w-[92vw] max-h-[92vh] p-0 bg-black border-none rounded-lg"
+            : "w-auto h-auto max-w-[90vw] max-h-[90vh] p-0 bg-black border-none rounded-lg overflow-hidden"
         }
         hideClose
+        fitContent={!isFullscreen}
       >
         <DialogTitle className="sr-only">Asset preview</DialogTitle>
         <DialogDescription className="sr-only">Use left and right arrow keys to navigate. Press Escape to close.</DialogDescription>
-        <div className="relative w-full h-full flex flex-col group">
+        <div className="relative flex flex-col group">
           {/* Header - shows on hover on desktop, toggle on mobile */}
           <div className={`absolute top-0 left-0 right-0 z-20 pointer-events-none transition-opacity duration-300 ${
             uiVisible ? 'opacity-100' : 'opacity-0 md:group-hover:opacity-100'
@@ -275,7 +276,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
 
           {/* Main content area */}
           <div 
-            className="flex-1 flex items-center justify-center"
+            className="flex items-center justify-center"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -287,7 +288,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 <div className="animate-spin w-6 h-6 border-2 border-white/20 border-t-white rounded-full" />
               </div>
             ) : currentOriginalUrl ? (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="max-w-[90vw] max-h-[90vh] flex items-center justify-center">
                 {(() => {
                   // Defensive type detection - check if asset should be video despite being marked as image
                   const isVideoByMime = currentAsset.metadata?.mimeType?.startsWith('video/') || currentAsset.mimeType?.startsWith('video/');
@@ -299,7 +300,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <video
                         src={currentOriginalUrl}
                         controls
-                        className="w-full h-full object-contain"
+                        className="max-w-full max-h-full w-auto h-auto object-contain"
                         poster={(currentAsset as any).thumbUrl || undefined}
                       />
                     );
@@ -308,7 +309,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                       <img
                         src={currentOriginalUrl}
                         alt=""
-                        className={`w-full h-full ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
+                        className={`max-w-full max-h-full w-auto h-auto ${imageFitMode === 'contain' ? 'object-contain' : 'object-cover'}`}
                       />
                     );
                   }
@@ -330,7 +331,7 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 {/* Asset info - compact */}
                 <div className="flex flex-col px-3 py-1">
                   {currentAsset.prompt && (
-                    <p className="text-white/70 text-sm truncate max-w-[400px]">
+                    <p className="text-white/70 text-sm truncate max-w-[60vw]">
                       {currentAsset.prompt}
                     </p>
                   )}
