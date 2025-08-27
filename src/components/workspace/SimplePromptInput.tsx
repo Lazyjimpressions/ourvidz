@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings } from 'lucide-react';
+import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy, Edit3, Settings, Info } from 'lucide-react';
 
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -954,7 +954,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </button>
               </div>
               
-              {/* Reference Type Selection and Presets - Always show at top when reference image present */}
+              {/* Reference Type Selection and Variation - Always show at top when reference image present */}
               {(referenceImage || referenceImageUrl) && (
                 <div className="mb-4 p-2 bg-muted/20 rounded border border-border/30">
                   <div className="flex items-center justify-between mb-2">
@@ -962,11 +962,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <div className="w-3 h-3 rounded-full bg-muted-foreground/30 flex items-center justify-center text-[8px] text-muted-foreground cursor-help">
-                            ?
-                          </div>
+                          <button className="w-4 h-4 rounded-full bg-muted-foreground/30 flex items-center justify-center text-muted-foreground cursor-help hover:bg-muted-foreground/40">
+                            <Info size={10} />
+                          </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-48 text-xs">
+                        <TooltipContent side="top" className="max-w-48 text-xs z-50 bg-popover border border-border shadow-lg">
                           <p><strong>Character:</strong> Preserves identity/face best</p>
                           <p><strong>Style:</strong> Transfers overall look & lighting</p>
                           <p><strong>Composition:</strong> Follows pose/framing</p>
@@ -975,7 +975,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </TooltipProvider>
                   </div>
                   
-                  {/* Reference Type Radio Group */}
+                  {/* Reference Type Radio Group - Tiny */}
                   <RadioGroup 
                     value={referenceType} 
                     onValueChange={(value) => {
@@ -997,70 +997,62 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       onExactCopyModeChange?.(false);
                       onLockSeedChange?.(false);
                     }}
-                    className="flex gap-4 mb-3"
+                    className="flex gap-3 mb-3"
                   >
                     {(['character', 'style', 'composition'] as const).map((type) => (
-                      <TooltipProvider key={type}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center space-x-1">
-                              <RadioGroupItem value={type} id={type} className="w-3 h-3" />
-                              <Label 
-                                htmlFor={type} 
-                                className="text-[10px] font-medium capitalize cursor-pointer"
-                              >
-                                {type}
-                              </Label>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">
-                            {type === 'character' && 'Preserves identity; lighter denoise (≈0.20)'}
-                            {type === 'style' && 'Transfers look, color, lighting'}
-                            {type === 'composition' && 'Follows pose/framing; higher denoise (≈0.35)'}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <div key={type} className="flex items-center space-x-1">
+                        <RadioGroupItem value={type} id={type} className="w-2.5 h-2.5 [&>*]:w-1 [&>*]:h-1" />
+                        <Label 
+                          htmlFor={type} 
+                          className="text-[10px] font-medium capitalize cursor-pointer"
+                        >
+                          {type}
+                        </Label>
+                      </div>
                     ))}
                   </RadioGroup>
                   
-                  {/* Preset Chips */}
-                  <div className="flex gap-1 mb-2">
-                    <button
-                      onClick={() => {
-                        onExactCopyModeChange?.(true);
-                        onReferenceStrengthChange?.(0.95);
-                        onGuidanceScaleChange?.(1.0);
-                        onStepsChange?.(15);
-                        onLockSeedChange?.(true);
-                      }}
-                      className={`chip ${exactCopyMode ? 'chip-active bg-orange-500 text-white hover:bg-orange-600' : ''}`}
-                    >
-                      Copy
-                    </button>
-                    <button
-                      onClick={() => {
-                        onExactCopyModeChange?.(false);
-                        onReferenceStrengthChange?.(0.75);
-                        onGuidanceScaleChange?.(6.5);
-                        onStepsChange?.(25);
-                        onLockSeedChange?.(false);
-                      }}
-                      className={`chip ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'chip-active' : ''}`}
-                    >
-                      Balanced
-                    </button>
-                    <button
-                      onClick={() => {
-                        onExactCopyModeChange?.(false);
-                        onReferenceStrengthChange?.(0.60);
-                        onGuidanceScaleChange?.(8.0);
-                        onStepsChange?.(30);
-                        onLockSeedChange?.(false);
-                      }}
-                      className={`chip ${!exactCopyMode && referenceStrength >= 0.55 && referenceStrength <= 0.65 ? 'chip-active' : ''}`}
-                    >
-                      Creative
-                    </button>
+                  {/* Variation Preset Chips - Segmented Style */}
+                  <div className="mb-2">
+                    <label className="text-[9px] text-muted-foreground mb-1 block">Variation</label>
+                    <div className="flex gap-0">
+                      <button
+                        onClick={() => {
+                          onExactCopyModeChange?.(true);
+                          onReferenceStrengthChange?.(0.95);
+                          onGuidanceScaleChange?.(1.0);
+                          onStepsChange?.(15);
+                          onLockSeedChange?.(true);
+                        }}
+                        className={`chip-segmented rounded-r-none border-r-0 ${exactCopyMode ? 'chip-segmented-active' : ''}`}
+                      >
+                        Copy
+                      </button>
+                      <button
+                        onClick={() => {
+                          onExactCopyModeChange?.(false);
+                          onReferenceStrengthChange?.(0.75);
+                          onGuidanceScaleChange?.(6.5);
+                          onStepsChange?.(25);
+                          onLockSeedChange?.(false);
+                        }}
+                        className={`chip-segmented rounded-none ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'chip-segmented-active' : ''}`}
+                      >
+                        Balanced
+                      </button>
+                      <button
+                        onClick={() => {
+                          onExactCopyModeChange?.(false);
+                          onReferenceStrengthChange?.(0.60);
+                          onGuidanceScaleChange?.(8.0);
+                          onStepsChange?.(30);
+                          onLockSeedChange?.(false);
+                        }}
+                        className={`chip-segmented rounded-l-none border-l-0 ${!exactCopyMode && referenceStrength >= 0.55 && referenceStrength <= 0.65 ? 'chip-segmented-active' : ''}`}
+                      >
+                        Creative
+                      </button>
+                    </div>
                   </div>
                   
                   {/* Profile Summary */}
@@ -1150,20 +1142,29 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               )}
               
               <div className="grid grid-cols-2 gap-3 text-xs">
-                {/* Batch Size */}
+                {/* Batch Size - Compact Chips */}
                 <div>
                   <label className="block text-[10px] font-medium text-muted-foreground mb-1">
                     Batch Size
                   </label>
-                  <select value={numImages} onChange={e => onNumImagesChange?.(parseInt(e.target.value))} className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" disabled={mode === 'video'}>
-                    <option value={1}>1</option>
-                    <option value={3}>3</option>
-                    <option value={6}>6</option>
-                  </select>
+                  <div className="flex gap-0">
+                    {[1, 3, 6].map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => onNumImagesChange?.(size)}
+                        disabled={mode === 'video'}
+                        className={`chip-segmented ${size === 1 ? 'rounded-r-none border-r-0' : size === 6 ? 'rounded-l-none border-l-0' : 'rounded-none'} ${
+                          numImages === size ? 'chip-segmented-active' : ''
+                        } ${mode === 'video' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Seed */}
-                <div className="col-span-2">
+                {/* Seed - Inline with Lock */}
+                <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] font-medium text-muted-foreground">
                       Seed
@@ -1173,7 +1174,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         <TooltipTrigger asChild>
                           <button
                             onClick={() => onLockSeedChange?.(!lockSeed)}
-                            className={`px-1.5 py-0.5 rounded text-[8px] font-medium transition-colors ${
+                            className={`w-4 h-4 rounded text-[8px] font-medium transition-colors flex items-center justify-center ${
                               lockSeed 
                                 ? 'bg-yellow-500 text-white' 
                                 : 'bg-muted text-muted-foreground hover:bg-yellow-100 hover:text-yellow-600'
@@ -1182,7 +1183,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                             {lockSeed ? '🔒' : '🔓'}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
+                        <TooltipContent side="top" className="text-xs z-50 bg-popover border border-border shadow-lg">
                           {lockSeed ? 'Seed locked - unlock for variation' : 'Click to lock seed'}
                         </TooltipContent>
                       </Tooltip>
@@ -1193,7 +1194,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     value={seed || ''} 
                     onChange={e => onSeedChange?.(e.target.value ? parseInt(e.target.value) : null)} 
                     placeholder="Random" 
-                    className="w-full h-7 px-2 bg-background border border-input rounded text-[10px]" 
+                    className="field-xxs w-full" 
                     min="0" 
                     max="2147483647" 
                   />
