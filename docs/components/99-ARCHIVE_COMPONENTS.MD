@@ -9,8 +9,12 @@ Note: This list should only include components not used by current pages. Confir
 - `src/components/workspace/VideoReferencePanel.tsx`
 - `src/components/workspace/CompactReferenceUpload.tsx`
 
+### Grid Components (legacy)
+- `src/components/MediaGrid.tsx` — **REMOVED** (replaced by SharedGrid)
+
 ### Library (legacy folder exists)
 - `src/components/library/legacy/*` — already archived; keep as historical reference only
 
 ### Notes
 - Prefer extracting shared components rather than duplicating: shared Grid and shared Lightbox should serve both pages.
+- **SharedGrid** is now the unified grid component used across workspace and library contexts
