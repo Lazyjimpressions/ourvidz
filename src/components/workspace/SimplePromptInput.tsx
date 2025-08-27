@@ -4,6 +4,8 @@ import { Image, Video, Play, Camera, Volume2, Zap, ChevronDown, X, Palette, Copy
 
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
 import { useImageModels } from '@/hooks/useApiModels';
@@ -973,40 +975,43 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </TooltipProvider>
                   </div>
                   
-                  {/* Reference Type Radio Buttons */}
-                  <div className="flex gap-1 mb-3">
+                  {/* Reference Type Radio Group */}
+                  <RadioGroup 
+                    value={referenceType} 
+                    onValueChange={(value) => {
+                      onReferenceTypeChange?.(value as any);
+                      // Apply defaults for the selected type
+                      if (value === 'character') {
+                        onReferenceStrengthChange?.(0.80);
+                        onGuidanceScaleChange?.(6.0);
+                        onStepsChange?.(25);
+                      } else if (value === 'style') {
+                        onReferenceStrengthChange?.(0.70);
+                        onGuidanceScaleChange?.(7.0);
+                        onStepsChange?.(25);
+                      } else if (value === 'composition') {
+                        onReferenceStrengthChange?.(0.65);
+                        onGuidanceScaleChange?.(5.5);
+                        onStepsChange?.(22);
+                      }
+                      onExactCopyModeChange?.(false);
+                      onLockSeedChange?.(false);
+                    }}
+                    className="flex gap-4 mb-3"
+                  >
                     {(['character', 'style', 'composition'] as const).map((type) => (
                       <TooltipProvider key={type}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <button
-                              onClick={() => {
-                                onReferenceTypeChange?.(type);
-                                // Apply defaults for the selected type
-                                if (type === 'character') {
-                                  onReferenceStrengthChange?.(0.80);
-                                  onGuidanceScaleChange?.(6.0);
-                                  onStepsChange?.(25);
-                                } else if (type === 'style') {
-                                  onReferenceStrengthChange?.(0.70);
-                                  onGuidanceScaleChange?.(7.0);
-                                  onStepsChange?.(25);
-                                } else if (type === 'composition') {
-                                  onReferenceStrengthChange?.(0.65);
-                                  onGuidanceScaleChange?.(5.5);
-                                  onStepsChange?.(22);
-                                }
-                                onExactCopyModeChange?.(false);
-                                onLockSeedChange?.(false);
-                              }}
-                              className={`flex-1 px-2 py-1 rounded text-[10px] font-medium transition-colors capitalize ${
-                                referenceType === type 
-                                  ? 'bg-primary text-primary-foreground' 
-                                  : 'bg-background border border-border text-muted-foreground hover:text-foreground hover:border-border'
-                              }`}
-                            >
-                              {type}
-                            </button>
+                            <div className="flex items-center space-x-1">
+                              <RadioGroupItem value={type} id={type} className="w-3 h-3" />
+                              <Label 
+                                htmlFor={type} 
+                                className="text-[10px] font-medium capitalize cursor-pointer"
+                              >
+                                {type}
+                              </Label>
+                            </div>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="text-xs">
                             {type === 'character' && 'Preserves identity; lighter denoise (≈0.20)'}
@@ -1016,9 +1021,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         </Tooltip>
                       </TooltipProvider>
                     ))}
-                  </div>
+                  </RadioGroup>
                   
-                  {/* Preset Buttons */}
+                  {/* Preset Chips */}
                   <div className="flex gap-1 mb-2">
                     <button
                       onClick={() => {
@@ -1028,64 +1033,33 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         onStepsChange?.(15);
                         onLockSeedChange?.(true);
                       }}
-                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
-                        exactCopyMode 
-                          ? 'bg-orange-500 text-white' 
-                          : 'bg-background border border-border text-muted-foreground hover:bg-orange-50 hover:text-orange-600'
-                      }`}
+                      className={`chip ${exactCopyMode ? 'chip-active bg-orange-500 text-white hover:bg-orange-600' : ''}`}
                     >
-                      COPY
+                      Copy
                     </button>
                     <button
                       onClick={() => {
                         onExactCopyModeChange?.(false);
-                        onReferenceTypeChange?.('character');
-                        onReferenceStrengthChange?.(0.80);
-                        onGuidanceScaleChange?.(6.0);
+                        onReferenceStrengthChange?.(0.75);
+                        onGuidanceScaleChange?.(6.5);
                         onStepsChange?.(25);
                         onLockSeedChange?.(false);
                       }}
-                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
-                        !exactCopyMode && referenceType === 'character'
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
-                      }`}
+                      className={`chip ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'chip-active' : ''}`}
                     >
-                      CHARACTER
+                      Balanced
                     </button>
                     <button
                       onClick={() => {
                         onExactCopyModeChange?.(false);
-                        onReferenceTypeChange?.('style');
-                        onReferenceStrengthChange?.(0.70);
-                        onGuidanceScaleChange?.(7.0);
-                        onStepsChange?.(25);
+                        onReferenceStrengthChange?.(0.60);
+                        onGuidanceScaleChange?.(8.0);
+                        onStepsChange?.(30);
                         onLockSeedChange?.(false);
                       }}
-                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
-                        !exactCopyMode && referenceType === 'style'
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
-                      }`}
+                      className={`chip ${!exactCopyMode && referenceStrength >= 0.55 && referenceStrength <= 0.65 ? 'chip-active' : ''}`}
                     >
-                      STYLE
-                    </button>
-                    <button
-                      onClick={() => {
-                        onExactCopyModeChange?.(false);
-                        onReferenceTypeChange?.('composition');
-                        onReferenceStrengthChange?.(0.65);
-                        onGuidanceScaleChange?.(5.5);
-                        onStepsChange?.(22);
-                        onLockSeedChange?.(false);
-                      }}
-                      className={`flex-1 px-2 py-1 rounded text-[9px] font-medium transition-colors ${
-                        !exactCopyMode && referenceType === 'composition'
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-background border border-border text-muted-foreground hover:bg-primary/10 hover:text-primary'
-                      }`}
-                    >
-                      COMPOSITION
+                      Creative
                     </button>
                   </div>
                   
@@ -1103,7 +1077,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               
               {/* Compact 3-column layout for reference controls */}
               {(referenceImage || referenceImageUrl) && (
-                <div className="grid grid-cols-3 gap-2 mb-4 text-xs">
+                <div className="grid grid-cols-3 controls-compact mb-4">
                   {/* Steps */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -1114,7 +1088,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         type="number" 
                         value={steps} 
                         onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
-                        className="w-14 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        className="control-number"
                         min="10" 
                         max="50"
                       />
@@ -1137,7 +1111,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                             onReferenceStrengthChange?.(val);
                           }
                         }} 
-                        className="w-14 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        className="control-number"
                         min="0.1" 
                         max="0.9"
                         step="0.05"
@@ -1164,7 +1138,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         type="number" 
                         value={guidanceScale} 
                         onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
-                        className="w-16 h-5 px-1 bg-background border border-input rounded text-[9px] text-center"
+                        className="control-number"
                         min="1" 
                         max="20"
                         step="0.5"
