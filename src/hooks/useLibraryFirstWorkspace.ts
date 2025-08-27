@@ -55,6 +55,9 @@ export interface LibraryFirstWorkspaceState {
   enhancementModel: 'qwen_base' | 'qwen_instruct' | 'none';
   userPreferredModel: 'qwen_base' | 'qwen_instruct' | 'none';
   
+  // Reference Type Selection
+  referenceType: 'style' | 'character' | 'composition';
+  
   // Advanced SDXL Settings
   numImages: number;
   steps: number;
@@ -87,6 +90,7 @@ export interface LibraryFirstWorkspaceActions {
   setStyleRef: (ref: File | null) => void;
   setEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
   updateEnhancementModel: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
+  setReferenceType: (type: 'style' | 'character' | 'composition') => void;
   generate: (referenceImageUrl?: string | null, beginningRefImageUrl?: string | null, endingRefImageUrl?: string | null, seed?: number | null) => Promise<void>;
   clearWorkspace: () => Promise<void>;
   deleteAllWorkspace: () => Promise<void>;
@@ -206,11 +210,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
   const [userPreferredModel, setUserPreferredModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
+  
+  // Reference Type Selection (default to character for modify mode)
+  const [referenceType, setReferenceType] = useState<'style' | 'character' | 'composition'>('character');
 
-  // Advanced SDXL Settings
+  // Advanced SDXL Settings (modify mode defaults)
   const [numImages, setNumImages] = useState(3);
   const [steps, setSteps] = useState(25);
-  const [guidanceScale, setGuidanceScale] = useState(7.5);
+  const [guidanceScale, setGuidanceScale] = useState(6.0); // Lower for modify mode
   const [negativePrompt, setNegativePrompt] = useState('');
   const [compelEnabled, setCompelEnabled] = useState(false);
   const [compelWeights, setCompelWeights] = useState('');
@@ -595,10 +602,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         seed: finalSeed,
         num_images: mode === 'video' ? 1 : numImages,
         steps: steps,
-        guidance_scale: exactCopyMode ? 1.0 : 6.0, // CRITICAL: Lower guidance for modify mode
+        guidance_scale: exactCopyMode ? 1.0 : guidanceScale, // Use actual guidanceScale from UI
         negative_prompt: negativePrompt,
         // CRITICAL: Pass top-level denoise_strength for SDXL worker  
-        denoise_strength: computedDenoiseStrength,
+        denoise_strength: exactCopyMode ? 0.05 : (1 - computedReferenceStrength), // Use UI-derived denoise
         compel_enabled: compelEnabled,
         compel_weights: compelWeights,
         metadata: (() => {
@@ -622,6 +629,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
             // Add reference mode and entry path for server classification
             reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
+            reference_type: effRefUrl ? referenceType : undefined, // Pass reference type
             // Mode-specific parameter overrides
             exact_copy_mode: exactCopyMode, // Always set this flag
           };
@@ -643,12 +651,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // Modify mode parameters - CRITICAL: set denoise_strength for i2i
             return {
               ...baseMetadata,
-              num_inference_steps: 25, // Modify mode: standard steps
-              guidance_scale: 7.5, // Modify mode: standard guidance
+              num_inference_steps: steps, // Use UI steps
+              guidance_scale: guidanceScale, // Use UI guidance
               denoise_strength: 1 - computedReferenceStrength, // CRITICAL: explicit denoise for modify
               negative_prompt: negativePrompt || undefined,
               exact_copy_mode: false, // Ensure modify mode
-              reference_mode: 'modify' // Explicit modify mode
+              reference_mode: 'modify', // Explicit modify mode
+              reference_type: referenceType // Pass reference type to worker
             };
           }
         })()
@@ -1209,6 +1218,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     referenceMetadata,
     enhancementModel,
     userPreferredModel,
+    referenceType,
     exactCopyMode,
     useOriginalParams,
     lockSeed,
@@ -1244,6 +1254,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setStyle,
     setStyleRef,
     setEnhancementModel,
+    setReferenceType,
     generate,
     clearWorkspace,
     deleteAllWorkspace,

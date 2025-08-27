@@ -150,6 +150,8 @@ export interface SimplePromptInputProps {
   onReferenceImageUrlChange?: (url: string | null) => void;
   referenceStrength: number;
   onReferenceStrengthChange: (strength: number) => void;
+  referenceType?: 'style' | 'character' | 'composition';
+  onReferenceTypeChange?: (type: 'style' | 'character' | 'composition') => void;
   onModeChange: (mode: 'image' | 'video') => void;
   onContentTypeChange: (type: 'sfw' | 'nsfw') => void;
   // Video-specific props
@@ -227,6 +229,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onReferenceImageUrlChange,
   referenceStrength,
   onReferenceStrengthChange,
+  referenceType = 'character',
+  onReferenceTypeChange,
   onModeChange,
   onContentTypeChange,
   beginningRefImage,
@@ -323,7 +327,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (file) {
       // Always default to modify mode (never auto-enable exact copy)
       onExactCopyModeChange?.(false);
-      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
+      onReferenceStrengthChange(0.35); // Better default for modify mode
+      onReferenceTypeChange?.('character'); // Default to character for most use cases
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -337,7 +342,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     onReferenceImageUrlChange?.(url);
     if (url) {
       // Always default to modify mode for all references
-      onReferenceStrengthChange(0.5); // Modify mode strength (worker default denoise = 0.5)
+      onReferenceStrengthChange(0.35); // Better default for modify mode
+      onReferenceTypeChange?.('character'); // Default to character for most use cases
       onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
     } else {

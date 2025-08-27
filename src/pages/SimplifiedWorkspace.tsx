@@ -65,6 +65,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     style,
     styleRef,
     enhancementModel,
+    referenceType,
     // UI State
     isGenerating,
     workspaceAssets,
@@ -102,6 +103,7 @@ export const SimplifiedWorkspace: React.FC = () => {
     setStyle,
     setStyleRef,
     setEnhancementModel,
+    setReferenceType,
     generate,
     clearWorkspace,
     deleteAllWorkspace,
@@ -499,6 +501,8 @@ export const SimplifiedWorkspace: React.FC = () => {
             onGuidanceScaleChange={setGuidanceScale}
             negativePrompt={negativePrompt}
             onNegativePromptChange={setNegativePrompt}
+            referenceType={referenceType}
+            onReferenceTypeChange={setReferenceType}
             compelEnabled={compelEnabled}
             onCompelEnabledChange={setCompelEnabled}
             compelWeights={compelWeights}
