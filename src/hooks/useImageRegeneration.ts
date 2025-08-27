@@ -10,6 +10,7 @@ interface RegenerationState {
   negativePrompt: string;
   keepSeed: boolean;
   referenceStrength: number;
+  denoiseStrength: number;
   isModified: boolean;
 }
 
@@ -30,8 +31,9 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
   const [state, setState] = useState<RegenerationState>(() => ({
     positivePrompt: basePrompt,
     negativePrompt: defaultNegativePrompt,
-    keepSeed: true,
-    referenceStrength: 0.5,
+    keepSeed: false, // Default to off to avoid exact copies
+    referenceStrength: 0.35, // Lower reference strength for more variation
+    denoiseStrength: 0.75, // Higher denoise for more changes
     isModified: false
   }));
 
@@ -45,7 +47,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
     }));
   }, [basePrompt, defaultNegativePrompt]);
 
-  const updateSettings = useCallback((updates: Partial<Pick<RegenerationState, 'keepSeed' | 'referenceStrength'>>) => {
+  const updateSettings = useCallback((updates: Partial<Pick<RegenerationState, 'keepSeed' | 'referenceStrength' | 'denoiseStrength'>>) => {
     setState(prev => ({ ...prev, ...updates }));
   }, []);
 
@@ -53,8 +55,9 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
     setState({
       positivePrompt: basePrompt,
       negativePrompt: defaultNegativePrompt,
-      keepSeed: true,
-      referenceStrength: 0.7,
+      keepSeed: false, // Default to off 
+      referenceStrength: 0.35,
+      denoiseStrength: 0.75,
       isModified: false
     });
   }, [basePrompt, defaultNegativePrompt]);
@@ -80,7 +83,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
       metadata: {
         reference_image: true,
         reference_strength: state.referenceStrength,
-        denoise_strength: 1 - state.referenceStrength,
+        denoise_strength: state.denoiseStrength, // Use direct denoise value instead of calculation
         reference_type: 'composition',
         negative_prompt: state.negativePrompt.trim() || undefined,
         ...(state.keepSeed && originalDetails?.seed && { seed: originalDetails.seed }),
@@ -91,19 +94,37 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
         cache_bust: Date.now().toString(),
         // Pass control settings for proper mapping in edge function
         steps: 20, // Default for RV5.1
-        guidance_scale: 5, // Will be mapped to 'guidance' in edge function
+        guidance_scale: 6, // Reduced from 7.5 to allow more variation
         width: 1024,
         height: 1024,
         scheduler: 'EulerA'
       }
     };
 
+    // 🐛 DEBUG: Log the complete payload before submission
+    console.log('🔍 REGENERATION DEBUG - Complete payload:', {
+      format,
+      prompt: state.positivePrompt.trim(),
+      referenceImageUrl: currentTile.url ? 'PRESENT' : 'MISSING',
+      metadata: {
+        reference_strength: state.referenceStrength,
+        denoise_strength: state.denoiseStrength,
+        keep_seed: state.keepSeed,
+        seed: state.keepSeed ? originalDetails?.seed : undefined,
+        guidance_scale: 6,
+        exact_copy_mode: false, // Always false for i2i modify
+        reference_type: 'composition'
+      }
+    });
+
     console.log('🎨 Starting image regeneration:', {
       originalImageId: currentTile.id,
       keepSeed: state.keepSeed,
       seed: state.keepSeed ? originalDetails?.seed : 'random',
       referenceStrength: state.referenceStrength,
-      format: format
+      denoiseStrength: state.denoiseStrength,
+      format: format,
+      expectedChange: state.denoiseStrength >= 0.7 ? 'HIGH' : state.denoiseStrength >= 0.5 ? 'MEDIUM' : 'LOW'
     });
 
     try {
