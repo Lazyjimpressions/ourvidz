@@ -364,35 +364,20 @@ serve(async (req) => {
       content_type: userMetadata.contentType || 'sfw'
     }
 
-    // ✅ ENHANCED LOGGING: Detailed parameter verification before enqueueing
-    console.log('🎯 I2I MODE RESOLUTION', {
+    // ✅ ENHANCED I2I DEBUGGING: Detailed parameter verification before enqueueing
+    console.log('🎯 I2I PARAMETERS DEBUG:', {
       job_id: job.id,
-      isPromptlessUploadedExactCopy,
-      isReferenceModify,
+      mode: isPromptlessUploadedExactCopy ? 'EXACT_COPY' : (isReferenceModify ? 'MODIFY' : 'TXT2IMG'),
       pipeline: queuePayload.config.pipeline,
       denoise_strength: queuePayload.config.denoise_strength,
       guidance_scale: queuePayload.config.guidance_scale,
-      num_inference_steps: queuePayload.config.num_inference_steps, // ✅ FIXED FIELD NAME
-      num_images: queuePayload.config.num_images,
-      reference_url_present: !!referenceUrl,
-      hasOriginalEnhancedPrompt,
-      metadata_exact_copy_mode: queuePayload.metadata.exact_copy_mode,
-      metadata_reference_mode: queuePayload.metadata.reference_mode,
-      metadata_denoise_strength: queuePayload.metadata.denoise_strength,
-      metadata_reference_strength: queuePayload.metadata.reference_strength,
-      negative_prompt_included: !!queuePayload.negative_prompt,
-      // 🆕 ADDITIONAL LOGGING for troubleshooting
-      has_user_modification: userPromptTrim.length > 0,
-      user_prompt_length: userPromptTrim.length,
-      final_prompt_preview: enhancedPrompt.substring(0, 100),
-      template_name: templateName,
-      enhancement_attempted: shouldEnhance,
-      // 🆕 NEW: Classification tracking
-      classification_source: userMetadata.reference_mode === 'modify' ? 'override_reference_mode' : 
-                           (hasOriginalEnhancedPrompt ? 'originalEnhancedPrompt' : 
-                           (userPromptTrim.length > 0 ? 'user_prompt' : 'default')),
-      exact_copy_mode_input: exactCopyMode,
-      reference_mode_override: userMetadata.reference_mode
+      num_inference_steps: queuePayload.config.num_inference_steps,
+      reference_type: queuePayload.metadata.reference_type,
+      reference_strength: queuePayload.metadata.reference_strength,
+      has_reference_url: !!referenceUrl,
+      user_modification_length: userPromptTrim.length,
+      final_prompt_preview: enhancedPrompt.substring(0, 100) + '...',
+      template_name: templateName
     });
 
     // Determine queue based on job type

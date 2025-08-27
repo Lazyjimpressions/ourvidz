@@ -142,7 +142,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [prompt, setPrompt] = useState('');
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
-  const [referenceStrength, setReferenceStrength] = useState(0.6); // Default to modify-friendly strength
+  const [referenceStrength, setReferenceStrength] = useState(0.75); // Better for modify mode - results in denoise_strength = 0.25
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   // Model Type Selection
@@ -217,7 +217,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Advanced SDXL Settings (modify mode defaults)
   const [numImages, setNumImages] = useState(3);
   const [steps, setSteps] = useState(25);
-  const [guidanceScale, setGuidanceScale] = useState(6.0); // Lower for modify mode
+  const [guidanceScale, setGuidanceScale] = useState(6.0); // Better for modify mode
   const [negativePrompt, setNegativePrompt] = useState('');
   const [compelEnabled, setCompelEnabled] = useState(false);
   const [compelWeights, setCompelWeights] = useState('');

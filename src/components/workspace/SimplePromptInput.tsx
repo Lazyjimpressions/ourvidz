@@ -327,7 +327,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (file) {
       // Always default to modify mode (never auto-enable exact copy)
       onExactCopyModeChange?.(false);
-      onReferenceStrengthChange(0.35); // Better default for modify mode
+      onReferenceStrengthChange(0.75); // Better default for modify mode
       onReferenceTypeChange?.('character'); // Default to character for most use cases
       onModeChange('image');
     } else {
@@ -342,7 +342,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     onReferenceImageUrlChange?.(url);
     if (url) {
       // Always default to modify mode for all references
-      onReferenceStrengthChange(0.35); // Better default for modify mode
+      onReferenceStrengthChange(0.75); // Better default for modify mode
       onReferenceTypeChange?.('character'); // Default to character for most use cases
       onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
@@ -481,7 +481,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               {/* Reference Images - Match row height */}
               <div className="flex gap-2 items-center">
                 {mode === 'image' ? (
-                  <div className="relative">
+                   <div className="relative">
                     <ReferenceImageUpload 
                       file={referenceImage} 
                       onFileChange={handleReferenceFileChange} 
@@ -492,6 +492,26 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       exactCopyMode={exactCopyMode}
                       setExactCopyMode={onExactCopyModeChange}
                     />
+                    
+                    {/* Reference Type Segmented Control - Show when reference image is present */}
+                    {(referenceImage || referenceImageUrl) && (
+                      <div className="absolute -bottom-6 left-0 right-0 flex bg-background/95 backdrop-blur-sm border border-border/30 rounded text-[8px] overflow-hidden">
+                        {(['character', 'style', 'composition'] as const).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => onReferenceTypeChange?.(type)}
+                            className={`flex-1 px-1 py-0.5 font-medium transition-colors capitalize ${
+                              referenceType === type 
+                                ? 'bg-primary text-primary-foreground' 
+                                : 'bg-background text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
                     {/* Mode toggle and status badges */}
                     {(referenceImage || referenceImageUrl) && (
                       <div className="absolute -bottom-1 -right-1 flex flex-col gap-0.5">
