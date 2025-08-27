@@ -39,9 +39,19 @@ export const SimplifiedWorkspace: React.FC = () => {
   
   // Note: Signed URLs now handled centrally in useLibraryFirstWorkspace hook
 
+  
   console.log('🚀 SimplifiedWorkspace: About to call useLibraryFirstWorkspace...');
   
   // Library-first workspace state
+  const workspace = useLibraryFirstWorkspace();
+  
+  // Debug: Log the workspace to check if referenceType is present
+  console.log('🔍 Workspace hook result:', { 
+    hasReferenceType: 'referenceType' in workspace,
+    hasSetReferenceType: 'setReferenceType' in workspace,
+    referenceTypeValue: workspace.referenceType 
+  });
+  
   const {
     // Core State
     mode,
