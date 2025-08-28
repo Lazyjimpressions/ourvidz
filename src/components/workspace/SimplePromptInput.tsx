@@ -1043,16 +1043,65 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <button
                         onClick={() => {
                           onExactCopyModeChange?.(false);
-                          onReferenceStrengthChange?.(0.60);
-                          onGuidanceScaleChange?.(8.0);
-                          onStepsChange?.(30);
+                          onReferenceStrengthChange?.(0.40);
+                          onGuidanceScaleChange?.(7.0);
+                          onStepsChange?.(25);
                           onLockSeedChange?.(false);
                         }}
-                        className={`chip-segmented rounded-l-none border-l-0 ${!exactCopyMode && referenceStrength >= 0.55 && referenceStrength <= 0.65 ? 'chip-segmented-active' : ''}`}
+                        className={`chip-segmented rounded-l-none ${!exactCopyMode && referenceStrength >= 0.35 && referenceStrength <= 0.45 ? 'chip-segmented-active' : ''}`}
                       >
-                        Creative
+                        Strong
                       </button>
                     </div>
+                  </div>
+                  
+                  {/* Clothing Changes Preset - Special chip for clothing modifications */}
+                  {/\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes|suit|jacket|coat|blue|red|green|yellow|purple|pink|black|white|brown))\b/i.test(prompt) && (
+                    <div className="mb-2">
+                      <div className="flex items-center gap-1 mb-1">
+                        <div className="w-1 h-1 bg-orange-500 rounded-full"></div>
+                        <label className="text-[9px] text-orange-600 font-medium">Detected: Clothing Change</label>
+                      </div>
+                      <button
+                        onClick={() => {
+                          onExactCopyModeChange?.(false);
+                          onReferenceTypeChange?.('composition');
+                          onReferenceStrengthChange?.(0.30);
+                          onGuidanceScaleChange?.(7.5);
+                          onStepsChange?.(25);
+                          onLockSeedChange?.(false);
+                        }}
+                        className="chip-segmented w-full border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 text-[10px] py-1"
+                      >
+                        🔄 Optimize for Clothing
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Variation Slider - Compact */}
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[9px] text-muted-foreground">Variation: {Math.round((1 - (referenceStrength || 0.8)) * 100)}%</label>
+                      <span className="text-[8px] text-muted-foreground">
+                        {(referenceStrength || 0.8) >= 0.9 ? 'Minimal' : 
+                         (referenceStrength || 0.8) >= 0.7 ? 'Balanced' : 
+                         (referenceStrength || 0.8) >= 0.5 ? 'Strong' : 'Very Strong'}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[1 - (referenceStrength || 0.8)]}
+                      onValueChange={([value]) => {
+                        onReferenceStrengthChange?.(1 - value);
+                        // Auto-unlock seed for variations
+                        if (value > 0.1) {
+                          onLockSeedChange?.(false);
+                        }
+                      }}
+                      min={0.05}
+                      max={0.7}
+                      step={0.05}
+                      className="w-full"
+                    />
                   </div>
                   
                   {/* Profile Summary */}

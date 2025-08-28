@@ -438,13 +438,17 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       // LIBRARY-FIRST: Create generation request (always goes to library)
       // Reference strength defaults - align with worker's denoise_strength defaults
       
-      // CRITICAL FIX: Correct modifyStrength to produce proper denoise_strength
-      const modifyStrength = 0.80; // Results in denoise_strength = 0.20 (CORRECT for modifications!)
+      // CRITICAL FIX: Auto-detect clothing changes and adjust settings
+      const lowerPrompt = prompt.toLowerCase();
+      const isClothingChange = /\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes|suit|jacket|coat|blue|red|green|yellow|purple|pink|black|white|brown))\b/i.test(prompt);
       
-      // Compute reference strength with better defaults for modify mode
+      // Dynamic strength based on content - clothing changes need stronger denoise
+      const modifyStrength = isClothingChange ? 0.30 : 0.80; // Clothing = 0.70 denoise, Others = 0.20 denoise
+      
+      // Compute reference strength with auto-optimization
       const computedReferenceStrength = exactCopyMode 
         ? 0.95 // High preservation for exact copy
-        : modifyStrength; // Use the corrected modify strength
+        : (referenceStrength || modifyStrength); // Use UI slider or smart default
       
       console.log('🔍 I2I CRITICAL VALUES:', {
         modifyStrength,
@@ -452,7 +456,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         resulting_denoise: 1 - computedReferenceStrength,
         mode: exactCopyMode ? 'COPY' : 'MODIFY',
         referenceType,
-        exactCopyMode
+        exactCopyMode,
+        isClothingChange,
+        referenceStrengthFromUI: referenceStrength
       });
       const copyStrength = 0.95; // Copy mode strength (worker will clamp denoise to ≤0.05)
       
@@ -617,6 +623,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         negative_prompt: negativePrompt,
         // CRITICAL: Pass top-level denoise_strength for SDXL worker  
         denoise_strength: exactCopyMode ? 0.05 : (1 - computedReferenceStrength), // Use UI-derived denoise
+        // Auto-force unlock seed for clothing changes (they need variation)
+        seed_locked: exactCopyMode && lockSeed && !isClothingChange,
         compel_enabled: compelEnabled,
         compel_weights: compelWeights,
         metadata: (() => {
@@ -641,8 +649,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // Add reference mode and entry path for server classification
             reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
             reference_type: effRefUrl ? referenceType : undefined, // Pass reference type
+            // Clothing change detection for auto-optimization
+            is_clothing_change: isClothingChange,
             // Mode-specific parameter overrides
-            exact_copy_mode: exactCopyMode, // Always set this flag
+            exact_copy_mode: exactCopyMode && !isClothingChange, // Never exact copy for clothing
           };
 
           if (exactCopyMode) {
@@ -672,22 +682,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // Modify mode parameters - CRITICAL: set denoise_strength for i2i
             return {
               ...baseMetadata,
-              num_inference_steps: steps, // Use UI steps
-              guidance_scale: guidanceScale, // Use UI guidance
+              num_inference_steps: steps || (isClothingChange ? 25 : 20), // More steps for clothing
+              guidance_scale: guidanceScale || (isClothingChange ? 7.5 : 6), // Higher CFG for clothing
               denoise_strength: 1 - computedReferenceStrength, // CRITICAL: explicit denoise for modify
               negative_prompt: negativePrompt || undefined,
               exact_copy_mode: false, // Ensure modify mode
               reference_mode: 'modify', // Explicit modify mode
-              reference_type: referenceType, // Pass reference type to worker
+              reference_type: isClothingChange ? 'composition' : referenceType, // Auto-set composition for clothing
               // Add reference profile for metadata preservation
               reference_profile: {
-                type: referenceType,
+                type: isClothingChange ? 'composition' : referenceType,
                 reference_strength: computedReferenceStrength,
                 denoise_strength: 1 - computedReferenceStrength,
-                guidance_scale: guidanceScale,
-                steps: steps,
-                seed_locked: lockSeed,
-                exact_copy_mode: false
+                guidance_scale: guidanceScale || (isClothingChange ? 7.5 : 6),
+                steps: steps || (isClothingChange ? 25 : 20),
+                seed_locked: lockSeed && !isClothingChange, // Force unlock for clothing
+                exact_copy_mode: false,
+                is_clothing_change: isClothingChange
               }
             };
           }
