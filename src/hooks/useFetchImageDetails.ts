@@ -10,6 +10,7 @@ interface ImageDetails {
   generationTime?: number;
   referenceStrength?: number;
   templateName?: string;
+  jobType?: string;
 }
 
 export const useFetchImageDetails = () => {
@@ -17,7 +18,7 @@ export const useFetchImageDetails = () => {
   const [error, setError] = useState<Error | null>(null);
   const [details, setDetails] = useState<ImageDetails | null>(null);
 
-  const fetchDetails = useCallback(async (imageId: string) => {
+  const fetchDetails = useCallback(async (imageId: string, assetType: 'image' | 'video' = 'image') => {
     setLoading(true);
     setError(null);
     
@@ -43,19 +44,26 @@ export const useFetchImageDetails = () => {
         let enhancedPrompt = settings?.enhancedPrompt;
         let templateName = settings?.templateName;
         
+        let jobType;
+        
         // If enhanced prompt or template name is missing and we have a job_id, try to backfill from jobs table
-        if ((!enhancedPrompt || !templateName) && workspaceAsset.job_id) {
-          console.log('🔍 Backfilling enhanced prompt from jobs table for job:', workspaceAsset.job_id);
+        if ((!enhancedPrompt || !templateName || !jobType) && workspaceAsset.job_id) {
+          console.log('🔍 Backfilling data from jobs table for job:', workspaceAsset.job_id);
           const { data: jobData } = await supabase
             .from('jobs')
-            .select('enhanced_prompt, template_name')
+            .select('enhanced_prompt, template_name, format')
             .eq('id', workspaceAsset.job_id)
             .single();
           
           if (jobData) {
             enhancedPrompt = enhancedPrompt || jobData.enhanced_prompt;
             templateName = templateName || jobData.template_name;
-            console.log('✅ Backfilled from jobs table:', { enhancedPrompt: !!enhancedPrompt, templateName: !!templateName });
+            jobType = jobData.format;
+            console.log('✅ Backfilled from jobs table:', { 
+              enhancedPrompt: !!enhancedPrompt, 
+              templateName: !!templateName,
+              jobType 
+            });
           }
         }
         
@@ -66,7 +74,8 @@ export const useFetchImageDetails = () => {
           seed: settings?.seed,
           generationTime: settings?.generationTime,
           referenceStrength: settings?.referenceStrength,
-          templateName
+          templateName,
+          jobType
         });
         return;
       }
@@ -97,7 +106,8 @@ export const useFetchImageDetails = () => {
           seed: libraryAsset.generation_seed,
           generationTime: undefined, // Library doesn't store generation time  
           referenceStrength: undefined, // Library doesn't store reference strength
-          templateName
+          templateName,
+          jobType: undefined // Library doesn't store job type
         });
         return;
       }

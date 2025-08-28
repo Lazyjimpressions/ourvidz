@@ -1,18 +1,25 @@
 import React from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, Download } from 'lucide-react';
+import { X, Download, Settings } from 'lucide-react';
+import { PromptDetailsSlider } from '@/components/lightbox/PromptDetailsSlider';
 
 interface ImageLightboxProps {
   imageUrl: string | null;
   onClose: () => void;
   onDownload?: () => void;
+  assetId?: string;
+  assetType?: 'image' | 'video';
+  quality?: string;
 }
 
 export const ImageLightbox: React.FC<ImageLightboxProps> = ({
   imageUrl,
   onClose,
-  onDownload
+  onDownload,
+  assetId,
+  assetType = 'image',
+  quality
 }) => {
   if (!imageUrl) return null;
 
@@ -36,6 +43,22 @@ export const ImageLightbox: React.FC<ImageLightboxProps> = ({
         <div className="relative h-full flex flex-col">
           {/* Header */}
           <div className="absolute top-4 right-4 z-50 flex gap-2">
+            {assetId && (
+              <PromptDetailsSlider
+                assetId={assetId}
+                assetType={assetType}
+                quality={quality}
+                trigger={
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-background/90 backdrop-blur-sm"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                }
+              />
+            )}
             <Button
               variant="secondary"
               size="sm"

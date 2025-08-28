@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, Download, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Download, Trash2, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PromptDetailsSlider } from '@/components/lightbox/PromptDetailsSlider';
 
 export interface SimpleLightboxItem {
   id: string;
@@ -105,6 +106,20 @@ export const SimpleLightbox: React.FC<SimpleLightboxProps> = ({
 
       {/* Header with controls */}
       <div className="absolute top-4 right-4 flex gap-2">
+        <PromptDetailsSlider
+          assetId={currentItem.originalAssetId || currentItem.id}
+          assetType={currentItem.type}
+          quality={currentItem.quality}
+          trigger={
+            <Button
+              variant="secondary"
+              size="sm"
+              className="bg-gray-700/80 hover:bg-gray-600"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
+          }
+        />
         <Button
           variant="secondary"
           size="sm"

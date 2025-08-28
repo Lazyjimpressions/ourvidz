@@ -13,9 +13,11 @@ import {
   Image as ImageIcon, 
   Video as VideoIcon,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings
 } from 'lucide-react';
 import { UnifiedAsset } from '@/lib/services/OptimizedAssetService';
+import { PromptDetailsSlider } from '@/components/lightbox/PromptDetailsSlider';
 
 interface LibraryLightboxProps {
   assets: UnifiedAsset[];
@@ -168,6 +170,21 @@ export const LibraryLightbox: React.FC<LibraryLightboxProps> = ({
               </div>
               
               <div className="flex items-center gap-1">
+                <PromptDetailsSlider
+                  assetId={currentAsset.id}
+                  assetType={currentAsset.type}
+                  quality={currentAsset.quality}
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="bg-background/80 backdrop-blur-sm h-8 w-8 p-0"
+                      aria-label="View generation details"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  }
+                />
                 <Button
                   variant="ghost"
                   size="sm"
