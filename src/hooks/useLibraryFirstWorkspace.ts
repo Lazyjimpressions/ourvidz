@@ -1302,6 +1302,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     compelEnabled,
     compelWeights,
     seed,
+    // Debug controls
+    bypassEnhancement,
+    hardOverride,
+    // Clothing Edit Mode
+    clothingEditMode,
+    lockHair,
+    originalClothingColor,
+    targetGarments,
     
     // Actions
     updateMode: setMode,
@@ -1373,18 +1381,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setCompelWeights,
     setSeed,
     // Debug controls
-    bypassEnhancement,
     setBypassEnhancement,
-    hardOverride,
     setHardOverride,
     // Clothing Edit Mode
-    clothingEditMode,
     setClothingEditMode,
-    lockHair,
     setLockHair,
-    originalClothingColor,
     setOriginalClothingColor,
-    targetGarments,
     setTargetGarments,
     getJobStats,
     getActiveJob,
