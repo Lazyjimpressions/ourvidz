@@ -215,6 +215,11 @@ export interface SimplePromptInputProps {
   onCompelWeightsChange?: (weights: string) => void;
   seed?: number | null;
   onSeedChange?: (seed: number | null) => void;
+  // Debug controls
+  onBypassEnhancement?: boolean;
+  onBypassEnhancementChange?: (enabled: boolean) => void;
+  onHardOverride?: boolean;
+  onHardOverrideChange?: (enabled: boolean) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -287,7 +292,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   compelWeights = '',
   onCompelWeightsChange,
   seed = null,
-  onSeedChange
+  onSeedChange,
+  onBypassEnhancement,
+  onBypassEnhancementChange,
+  onHardOverride,
+  onHardOverrideChange
 }) => {
   // Fetch available image models from API
   const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();
@@ -1097,22 +1106,53 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                           onLockSeedChange?.(false);
                         }
                       }}
-                      min={0.05}
-                      max={0.7}
-                      step={0.05}
+                       min={0.05}
+                       max={0.8}
+                       step={0.05}
                       className="w-full"
                     />
                   </div>
                   
-                  {/* Profile Summary */}
-                  <div className="text-[9px] text-muted-foreground text-center">
-                    {exactCopyMode ? 'Copy' : referenceType?.charAt(0).toUpperCase() + referenceType?.slice(1)} • 
-                    Strength {referenceStrength.toFixed(2)} • 
-                    Denoise {(1 - referenceStrength).toFixed(2)} • 
-                    CFG {guidanceScale} • 
-                    Steps {steps}
-                    {lockSeed && ' • Seed Locked'}
-                  </div>
+                    {/* Debug Controls */}
+                    {(onBypassEnhancement !== undefined || onHardOverride !== undefined) && (
+                      <div className="space-y-1 p-2 border-t border-border/50">
+                        <div className="text-[8px] font-medium text-muted-foreground">Debug</div>
+                        <div className="flex gap-2 text-[8px]">
+                          {onBypassEnhancement !== undefined && (
+                            <label className="flex items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked={onBypassEnhancement}
+                                onChange={(e) => onBypassEnhancementChange?.(e.target.checked)}
+                                className="w-3 h-3"
+                              />
+                              Bypass enhancement
+                            </label>
+                          )}
+                          {onHardOverride !== undefined && (
+                            <label className="flex items-center gap-1">
+                              <input
+                                type="checkbox"
+                                checked={onHardOverride}
+                                onChange={(e) => onHardOverrideChange?.(e.target.checked)}
+                                className="w-3 h-3"
+                              />
+                              Hard override
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                   {/* Profile Summary */}
+                   <div className="text-[9px] text-muted-foreground text-center">
+                     {exactCopyMode ? 'Copy' : referenceType?.charAt(0).toUpperCase() + referenceType?.slice(1)} • 
+                     Strength {referenceStrength.toFixed(2)} • 
+                     Denoise {(1 - referenceStrength).toFixed(2)} • 
+                     CFG {guidanceScale} • 
+                     Steps {steps}
+                     {lockSeed && ' • Seed Locked'}
+                   </div>
                 </div>
               )}
               

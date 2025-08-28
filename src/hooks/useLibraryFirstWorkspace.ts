@@ -66,6 +66,10 @@ export interface LibraryFirstWorkspaceState {
   compelEnabled: boolean;
   compelWeights: string;
   seed: number | null;
+  
+  // Debug controls
+  bypassEnhancement: boolean;
+  hardOverride: boolean;
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -117,6 +121,10 @@ export interface LibraryFirstWorkspaceActions {
   setCompelEnabled: (enabled: boolean) => void;
   setCompelWeights: (weights: string) => void;
   setSeed: (seed: number | null) => void;
+  // Debug controls
+  setBypassEnhancement: (enabled: boolean) => void;
+  setHardOverride: (enabled: boolean) => void;
+  
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
   getActiveJob: () => any | null;
@@ -1345,6 +1353,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setCompelEnabled,
     setCompelWeights,
     setSeed,
+    // Debug controls
+    bypassEnhancement,
+    setBypassEnhancement,
+    hardOverride,
+    setHardOverride,
     getJobStats,
     getActiveJob,
     getJobById,

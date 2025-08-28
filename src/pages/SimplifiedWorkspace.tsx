@@ -131,6 +131,11 @@ export const SimplifiedWorkspace: React.FC = () => {
     setCompelEnabled,
     setCompelWeights,
     setSeed,
+    // Debug controls
+    bypassEnhancement,
+    setBypassEnhancement,
+    hardOverride,
+    setHardOverride,
     // URL Management
     registerAssetRef,
     signedUrls,
@@ -510,6 +515,10 @@ export const SimplifiedWorkspace: React.FC = () => {
             onCompelWeightsChange={setCompelWeights}
             seed={seed}
             onSeedChange={setSeed}
+            onBypassEnhancement={bypassEnhancement}
+            onBypassEnhancementChange={setBypassEnhancement}
+            onHardOverride={hardOverride}
+            onHardOverrideChange={setHardOverride}
           />
         </div>
       </div>

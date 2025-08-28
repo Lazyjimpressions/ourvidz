@@ -253,6 +253,18 @@ serve(async (req) => {
     }
 
     // Simplified parameter setting - let worker handle defaults
+    console.log('📊 EDGE FUNCTION PARAMETERS (provided vs resolved):', {
+      provided: {
+        denoise_strength: jobRequest.denoise_strength,
+        guidance_scale: jobRequest.guidance_scale,
+        steps: jobRequest.steps,
+        reference_strength: jobRequest.reference_strength
+      },
+      mode: isPromptlessUploadedExactCopy ? 'exact_copy' : (isReferenceModify ? 'modify' : 'text2img'),
+      bypass_enhancement: jobRequest.bypass_enhancement,
+      hard_override: jobRequest.hard_override
+    });
+
     if (isPromptlessUploadedExactCopy) {
       // Exact copy mode: let worker handle clamping
       denoise = typeof denoise === 'number' ? denoise : DENOISE_COPY_MAX;
@@ -266,6 +278,16 @@ serve(async (req) => {
       cfg = typeof cfg === 'number' ? cfg : CFG_MOD_DEFAULT;
       steps = typeof steps === 'number' ? steps : STEPS_MOD_DEFAULT;
     }
+
+    console.log('📊 EDGE FUNCTION RESOLVED PARAMETERS:', {
+      resolved: {
+        denoise_strength: denoise,
+        guidance_scale: cfg,
+        steps: steps,
+        reference_strength: jobRequest.reference_strength
+      },
+      will_send_to_worker: true
+    });
 
     // Create job record
     const { data: job, error: jobError } = await supabaseClient
