@@ -230,6 +230,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [compelEnabled, setCompelEnabled] = useState(false);
   const [compelWeights, setCompelWeights] = useState('');
   const [seed, setSeed] = useState<number | null>(null);
+  // Debug controls
+  const [bypassEnhancement, setBypassEnhancement] = useState(false);
+  const [hardOverride, setHardOverride] = useState(false);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
