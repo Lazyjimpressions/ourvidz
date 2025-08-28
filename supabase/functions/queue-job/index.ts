@@ -403,6 +403,22 @@ serve(async (req) => {
       reference_profile: queuePayload.metadata.reference_profile
     });
 
+    // Enhanced final parameters logging for clothing edit mode
+    console.log('🔧 FINAL PARAMETERS:', {
+      bypass_enhancement: userMetadata.bypass_enhancement,
+      hard_override: userMetadata.hard_override,
+      clothing_edit_mode: userMetadata.clothing_edit_mode,
+      lock_hair: userMetadata.lock_hair,
+      original_clothing_color: userMetadata.original_clothing_color,
+      denoise_strength: queuePayload.config.denoise_strength,
+      guidance_scale: queuePayload.config.guidance_scale,
+      steps: queuePayload.config.num_inference_steps,
+      reference_strength: queuePayload.metadata.reference_strength,
+      exact_copy_mode: userMetadata.exact_copy_mode,
+      seed_locked: userMetadata.seed_locked,
+      negative_prompt_length: queuePayload.negative_prompt?.length || 0
+    });
+
     // Determine queue based on job type
     const queueName = (jobRequest.job_type.startsWith('sdxl') || jobRequest.job_type.includes('image')) ? 'sdxl_queue' : 'wan_queue'
     

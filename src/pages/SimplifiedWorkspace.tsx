@@ -136,6 +136,15 @@ export const SimplifiedWorkspace: React.FC = () => {
     setBypassEnhancement,
     hardOverride,
     setHardOverride,
+    // Clothing Edit Mode
+    clothingEditMode,
+    setClothingEditMode,
+    lockHair,
+    setLockHair,
+    originalClothingColor,
+    setOriginalClothingColor,
+    targetGarments,
+    setTargetGarments,
     // URL Management
     registerAssetRef,
     signedUrls,
@@ -515,10 +524,18 @@ export const SimplifiedWorkspace: React.FC = () => {
             onCompelWeightsChange={setCompelWeights}
             seed={seed}
             onSeedChange={setSeed}
-            onBypassEnhancement={bypassEnhancement}
-            onBypassEnhancementChange={setBypassEnhancement}
-            onHardOverride={hardOverride}
-            onHardOverrideChange={setHardOverride}
+          onBypassEnhancement={bypassEnhancement}
+          onBypassEnhancementChange={setBypassEnhancement}
+          onHardOverride={hardOverride}
+          onHardOverrideChange={setHardOverride}
+          clothingEditMode={clothingEditMode}
+          onClothingEditModeChange={setClothingEditMode}
+          lockHair={lockHair}
+          onLockHairChange={setLockHair}
+          originalClothingColor={originalClothingColor}
+          onOriginalClothingColorChange={setOriginalClothingColor}
+          targetGarments={targetGarments}
+          onTargetGarmentsChange={setTargetGarments}
           />
         </div>
       </div>

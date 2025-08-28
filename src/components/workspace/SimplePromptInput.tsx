@@ -220,6 +220,15 @@ export interface SimplePromptInputProps {
   onBypassEnhancementChange?: (enabled: boolean) => void;
   onHardOverride?: boolean;
   onHardOverrideChange?: (enabled: boolean) => void;
+  // Clothing Edit Mode
+  clothingEditMode?: boolean;
+  onClothingEditModeChange?: (enabled: boolean) => void;
+  lockHair?: boolean;
+  onLockHairChange?: (enabled: boolean) => void;
+  originalClothingColor?: string;
+  onOriginalClothingColorChange?: (color: string) => void;
+  targetGarments?: string[];
+  onTargetGarmentsChange?: (garments: string[]) => void;
 }
 
 export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
@@ -296,7 +305,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onBypassEnhancement,
   onBypassEnhancementChange,
   onHardOverride,
-  onHardOverrideChange
+  onHardOverrideChange,
+  clothingEditMode = false,
+  onClothingEditModeChange,
+  lockHair = false,
+  onLockHairChange,
+  originalClothingColor = 'black',
+  onOriginalClothingColorChange,
+  targetGarments = [],
+  onTargetGarmentsChange
 }) => {
   // Fetch available image models from API
   const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();

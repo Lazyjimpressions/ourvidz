@@ -70,6 +70,11 @@ export interface LibraryFirstWorkspaceState {
   // Debug controls
   bypassEnhancement: boolean;
   hardOverride: boolean;
+  // Clothing Edit Mode
+  clothingEditMode: boolean;
+  lockHair: boolean;
+  originalClothingColor: string;
+  targetGarments: string[];
 }
 
 export interface LibraryFirstWorkspaceActions {
@@ -124,6 +129,11 @@ export interface LibraryFirstWorkspaceActions {
   // Debug controls
   setBypassEnhancement: (enabled: boolean) => void;
   setHardOverride: (enabled: boolean) => void;
+  // Clothing Edit Mode
+  setClothingEditMode: (enabled: boolean) => void;
+  setLockHair: (enabled: boolean) => void;
+  setOriginalClothingColor: (color: string) => void;
+  setTargetGarments: (garments: string[]) => void;
   
   // Helper functions
   getJobStats: () => { totalJobs: number; totalItems: number; readyJobs: number; pendingJobs: number; hasActiveJob: boolean };
@@ -233,6 +243,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   // Debug controls
   const [bypassEnhancement, setBypassEnhancement] = useState(false);
   const [hardOverride, setHardOverride] = useState(false);
+  
+  // Clothing Edit Mode
+  const [clothingEditMode, setClothingEditMode] = useState(false);
+  const [lockHair, setLockHair] = useState(false);
+  const [originalClothingColor, setOriginalClothingColor] = useState('black');
+  const [targetGarments, setTargetGarments] = useState<string[]>([]);
 
   // STAGING-FIRST: Use debounced asset loading to prevent infinite loops
   const { 
@@ -1361,6 +1377,15 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setBypassEnhancement,
     hardOverride,
     setHardOverride,
+    // Clothing Edit Mode
+    clothingEditMode,
+    setClothingEditMode,
+    lockHair,
+    setLockHair,
+    originalClothingColor,
+    setOriginalClothingColor,
+    targetGarments,
+    setTargetGarments,
     getJobStats,
     getActiveJob,
     getJobById,
