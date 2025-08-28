@@ -437,11 +437,27 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
 
       // LIBRARY-FIRST: Create generation request (always goes to library)
       // Reference strength defaults - align with worker's denoise_strength defaults
-      const modifyStrength = 0.35; // Modify mode strength - reduced for stronger modification effect
+      
+      // CRITICAL FIX: Correct modifyStrength to produce proper denoise_strength
+      const modifyStrength = 0.80; // Results in denoise_strength = 0.20 (CORRECT for modifications!)
+      
+      // Compute reference strength with better defaults for modify mode
+      const computedReferenceStrength = exactCopyMode 
+        ? 0.95 // High preservation for exact copy
+        : modifyStrength; // Use the corrected modify strength
+      
+      console.log('🔍 I2I CRITICAL VALUES:', {
+        modifyStrength,
+        computedReferenceStrength,
+        resulting_denoise: 1 - computedReferenceStrength,
+        mode: exactCopyMode ? 'COPY' : 'MODIFY',
+        referenceType,
+        exactCopyMode
+      });
       const copyStrength = 0.95; // Copy mode strength (worker will clamp denoise to ≤0.05)
       
       // CRITICAL: Calculate denoise strength for modify mode (worker expects complete settings)
-      const computedDenoiseStrength = exactCopyMode ? 0.05 : (1 - modifyStrength); // 0.65 for modify mode
+      const computedDenoiseStrength = exactCopyMode ? 0.05 : (1 - computedReferenceStrength); // Now 0.20 for modify mode
       
       // EXACT COPY MODE: Use original enhanced prompt as base
       let finalPrompt: string;
@@ -579,12 +595,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         ? (overrideReferenceImageUrl || referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
         : undefined;
 
-      // CRITICAL FIX: Compute reference strength BEFORE using it in generation request
-      const computedReferenceStrength = exactCopyMode ? copyStrength : (() => {
-        const lowerPrompt = prompt.toLowerCase();
-        const hasColorChange = /\b(change|replace|swap|make.*?(?:blue|red|green|yellow|purple|pink|black|white|brown|blonde|brunette))\b/.test(lowerPrompt);
-        return hasColorChange ? Math.min(referenceStrength, 0.35) : Math.min(referenceStrength, modifyStrength);
-      })();
+      // Use the already computed reference strength from above
 
       const generationRequest = {
         job_type: (mode === 'image' 

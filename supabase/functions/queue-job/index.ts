@@ -7,13 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// I2I constants - Simplified to work with SDXL worker defaults
+// I2I constants - Fixed to align with SDXL worker expectations for modifications
 const DENOISE_COPY_MAX = 0.05;   // exact copy mode (worker will clamp)
-const DENOISE_MOD_DEFAULT = 0.5; // modify mode (worker default)
+const DENOISE_MOD_DEFAULT = 0.20; // modify mode: FIXED - lower for proper modifications
 const CFG_COPY = 1.0;            // copy mode: minimal guidance
-const CFG_MOD_DEFAULT = 7.5;     // modify mode: standard guidance
+const CFG_MOD_DEFAULT = 6.0;     // modify mode: FIXED - better for i2i modifications
 const STEPS_COPY_DEFAULT = 15;   // copy mode: standard steps
-const STEPS_MOD_DEFAULT = 25;    // modify mode: standard steps
+const STEPS_MOD_DEFAULT = 20;    // modify mode: FIXED - optimal for modifications
 
 interface JobRequest {
   prompt: string;
