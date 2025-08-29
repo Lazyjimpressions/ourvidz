@@ -1104,31 +1104,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </div>
                   )}
 
-                  {/* Variation Slider - Compact */}
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[9px] text-muted-foreground">Variation: {Math.round((1 - (referenceStrength || 0.8)) * 100)}%</label>
-                      <span className="text-[8px] text-muted-foreground">
-                        {(referenceStrength || 0.8) >= 0.9 ? 'Minimal' : 
-                         (referenceStrength || 0.8) >= 0.7 ? 'Balanced' : 
-                         (referenceStrength || 0.8) >= 0.5 ? 'Strong' : 'Very Strong'}
-                      </span>
-                    </div>
-                    <Slider
-                      value={[1 - (referenceStrength || 0.8)]}
-                      onValueChange={([value]) => {
-                        onReferenceStrengthChange?.(1 - value);
-                        // Auto-unlock seed for variations
-                        if (value > 0.1) {
-                          onLockSeedChange?.(false);
-                        }
-                      }}
-                       min={0.05}
-                       max={0.8}
-                       step={0.05}
-                      className="w-full"
-                    />
-                  </div>
                   
                     {/* Debug Controls */}
                     {(onBypassEnhancement !== undefined || onHardOverride !== undefined) && (
@@ -1196,10 +1171,10 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
                   {/* Reference Strength */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] font-medium text-muted-foreground">
-                        Ref Strength
-                      </label>
+                     <div className="flex items-center justify-between mb-1">
+                       <label className="text-[10px] font-medium text-muted-foreground">
+                         Ref Strength <span className="text-[8px] text-muted-foreground/60">(Variation: {Math.round((1 - referenceStrength) * 100)}%)</span>
+                       </label>
                       <input 
                         type="number" 
                         value={referenceStrength.toFixed(2)} 
