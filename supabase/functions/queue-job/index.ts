@@ -400,6 +400,7 @@ serve(async (req) => {
       user_modification_length: userPromptTrim.length,
       final_prompt_preview: enhancedPrompt.substring(0, 100) + '...',
       template_name: templateName,
+      lock_hair: queuePayload.metadata.lock_hair, // Log Hair Lock setting
       reference_profile: {
         type: queuePayload.metadata.reference_type,
         reference_strength: queuePayload.metadata.reference_strength,

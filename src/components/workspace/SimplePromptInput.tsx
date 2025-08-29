@@ -340,66 +340,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showEnhancePopup, setShowEnhancePopup] = useState(false);
   const [showModelPopup, setShowModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
-  
-  // Manual override tracking to prevent preset overrides
-  const [manualOverrides, setManualOverrides] = useState<{
-    steps?: number;
-    guidanceScale?: number;
-    timestamp?: number;
-  }>({});
-  
-  // Identity lock state
-  const [identityLockEnabled, setIdentityLockEnabled] = useState(false);
-
-  // Track manual changes to prevent preset overrides
-  const handleManualStepsChange = (newSteps: number) => {
-    setManualOverrides(prev => ({
-      ...prev,
-      steps: newSteps,
-      timestamp: Date.now()
-    }));
-    onStepsChange?.(newSteps);
-  };
-
-  const handleManualGuidanceScaleChange = (newScale: number) => {
-    setManualOverrides(prev => ({
-      ...prev,
-      guidanceScale: newScale,
-      timestamp: Date.now()
-    }));
-    onGuidanceScaleChange?.(newScale);
-  };
-
-  // Check if manual override is still active (within 10 seconds)
-  const isManualOverrideActive = (type: 'steps' | 'guidanceScale') => {
-    const override = manualOverrides[type];
-    if (!override || !manualOverrides.timestamp) return false;
-    return Date.now() - manualOverrides.timestamp < 10000; // 10 seconds
-  };
-
-  // Identity lock toggle handler
-  const handleIdentityLockToggle = () => {
-    const newLockEnabled = !identityLockEnabled;
-    setIdentityLockEnabled(newLockEnabled);
-    
-    if (newLockEnabled) {
-      // Apply identity-preserving settings
-      onReferenceTypeChange?.('character');
-      onLockHairChange?.(true);
-      onLockSeedChange?.(true);
-      
-      // Only override if no recent manual changes
-      if (!isManualOverrideActive('steps')) {
-        onStepsChange?.(30);
-      }
-      if (!isManualOverrideActive('guidanceScale')) {
-        onGuidanceScaleChange?.(6.5);
-      }
-      
-      // Set moderate denoise for identity preservation
-      onReferenceStrengthChange(0.65); // This translates to ~0.35 denoise
-    }
-  };
 
   const { toast } = useToast();
 
@@ -435,10 +375,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
       onExactCopyModeChange?.(false);
       onReferenceStrengthChange(0.80); // Better default for character mode
       
-      // Only set reference type if identity lock isn't enabled
-      if (!identityLockEnabled) {
-        onReferenceTypeChange?.('character'); // Default to character for most use cases
-      }
+      onReferenceTypeChange?.('character'); // Default to character for most use cases
       
       onModeChange('image');
     } else {
@@ -455,10 +392,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
       // Always default to modify mode for all references
       onReferenceStrengthChange(0.80); // Better default for character mode
       
-      // Only set reference type if identity lock isn't enabled
-      if (!identityLockEnabled) {
-        onReferenceTypeChange?.('character'); // Default to character for most use cases
-      }
+      onReferenceTypeChange?.('character'); // Default to character for most use cases
       
       onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
@@ -1075,40 +1009,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </TooltipProvider>
                   </div>
                   
-                  {/* Reference Type Radio Group - Tiny */}
+                  {/* Reference Type Radio Group - Pure (no auto-changes) */}
                   <RadioGroup 
                     value={referenceType} 
-                       onValueChange={(value) => {
-                         onReferenceTypeChange?.(value as any);
-                         // Apply defaults for the selected type - but respect manual overrides
-                         if (value === 'character') {
-                           onReferenceStrengthChange?.(0.80);
-                           if (!isManualOverrideActive('guidanceScale')) {
-                             onGuidanceScaleChange?.(6.0);
-                           }
-                           if (!isManualOverrideActive('steps')) {
-                             onStepsChange?.(25);
-                           }
-                         } else if (value === 'style') {
-                           onReferenceStrengthChange?.(0.70);
-                           if (!isManualOverrideActive('guidanceScale')) {
-                             onGuidanceScaleChange?.(7.0);
-                           }
-                           if (!isManualOverrideActive('steps')) {
-                             onStepsChange?.(25);
-                           }
-                         } else if (value === 'composition') {
-                           onReferenceStrengthChange?.(0.65);
-                           if (!isManualOverrideActive('guidanceScale')) {
-                             onGuidanceScaleChange?.(5.5);
-                           }
-                           if (!isManualOverrideActive('steps')) {
-                             onStepsChange?.(22);
-                           }
-                         }
-                         onExactCopyModeChange?.(false);
-                         onLockSeedChange?.(false);
-                       }}
+                    onValueChange={(value) => {
+                      onReferenceTypeChange?.(value as any);
+                    }}
                     className="flex gap-3 mb-3"
                   >
                     {(['character', 'style', 'composition'] as const).map((type) => (
@@ -1150,7 +1056,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         }}
                         className={`chip-segmented rounded-none ${!exactCopyMode && referenceStrength >= 0.7 && referenceStrength <= 0.8 ? 'chip-segmented-active' : ''}`}
                       >
-                        Balanced
+                        Modify
                       </button>
                       <button
                         onClick={() => {
@@ -1162,7 +1068,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         }}
                         className={`chip-segmented rounded-l-none ${!exactCopyMode && referenceStrength >= 0.35 && referenceStrength <= 0.45 ? 'chip-segmented-active' : ''}`}
                       >
-                        Strong
+                        Creative
                       </button>
                     </div>
                   </div>
@@ -1190,30 +1096,41 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                        </button>
                      </div>
                    )}
-                   
-                   {/* Identity Lock Toggle */}
-                   <div className="mb-2">
-                     <div className="flex items-center justify-between">
-                       <label className="text-[9px] text-muted-foreground font-medium">Identity Lock</label>
-                       <button
-                         onClick={handleIdentityLockToggle}
-                         className={`w-8 h-4 rounded-full transition-colors ${
-                           identityLockEnabled ? 'bg-primary' : 'bg-muted'
-                         }`}
-                       >
-                         <div
-                           className={`w-3 h-3 bg-white rounded-full transition-transform ${
-                             identityLockEnabled ? 'translate-x-4' : 'translate-x-0.5'
-                           }`}
-                         />
-                       </button>
-                     </div>
-                     <div className="text-[8px] text-muted-foreground mt-0.5">
-                       {identityLockEnabled ? 'Character mode, locked hair & seed, identity-preserving settings' : 'Click to enable identity-preserving defaults'}
-                     </div>
-                   </div>
+                    
+                    {/* Hair Lock Toggle - Visible with tooltip */}
+                    <div className="mb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <label className="text-[9px] text-muted-foreground font-medium">Hair Lock</label>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button className="w-3 h-3 rounded-full bg-muted-foreground/30 flex items-center justify-center text-muted-foreground cursor-help hover:bg-muted-foreground/40">
+                                  <Info size={8} />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-48 text-xs z-50 bg-popover border border-border shadow-lg">
+                                <p>Preserves hair color and style during generation. Useful for clothing changes while maintaining identity.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                        <button
+                          onClick={() => onLockHairChange?.(!lockHair)}
+                          className={`w-8 h-4 rounded-full transition-colors ${
+                            lockHair ? 'bg-primary' : 'bg-muted'
+                          }`}
+                        >
+                          <div
+                            className={`w-3 h-3 bg-white rounded-full transition-transform ${
+                              lockHair ? 'translate-x-4' : 'translate-x-0.5'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
 
-                  
+                   
                     {/* Debug Controls */}
                     {(onBypassEnhancement !== undefined || onHardOverride !== undefined) && (
                       <div className="space-y-1 p-2 border-t border-border/50">
@@ -1266,16 +1183,16 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <label className="text-[10px] font-medium text-muted-foreground">
                         Steps
                       </label>
-                      <input 
-                        type="number" 
-                        value={steps} 
-                        onChange={e => handleManualStepsChange(parseInt(e.target.value) || 25)} 
-                        className="control-number"
-                        min="10" 
-                        max="50"
-                      />
+                       <input 
+                         type="number" 
+                         value={steps} 
+                         onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
+                         className="control-number"
+                         min="10" 
+                         max="50"
+                       />
                     </div>
-                    <Slider value={[steps]} onValueChange={value => handleManualStepsChange(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
+                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
 
                   {/* Reference Strength */}
@@ -1316,17 +1233,17 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <label className="text-[10px] font-medium text-muted-foreground">
                         CFG
                       </label>
-                      <input 
-                        type="number" 
-                        value={guidanceScale} 
-                        onChange={e => handleManualGuidanceScaleChange(parseFloat(e.target.value) || 7.5)} 
-                        className="control-number"
-                        min="1" 
-                        max="20"
-                        step="0.5"
-                      />
+                       <input 
+                         type="number" 
+                         value={guidanceScale} 
+                         onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
+                         className="control-number"
+                         min="1" 
+                         max="20"
+                         step="0.5"
+                       />
                     </div>
-                    <Slider value={[guidanceScale]} onValueChange={value => handleManualGuidanceScaleChange(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
+                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
                 </div>
               )}
