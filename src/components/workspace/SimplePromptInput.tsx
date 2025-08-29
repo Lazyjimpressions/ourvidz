@@ -532,19 +532,6 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       />
                       
                       {/* In-tile badge - visible and clickable */}
-                      {(referenceImage || referenceImageUrl) && (
-                        <div 
-                          className="absolute bottom-0 inset-x-0 h-4 bg-background/95 backdrop-blur-sm border-t border-border/30 flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setShowAdvancedSettings(true);
-                          }}
-                        >
-                          <span className="text-[8px] font-medium text-muted-foreground">
-                            {referenceType?.toUpperCase() || 'CHARACTER'} • {exactCopyMode ? 'COPY' : 'MOD'}
-                          </span>
-                        </div>
-                      )}
                     </div>
                     
                     {/* Mode toggle and status badges */}
