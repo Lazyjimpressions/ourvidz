@@ -400,7 +400,16 @@ serve(async (req) => {
       user_modification_length: userPromptTrim.length,
       final_prompt_preview: enhancedPrompt.substring(0, 100) + '...',
       template_name: templateName,
-      reference_profile: queuePayload.metadata.reference_profile
+      reference_profile: {
+        type: queuePayload.metadata.reference_type,
+        reference_strength: queuePayload.metadata.reference_strength,
+        denoise_strength: queuePayload.config.denoise_strength,
+        guidance_scale: queuePayload.config.guidance_scale,
+        steps: queuePayload.config.num_inference_steps,
+        seed_locked: queuePayload.metadata.seed_locked || false,
+        exact_copy_mode: isPromptlessUploadedExactCopy,
+        is_clothing_change: /\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes))\b/i.test(userPromptTrim)
+      }
     });
 
     // Enhanced final parameters logging for clothing edit mode
@@ -414,9 +423,9 @@ serve(async (req) => {
       guidance_scale: queuePayload.config.guidance_scale,
       steps: queuePayload.config.num_inference_steps,
       reference_strength: queuePayload.metadata.reference_strength,
-      exact_copy_mode: userMetadata.exact_copy_mode,
-      seed_locked: userMetadata.seed_locked,
-      negative_prompt_length: queuePayload.negative_prompt?.length || 0
+      exact_copy_mode: isPromptlessUploadedExactCopy,
+      seed_locked: queuePayload.metadata.seed_locked,
+      negative_prompt_length: (queuePayload.negative_prompt || '').length
     });
 
     // Determine queue based on job type

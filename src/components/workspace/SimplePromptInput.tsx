@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
 import { useImageModels } from '@/hooks/useApiModels';
+import { useToast } from '@/hooks/use-toast';
+import { NegativePromptPresets } from '@/components/ui/negative-prompt-presets';
 
 // Compact reference upload component with sizing
 const ReferenceImageUpload: React.FC<{
@@ -338,6 +340,68 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showEnhancePopup, setShowEnhancePopup] = useState(false);
   const [showModelPopup, setShowModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  
+  // Manual override tracking to prevent preset overrides
+  const [manualOverrides, setManualOverrides] = useState<{
+    steps?: number;
+    guidanceScale?: number;
+    timestamp?: number;
+  }>({});
+  
+  // Identity lock state
+  const [identityLockEnabled, setIdentityLockEnabled] = useState(false);
+
+  // Track manual changes to prevent preset overrides
+  const handleManualStepsChange = (newSteps: number) => {
+    setManualOverrides(prev => ({
+      ...prev,
+      steps: newSteps,
+      timestamp: Date.now()
+    }));
+    onStepsChange?.(newSteps);
+  };
+
+  const handleManualGuidanceScaleChange = (newScale: number) => {
+    setManualOverrides(prev => ({
+      ...prev,
+      guidanceScale: newScale,
+      timestamp: Date.now()
+    }));
+    onGuidanceScaleChange?.(newScale);
+  };
+
+  // Check if manual override is still active (within 10 seconds)
+  const isManualOverrideActive = (type: 'steps' | 'guidanceScale') => {
+    const override = manualOverrides[type];
+    if (!override || !manualOverrides.timestamp) return false;
+    return Date.now() - manualOverrides.timestamp < 10000; // 10 seconds
+  };
+
+  // Identity lock toggle handler
+  const handleIdentityLockToggle = () => {
+    const newLockEnabled = !identityLockEnabled;
+    setIdentityLockEnabled(newLockEnabled);
+    
+    if (newLockEnabled) {
+      // Apply identity-preserving settings
+      onReferenceTypeChange?.('character');
+      onLockHairChange?.(true);
+      onLockSeedChange?.(true);
+      
+      // Only override if no recent manual changes
+      if (!isManualOverrideActive('steps')) {
+        onStepsChange?.(30);
+      }
+      if (!isManualOverrideActive('guidanceScale')) {
+        onGuidanceScaleChange?.(6.5);
+      }
+      
+      // Set moderate denoise for identity preservation
+      onReferenceStrengthChange(0.65); // This translates to ~0.35 denoise
+    }
+  };
+
+  const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -345,6 +409,19 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (mode === 'video' && !prompt.trim()) {
       return;
     }
+    
+    // Show pre-generation summary toast
+    if (referenceImage || referenceImageUrl) {
+      const currentDenoise = 1 - referenceStrength;
+      const summary = `${steps} Steps • CFG ${guidanceScale} • Denoise ${currentDenoise.toFixed(2)} • ${exactCopyMode ? 'COPY' : referenceType?.toUpperCase() || 'CHARACTER'}`;
+      
+      toast({
+        title: "Generation Settings",
+        description: summary,
+        duration: 2000,
+      });
+    }
+    
     if (!isGenerating && (prompt.trim() || exactCopyMode)) {
       onGenerate();
     }
@@ -357,7 +434,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
       // Always default to modify mode (never auto-enable exact copy)
       onExactCopyModeChange?.(false);
       onReferenceStrengthChange(0.80); // Better default for character mode
-      onReferenceTypeChange?.('character'); // Default to character for most use cases
+      
+      // Only set reference type if identity lock isn't enabled
+      if (!identityLockEnabled) {
+        onReferenceTypeChange?.('character'); // Default to character for most use cases
+      }
+      
       onModeChange('image');
     } else {
       // Clear exact copy mode when reference is removed
@@ -372,7 +454,12 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     if (url) {
       // Always default to modify mode for all references
       onReferenceStrengthChange(0.80); // Better default for character mode
-      onReferenceTypeChange?.('character'); // Default to character for most use cases
+      
+      // Only set reference type if identity lock isn't enabled
+      if (!identityLockEnabled) {
+        onReferenceTypeChange?.('character'); // Default to character for most use cases
+      }
+      
       onExactCopyModeChange?.(false); // Explicitly set modify mode
       onModeChange('image');
     } else {
@@ -991,25 +1078,37 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                   {/* Reference Type Radio Group - Tiny */}
                   <RadioGroup 
                     value={referenceType} 
-                    onValueChange={(value) => {
-                      onReferenceTypeChange?.(value as any);
-                      // Apply defaults for the selected type
-                      if (value === 'character') {
-                        onReferenceStrengthChange?.(0.80);
-                        onGuidanceScaleChange?.(6.0);
-                        onStepsChange?.(25);
-                      } else if (value === 'style') {
-                        onReferenceStrengthChange?.(0.70);
-                        onGuidanceScaleChange?.(7.0);
-                        onStepsChange?.(25);
-                      } else if (value === 'composition') {
-                        onReferenceStrengthChange?.(0.65);
-                        onGuidanceScaleChange?.(5.5);
-                        onStepsChange?.(22);
-                      }
-                      onExactCopyModeChange?.(false);
-                      onLockSeedChange?.(false);
-                    }}
+                       onValueChange={(value) => {
+                         onReferenceTypeChange?.(value as any);
+                         // Apply defaults for the selected type - but respect manual overrides
+                         if (value === 'character') {
+                           onReferenceStrengthChange?.(0.80);
+                           if (!isManualOverrideActive('guidanceScale')) {
+                             onGuidanceScaleChange?.(6.0);
+                           }
+                           if (!isManualOverrideActive('steps')) {
+                             onStepsChange?.(25);
+                           }
+                         } else if (value === 'style') {
+                           onReferenceStrengthChange?.(0.70);
+                           if (!isManualOverrideActive('guidanceScale')) {
+                             onGuidanceScaleChange?.(7.0);
+                           }
+                           if (!isManualOverrideActive('steps')) {
+                             onStepsChange?.(25);
+                           }
+                         } else if (value === 'composition') {
+                           onReferenceStrengthChange?.(0.65);
+                           if (!isManualOverrideActive('guidanceScale')) {
+                             onGuidanceScaleChange?.(5.5);
+                           }
+                           if (!isManualOverrideActive('steps')) {
+                             onStepsChange?.(22);
+                           }
+                         }
+                         onExactCopyModeChange?.(false);
+                         onLockSeedChange?.(false);
+                       }}
                     className="flex gap-3 mb-3"
                   >
                     {(['character', 'style', 'composition'] as const).map((type) => (
@@ -1068,28 +1167,51 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     </div>
                   </div>
                   
-                  {/* Clothing Changes Preset - Special chip for clothing modifications */}
-                  {/\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes|suit|jacket|coat|blue|red|green|yellow|purple|pink|black|white|brown))\b/i.test(prompt) && (
-                    <div className="mb-2">
-                      <div className="flex items-center gap-1 mb-1">
-                        <div className="w-1 h-1 bg-orange-500 rounded-full"></div>
-                        <label className="text-[9px] text-orange-600 font-medium">Detected: Clothing Change</label>
-                      </div>
-                      <button
-                        onClick={() => {
-                          onExactCopyModeChange?.(false);
-                          onReferenceTypeChange?.('composition');
-                          onReferenceStrengthChange?.(0.30);
-                          onGuidanceScaleChange?.(7.5);
-                          onStepsChange?.(25);
-                          onLockSeedChange?.(false);
-                        }}
-                        className="chip-segmented w-full border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 text-[10px] py-1"
-                      >
-                        🔄 Optimize for Clothing
-                      </button>
-                    </div>
-                  )}
+                   {/* Clothing Changes Preset - Special chip for clothing modifications - SUGGESTION ONLY */}
+                   {/\b(change|replace|swap|modify|make.*?(?:dress|shirt|top|bottom|pants|skirt|outfit|clothing|clothes|suit|jacket|coat|blue|red|green|yellow|purple|pink|black|white|brown))\b/i.test(prompt) && (
+                     <div className="mb-2">
+                       <div className="flex items-center gap-1 mb-1">
+                         <div className="w-1 h-1 bg-orange-500 rounded-full"></div>
+                         <label className="text-[9px] text-orange-600 font-medium">Suggestion: Clothing Change</label>
+                       </div>
+                       <button
+                         onClick={() => {
+                           onExactCopyModeChange?.(false);
+                           // Don't auto-force composition - respect user's selection
+                           // onReferenceTypeChange?.('composition');
+                           onReferenceStrengthChange?.(0.30);
+                           onGuidanceScaleChange?.(7.5);
+                           onStepsChange?.(25);
+                           onLockSeedChange?.(false);
+                         }}
+                         className="chip-segmented w-full border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 text-[10px] py-1"
+                       >
+                         🔄 Optimize for Clothing (Keep {referenceType})
+                       </button>
+                     </div>
+                   )}
+                   
+                   {/* Identity Lock Toggle */}
+                   <div className="mb-2">
+                     <div className="flex items-center justify-between">
+                       <label className="text-[9px] text-muted-foreground font-medium">Identity Lock</label>
+                       <button
+                         onClick={handleIdentityLockToggle}
+                         className={`w-8 h-4 rounded-full transition-colors ${
+                           identityLockEnabled ? 'bg-primary' : 'bg-muted'
+                         }`}
+                       >
+                         <div
+                           className={`w-3 h-3 bg-white rounded-full transition-transform ${
+                             identityLockEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                           }`}
+                         />
+                       </button>
+                     </div>
+                     <div className="text-[8px] text-muted-foreground mt-0.5">
+                       {identityLockEnabled ? 'Character mode, locked hair & seed, identity-preserving settings' : 'Click to enable identity-preserving defaults'}
+                     </div>
+                   </div>
 
                   
                     {/* Debug Controls */}
@@ -1147,13 +1269,13 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <input 
                         type="number" 
                         value={steps} 
-                        onChange={e => onStepsChange?.(parseInt(e.target.value) || 25)} 
+                        onChange={e => handleManualStepsChange(parseInt(e.target.value) || 25)} 
                         className="control-number"
                         min="10" 
                         max="50"
                       />
                     </div>
-                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
+                    <Slider value={[steps]} onValueChange={value => handleManualStepsChange(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
 
                   {/* Reference Strength */}
@@ -1197,14 +1319,14 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       <input 
                         type="number" 
                         value={guidanceScale} 
-                        onChange={e => onGuidanceScaleChange?.(parseFloat(e.target.value) || 7.5)} 
+                        onChange={e => handleManualGuidanceScaleChange(parseFloat(e.target.value) || 7.5)} 
                         className="control-number"
                         min="1" 
                         max="20"
                         step="0.5"
                       />
                     </div>
-                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
+                    <Slider value={[guidanceScale]} onValueChange={value => handleManualGuidanceScaleChange(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
                 </div>
               )}
@@ -1290,18 +1412,27 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                    <div className="text-[9px] text-muted-foreground mb-1">
                      A base negative prompt for {selectedModel?.type?.toUpperCase() || 'SDXL'} {contentType.toUpperCase()} is applied automatically
                    </div>
-                  {showBaseNegative && (
-                    <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
-                      {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
-                    </div>
-                  )}
-                  <textarea 
-                    value={negativePrompt} 
-                    onChange={e => onNegativePromptChange?.(e.target.value)} 
-                    placeholder="Additional negatives..." 
-                    className="w-full h-12 px-2 py-1 bg-background border border-input rounded text-[10px] resize-none"
-                    rows={2} 
-                  />
+                   {showBaseNegative && (
+                     <div className="mb-2 p-1 bg-muted/20 border border-border/30 rounded text-[9px] text-muted-foreground max-h-16 overflow-y-auto">
+                       {loadingBaseNegative ? 'Loading...' : baseNegativePrompt || 'No base negative prompt'}
+                     </div>
+                   )}
+                   
+                   {/* Negative Prompt Presets */}
+                   <div className="mb-2">
+                     <NegativePromptPresets 
+                       currentPrompt={negativePrompt} 
+                       onSelect={onNegativePromptChange || (() => {})} 
+                     />
+                   </div>
+                   
+                   <textarea 
+                     value={negativePrompt} 
+                     onChange={e => onNegativePromptChange?.(e.target.value)} 
+                     placeholder="Additional negatives..." 
+                     className="w-full h-12 px-2 py-1 bg-background border border-input rounded text-[10px] resize-none"
+                     rows={2} 
+                   />
                 </div>
 
                 {/* Compel Enhancement */}
