@@ -742,7 +742,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         seed_present: !!finalSeed,
         prompt_preview: finalPrompt.substring(0, 80) + '...',
         has_reference_image: !!effRefUrl,
-        was_set_by_exact_copy: wasSetByExactCopy || false
+        was_set_by_exact_copy: wasSetByExactCopy || false,
+        // LOG CRITICAL VALUES FOR CFG BUG VERIFICATION
+        controlValues: {
+          steps,
+          reference_strength: computedReferenceStrength,
+          guidance_scale: guidanceScale
+        }
       });
 
       // 🆕 CRITICAL DEBUG: Check exact_copy_mode flag

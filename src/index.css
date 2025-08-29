@@ -145,7 +145,7 @@
   }
 
   .control-number {
-    @apply w-16 px-2 py-1 text-xs bg-background border border-border rounded text-center font-mono tabular-nums;
+    @apply w-24 px-2 py-1 text-xs bg-background border border-border rounded text-center font-mono tabular-nums;
   }
 
   .field-xxs {

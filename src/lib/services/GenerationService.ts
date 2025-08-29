@@ -323,7 +323,7 @@ export class GenerationService {
         negative_prompt: request.metadata?.negative_prompt,
         num_outputs: request.batchCount || 1,
         steps: request.metadata?.steps || 20,
-        guidance_scale: request.metadata?.guidance_scale || 7.5,
+        guidance_scale: request.metadata?.guidance_scale, // Remove hardcoded 7.5 default
         seed: request.metadata?.seed ? Number(request.metadata.seed) : undefined,
         width: request.metadata?.width || 1024,
         height: request.metadata?.height || 1024,

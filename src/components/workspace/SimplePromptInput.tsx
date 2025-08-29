@@ -318,8 +318,8 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   // Fetch available image models from API
   const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();
 
-  // Base negative prompt hook - use selectedModel type for image mode, fallback to 'ltx' for video  
-  const negativePromptModelType = mode === 'image' ? (selectedModel?.type === 'replicate' ? 'sdxl' : 'sdxl') : 'ltx';
+  // Base negative prompt hook - use 'sdxl' for both model types to ensure consistency  
+  const negativePromptModelType = mode === 'image' ? 'sdxl' : 'ltx';
   const { baseNegativePrompt, isLoading: loadingBaseNegative, fetchBaseNegativePrompt } = useBaseNegativePrompt(negativePromptModelType, contentType);
 
   const [showBaseNegative, setShowBaseNegative] = useState(false);
@@ -1173,9 +1173,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 </div>
               )}
               
-              {/* Compact 3-column layout for reference controls */}
+              {/* Compact 3-column layout for reference controls with proper spacing */}
               {(referenceImage || referenceImageUrl) && (
-                <div className="grid grid-cols-3 controls-compact mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 controls-compact mb-4">
                   {/* Steps */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -1191,7 +1191,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         max="50"
                       />
                     </div>
-                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full" />
+                    <Slider value={[steps]} onValueChange={value => onStepsChange?.(value[0])} min={10} max={50} step={1} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
 
                   {/* Reference Strength */}
@@ -1222,7 +1222,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       max={0.9} 
                       step={0.05} 
                       size="xs"
-                      className="w-full" 
+                      className="w-full max-w-[140px] sm:max-w-full" 
                     />
                   </div>
 
@@ -1242,7 +1242,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                         step="0.5"
                       />
                     </div>
-                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full" />
+                    <Slider value={[guidanceScale]} onValueChange={value => onGuidanceScaleChange?.(value[0])} min={1} max={20} step={0.5} size="xs" className="w-full max-w-[140px] sm:max-w-full" />
                   </div>
                 </div>
               )}
