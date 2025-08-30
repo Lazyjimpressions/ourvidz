@@ -19,6 +19,7 @@ import Profile from "@/pages/Profile";
 import Pricing from "@/pages/Pricing";
 import Playground from "@/pages/Playground";
 import MobileRoleplayDashboard from "@/pages/MobileRoleplayDashboard";
+import MobileRoleplayChat from "@/pages/MobileRoleplayChat";
 // import RoleplayCharacterSelection from "@/pages/RoleplayCharacterSelection";
 
 import NotFound from "@/pages/NotFound";
@@ -64,6 +65,7 @@ function App() {
               <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
               <Route path="/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
                         <Route path="/roleplay" element={<ProtectedRoute><MobileRoleplayDashboard /></ProtectedRoute>} />
+                        <Route path="/roleplay/chat/:characterId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
             {/* Temporarily disabled until we create new chat interface */}
             {/* <Route path="/roleplay/select" element={<ProtectedRoute><RoleplayCharacterSelection /></ProtectedRoute>} /> */}
             
