@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
-import { RoleplayLeftSidebar } from '@/components/roleplay/RoleplayLeftSidebar';
-import { SectionHeader } from '@/components/roleplay/SectionHeader';
+import { RoleplayLeftSidebar } from '@/components/roleplay/ARCHIVED/RoleplayLeftSidebar';
+import { SectionHeader } from '@/components/roleplay/ARCHIVED/SectionHeader';
 import { HorizontalScroll } from '@/components/roleplay/HorizontalScroll';
 import { MinimalCharacterCard } from '@/components/roleplay/MinimalCharacterCard';
 import { SceneCard } from '@/components/roleplay/SceneCard';

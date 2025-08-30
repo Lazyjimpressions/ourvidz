@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { CharacterBrowser } from '@/components/roleplay/CharacterBrowser';
-import { UserCharacterSetup } from '@/components/roleplay/UserCharacterSetup';
+import { UserCharacterSetup } from '@/components/roleplay/ARCHIVED/UserCharacterSetup';
 import { useCharacterData } from '@/hooks/useCharacterData';
 import { useToast } from '@/hooks/use-toast';
 

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useUserCharacters, UserCharacter } from '@/hooks/useUserCharacters';
 import { Plus, User, Settings } from 'lucide-react';
-import { UserCharacterSetup } from './UserCharacterSetup';
+import { UserCharacterSetup } from './ARCHIVED/UserCharacterSetup';
 
 interface UserCharacterSelectorProps {
   selectedCharacterId?: string;

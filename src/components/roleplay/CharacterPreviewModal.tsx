@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useCharacterScenes } from '@/hooks/useCharacterScenes';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
-import { CharacterEditModal } from './CharacterEditModal';
+import { CharacterEditModal } from './ARCHIVED/CharacterEditModal';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
