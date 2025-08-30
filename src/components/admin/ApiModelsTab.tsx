@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAdminApiProviders } from '@/hooks/useApiProviders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,13 @@ interface ApiProvider {
   name: string;
   display_name: string;
   base_url: string | null;
+  is_active: boolean;
+}
+
+interface SafeApiProvider {
+  id: string;
+  name: string;
+  display_name: string;
   is_active: boolean;
 }
 
@@ -47,22 +55,10 @@ export const ApiModelsTab = () => {
   const [editingModel, setEditingModel] = useState<ApiModel | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Fetch providers for the dropdown
-  const { data: providers } = useQuery({
-    queryKey: ['api-providers'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('api_providers')
-        .select('*')
-        .eq('is_active', true)
-        .order('display_name');
-      
-      if (error) throw error;
-      return data as ApiProvider[];
-    }
-  });
+  // Fetch providers for the dropdown using secure hook
+  const { data: providers } = useAdminApiProviders();
 
-  // Fetch models with provider info
+  // Fetch models with provider info (only safe fields)
   const { data: models, isLoading } = useQuery({
     queryKey: ['api-models'],
     queryFn: async () => {
@@ -70,13 +66,13 @@ export const ApiModelsTab = () => {
         .from('api_models')
         .select(`
           *,
-          api_providers!inner(*)
+          api_providers!inner(id, name, display_name, is_active)
         `)
         .order('priority', { ascending: false })
         .order('display_name');
       
       if (error) throw error;
-      return data as (ApiModel & { api_providers: ApiProvider })[];
+      return data as (ApiModel & { api_providers: SafeApiProvider })[];
     }
   });
 
