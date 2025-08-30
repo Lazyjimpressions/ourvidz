@@ -1306,6 +1306,7 @@ export type Database = {
         Row: {
           asset_type: string
           collection_id: string | null
+          content_category: string | null
           created_at: string | null
           custom_title: string | null
           duration_seconds: number | null
@@ -1317,6 +1318,7 @@ export type Database = {
           mime_type: string
           model_used: string
           original_prompt: string
+          roleplay_metadata: Json | null
           storage_path: string
           tags: string[] | null
           thumbnail_path: string | null
@@ -1328,6 +1330,7 @@ export type Database = {
         Insert: {
           asset_type: string
           collection_id?: string | null
+          content_category?: string | null
           created_at?: string | null
           custom_title?: string | null
           duration_seconds?: number | null
@@ -1339,6 +1342,7 @@ export type Database = {
           mime_type: string
           model_used: string
           original_prompt: string
+          roleplay_metadata?: Json | null
           storage_path: string
           tags?: string[] | null
           thumbnail_path?: string | null
@@ -1350,6 +1354,7 @@ export type Database = {
         Update: {
           asset_type?: string
           collection_id?: string | null
+          content_category?: string | null
           created_at?: string | null
           custom_title?: string | null
           duration_seconds?: number | null
@@ -1361,6 +1366,7 @@ export type Database = {
           mime_type?: string
           model_used?: string
           original_prompt?: string
+          roleplay_metadata?: Json | null
           storage_path?: string
           tags?: string[] | null
           thumbnail_path?: string | null
