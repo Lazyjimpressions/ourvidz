@@ -252,6 +252,8 @@ export type Database = {
       characters: {
         Row: {
           appearance_tags: string[] | null
+          base_prompt: string | null
+          consistency_method: string | null
           content_rating: string
           created_at: string | null
           creator_id: string | null
@@ -265,8 +267,11 @@ export type Database = {
           mood: string | null
           name: string
           persona: string | null
+          preview_image_url: string | null
+          quick_start: boolean | null
           reference_image_url: string | null
           role: string | null
+          seed_locked: number | null
           system_prompt: string | null
           traits: string | null
           updated_at: string | null
@@ -275,6 +280,8 @@ export type Database = {
         }
         Insert: {
           appearance_tags?: string[] | null
+          base_prompt?: string | null
+          consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
           creator_id?: string | null
@@ -288,8 +295,11 @@ export type Database = {
           mood?: string | null
           name: string
           persona?: string | null
+          preview_image_url?: string | null
+          quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
+          seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
@@ -298,6 +308,8 @@ export type Database = {
         }
         Update: {
           appearance_tags?: string[] | null
+          base_prompt?: string | null
+          consistency_method?: string | null
           content_rating?: string
           created_at?: string | null
           creator_id?: string | null
@@ -311,8 +323,11 @@ export type Database = {
           mood?: string | null
           name?: string
           persona?: string | null
+          preview_image_url?: string | null
+          quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
+          seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
@@ -381,6 +396,8 @@ export type Database = {
           conversation_type: string
           created_at: string
           id: string
+          memory_data: Json | null
+          memory_tier: string | null
           project_id: string | null
           status: string
           title: string
@@ -393,6 +410,8 @@ export type Database = {
           conversation_type?: string
           created_at?: string
           id?: string
+          memory_data?: Json | null
+          memory_tier?: string | null
           project_id?: string | null
           status?: string
           title?: string
@@ -405,6 +424,8 @@ export type Database = {
           conversation_type?: string
           created_at?: string
           id?: string
+          memory_data?: Json | null
+          memory_tier?: string | null
           project_id?: string | null
           status?: string
           title?: string
