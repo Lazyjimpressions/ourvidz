@@ -13,6 +13,7 @@ import {
   Info
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { ConsistencySettings as IConsistencySettings } from '@/services/ImageConsistencyService';
 
 interface Character {
   id: string;
@@ -33,6 +34,8 @@ interface MobileCharacterSheetProps {
   onMemoryTierChange: (tier: 'conversation' | 'character' | 'profile') => void;
   modelProvider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
   onModelProviderChange: (provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt') => void;
+  consistencySettings?: IConsistencySettings;
+  onConsistencySettingsChange?: (settings: IConsistencySettings) => void;
 }
 
 export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
@@ -41,7 +44,9 @@ export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
   memoryTier,
   onMemoryTierChange,
   modelProvider,
-  onModelProviderChange
+  onModelProviderChange,
+  consistencySettings,
+  onConsistencySettingsChange
 }) => {
   const { isMobile } = useMobileDetection();
 
@@ -192,6 +197,42 @@ export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
               </p>
             </Card>
           </div>
+
+          {/* Consistency Method */}
+          {consistencySettings && (
+            <div className="p-4 border-t border-gray-700">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <h4 className="text-white font-medium">Consistency Method</h4>
+              </div>
+              
+              <div className="space-y-2">
+                {[
+                  { value: 'seed_locked', label: 'Seed Locked', desc: 'Fixed seed for consistency' },
+                  { value: 'i2i_reference', label: 'Image-to-Image', desc: 'Reference image style' },
+                  { value: 'hybrid', label: 'Hybrid', desc: 'Combines both methods' }
+                ].map((option) => (
+                  <div
+                    key={option.value}
+                    className={`
+                      p-2 rounded border text-sm cursor-pointer transition-colors
+                      ${consistencySettings.method === option.value 
+                        ? 'border-purple-500 bg-purple-500/10' 
+                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                      }
+                    `}
+                    onClick={() => onConsistencySettingsChange?.({
+                      ...consistencySettings,
+                      method: option.value as any
+                    })}
+                  >
+                    <div className="text-white font-medium">{option.label}</div>
+                    <div className="text-gray-400 text-xs">{option.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

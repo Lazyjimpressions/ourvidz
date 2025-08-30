@@ -20,6 +20,7 @@ import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
+import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 
 interface Character {
   id: string;
@@ -58,6 +59,12 @@ const MobileRoleplayChat: React.FC = () => {
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
+  const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
+    method: 'hybrid',
+    reference_strength: 0.35,
+    denoise_strength: 0.25,
+    modify_strength: 0.5
+  });
 
   // Mock character data - replace with actual API call
   useEffect(() => {
@@ -169,41 +176,52 @@ const MobileRoleplayChat: React.FC = () => {
     
     setIsLoading(true);
     try {
-      // Call the roleplay-chat edge function with scene generation
-      const response = await fetch('/api/roleplay-chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: 'Generate a scene based on our conversation',
-          conversation_id: 'mock-conversation-id',
-          character_id: character.id,
-          model_provider: modelProvider,
-          memory_tier: memoryTier,
-          content_tier: 'sfw',
-          scene_generation: true,
-          user_id: 'mock-user-id'
-        })
+      // Build scene prompt from conversation context
+      const recentMessages = messages.slice(-3); // Last 3 messages for context
+      const conversationContext = recentMessages
+        .map(msg => `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`)
+        .join(' | ');
+      
+      // Use the image consistency service
+      const result = await imageConsistencyService.generateConsistentScene({
+        characterId: character.id,
+        scenePrompt: `Generate a scene showing ${character.name} in the current conversation context`,
+        modelChoice: modelProvider === 'chat_worker' ? 'sdxl' : 'replicate',
+        consistencySettings,
+        conversationContext
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (result.success && result.imageUrl) {
         const sceneMessage: Message = {
           id: Date.now().toString(),
-          content: 'I\'ve generated a scene based on our conversation!',
+          content: `I've generated a scene based on our conversation! Consistency score: ${Math.round((result.consistencyScore || 0) * 100)}%`,
           sender: 'character',
           timestamp: new Date(),
           metadata: {
             scene_generated: true,
-            image_url: data.image_url,
-            consistency_method: character.consistency_method
+            image_url: result.imageUrl,
+            consistency_method: consistencySettings.method
           }
         };
         setMessages(prev => [...prev, sceneMessage]);
+        
+        // Update character's seed lock if using seed locking
+        if (consistencySettings.method === 'seed_locked' && result.seedUsed) {
+          await imageConsistencyService.updateSeedLock(character.id, result.seedUsed);
+        }
+      } else {
+        throw new Error(result.error || 'Failed to generate scene');
       }
     } catch (error) {
       console.error('Error generating scene:', error);
+      // Add error message to chat
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        content: 'Sorry, I encountered an error while generating the scene. Please try again.',
+        sender: 'character',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
@@ -368,6 +386,8 @@ const MobileRoleplayChat: React.FC = () => {
             onMemoryTierChange={setMemoryTier}
             modelProvider={modelProvider}
             onModelProviderChange={setModelProvider}
+            consistencySettings={consistencySettings}
+            onConsistencySettingsChange={setConsistencySettings}
           />
         )}
 
