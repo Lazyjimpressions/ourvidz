@@ -254,31 +254,117 @@ CREATE TABLE profile_memory (
 
 ### **Phase 1: Core Infrastructure (Week 1)**
 
-#### **Day 1-2: Page Refactoring**
+#### **Day 1-2: Database & Edge Functions**
 **Tasks:**
-- [ ] Create `MobileRoleplayDashboard.tsx` with mobile-first grid layout
-- [ ] Create `MobileRoleplayChat.tsx` with simplified chat interface
-- [ ] Archive old desktop pages
-- [ ] Update routing in `App.tsx`
+- [ ] Execute database schema extensions
+- [ ] Create new `roleplay-chat` edge function
+- [ ] Archive deprecated components and pages
+- [ ] Set up development environment
 
-**Components:**
-- [ ] Refactor `MinimalCharacterCard.tsx` → `MobileCharacterCard.tsx`
-- [ ] Refactor `RoleplayPromptInput.tsx` → `MobileChatInput.tsx`
-- [ ] Refactor `CharacterPreviewModal.tsx` → `MobileCharacterModal.tsx`
+**Edge Function Creation:**
+```typescript
+// supabase/functions/roleplay-chat/index.ts
+interface RoleplayChatRequest {
+  message: string;
+  conversation_id: string;
+  character_id: string;
+  model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
+  model_variant?: string;
+  memory_tier: 'conversation' | 'character' | 'profile';
+  content_tier: 'sfw' | 'nsfw';
+  scene_generation?: boolean;
+}
+```
 
-#### **Day 3-4: Mobile Components**
+**Component Archiving:**
+```bash
+# Archive deprecated components
+mkdir -p src/components/roleplay/ARCHIVED
+mv src/components/roleplay/RoleplayLeftSidebar.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/RoleplaySidebar.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/MultiCharacterSceneCard.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/SceneContextHeader.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/SectionHeader.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/UnifiedSceneCard.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/UserCharacterSetup.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/CharacterEditModal.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/CharacterMultiSelector.tsx src/components/roleplay/ARCHIVED/
+
+# Archive old pages
+mkdir -p src/pages/ARCHIVED
+mv src/pages/RoleplayDashboard.tsx src/pages/ARCHIVED/
+mv src/pages/RoleplayChat.tsx src/pages/ARCHIVED/
+```
+
+#### **Day 3-4: Mobile-First Dashboard**
 **Tasks:**
-- [ ] Create `TouchOptimizedInput.tsx` for mobile input
-- [ ] Create `SwipeGestures.tsx` for touch navigation
-- [ ] Create `BottomNavigation.tsx` for mobile navigation
-- [ ] Add touch gestures and animations
+- [ ] Create `MobileRoleplayDashboard.tsx`
+- [ ] Create `CharacterGrid.tsx` component
+- [ ] Create `MobileCharacterCard.tsx` component
+- [ ] Create `QuickStartSection.tsx` component
 
-#### **Day 5: Hook Enhancement**
+**New Dashboard Component:**
+```typescript
+// src/pages/MobileRoleplayDashboard.tsx
+import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
+import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
+import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
+import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
+
+const MobileRoleplayDashboard = () => {
+  const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  
+  return (
+    <OurVidzDashboardLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header Section */}
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
+          <p className="text-gray-400 mt-2">Chat with AI characters and generate scenes</p>
+        </div>
+        
+        {/* Quick Start Section */}
+        <QuickStartSection />
+        
+        {/* Search and Filters */}
+        <SearchAndFilters />
+        
+        {/* Character Grid */}
+        <CharacterGrid />
+      </div>
+    </OurVidzDashboardLayout>
+  );
+};
+```
+
+#### **Day 5: Mobile Character Components**
 **Tasks:**
-- [ ] Enhance `usePublicCharacters.ts` for mobile loading
-- [ ] Enhance `useCharacterData.ts` for consistency tracking
-- [ ] Enhance `useSceneGeneration.ts` for i2i consistency
-- [ ] Optimize for mobile performance
+- [ ] Create responsive character grid
+- [ ] Implement touch-optimized character cards
+- [ ] Add quick start section
+- [ ] Create search and filter components
+
+**Character Grid Implementation:**
+```typescript
+// src/components/roleplay/CharacterGrid.tsx
+const CharacterGrid = () => {
+  const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  
+  return (
+    <div className={`
+      grid gap-4
+      ${isMobile ? 'grid-cols-1 sm:grid-cols-2' : ''}
+      ${isTablet ? 'grid-cols-2 md:grid-cols-3' : ''}
+      ${isDesktop ? 'grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
+    `}>
+      {characters.map(character => (
+        <MobileCharacterCard key={character.id} character={character} />
+      ))}
+    </div>
+  );
+};
+```
 
 ### **Phase 2: Advanced Features (Week 2)**
 
@@ -289,12 +375,79 @@ CREATE TABLE profile_memory (
 - [ ] Create `ConsistencySettings.tsx`
 - [ ] Implement i2i reference system
 
-#### **Day 3-4: Memory System**
+**Image Consistency Implementation:**
+```typescript
+// src/services/ImageConsistencyService.ts
+class ImageConsistencyService {
+  async generateConsistentScene(characterId: string, scenePrompt: string, modelChoice: 'sdxl' | 'replicate') {
+    if (modelChoice === 'sdxl') {
+      // Use queue-job for SDXL worker
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          prompt: scenePrompt,
+          job_type: 'sdxl_image_fast',
+          metadata: {
+            destination: 'roleplay_scene',
+            character_id: characterId,
+            scene_type: 'chat_scene',
+            consistency_method: 'i2i_reference',
+            reference_strength: 0.35
+          }
+        }
+      });
+      return data;
+    } else {
+      // Use replicate-image for Replicate API
+      const { data, error } = await supabase.functions.invoke('replicate-image', {
+        body: {
+          prompt: scenePrompt,
+          apiModelId: 'replicate-rv5.1-model-id',
+          jobType: 'image_generation',
+          metadata: {
+            destination: 'roleplay_scene',
+            character_id: characterId,
+            scene_type: 'chat_scene'
+          }
+        }
+      });
+      return data;
+    }
+  }
+}
+```
+
+#### **Day 3-4: Memory Management System**
 **Tasks:**
 - [ ] Create `ConversationMemory.ts`
 - [ ] Create `CharacterMemory.ts`
 - [ ] Create `ProfileMemory.ts`
 - [ ] Create `MemoryManager.tsx`
+
+**Memory System Implementation:**
+```typescript
+// src/services/MemoryManager.ts
+class MemoryManager {
+  async getConversationMemory(conversationId: string): Promise<Memory> {
+    const { data } = await supabase
+      .from('conversations')
+      .select('memory_data')
+      .eq('id', conversationId)
+      .single();
+    
+    return data?.memory_data || {};
+  }
+  
+  async getCharacterMemory(characterId: string, userId: string): Promise<Memory> {
+    // Character-specific memory implementation
+    return {};
+  }
+  
+  async getProfileMemory(userId: string): Promise<Memory> {
+    // User profile memory implementation
+    return {};
+  }
+}
+```
 
 #### **Day 5: Mobile Optimization**
 **Tasks:**
@@ -345,9 +498,9 @@ const MobileCharacterCard = ({ character, onSelect }) => {
 ```
 
 ### **Key Interactions**
-- **Touch-Optimized Cards**: Large touch targets with proper spacing
+- **Touch-Optimized Cards**: Large touch targets with proper spacing (44px minimum)
 - **Swipe Gestures**: Swipe for navigation and quick actions
-- **Long-Press Actions**: Context menus for message actions
+- **Long-Press Actions**: Context menus for message actions (500ms threshold)
 - **Pinch-to-Zoom**: Image viewing and scene preview
 
 ---
@@ -374,7 +527,7 @@ const MobileCharacterCard = ({ character, onSelect }) => {
 
 ---
 
-## **🚨 Risk Mitigation**
+## **�� Risk Mitigation**
 
 ### **Technical Risks**
 - **Breaking Changes**: Gradual migration with feature flags
@@ -428,4 +581,52 @@ const MobileCharacterCard = ({ character, onSelect }) => {
 
 ---
 
+## **🔗 Integration Points**
+
+### **Existing Systems**
+- **OurVidzDashboardLayout**: Use existing layout component
+- **SharedGrid**: Leverage existing grid component for library integration
+- **useMobileDetection**: Use existing mobile detection hook
+- **Edge Functions**: Use existing `queue-job` and `replicate-image` functions
+
+### **New Systems**
+- **roleplay-chat**: New edge function for chat processing
+- **Image Consistency**: New service for character consistency
+- **Memory Management**: New three-tier memory system
+- **Mobile Components**: New mobile-first component library
+
+---
+
+## **📋 Implementation Checklist**
+
+### **Phase 1: Core Infrastructure (Week 1)**
+- [ ] Database schema extensions executed
+- [ ] Edge function `roleplay-chat` created
+- [ ] Deprecated components archived
+- [ ] `MobileRoleplayDashboard.tsx` created
+- [ ] `MobileCharacterCard.tsx` created
+- [ ] `CharacterGrid.tsx` created
+- [ ] `QuickStartSection.tsx` created
+
+### **Phase 2: Advanced Features (Week 2)**
+- [ ] `ImageConsistencyService.ts` created
+- [ ] `ReferenceImageManager.ts` created
+- [ ] `ConsistencySettings.tsx` created
+- [ ] `ConversationMemory.ts` created
+- [ ] `CharacterMemory.ts` created
+- [ ] `ProfileMemory.ts` created
+- [ ] `MemoryManager.tsx` created
+- [ ] Mobile optimization completed
+
+### **Phase 3: Testing & Polish (Week 3)**
+- [ ] Comprehensive testing across devices
+- [ ] Performance optimization completed
+- [ ] Error handling implemented
+- [ ] User testing completed
+- [ ] Documentation updated
+
+---
+
 **Status**: Ready for Phase 1 implementation. All existing files analyzed and categorized. New architecture designed for mobile-first approach with character consistency and memory systems.
+
+**Document Purpose**: This is the complete implementation guide that combines the PRD, audit analysis, and development plan into a single actionable document for the development team.

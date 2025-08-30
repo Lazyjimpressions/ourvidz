@@ -1,4 +1,4 @@
-# Roleplay Purpose & Implementation
+# Roleplay Purpose & PRD (Product Requirements Document)
 
 **Last Updated:** August 30, 2025  
 **Status:** 🚧 **PRD Implementation Phase**  
@@ -7,33 +7,43 @@
 ## **🎯 Purpose Statement**
 Provide a mobile-first, character-consistent chat experience with integrated visual scene generation, enabling users to engage in immersive roleplay conversations with AI characters while maintaining visual continuity across scenes.
 
-## **👤 User Intent**
-- **Primary**: Engage in immersive roleplay conversations with AI characters that maintain visual consistency and generate contextual visual scenes
-- **Secondary**: Customize characters, manage conversation history, share favorite interactions, and create persistent roleplay narratives
-- **Context**: Mobile-first usage for on-the-go entertainment and creative storytelling
+## **👤 User Intent & Business Goals**
 
-## **💼 Business Value**
-- **Competitive Differentiation**: Integrated scene generation sets us apart from Character.ai and similar platforms
-- **User Engagement**: Visual storytelling increases session duration and user retention
+### **Primary User Intent**
+- **Entertainment**: Engage in immersive roleplay conversations with AI characters
+- **Creative Expression**: Generate and share visual scenes from conversations
+- **Social Sharing**: Create shareable content for social media platforms
+- **Mobile-First**: On-the-go entertainment and storytelling
+
+### **Secondary User Intent**
+- **Character Customization**: Create and personalize AI characters
+- **Story Development**: Build persistent narratives across conversations
+- **Community Engagement**: Share characters and scenes with other users
+- **Premium Features**: Access advanced consistency and memory systems
+
+### **Business Value**
+- **Competitive Differentiation**: Integrated scene generation vs. Character.ai
+- **User Engagement**: Visual storytelling increases session duration (target: 15+ minutes)
 - **Viral Potential**: Scene images create shareable content for social media
-- **Revenue Opportunity**: Premium features for advanced consistency and memory systems
+- **Revenue Opportunity**: Premium features for advanced consistency and memory
+- **User Retention**: Target 70%+ day 7 retention through engaging experience
 
-## **🏗️ Core Functionality**
+## **🏗️ Core Functionality Requirements**
 
-### **Primary Features**
-1. **Character Selection Dashboard** - Mobile-first grid of character cards with preview images
-2. **Chat Interface** - Responsive chat with character avatars and message streaming
-3. **Scene Integration** - Optional scene selection with visual preview in chat
-4. **Memory System** - Three-tier memory (conversation, character, profile) with user controls
-5. **Image Consistency** - Hybrid approach using i2i reference for 70%+ consistency
+### **Primary Features (MVP)**
+1. **Character Selection Dashboard** - Mobile-first grid with preview images
+2. **Chat Interface** - Responsive chat with character avatars and streaming
+3. **Scene Integration** - Optional scene selection with visual preview
+4. **Memory System** - Three-tier memory (conversation, character, profile)
+5. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
 
-### **Secondary Features**
+### **Secondary Features (Phase 2)**
 1. **Custom Character Creation** - Character builder with real-time preview
 2. **Scene Generation** - Dynamic scene creation with consistency controls
 3. **Model Management** - Admin/power user model selection and configuration
-4. **Mobile Optimization** - Touch gestures, swipe navigation, and responsive design
+4. **Mobile Optimization** - Touch gestures, swipe navigation, responsive design
 
-## **🎨 UX/UI Design**
+## **🎨 UX/UI Design Requirements**
 
 ### **Layout Structure**
 - **Mobile-First Dashboard**: Grid layout with character cards optimized for touch
@@ -49,26 +59,12 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 5. **Scene Generation**: Automatic scene generation with consistency controls
 
 ### **Key Interactions**
-- **Touch-Optimized Cards**: Large touch targets with proper spacing
+- **Touch-Optimized Cards**: Large touch targets with proper spacing (44px minimum)
 - **Swipe Gestures**: Swipe for navigation and quick actions
-- **Long-Press Actions**: Context menus for message actions
+- **Long-Press Actions**: Context menus for message actions (500ms threshold)
 - **Pinch-to-Zoom**: Image viewing and scene preview
 
-## **🔧 Technical Architecture**
-
-### **Core Components**
-- **RoleplayDashboard**: Mobile-first dashboard with character grid
-- **ChatInterface**: Responsive chat with streaming and avatars
-- **CharacterCard**: Touch-optimized character display
-- **SceneIntegration**: Scene selection and preview system
-- **MemoryManager**: Three-tier memory system
-- **ImageConsistencyService**: Hybrid consistency management
-
-### **Integration Points**
-- **Database**: `characters`, `conversations`, `messages`, `scenes` tables
-- **Edge Functions**: Chat processing, scene generation, memory management
-- **Workers**: Chat Worker (local), SDXL Worker (images), API integrations
-- **Storage**: Character references, scene images, conversation assets
+## **🔧 Technical Requirements**
 
 ### **Performance Requirements**
 - **Page Load**: <3 seconds on mobile devices
@@ -76,7 +72,13 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Memory Usage**: <100MB on mobile devices
 - **API Response**: <2 seconds for chat responses
 
-## **📊 Success Criteria**
+### **Integration Requirements**
+- **Database**: Leverage existing `characters`, `conversations`, `messages`, `scenes` tables
+- **Edge Functions**: Use existing `queue-job`, `replicate-image`, create new `roleplay-chat`
+- **Storage**: Use existing `user_library` table with roleplay category
+- **Workers**: Chat Worker (local), SDXL Worker (images), API integrations
+
+## **📊 Success Criteria & Metrics**
 
 ### **User Experience Metrics**
 - **Flow Completion**: 90%+ success rate from login to chat
@@ -84,7 +86,7 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Chat Initiation**: <10 seconds to start conversation
 - **Session Duration**: 15+ minutes average session length
 
-### **Technical Performance**
+### **Technical Performance Metrics**
 - **Mobile Load Time**: <3 seconds on low-end devices
 - **Image Consistency**: 70%+ visual consistency across scenes
 - **Memory Efficiency**: Optimized memory usage and management
@@ -110,33 +112,7 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Automatic Retry**: Intelligent retry logic for transient failures
 - **Graceful Degradation**: Fallback modes for partial failures
 
-## **📋 Implementation Progress**
-
-### **✅ Completed Features**
-- [ ] Simplified workflow design - August 2025
-- [ ] Three card system architecture - August 2025
-- [ ] Unified modal system design - August 2025
-- [ ] Character tab implementation - August 2025
-- [ ] Scene tab implementation - August 2025
-
-### **🔄 In Progress**
-- [ ] PRD-based architecture redesign - August 2025
-- [ ] Mobile-first component development - August 2025
-- [ ] Image consistency system implementation - August 2025
-- [ ] Memory system architecture - August 2025
-
-### **🚧 Planned**
-- [ ] Phase 1 MVP implementation - Weeks 1-2
-- [ ] Advanced features development - Weeks 3-4
-- [ ] Performance optimization - Week 4
-- [ ] User testing and refinement - Week 4
-
-### **🐛 Known Issues**
-- [ ] Current system complexity - High impact - Being addressed with PRD redesign
-- [ ] Mobile performance - Medium impact - Mobile-first approach will resolve
-- [ ] Image consistency quality - Medium impact - Hybrid approach will improve
-
-## **🔗 Dependencies**
+## **🔗 Dependencies & Constraints**
 
 ### **Technical Dependencies**
 - **SDXL Worker**: Image generation and consistency management
@@ -150,21 +126,21 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 - **Privacy Controls**: User data protection and memory management
 - **Legal Compliance**: Content guidelines and user agreements
 
-## **📈 Future Enhancements**
+## **📈 Future Enhancements (Phase 2+)**
 
-### **Phase 2 Features**
+### **Advanced Features**
 - **Multi-modal Interactions**: Generate images/videos from chat
 - **Advanced Analytics**: Detailed usage analytics and insights
 - **Collaborative Features**: Multi-user roleplay sessions
 - **AI Narrator**: Advanced scene description generation
 
-### **Phase 3 Features**
-- **Premium Consistency**: IP-Adapter for 90%+ consistency
+### **Premium Features**
+- **High Consistency**: IP-Adapter for 90%+ consistency
 - **Advanced Memory**: Unlimited cross-conversation memory
 - **Custom Models**: User-specific model training
 - **Priority Generation**: Faster generation for premium users
 
-## **📝 Implementation Notes**
+## **📝 Implementation Guidelines**
 
 ### **Critical Technical Decisions**
 1. **Image Consistency Method**: Hybrid approach using i2i reference as default (70% consistency)
@@ -186,4 +162,6 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ---
 
-**Status**: Transitioning from simplified workflow to PRD-based mobile-first implementation. Development plan created and ready for Phase 1 execution.
+**Status**: PRD finalized and ready for implementation. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
+
+**Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the roleplay feature. It serves as the strategic foundation for all development decisions.

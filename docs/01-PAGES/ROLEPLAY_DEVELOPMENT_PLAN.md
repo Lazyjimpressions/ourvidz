@@ -1,13 +1,18 @@
-# Roleplay Page Development Plan - PRD Implementation
+# Roleplay Development Plan - Technical Implementation Roadmap
 
 **Last Updated:** August 30, 2025  
-**Status:** 🚧 **Planning Phase**  
+**Status:** 🚧 **Development Planning Phase**  
 **Priority:** **HIGH** - Core MVP Feature
 
-## **🎯 Project Overview**
+## **🎯 Development Overview**
 
 ### **Objective**
-Transform the existing roleplay system into a mobile-first, character-consistent chat experience with integrated visual scene generation, following the PRD requirements for Phase 1 MVP.
+Transform the existing roleplay system into a mobile-first, character-consistent chat experience following the PRD requirements. This document provides the detailed technical implementation roadmap.
+
+### **Development Phases**
+- **Phase 1**: Core Infrastructure & Mobile-First UI (Weeks 1-2)
+- **Phase 2**: Advanced Features & Integration (Weeks 3-4)
+- **Phase 3**: Performance Optimization & Polish (Week 5)
 
 ### **Key Success Metrics**
 - **User Flow Completion**: 90%+ success rate from login to chat
@@ -17,7 +22,7 @@ Transform the existing roleplay system into a mobile-first, character-consistent
 
 ---
 
-## **🏗️ Architecture Overview**
+## **🏗️ Technical Architecture**
 
 ### **Core User Flow**
 ```
@@ -27,98 +32,383 @@ Login → Dashboard → Character Selection → Scene Selection (optional) → C
 ### **Technical Stack**
 - **Frontend**: React + TypeScript + Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Edge Functions)
-- **Image Generation**: SDXL Worker (local) + API fallbacks
-- **Chat**: Chat Worker (local) + API integrations
+- **Image Generation**: SDXL Worker (local) + Replicate API (fallback)
+- **Chat**: Chat Worker (local) + API integrations (OpenRouter, Claude, GPT)
 - **Storage**: Supabase Storage + CDN
+
+### **Database Schema Extensions**
+```sql
+-- Character table enhancements
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS consistency_method TEXT DEFAULT 'i2i_reference';
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS seed_locked INTEGER;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS base_prompt TEXT;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS preview_image_url TEXT;
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS quick_start BOOLEAN DEFAULT false;
+
+-- Memory system to conversations table
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_tier TEXT DEFAULT 'conversation';
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}';
+
+-- Enhance user_library for roleplay content
+ALTER TABLE user_library ADD COLUMN IF NOT EXISTS content_category TEXT DEFAULT 'general';
+ALTER TABLE user_library ADD COLUMN IF NOT EXISTS roleplay_metadata JSONB DEFAULT '{}';
+```
 
 ---
 
-## **📋 Phase 1: MVP Foundation (Weeks 1-2)**
+## **📋 Phase 1: Core Infrastructure (Weeks 1-2)**
 
-### **Week 1: Core Chat Infrastructure**
+### **Week 1: Foundation & Database**
 
-#### **Day 1-2: Dashboard & Character Selection**
-```typescript
-// Core Components to Create/Update
-- RoleplayDashboard.tsx (Mobile-first grid layout)
-- CharacterCard.tsx (Character display with preview)
-- CharacterSelectionModal.tsx (Character browsing)
-- QuickStartSection.tsx (Pre-made characters)
-```
-
+#### **Day 1-2: Database & Edge Functions**
 **Tasks:**
-- [ ] Create mobile-first dashboard with character grid
-- [ ] Implement character card component with preview images
-- [ ] Add "Quick Start" section with pre-made characters
-- [ ] Create character selection modal with search/filter
-- [ ] Implement "Create Custom" option (basic version)
+- [ ] Execute database schema extensions
+- [ ] Create new `roleplay-chat` edge function
+- [ ] Archive deprecated components and pages
+- [ ] Set up development environment
 
-**Database Updates:**
-```sql
--- Character table enhancements
-ALTER TABLE characters ADD COLUMN preview_image_url TEXT;
-ALTER TABLE characters ADD COLUMN quick_start BOOLEAN DEFAULT false;
-ALTER TABLE characters ADD COLUMN seed_locked INTEGER;
-ALTER TABLE characters ADD COLUMN base_prompt TEXT;
-```
-
-#### **Day 3-4: Chat Interface Foundation**
+**Edge Function Creation:**
 ```typescript
-// Chat Components
-- ChatInterface.tsx (Main chat container)
-- MessageBubble.tsx (Individual messages)
-- ChatInput.tsx (Message input with attachments)
-- CharacterAvatar.tsx (Character avatars in chat)
+// supabase/functions/roleplay-chat/index.ts
+interface RoleplayChatRequest {
+  message: string;
+  conversation_id: string;
+  character_id: string;
+  model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
+  model_variant?: string;
+  memory_tier: 'conversation' | 'character' | 'profile';
+  content_tier: 'sfw' | 'nsfw';
+  scene_generation?: boolean;
+}
 ```
 
+**Component Archiving:**
+```bash
+# Archive deprecated components
+mkdir -p src/components/roleplay/ARCHIVED
+mv src/components/roleplay/RoleplayLeftSidebar.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/RoleplaySidebar.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/MultiCharacterSceneCard.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/SceneContextHeader.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/SectionHeader.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/UnifiedSceneCard.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/UserCharacterSetup.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/CharacterEditModal.tsx src/components/roleplay/ARCHIVED/
+mv src/components/roleplay/CharacterMultiSelector.tsx src/components/roleplay/ARCHIVED/
+
+# Archive old pages
+mkdir -p src/pages/ARCHIVED
+mv src/pages/RoleplayDashboard.tsx src/pages/ARCHIVED/
+mv src/pages/RoleplayChat.tsx src/pages/ARCHIVED/
+```
+
+#### **Day 3-4: Mobile-First Dashboard**
 **Tasks:**
-- [ ] Create responsive chat interface
-- [ ] Implement message streaming from Chat Worker
-- [ ] Add character avatars and message styling
-- [ ] Create mobile-optimized input with attachments
-- [ ] Implement basic memory persistence (per-conversation)
+- [ ] Create `MobileRoleplayDashboard.tsx`
+- [ ] Create `CharacterGrid.tsx` component
+- [ ] Create `MobileCharacterCard.tsx` component
+- [ ] Create `QuickStartSection.tsx` component
 
-#### **Day 5: Memory System Foundation**
+**New Dashboard Component:**
 ```typescript
-// Memory Management
-- ConversationMemory.ts (Per-conversation memory)
-- MemoryService.ts (Memory persistence)
-- useConversationMemory.ts (Memory hook)
+// src/pages/MobileRoleplayDashboard.tsx
+import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
+import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
+import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
+import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
+
+const MobileRoleplayDashboard = () => {
+  const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  
+  return (
+    <OurVidzDashboardLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Header Section */}
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
+          <p className="text-gray-400 mt-2">Chat with AI characters and generate scenes</p>
+        </div>
+        
+        {/* Quick Start Section */}
+        <QuickStartSection />
+        
+        {/* Search and Filters */}
+        <SearchAndFilters />
+        
+        {/* Character Grid */}
+        <CharacterGrid />
+      </div>
+    </OurVidzDashboardLayout>
+  );
+};
 ```
 
+#### **Day 5: Mobile Character Components**
 **Tasks:**
-- [ ] Implement 4000+ token context window
-- [ ] Create conversation memory persistence
-- [ ] Add memory toggle for cross-conversation (optional)
-- [ ] Implement basic character memory system
+- [ ] Create responsive character grid
+- [ ] Implement touch-optimized character cards
+- [ ] Add quick start section
+- [ ] Create search and filter components
 
-### **Week 2: Visual Integration**
-
-#### **Day 1-2: Scene System Foundation**
+**Character Grid Implementation:**
 ```typescript
-// Scene Components
-- SceneSelectionModal.tsx (Scene browsing)
-- SceneCard.tsx (Scene display)
-- ScenePreview.tsx (Scene preview in chat)
-- SceneGeneration.tsx (Dynamic scene generation)
+// src/components/roleplay/CharacterGrid.tsx
+const CharacterGrid = () => {
+  const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  
+  return (
+    <div className={`
+      grid gap-4
+      ${isMobile ? 'grid-cols-1 sm:grid-cols-2' : ''}
+      ${isTablet ? 'grid-cols-2 md:grid-cols-3' : ''}
+      ${isDesktop ? 'grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : ''}
+    `}>
+      {characters.map(character => (
+        <MobileCharacterCard key={character.id} character={character} />
+      ))}
+    </div>
+  );
+};
 ```
 
+### **Week 2: Chat Interface & Mobile Optimization**
+
+#### **Day 1-2: Mobile Chat Interface**
 **Tasks:**
-- [ ] Create pre-generated scene library
-- [ ] Implement scene selection UI
-- [ ] Add scene preview in chat interface
-- [ ] Create scene generation toggle
-- [ ] Implement basic scene-application system
+- [ ] Create `MobileRoleplayChat.tsx`
+- [ ] Create `MobileChatInput.tsx` component
+- [ ] Create `MobileCharacterSheet.tsx` component
+- [ ] Implement responsive chat layout
 
-#### **Day 3-4: Image Consistency System**
+**Chat Interface Implementation:**
 ```typescript
-// Image Consistency Components
-- ImageConsistencyService.ts (Consistency management)
-- ReferenceImageManager.ts (Reference image handling)
-- ConsistencySettings.tsx (User settings for consistency)
+// src/pages/MobileRoleplayChat.tsx
+import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
+import { ChatInterface } from '@/components/roleplay/ChatInterface';
+import { CharacterInfo } from '@/components/roleplay/CharacterInfo';
+import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
+
+const MobileRoleplayChat = () => {
+  const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  
+  return (
+    <OurVidzDashboardLayout>
+      <div className="flex h-screen bg-background">
+        {/* Character Info - Collapsible on mobile */}
+        {!isMobile && (
+          <div className="w-80 border-r border-border bg-card">
+            <CharacterInfo character={selectedCharacter} />
+          </div>
+        )}
+        
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <ChatInterface messages={messages} />
+          </div>
+          
+          {/* Input Area */}
+          <div className="border-t border-border p-4">
+            <MobileChatInput 
+              onSend={handleSendMessage}
+              onGenerateScene={handleGenerateScene}
+              isMobile={isMobile}
+            />
+          </div>
+        </div>
+        
+        {/* Mobile Character Info - Bottom Sheet */}
+        {isMobile && (
+          <MobileCharacterSheet character={selectedCharacter} />
+        )}
+      </div>
+    </OurVidzDashboardLayout>
+  );
+};
 ```
 
-**Implementation Strategy (Hybrid Approach):**
+#### **Day 3-4: Touch Interactions & Mobile Optimization**
+**Tasks:**
+- [ ] Implement touch gestures and animations
+- [ ] Create swipe navigation components
+- [ ] Add long-press context menus
+- [ ] Optimize for mobile performance
+
+**Touch-Optimized Components:**
+```typescript
+// src/components/roleplay/MobileCharacterCard.tsx
+const MobileCharacterCard = ({ character, onSelect }) => {
+  const { isMobile, isTouchDevice } = useMobileDetection();
+  
+  return (
+    <div 
+      className={`
+        relative group cursor-pointer
+        ${isMobile ? 'aspect-square' : 'aspect-[4/5]'}
+        rounded-lg overflow-hidden
+        bg-card border border-border
+        transition-all duration-200
+        hover:shadow-lg hover:scale-[1.02]
+        ${isTouchDevice ? 'touch-manipulation' : ''}
+      `}
+      onClick={onSelect}
+      onTouchStart={isTouchDevice ? handleTouchStart : undefined}
+      onTouchEnd={isTouchDevice ? handleTouchEnd : undefined}
+    >
+      {/* Character Image */}
+      <div className="relative w-full h-full">
+        <img 
+          src={character.preview_image_url || character.image_url} 
+          alt={character.name}
+          className="w-full h-full object-cover"
+        />
+        
+        {/* Overlay Actions */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors">
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+            <h3 className="text-white font-semibold">{character.name}</h3>
+            <p className="text-white/80 text-sm line-clamp-2">{character.description}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+```
+
+#### **Day 5: Hook Enhancement & Data Integration**
+**Tasks:**
+- [ ] Enhance existing hooks for mobile-first loading
+- [ ] Implement character consistency tracking
+- [ ] Add image-to-image reference system
+- [ ] Optimize data fetching for mobile
+
+---
+
+## **📋 Phase 2: Advanced Features (Weeks 3-4)**
+
+### **Week 3: Image Consistency & Memory Systems**
+
+#### **Day 1-2: Image Consistency System**
+**Tasks:**
+- [ ] Create `ImageConsistencyService.ts`
+- [ ] Create `ReferenceImageManager.ts`
+- [ ] Create `ConsistencySettings.tsx`
+- [ ] Implement i2i reference system
+
+**Image Consistency Implementation:**
+```typescript
+// src/services/ImageConsistencyService.ts
+class ImageConsistencyService {
+  async generateConsistentScene(characterId: string, scenePrompt: string, modelChoice: 'sdxl' | 'replicate') {
+    if (modelChoice === 'sdxl') {
+      // Use queue-job for SDXL worker
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          prompt: scenePrompt,
+          job_type: 'sdxl_image_fast',
+          metadata: {
+            destination: 'roleplay_scene',
+            character_id: characterId,
+            scene_type: 'chat_scene',
+            consistency_method: 'i2i_reference',
+            reference_strength: 0.35
+          }
+        }
+      });
+      return data;
+    } else {
+      // Use replicate-image for Replicate API
+      const { data, error } = await supabase.functions.invoke('replicate-image', {
+        body: {
+          prompt: scenePrompt,
+          apiModelId: 'replicate-rv5.1-model-id',
+          jobType: 'image_generation',
+          metadata: {
+            destination: 'roleplay_scene',
+            character_id: characterId,
+            scene_type: 'chat_scene'
+          }
+        }
+      });
+      return data;
+    }
+  }
+}
+```
+
+#### **Day 3-4: Memory Management System**
+**Tasks:**
+- [ ] Create `ConversationMemory.ts`
+- [ ] Create `CharacterMemory.ts`
+- [ ] Create `ProfileMemory.ts`
+- [ ] Create `MemoryManager.tsx`
+
+**Memory System Implementation:**
+```typescript
+// src/services/MemoryManager.ts
+class MemoryManager {
+  async getConversationMemory(conversationId: string): Promise<Memory> {
+    const { data } = await supabase
+      .from('conversations')
+      .select('memory_data')
+      .eq('id', conversationId)
+      .single();
+    
+    return data?.memory_data || {};
+  }
+  
+  async getCharacterMemory(characterId: string, userId: string): Promise<Memory> {
+    // Character-specific memory implementation
+    return {};
+  }
+  
+  async getProfileMemory(userId: string): Promise<Memory> {
+    // User profile memory implementation
+    return {};
+  }
+}
+```
+
+#### **Day 5: Library Integration**
+**Tasks:**
+- [ ] Update library page with roleplay tab
+- [ ] Create roleplay-specific library components
+- [ ] Implement roleplay content categorization
+- [ ] Add roleplay scene management
+
+### **Week 4: Model Management & Performance**
+
+#### **Day 1-2: Model Management Interface**
+**Tasks:**
+- [ ] Create model selection interface
+- [ ] Implement model switching UI
+- [ ] Add model performance monitoring
+- [ ] Create admin model management
+
+#### **Day 3-4: Performance Optimization**
+**Tasks:**
+- [ ] Implement performance monitoring
+- [ ] Add lazy loading for components
+- [ ] Optimize image loading and caching
+- [ ] Implement intelligent caching
+
+#### **Day 5: Testing & Bug Fixes**
+**Tasks:**
+- [ ] Comprehensive testing across devices
+- [ ] Fix identified bugs and issues
+- [ ] Optimize error handling
+- [ ] Add comprehensive loading states
+
+---
+
+## **🔧 Technical Implementation Details**
+
+### **Image Consistency Implementation**
+
+#### **Hybrid Consistency Approach**
 ```typescript
 // Tiered consistency system
 const consistencyMethods = {
@@ -148,214 +438,6 @@ const consistencyMethods = {
 };
 ```
 
-**Tasks:**
-- [ ] Implement seed locking for basic consistency
-- [ ] Add image-to-image with reference system
-- [ ] Create reference image management
-- [ ] Implement smart reference selection
-- [ ] Add consistency settings UI
-
-#### **Day 5: Mobile Optimization**
-```typescript
-// Mobile Components
-- MobileChatInterface.tsx (Touch-optimized chat)
-- SwipeGestures.tsx (Swipe navigation)
-- BottomNavigation.tsx (Mobile navigation)
-- TouchOptimizedInput.tsx (Mobile input)
-```
-
-**Tasks:**
-- [ ] Optimize chat interface for touch
-- [ ] Add swipe gestures for navigation
-- [ ] Implement bottom navigation bar
-- [ ] Create collapsible panels for options
-- [ ] Add long-press for message actions
-
----
-
-## **📋 Phase 2: Advanced Features (Weeks 3-4)**
-
-### **Week 3: Character & Scene Enhancement**
-
-#### **Day 1-2: Custom Character Creation**
-```typescript
-// Character Creation Components
-- CharacterBuilder.tsx (Character creation interface)
-- CharacterEditor.tsx (Character editing)
-- CharacterPreview.tsx (Real-time preview)
-- CharacterTemplates.tsx (Character templates)
-```
-
-**Tasks:**
-- [ ] Create character builder interface
-- [ ] Implement character editing capabilities
-- [ ] Add real-time character preview
-- [ ] Create character templates system
-- [ ] Implement character sharing (basic)
-
-#### **Day 3-4: Advanced Scene System**
-```typescript
-// Advanced Scene Components
-- SceneGenerator.tsx (Dynamic scene generation)
-- SceneEditor.tsx (Scene editing)
-- SceneLibrary.tsx (Scene management)
-- SceneSharing.tsx (Scene sharing)
-```
-
-**Tasks:**
-- [ ] Implement dynamic scene generation
-- [ ] Create scene editing interface
-- [ ] Add scene library management
-- [ ] Implement scene sharing features
-- [ ] Add scene templates and presets
-
-#### **Day 5: Cross-Conversation Memory**
-```typescript
-// Advanced Memory Components
-- CharacterMemory.ts (Persistent character memory)
-- ProfileMemory.ts (User profile memory)
-- MemoryManager.tsx (Memory management UI)
-- MemoryAnalytics.ts (Memory analytics)
-```
-
-**Tasks:**
-- [ ] Implement cross-conversation memory
-- [ ] Add character relationship progression
-- [ ] Create user profile memory system
-- [ ] Add memory management UI
-- [ ] Implement memory analytics
-
-### **Week 4: Model Management & Polish**
-
-#### **Day 1-2: Model Management Interface**
-```typescript
-// Model Management Components
-- ModelSelector.tsx (Model selection)
-- ModelSettings.tsx (Model configuration)
-- ModelPerformance.tsx (Performance monitoring)
-- AdminModelManager.tsx (Admin model management)
-```
-
-**Tasks:**
-- [ ] Create model selection interface
-- [ ] Implement model switching UI
-- [ ] Add model performance monitoring
-- [ ] Create admin model management
-- [ ] Implement per-character model override
-
-#### **Day 3-4: Performance Optimization**
-```typescript
-// Performance Components
-- PerformanceMonitor.ts (Performance tracking)
-- LazyLoading.tsx (Lazy loading components)
-- ImageOptimization.tsx (Image optimization)
-- CacheManager.ts (Cache management)
-```
-
-**Tasks:**
-- [ ] Implement performance monitoring
-- [ ] Add lazy loading for components
-- [ ] Optimize image loading and caching
-- [ ] Implement intelligent caching
-- [ ] Add performance analytics
-
-#### **Day 5: Testing & Bug Fixes**
-```typescript
-// Testing Components
-- ErrorBoundary.tsx (Error handling)
-- LoadingStates.tsx (Loading states)
-- ErrorRecovery.tsx (Error recovery)
-- UserTesting.tsx (User testing interface)
-```
-
-**Tasks:**
-- [ ] Comprehensive testing across devices
-- [ ] Fix identified bugs and issues
-- [ ] Optimize error handling
-- [ ] Add comprehensive loading states
-- [ ] Conduct user testing
-
----
-
-## **🔧 Technical Implementation Details**
-
-### **Image Consistency Implementation**
-
-#### **Option A: Seed Locking (Basic)**
-```typescript
-// Simple seed locking for background consistency
-const generateWithSeedLock = async (characterId: string, scenePrompt: string) => {
-  const character = await getCharacter(characterId);
-  const lockedSeed = character.seed_locked || generateSeed();
-  
-  return await generateImage({
-    prompt: `${character.base_prompt}, ${scenePrompt}`,
-    seed: lockedSeed,
-    steps: 30,
-    cfg_scale: 7
-  });
-};
-```
-
-#### **Option B: Image-to-Image (Standard)**
-```typescript
-// i2i with reference for character consistency
-const generateWithI2I = async (characterId: string, scenePrompt: string) => {
-  const character = await getCharacter(characterId);
-  const referenceImage = await getCharacterReference(characterId);
-  
-  return await generateImage({
-    method: "i2i",
-    reference: referenceImage,
-    prompt: `${character.base_prompt}, ${scenePrompt}`,
-    denoise: 0.35,
-    cfg_scale: 7,
-    reference_weight: 0.65
-  });
-};
-```
-
-#### **Option C: IP-Adapter (Premium)**
-```typescript
-// Advanced consistency with IP-Adapter
-const generateWithIPAdapter = async (characterId: string, scenePrompt: string) => {
-  const character = await getCharacter(characterId);
-  const faceReference = await getCharacterFace(characterId);
-  
-  return await generateImage({
-    method: "ip_adapter",
-    face_reference: faceReference,
-    prompt: `${character.base_prompt}, ${scenePrompt}`,
-    ip_adapter_weight: 0.7,
-    steps: 40,
-    cfg_scale: 8
-  });
-};
-```
-
-### **Memory System Implementation**
-
-#### **Three-Tier Memory System**
-```typescript
-// Memory management system
-class MemoryManager {
-  // Conversation Memory (default)
-  async getConversationMemory(conversationId: string): Promise<Memory> {
-    return await this.db.getConversationMemory(conversationId);
-  }
-  
-  // Character Memory (optional)
-  async getCharacterMemory(characterId: string, userId: string): Promise<Memory> {
-    return await this.db.getCharacterMemory(characterId, userId);
-  }
-  
-  // Profile Memory (optional)
-  async getProfileMemory(userId: string): Promise<Memory> {
-    return await this.db.getProfileMemory(userId);
-  }
-}
-```
-
 ### **Mobile-First Design Patterns**
 
 #### **Responsive Layout**
@@ -381,7 +463,7 @@ class MemoryManager {
 #### **Touch-Optimized Components**
 ```typescript
 // Touch-optimized character card
-const CharacterCard = ({ character, onSelect }) => {
+const MobileCharacterCard = ({ character, onSelect }) => {
   return (
     <div 
       className="touch-manipulation min-h-[200px] rounded-lg shadow-md"
@@ -422,16 +504,16 @@ const CharacterCard = ({ character, onSelect }) => {
 ## **🚨 Risk Mitigation**
 
 ### **Technical Risks**
-- **Image Consistency Quality**: Implement fallback methods
-- **Mobile Performance**: Extensive testing on low-end devices
-- **API Reliability**: Implement retry logic and fallbacks
-- **Memory Management**: Monitor and optimize memory usage
+- **Breaking Changes**: Gradual migration with feature flags
+- **Data Loss**: Comprehensive backup before refactoring
+- **Performance Regression**: Continuous performance monitoring
+- **User Disruption**: Beta testing with power users
 
-### **User Experience Risks**
-- **Complex Workflow**: Extensive user testing and iteration
-- **Learning Curve**: Implement onboarding and tutorials
-- **Feature Overload**: Progressive disclosure of advanced features
-- **Performance Issues**: Continuous monitoring and optimization
+### **Development Risks**
+- **Scope Creep**: Strict adherence to PRD requirements
+- **Timeline Overrun**: Phased approach with clear milestones
+- **Quality Issues**: Comprehensive testing at each phase
+- **Integration Problems**: Thorough integration testing
 
 ---
 
@@ -473,4 +555,6 @@ const CharacterCard = ({ character, onSelect }) => {
 
 ---
 
-**Next Steps**: Begin Phase 1 implementation with Week 1 tasks, focusing on core chat infrastructure and mobile-first design.
+**Next Steps**: Begin Phase 1 implementation with Week 1 tasks, focusing on core infrastructure and mobile-first design.
+
+**Document Purpose**: This is the detailed technical implementation roadmap that provides specific tasks, timelines, and code examples for developers to follow during the roleplay feature implementation.
