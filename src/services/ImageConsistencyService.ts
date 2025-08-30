@@ -243,8 +243,11 @@ class ImageConsistencyService {
 
     if (error) throw error;
 
+    const method = data.consistency_method;
+    const validMethod = (method === 'seed_locked' || method === 'i2i_reference' || method === 'hybrid') ? method : 'hybrid';
+    
     return {
-      method: data.consistency_method || 'hybrid',
+      method: validMethod,
       seed_value: data.seed_locked,
       reference_strength: 0.35,
       denoise_strength: 0.25,

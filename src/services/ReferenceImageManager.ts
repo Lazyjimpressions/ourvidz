@@ -33,7 +33,7 @@ class ReferenceImageManager {
 
     // Upload to storage
     const { data: uploadData, error: uploadError } = await this.supabase.storage
-      .from('user-library')
+      .from('reference_images')
       .upload(filePath, upload.file, {
         cacheControl: '3600',
         upsert: false
@@ -43,20 +43,27 @@ class ReferenceImageManager {
 
     // Get public URL
     const { data: urlData } = this.supabase.storage
-      .from('user-library')
+      .from('reference_images')
       .getPublicUrl(filePath);
 
     // Create thumbnail
     const thumbnailUrl = await this.createThumbnail(urlData.publicUrl);
 
+    // Get current user
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
     // Save metadata to database
     const { data: dbData, error: dbError } = await this.supabase
       .from('user_library')
       .insert({
-        user_id: (await this.supabase.auth.getUser()).data.user?.id,
-        file_path: filePath,
-        file_name: fileName,
-        file_type: 'image',
+        user_id: user.id,
+        storage_path: filePath,
+        asset_type: 'image',
+        mime_type: upload.file.type,
+        file_size_bytes: upload.file.size,
+        original_prompt: `Character reference for ${upload.characterId}`,
+        model_used: 'manual_upload',
         content_category: 'roleplay_reference',
         roleplay_metadata: {
           character_id: upload.characterId,
@@ -91,26 +98,29 @@ class ReferenceImageManager {
   async getReferenceImages(characterId: string): Promise<ReferenceImage[]> {
     const { data, error } = await this.supabase
       .from('user_library')
-      .select('*')
+      .select('id, storage_path, thumbnail_path, created_at, roleplay_metadata')
       .eq('content_category', 'roleplay_reference')
-      .eq('roleplay_metadata->character_id', characterId)
+      .contains('roleplay_metadata', { character_id: characterId })
       .order('created_at', { ascending: false });
 
     if (error) throw error;
 
-    return data.map(item => ({
-      id: item.id,
-      characterId,
-      imageUrl: item.file_url || '',
-      thumbnailUrl: item.thumbnail_url,
-      metadata: {
-        consistency_score: item.roleplay_metadata?.consistency_score,
-        generation_params: item.roleplay_metadata?.generation_params,
-        created_at: item.created_at,
-        tags: item.roleplay_metadata?.tags || [],
-        description: item.roleplay_metadata?.description
-      }
-    }));
+    return data.map(item => {
+      const metadata = item.roleplay_metadata as any || {};
+      return {
+        id: item.id,
+        characterId,
+        imageUrl: item.storage_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.storage_path).data.publicUrl : '',
+        thumbnailUrl: item.thumbnail_path ? this.supabase.storage.from('reference_images').getPublicUrl(item.thumbnail_path).data.publicUrl : undefined,
+        metadata: {
+          consistency_score: metadata.consistency_score,
+          generation_params: metadata.generation_params,
+          created_at: item.created_at,
+          tags: metadata.tags || [],
+          description: metadata.description
+        }
+      };
+    });
   }
 
   /**
@@ -134,17 +144,17 @@ class ReferenceImageManager {
     // Get the image data first
     const { data, error: fetchError } = await this.supabase
       .from('user_library')
-      .select('file_path')
+      .select('storage_path')
       .eq('id', imageId)
       .single();
 
     if (fetchError) throw fetchError;
 
     // Delete from storage
-    if (data.file_path) {
+    if (data.storage_path) {
       const { error: storageError } = await this.supabase.storage
-        .from('user-library')
-        .remove([data.file_path]);
+        .from('reference_images')
+        .remove([data.storage_path]);
 
       if (storageError) throw storageError;
     }
