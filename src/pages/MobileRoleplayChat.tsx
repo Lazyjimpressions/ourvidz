@@ -21,6 +21,9 @@ import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
+import { useAuth } from '@/contexts/AuthContext';
+import { useWorkerStatus } from '@/hooks/useWorkerStatus';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Character {
   id: string;
@@ -43,6 +46,7 @@ interface Message {
     scene_generated?: boolean;
     image_url?: string;
     consistency_method?: string;
+    job_id?: string;
   };
 }
 
@@ -65,32 +69,108 @@ const MobileRoleplayChat: React.FC = () => {
     denoise_strength: 0.25,
     modify_strength: 0.5
   });
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [sceneJobId, setSceneJobId] = useState<string | null>(null);
+  const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
 
-  // Mock character data - replace with actual API call
+  // Hooks
+  const { user } = useAuth();
+  const { chatWorker, runHealthCheck } = useWorkerStatus();
+
+  // Initialize conversation and load data
   useEffect(() => {
-    const mockCharacter: Character = {
-      id: characterId || '1',
-      name: 'Luna the Mystic',
-      description: 'A wise and mysterious character with deep knowledge of ancient magic',
-      image_url: '/placeholder.svg',
-      category: 'fantasy',
-      consistency_method: 'i2i_reference',
-      base_prompt: 'You are Luna, a wise and mysterious character with deep knowledge of ancient magic. You speak with wisdom and grace.',
-      quick_start: true
-    };
-    setCharacter(mockCharacter);
-    
-    // Mock initial messages
-    const initialMessages: Message[] = [
-      {
-        id: '1',
-        content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
-        sender: 'character',
-        timestamp: new Date(Date.now() - 60000)
+    const initializeConversation = async () => {
+      if (!user || !characterId) return;
+
+      try {
+        // Check for existing conversation
+        const { data: existingConversations, error: queryError } = await supabase
+          .from('conversations')
+          .select('id, title, messages(*)')
+          .eq('user_id', user.id)
+          .eq('character_id', characterId)
+          .eq('conversation_type', 'character_roleplay')
+          .order('updated_at', { ascending: false })
+          .limit(1);
+
+        if (queryError) throw queryError;
+
+        let conversation;
+        if (existingConversations && existingConversations.length > 0) {
+          conversation = existingConversations[0];
+          setConversationId(conversation.id);
+          
+          // Load existing messages
+          if (conversation.messages && conversation.messages.length > 0) {
+            const loadedMessages = conversation.messages.map((msg: any) => ({
+              id: msg.id,
+              content: msg.content,
+              sender: msg.sender as 'user' | 'character',
+              timestamp: new Date(msg.created_at)
+            }));
+            setMessages(loadedMessages);
+          } else {
+            // Add initial greeting
+            const initialMessage: Message = {
+              id: '1',
+              content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
+              sender: 'character',
+              timestamp: new Date()
+            };
+            setMessages([initialMessage]);
+          }
+        } else {
+          // Create new conversation
+          const { data: newConversation, error: insertError } = await supabase
+            .from('conversations')
+            .insert({
+              user_id: user.id,
+              character_id: characterId,
+              conversation_type: 'character_roleplay',
+              title: `Roleplay: Luna the Mystic`,
+              status: 'active',
+              memory_tier: memoryTier
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+          
+          setConversationId(newConversation.id);
+          
+          // Add initial greeting
+          const initialMessage: Message = {
+            id: '1',
+            content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
+            sender: 'character',
+            timestamp: new Date()
+          };
+          setMessages([initialMessage]);
+        }
+
+        // Load character data
+        const mockCharacter: Character = {
+          id: characterId || '1',
+          name: 'Luna the Mystic',
+          description: 'A wise and mysterious character with deep knowledge of ancient magic',
+          image_url: '/placeholder.svg',
+          category: 'fantasy',
+          consistency_method: 'i2i_reference',
+          base_prompt: 'You are Luna, a wise and mysterious character with deep knowledge of ancient magic. You speak with wisdom and grace.',
+          quick_start: true
+        };
+        setCharacter(mockCharacter);
+
+        // Run worker health check
+        runHealthCheck();
+
+      } catch (error) {
+        console.error('Error initializing conversation:', error);
       }
-    ];
-    setMessages(initialMessages);
-  }, [characterId]);
+    };
+
+    initializeConversation();
+  }, [user, characterId, memoryTier, runHealthCheck]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -101,7 +181,7 @@ const MobileRoleplayChat: React.FC = () => {
   }, [messages]);
 
   const handleSendMessage = async (content: string) => {
-    if (!content.trim() || !character) return;
+    if (!content.trim() || !character || !conversationId || !user) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -114,47 +194,48 @@ const MobileRoleplayChat: React.FC = () => {
     setIsLoading(true);
 
     try {
+      // Insert user message into database
+      const { error: insertError } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender: 'user',
+          content: content.trim(),
+          message_type: 'text'
+        });
+
+      if (insertError) throw insertError;
+
       // Call the roleplay-chat edge function
-      const response = await fetch('/api/roleplay-chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
           message: content.trim(),
-          conversation_id: 'mock-conversation-id', // TODO: Get from context
+          conversation_id: conversationId,
           character_id: character.id,
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: 'sfw',
           scene_generation: false,
-          user_id: 'mock-user-id' // TODO: Get from auth context
-        })
+          user_id: user.id
+        }
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (error) throw error;
+
+      if (data && data.response) {
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
           sender: 'character',
           timestamp: new Date(),
           metadata: {
-            scene_generated: data.scene_generated,
-            image_url: data.image_url,
+            scene_generated: data.scene_generated || false,
             consistency_method: character.consistency_method
           }
         };
         setMessages(prev => [...prev, characterMessage]);
       } else {
-        // Fallback response for demo
-        const fallbackMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          content: `Thank you for your message about "${content.trim()}". As Luna, I find your inquiry most intriguing. What specific aspect would you like to explore further?`,
-          sender: 'character',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, fallbackMessage]);
+        throw new Error('No response from roleplay-chat function');
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -172,9 +253,11 @@ const MobileRoleplayChat: React.FC = () => {
   };
 
   const handleGenerateScene = async () => {
-    if (!character) return;
+    if (!character || !conversationId || !user) return;
     
     setIsLoading(true);
+    setSceneJobStatus('queued');
+    
     try {
       // Build scene prompt from conversation context
       const recentMessages = messages.slice(-3); // Last 3 messages for context
@@ -182,38 +265,52 @@ const MobileRoleplayChat: React.FC = () => {
         .map(msg => `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`)
         .join(' | ');
       
-      // Use the image consistency service
-      const result = await imageConsistencyService.generateConsistentScene({
-        characterId: character.id,
-        scenePrompt: `Generate a scene showing ${character.name} in the current conversation context`,
-        modelChoice: modelProvider === 'chat_worker' ? 'sdxl' : 'replicate',
-        consistencySettings,
-        conversationContext
+      // Call queue-job directly for SDXL generation
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          prompt: `Generate a scene showing ${character.name} in the current conversation context: ${conversationContext}`,
+          job_type: 'sdxl_image_fast',
+          metadata: {
+            destination: 'roleplay_scene',
+            character_id: character.id,
+            scene_type: 'chat_scene',
+            consistency_method: consistencySettings.method,
+            conversation_id: conversationId,
+            reference_mode: 'modify',
+            contentType: 'sfw'
+          }
+        }
       });
 
-      if (result.success && result.imageUrl) {
-        const sceneMessage: Message = {
+      if (error) throw error;
+
+      if (data && data.job_id) {
+        setSceneJobId(data.job_id);
+        setSceneJobStatus('processing');
+        
+        // Add queued message to chat
+        const queuedMessage: Message = {
           id: Date.now().toString(),
-          content: `I've generated a scene based on our conversation! Consistency score: ${Math.round((result.consistencyScore || 0) * 100)}%`,
+          content: 'Scene generation queued! I\'m creating a visual representation of our conversation...',
           sender: 'character',
           timestamp: new Date(),
           metadata: {
-            scene_generated: true,
-            image_url: result.imageUrl,
+            scene_generated: false,
+            job_id: data.job_id,
             consistency_method: consistencySettings.method
           }
         };
-        setMessages(prev => [...prev, sceneMessage]);
+        setMessages(prev => [...prev, queuedMessage]);
         
-        // Update character's seed lock if using seed locking
-        if (consistencySettings.method === 'seed_locked' && result.seedUsed) {
-          await imageConsistencyService.updateSeedLock(character.id, result.seedUsed);
-        }
+        // Start polling for job completion
+        pollJobCompletion(data.job_id);
       } else {
-        throw new Error(result.error || 'Failed to generate scene');
+        throw new Error('No job ID returned from queue-job');
       }
     } catch (error) {
       console.error('Error generating scene:', error);
+      setSceneJobStatus('failed');
+      
       // Add error message to chat
       const errorMessage: Message = {
         id: Date.now().toString(),
@@ -225,6 +322,73 @@ const MobileRoleplayChat: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Poll for job completion
+  const pollJobCompletion = async (jobId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('jobs')
+          .select('status')
+          .eq('id', jobId)
+          .single();
+
+        if (error) throw error;
+
+        if (data.status === 'completed') {
+          clearInterval(pollInterval);
+          setSceneJobStatus('completed');
+          
+          // Get the generated image from workspace_assets
+          const { data: assetData, error: assetError } = await supabase
+            .from('workspace_assets')
+            .select('temp_storage_path')
+            .eq('job_id', jobId)
+            .single();
+
+          if (assetError) throw assetError;
+
+          // Update the last message with the image
+          setMessages(prev => {
+            const updatedMessages = [...prev];
+            const lastMessage = updatedMessages[updatedMessages.length - 1];
+            if (lastMessage && lastMessage.metadata?.job_id === jobId) {
+              lastMessage.content = 'Scene generated successfully! Here\'s a visual representation of our conversation.';
+              lastMessage.metadata = {
+                ...lastMessage.metadata,
+                scene_generated: true,
+                image_url: assetData.temp_storage_path
+              };
+            }
+            return updatedMessages;
+          });
+        } else if (data.status === 'failed') {
+          clearInterval(pollInterval);
+          setSceneJobStatus('failed');
+          
+          // Update the last message with error
+          setMessages(prev => {
+            const updatedMessages = [...prev];
+            const lastMessage = updatedMessages[updatedMessages.length - 1];
+            if (lastMessage && lastMessage.metadata?.job_id === jobId) {
+              lastMessage.content = 'Scene generation failed. Please try again.';
+            }
+            return updatedMessages;
+          });
+        }
+      } catch (error) {
+        console.error('Error polling job completion:', error);
+        clearInterval(pollInterval);
+        setSceneJobStatus('failed');
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Timeout after 5 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval);
+      setSceneJobStatus('failed');
+    }, 300000);
   };
 
   const handleBack = () => {
@@ -325,6 +489,19 @@ const MobileRoleplayChat: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            {/* Worker Health Indicator */}
+            <div className="flex items-center gap-1">
+              <div 
+                className={`w-2 h-2 rounded-full ${
+                  chatWorker.isHealthy ? 'bg-green-500' : 'bg-gray-500'
+                }`} 
+                title={chatWorker.isHealthy ? 'Chat Worker Online' : 'Chat Worker Offline'}
+              />
+              <span className="text-xs text-gray-400">
+                {chatWorker.isHealthy ? 'Online' : 'Offline'}
+              </span>
+            </div>
+            
             <Button
               variant="ghost"
               size="sm"
