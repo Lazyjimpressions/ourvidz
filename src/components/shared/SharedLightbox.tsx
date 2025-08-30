@@ -15,9 +15,11 @@ import {
   Palette,
   Zap,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Info
 } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
+import { PromptDetailsSlider } from '@/components/lightbox/PromptDetailsSlider';
 
 export type SharedLightboxProps = {
   assets: SharedAsset[];
@@ -221,6 +223,24 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 >
                   {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                 </Button>
+                
+                {/* Info button for metadata */}
+                <PromptDetailsSlider
+                  assetId={currentAsset.id}
+                  assetType={currentAsset.type}
+                  jobType={currentAsset.metadata?.jobType}
+                  quality={currentAsset.metadata?.quality}
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-white hover:bg-white/20 h-8 w-8 p-0"
+                      title="View generation details"
+                    >
+                      <Info className="w-4 h-4" />
+                    </Button>
+                  }
+                />
                 
                 {/* Fit/Fill toggle for images on mobile */}
                 {currentAsset.type !== 'video' && (

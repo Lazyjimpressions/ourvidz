@@ -15,7 +15,10 @@ import {
   Zap, 
   Tag,
   CheckCircle2,
-  Settings
+  Settings,
+  ChevronDown,
+  ChevronRight,
+  Info
 } from 'lucide-react';
 import { useFetchImageDetails } from '@/hooks/useFetchImageDetails';
 import { toast } from '@/hooks/use-toast';
@@ -36,6 +39,8 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
   trigger
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [originalPromptExpanded, setOriginalPromptExpanded] = useState(false);
+  const [enhancedPromptExpanded, setEnhancedPromptExpanded] = useState(false);
   const { fetchDetails, loading, details } = useFetchImageDetails();
 
   useEffect(() => {
@@ -61,6 +66,27 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
         duration: 2000,
       });
     }
+  };
+
+  const copyAllMetadata = async () => {
+    if (!details) return;
+    
+    const metadata = [
+      details.templateName && `Template: ${details.templateName}`,
+      details.originalPrompt && `Original Prompt: ${details.originalPrompt}`,
+      details.enhancedPrompt && `Enhanced Prompt: ${details.enhancedPrompt}`,
+      details.seed && `Seed: ${details.seed}`,
+      details.referenceStrength && `Reference Strength: ${(details.referenceStrength * 100).toFixed(0)}%`,
+      details.denoiseStrength && `Denoise Strength: ${(details.denoiseStrength * 100).toFixed(0)}%`,
+      details.guidanceScale && `Guidance Scale: ${details.guidanceScale}`,
+      details.steps && `Steps: ${details.steps}`,
+      details.lockHair !== undefined && `Hair Lock: ${details.lockHair ? 'ON' : 'OFF'}`,
+      details.exactCopyMode !== undefined && `Exact Copy Mode: ${details.exactCopyMode ? 'ON' : 'OFF'}`,
+      details.referenceMode && `Reference Mode: ${details.referenceMode}`,
+      details.generationTime && `Generation Time: ${details.generationTime}s`
+    ].filter(Boolean).join('\n');
+    
+    await copyToClipboard(metadata, 'All metadata');
   };
 
   const getJobTypeFormatted = () => {
@@ -97,21 +123,31 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
             </div>
           )}
 
-          {!loading && (
+          {!loading && details && (
             <>
-              {/* Job Type */}
-              <div className="space-y-3">
+              {/* Header with Copy All */}
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Zap className="h-4 w-4 text-muted-foreground" />
-                  <h4 className="font-medium text-sm">Job Type</h4>
+                  <h4 className="font-medium text-sm">Generation Summary</h4>
                 </div>
-                <Badge 
-                  variant="outline" 
-                  className={`w-fit ${getJobTypeBadgeVariant()}`}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyAllMetadata}
+                  className="h-7 text-xs"
                 >
-                  {getJobTypeFormatted()}
-                </Badge>
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copy All
+                </Button>
               </div>
+
+              <Badge 
+                variant="outline" 
+                className={`w-fit ${getJobTypeBadgeVariant()}`}
+              >
+                {getJobTypeFormatted()}
+              </Badge>
 
               {/* Template Name */}
               {details?.templateName && (
@@ -142,58 +178,123 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
               {/* Original Prompt */}
               {details?.originalPrompt && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="font-medium text-sm">Original Prompt</h4>
-                  </div>
-                  <div className="relative">
-                    <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
-                      <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
-                        {details.originalPrompt}
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="font-medium text-sm">Original Prompt</h4>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(details.originalPrompt!, 'Original prompt')}
-                      className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                      onClick={() => setOriginalPromptExpanded(!originalPromptExpanded)}
+                      className="h-6 w-6 p-0"
                     >
-                      <Copy className="h-3 w-3" />
+                      {originalPromptExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     </Button>
                   </div>
+                  {originalPromptExpanded && (
+                    <div className="relative">
+                      <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
+                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
+                          {details.originalPrompt}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(details.originalPrompt!, 'Original prompt')}
+                        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
               {/* Enhanced Prompt */}
               {details?.enhancedPrompt && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="font-medium text-sm">Enhanced Prompt</h4>
-                  </div>
-                  <div className="relative">
-                    <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
-                      <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
-                        {details.enhancedPrompt}
-                      </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                      <h4 className="font-medium text-sm">Enhanced Prompt</h4>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => copyToClipboard(details.enhancedPrompt!, 'Enhanced prompt')}
-                      className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                      onClick={() => setEnhancedPromptExpanded(!enhancedPromptExpanded)}
+                      className="h-6 w-6 p-0"
                     >
-                      <Copy className="h-3 w-3" />
+                      {enhancedPromptExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     </Button>
                   </div>
+                  {enhancedPromptExpanded && (
+                    <div className="relative">
+                      <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
+                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
+                          {details.enhancedPrompt}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(details.enhancedPrompt!, 'Enhanced prompt')}
+                        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Additional Details */}
-              {(details?.seed || details?.referenceStrength || details?.generationTime) && (
+              {/* Verified i2i Settings */}
+              {(details?.referenceStrength || details?.denoiseStrength || details?.guidanceScale || details?.steps || details?.lockHair !== undefined || details?.exactCopyMode !== undefined) && (
                 <div className="space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground">Technical Details</h4>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <h4 className="font-medium text-sm">Verified i2i Settings</h4>
+                    <Badge variant="outline" className="text-xs border-emerald-500/20 text-emerald-400">
+                      from job log
+                    </Badge>
+                  </div>
                   <div className="space-y-2 text-sm">
+                    {details.referenceMode && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Reference Mode:</span>
+                        <span className="capitalize">{details.referenceMode}</span>
+                      </div>
+                    )}
+                    
+                    {details.referenceStrength !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Reference Strength:</span>
+                        <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
+                      </div>
+                    )}
+
+                    {details.denoiseStrength !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Denoise Strength:</span>
+                        <span>{(details.denoiseStrength * 100).toFixed(0)}%</span>
+                      </div>
+                    )}
+
+                    {details.guidanceScale && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Guidance Scale:</span>
+                        <span>{details.guidanceScale}</span>
+                      </div>
+                    )}
+
+                    {details.steps && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Steps:</span>
+                        <span>{details.steps}</span>
+                      </div>
+                    )}
+
                     {details.seed && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Seed:</span>
@@ -211,10 +312,21 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                       </div>
                     )}
 
-                    {details.referenceStrength && (
+                    {details.lockHair !== undefined && (
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Reference Strength:</span>
-                        <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
+                        <span className="text-muted-foreground">Hair Lock:</span>
+                        <Badge variant={details.lockHair ? "default" : "secondary"} className="text-xs">
+                          {details.lockHair ? 'ON' : 'OFF'}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {details.exactCopyMode !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Exact Copy Mode:</span>
+                        <Badge variant={details.exactCopyMode ? "default" : "secondary"} className="text-xs">
+                          {details.exactCopyMode ? 'ON' : 'OFF'}
+                        </Badge>
                       </div>
                     )}
 
@@ -229,7 +341,7 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
               )}
 
               {/* No Details Message */}
-              {!details && !loading && (
+              {!loading && !details && (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No generation details available</p>

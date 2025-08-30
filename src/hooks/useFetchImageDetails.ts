@@ -11,6 +11,13 @@ interface ImageDetails {
   referenceStrength?: number;
   templateName?: string;
   jobType?: string;
+  // i2i settings
+  denoiseStrength?: number;
+  guidanceScale?: number;
+  steps?: number;
+  lockHair?: boolean;
+  exactCopyMode?: boolean;
+  referenceMode?: string;
 }
 
 export const useFetchImageDetails = () => {
@@ -51,7 +58,7 @@ export const useFetchImageDetails = () => {
           console.log('🔍 Backfilling data from jobs table for job:', workspaceAsset.job_id);
           const { data: jobData } = await supabase
             .from('jobs')
-            .select('enhanced_prompt, template_name, format')
+            .select('enhanced_prompt, template_name, format, metadata')
             .eq('id', workspaceAsset.job_id)
             .single();
           
@@ -59,23 +66,45 @@ export const useFetchImageDetails = () => {
             enhancedPrompt = enhancedPrompt || jobData.enhanced_prompt;
             templateName = templateName || jobData.template_name;
             jobType = jobData.format;
+            
+            // Merge job metadata into settings for i2i params
+            if (jobData.metadata) {
+              Object.assign(settings, jobData.metadata);
+            }
+            
             console.log('✅ Backfilled from jobs table:', { 
               enhancedPrompt: !!enhancedPrompt, 
               templateName: !!templateName,
-              jobType 
+              jobType,
+              hasJobMetadata: !!jobData.metadata
             });
           }
         }
         
+        // Calculate denoise strength from reference strength if available
+        let denoiseStrength = settings?.denoise_strength || settings?.denoiseStrength;
+        if (!denoiseStrength && settings?.reference_strength) {
+          denoiseStrength = 1 - settings.reference_strength;
+        } else if (!denoiseStrength && settings?.referenceStrength) {
+          denoiseStrength = 1 - settings.referenceStrength;
+        }
+
         setDetails({
           originalPrompt: workspaceAsset.original_prompt,
           enhancedPrompt,
           negativePrompt: settings?.negativePrompt,
           seed: settings?.seed,
           generationTime: settings?.generationTime,
-          referenceStrength: settings?.referenceStrength,
+          referenceStrength: settings?.referenceStrength || settings?.reference_strength,
           templateName,
-          jobType
+          jobType,
+          // i2i settings
+          denoiseStrength,
+          guidanceScale: settings?.guidance_scale || settings?.guidanceScale,
+          steps: settings?.steps || settings?.num_inference_steps,
+          lockHair: settings?.lock_hair || settings?.lockHair,
+          exactCopyMode: settings?.exact_copy_mode || settings?.exactCopyMode,
+          referenceMode: settings?.reference_mode || settings?.referenceMode
         });
         return;
       }
