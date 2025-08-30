@@ -19,6 +19,7 @@ import {
 import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
+import { ContextMenu } from '@/components/roleplay/ContextMenu';
 
 interface Character {
   id: string;
@@ -54,6 +55,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
 
@@ -211,6 +213,52 @@ const MobileRoleplayChat: React.FC = () => {
     navigate('/roleplay');
   };
 
+  // Context menu handlers
+  const handleClearConversation = () => {
+    setMessages([messages[0]]); // Keep the initial greeting
+  };
+
+  const handleExportConversation = () => {
+    const conversationText = messages.map(msg => 
+      `${msg.sender === 'user' ? 'You' : character?.name}: ${msg.content}`
+    ).join('\n\n');
+    
+    const blob = new Blob([conversationText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `conversation-${character?.name}-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleShareConversation = () => {
+    // TODO: Implement sharing functionality
+    console.log('Share conversation');
+  };
+
+  const handleViewScenes = () => {
+    // TODO: Navigate to scenes view
+    console.log('View scenes');
+  };
+
+  const handleSaveToLibrary = () => {
+    // TODO: Save conversation to library
+    console.log('Save to library');
+  };
+
+  const handleEditCharacter = () => {
+    // TODO: Navigate to character editor
+    console.log('Edit character');
+  };
+
+  const handleReportCharacter = () => {
+    // TODO: Implement report functionality
+    console.log('Report character');
+  };
+
   if (!character) {
     return (
       <OurVidzDashboardLayout>
@@ -270,6 +318,7 @@ const MobileRoleplayChat: React.FC = () => {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => setShowContextMenu(!showContextMenu)}
               className="text-white hover:bg-gray-800"
             >
               <MoreVertical className="w-4 h-4" />
@@ -310,8 +359,8 @@ const MobileRoleplayChat: React.FC = () => {
           />
         </div>
 
-        {/* Mobile Character Sheet - Bottom Sheet */}
-        {isMobile && showCharacterSheet && (
+        {/* Character Sheet - Bottom Sheet (Mobile) or Sidebar (Desktop) */}
+        {showCharacterSheet && (
           <MobileCharacterSheet 
             character={character}
             onClose={() => setShowCharacterSheet(false)}
@@ -321,6 +370,20 @@ const MobileRoleplayChat: React.FC = () => {
             onModelProviderChange={setModelProvider}
           />
         )}
+
+        {/* Context Menu */}
+        <ContextMenu
+          isOpen={showContextMenu}
+          onClose={() => setShowContextMenu(false)}
+          onClearConversation={handleClearConversation}
+          onExportConversation={handleExportConversation}
+          onShareConversation={handleShareConversation}
+          onViewScenes={handleViewScenes}
+          onSaveToLibrary={handleSaveToLibrary}
+          onEditCharacter={handleEditCharacter}
+          onReportCharacter={handleReportCharacter}
+          canEditCharacter={false} // TODO: Check if user owns character
+        />
       </div>
     </OurVidzDashboardLayout>
   );
