@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 const MobileRoleplayDashboard = () => {
+  console.log('🎭 MobileRoleplayDashboard: Component loaded!');
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');

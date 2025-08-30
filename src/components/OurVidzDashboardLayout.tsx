@@ -64,7 +64,10 @@ export const OurVidzDashboardLayout = ({ children }: OurVidzDashboardLayoutProps
     { 
       icon: Users, 
       label: "🎭 Roleplay",
-      onClick: () => navigate("/roleplay"),
+      onClick: () => {
+        console.log('🎭 Roleplay: Navigation clicked, navigating to /roleplay');
+        navigate("/roleplay");
+      },
       active: isActiveRoute("/roleplay")
     }
   ];
