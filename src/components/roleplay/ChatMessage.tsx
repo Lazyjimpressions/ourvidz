@@ -52,12 +52,24 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
 
   const formatTime = (timestamp: string | Date) => {
-    // Convert to Date object if it's a string
-    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    try {
+      // Convert to Date object if it's a string
+      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid timestamp received:', timestamp);
+        return 'Invalid time';
+      }
+      
+      return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error, 'Timestamp:', timestamp);
+      return 'Invalid time';
+    }
   };
 
   const handleDownloadImage = () => {
