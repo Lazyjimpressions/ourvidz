@@ -114,44 +114,45 @@ export const PromptInfoModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-hidden">
+        <DialogHeader className="pb-3">
+          <DialogTitle className="flex items-center gap-2 text-base">
             Generation Details
-            <Badge variant="outline" className="flex items-center gap-1">
+            <Badge variant="outline" className="flex items-center gap-1 text-xs">
               {getModelIcon()}
               {getModelName()}
             </Badge>
           </DialogTitle>
         </DialogHeader>
         
-        <div className="space-y-6 max-h-[70vh] overflow-y-auto">
+        <div className="space-y-4 max-h-[65vh] overflow-y-auto">
           {/* Generation Info */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <div className="flex items-center gap-1">
-                <Calendar className="h-4 w-4" />
+                <Calendar className="h-3.5 w-3.5" />
                 <span>{formatDate(timestamp)}</span>
               </div>
               <div className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
+                <Clock className="h-3.5 w-3.5" />
                 <span>{contentCount} {mode}(s)</span>
               </div>
-              <Badge variant={quality === 'high' ? 'default' : 'secondary'}>
+              <Badge variant={quality === 'high' ? 'default' : 'secondary'} className="text-xs">
                 {quality === 'high' ? 'High Quality' : 'Fast'}
               </Badge>
             </div>
 
             {/* Load Generation Details Button */}
             {!details && (
-              <div className="flex justify-center py-4">
+              <div className="flex justify-center py-3">
                 <Button
                   onClick={handleLoadDetails}
                   disabled={loading}
                   variant="outline"
+                  size="sm"
                   className="flex items-center gap-2"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5" />
                   {loading ? 'Loading Details...' : 'Load Generation Details'}
                 </Button>
               </div>
@@ -159,24 +160,40 @@ export const PromptInfoModal = ({
 
             {/* Generation Details */}
             {details && (
-              <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                <h4 className="font-medium">Generation Details</h4>
+              <div className="space-y-2 p-3 bg-muted/50 rounded border">
+                <h4 className="font-medium text-sm">Generation Details</h4>
                 
                 {details.seed !== undefined && (
-                  <SeedDisplay seed={details.seed} />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Seed:</span>
+                    <code className="text-xs bg-muted px-2 py-1 rounded font-mono">{details.seed}</code>
+                  </div>
                 )}
 
                 {details.generationTime && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Generation Time:</span>
-                    <Badge variant="outline">{formatGenerationTime(details.generationTime)}</Badge>
+                    <span className="text-xs text-muted-foreground">Generation Time:</span>
+                    <Badge variant="outline" className="text-xs">{formatGenerationTime(details.generationTime)}</Badge>
+                  </div>
+                )}
+
+                {/* Style & Framing */}
+                {(details.aspectRatio || details.cameraAngle || details.shotType || details.style) && (
+                  <div className="space-y-1">
+                    <span className="text-xs text-muted-foreground font-medium">Style & Framing:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {details.aspectRatio && <Badge variant="outline" className="text-xs">{details.aspectRatio}</Badge>}
+                      {details.cameraAngle && <Badge variant="outline" className="text-xs">{details.cameraAngle}</Badge>}
+                      {details.shotType && <Badge variant="outline" className="text-xs">{details.shotType}</Badge>}
+                      {details.style && <Badge variant="outline" className="text-xs">{details.style}</Badge>}
+                    </div>
                   </div>
                 )}
 
                 {details.referenceStrength && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Reference Strength:</span>
-                                            <Badge variant="outline">{details.referenceStrength.toFixed(2)}</Badge>
+                    <span className="text-xs text-muted-foreground">Reference Strength:</span>
+                    <Badge variant="outline" className="text-xs">{(details.referenceStrength * 100).toFixed(0)}%</Badge>
                   </div>
                 )}
               </div>
@@ -186,18 +203,20 @@ export const PromptInfoModal = ({
           {/* Prompt Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Prompt</h3>
+              <h3 className="font-semibold text-sm">Prompt</h3>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => copyToClipboard(prompt, 'Prompt')}
+                className="h-7 text-xs"
+                aria-label="Copy prompt"
               >
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className="h-3 w-3 mr-1" />
                 Copy
               </Button>
             </div>
-            <div className="bg-muted p-3 rounded-md">
-              <p className="text-sm leading-relaxed">{prompt}</p>
+            <div className="bg-muted p-2 rounded border max-h-32 overflow-y-auto">
+              <p className="text-xs leading-relaxed break-words">{prompt}</p>
             </div>
           </div>
 
@@ -205,58 +224,48 @@ export const PromptInfoModal = ({
           {details?.negativePrompt && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Negative Prompt</h3>
+                <h3 className="font-semibold text-sm">Negative Prompt</h3>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => copyToClipboard(details.negativePrompt!, 'Negative Prompt')}
+                  className="h-7 text-xs"
+                  aria-label="Copy negative prompt"
                 >
-                  <Copy className="h-4 w-4 mr-2" />
+                  <Copy className="h-3 w-3 mr-1" />
                   Copy
                 </Button>
               </div>
-              <div className="bg-muted p-3 rounded-md">
-                <p className="text-sm leading-relaxed text-muted-foreground">{details.negativePrompt}</p>
+              <div className="bg-muted p-2 rounded border max-h-24 overflow-y-auto">
+                <p className="text-xs leading-relaxed text-muted-foreground break-words">{details.negativePrompt}</p>
               </div>
             </div>
           )}
 
           {/* Technical Details */}
           <div className="space-y-2">
-            <h3 className="font-semibold">Technical Details</h3>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
+            <h3 className="font-semibold text-sm">Technical Details</h3>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Model:</span>
-                <span className="ml-2">{getModelName()}</span>
+                <span>{getModelName()}</span>
               </div>
-              <div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Quality:</span>
-                <span className="ml-2 capitalize">{quality}</span>
+                <span className="capitalize">{quality}</span>
               </div>
-              <div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Type:</span>
-                <span className="ml-2 capitalize">{mode}</span>
+                <span className="capitalize">{mode}</span>
               </div>
-              <div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Job ID:</span>
-                <span className="ml-2 font-mono text-xs">{itemId}</span>
+                <code className="font-mono text-xs bg-muted px-1 rounded truncate max-w-20" title={itemId}>{itemId}</code>
               </div>
               {details?.templateName && (
-                <div>
+                <div className="flex justify-between col-span-2">
                   <span className="text-muted-foreground">Template:</span>
-                  <span className="ml-2">{details.templateName}</span>
-                </div>
-              )}
-              {details?.seed && (
-                <div>
-                  <span className="text-muted-foreground">Seed:</span>
-                  <span className="ml-2 font-mono">{details.seed}</span>
-                </div>
-              )}
-              {details?.generationTime && (
-                <div>
-                  <span className="text-muted-foreground">Generation Time:</span>
-                  <span className="ml-2">{formatGenerationTime(details.generationTime)}</span>
+                  <span className="truncate max-w-48" title={details.templateName}>{details.templateName}</span>
                 </div>
               )}
             </div>
@@ -265,12 +274,12 @@ export const PromptInfoModal = ({
           {/* Original Image Preview */}
           {originalImageUrl && (
             <div className="space-y-2">
-              <h3 className="font-semibold">Generated Image</h3>
+              <h3 className="font-semibold text-sm">Generated Image</h3>
               <div className="flex justify-center">
                 <img
                   src={originalImageUrl}
                   alt="Generated content"
-                  className="max-h-64 object-contain rounded-lg border"
+                  className="max-h-48 object-contain rounded border"
                 />
               </div>
             </div>
