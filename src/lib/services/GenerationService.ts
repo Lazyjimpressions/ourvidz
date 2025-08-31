@@ -136,6 +136,9 @@ export class GenerationService {
       }
 
       // CRITICAL: Prepare complete payload with top-level settings for SDXL worker
+      // FIXED: Strip I2I parameters if no reference image exists
+      const hasReferenceImage = !!request.referenceImageUrl;
+      
       const queueJobPayload = {
         prompt: request.enhancedPrompt || request.originalPrompt || request.prompt,
         original_prompt: request.originalPrompt || request.prompt,
@@ -145,18 +148,21 @@ export class GenerationService {
         model_type: config.isSDXL ? 'sdxl' : 'wan',
         enhanced_prompt: request.enhancedPrompt,
         num_images: request.batchCount || 1,
-        reference_image_url: request.referenceImageUrl,
-        reference_strength: request.metadata?.reference_strength,
+        reference_image_url: hasReferenceImage ? request.referenceImageUrl : undefined,
+        reference_strength: hasReferenceImage ? request.metadata?.reference_strength : undefined,
         negative_prompt: request.metadata?.negative_prompt || undefined,
         // CRITICAL: Pass top-level settings for SDXL worker (complete settings)
         steps: request.metadata?.steps,
-        guidance_scale: request.metadata?.guidance_scale,
-        denoise_strength: request.metadata?.denoise_strength,
+        guidance_scale: hasReferenceImage ? request.metadata?.guidance_scale : undefined,
+        denoise_strength: hasReferenceImage ? request.metadata?.denoise_strength : undefined,
         seed: request.metadata?.seed,
         metadata: {
           ...sanitizedBody.metadata,
-          reference_image_url: request.referenceImageUrl,
-          reference_strength: request.metadata?.reference_strength,
+          reference_image_url: hasReferenceImage ? request.referenceImageUrl : undefined,
+          reference_strength: hasReferenceImage ? request.metadata?.reference_strength : undefined,
+          // FIXED: Clear I2I-specific flags when no reference image exists
+          reference_mode: hasReferenceImage ? sanitizedBody.metadata?.reference_mode : undefined,
+          denoise_strength: hasReferenceImage ? request.metadata?.denoise_strength : undefined,
           user_requested_enhancement: !request.metadata?.exact_copy_mode && 
                                     request.metadata?.enhancement_model !== 'none' &&
                                     request.metadata?.skip_enhancement !== true,

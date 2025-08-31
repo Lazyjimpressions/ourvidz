@@ -134,6 +134,7 @@ serve(async (req) => {
       !hasOriginalEnhancedPrompt &&
       userPromptTrim.length === 0;
 
+    // FIXED: Stricter check - only set modify mode when reference URL actually exists
     const isReferenceModify =
       !!referenceUrl &&
       !isPromptlessUploadedExactCopy &&
@@ -359,14 +360,14 @@ serve(async (req) => {
         resolution: getResolutionFromAspectRatio(userMetadata?.aspect_ratio),
         seed: jobRequest.seed || userMetadata.seed
       },
-      metadata: {
-        ...userMetadata,
-        // ✅ CRITICAL: Include strength parameters for worker
-        denoise_strength: denoise,
-        reference_strength: finalReferenceStrength,  // Override for modify mode
-        exact_copy_mode: isPromptlessUploadedExactCopy,
-        reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
-        reference_image_url: referenceUrl || undefined,
+        metadata: {
+          ...userMetadata,
+          // FIXED: Only include I2I parameters when reference URL exists
+          denoise_strength: referenceUrl ? denoise : undefined,
+          reference_strength: referenceUrl ? finalReferenceStrength : undefined,
+          exact_copy_mode: isPromptlessUploadedExactCopy,
+          reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
+          reference_image_url: referenceUrl || undefined,
         // Keep original prompt/seed context for pure-inference workers
         originalEnhancedPrompt: userMetadata.originalEnhancedPrompt || undefined,
         originalSeed: userMetadata.seed || undefined,
