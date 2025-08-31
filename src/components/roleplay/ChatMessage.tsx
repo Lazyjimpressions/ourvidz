@@ -28,7 +28,7 @@ interface Message {
   id: string;
   content: string;
   sender: 'user' | 'character';
-  timestamp: Date;
+  timestamp: string | Date; // Accept both string and Date
   metadata?: {
     scene_generated?: boolean;
     image_url?: string;
@@ -51,11 +51,25 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+  const formatTime = (timestamp: string | Date) => {
+    try {
+      // Convert to Date object if it's a string
+      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) {
+        console.warn('Invalid timestamp received:', timestamp);
+        return 'Invalid time';
+      }
+      
+      return date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error, 'Timestamp:', timestamp);
+      return 'Invalid time';
+    }
   };
 
   const handleDownloadImage = () => {
