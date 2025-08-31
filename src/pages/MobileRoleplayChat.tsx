@@ -39,7 +39,7 @@ interface Character {
 interface Message {
   id: string;
   content: string;
-  role: 'user' | 'assistant';
+  sender: 'user' | 'character';
   timestamp: string;
   scene_image?: string;
   consistency_method?: string;
@@ -106,8 +106,8 @@ const MobileRoleplayChat: React.FC = () => {
             const loadedMessages = conversation.messages.map((msg: any) => ({
               id: msg.id,
               content: msg.content,
-              role: msg.sender as 'user' | 'character',
-              timestamp: new Date(msg.created_at)
+              sender: msg.sender as 'user' | 'character',
+              timestamp: msg.created_at
             }));
             setMessages(loadedMessages);
           } else {
@@ -115,7 +115,7 @@ const MobileRoleplayChat: React.FC = () => {
             const initialMessage: Message = {
               id: '1',
               content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
-              role: 'assistant',
+              sender: 'character',
               timestamp: new Date().toISOString()
             };
             setMessages([initialMessage]);
@@ -143,7 +143,7 @@ const MobileRoleplayChat: React.FC = () => {
           const initialMessage: Message = {
             id: '1',
             content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
-            role: 'assistant',
+            sender: 'character',
             timestamp: new Date().toISOString()
           };
           setMessages([initialMessage]);
@@ -184,7 +184,7 @@ const MobileRoleplayChat: React.FC = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: content.trim(),
-      role: 'user',
+      sender: 'user',
       timestamp: new Date().toISOString()
     };
 
@@ -224,7 +224,7 @@ const MobileRoleplayChat: React.FC = () => {
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
-          role: 'assistant',
+          sender: 'character',
           timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: data.scene_generated || false,
@@ -241,7 +241,7 @@ const MobileRoleplayChat: React.FC = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'I apologize, but I seem to be having trouble connecting right now. Could you try again in a moment?',
-        role: 'assistant',
+        sender: 'character',
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -260,7 +260,7 @@ const MobileRoleplayChat: React.FC = () => {
       // Build scene prompt from conversation context
       const recentMessages = messages.slice(-3); // Last 3 messages for context
       const conversationContext = recentMessages
-        .map(msg => `${msg.role === 'user' ? 'You' : character.name}: ${msg.content}`)
+        .map(msg => `${msg.sender === 'user' ? 'You' : character.name}: ${msg.content}`)
         .join(' | ');
       
       // Call queue-job directly for SDXL generation
@@ -290,7 +290,7 @@ const MobileRoleplayChat: React.FC = () => {
         const queuedMessage: Message = {
           id: Date.now().toString(),
           content: 'Scene generation queued! I\'m creating a visual representation of our conversation...',
-          role: 'assistant',
+          sender: 'character',
           timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: false,
@@ -313,7 +313,7 @@ const MobileRoleplayChat: React.FC = () => {
       const errorMessage: Message = {
         id: Date.now().toString(),
         content: 'Sorry, I encountered an error while generating the scene. Please try again.',
-        role: 'assistant',
+        sender: 'character',
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -400,7 +400,7 @@ const MobileRoleplayChat: React.FC = () => {
 
   const handleExportConversation = () => {
     const conversationText = messages.map(msg => 
-      `${msg.role === 'user' ? 'You' : character?.name}: ${msg.content}`
+      `${msg.sender === 'user' ? 'You' : character?.name}: ${msg.content}`
     ).join('\n\n');
     
     const blob = new Blob([conversationText], { type: 'text/plain' });

@@ -28,7 +28,7 @@ interface Message {
   id: string;
   content: string;
   sender: 'user' | 'character';
-  timestamp: Date;
+  timestamp: string | Date; // Accept both string and Date
   metadata?: {
     scene_generated?: boolean;
     image_url?: string;
@@ -51,7 +51,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
 
-  const formatTime = (date: Date) => {
+  const formatTime = (timestamp: string | Date) => {
+    // Convert to Date object if it's a string
+    const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
     return date.toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit' 
