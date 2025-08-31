@@ -262,28 +262,41 @@ serve(async (req) => {
         
         if (characterId && firstImageAsset) {
           try {
-            // Create a signed URL for the image (assuming it's in workspace-temp bucket)
-            const { data: signedUrlData } = await supabaseClient.storage
-              .from('workspace-temp')
-              .createSignedUrl(firstImageAsset.temp_storage_path, 3600); // 1 hour expiry
-
-            if (signedUrlData?.signedUrl) {
-              // Update character record
-              const { error: updateError } = await supabaseClient
-                .from('characters')
-                .update({
-                  image_url: signedUrlData.signedUrl,
-                  reference_image_url: signedUrlData.signedUrl,
-                  seed_locked: firstImageAsset.generation_seed,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', characterId);
-
-              if (updateError) {
-                console.error('Failed to update character image:', updateError);
+            let imageUrl = firstImageAsset.temp_storage_path;
+            
+            // Check if the URL is already a full URL (from SDXL worker)
+            if (imageUrl.startsWith('http')) {
+              // Use the full URL directly
+              console.log(`📸 Using full URL for character image: ${imageUrl}`);
+            } else {
+              // Create a signed URL for the image (assuming it's in workspace-temp bucket)
+              const { data: signedUrlData } = await supabaseClient.storage
+                .from('workspace-temp')
+                .createSignedUrl(imageUrl, 3600); // 1 hour expiry
+              
+              if (signedUrlData?.signedUrl) {
+                imageUrl = signedUrlData.signedUrl;
               } else {
-                console.log(`✅ Character ${characterId} image updated successfully`);
+                console.error('Failed to create signed URL for character image');
+                return;
               }
+            }
+
+            // Update character record
+            const { error: updateError } = await supabaseClient
+              .from('characters')
+              .update({
+                image_url: imageUrl,
+                reference_image_url: imageUrl,
+                seed_locked: firstImageAsset.generation_seed,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', characterId);
+
+            if (updateError) {
+              console.error('Failed to update character image:', updateError);
+            } else {
+              console.log(`✅ Character ${characterId} image updated successfully with URL: ${imageUrl}`);
             }
           } catch (error) {
             console.error('Error updating character image:', error);

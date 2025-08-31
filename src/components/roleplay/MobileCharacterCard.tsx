@@ -3,6 +3,7 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Eye, Play, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { supabase } from '@/integrations/supabase/client';
 
@@ -35,6 +36,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const [isPressed, setIsPressed] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
 
 
@@ -55,9 +57,14 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     onPreview();
   };
 
+
+
   const generateCharacterImage = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    console.log('🎯 Generate Image button clicked for character:', character.name);
+    console.log('👤 User authenticated:', !!user);
     
     if (isGenerating) return;
     
@@ -70,6 +77,8 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
       const persona = character.persona || '';
       
       const characterPrompt = `${character.name}, ${character.description}. ${appearanceTags}. ${traits}. ${persona}. Professional character portrait, high quality, detailed, consistent appearance, studio lighting`;
+      
+      console.log('📝 Character prompt:', characterPrompt);
       
       // Use queue-job for simple image generation
       const { data, error } = await supabase.functions.invoke('queue-job', {
@@ -85,9 +94,14 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         }
       });
 
+      console.log('📡 Queue job response:', { data, error });
+
       if (error) {
+        console.error('❌ Queue job error:', error);
         throw error;
       }
+
+      console.log('✅ Queue job successful:', data);
 
       toast({
         title: "Image Generation Started",
@@ -95,7 +109,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
       });
       
     } catch (error) {
-      console.error('Error generating character image:', error);
+      console.error('❌ Error generating character image:', error);
       toast({
         title: "Generation Failed",
         description: "Failed to generate character image. Please try again.",
@@ -162,7 +176,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         )}
 
         {/* Generate Image Button */}
-        {!imageUrl && (
+        {!imageUrl && user && (
           <div 
             className="absolute inset-0 bg-black/20 flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
@@ -207,7 +221,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
             </Button>
             
             {/* Generate Image Button (when image exists) */}
-            {imageUrl && (
+            {imageUrl && user && (
               <Button
                 onClick={generateCharacterImage}
                 disabled={isGenerating}
