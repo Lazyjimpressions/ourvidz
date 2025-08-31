@@ -3,7 +3,8 @@ import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Eye, Play, Sparkles, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { CharacterImageService } from '@/services/CharacterImageService';
+
+import { supabase } from '@/integrations/supabase/client';
 
 interface Character {
   id: string;
@@ -35,6 +36,8 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const { toast } = useToast();
 
+
+
   const handleTouchStart = () => {
     if (isTouchDevice) {
       setIsPressed(true);
@@ -53,6 +56,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   };
 
   const generateCharacterImage = async (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
     
     if (isGenerating) return;
@@ -60,24 +64,35 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     setIsGenerating(true);
     
     try {
-      const result = await CharacterImageService.generateCharacterPortrait({
-        characterId: character.id,
-        characterName: character.name,
-        description: character.description,
-        appearanceTags: character.appearance_tags,
-        traits: character.traits,
-        persona: character.persona,
-        consistencyMethod: character.consistency_method
+      // Build character prompt from metadata
+      const appearanceTags = character.appearance_tags?.join(', ') || '';
+      const traits = character.traits || '';
+      const persona = character.persona || '';
+      
+      const characterPrompt = `${character.name}, ${character.description}. ${appearanceTags}. ${traits}. ${persona}. Professional character portrait, high quality, detailed, consistent appearance, studio lighting`;
+      
+      // Use queue-job for simple image generation
+      const { data, error } = await supabase.functions.invoke('queue-job', {
+        body: {
+          prompt: characterPrompt,
+          job_type: 'sdxl_image_fast',
+          metadata: {
+            destination: 'character_portrait',
+            character_id: character.id,
+            character_name: character.name,
+            update_character_image: true
+          }
+        }
       });
 
-      if (result.success) {
-        toast({
-          title: "Image Generation Started",
-          description: result.message,
-        });
-      } else {
-        throw new Error(result.error);
+      if (error) {
+        throw error;
       }
+
+      toast({
+        title: "Image Generation Started",
+        description: `Generating portrait for ${character.name}...`,
+      });
       
     } catch (error) {
       console.error('Error generating character image:', error);
@@ -148,7 +163,10 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
 
         {/* Generate Image Button */}
         {!imageUrl && (
-          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+          <div 
+            className="absolute inset-0 bg-black/20 flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button
               onClick={generateCharacterImage}
               disabled={isGenerating}

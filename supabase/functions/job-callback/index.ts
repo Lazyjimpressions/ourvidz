@@ -254,6 +254,42 @@ serve(async (req) => {
       }
 
       console.log(`✅ Job ${jobId} completed with ${assetsToCreate.length} assets`)
+
+      // Update character image if this is a character portrait job
+      if (job.metadata?.destination === 'character_portrait' && job.metadata?.update_character_image) {
+        const characterId = job.metadata.character_id;
+        const firstImageAsset = assetsToCreate.find(asset => asset.asset_type === 'image');
+        
+        if (characterId && firstImageAsset) {
+          try {
+            // Create a signed URL for the image (assuming it's in workspace-temp bucket)
+            const { data: signedUrlData } = await supabaseClient.storage
+              .from('workspace-temp')
+              .createSignedUrl(firstImageAsset.temp_storage_path, 3600); // 1 hour expiry
+
+            if (signedUrlData?.signedUrl) {
+              // Update character record
+              const { error: updateError } = await supabaseClient
+                .from('characters')
+                .update({
+                  image_url: signedUrlData.signedUrl,
+                  reference_image_url: signedUrlData.signedUrl,
+                  seed_locked: firstImageAsset.generation_seed,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', characterId);
+
+              if (updateError) {
+                console.error('Failed to update character image:', updateError);
+              } else {
+                console.log(`✅ Character ${characterId} image updated successfully`);
+              }
+            }
+          } catch (error) {
+            console.error('Error updating character image:', error);
+          }
+        }
+      }
     } else if (payload.status === 'failed') {
       console.log(`❌ Job ${jobId} failed:`, {
         errorMessage: errorMessage,

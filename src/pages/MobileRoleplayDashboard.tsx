@@ -9,7 +9,7 @@ import { Search, Filter, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
-import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
+
 
 const MobileRoleplayDashboard = () => {
   console.log('🎭 MobileRoleplayDashboard: Component loaded!');
@@ -19,10 +19,10 @@ const MobileRoleplayDashboard = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
 
   // ✅ REAL DATA: Use database characters instead of mock data
-  const { characters, isLoading, error } = usePublicCharacters();
+  const { characters, isLoading, error, loadPublicCharacters } = usePublicCharacters();
 
-  // ✅ REAL-TIME UPDATES: Listen for character image generation updates
-  useCharacterImageUpdates();
+
+
 
   // Transform database characters to display format
   const displayCharacters = characters.map(char => ({
