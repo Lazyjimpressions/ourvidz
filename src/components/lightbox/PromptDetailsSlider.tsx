@@ -108,15 +108,15 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
       <SheetTrigger asChild>
         {trigger}
       </SheetTrigger>
-      <SheetContent side="right" className="w-[400px] sm:w-[400px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
+      <SheetContent side="right" className="w-[380px] sm:w-[380px]">
+        <SheetHeader className="pb-3">
+          <SheetTitle className="flex items-center gap-2 text-base">
+            <Settings className="h-4 w-4" />
             Generation Details
           </SheetTitle>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="space-y-4">
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/30 border-t-primary"></div>
@@ -127,15 +127,16 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
             <>
               {/* Header with Copy All */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-muted-foreground" />
-                  <h4 className="font-medium text-sm">Generation Summary</h4>
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h4 className="font-medium text-xs">Generation Summary</h4>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={copyAllMetadata}
-                  className="h-7 text-xs"
+                  className="h-6 text-xs px-2"
+                  aria-label="Copy all metadata"
                 >
                   <Copy className="h-3 w-3 mr-1" />
                   Copy All
@@ -144,22 +145,22 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
 
               <Badge 
                 variant="outline" 
-                className={`w-fit ${getJobTypeBadgeVariant()}`}
+                className={`w-fit text-xs ${getJobTypeBadgeVariant()}`}
               >
                 {getJobTypeFormatted()}
               </Badge>
 
               {/* Template Name */}
               {details?.templateName && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-muted-foreground" />
-                    <h4 className="font-medium text-sm">Template</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h4 className="font-medium text-xs">Template</h4>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge 
                       variant="outline" 
-                      className="border-emerald-500/20 text-emerald-400"
+                      className="border-emerald-500/20 text-emerald-400 text-xs"
                     >
                       {details.templateName}
                     </Badge>
@@ -167,7 +168,8 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => copyToClipboard(details.templateName!, 'Template name')}
-                      className="h-6 w-6 p-0"
+                      className="h-5 w-5 p-0"
+                      aria-label="Copy template name"
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
@@ -175,27 +177,64 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                 </div>
               )}
 
+              {/* Style & Framing */}
+              {(details?.aspectRatio || details?.cameraAngle || details?.shotType || details?.style) && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Settings className="h-3.5 w-3.5 text-muted-foreground" />
+                    <h4 className="font-medium text-xs">Style & Framing</h4>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-xs">
+                    {details.aspectRatio && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Aspect:</span>
+                        <Badge variant="outline" className="text-xs">{details.aspectRatio}</Badge>
+                      </div>
+                    )}
+                    {details.cameraAngle && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Angle:</span>
+                        <Badge variant="outline" className="text-xs">{details.cameraAngle}</Badge>
+                      </div>
+                    )}
+                    {details.shotType && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Shot:</span>
+                        <Badge variant="outline" className="text-xs">{details.shotType}</Badge>
+                      </div>
+                    )}
+                    {details.style && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Style:</span>
+                        <Badge variant="outline" className="text-xs">{details.style}</Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Original Prompt */}
               {details?.originalPrompt && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="font-medium text-sm">Original Prompt</h4>
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                      <h4 className="font-medium text-xs">Original Prompt</h4>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setOriginalPromptExpanded(!originalPromptExpanded)}
-                      className="h-6 w-6 p-0"
+                      className="h-5 w-5 p-0"
+                      aria-label={originalPromptExpanded ? "Collapse original prompt" : "Expand original prompt"}
                     >
                       {originalPromptExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     </Button>
                   </div>
                   {originalPromptExpanded && (
                     <div className="relative">
-                      <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
-                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
+                      <div className="text-xs bg-muted/50 p-2 rounded border max-h-24 overflow-y-auto">
+                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-6">
                           {details.originalPrompt}
                         </p>
                       </div>
@@ -203,9 +242,10 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => copyToClipboard(details.originalPrompt!, 'Original prompt')}
-                        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                        className="absolute top-1 right-1 h-5 w-5 p-0 bg-background/80 hover:bg-background/90"
+                        aria-label="Copy original prompt"
                       >
-                        <Copy className="h-3 w-3" />
+                        <Copy className="h-2.5 w-2.5" />
                       </Button>
                     </div>
                   )}
@@ -214,25 +254,26 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
 
               {/* Enhanced Prompt */}
               {details?.enhancedPrompt && (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="h-4 w-4 text-muted-foreground" />
-                      <h4 className="font-medium text-sm">Enhanced Prompt</h4>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+                      <h4 className="font-medium text-xs">Enhanced Prompt</h4>
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setEnhancedPromptExpanded(!enhancedPromptExpanded)}
-                      className="h-6 w-6 p-0"
+                      className="h-5 w-5 p-0"
+                      aria-label={enhancedPromptExpanded ? "Collapse enhanced prompt" : "Expand enhanced prompt"}
                     >
                       {enhancedPromptExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                     </Button>
                   </div>
                   {enhancedPromptExpanded && (
                     <div className="relative">
-                      <div className="text-sm bg-muted/50 p-3 rounded-lg border max-h-32 overflow-y-auto">
-                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-8">
+                      <div className="text-xs bg-muted/50 p-2 rounded border max-h-24 overflow-y-auto">
+                        <p className="break-words leading-relaxed whitespace-pre-wrap pr-6">
                           {details.enhancedPrompt}
                         </p>
                       </div>
@@ -240,26 +281,27 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                         variant="ghost"
                         size="sm"
                         onClick={() => copyToClipboard(details.enhancedPrompt!, 'Enhanced prompt')}
-                        className="absolute top-2 right-2 h-6 w-6 p-0 bg-background/80 hover:bg-background/90"
+                        className="absolute top-1 right-1 h-5 w-5 p-0 bg-background/80 hover:bg-background/90"
+                        aria-label="Copy enhanced prompt"
                       >
-                        <Copy className="h-3 w-3" />
+                        <Copy className="h-2.5 w-2.5" />
                       </Button>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Verified i2i Settings */}
-              {(details?.referenceStrength || details?.denoiseStrength || details?.guidanceScale || details?.steps || details?.lockHair !== undefined || details?.exactCopyMode !== undefined) && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    <h4 className="font-medium text-sm">Verified i2i Settings</h4>
-                    <Badge variant="outline" className="text-xs border-emerald-500/20 text-emerald-400">
+              {/* Verified i2i Settings - Only show if referenceStrength exists (actual i2i job) */}
+              {details?.referenceStrength && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <h4 className="font-medium text-xs">Verified i2i Settings</h4>
+                    <Badge variant="outline" className="text-xs border-emerald-500/20 text-emerald-400 px-1.5 py-0.5">
                       from job log
                     </Badge>
                   </div>
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-1.5 text-xs">
                     {details.referenceMode && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Reference Mode:</span>
@@ -267,12 +309,10 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                       </div>
                     )}
                     
-                    {details.referenceStrength !== undefined && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Reference Strength:</span>
-                        <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Reference Strength:</span>
+                      <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
+                    </div>
 
                     {details.denoiseStrength !== undefined && (
                       <div className="flex items-center justify-between">
@@ -298,15 +338,16 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                     {details.seed && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Seed:</span>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs bg-muted px-2 py-1 rounded">{details.seed}</code>
+                        <div className="flex items-center gap-1">
+                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{details.seed}</code>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => copyToClipboard(details.seed!.toString(), 'Seed')}
-                            className="h-6 w-6 p-0"
+                            className="h-4 w-4 p-0"
+                            aria-label="Copy seed"
                           >
-                            <Copy className="h-3 w-3" />
+                            <Copy className="h-2.5 w-2.5" />
                           </Button>
                         </div>
                       </div>
@@ -315,7 +356,7 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                     {details.lockHair !== undefined && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Hair Lock:</span>
-                        <Badge variant={details.lockHair ? "default" : "secondary"} className="text-xs">
+                        <Badge variant={details.lockHair ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
                           {details.lockHair ? 'ON' : 'OFF'}
                         </Badge>
                       </div>
@@ -324,7 +365,7 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                     {details.exactCopyMode !== undefined && (
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Exact Copy Mode:</span>
-                        <Badge variant={details.exactCopyMode ? "default" : "secondary"} className="text-xs">
+                        <Badge variant={details.exactCopyMode ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
                           {details.exactCopyMode ? 'ON' : 'OFF'}
                         </Badge>
                       </div>
@@ -342,10 +383,10 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
 
               {/* No Details Message */}
               {!loading && !details && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No generation details available</p>
-                  <p className="text-xs mt-1">This asset may have been imported or generated externally</p>
+                <div className="text-center py-6 text-muted-foreground">
+                  <FileText className="h-6 w-6 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs">No generation details available</p>
+                  <p className="text-xs mt-1 opacity-75">This asset may have been imported or generated externally</p>
                 </div>
               )}
             </>

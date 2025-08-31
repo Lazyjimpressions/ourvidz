@@ -18,6 +18,11 @@ interface ImageDetails {
   lockHair?: boolean;
   exactCopyMode?: boolean;
   referenceMode?: string;
+  // control box settings
+  aspectRatio?: string;
+  cameraAngle?: string;
+  shotType?: string;
+  style?: string;
 }
 
 export const useFetchImageDetails = () => {
@@ -104,7 +109,12 @@ export const useFetchImageDetails = () => {
           steps: settings?.steps || settings?.num_inference_steps,
           lockHair: settings?.lock_hair || settings?.lockHair,
           exactCopyMode: settings?.exact_copy_mode || settings?.exactCopyMode,
-          referenceMode: settings?.reference_mode || settings?.referenceMode
+          referenceMode: settings?.reference_mode || settings?.referenceMode,
+          // control box settings
+          aspectRatio: settings?.aspect_ratio || settings?.aspectRatio,
+          cameraAngle: settings?.camera_angle || settings?.cameraAngle,
+          shotType: settings?.shot_type || settings?.shotType,
+          style: settings?.style
         });
         return;
       }

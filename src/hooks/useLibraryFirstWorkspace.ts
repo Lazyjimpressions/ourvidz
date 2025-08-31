@@ -665,7 +665,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // Skip enhancement in exact copy mode or for replicate models
             user_requested_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? false : (enhancementModel !== 'none'),
             skip_enhancement: exactCopyMode || selectedModel?.type === 'replicate' ? true : (enhancementModel === 'none'),
-            // Add reference mode and entry path for server classification
+            // Add reference mode and entry path for server classification  
             reference_mode: exactCopyMode ? 'copy' : (effRefUrl ? 'modify' : undefined),
             reference_type: effRefUrl ? referenceType : undefined, // Pass reference type
             exact_copy_mode: exactCopyMode,
@@ -696,27 +696,40 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
               }
             };
           } else {
-            // Modify mode parameters - CRITICAL: set denoise_strength for i2i
-            return {
-              ...baseMetadata,
-              num_inference_steps: steps || 25,
-              guidance_scale: guidanceScale || 6,
-              denoise_strength: 1 - computedReferenceStrength,
-              negative_prompt: negativePrompt || undefined,
-              exact_copy_mode: false, // Ensure modify mode
-              reference_mode: 'modify', // Explicit modify mode
-              reference_type: referenceType,
-              // Add reference profile for metadata preservation
-              reference_profile: {
-                type: referenceType,
-                reference_strength: computedReferenceStrength,
-                denoise_strength: 1 - computedReferenceStrength,
+            // FIXED: Only use I2I parameters when reference image exists
+            if (effRefUrl) {
+              // Modify mode parameters - set I2I parameters for reference image modifications
+              return {
+                ...baseMetadata,
+                num_inference_steps: steps || 25,
                 guidance_scale: guidanceScale || 6,
-                steps: steps || 25,
-                seed_locked: lockSeed,
+                denoise_strength: 1 - computedReferenceStrength,
+                negative_prompt: negativePrompt || undefined,
+                exact_copy_mode: false,
+                reference_mode: 'modify', // Only set when reference image exists
+                reference_type: referenceType,
+                // Add reference profile for metadata preservation
+                reference_profile: {
+                  type: referenceType,
+                  reference_strength: computedReferenceStrength,
+                  denoise_strength: 1 - computedReferenceStrength,
+                  guidance_scale: guidanceScale || 6,
+                  steps: steps || 25,
+                  seed_locked: lockSeed,
+                  exact_copy_mode: false
+                }
+              };
+            } else {
+              // Text-to-image mode parameters - no I2I parameters
+              return {
+                ...baseMetadata,
+                num_inference_steps: steps || 25,
+                guidance_scale: guidanceScale || 7.5, // Standard CFG for txt2img
+                negative_prompt: negativePrompt || undefined,
                 exact_copy_mode: false
-              }
-            };
+                // No reference_mode, reference_type, or I2I parameters
+              };
+            }
           }
         })()
       };
