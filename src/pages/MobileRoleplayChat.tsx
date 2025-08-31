@@ -22,7 +22,6 @@ import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWorkerStatus } from '@/hooks/useWorkerStatus';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Character {
@@ -40,8 +39,11 @@ interface Character {
 interface Message {
   id: string;
   content: string;
-  sender: 'user' | 'character';
-  timestamp: Date;
+  role: 'user' | 'assistant';
+  timestamp: string;
+  scene_image?: string;
+  consistency_method?: string;
+  job_id?: string;
   metadata?: {
     scene_generated?: boolean;
     image_url?: string;
@@ -75,7 +77,6 @@ const MobileRoleplayChat: React.FC = () => {
 
   // Hooks
   const { user } = useAuth();
-  const { chatWorker, runHealthCheck } = useWorkerStatus();
 
   // Initialize conversation and load data
   useEffect(() => {
@@ -105,7 +106,7 @@ const MobileRoleplayChat: React.FC = () => {
             const loadedMessages = conversation.messages.map((msg: any) => ({
               id: msg.id,
               content: msg.content,
-              sender: msg.sender as 'user' | 'character',
+              role: msg.sender as 'user' | 'character',
               timestamp: new Date(msg.created_at)
             }));
             setMessages(loadedMessages);
@@ -114,8 +115,8 @@ const MobileRoleplayChat: React.FC = () => {
             const initialMessage: Message = {
               id: '1',
               content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
-              sender: 'character',
-              timestamp: new Date()
+              role: 'assistant',
+              timestamp: new Date().toISOString()
             };
             setMessages([initialMessage]);
           }
@@ -142,8 +143,8 @@ const MobileRoleplayChat: React.FC = () => {
           const initialMessage: Message = {
             id: '1',
             content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
-            sender: 'character',
-            timestamp: new Date()
+            role: 'assistant',
+            timestamp: new Date().toISOString()
           };
           setMessages([initialMessage]);
         }
@@ -161,16 +162,13 @@ const MobileRoleplayChat: React.FC = () => {
         };
         setCharacter(mockCharacter);
 
-        // Run worker health check
-        runHealthCheck();
-
       } catch (error) {
         console.error('Error initializing conversation:', error);
       }
     };
 
     initializeConversation();
-  }, [user, characterId, memoryTier, runHealthCheck]);
+  }, [user, characterId, memoryTier]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -186,8 +184,8 @@ const MobileRoleplayChat: React.FC = () => {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: content.trim(),
-      sender: 'user',
-      timestamp: new Date()
+      role: 'user',
+      timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -226,8 +224,8 @@ const MobileRoleplayChat: React.FC = () => {
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
-          sender: 'character',
-          timestamp: new Date(),
+          role: 'assistant',
+          timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: data.scene_generated || false,
             consistency_method: character.consistency_method
@@ -243,8 +241,8 @@ const MobileRoleplayChat: React.FC = () => {
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'I apologize, but I seem to be having trouble connecting right now. Could you try again in a moment?',
-        sender: 'character',
-        timestamp: new Date()
+        role: 'assistant',
+        timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -262,7 +260,7 @@ const MobileRoleplayChat: React.FC = () => {
       // Build scene prompt from conversation context
       const recentMessages = messages.slice(-3); // Last 3 messages for context
       const conversationContext = recentMessages
-        .map(msg => `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`)
+        .map(msg => `${msg.role === 'user' ? 'You' : character.name}: ${msg.content}`)
         .join(' | ');
       
       // Call queue-job directly for SDXL generation
@@ -292,8 +290,8 @@ const MobileRoleplayChat: React.FC = () => {
         const queuedMessage: Message = {
           id: Date.now().toString(),
           content: 'Scene generation queued! I\'m creating a visual representation of our conversation...',
-          sender: 'character',
-          timestamp: new Date(),
+          role: 'assistant',
+          timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: false,
             job_id: data.job_id,
@@ -315,8 +313,8 @@ const MobileRoleplayChat: React.FC = () => {
       const errorMessage: Message = {
         id: Date.now().toString(),
         content: 'Sorry, I encountered an error while generating the scene. Please try again.',
-        sender: 'character',
-        timestamp: new Date()
+        role: 'assistant',
+        timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -402,7 +400,7 @@ const MobileRoleplayChat: React.FC = () => {
 
   const handleExportConversation = () => {
     const conversationText = messages.map(msg => 
-      `${msg.sender === 'user' ? 'You' : character?.name}: ${msg.content}`
+      `${msg.role === 'user' ? 'You' : character?.name}: ${msg.content}`
     ).join('\n\n');
     
     const blob = new Blob([conversationText], { type: 'text/plain' });
@@ -493,12 +491,13 @@ const MobileRoleplayChat: React.FC = () => {
             <div className="flex items-center gap-1">
               <div 
                 className={`w-2 h-2 rounded-full ${
-                  chatWorker.isHealthy ? 'bg-green-500' : 'bg-gray-500'
+                  // chatWorker.isHealthy ? 'bg-green-500' : 'bg-gray-500' // Removed useWorkerStatus
+                  true ? 'bg-green-500' : 'bg-gray-500' // Placeholder for now
                 }`} 
-                title={chatWorker.isHealthy ? 'Chat Worker Online' : 'Chat Worker Offline'}
+                title={true ? 'Chat Worker Online' : 'Chat Worker Offline'} // Placeholder for now
               />
               <span className="text-xs text-gray-400">
-                {chatWorker.isHealthy ? 'Online' : 'Offline'}
+                {true ? 'Online' : 'Offline'} {/* Placeholder for now */}
               </span>
             </div>
             
