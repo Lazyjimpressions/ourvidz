@@ -159,6 +159,19 @@ export const SimplifiedWorkspace: React.FC = () => {
     }
   }, [location.search, mode, updateMode]);
 
+  // Handle mode change with URL update
+  const handleModeChange = (newMode: 'image' | 'video') => {
+    if (newMode !== mode) {
+      // Update local state
+      updateMode(newMode);
+      
+      // Update URL parameter
+      const params = new URLSearchParams(location.search);
+      params.set('mode', newMode);
+      navigate(`${location.pathname}?${params.toString()}`, { replace: true });
+    }
+  };
+
   // Handle incoming reference image from library - prevent re-processing
   useEffect(() => {
     console.log('🖼️ Workspace: Checking location.state:', location.state);
@@ -462,7 +475,7 @@ export const SimplifiedWorkspace: React.FC = () => {
               prompt={prompt}
               onPromptChange={setPrompt}
               mode={mode}
-              onModeChange={updateMode}
+              onModeChange={handleModeChange}
               contentType={contentType}
               onContentTypeChange={setContentType}
               quality={quality}
