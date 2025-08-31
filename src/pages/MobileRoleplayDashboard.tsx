@@ -8,6 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useCharacterImageUpdates } from '@/hooks/useCharacterImageUpdates';
 
 const MobileRoleplayDashboard = () => {
   console.log('🎭 MobileRoleplayDashboard: Component loaded!');
@@ -16,15 +18,31 @@ const MobileRoleplayDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
 
-  // Mock data for demonstration - replace with actual data fetching
-  const [characters, setCharacters] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // ✅ REAL DATA: Use database characters instead of mock data
+  const { characters, isLoading, error } = usePublicCharacters();
 
-  useEffect(() => {
-    // TODO: Replace with actual data fetching
-    // fetchCharacters();
-    setLoading(false);
-  }, []);
+  // ✅ REAL-TIME UPDATES: Listen for character image generation updates
+  useCharacterImageUpdates();
+
+  // Transform database characters to display format
+  const displayCharacters = characters.map(char => ({
+    id: char.id,
+    name: char.name,
+    description: char.description,
+    image_url: char.image_url,
+    preview_image_url: char.reference_image_url || char.image_url, // Use reference_image_url as preview
+    quick_start: char.interaction_count > 50, // Popular characters as quick start
+    category: char.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
+    consistency_method: char.consistency_method || 'i2i_reference',
+    interaction_count: char.interaction_count,
+    likes_count: char.likes_count,
+    content_rating: char.content_rating,
+    gender: char.gender,
+    role: char.role,
+    appearance_tags: char.appearance_tags,
+    traits: char.traits,
+    persona: char.persona
+  }));
 
   const handleCharacterSelect = (characterId: string) => {
     navigate(`/roleplay/chat/${characterId}`);
@@ -39,18 +57,39 @@ const MobileRoleplayDashboard = () => {
     navigate('/roleplay/create');
   };
 
-  const filteredCharacters = characters.filter((character: any) => {
+  const filteredCharacters = displayCharacters.filter((character: any) => {
     const matchesSearch = character.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          character.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter = selectedFilter === 'all' || character.category === selectedFilter;
     return matchesSearch && matchesFilter;
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <OurVidzDashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-white">Loading characters...</div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
+            <p className="text-gray-400 mt-2">Loading characters...</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="aspect-square bg-card border border-border rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </OurVidzDashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <OurVidzDashboardLayout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
+            <p className="text-red-400 mt-2">Error loading characters: {error}</p>
+          </div>
         </div>
       </OurVidzDashboardLayout>
     );
@@ -61,20 +100,8 @@ const MobileRoleplayDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header Section */}
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
-              <p className="text-gray-400 mt-2">Chat with AI characters and generate scenes</p>
-            </div>
-            <Button 
-              onClick={handleCreateCharacter}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-              size={isMobile ? "sm" : "default"}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {isMobile ? "Create" : "Create Character"}
-            </Button>
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
+          <p className="text-gray-400 mt-2">Chat with AI characters and generate scenes</p>
         </div>
         
         {/* Quick Start Section */}
@@ -83,9 +110,9 @@ const MobileRoleplayDashboard = () => {
         {/* Search and Filters */}
         <SearchAndFilters 
           searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
+          setSearchQuery={setSearchQuery}
           selectedFilter={selectedFilter}
-          onFilterChange={setSelectedFilter}
+          setSelectedFilter={setSelectedFilter}
         />
         
         {/* Character Grid */}
@@ -95,23 +122,16 @@ const MobileRoleplayDashboard = () => {
           onCharacterPreview={handleCharacterPreview}
         />
 
-        {/* Empty State */}
-        {filteredCharacters.length === 0 && !loading && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-lg mb-4">
-              {searchQuery ? 'No characters found matching your search.' : 'No characters available.'}
-            </div>
-            {searchQuery && (
-              <Button 
-                variant="outline" 
-                onClick={() => setSearchQuery('')}
-                className="text-white border-gray-600 hover:bg-gray-800"
-              >
-                Clear Search
-              </Button>
-            )}
-          </div>
-        )}
+        {/* Create Character Button */}
+        <div className="mt-8 text-center">
+          <Button 
+            onClick={handleCreateCharacter}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Create Character
+          </Button>
+        </div>
       </div>
     </OurVidzDashboardLayout>
   );

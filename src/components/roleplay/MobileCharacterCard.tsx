@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Eye, Play } from 'lucide-react';
+import { Eye, Play, Sparkles, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { CharacterImageService } from '@/services/CharacterImageService';
 
 interface Character {
   id: string;
@@ -11,6 +14,9 @@ interface Character {
   quick_start?: boolean;
   category?: string;
   consistency_method?: string;
+  appearance_tags?: string[];
+  traits?: string;
+  persona?: string;
 }
 
 interface MobileCharacterCardProps {
@@ -26,6 +32,8 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
 }) => {
   const { isMobile, isTouchDevice } = useMobileDetection();
   const [isPressed, setIsPressed] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
 
   const handleTouchStart = () => {
     if (isTouchDevice) {
@@ -42,6 +50,45 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const handlePreview = (e: React.MouseEvent) => {
     e.stopPropagation();
     onPreview();
+  };
+
+  const generateCharacterImage = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (isGenerating) return;
+    
+    setIsGenerating(true);
+    
+    try {
+      const result = await CharacterImageService.generateCharacterPortrait({
+        characterId: character.id,
+        characterName: character.name,
+        description: character.description,
+        appearanceTags: character.appearance_tags,
+        traits: character.traits,
+        persona: character.persona,
+        consistencyMethod: character.consistency_method
+      });
+
+      if (result.success) {
+        toast({
+          title: "Image Generation Started",
+          description: result.message,
+        });
+      } else {
+        throw new Error(result.error);
+      }
+      
+    } catch (error) {
+      console.error('Error generating character image:', error);
+      toast({
+        title: "Generation Failed",
+        description: "Failed to generate character image. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const imageUrl = character.preview_image_url || character.image_url;
@@ -68,12 +115,21 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     >
       {/* Character Image */}
       <div className="relative w-full h-full">
-        <img 
-          src={imageUrl} 
-          alt={character.name}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
+        {imageUrl ? (
+          <img 
+            src={imageUrl} 
+            alt={character.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+            <div className="text-center text-gray-400">
+              <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-xs">No Image</p>
+            </div>
+          </div>
+        )}
         
         {/* Quick Start Badge */}
         {character.quick_start && (
@@ -89,50 +145,67 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
              character.consistency_method === 'ip_adapter' ? '90%' : '40%'}
           </div>
         )}
+
+        {/* Generate Image Button */}
+        {!imageUrl && (
+          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+            <Button
+              onClick={generateCharacterImage}
+              disabled={isGenerating}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs"
+              size="sm"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3 h-3 mr-1" />
+                  Generate Image
+                </>
+              )}
+            </Button>
+          </div>
+        )}
         
         {/* Overlay Actions */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors">
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+            <h3 className="text-white font-semibold">{character.name}</h3>
+            <p className="text-white/80 text-sm line-clamp-2">{character.description}</p>
+          </div>
+          
           {/* Action Buttons */}
-          <div className="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
+          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
               onClick={handlePreview}
-              className="bg-black/70 hover:bg-black/90 text-white p-2 rounded-full transition-colors"
-              title="Preview Character"
+              size="sm"
+              variant="secondary"
+              className="w-8 h-8 p-0 bg-black/50 hover:bg-black/70 text-white"
             >
-              <Eye className="w-4 h-4" />
-            </button>
+              <Eye className="w-3 h-3" />
+            </Button>
+            
+            {/* Generate Image Button (when image exists) */}
+            {imageUrl && (
+              <Button
+                onClick={generateCharacterImage}
+                disabled={isGenerating}
+                size="sm"
+                variant="secondary"
+                className="w-8 h-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+                title="Regenerate Image"
+              >
+                {isGenerating ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3 h-3" />
+                )}
+              </Button>
+            )}
           </div>
-
-          {/* Character Info */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="text-white font-semibold text-sm sm:text-base line-clamp-1">
-                  {character.name}
-                </h3>
-                <p className="text-white/80 text-xs sm:text-sm line-clamp-2 mt-1">
-                  {character.description}
-                </p>
-              </div>
-              <div className="ml-2">
-                <Play className="w-4 h-4 text-white/80" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Category Badge */}
-        {character.category && (
-          <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-            {character.category}
-          </div>
-        )}
-      </div>
-
-      {/* Loading State */}
-      <div className="absolute inset-0 bg-gray-800 animate-pulse opacity-0 group-hover:opacity-0">
-        <div className="flex items-center justify-center h-full">
-          <div className="text-white text-sm">Loading...</div>
         </div>
       </div>
     </div>
