@@ -1,17 +1,20 @@
 # Worker API Documentation
 
-**Last Updated:** 8/16/25
+**Last Updated:** August 31, 2025
 
 ## System Overview
 
-The `ourvidz-worker` repository manages a comprehensive AI content generation system with three specialized workers orchestrated by a central memory management system. This document provides the frontend AI with complete context of all active workers, Python files, APIs, and system architecture.
+The `ourvidz-worker` repository manages a **pure inference AI content generation system** with three specialized workers that execute exactly what's provided by edge functions. This document provides the frontend AI with complete context of all active workers, Python files, APIs, and system architecture.
+
+### Architecture Philosophy
+**"Workers are dumb execution engines. All intelligence lives in the edge function."**
 
 ### Architecture Components
 
-#### Core Workers
-1. **SDXL Worker** (`sdxl_worker.py`) - High-quality image generation using Stable Diffusion XL with batch processing
-2. **Enhanced Chat Worker** (`chat_worker.py`) - AI conversation and intelligent prompt enhancement using Qwen Instruct
-3. **WAN Worker** (`wan_worker.py`) - Video generation and enhanced image processing using WAN 2.1 with comprehensive reference frame support
+#### Core Workers (Pure Inference)
+1. **SDXL Worker** (`sdxl_worker.py`) - Pure image generation using Stable Diffusion XL with batch processing and I2I pipeline
+2. **Chat Worker** (`chat_worker.py`) - Pure inference for chat and enhancement using Qwen models
+3. **WAN Worker** (`wan_worker.py`) - Pure video generation using WAN 2.1 with reference frame support and I2I pipeline
 
 #### System Management
 - **Triple Orchestrator** (`dual_orchestrator.py`) - Central job distribution and worker coordination
@@ -19,8 +22,8 @@ The `ourvidz-worker` repository manages a comprehensive AI content generation sy
 - **Worker Registration** (`worker_registration.py`) - Dynamic worker discovery and registration
 
 #### Infrastructure
-- **Redis Job Queues** - `sdxl_queue`, `wan_queue` (chat bypasses Redis)
-- **HTTP APIs** - RESTful endpoints for each worker and system management
+- **Redis Job Queues** - `sdxl_queue`, `chat_queue`, `wan_queue` for job distribution
+- **Flask HTTP APIs** - RESTful endpoints for each worker and system management
 - **Callback System** - Standardized job status reporting via `POST /functions/v1/job-callback`
 
 ### File Structure
@@ -28,9 +31,13 @@ The `ourvidz-worker` repository manages a comprehensive AI content generation sy
 ```
 ourvidz-worker/
 ├── Core Workers/
-│   ├── sdxl_worker.py          # SDXL image generation worker
-│   ├── chat_worker.py          # Enhanced chat and prompt enhancement
-│   └── wan_worker.py           # WAN video and image processing
+│   ├── sdxl_worker.py          # Pure SDXL image generation
+│   ├── chat_worker.py          # Pure chat and enhancement inference
+│   └── wan_worker.py           # Pure WAN video generation
+├── Configuration/
+│   ├── worker_configs.py       # Worker configuration templates
+│   ├── validation_schemas.py   # Request validation schemas
+│   └── CONFIGURATION_APPROACH.md # Configuration philosophy
 ├── System Management/
 │   ├── dual_orchestrator.py    # Central job orchestrator
 │   ├── memory_manager.py       # VRAM and worker management
@@ -49,73 +56,213 @@ ourvidz-worker/
     └── [Historical documentation and test files]
 ```
 
-## Enhanced Chat Worker
+## Environment and Dependencies
 
-### Overview
-The Enhanced Chat Worker provides AI conversation capabilities and intelligent prompt enhancement with NSFW optimization, dynamic system prompts, and performance optimization using Qwen 2.5-7B Instruct.
+### **📦 Dependency Management**
+**Path Structure**: Dependencies are pre-installed in persistent `/workspace` storage
+```bash
+/workspace/python_deps/
+└── lib/
+    └── python3.11/
+        └── site-packages/
+            ├── cv2/                    # OpenCV-Python module
+            ├── torch/                   # PyTorch
+            ├── transformers/            # Transformers
+            ├── diffusers/              # Diffusers
+            ├── flask/                  # Flask
+            ├── PIL/                    # Pillow
+            ├── numpy/                  # NumPy
+            ├── requests/               # Requests
+            └── ... (other packages)
+```
 
-### API Endpoints
+**Environment Configuration**:
+- `PYTHONPATH=/workspace/python_deps/lib/python3.11/site-packages`
+- Set in `startup.sh` for all workers
+- Persistent across pod restarts on RunPod
 
-#### Primary Chat Endpoints
+**Key Dependencies**:
+- **OpenCV-Python 4.10.0.84**: Available for video processing and thumbnail generation
+- **PyTorch 2.4.1+cu124**: Stable version for all ML operations
+- **Flask 3.0.2**: HTTP APIs for worker communication
+- **Pillow 10.4.0**: Image processing and thumbnail generation
+
+**Usage in Workers**:
+```python
+import sys
+sys.path.insert(0, "/workspace/python_deps/lib/python3.11/site-packages")
+import cv2  # Available for video processing
+```
+
+## Core Workers (Pure Inference)
+
+### Chat Worker (Pure Inference Engine)
+
+#### Overview
+The Chat Worker provides **pure inference** for AI conversation and prompt enhancement using Qwen 2.5-7B models. All system prompts and enhancement logic are provided by the edge function - the worker executes exactly what's requested.
+
+**Key Architecture Features:**
+- **Pure Inference Engine:** No hardcoded prompts or logic
+- **Dual Model Support:** Qwen 2.5-7B Instruct (primary) + Base (enhancement)
+- **Auto-Registration:** Detects RunPod URL and registers with Supabase
+- **Memory Management:** Smart loading/unloading with 15GB VRAM requirement
+- **Health Monitoring:** Comprehensive status endpoints
+
+**Model Architecture:**
+- **Qwen 2.5-7B Instruct:** Primary model for chat and enhancement (safety-tuned)
+- **Qwen 2.5-7B Base:** Secondary model for enhanced jobs (no extra safety)
+- **Model Paths:** `/workspace/models/huggingface_cache/models--Qwen--Qwen2.5-7B-Instruct/`
+- **Device Management:** Automatic CUDA device allocation and pinning
+
+#### API Endpoints
 
 **POST /chat** - Chat Conversation
 ```json
 {
-  "prompt": "User message",
-  "config": {
-    "system_prompt": "Optional custom system prompt",
-    "job_type": "chat_conversation",
-    "quality": "high"
+  "messages": [
+    {
+      "role": "system",
+      "content": "System prompt from edge function"
+    },
+    {
+      "role": "user",
+      "content": "User message"
+    }
+  ],
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "model": "qwen_instruct|qwen_base",
+  "sfw_mode": false
+}
+```
+
+**POST /enhance** - Pure Enhancement Inference
+```json
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Enhancement system prompt from edge function"
+    },
+    {
+      "role": "user", 
+      "content": "Original prompt to enhance"
+    }
+  ],
+  "max_tokens": 200,
+  "temperature": 0.7,
+  "model": "qwen_instruct|qwen_base"
+}
+```
+
+**POST /generate** - Generic Inference
+```json
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "System prompt from edge function"
+    },
+    {
+      "role": "user",
+      "content": "User input"
+    }
+  ],
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "top_p": 0.9,
+  "model": "qwen_instruct|qwen_base",
+  "sfw_mode": false
+}
+```
+
+**GET /health** - Health Check
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "uptime": 3600.5,
+  "stats": {
+    "requests_served": 150,
+    "model_loads": 2,
+    "sfw_requests": 25,
+    "base_model_uses": 10,
+    "instruct_model_uses": 140
   },
-  "metadata": {
-    "unrestricted_mode": false,
-    "nsfw_optimization": true
+  "worker_type": "pure_inference_engine",
+  "no_hardcoded_prompts": true
+}
+```
+
+**GET /worker/info** - Worker Information
+```json
+{
+  "worker_type": "pure_inference_engine",
+  "model": "Qwen2.5-7B-Instruct",
+  "capabilities": {
+    "chat": true,
+    "enhancement": true,
+    "generation": true,
+    "hardcoded_prompts": false,
+    "prompt_modification": false,
+    "pure_inference": true
+  },
+  "models_loaded": {
+    "instruct_loaded": true,
+    "base_loaded": false,
+    "active_model_type": "instruct"
+  },
+  "model_paths": {
+    "instruct": "/workspace/models/huggingface_cache/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28",
+    "base": "/workspace/models/huggingface_cache/hub/models--Qwen--Qwen2.5-7B/snapshots/d149729398750b98c0af14eb82c78cfe92750796"
+  },
+  "endpoints": {
+    "/chat": "POST - Chat inference with messages array",
+    "/enhance": "POST - Enhancement inference with messages array",
+    "/generate": "POST - Generic inference with messages array",
+    "/health": "GET - Health check",
+    "/worker/info": "GET - This information",
+    "/debug/model": "GET - Current model/debug status"
+  },
+  "message_format": {
+    "required": ["messages"],
+    "optional": ["max_tokens", "temperature", "top_p", "sfw_mode", "model"],
+    "example": {
+      "messages": [
+        {"role": "system", "content": "System prompt from edge function"},
+        {"role": "user", "content": "User message"}
+      ],
+      "max_tokens": 512,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "sfw_mode": false,
+      "model": "qwen_instruct"
+    }
   }
 }
 ```
 
-**POST /chat/unrestricted** - Unrestricted Mode Chat
+**GET /debug/model** - Model Debug Information
 ```json
 {
-  "prompt": "Adult content request",
-  "config": {
-    "system_prompt": "NSFW-optimized system prompt",
-    "job_type": "chat_unrestricted",
-    "quality": "high"
+  "active_model_type": "instruct",
+  "instruct_loaded": true,
+  "base_loaded": false,
+  "paths": {
+    "instruct": "/workspace/models/huggingface_cache/models--Qwen--Qwen2.5-7B-Instruct/snapshots/a09a35458c702b33eeacc393d103063234e8bc28",
+    "base": "/workspace/models/huggingface_cache/hub/models--Qwen--Qwen2.5-7B/snapshots/d149729398750b98c0af14eb82c78cfe92750796"
   },
-  "metadata": {
-    "unrestricted_mode": true,
-    "nsfw_optimization": true
-  }
-}
-```
-
-#### Enhancement Endpoints
-
-**POST /enhance** - Simple Prompt Enhancement
-```json
-{
-  "prompt": "Original prompt",
-  "config": {
-    "job_type": "sdxl_image_fast|sdxl_image_high|image_fast|image_high|video_fast|video_high",
-    "quality": "high|medium|low"
+  "devices": {
+    "instruct": "cuda:0",
+    "base": null
   },
-  "metadata": {
-    "nsfw_optimization": true,
-    "anatomical_accuracy": true
-  }
-}
-```
-
-**GET /enhancement/info** - Enhancement System Info
-```json
-{
-  "enhancement_system": "Direct Qwen Instruct Enhancement",
-  "supported_job_types": ["sdxl_image_fast", "sdxl_image_high", "image_fast", "image_high", "video_fast", "video_high"],
-  "model_info": {
-    "model_name": "Qwen2.5-7B-Instruct",
-    "model_loaded": true,
-    "enhancement_method": "Direct Qwen Instruct with dynamic prompts"
+  "stats": {
+    "requests_served": 150,
+    "model_loads": 2,
+    "sfw_requests": 25,
+    "base_model_uses": 10,
+    "instruct_model_uses": 140
   }
 }
 ```
@@ -123,16 +270,20 @@ The Enhanced Chat Worker provides AI conversation capabilities and intelligent p
 **GET /memory/status** - Memory Status
 ```json
 {
+  "total_vram": 48.0,
+  "allocated_vram": 15.2,
+  "available_vram": 32.8,
   "model_loaded": true,
-  "memory_usage": "15GB",
-  "device": "cuda:0",
-  "compilation_status": "compiled"
+  "instruct_loaded": true,
+  "base_loaded": false,
+  "instruct_device": "cuda:0"
 }
 ```
 
 **POST /memory/load** - Load Model
 ```json
 {
+  "which": "instruct|base|all",
   "force": false
 }
 ```
@@ -140,34 +291,55 @@ The Enhanced Chat Worker provides AI conversation capabilities and intelligent p
 **POST /memory/unload** - Unload Model
 ```json
 {
-  "force": false
+  "which": "instruct|base|all"
 }
 ```
 
-### Enhanced Chat Job Payload
+#### Auto-Registration Process
+The Chat Worker automatically registers itself with Supabase on startup:
+
+1. **URL Detection:** Detects `RUNPOD_POD_ID` environment variable
+2. **URL Construction:** Creates `https://{pod_id}-7861.proxy.runpod.net`
+3. **Registration:** Calls `register-chat-worker` edge function with:
 ```json
 {
-  "worker_id": "chat_worker_001",
-  "job_id": "chat_job_123",
-  "prompt": "User input",
-  "config": {
-    "system_prompt": "Custom system prompt",
-    "job_type": "chat_conversation|chat_enhance|chat_unrestricted|admin_utilities",
-    "quality": "high|medium|low"
+  "worker_url": "https://{pod_id}-7861.proxy.runpod.net",
+  "auto_registered": true,
+  "registration_method": "pure_inference_chat_worker",
+  "worker_type": "pure_inference_engine",
+  "capabilities": {
+    "hardcoded_prompts": false,
+    "prompt_modification": false,
+    "pure_inference": true
   },
-  "metadata": {
-    "unrestricted_mode": false,
-    "nsfw_optimization": true,
-    "user_id": "user_123",
-    "session_id": "session_456"
-  }
+  "timestamp": "2025-08-31T10:00:00Z"
 }
 ```
 
-## SDXL Worker
+#### Performance Characteristics
+- **Chat Enhancement:** 1-3 seconds (direct inference)
+- **Chat Conversation:** 5-15 seconds (dynamic prompts)
+- **Model Loading:** 15GB VRAM required for Qwen Instruct
+- **Memory Management:** Automatic cleanup and validation
+- **PyTorch 2.0 Compilation:** Performance optimization when available
+
+## SDXL Worker (Pure Inference)
 
 ### Overview
-High-quality image generation using Stable Diffusion XL with NSFW optimization, anatomical accuracy focus, and batch processing support (1, 3, or 6 images per request).
+Pure image generation using Stable Diffusion XL with batch processing support (1, 3, or 6 images per request) and comprehensive Image-to-Image (I2I) pipeline. Receives complete parameters from edge function and executes exactly what's provided.
+
+### I2I Pipeline Features
+- **StableDiffusionXLImg2ImgPipeline**: First-class I2I support using dedicated pipeline
+- **Two Explicit Modes**:
+  - **Promptless Exact Copy**: `denoise_strength ≤ 0.05`, `guidance_scale = 1.0`, `steps = 6-10`, `negative_prompt = ''`
+  - **Reference Modify**: `denoise_strength = 0.10-0.25`, `guidance_scale = 4-7`, `steps = 15-30`
+- **Parameter Clamping**: Worker-side guards ensure consistent behavior
+- **Backward Compatibility**: `reference_strength` automatically converted to `denoise_strength = 1 - reference_strength`
+
+### Thumbnail Generation
+- **256px WEBP Thumbnails**: Generated for each image (longest edge 256px, preserve aspect ratio)
+- **Storage**: Both original and thumbnail uploaded to `workspace-temp`
+- **Callback Format**: Includes both `url` and `thumbnail_url` for each asset
 
 ### API Endpoints
 
@@ -186,39 +358,74 @@ High-quality image generation using Stable Diffusion XL with NSFW optimization, 
   "worker_type": "sdxl",
   "model": "lustifySDXLNSFWSFW_v20.safetensors",
   "batch_support": [1, 3, 6],
-  "quality_tiers": ["fast", "high"]
+  "quality_tiers": ["fast", "high"],
+  "i2i_pipeline": "StableDiffusionXLImg2ImgPipeline",
+  "thumbnail_generation": true
 }
 ```
 
-### SDXL Job Payload
+### SDXL Pure Inference Payload
 ```json
 {
-  "worker_id": "sdxl_worker_001",
-  "job_id": "sdxl_job_123",
-  "prompt": "Enhanced prompt",
+  "id": "sdxl_job_123",
+  "type": "sdxl_image_fast|sdxl_image_high",
+  "prompt": "Complete prompt from edge function",
+  "user_id": "user_123",
   "config": {
-    "job_type": "sdxl_image_fast|sdxl_image_high",
-    "width": 1024,
-    "height": 1024,
-    "steps": 15,
-    "guidance_scale": 7.5,
-    "seed": 42,
-    "negative_prompt": "Optional negative prompt",
-    "batch_size": 1
+    "num_images": 1|3|6,
+    "steps": 10-50,
+    "guidance_scale": 1.0-20.0,
+    "resolution": "1024x1024",
+    "seed": 0-2147483647,
+    "negative_prompt": "Optional negative prompt"
   },
   "metadata": {
-    "nsfw_optimization": true,
-    "anatomical_accuracy": true,
-    "user_id": "user_123",
-    "reference_image_url": "Optional reference image"
-  }
+    "reference_image_url": "Optional reference image URL",
+    "denoise_strength": 0.0-1.0,
+    "exact_copy_mode": false,
+    "reference_type": "style|composition|character"
+  },
+  "compel_enabled": boolean,
+  "compel_weights": "Optional Compel weights"
 }
 ```
 
-## WAN Worker
+### I2I Generation Modes
+
+#### Promptless Exact Copy Mode
+- **Trigger**: `exact_copy_mode: true` with empty prompt
+- **Parameters**:
+  - `denoise_strength`: Clamped to ≤ 0.05
+  - `guidance_scale`: Fixed at 1.0
+  - `steps`: 6-10 (based on denoise_strength)
+  - `negative_prompt`: Omitted
+- **Use Case**: Upload reference image for exact copy with minimal modification
+
+#### Reference Modify Mode
+- **Trigger**: `exact_copy_mode: false` or not specified
+- **Parameters**:
+  - `denoise_strength`: As provided by edge function (NO CLAMPING)
+  - `guidance_scale`: As provided by edge function (NO CLAMPING)
+  - `steps`: As provided by edge function (NO CLAMPING)
+  - `negative_prompt`: Standard quality prompts
+- **Use Case**: Modify reference image with provided prompt
+- **Worker Contract**: Workers respect edge function parameters completely
+
+## WAN Worker (Pure Inference)
 
 ### Overview
-Video generation and enhanced image processing using WAN 2.1 with comprehensive reference frame support (5 modes), AI prompt enhancement, and NSFW optimization.
+Pure video generation using WAN 2.1 with comprehensive reference frame support (5 modes) and I2I pipeline. Receives complete parameters from edge function and executes exactly what's provided. Includes internal auto-enhancement for enhanced job types.
+
+### I2I Pipeline Features
+- **denoise_strength Parameter**: Replaces `reference_strength` for consistency
+- **Backward Compatibility**: `reference_strength` automatically converted to `denoise_strength = 1 - reference_strength`
+- **Parameter Handling**: Workers respect edge function parameters (clamping only in exact copy mode)
+
+### Video Thumbnail Generation
+- **Mid-Frame Thumbnails**: Extract middle frame of video for better representation
+- **256px WEBP Format**: Longest edge 256px, preserve aspect ratio, quality 85
+- **Storage**: Both original video and thumbnail uploaded to `workspace-temp`
+- **Callback Format**: Includes both `url` and `thumbnail_url` for each asset
 
 ### API Endpoints
 
@@ -243,7 +450,7 @@ Video generation and enhanced image processing using WAN 2.1 with comprehensive 
 }
 ```
 
-**POST /enhance** - Prompt Enhancement
+**POST /enhance** - Internal Enhancement (WAN Auto-Enhancement)
 ```json
 {
   "prompt": "Original prompt",
@@ -253,28 +460,28 @@ Video generation and enhanced image processing using WAN 2.1 with comprehensive 
 }
 ```
 
-### WAN Job Payload
+### WAN Pure Inference Payload
 ```json
 {
-  "worker_id": "wan_worker_001",
-  "job_id": "wan_job_123",
-  "prompt": "Enhanced prompt",
+  "id": "wan_job_123",
+  "type": "image_fast|image_high|video_fast|video_high|image7b_fast_enhanced|image7b_high_enhanced|video7b_fast_enhanced|video7b_high_enhanced",
+  "prompt": "Complete prompt from edge function",
+  "user_id": "user_123",
   "config": {
-    "job_type": "image_fast|image_high|video_fast|video_high|image7b_fast_enhanced|image7b_high_enhanced|video7b_fast_enhanced|video7b_high_enhanced",
     "width": 480,
     "height": 832,
-    "frames": 83,
+    "frames": 1-83,
+    "fps": 8-24,
     "reference_mode": "none|single|start|end|both",
-    "reference_image": "base64_encoded_image",
-    "fps": 24
+    "image": "Optional single reference",
+    "first_frame": "Optional start reference",
+    "last_frame": "Optional end reference"
   },
   "metadata": {
-    "nsfw_optimization": true,
-    "anatomical_accuracy": true,
-    "user_id": "user_123",
-    "reference_image_url": "Optional reference image URL",
-    "start_reference_url": "Optional start frame URL",
-    "end_reference_url": "Optional end frame URL"
+    "reference_image_url": "Fallback reference URL",
+    "start_reference_url": "Fallback start URL",
+    "end_reference_url": "Fallback end URL",
+    "denoise_strength": 0.0-1.0
   }
 }
 ```
@@ -366,7 +573,7 @@ Central job distribution system that routes jobs to appropriate workers based on
 
 ## Callback Payload Format
 
-All workers use a standardized callback format for job status updates:
+All workers use a standardized callback format for job status updates with enhanced metadata for I2I and thumbnail support:
 
 ```json
 {
@@ -376,12 +583,22 @@ All workers use a standardized callback format for job status updates:
   "assets": [
     {
       "type": "image|video|text",
-      "url": "https://cdn.example.com/asset.jpg",
+      "url": "workspace-temp/user123/job123/0.png",
+      "thumbnail_url": "workspace-temp/user123/job123/0.thumb.webp",
       "metadata": {
         "width": 1024,
         "height": 1024,
         "format": "png",
-        "batch_size": 1
+        "batch_size": 1,
+        "steps": 25,
+        "guidance_scale": 7.5,
+        "seed": 12345,
+        "file_size_bytes": 2048576,
+        "asset_index": 0,
+        "denoise_strength": 0.15,
+        "pipeline": "img2img",
+        "resize_policy": "center_crop",
+        "negative_prompt_used": true
       }
     }
   ],
@@ -392,8 +609,9 @@ All workers use a standardized callback format for job status updates:
     "nsfw_optimization": true,
     "processing_time": 15.2,
     "vram_used": 8192,
-    "reference_mode": "none",
-    "batch_size": 1
+    "reference_mode": "single",
+    "batch_size": 1,
+    "exact_copy_mode": false
   },
   "error": {
     "code": "OOM_ERROR",
@@ -402,6 +620,19 @@ All workers use a standardized callback format for job status updates:
   }
 }
 ```
+
+### Enhanced Asset Metadata Fields
+
+#### For I2I Jobs (SDXL and WAN)
+- `denoise_strength`: Float 0.0-1.0 (I2I strength parameter)
+- `pipeline`: String "img2img" (indicates I2I generation)
+- `resize_policy`: String "center_crop" (reference image processing)
+- `negative_prompt_used`: Boolean (whether negative prompts were applied)
+
+#### For All Assets
+- `thumbnail_url`: String path to 256px WEBP thumbnail
+- `file_size_bytes`: Integer file size in bytes
+- `asset_index`: Integer 0-based asset index in batch
 
 ## Performance Metrics
 
@@ -419,6 +650,8 @@ All workers use a standardized callback format for job status updates:
 - **Fast (15 steps):** 30s total (3-8s per image)
 - **High (25 steps):** 42s total (5-10s per image)
 - **Batch Support:** 1, 3, or 6 images per request
+- **I2I Pipeline:** +2-5s for reference image processing
+- **Thumbnail Generation:** +0.5-1s per image
 
 ### WAN Generation
 - **Fast Images:** 25-40s
@@ -426,6 +659,7 @@ All workers use a standardized callback format for job status updates:
 - **Fast Videos:** 135-180s
 - **High Videos:** 180-240s
 - **Enhanced Variants:** +60-120s for AI enhancement
+- **Video Thumbnail Generation:** +1-2s per video (mid-frame extraction)
 
 ## System Configuration
 
@@ -437,6 +671,7 @@ UPSTASH_REDIS_REST_URL=    # Redis queue URL
 UPSTASH_REDIS_REST_TOKEN=  # Redis authentication token
 WAN_WORKER_API_KEY=        # API key for WAN worker authentication
 HF_TOKEN=                  # Optional HuggingFace token
+RUNPOD_POD_ID=             # RunPod pod ID for auto-registration
 ```
 
 ### Worker Configuration
@@ -453,7 +688,8 @@ HF_TOKEN=                  # Optional HuggingFace token
     "primary_model": "Qwen2.5-7B-Instruct",
     "max_tokens": 2048,
     "port": 7861,
-    "compilation": true
+    "compilation": true,
+    "auto_registration": true
   },
   "wan_worker": {
     "model_path": "/workspace/models/wan2.1-t2v-1.3b",
@@ -464,6 +700,11 @@ HF_TOKEN=                  # Optional HuggingFace token
 }
 ```
 
+### RunPod Deployment
+- **Chat Worker URL:** `https://{RUNPOD_POD_ID}-7861.proxy.runpod.net`
+- **Auto-Registration:** Detects `RUNPOD_POD_ID` and registers with Supabase
+- **Health Monitoring:** Continuous status tracking via `/health` endpoints
+
 ## Error Handling
 
 ### Common Error Codes
@@ -473,12 +714,16 @@ HF_TOKEN=                  # Optional HuggingFace token
 - `WORKER_UNAVAILABLE` - Worker not loaded
 - `TIMEOUT_ERROR` - Request timeout
 - `REFERENCE_FRAME_ERROR` - Reference frame processing failed
+- `I2I_PIPELINE_ERROR` - Image-to-image pipeline error
+- `THUMBNAIL_GENERATION_ERROR` - Thumbnail generation failed
 
 ### Retry Logic
 - **OOM Errors:** Automatic retry with memory cleanup
 - **Network Errors:** 3 retries with exponential backoff
 - **Model Errors:** Single retry with model reload
 - **Reference Frame Errors:** Graceful fallback to standard generation
+- **I2I Errors:** Fallback to text-to-image generation
+- **Thumbnail Errors:** Continue without thumbnail (non-critical)
 
 ## Security and NSFW Features
 
@@ -511,9 +756,12 @@ import requests
 
 # Submit chat job
 response = requests.post("http://worker:7861/chat", json={
-    "prompt": "User message",
-    "config": {"job_type": "chat_conversation"},
-    "metadata": {"user_id": "user_123"}
+    "messages": [
+        {"role": "system", "content": "System prompt from edge function"},
+        {"role": "user", "content": "User message"}
+    ],
+    "max_tokens": 512,
+    "temperature": 0.7
 })
 
 # Monitor job status
@@ -527,9 +775,9 @@ memory = requests.get("http://memory-manager:8001/memory/status")
 ## Python Files Overview
 
 ### Core Worker Files
-- **`sdxl_worker.py`**: SDXL image generation with batch processing and NSFW optimization
+- **`sdxl_worker.py`**: SDXL image generation with batch processing, I2I pipeline, and thumbnail generation
 - **`chat_worker.py`**: Enhanced chat and prompt enhancement system with Qwen Instruct
-- **`wan_worker.py`**: WAN video and image processing with comprehensive reference frame support
+- **`wan_worker.py`**: WAN video and image processing with comprehensive reference frame support, I2I pipeline, and video thumbnail generation
 
 ### System Management Files
 - **`dual_orchestrator.py`**: Central job distribution and triple worker coordination
@@ -547,4 +795,45 @@ memory = requests.get("http://memory-manager:8001/memory/status")
 - **`CHAT_WORKER_CONSOLIDATED.md`**: Enhanced chat worker features and NSFW optimization
 - **`CLEANUP_SUMMARY.md`**: Codebase cleanup and organization summary
 
-This documentation provides the frontend AI with complete context of the ourvidz-worker system architecture, all active workers, Python files, APIs, and integration patterns after the August 16, 2025 cleanup. 
+## Edge Function Requirements Summary
+
+### **Pure Inference Architecture**
+All workers are designed as pure inference engines. The edge function must provide:
+
+#### **SDXL Worker Requirements**
+- **Complete Parameters:** All generation parameters (steps, guidance_scale, batch_size, etc.)
+- **Enhanced Prompts:** Pre-enhanced prompts from Chat Worker
+- **Reference Images:** Downloaded and processed reference images
+- **I2I Parameters:** `denoise_strength` (0.0-1.0) and `exact_copy_mode` (boolean)
+- **User Validation:** Permissions and content restrictions
+- **Parameter Conversion:** Frontend presets → worker parameters
+
+#### **Chat Worker Requirements**
+- **System Prompts:** Complete system prompts for all contexts
+- **Message Arrays:** Properly formatted message arrays
+- **Model Selection:** Base vs Instruct model choice
+- **User Validation:** Chat permissions and restrictions
+- **Enhancement Context:** Target model and enhancement type
+
+#### **WAN Worker Requirements**
+- **Complete Parameters:** All video generation parameters
+- **Enhanced Prompts:** Pre-enhanced prompts from Chat Worker
+- **Reference Frames:** Downloaded and processed reference images
+- **I2I Parameters:** `denoise_strength` (0.0-1.0) for reference frame processing
+- **User Validation:** Video generation permissions
+- **Parameter Conversion:** Frontend presets → worker parameters
+
+### **Frontend Integration**
+- **Parameter Validation:** Validate all parameters before sending to edge function
+- **Callback Processing:** Handle different asset types and thumbnail URLs appropriately
+- **Error Handling:** Implement retry logic for transient failures
+- **Progress Tracking:** Display processing time and queue position
+- **Thumbnail Display:** Use `thumbnail_url` for grid views and previews
+
+### **Configuration Files**
+- **Configuration/CONFIGURATION_APPROACH.md** - Complete edge function requirements and validation rules
+- **Configuration/worker_configs.py** - Worker configuration templates
+- **Configuration/validation_schemas.py** - Request validation schemas
+- **I2I_THUMBNAIL_IMPLEMENTATION_SUMMARY.md** - I2I pipeline and thumbnail generation details
+
+This documentation provides the frontend AI with complete context of the ourvidz-worker system architecture, all active workers, Python files, APIs, and integration patterns after the August 31, 2025 pure inference chat worker implementation and system updates. 

@@ -1,7 +1,7 @@
 # Worker System Documentation
 
-**Last Updated:** 8/16/25  
-**Status:** ✅ Production Ready with Enhanced Logging
+**Last Updated:** August 31, 2025  
+**Status:** ✅ Production Ready with Pure Inference Engine Architecture
 
 ## Overview
 
@@ -14,6 +14,10 @@ ourvidz-worker/
 ├── chat_worker.py          # Pure inference engine (Qwen Instruct)
 ├── wan_worker.py           # Video generation (Qwen Base)
 ├── sdxl_worker.py          # Image generation (SDXL)
+├── dual_orchestrator.py    # Triple worker orchestrator
+├── memory_manager.py       # VRAM management
+├── worker_registration.py  # Dynamic registration
+├── startup.sh              # Production startup
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile             # Container configuration
 └── README.md              # Setup instructions
@@ -23,12 +27,12 @@ ourvidz-worker/
 
 ### Chat Worker (chat_worker.py)
 **Purpose:** Pure inference engine for chat, enhancement, and general AI tasks  
-**Model:** Qwen Instruct  
+**Model:** Qwen 2.5-7B Instruct + Base  
 **Architecture:** Pure Inference Engine - No Hardcoded Prompts
 
 #### 🎯 NEW ARCHITECTURE: Pure Inference Engine
 
-**Key Changes (August 4, 2025):**
+**Key Changes (August 2025):**
 - **Removed hardcoded prompts** - worker no longer contains any prompt logic
 - **Template override risk eliminated** - workers cannot override database templates
 - **New pure inference endpoints** (`/chat`, `/enhance`, `/generate`, `/worker/info`)
@@ -50,6 +54,7 @@ ourvidz-worker/
 - **Memory Optimized:** Improved memory management and OOM handling
 - **PyTorch 2.0:** Compiled models for better performance
 - **Health Monitoring:** Real-time health checks and status reporting
+- **Auto-Registration:** Detects RunPod URL and registers with Supabase
 
 #### New Endpoints
 
@@ -110,18 +115,38 @@ logger.warning(f"⚠️ Fallback to original prompt due to error")
 ```
 
 ### WAN Worker (wan_worker.py)
-**Purpose:** Video generation and enhancement  
-**Model:** Qwen Base  
-**Status:** Legacy format maintained for backward compatibility
+**Purpose:** Pure video generation with reference frame support  
+**Model:** WAN 2.1 T2V 1.3B + Qwen Base  
+**Status:** Pure inference engine with 5 reference modes
+
+#### Key Features
+- **Pure Inference:** Executes exactly what edge functions provide
+- **5 Reference Frame Modes:** none, single, start, end, both
+- **I2I Pipeline:** `denoise_strength` parameter for consistency
+- **Video Thumbnail Generation:** Mid-frame extraction for better representation
+- **Internal Auto-Enhancement:** Qwen Base for enhanced job types
+- **Thread-Safe Timeouts:** Concurrent.futures implementation
+
+#### Job Types
+- **Standard:** `image_fast` (25-40s), `image_high` (40-100s), `video_fast` (135-180s), `video_high` (180-240s)
+- **Enhanced:** `image7b_fast_enhanced` (85-100s), `image7b_high_enhanced` (100-240s), `video7b_fast_enhanced` (195-240s), `video7b_high_enhanced` (240+s)
 
 ### SDXL Worker (sdxl_worker.py)
-**Purpose:** High-quality image generation  
-**Model:** SDXL  
-**Status:** Stable production deployment
-#### Runtime & Queueing
-- Polls Redis `sdxl_queue` (single list) with appropriate backoff
-- Uploads outputs to Supabase Storage bucket `workspace-temp` at path `userId/jobId/assetIndex.png`
-- Posts results to Supabase Edge `job-callback` only (legacy callbacks removed)
+**Purpose:** Pure image generation with I2I pipeline  
+**Model:** LUSTIFY SDXL  
+**Status:** Pure inference engine with batch processing
+
+#### Key Features
+- **Pure Inference:** Executes exactly what edge functions provide
+- **Batch Processing:** Support for 1, 3, or 6 image generation
+- **I2I Pipeline:** First-class support using StableDiffusionXLImg2ImgPipeline
+- **Two I2I Modes:** Promptless exact copy and reference modify
+- **Thumbnail Generation:** 256px WEBP thumbnails for each image
+- **Memory Efficient:** Attention slicing + xformers
+
+#### Job Types
+- `sdxl_image_fast` - 15 steps, 30s total (3-8s per image)
+- `sdxl_image_high` - 25 steps, 42s total (5-10s per image)
 
 ## 🏗️ Pure Inference Engine Architecture
 
@@ -151,200 +176,173 @@ class ChatWorker:
 # NEW: Worker executes exactly what edge functions provide
 class PureInferenceWorker:
     def __init__(self):
-        # ✅ No hardcoded prompts
-        # ✅ No enhancement rules
-        # ✅ Pure inference only
-        pass
+        self.model = None
+        # No hardcoded prompts or logic
     
-    async def enhance(self, request):
-        # ✅ Execute exactly what edge functions provide
-        messages = request.messages  # From edge function
-        return await self.execute_pure_inference(messages)
+    async def chat(self, messages):
+        # ✅ Execute exactly what's provided
+        return await self.model.generate(messages=messages)
     
-    async def chat(self, request):
-        # ✅ Execute exactly what edge functions provide  
-        messages = request.messages  # From edge function
-        return await self.execute_pure_inference(messages)
-    
-    async def execute_pure_inference(self, messages):
-        # ✅ No prompt modification
-        # ✅ No template overrides
-        # ✅ Pure execution only
-        logger.info(f"Pure inference mode: no template overrides detected")
-        return await self.model.generate(messages)
+    async def enhance(self, messages):
+        # ✅ Execute exactly what's provided
+        return await self.model.generate(messages=messages)
 ```
 
-## Security & Risk Mitigation
+## 🧠 Memory Management
 
-### Template Override Risk: ELIMINATED
+### Memory Allocation
+- **SDXL:** 10GB (Always loaded)
+- **Chat:** 15GB (Load when possible)
+- **WAN:** 30GB (Load on demand)
 
-**Previous Risk:**
-- Workers contained hardcoded prompts
-- Workers could override database templates
-- No audit trail of prompt modifications
+### Memory Manager Features
+- **Pressure Detection:** Critical/High/Medium/Low levels
+- **Emergency Operations:** Force unload capabilities
+- **Predictive Loading:** Smart preloading based on patterns
+- **Worker Coordination:** HTTP-based memory management
 
-**Current Solution:**
-- **Pure Inference Engine:** Workers execute exactly what edge functions provide
-- **Edge Function Control:** All prompt construction happens in edge functions
-- **Database-Driven:** All templates stored securely in database
-- **Complete Audit Trail:** All interactions logged and monitored
+## 🔧 Triple Orchestrator
 
-### Security Features
+### Purpose
+Central job distribution system that routes jobs to appropriate workers based on job type and current system load.
 
-- **No Hardcoded Prompts:** Workers contain zero prompt logic
-- **Edge Function Control:** All prompt construction in edge functions
-- **Template Override Protection:** Workers cannot modify system prompts
-- **Audit Trail:** Complete logging of all prompt interactions
-- **Database-Driven:** All templates stored in secure database
+### Key Features
+- **Priority-based startup:** SDXL (1) → Chat (2) → WAN (3)
+- **Graceful validation:** Environment and model readiness checks
+- **Automatic restart:** Worker failure recovery
+- **Production logging:** Comprehensive monitoring
 
-## Performance Improvements
+### Job Types Managed
+- **SDXL:** `sdxl_image_fast`, `sdxl_image_high`
+- **Chat:** `chat_enhance`, `chat_conversation`, `chat_unrestricted`, `admin_utilities`
+- **WAN:** `image_fast`, `image_high`, `video_fast`, `video_high`, enhanced variants
 
-### Memory Optimization
+## 🚀 Production Startup
 
-- **PyTorch 2.0 Compilation:** Improved model performance
-- **Memory Management:** Better OOM handling and recovery
-- **Token Optimization:** Efficient token usage and limits
-- **Response Time:** Faster pure inference execution
+### Startup Sequence
+1. **Environment Validation:** PyTorch/CUDA version checks
+2. **Model Readiness:** SDXL, WAN, Qwen model verification
+3. **Memory Assessment:** VRAM availability analysis
+4. **Worker Launch:** Priority-based startup (SDXL → Chat → WAN)
+5. **Auto-Registration:** RunPod URL detection and registration
+6. **Health Monitoring:** Continuous worker status tracking
 
-### Enhanced Monitoring
-
-```python
-# Health check with pure inference status
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "pure_inference_engine": True,
-        "no_prompt_overrides": True,
-        "template_override_risk": "eliminated",
-        "hardcoded_prompts": False,
-        "edge_function_control": True,
-        "capabilities": ["pure_inference", "enhanced_logging"]
-    }
+### Startup Command
+```bash
+./startup.sh
 ```
 
-## Migration Path
+## 📊 Performance Metrics
 
-### Edge Function Updates
+### Chat Worker
+- **Chat Enhancement:** 1-3 seconds (direct inference)
+- **Chat Conversation:** 5-15 seconds (dynamic prompts)
+- **Model Loading:** 15GB VRAM required for Qwen Instruct
+- **Memory Management:** Automatic cleanup and validation
 
-Edge functions now construct complete `messages` arrays:
+### SDXL Worker
+- **Fast (15 steps):** 30s total (3-8s per image)
+- **High (25 steps):** 42s total (5-10s per image)
+- **Batch Support:** 1, 3, or 6 images per request
+- **I2I Processing:** +2-5s for reference image processing
+- **Thumbnail Generation:** +0.5-1s per image
 
-```typescript
-// FIXED: Edge function constructs messages array
-const messages = [
-  {
-    role: "system",
-    content: template.system_prompt  // From database
-  },
-  {
-    role: "user", 
-    content: request.prompt          // User input
-  }
-];
+### WAN Worker
+- **Fast Images:** 25-40s
+- **High Images:** 40-100s
+- **Fast Videos:** 135-180s
+- **High Videos:** 180-240s
+- **Enhanced Variants:** +60-120s for AI enhancement
+- **Video Thumbnail Generation:** +1-2s per video (mid-frame extraction)
 
-// Send to pure inference endpoint
-const response = await fetch(`${workerUrl}/enhance`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ messages, max_tokens: 200 })
-});
+## 🔑 Environment Configuration
+
+### Required Environment Variables
+```bash
+SUPABASE_URL=              # Supabase database URL
+SUPABASE_SERVICE_ROLE_KEY= # Supabase service key
+UPSTASH_REDIS_REST_URL=    # Redis queue URL
+UPSTASH_REDIS_REST_TOKEN=  # Redis authentication token
+WAN_WORKER_API_KEY=        # API key for WAN worker authentication
+HF_TOKEN=                  # Optional HuggingFace token
+RUNPOD_POD_ID=             # RunPod pod ID for auto-registration
 ```
 
-### Example Edge Function Integration
+### RunPod Deployment
+- **Chat Worker URL:** `https://{RUNPOD_POD_ID}-7861.proxy.runpod.net`
+- **SDXL/WAN Worker URL:** `https://{RUNPOD_POD_ID}-7860.proxy.runpod.net`
+- **Auto-Registration:** Detects `RUNPOD_POD_ID` and registers with Supabase
+- **Health Monitoring:** Continuous status tracking via `/health` endpoints
 
-```javascript
-// enhance-prompt edge function
-async function enhanceWithChatWorker(request, template) {
-  // Build messages array using database template
-  const messages = [
-    { role: "system", content: template.system_prompt },
-    { role: "user", content: request.prompt }
-  ];
+## 🛡️ Error Handling & Recovery
 
-  // Send to pure inference endpoint
-  const response = await fetch(`${chatWorkerUrl}/enhance`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages: messages,
-      max_tokens: template.token_limit || 200,
-      temperature: 0.7,
-      top_p: 0.9
-    })
-  });
+### Error Types
+- `OOM_ERROR` - Out of memory (retryable)
+- `MODEL_LOAD_ERROR` - Model loading failed
+- `INVALID_PROMPT` - Prompt validation failed
+- `WORKER_UNAVAILABLE` - Worker not loaded
+- `TIMEOUT_ERROR` - Request timeout
+- `REFERENCE_FRAME_ERROR` - Reference processing failed
+- `I2I_PIPELINE_ERROR` - Image-to-image pipeline error
+- `THUMBNAIL_GENERATION_ERROR` - Thumbnail generation failed
 
-  return await response.json();
-}
-```
+### Recovery Mechanisms
+- **OOM Errors:** Automatic retry with memory cleanup
+- **Network Errors:** 3 retries with exponential backoff
+- **Model Errors:** Single retry with model reload
+- **Reference Frame Errors:** Graceful fallback to standard generation
+- **I2I Errors:** Fallback to text-to-image generation
+- **Thumbnail Errors:** Continue without thumbnail (non-critical)
 
-## Monitoring & Debugging
+## 📋 Integration Guide
 
-### Pure Inference Status
+### Frontend Integration
+1. **Job Submission:** Send jobs to appropriate worker endpoints
+2. **Status Monitoring:** Poll callback endpoint for job status
+3. **Asset Retrieval:** Download generated assets from callback URLs
+4. **Thumbnail Display:** Use `thumbnail_url` for grid views and previews
+5. **Memory Management:** Monitor memory status for optimization
+6. **Error Handling:** Implement retry logic for transient errors
 
-All health checks now include pure inference status:
-
+### Enhanced Callback Format
 ```json
 {
-  "status": "healthy",
-  "pure_inference_engine": true,
-  "no_prompt_overrides": true,
-  "template_override_risk": "eliminated",
-  "hardcoded_prompts": false,
-  "edge_function_control": true,
-  "capabilities": ["pure_inference", "enhanced_logging"]
+  "job_id": "job_123",
+  "worker_id": "worker_001",
+  "status": "completed|failed|processing",
+  "assets": [
+    {
+      "type": "image|video|text",
+      "url": "workspace-temp/user123/job123/0.png",
+      "thumbnail_url": "workspace-temp/user123/job123/0.thumb.webp",
+      "metadata": {
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "batch_size": 1,
+        "steps": 25,
+        "guidance_scale": 7.5,
+        "seed": 12345,
+        "file_size_bytes": 2048576,
+        "asset_index": 0,
+        "denoise_strength": 0.15,
+        "pipeline": "img2img",
+        "resize_policy": "center_crop",
+        "negative_prompt_used": true
+      }
+    }
+  ],
+  "metadata": {
+    "enhancement_source": "qwen_instruct",
+    "unrestricted_mode": false,
+    "processing_time": 15.2,
+    "reference_mode": "single",
+    "batch_size": 1,
+    "exact_copy_mode": false
+  }
 }
 ```
 
-### Enhanced Logging
+---
 
-```python
-# Pure inference logging
-logger.info(f"Pure inference mode: no template overrides detected")
-logger.info(f"Edge function control: all prompts from edge functions")
-logger.info(f"Template override risk: eliminated through pure inference architecture")
-```
-
-### Common Issues
-
-**Pure Inference:**
-- Chat worker respects all system prompts from edge functions
-- Template overrides eliminated through pure inference architecture
-- Enhanced logging provides complete audit trail
-
-**Performance:**
-- Memory optimization with PyTorch 2.0 compilation
-- Improved OOM handling and recovery
-- Faster response times with pure inference
-
-**Security:**
-- No hardcoded prompts in workers
-- Edge function control over all prompt construction
-- Database-driven template system
-
-## Recent Updates
-
-### August 16, 2025: Queueing & Callback Simplification
-
-- Queueing
-  - SDXL and WAN use single Redis lists: `sdxl_queue`, `wan_queue`
-  - Chat bypasses Redis entirely (direct HTTP via edge `playground-chat`)
-- Storage
-  - Workers upload to `workspace-temp` only (no writes to legacy buckets)
-  - Promotion to permanent storage handled by edge `workspace-actions` (copies to `user-library`)
-- Callback
-  - Workers call Supabase Edge `job-callback` exclusively
-  - Legacy `generation-complete` path removed
-- Admin Metrics
-  - New edge `system-metrics` endpoint (admin-only) exposes worker health and queue depths
-  - Admin UI includes a System Metrics tab for live monitoring
-- Endpoints & Ports
-  - SDXL/WAN share 7860; Chat runs on 7861
-  - Health endpoints unchanged; memory manager remains in place
-
-### August 4, 2025: Enhanced Logging & Pure Inference
-
-- **Enhanced Logging:** Comprehensive logging throughout worker interactions
-- **Pure Inference Integration:** Complete integration with new worker architecture
-- **Template Override Elimination:** Security improvement through pure inference
-- **Performance Monitoring:** Real-time metrics and response tracking
-- **Error Handling:** Improved error handling with detailed logging
+**🎯 This worker system provides a pure inference engine architecture with centralized edge function intelligence, ensuring maximum flexibility, security, and maintainability while delivering high-quality AI content generation capabilities.**

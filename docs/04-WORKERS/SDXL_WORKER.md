@@ -1,17 +1,20 @@
 # SDXL Worker Documentation
 
-**Last Updated:** January 2025  
-**Status:** ✅ ACTIVE - Fully implemented with i2i capabilities
+**Last Updated:** August 31, 2025  
+**Status:** ✅ ACTIVE - Pure Inference Engine with I2I Pipeline
 
 ## **🎯 Overview**
 
-The SDXL Worker is responsible for image generation using the SDXL Lustify model, with specialized handling for image-to-image (i2i) functionality. It's part of the triple worker system and provides high-quality NSFW-optimized image generation.
+The SDXL Worker is a **pure inference engine** for image generation using the LUSTIFY SDXL model with batch processing support (1, 3, or 6 images per request) and comprehensive Image-to-Image (I2I) pipeline. It receives complete parameters from edge functions and executes exactly what's provided.
 
 ### **Key Capabilities**
-- **Image Generation**: High-quality image generation with SDXL Lustify
-- **I2I Processing**: Image-to-image modification and exact copying
+- **Pure Inference Engine**: Executes exactly what edge functions provide
 - **Batch Processing**: Support for 1, 3, or 6 image generation
-- **Prompt Enhancement**: Integration with Qwen 2.5-7B Base for prompt enhancement
+- **I2I Pipeline**: First-class support using StableDiffusionXLImg2ImgPipeline
+- **Thumbnail Generation**: 256px WEBP thumbnails for each image
+- **Reference Image Support**: Style, composition, character modes
+- **NSFW Optimization**: Zero content restrictions
+- **Memory Efficient**: Attention slicing + xformers
 
 ---
 
@@ -24,19 +27,25 @@ MODEL_PATH = "/workspace/models/sdxl-lustify/"
 MODEL_NAME = "lustifySDXLNSFWSFW_v20.safetensors"
 VRAM_USAGE = "10GB"  # Always loaded
 MAX_CONCURRENT_JOBS = 2
+BATCH_SUPPORT = [1, 3, 6]  # Supported batch sizes
 ```
 
 ### **Hardware Requirements**
 - **GPU**: NVIDIA RTX 6000 ADA (48GB VRAM)
 - **Memory**: 10GB VRAM dedicated to SDXL
-- **Storage**: Model files (~6GB)
+- **Storage**: Model files (~6.5GB)
 - **Performance**: 3-8 seconds per image
+- **Port**: 7860 (shared with WAN)
 
 ### **Worker Configuration**
 ```python
 WORKER_CONFIG = {
     "sdxl": {
-        "model_path": "/workspace/models/sdxl-lustify/",
+        "model_path": "/workspace/models/sdxl-lustify/lustifySDXLNSFWSFW_v20.safetensors",
+        "max_batch_size": 6,
+        "enable_xformers": true,
+        "attention_slicing": "auto",
+        "port": 7860,
         "max_concurrent_jobs": 2,
         "memory_limit": 10,  # GB
         "polling_interval": 2,
@@ -47,275 +56,228 @@ WORKER_CONFIG = {
 
 ---
 
-## **🎨 I2I Implementation**
+## **🎨 I2I Pipeline Features**
 
-### **Parameter Handling**
+### **I2I Pipeline Implementation**
+- **StableDiffusionXLImg2ImgPipeline**: First-class I2I support using dedicated pipeline
+- **Two Explicit Modes**:
+  - **Promptless Exact Copy**: `denoise_strength ≤ 0.05`, `guidance_scale = 1.0`, `steps = 6-10`, `negative_prompt = ''`
+  - **Reference Modify**: `denoise_strength = 0.10-0.25`, `guidance_scale = 4-7`, `steps = 15-30`
+- **Parameter Clamping**: Worker-side guards ensure consistent behavior
+- **Backward Compatibility**: `reference_strength` automatically converted to `denoise_strength = 1 - reference_strength`
 
-#### **Reference Strength Conversion**
-```python
-def process_i2i_parameters(job_data):
-    """Convert frontend reference strength to SDXL denoise_strength"""
-    
-    reference_strength = job_data.get('reference_strength', 0.5)
-    exact_copy_mode = job_data.get('exact_copy_mode', False)
-    
-    if exact_copy_mode:
-        # Exact copy mode: clamp denoise_strength to ≤0.05
-        denoise_strength = min(reference_strength, 0.05)
-        guidance_scale = 1.0
-        negative_prompt = ""
-        skip_enhancement = True
-    else:
-        # Modify mode: use worker defaults
-        denoise_strength = 1 - reference_strength  # Invert for SDXL
-        guidance_scale = 7.5
-        negative_prompt = job_data.get('negative_prompt', '')
-        skip_enhancement = False
-    
-    return {
-        'denoise_strength': denoise_strength,
-        'guidance_scale': guidance_scale,
-        'negative_prompt': negative_prompt,
-        'skip_enhancement': skip_enhancement
+### **I2I Generation Modes**
+
+#### **Promptless Exact Copy Mode**
+- **Trigger**: `exact_copy_mode: true` with empty prompt
+- **Parameters**:
+  - `denoise_strength`: Clamped to ≤ 0.05
+  - `guidance_scale`: Fixed at 1.0
+  - `steps`: 6-10 (based on denoise_strength)
+  - `negative_prompt`: Omitted
+- **Use Case**: Upload reference image for exact copy with minimal modification
+
+#### **Reference Modify Mode**
+- **Trigger**: `exact_copy_mode: false` or not specified
+- **Parameters**:
+  - `denoise_strength`: As provided by edge function (NO CLAMPING)
+  - `guidance_scale`: As provided by edge function (NO CLAMPING)
+  - `steps`: As provided by edge function (NO CLAMPING)
+  - `negative_prompt`: Standard quality prompts
+- **Use Case**: Modify reference image with provided prompt
+- **Worker Contract**: Workers respect edge function parameters completely
+
+---
+
+## **🖼️ Thumbnail Generation**
+
+### **Thumbnail Features**
+- **256px WEBP Thumbnails**: Generated for each image (longest edge 256px, preserve aspect ratio)
+- **Storage**: Both original and thumbnail uploaded to `workspace-temp`
+- **Callback Format**: Includes both `url` and `thumbnail_url` for each asset
+- **Quality**: WEBP format with quality 85 for optimal file size
+
+---
+
+## **💬 API Endpoints**
+
+### **GET /health** - Health Check
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "device": "cuda:0"
+}
+```
+
+### **GET /status** - Worker Status
+```json
+{
+  "worker_type": "sdxl",
+  "model": "lustifySDXLNSFWSFW_v20.safetensors",
+  "batch_support": [1, 3, 6],
+  "quality_tiers": ["fast", "high"],
+  "i2i_pipeline": "StableDiffusionXLImg2ImgPipeline",
+  "thumbnail_generation": true
+}
+```
+
+---
+
+## **📋 Pure Inference Payload**
+
+### **SDXL Job Payload**
+```json
+{
+  "id": "sdxl_job_123",
+  "type": "sdxl_image_fast|sdxl_image_high",
+  "prompt": "Complete prompt from edge function",
+  "user_id": "user_123",
+  "config": {
+    "num_images": 1|3|6,
+    "steps": 10-50,
+    "guidance_scale": 1.0-20.0,
+    "resolution": "1024x1024",
+    "seed": 0-2147483647,
+    "negative_prompt": "Optional negative prompt"
+  },
+  "metadata": {
+    "reference_image_url": "Optional reference image URL",
+    "denoise_strength": 0.0-1.0,
+    "exact_copy_mode": false,
+    "reference_type": "style|composition|character"
+  },
+  "compel_enabled": boolean,
+  "compel_weights": "Optional Compel weights"
+}
+```
+
+### **Enhanced Callback Format**
+```json
+{
+  "job_id": "sdxl_job_123",
+  "worker_id": "sdxl_worker_001",
+  "status": "completed|failed|processing",
+  "assets": [
+    {
+      "type": "image",
+      "url": "workspace-temp/user123/job123/0.png",
+      "thumbnail_url": "workspace-temp/user123/job123/0.thumb.webp",
+      "metadata": {
+        "width": 1024,
+        "height": 1024,
+        "format": "png",
+        "batch_size": 3,
+        "steps": 25,
+        "guidance_scale": 7.5,
+        "seed": 12345,
+        "file_size_bytes": 2048576,
+        "asset_index": 0,
+        "denoise_strength": 0.15,
+        "pipeline": "img2img",
+        "resize_policy": "center_crop",
+        "negative_prompt_used": true
+      }
     }
-```
-
-#### **Mode Detection**
-```python
-def detect_i2i_mode(job_data):
-    """Determine i2i mode based on job parameters"""
-    
-    reference_image = job_data.get('reference_image_url')
-    exact_copy_mode = job_data.get('exact_copy_mode', False)
-    prompt = job_data.get('prompt', '').strip()
-    
-    if not reference_image:
-        return 'none'
-    
-    if exact_copy_mode:
-        return 'copy'
-    
-    if prompt:
-        return 'modify'
-    
-    return 'modify'  # Default to modify mode
-```
-
-### **Image Processing Pipeline**
-
-#### **Standard Generation**
-```python
-def generate_image(job_data):
-    """Standard image generation pipeline"""
-    
-    # 1. Load model (always loaded)
-    model = load_sdxl_model()
-    
-    # 2. Process prompt enhancement
-    if not job_data.get('skip_enhancement'):
-        enhanced_prompt = enhance_prompt_with_qwen(job_data['prompt'])
-    else:
-        enhanced_prompt = job_data['prompt']
-    
-    # 3. Generate image
-    image = model.generate(
-        prompt=enhanced_prompt,
-        negative_prompt=job_data.get('negative_prompt', ''),
-        guidance_scale=job_data.get('guidance_scale', 7.5),
-        steps=job_data.get('steps', 25),
-        width=job_data.get('width', 1024),
-        height=job_data.get('height', 1024)
-    )
-    
-    return image
-```
-
-#### **I2I Generation**
-```python
-def generate_i2i_image(job_data):
-    """I2I image generation pipeline"""
-    
-    # 1. Load model
-    model = load_sdxl_model()
-    
-    # 2. Process reference image
-    reference_image = load_reference_image(job_data['reference_image_url'])
-    
-    # 3. Process parameters
-    i2i_params = process_i2i_parameters(job_data)
-    
-    # 4. Generate with reference
-    image = model.generate(
-        prompt=job_data.get('prompt', ''),
-        negative_prompt=i2i_params['negative_prompt'],
-        guidance_scale=i2i_params['guidance_scale'],
-        steps=job_data.get('steps', 25),
-        denoise_strength=i2i_params['denoise_strength'],
-        init_image=reference_image
-    )
-    
-    return image
+  ],
+  "metadata": {
+    "enhancement_source": "qwen_instruct|none",
+    "compel_enhancement": true|false,
+    "reference_mode": "none|style|composition|character",
+    "processing_time": 15.2,
+    "vram_used": 8192,
+    "batch_size": 3,
+    "exact_copy_mode": false
+  }
+}
 ```
 
 ---
 
-## **🔗 Frontend Integration**
+## **📊 Performance Characteristics**
 
-### **Job Submission**
-```typescript
-// Frontend job submission to SDXL worker
-const submitSDXLJob = async (params: SDXLJobParams) => {
-  const jobData = {
-    job_type: 'sdxl_image_high',
-    prompt: params.prompt,
-    negative_prompt: params.negativePrompt,
-    batch_size: params.batchSize,
-    width: params.width,
-    height: params.height,
-    
-    // I2I specific parameters
-    reference_image_url: params.referenceImageUrl,
-    reference_strength: params.referenceStrength,
-    exact_copy_mode: params.exactCopyMode,
-    
-    // Worker routing
-    target_worker: 'sdxl'
-  };
-  
-  return await queueJob(jobData);
-};
-```
+### **Generation Times**
+- **Fast (15 steps)**: 30s total (3-8s per image)
+- **High (25 steps)**: 42s total (5-10s per image)
+- **Batch Support**: 1, 3, or 6 images per request
+- **I2I Processing**: +2-5s for reference image processing
+- **Thumbnail Generation**: +0.5-1s per image
 
-### **Parameter Validation**
-```typescript
-// Frontend parameter validation
-const validateSDXLParams = (params: SDXLJobParams) => {
-  const errors = [];
-  
-  // Basic validation
-  if (!params.prompt?.trim()) {
-    errors.push('Prompt is required');
-  }
-  
-  // I2I validation
-  if (params.referenceImageUrl && !params.referenceStrength) {
-    errors.push('Reference strength required for I2I');
-  }
-  
-  // Parameter ranges
-  if (params.referenceStrength && (params.referenceStrength < 0 || params.referenceStrength > 1)) {
-    errors.push('Reference strength must be between 0 and 1');
-  }
-  
-  return errors;
-};
-```
+### **Job Types**
+- `sdxl_image_fast` - 15 steps, 30s total (3-8s per image)
+- `sdxl_image_high` - 25 steps, 42s total (5-10s per image)
 
 ---
 
-## **📊 Performance Optimization**
+## **🔧 Edge Function Requirements**
 
-### **Model Loading Strategy**
-```python
-# SDXL model is always loaded for fast response
-class SDXLWorker:
-    def __init__(self):
-        self.model = None
-        self.model_loaded = False
-    
-    def ensure_model_loaded(self):
-        """Ensure SDXL model is loaded"""
-        if not self.model_loaded:
-            self.model = load_sdxl_model()
-            self.model_loaded = True
+### **Required Parameters**
+```json
+{
+  "id": "string",                    // Job ID (required)
+  "type": "sdxl_image_fast|sdxl_image_high", // Job type (required)
+  "prompt": "string",                // Complete prompt (required)
+  "user_id": "string",               // User ID (required)
+  "config": {
+    "num_images": 1|3|6,            // Batch size (required)
+    "steps": 10-50,                 // Generation steps (optional, default: 25)
+    "guidance_scale": 1.0-20.0,     // CFG scale (optional, default: 7.5)
+    "resolution": "1024x1024",      // Image resolution (optional, default: 1024x1024)
+    "seed": 0-2147483647,           // Random seed (optional)
+    "negative_prompt": "string"     // Negative prompt (optional)
+  },
+  "metadata": {
+    "reference_image_url": "string", // Reference image URL (optional)
+    "denoise_strength": 0.0-1.0,    // I2I strength (optional, default: 0.5)
+    "exact_copy_mode": false,       // Exact copy mode (optional)
+    "reference_type": "style|composition|character" // Reference type (optional)
+  },
+  "compel_enabled": boolean,        // Compel enhancement (optional, default: false)
+  "compel_weights": "string"        // Compel weights (optional)
+}
 ```
 
-### **Memory Management**
+### **Edge Function Processing**
+1. **Validate User Permissions**: Check if user can request NSFW content
+2. **Enhance Prompt**: Call Chat Worker for prompt enhancement if requested
+3. **Convert Presets**: Transform frontend presets to worker parameters
+4. **Validate Parameters**: Check against SDXL validation rules
+5. **Route to Worker**: Send complete job data to SDXL worker
+
+---
+
+## **🧠 Memory Management**
+
+### **Memory Allocation**
 ```python
-# Memory optimization for concurrent jobs
-def optimize_memory():
-    """Optimize memory usage for SDXL worker"""
-    
-    # Clear GPU cache between jobs
-    torch.cuda.empty_cache()
-    
-    # Monitor VRAM usage
-    vram_usage = torch.cuda.memory_allocated() / 1024**3
-    if vram_usage > 8:  # GB
-        gc.collect()
-        torch.cuda.empty_cache()
+def setup_sdxl_memory():
+    """Configure SDXL memory allocation"""
+    if torch.cuda.is_available():
+        # SDXL uses 10GB of 48GB VRAM
+        torch.cuda.set_per_process_memory_fraction(0.21)  # 10GB / 48GB
+        
+        # Enable memory optimizations
+        torch.backends.cuda.enable_mem_efficient_sdp(True)
+        torch.backends.cuda.enable_flash_sdp(True)
 ```
 
 ### **Batch Processing**
 ```python
-def process_batch(job_data):
-    """Process multiple images in batch"""
+def process_batch_generation(prompts, batch_size):
+    """Process batch image generation"""
     
-    batch_size = job_data.get('batch_size', 1)
+    # Validate batch size
+    if batch_size not in [1, 3, 6]:
+        raise ValueError("Batch size must be 1, 3, or 6")
+    
+    # Generate images in batch
     images = []
-    
-    for i in range(batch_size):
-        # Generate individual image
-        image = generate_image(job_data)
-        images.append(image)
-        
-        # Memory cleanup between images
-        if i < batch_size - 1:
-            torch.cuda.empty_cache()
+    for i in range(0, len(prompts), batch_size):
+        batch_prompts = prompts[i:i + batch_size]
+        batch_images = generate_batch(batch_prompts)
+        images.extend(batch_images)
     
     return images
-```
-
----
-
-## **🔍 Error Handling**
-
-### **Common Issues**
-```python
-def handle_sdxl_errors(error, job_data):
-    """Handle common SDXL worker errors"""
-    
-    if "CUDA out of memory" in str(error):
-        # Clear memory and retry
-        torch.cuda.empty_cache()
-        gc.collect()
-        return retry_job(job_data)
-    
-    elif "Model not found" in str(error):
-        # Reload model
-        reload_sdxl_model()
-        return retry_job(job_data)
-    
-    elif "Invalid reference image" in str(error):
-        # Return error to frontend
-        return {
-            'error': 'Invalid reference image format',
-            'job_id': job_data.get('job_id')
-        }
-    
-    else:
-        # Log unknown error
-        log_error(error, job_data)
-        return {
-            'error': 'Unknown error occurred',
-            'job_id': job_data.get('job_id')
-        }
-```
-
-### **Fallback Strategies**
-```python
-def fallback_generation(job_data):
-    """Fallback to basic generation if I2I fails"""
-    
-    # Remove I2I parameters
-    basic_job = {
-        'prompt': job_data.get('prompt'),
-        'negative_prompt': job_data.get('negative_prompt'),
-        'guidance_scale': 7.5,
-        'steps': 25
-    }
-    
-    return generate_image(basic_job)
 ```
 
 ---
@@ -324,15 +286,19 @@ def fallback_generation(job_data):
 
 ### **Performance Metrics**
 ```python
-def log_performance_metrics(job_data, generation_time):
+def log_sdxl_metrics(job_data, response_time, batch_size):
     """Log SDXL worker performance metrics"""
     
     metrics = {
         'worker': 'sdxl',
         'job_type': job_data.get('job_type'),
-        'generation_time': generation_time,
-        'batch_size': job_data.get('batch_size', 1),
-        'i2i_mode': detect_i2i_mode(job_data),
+        'response_time': response_time,
+        'batch_size': batch_size,
+        'steps': job_data.get('config', {}).get('steps'),
+        'guidance_scale': job_data.get('config', {}).get('guidance_scale'),
+        'resolution': job_data.get('config', {}).get('resolution'),
+        'i2i_mode': job_data.get('metadata', {}).get('exact_copy_mode', False),
+        'denoise_strength': job_data.get('metadata', {}).get('denoise_strength'),
         'vram_usage': torch.cuda.memory_allocated() / 1024**3,
         'timestamp': datetime.now().isoformat()
     }
@@ -340,40 +306,40 @@ def log_performance_metrics(job_data, generation_time):
     log_metrics(metrics)
 ```
 
-### **Quality Monitoring**
-```python
-def monitor_generation_quality(job_data, result):
-    """Monitor generation quality and log issues"""
-    
-    # Check for common quality issues
-    if result.get('error'):
-        log_quality_issue('generation_error', job_data, result)
-    
-    # Monitor generation times
-    if result.get('generation_time', 0) > 10:  # seconds
-        log_quality_issue('slow_generation', job_data, result)
-    
-    # Monitor I2I specific issues
-    if job_data.get('reference_image_url'):
-        if result.get('similarity_score', 0) < 0.7:
-            log_quality_issue('low_i2i_similarity', job_data, result)
+---
+
+## **🔑 Environment Configuration**
+
+### **Required Environment Variables**
+```bash
+SUPABASE_URL=              # Supabase database URL
+SUPABASE_SERVICE_ROLE_KEY= # Supabase service key
+UPSTASH_REDIS_REST_URL=    # Redis queue URL
+UPSTASH_REDIS_REST_TOKEN=  # Redis authentication token
+WAN_WORKER_API_KEY=        # API key for WAN worker authentication
+HF_TOKEN=                  # Optional HuggingFace token
 ```
+
+### **RunPod Deployment**
+- **SDXL Worker URL**: `https://{RUNPOD_POD_ID}-7860.proxy.runpod.net`
+- **Port**: 7860 (shared with WAN worker)
+- **Health Monitoring**: Continuous status tracking via `/health` endpoints
 
 ---
 
 ## **🚀 Future Enhancements**
 
 ### **Planned Improvements**
-1. **Advanced I2I**: Multi-reference image support
-2. **Style Transfer**: Artistic style application
-3. **Quality Optimization**: Better parameter tuning
-4. **Batch Optimization**: Improved batch processing
+1. **Advanced I2I Modes**: Additional reference processing options
+2. **Custom Models**: Support for custom fine-tuned models
+3. **Batch Optimization**: Improved batch processing performance
+4. **Real-time Generation**: Streaming generation progress
 
 ### **Integration Opportunities**
-1. **3rd Party APIs**: Fallback to external SDXL providers
-2. **Quality Comparison**: Side-by-side result comparison
-3. **Parameter Learning**: AI-optimized parameter selection
+1. **Character Consistency**: Integration with character reference system
+2. **Style Transfer**: Advanced style transfer capabilities
+3. **Quality Enhancement**: Post-processing quality improvements
 
 ---
 
-**Note**: This worker is actively maintained and optimized for the OurVidz platform. The I2I implementation provides the foundation for advanced image modification capabilities.
+**Note**: This worker provides high-quality image generation with comprehensive I2I support and batch processing capabilities. The LUSTIFY SDXL model ensures professional-quality results with zero content restrictions.
