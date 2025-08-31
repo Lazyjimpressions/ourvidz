@@ -33,7 +33,7 @@ const MobileRoleplayDashboard = () => {
     preview_image_url: char.reference_image_url || char.image_url, // Use reference_image_url as preview
     quick_start: char.interaction_count > 50, // Popular characters as quick start
     category: char.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
-    consistency_method: char.consistency_method || 'i2i_reference',
+    consistency_method: (char as any).consistency_method || 'i2i_reference',
     interaction_count: char.interaction_count,
     likes_count: char.likes_count,
     content_rating: char.content_rating,

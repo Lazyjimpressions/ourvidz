@@ -40,7 +40,8 @@ export const AssetListView = ({
     onSelectAll(checked);
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined) => {
+    if (!status) return 'outline';
     switch (status.toLowerCase()) {
       case 'completed': return 'default';
       case 'processing': return 'secondary';
