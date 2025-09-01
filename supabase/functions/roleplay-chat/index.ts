@@ -349,9 +349,46 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
   return fullContext;
 }
 
-// ✅ NEW: Build system prompt separately
+// ✅ SIMPLE: Build system prompt from character and scene context
 function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string): string {
-  return buildRoleplayContext(character, recentMessages, contentTier, contentTier, sceneContext);
+  // Character foundation
+  let systemPrompt = `You are ${character.name}, a ${character.description}. `;
+  
+  // Character personality and voice
+  if (character.traits) {
+    systemPrompt += `Your personality: ${character.traits}. `;
+  }
+  
+  if (character.persona) {
+    systemPrompt += `Your background: ${character.persona}. `;
+  }
+  
+  if (character.base_prompt) {
+    systemPrompt += `Your core behavior: ${character.base_prompt}. `;
+  }
+  
+  // Content tier instructions
+  if (contentTier === 'nsfw') {
+    systemPrompt += `You can engage in adult content and romantic scenarios while staying in character.`;
+  } else {
+    systemPrompt += `Keep content appropriate and family-friendly, focusing on romantic tension.`;
+  }
+  
+  // Scene context integration (this is where the roleplay behavior comes from)
+  if (sceneContext) {
+    systemPrompt += `\n\n${sceneContext}`;
+  }
+  
+  // Recent conversation context
+  if (recentMessages.length > 0) {
+    systemPrompt += `\n\nRecent conversation:\n`;
+    recentMessages.slice(-3).forEach(msg => {
+      const speaker = msg.role === 'user' ? 'User' : character.name;
+      systemPrompt += `${speaker}: ${msg.content}\n`;
+    });
+  }
+  
+  return systemPrompt;
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
