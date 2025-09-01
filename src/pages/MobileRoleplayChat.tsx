@@ -20,37 +20,11 @@ import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
-import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
+import { imageConsistencyService } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-
-interface Character {
-  id: string;
-  name: string;
-  description: string;
-  image_url: string;
-  preview_image_url?: string;
-  category: string;
-  consistency_method: string;
-  base_prompt: string;
-  quick_start: boolean;
-}
-
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'character';
-  timestamp: string;
-  scene_image?: string;
-  consistency_method?: string;
-  job_id?: string;
-  metadata?: {
-    scene_generated?: boolean;
-    image_url?: string;
-    consistency_method?: string;
-    job_id?: string;
-  };
-}
+import { Character, Message, CharacterScene } from '@/types/roleplay';
+import type { ConsistencySettings } from '@/services/ImageConsistencyService';
 
 const MobileRoleplayChat: React.FC = () => {
   const { characterId } = useParams<{ characterId: string }>();
