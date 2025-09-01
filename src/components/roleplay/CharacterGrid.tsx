@@ -38,9 +38,9 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
 
   const getGapSize = () => {
     if (isMobile) {
-      return 'gap-3';
-    } else if (isTablet) {
       return 'gap-4';
+    } else if (isTablet) {
+      return 'gap-5';
     } else {
       return 'gap-6';
     }

@@ -167,80 +167,82 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
           </div>
         )}
 
-        {/* Consistency Method Badge */}
+        {/* Consistency Method Badge - Bottom Right */}
         {character.consistency_method && (
-          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+          <div className="absolute bottom-2 right-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full font-medium z-20">
             {character.consistency_method === 'i2i_reference' ? '70%' : 
              character.consistency_method === 'ip_adapter' ? '90%' : '40%'}
           </div>
         )}
 
-        {/* Generate Image Button - Always visible for testing with mobile improvements */}
-        <div 
-          className="absolute inset-0 bg-black/20 flex items-center justify-center z-20 pointer-events-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Button
-            onClick={generateCharacterImage}
-            disabled={isGenerating}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs"
-            size="sm"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-3 h-3 mr-1" />
-                Generate Image
-              </>
-            )}
-          </Button>
-        </div>
-        
-        {/* Overlay Actions */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors z-10 pointer-events-none">
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-            <h3 className="text-white font-semibold">{character.name}</h3>
-            <p className="text-white/80 text-sm line-clamp-2">{character.description}</p>
-          </div>
-          
-          {/* Action Buttons */}
+        {/* Generate Image Button - Only for cards without images */}
+        {!imageUrl && (
           <div 
-            className={`absolute top-2 right-2 flex gap-1 transition-opacity pointer-events-auto ${
-              isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-            }`}
+            className="absolute inset-0 bg-black/30 flex items-center justify-center z-10"
             onClick={(e) => e.stopPropagation()}
           >
             <Button
-              onClick={handlePreview}
+              onClick={generateCharacterImage}
+              disabled={isGenerating}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 text-sm"
+              size="sm"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Generate Image
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        
+        {/* Text Overlay - Always visible */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
+          <h3 className="text-white font-semibold text-sm line-clamp-1">{character.name}</h3>
+          <p className="text-white/80 text-xs line-clamp-2 mt-0.5">{character.description}</p>
+        </div>
+        
+        {/* Corner Action Icons */}
+        <div 
+          className={`absolute top-2 right-2 flex gap-1 transition-all duration-200 ${
+            isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Generate Image Icon - Always visible */}
+          {user && (
+            <Button
+              onClick={generateCharacterImage}
+              disabled={isGenerating}
               size="sm"
               variant="secondary"
-              className="w-8 h-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+              className="w-7 h-7 p-0 bg-black/60 hover:bg-black/80 border-0 backdrop-blur-sm"
+              title="Generate New Image"
             >
-              <Eye className="w-3 h-3" />
+              {isGenerating ? (
+                <Loader2 className="w-3 h-3 animate-spin text-white" />
+              ) : (
+                <Sparkles className="w-3 h-3 text-white" />
+              )}
             </Button>
-            
-            {/* Generate Image Button (when image exists) */}
-            {imageUrl && user && (
-              <Button
-                onClick={generateCharacterImage}
-                disabled={isGenerating}
-                size="sm"
-                variant="secondary"
-                className="w-8 h-8 p-0 bg-black/50 hover:bg-black/70 text-white"
-                title="Regenerate Image"
-              >
-                {isGenerating ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Sparkles className="w-3 h-3" />
-                )}
-              </Button>
-            )}
-          </div>
+          )}
+          
+          {/* Preview Button */}
+          <Button
+            onClick={handlePreview}
+            size="sm"
+            variant="secondary"
+            className="w-7 h-7 p-0 bg-black/60 hover:bg-black/80 border-0 backdrop-blur-sm"
+            title="Preview Character"
+          >
+            <Eye className="w-3 h-3 text-white" />
+          </Button>
         </div>
       </div>
     </div>
