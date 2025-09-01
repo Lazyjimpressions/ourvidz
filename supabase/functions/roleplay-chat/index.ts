@@ -303,7 +303,7 @@ serve(async (req) => {
 });
 
 // Helper functions
-function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string): string {
+function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string): string {
   const recentContext = messages
     .slice(0, 5)
     .reverse()
@@ -316,7 +316,14 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     characterContext += `\nBase Prompt: ${character.base_prompt}`;
   }
 
-  return `${characterContext}\n\nRecent Conversation:\n${recentContext}`;
+  // ✅ ADD SCENE CONTEXT IF AVAILABLE:
+  let fullContext = `${characterContext}\n\nRecent Conversation:\n${recentContext}`;
+  
+  if (sceneContext) {
+    fullContext += `\n\nCurrent Scene Context:\n${sceneContext}`;
+  }
+
+  return fullContext;
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
