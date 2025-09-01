@@ -54,20 +54,44 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 }) => {
   const { isMobile } = useMobileDetection();
 
-  if (!character) return null;
+  // Debug logging
+  console.log('🎭 CharacterPreviewModal:', {
+    isOpen,
+    characterName: character?.name,
+    hasCharacter: !!character,
+    description: character?.description?.substring(0, 50) + '...'
+  });
+
+  if (!character) {
+    console.log('❌ No character provided to modal');
+    return null;
+  }
 
   const imageUrl = character.image_url || character.preview_image_url;
   const hasImage = !!imageUrl;
 
+  const handleStartChat = () => {
+    console.log('🚀 Starting chat with character:', character.name);
+    onStartChat();
+  };
+
+  const handleClose = () => {
+    console.log('❌ Closing modal for character:', character.name);
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`
-        max-w-md w-[95vw] max-h-[90vh] overflow-hidden
-        bg-card border-border p-0
-        ${isMobile ? 'rounded-none' : 'rounded-lg'}
-      `}>
-        {/* Header */}
-        <DialogHeader className="p-4 pb-0">
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent 
+        className={`
+          max-w-md w-[95vw] h-[90vh] flex flex-col
+          bg-card border-border p-0
+          ${isMobile ? 'rounded-none' : 'rounded-lg'}
+        `}
+        hideClose={true} // Hide the built-in close button
+      >
+        {/* Header - Fixed */}
+        <DialogHeader className="p-4 pb-2 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-semibold text-white line-clamp-1">
               {character.name}
@@ -75,17 +99,18 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={onClose}
-              className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+              onClick={handleClose}
+              className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
         </DialogHeader>
 
-        <div className="flex flex-col h-full overflow-y-auto">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
           {/* Character Image Section */}
-          <div className="relative px-4">
+          <div className="mb-4">
             <div className={`
               relative rounded-lg overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900
               ${hasImage ? 'aspect-square' : 'aspect-[4/3]'}
@@ -137,9 +162,10 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           </div>
 
           {/* Character Info Section */}
-          <div className="p-4 space-y-4">
+          <div className="space-y-4">
             {/* Description */}
             <div>
+              <h3 className="text-sm font-medium text-gray-400 mb-2">About {character.name}</h3>
               <p className="text-gray-300 text-sm leading-relaxed">
                 {character.description}
               </p>
@@ -207,30 +233,30 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               </div>
             )}
           </div>
+        </div>
 
-          {/* Action Buttons */}
-          <div className="p-4 pt-0">
-            <div className="flex gap-2">
+        {/* Action Buttons - Fixed at bottom */}
+        <div className="p-4 pt-2 border-t border-border flex-shrink-0 bg-card">
+          <div className="flex gap-2">
+            <Button 
+              onClick={handleStartChat}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              size="lg"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Chat
+            </Button>
+            
+            {onEditCharacter && (
               <Button 
-                onClick={onStartChat}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={onEditCharacter}
+                variant="outline"
                 size="lg"
+                className="border-gray-600 text-gray-300 hover:bg-gray-800"
               >
-                <Play className="w-4 h-4 mr-2" />
-                Start Chat
+                <Settings className="w-4 h-4" />
               </Button>
-              
-              {onEditCharacter && (
-                <Button 
-                  onClick={onEditCharacter}
-                  variant="outline"
-                  size="lg"
-                  className="border-gray-600 text-gray-300 hover:bg-gray-800"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </DialogContent>
