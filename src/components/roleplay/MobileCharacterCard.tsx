@@ -175,9 +175,9 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
           </div>
         )}
 
-        {/* Generate Image Button - Always visible for testing */}
+        {/* Generate Image Button - Always visible for testing with mobile improvements */}
         <div 
-          className="absolute inset-0 bg-black/20 flex items-center justify-center"
+          className="absolute inset-0 bg-black/20 flex items-center justify-center z-20 pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <Button
@@ -201,14 +201,19 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         </div>
         
         {/* Overlay Actions */}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors">
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors z-10 pointer-events-none">
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
             <h3 className="text-white font-semibold">{character.name}</h3>
             <p className="text-white/80 text-sm line-clamp-2">{character.description}</p>
           </div>
           
           {/* Action Buttons */}
-          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div 
+            className={`absolute top-2 right-2 flex gap-1 transition-opacity pointer-events-auto ${
+              isTouchDevice ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button
               onClick={handlePreview}
               size="sm"
