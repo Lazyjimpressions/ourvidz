@@ -45,6 +45,8 @@ export interface Message {
     job_id?: string;
     needsRetry?: boolean;
     isError?: boolean;
+    sceneError?: boolean;
+    canRetryScene?: boolean;
   };
 }
 
