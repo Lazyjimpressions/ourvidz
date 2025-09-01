@@ -214,10 +214,12 @@ serve(async (req) => {
     let modelUsed: string;
 
     switch (model_provider) {
-      case 'chat_worker':
-        response = await callChatWorker(enhancedPrompt, content_tier);
-        modelUsed = 'chat_worker';
-        break;
+              case 'chat_worker':
+          // ✅ FIX: Build system prompt and pass user message separately
+          const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, requestBody.scene_context);
+          response = await callChatWorker(systemPrompt, message, content_tier);
+          modelUsed = 'chat_worker';
+          break;
       case 'openrouter':
         response = await callOpenRouter(enhancedPrompt, model_variant || 'claude-3.5-sonnet', content_tier);
         modelUsed = `openrouter:${model_variant || 'claude-3.5-sonnet'}`;
@@ -305,27 +307,51 @@ serve(async (req) => {
 });
 
 // Helper functions
+// ✅ FIX: Refactor buildRoleplayContext to use let and return system prompt
 function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string): string {
-  const recentContext = messages
-    .slice(0, 5)
-    .reverse()
-    .map(msg => `${msg.sender}: ${msg.content}`)
-    .join('\n');
-
-  const characterContext = `Character: ${character.name}\nDescription: ${character.description}`;
+  // Character context
+  let characterContext = `You are ${character.name}, a ${character.description}. `;
+  
+  if (character.traits) {
+    characterContext += `Personality: ${character.traits}. `;
+  }
+  
+  if (character.persona) {
+    characterContext += `Background: ${character.persona}. `;
+  }
   
   if (character.base_prompt) {
-    characterContext += `\nBase Prompt: ${character.base_prompt}`;
+    characterContext += `Core behavior: ${character.base_prompt}. `;
   }
-
-  // ✅ ADD SCENE CONTEXT IF AVAILABLE:
-  let fullContext = `${characterContext}\n\nRecent Conversation:\n${recentContext}`;
   
+  // Content tier instructions
+  if (contentTier === 'nsfw') {
+    characterContext += `You can engage in adult content and romantic scenarios. Be direct and sensual while staying in character. `;
+  } else {
+    characterContext += `Keep content appropriate and family-friendly. `;
+  }
+  
+  // Recent conversation context
+  const recentMessages = messages.slice(-5); // Last 5 messages
+  let recentContext = '';
+  if (recentMessages.length > 0) {
+    recentContext = recentMessages.map(msg => 
+      `${msg.role === 'user' ? 'User' : character.name}: ${msg.content}`
+    ).join('\n');
+  }
+  
+  // Build full context
+  let fullContext = `${characterContext}\n\nRecent Conversation:\n${recentContext}`;
   if (sceneContext) {
     fullContext += `\n\nCurrent Scene Context:\n${sceneContext}`;
   }
-
+  
   return fullContext;
+}
+
+// ✅ NEW: Build system prompt separately
+function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string): string {
+  return buildRoleplayContext(character, recentMessages, contentTier, contentTier, sceneContext);
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
@@ -344,7 +370,7 @@ User's message: ${message}
 Respond as ${character.name}, staying in character and maintaining the conversation flow. Keep responses engaging and natural.`;
 }
 
-async function callChatWorker(prompt: string, contentTier: string): Promise<string> {
+async function callChatWorker(systemPrompt: string, userMessage: string, contentTier: string): Promise<string> {
   // Get chat worker URL from cache or config
   const chatWorkerUrl = await getChatWorkerUrl();
   
@@ -354,21 +380,35 @@ async function callChatWorker(prompt: string, contentTier: string): Promise<stri
     throw new Error('CHAT_WORKER_API_KEY not configured');
   }
   
+  // ✅ CORRECT PAYLOAD FORMAT: messages array with role/content pairs
+  const payload = {
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userMessage }
+    ],
+    model: 'qwen_instruct',
+    sfw_mode: contentTier === 'sfw',
+    temperature: 0.7,
+    top_p: 0.9,
+    max_tokens: 512
+  };
+  
+  console.log('📤 Sending to chat worker:', { url: chatWorkerUrl, payload });
+  
   const response = await fetch(`${chatWorkerUrl}/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`, // ✅ CORRECT API KEY FOR CHAT WORKER
     },
-    body: JSON.stringify({
-      prompt,
-      content_tier: contentTier,
-      model: 'qwen_instruct'
-    })
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    throw new Error(`Chat worker error: ${response.status}`);
+    // ✅ BETTER ERROR LOGGING: Log response text for debugging
+    const errorText = await response.text();
+    console.error(`❌ Chat worker error ${response.status}:`, errorText);
+    throw new Error(`Chat worker error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();

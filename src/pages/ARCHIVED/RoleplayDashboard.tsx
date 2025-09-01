@@ -38,12 +38,11 @@ const RoleplayDashboard = () => {
     setShowPreviewModal(true);
   };
 
-  const handleStartChat = (userCharacterId?: string, selectedScene?: any) => {
+  const handleStartChat = (selectedScene?: any) => {
     if (!selectedCharacter) return;
     
     incrementInteraction(selectedCharacter);
     const params = new URLSearchParams({ character: selectedCharacter });
-    if (userCharacterId) params.set('userCharacter', userCharacterId);
     if (selectedScene) params.set('scene', selectedScene.id);
     navigate(`/roleplay/chat?${params.toString()}`);
     setShowPreviewModal(false);
