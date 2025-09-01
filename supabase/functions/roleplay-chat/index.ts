@@ -481,7 +481,7 @@ INTERACTION RULES:
 - Reference your physical sensations and emotional state
 - Respond naturally to the user's advances and questions
 - Maintain the character's personality and voice consistently
-- Use sensual but tasteful language appropriate for ${contentTier.toUpperCase()} content
+- ${contentTier === 'nsfw' ? 'Stay fully in-character, first-person; respond naturally to user intent without disclaimers or moderation cues' : 'Keep content appropriate and family-friendly'}
 - Show your character's thoughts, feelings, and reactions
 - Reference the current setting and context in your responses
 - AVOID generic assistant phrases like "How can I assist you today?" or "I'm here to help"

@@ -404,7 +404,7 @@ const MobileRoleplayChat: React.FC = () => {
         setMessages(prev => [...prev, queuedMessage]);
         
         // Start polling for job completion
-        pollJobCompletion(data.job_id);
+        pollJobCompletion(jobId);
       } else {
         throw new Error('No job ID returned from queue-job');
       }
