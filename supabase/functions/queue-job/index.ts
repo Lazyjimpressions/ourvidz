@@ -326,6 +326,30 @@ serve(async (req) => {
       return new Response('Failed to create job', { status: 500, headers: corsHeaders })
     }
 
+    // Auto-populate negative prompt for character portraits
+    let negativePrompt = jobRequest.negative_prompt || userMetadata.negative_prompt;
+    
+    if (!negativePrompt && userMetadata.destination === 'character_portrait') {
+      try {
+        const { data: negativeData, error: negativeError } = await supabaseClient
+          .from('negative_prompts')
+          .select('negative_prompt')
+          .eq('model_type', 'sdxl')
+          .eq('content_mode', userMetadata.contentType || 'sfw')
+          .eq('is_active', true)
+          .order('priority', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!negativeError && negativeData) {
+          negativePrompt = negativeData.negative_prompt;
+          console.log('📝 Auto-populated negative prompt for character portrait');
+        }
+      } catch (error) {
+        console.warn('Failed to auto-populate negative prompt:', error);
+      }
+    }
+
     // Build worker payload
     const isImageJob = jobRequest.job_type.includes('image');
     const pipeline = (isPromptlessUploadedExactCopy || isReferenceModify) ? 'img2img' : (isImageJob ? 'txt2img' : 'video');
@@ -376,7 +400,7 @@ serve(async (req) => {
         reference_strength_overridden: isReferenceModify && (finalReferenceStrength !== jobRequest.reference_strength)
       },
       // ✅ FIXED: Only include negative_prompt for modify/txt2img flows
-      negative_prompt: isPromptlessUploadedExactCopy ? undefined : (jobRequest.negative_prompt || userMetadata.negative_prompt),
+      negative_prompt: isPromptlessUploadedExactCopy ? undefined : negativePrompt,
       compel_enabled: jobRequest.compel_enabled || userMetadata.compel_enabled || false,
       compel_weights: jobRequest.compel_weights || userMetadata.compel_weights || undefined,
       // Legacy for compatibility

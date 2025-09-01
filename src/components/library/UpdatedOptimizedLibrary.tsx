@@ -14,6 +14,7 @@ import { LibraryAssetService } from '@/lib/services/LibraryAssetService';
 import { toast } from 'sonner';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { useNavigate } from 'react-router-dom';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export const UpdatedOptimizedLibrary: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [visibleCount, setVisibleCount] = useState(isMobile ? 8 : 12);
   const [lastLightboxClose, setLastLightboxClose] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState<'all' | 'characters'>('all');
 
   // Infinite scroll sentinel
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -38,11 +40,20 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
     refetch
   } = useLibraryAssets();
 
-  // Convert to shared asset format
-  const sharedAssets = useMemo(() => 
-    rawAssets.map(toSharedFromLibrary), 
-    [rawAssets]
-  );
+  // Convert to shared asset format and filter by tab
+  const sharedAssets = useMemo(() => {
+    const allAssets = rawAssets.map(toSharedFromLibrary);
+    
+    if (activeTab === 'characters') {
+      return allAssets.filter(asset => 
+        asset.metadata?.roleplay_metadata?.type === 'character_portrait' ||
+        asset.metadata?.tags?.includes('character') ||
+        asset.metadata?.content_category === 'character'
+      );
+    }
+    
+    return allAssets;
+  }, [rawAssets, activeTab]);
 
   // Get signed URLs for thumbnails
   const { signedAssets, isSigning } = useSignedAssets(sharedAssets, 'user-library', {
@@ -291,6 +302,16 @@ export const UpdatedOptimizedLibrary: React.FC = () => {
               hasActiveFilters={hasActiveFilters}
               onClearFilters={clearSearch}
             />
+            
+            {/* Tabs */}
+            <div className="mt-3">
+              <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'characters')}>
+                <TabsList className="grid w-full max-w-md grid-cols-2">
+                  <TabsTrigger value="all">All Assets</TabsTrigger>
+                  <TabsTrigger value="characters">Characters</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
             
             {/* Filters */}
             <div className="mt-3">

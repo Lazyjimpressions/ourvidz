@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 
 export interface CharacterImageGenerationParams {
   characterId: string;
@@ -8,35 +9,43 @@ export interface CharacterImageGenerationParams {
   traits?: string;
   persona?: string;
   consistencyMethod?: string;
+  gender?: string;
+  referenceImageUrl?: string;
+  seedLocked?: number;
 }
 
 export class CharacterImageService {
   /**
-   * Generate a character portrait image using the image model
+   * Generate a character portrait image using the optimized prompt builder
    */
   static async generateCharacterPortrait(params: CharacterImageGenerationParams) {
     try {
-      // Build character prompt from metadata
-      const appearanceTags = params.appearanceTags?.join(', ') || '';
-      const traits = params.traits || '';
-      const persona = params.persona || '';
+      // Use the optimized character prompt builder
+      const characterPrompt = buildCharacterPortraitPrompt({
+        name: params.characterName,
+        description: params.description,
+        appearance_tags: params.appearanceTags || [],
+        traits: params.traits,
+        persona: params.persona,
+        gender: params.gender
+      });
       
-      const characterPrompt = `${params.characterName}, ${params.description}. ${appearanceTags}. ${traits}. ${persona}. Professional character portrait, high quality, detailed, consistent appearance, studio lighting`;
-      
-      // Generate image using our image model
+      // Generate image using optimized workflow
       const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: characterPrompt,
           job_type: 'sdxl_image_fast',
+          reference_image_url: params.referenceImageUrl,
+          seed: params.seedLocked,
           metadata: {
             destination: 'character_portrait',
             character_id: params.characterId,
             character_name: params.characterName,
             consistency_method: params.consistencyMethod || 'i2i_reference',
-            reference_strength: 0.35,
+            reference_strength: params.referenceImageUrl ? 0.35 : undefined,
             base_prompt: characterPrompt,
-            seed_locked: null, // Will be set after first generation
-            update_character_image: true // Flag to update character record
+            seed_locked: params.seedLocked || false,
+            contentType: 'sfw' // Character portraits are SFW by default
           }
         }
       });

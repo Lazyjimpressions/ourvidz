@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Eye, Sparkles, Loader2 } from 'lucide-react';
+import { Eye, Sparkles, Loader2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateCharacterPortrait } from '@/utils/characterImageUtils';
 import { CharacterPreviewModal } from './CharacterPreviewModal';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Character {
   id: string;
@@ -40,6 +41,8 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const { isMobile, isTouchDevice } = useMobileDetection();
   const [isGenerating, setIsGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showSaveOption, setShowSaveOption] = useState(false);
+  const [lastJobId, setLastJobId] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -81,6 +84,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
       
       if (result.success) {
         console.log('✅ Character portrait generation started:', result.jobId);
+        setLastJobId(result.jobId || null);
         toast({
           title: "Image Generation Started",
           description: "Character image is being generated. This may take a few moments.",
@@ -102,6 +106,76 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
       });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  // Monitor job completion for save-to-library option
+  useEffect(() => {
+    if (!lastJobId) return;
+
+    const checkJobStatus = async () => {
+      try {
+        const { data: job } = await supabase
+          .from('jobs')
+          .select('status')
+          .eq('id', lastJobId)
+          .single();
+
+        if (job?.status === 'completed') {
+          setShowSaveOption(true);
+          setLastJobId(null);
+        }
+      } catch (error) {
+        console.error('Error checking job status:', error);
+      }
+    };
+
+    const interval = setInterval(checkJobStatus, 3000);
+    return () => clearInterval(interval);
+  }, [lastJobId]);
+
+  const handleSaveToLibrary = async () => {
+    try {
+      // Find the workspace asset for this character's latest generation
+      const { data: assets } = await supabase
+        .from('workspace_assets')
+        .select('id')
+        .eq('user_id', user?.id)
+        .contains('generation_settings', { character_id: character.id })
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (assets && assets.length > 0) {
+        const { error } = await supabase.functions.invoke('workspace-actions', {
+          body: {
+            action: 'save_to_library',
+            assetId: assets[0].id,
+            tags: ['character', 'portrait'],
+            customTitle: `${character.name} Portrait`
+          }
+        });
+
+        if (!error) {
+          toast({
+            title: "Saved to Library",
+            description: `${character.name}'s portrait has been saved to your library.`,
+          });
+          setShowSaveOption(false);
+        } else {
+          toast({
+            title: "Save Failed",
+            description: "Failed to save image to library.",
+            variant: "destructive"
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error saving to library:', error);
+      toast({
+        title: "Save Failed", 
+        description: "An error occurred while saving.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -199,6 +273,19 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
                 ) : (
                   <Sparkles className="w-3 h-3 text-white" />
                 )}
+              </Button>
+            )}
+            
+            {/* Save to Library Option - Shows after successful generation */}
+            {showSaveOption && (
+              <Button
+                onClick={handleSaveToLibrary}
+                size="sm"
+                variant="secondary"
+                className="w-6 h-6 p-0 bg-green-600/80 hover:bg-green-600 border-0"
+                title="Save to Library"
+              >
+                <Save className="w-3 h-3 text-white" />
               </Button>
             )}
             

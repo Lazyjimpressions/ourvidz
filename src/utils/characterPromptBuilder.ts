@@ -4,19 +4,27 @@ interface Character {
   persona?: string;
   traits?: string;
   appearance_tags: string[];
+  gender?: string;
 }
 
 export const buildCharacterPortraitPrompt = (character: Character): string => {
-  const maxTokens = 75; // SDXL limit
+  const maxTokens = 77; // SDXL limit
   
-  // Build quality tokens
-  const qualityTokens = ['score_9', 'score_8_up', 'masterpiece', 'best quality'];
+  // Build quality tokens - photorealistic focus
+  const qualityTokens = ['score_9', 'score_8_up', 'masterpiece', 'best quality', 'photorealistic'];
   
   // Build character tokens
   const characterTokens: string[] = [];
   
-  // Add base portrait tokens
-  characterTokens.push('1girl', 'beautiful woman', 'portrait', 'headshot');
+  // Gender-aware base tokens
+  const gender = character.gender?.toLowerCase() || 'unspecified';
+  if (gender === 'male') {
+    characterTokens.push('1boy', 'handsome man', 'portrait', 'headshot');
+  } else if (gender === 'female') {
+    characterTokens.push('1girl', 'beautiful woman', 'portrait', 'headshot'); 
+  } else {
+    characterTokens.push('1person', 'beautiful person', 'portrait', 'headshot');
+  }
   
   // Add appearance tags if available
   if (character.appearance_tags && character.appearance_tags.length > 0) {
@@ -50,13 +58,14 @@ export const buildCharacterPortraitPrompt = (character: Character): string => {
     characterTokens.push(...traitTokens);
   }
   
-  // Technical quality tokens
+  // Technical quality tokens - photorealistic focus
   const technicalTokens = [
     'studio photography',
-    'cinematic lighting', 
+    'professional lighting', 
     'sharp focus',
-    'soft lighting',
-    'high detail'
+    'detailed skin texture',
+    'realistic',
+    'photographic'
   ];
   
   // Smart token assembly with deduplication

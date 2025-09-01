@@ -1,5 +1,5 @@
+import { CharacterImageService } from '@/services/CharacterImageService';
 import { supabase } from '@/integrations/supabase/client';
-import { buildCharacterPortraitPrompt } from './characterPromptBuilder';
 import { extractReferenceMetadata } from './extractReferenceMetadata';
 
 interface Character {
@@ -12,6 +12,9 @@ interface Character {
   traits?: string;
   persona?: string;
   consistency_method?: string;
+  gender?: string;
+  reference_image_url?: string;
+  seed_locked?: number;
 }
 
 interface CharacterImageGenerationResult {
@@ -22,57 +25,30 @@ interface CharacterImageGenerationResult {
 }
 
 /**
- * Generate a character portrait using optimized prompt building
+ * Generate a character portrait using optimized prompt building and service
  */
 export const generateCharacterPortrait = async (
   character: Character,
   userId: string
 ): Promise<CharacterImageGenerationResult> => {
   try {
-    // Use optimized prompt builder
-    const characterPrompt = buildCharacterPortraitPrompt({
-      name: character.name,
-      description: character.description,
-      persona: character.persona,
-      traits: character.traits,
-      appearance_tags: character.appearance_tags || []
-    });
-
     console.log('🎨 Generating character portrait for:', character.name);
-    console.log('📝 Optimized prompt:', characterPrompt);
-
-    // Queue the job for SDXL generation
-    const { data, error } = await supabase.functions.invoke('queue-job', {
-      body: {
-        prompt: characterPrompt,
-        job_type: 'sdxl_image_fast',
-        metadata: {
-          destination: 'character_portrait',
-          character_id: character.id,
-          character_name: character.name,
-          update_character_image: true,
-          user_id: userId,
-          save_to_library: true, // Save to user_library instead of avatars
-          collection_name: 'Character Portraits'
-        }
-      }
+    
+    // Use the CharacterImageService for consistent generation
+    const result = await CharacterImageService.generateCharacterPortrait({
+      characterId: character.id,
+      characterName: character.name,
+      description: character.description || '',
+      appearanceTags: character.appearance_tags,
+      traits: character.traits,
+      persona: character.persona,
+      gender: character.gender,
+      referenceImageUrl: character.reference_image_url,
+      seedLocked: character.seed_locked,
+      consistencyMethod: character.consistency_method || 'i2i_reference'
     });
 
-    if (error) {
-      console.error('❌ Character portrait generation failed:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to generate character portrait'
-      };
-    }
-
-    console.log('✅ Character portrait job queued:', data);
-    return {
-      success: true,
-      jobId: data.job_id,
-      prompt: characterPrompt
-    };
-
+    return result;
   } catch (error) {
     console.error('❌ Character portrait generation error:', error);
     return {

@@ -255,51 +255,123 @@ serve(async (req) => {
 
       console.log(`✅ Job ${jobId} completed with ${assetsToCreate.length} assets`)
 
-      // Update character image if this is a character portrait job
-      if (job.metadata?.destination === 'character_portrait' && job.metadata?.update_character_image) {
+      // Auto-save character portraits to library and update character
+      if (job.metadata?.destination === 'character_portrait') {
         const characterId = job.metadata.character_id;
         const firstImageAsset = assetsToCreate.find(asset => asset.asset_type === 'image');
         
         if (characterId && firstImageAsset) {
           try {
-            let imageUrl = firstImageAsset.temp_storage_path;
-            
-            // Check if the URL is already a full URL (from SDXL worker)
-            if (imageUrl.startsWith('http')) {
-              // Use the full URL directly
-              console.log(`📸 Using full URL for character image: ${imageUrl}`);
-            } else {
-              // Create a signed URL for the image (assuming it's in workspace-temp bucket)
-              const { data: signedUrlData } = await supabaseClient.storage
-                .from('workspace-temp')
-                .createSignedUrl(imageUrl, 3600); // 1 hour expiry
-              
-              if (signedUrlData?.signedUrl) {
-                imageUrl = signedUrlData.signedUrl;
-              } else {
-                console.error('Failed to create signed URL for character image');
-                return;
-              }
+            // Auto-save to user library with roleplay metadata
+            let sourceKey = firstImageAsset.temp_storage_path;
+            if (sourceKey.startsWith('workspace-temp/')) {
+              sourceKey = sourceKey.replace('workspace-temp/', '');
             }
+            
+            const destKey = `${finalUserId}/${jobId}_${characterId}.${firstImageAsset.mime_type.split('/')[1]}`;
+            
+            // Copy file to user-library
+            const { data: fileData, error: downloadError } = await supabaseClient.storage
+              .from('workspace-temp')
+              .download(sourceKey);
 
-            // Update character record
-            const { error: updateError } = await supabaseClient
-              .from('characters')
-              .update({
-                image_url: imageUrl,
-                reference_image_url: imageUrl,
-                seed_locked: firstImageAsset.generation_seed,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', characterId);
+            if (!downloadError && fileData) {
+              const { error: uploadError } = await supabaseClient.storage
+                .from('user-library')
+                .upload(destKey, fileData, {
+                  contentType: firstImageAsset.mime_type,
+                  upsert: true
+                });
 
-            if (updateError) {
-              console.error('Failed to update character image:', updateError);
+              if (!uploadError) {
+                // Handle thumbnail copy
+                let libraryThumbPath: string | null = null;
+                let thumbSrc = firstImageAsset.thumbnail_path;
+                if (!thumbSrc) {
+                  const base = firstImageAsset.temp_storage_path.replace(/\.(png|jpg|jpeg)$/i, '');
+                  thumbSrc = `${base}.thumb.webp`;
+                }
+                
+                if (thumbSrc && thumbSrc.startsWith('workspace-temp/')) {
+                  thumbSrc = thumbSrc.replace('workspace-temp/', '');
+                }
+                
+                if (thumbSrc) {
+                  const { data: thumbData } = await supabaseClient.storage
+                    .from('workspace-temp')
+                    .download(thumbSrc);
+                  
+                  if (thumbData) {
+                    const thumbDest = `${finalUserId}/${jobId}_${characterId}.thumb.webp`;
+                    const { error: upThumbErr } = await supabaseClient.storage
+                      .from('user-library')
+                      .upload(thumbDest, thumbData, {
+                        contentType: 'image/webp',
+                        upsert: true
+                      });
+                    if (!upThumbErr) {
+                      libraryThumbPath = thumbDest;
+                    }
+                  }
+                }
+
+                // Create library record with roleplay metadata
+                const { data: libraryAsset, error: libraryError } = await supabaseClient
+                  .from('user_library')
+                  .insert({
+                    user_id: finalUserId,
+                    asset_type: firstImageAsset.asset_type,
+                    storage_path: destKey,
+                    thumbnail_path: libraryThumbPath,
+                    file_size_bytes: firstImageAsset.file_size_bytes || 0,
+                    mime_type: firstImageAsset.mime_type,
+                    original_prompt: firstImageAsset.original_prompt,
+                    model_used: firstImageAsset.model_used,
+                    generation_seed: firstImageAsset.generation_seed,
+                    width: firstImageAsset.generation_settings?.width,
+                    height: firstImageAsset.generation_settings?.height,
+                    tags: ['character', 'portrait'],
+                    roleplay_metadata: {
+                      type: 'character_portrait',
+                      character_id: characterId,
+                      character_name: job.metadata.character_name,
+                      consistency_method: job.metadata.consistency_method
+                    },
+                    content_category: 'character'
+                  })
+                  .select()
+                  .single();
+
+                if (!libraryError && libraryAsset) {
+                  // Update character with stable storage path instead of signed URL
+                  const stableImageUrl = `user-library/${destKey}`;
+                  
+                  const { error: updateError } = await supabaseClient
+                    .from('characters')
+                    .update({
+                      image_url: stableImageUrl,
+                      reference_image_url: stableImageUrl,
+                      seed_locked: firstImageAsset.generation_seed,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('id', characterId);
+
+                  if (!updateError) {
+                    console.log(`✅ Character ${characterId} portrait saved to library and character updated`);
+                  } else {
+                    console.error('Failed to update character with library path:', updateError);
+                  }
+                } else {
+                  console.error('Failed to create library record:', libraryError);
+                }
+              } else {
+                console.error('Failed to upload character portrait to library:', uploadError);
+              }
             } else {
-              console.log(`✅ Character ${characterId} image updated successfully with URL: ${imageUrl}`);
+              console.error('Failed to download character portrait from workspace:', downloadError);
             }
           } catch (error) {
-            console.error('Error updating character image:', error);
+            console.error('Error auto-saving character portrait:', error);
           }
         }
       }
