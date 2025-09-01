@@ -50,11 +50,10 @@ export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
   }
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="w-5 h-5 text-blue-400" />
-        <h2 className="text-lg font-semibold text-white">Quick Start</h2>
-        <span className="text-gray-400 text-sm">Popular Characters</span>
+    <div className="mb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4 text-blue-400" />
+        <h2 className="text-base font-medium text-white">Quick Start</h2>
       </div>
       
       <div className={`
@@ -68,18 +67,9 @@ export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
               onSelect={() => onCharacterSelect(character.id)}
               onPreview={() => console.log('Preview:', character.id)}
             />
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full animate-pulse"></div>
+            <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
           </div>
         ))}
-      </div>
-      
-      <div className="mt-4 text-center">
-        <p className="text-gray-400 text-sm">
-          Start chatting with these popular characters instantly
-        </p>
-        <p className="text-gray-500 text-xs mt-1">
-          {quickStartCharacters.length} character{quickStartCharacters.length !== 1 ? 's' : ''} available
-        </p>
       </div>
     </div>
   );

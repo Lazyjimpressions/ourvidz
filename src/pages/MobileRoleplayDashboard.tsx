@@ -5,14 +5,11 @@ import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 
-
 const MobileRoleplayDashboard = () => {
-  console.log('🎭 MobileRoleplayDashboard: Component loaded!');
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,9 +17,6 @@ const MobileRoleplayDashboard = () => {
 
   // ✅ REAL DATA: Use database characters instead of mock data
   const { characters, isLoading, error, loadPublicCharacters } = usePublicCharacters();
-
-
-
 
   // Transform database characters to display format
   const displayCharacters = characters.map(char => ({
@@ -68,9 +62,9 @@ const MobileRoleplayDashboard = () => {
     return (
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-6">
+          <div className="mb-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
-            <p className="text-gray-400 mt-2">Loading characters...</p>
+            <p className="text-gray-400 mt-1">Loading characters...</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {[...Array(10)].map((_, i) => (
@@ -86,9 +80,9 @@ const MobileRoleplayDashboard = () => {
     return (
       <OurVidzDashboardLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-6">
+          <div className="mb-4">
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
-            <p className="text-red-400 mt-2">Error loading characters: {error}</p>
+            <p className="text-red-400 mt-1">Error loading characters: {error}</p>
           </div>
         </div>
       </OurVidzDashboardLayout>
@@ -99,9 +93,9 @@ const MobileRoleplayDashboard = () => {
     <OurVidzDashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header Section */}
-        <div className="mb-6">
+        <div className="mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
-          <p className="text-gray-400 mt-2">Chat with AI characters and generate scenes</p>
+          <p className="text-gray-400 mt-1">Chat with AI characters</p>
         </div>
         
         {/* Quick Start Section */}
@@ -123,10 +117,10 @@ const MobileRoleplayDashboard = () => {
         />
 
         {/* Create Character Button */}
-        <div className="mt-8 text-center">
+        <div className="mt-6 text-center">
           <Button 
             onClick={handleCreateCharacter}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
           >
             <Plus className="w-4 h-4 mr-2" />
             Create Character
