@@ -1,7 +1,7 @@
 # Roleplay Implementation Audit - Current Status & Next Steps
 
 **Last Updated:** September 1, 2025  
-**Status:** 🔍 **Audit Updated - Implementation In Progress**  
+**Status:** 🔍 **Audit Updated - Phase 2 Implementation In Progress**  
 **Purpose:** Current analysis of implementation progress and remaining work
 
 ## **🎯 Current Implementation Status**
@@ -25,13 +25,21 @@
   - `characterImageUtils.ts` created for user_library integration
   - `extractReferenceMetadata` available for consistency
   - `modifyOriginalPrompt` available for prompt editing
+- **Character Preview Modal**: ✅ **MAJOR ACHIEVEMENT - IMPLEMENTED**
+  - Complete modal with character details and stats
+  - Scene selection UI (ready for integration)
+  - Action buttons with proper UX
+  - Real data integration (no mock data)
+  - Proper scrolling and responsive design
 
 ### **❌ Missing Implementation (15% Remaining)**
 - **Memory system**: Three-tier memory (conversation, character, profile)
 - **Database schema**: Character table enhancements not executed
 - **Library integration**: Roleplay content categorization
 - **Performance optimization**: Mobile performance and caching
-- **Character preview modal**: Preview functionality not implemented
+- **Character scene templates**: Scene selection integration
+- **Dynamic greeting generation**: AI-powered character greetings
+- **Prompt template integration**: Database template usage
 
 ---
 
@@ -40,11 +48,11 @@
 ### **Pages (2 files)**
 ```
 src/pages/
-├── MobileRoleplayDashboard.tsx (120 lines) - ✅ IMPLEMENTED
-└── MobileRoleplayChat.tsx (587 lines) - ✅ IMPLEMENTED
+├── MobileRoleplayDashboard.tsx (138 lines) - ✅ IMPLEMENTED
+└── MobileRoleplayChat.tsx (632 lines) - ✅ IMPLEMENTED
 ```
 
-### **Components (8 files implemented)**
+### **Components (9 files implemented)**
 ```
 src/components/roleplay/
 ├── MobileCharacterCard.tsx (140 lines) - ✅ IMPLEMENTED
@@ -54,7 +62,8 @@ src/components/roleplay/
 ├── ContextMenu.tsx (80 lines) - ✅ IMPLEMENTED
 ├── CharacterGrid.tsx (66 lines) - ✅ IMPLEMENTED
 ├── QuickStartSection.tsx (77 lines) - ✅ IMPLEMENTED
-└── SearchAndFilters.tsx (100 lines) - ✅ IMPLEMENTED
+├── SearchAndFilters.tsx (100 lines) - ✅ IMPLEMENTED
+└── CharacterPreviewModal.tsx (296 lines) - ✅ NEW - IMPLEMENTED
 ```
 
 ### **Services (2 files implemented)**
@@ -64,10 +73,17 @@ src/services/
 └── MemoryManager.ts - ❌ NOT IMPLEMENTED
 ```
 
-### **Utilities (1 file implemented)**
+### **Utilities (2 files implemented)**
 ```
 src/utils/
-└── characterImageUtils.ts (150 lines) - ✅ NEW - IMPLEMENTED
+├── characterImageUtils.ts (150 lines) - ✅ IMPLEMENTED
+└── characterPromptBuilder.ts (100 lines) - ✅ IMPLEMENTED
+```
+
+### **Types (1 file implemented)**
+```
+src/types/
+└── roleplay.ts (100 lines) - ✅ NEW - IMPLEMENTED
 ```
 
 ### **Archived Components (10 files)**
@@ -96,10 +112,10 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 ```
 
 **Gap Analysis:**
-- **Dashboard**: 95% complete - all components implemented and working
-- **Character Selection**: 90% complete - MobileCharacterCard implemented, preview modal missing
-- **Chat Interface**: 95% complete - fully functional
-- **Scene Integration**: 60% complete - basic scene generation working
+- **Dashboard**: 100% complete - all components implemented and working
+- **Character Selection**: 95% complete - CharacterPreviewModal implemented, scene selection ready
+- **Chat Interface**: 95% complete - fully functional with real data
+- **Scene Integration**: 60% complete - basic scene generation working, selection UI ready
 
 ### **Mobile-First Design Status**
 - **PRD**: Mobile-first with touch-optimized interface
@@ -123,97 +139,142 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 
 ## **🎯 Immediate Next Steps (Priority Order)**
 
-### **1. Implement Character Preview Modal (Week 1)**
+### **1. Implement Character Scene Integration (Week 3, Days 1-2)**
 **Priority: HIGH** - Required for complete user flow
 
-#### **CharacterPreviewModal.tsx Implementation**
+#### **CharacterPreviewModal.tsx Scene Integration**
 ```typescript
-// src/components/roleplay/CharacterPreviewModal.tsx
-import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Play, Settings, Heart } from 'lucide-react';
+// Add scene loading and selection to existing modal
+const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
+const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
 
-interface CharacterPreviewModalProps {
-  character: Character;
-  isOpen: boolean;
-  onClose: () => void;
-  onStartChat: () => void;
-  onEditCharacter?: () => void;
-}
+// Load character scenes
+useEffect(() => {
+  const loadCharacterScenes = async () => {
+    if (!character?.id) return;
+    
+    const { data: scenes, error } = await supabase
+      .from('character_scenes')
+      .select('*')
+      .eq('character_id', character.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+      
+    if (!error && scenes) {
+      setCharacterScenes(scenes);
+    }
+  };
+  
+  loadCharacterScenes();
+}, [character?.id]);
 
-export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
-  character,
-  isOpen,
-  onClose,
-  onStartChat,
-  onEditCharacter
-}) => {
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-white">{character.name}</DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          {/* Character Image */}
-          <div className="aspect-square rounded-lg overflow-hidden bg-gray-800">
-            <img 
-              src={character.image_url || character.preview_image_url} 
-              alt={character.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-          
-          {/* Character Info */}
-          <div className="space-y-2">
-            <p className="text-gray-300 text-sm">{character.description}</p>
-            
-            <div className="flex flex-wrap gap-2">
-              {character.appearance_tags?.map(tag => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-            
-            {character.traits && (
-              <div className="text-xs text-gray-400">
-                <strong>Traits:</strong> {character.traits}
-              </div>
-            )}
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button 
-              onClick={onStartChat}
-              className="flex-1 bg-blue-600 hover:bg-blue-700"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              Start Chat
-            </Button>
-            
-            {onEditCharacter && (
-              <Button 
-                onClick={onEditCharacter}
-                variant="outline"
-                size="sm"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
+// Scene selection UI (add to existing modal)
+{characterScenes.length > 0 && (
+  <div className="mb-4">
+    <h4 className="text-xs font-medium text-gray-400 mb-2">Scenes</h4>
+    <div className="space-y-2">
+      {characterScenes.map(scene => (
+        <div 
+          key={scene.id}
+          onClick={() => setSelectedScene(scene)}
+          className={`text-xs text-gray-300 p-2 rounded border cursor-pointer hover:bg-gray-800 ${
+            selectedScene?.id === scene.id ? 'bg-gray-800 border-blue-500' : ''
+          }`}
+        >
+          {scene.scene_prompt}
         </div>
-      </DialogContent>
-    </Dialog>
-  );
-};
+      ))}
+    </div>
+  </div>
+)}
 ```
 
-### **2. Implement Memory System (Week 2)**
+### **2. Implement Dynamic Greeting Generation (Week 3, Days 3-4)**
+**Priority: HIGH** - Core feature for character immersion
+
+#### **CharacterGreetingService.ts Implementation**
+```typescript
+// src/services/CharacterGreetingService.ts
+export class CharacterGreetingService {
+  static async generateGreeting(
+    character: Character, 
+    scene?: CharacterScene
+  ): Promise<string> {
+    try {
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          message: '[INITIAL_GREETING]',
+          character_id: character.id,
+          scene_id: scene?.id,
+          scene_context: scene?.scene_prompt,
+          is_initial_greeting: true,
+          content_tier: character.content_rating || 'sfw'
+        }
+      });
+      
+      if (error) throw error;
+      
+      return data?.response || this.getFallbackGreeting(character);
+    } catch (error) {
+      console.error('Error generating greeting:', error);
+      return this.getFallbackGreeting(character);
+    }
+  }
+  
+  private static getFallbackGreeting(character: Character): string {
+    return `Hello! I'm ${character.name}. ${character.description}`;
+  }
+}
+```
+
+### **3. Implement Prompt Template Integration (Week 3, Day 5)**
+**Priority: HIGH** - Required for consistent character behavior
+
+#### **PromptTemplateService.ts Implementation**
+```typescript
+// src/services/PromptTemplateService.ts
+export class PromptTemplateService {
+  static async getCharacterPrompt(
+    character: Character,
+    contentTier: 'sfw' | 'nsfw' = 'sfw'
+  ): Promise<string> {
+    try {
+      const { data: template, error } = await supabase
+        .from('prompt_templates')
+        .select('system_prompt')
+        .eq('use_case', 'character_roleplay')
+        .eq('content_mode', contentTier)
+        .eq('is_active', true)
+        .single();
+        
+      if (error || !template) {
+        return this.getDefaultPrompt(character);
+      }
+      
+      return this.substituteVariables(template.system_prompt, character);
+    } catch (error) {
+      console.error('Error loading prompt template:', error);
+      return this.getDefaultPrompt(character);
+    }
+  }
+  
+  private static substituteVariables(prompt: string, character: Character): string {
+    return prompt
+      .replace('{{character_name}}', character.name)
+      .replace('{{character_description}}', character.description)
+      .replace('{{character_personality}}', character.traits || '')
+      .replace('{{character_background}}', character.persona || '')
+      .replace('{{character_speaking_style}}', character.voice_tone || '')
+      .replace('{{character_goals}}', character.base_prompt || '');
+  }
+  
+  private static getDefaultPrompt(character: Character): string {
+    return `You are ${character.name}. ${character.description}. Stay in character and respond naturally.`;
+  }
+}
+```
+
+### **4. Implement Memory System (Week 4, Days 1-2)**
 **Priority: HIGH** - Core feature for user experience
 
 #### **MemoryManager.ts Implementation**
@@ -273,7 +334,7 @@ export class MemoryManager {
 }
 ```
 
-### **3. Database Schema Updates (Week 1)**
+### **5. Database Schema Updates (Week 4, Day 1)**
 **Priority: HIGH** - Required for memory system
 
 #### **Execute Schema Updates**
@@ -330,35 +391,35 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 
 ## **🎯 COMPREHENSIVE NEXT STEPS PLAN**
 
-### **Week 1: Complete Core Dashboard (September 1-7)**
-**Goal**: 95% completion of Phase 1
+### **Week 3: Character Scene Integration & Dynamic Features (September 1-7)**
+**Goal**: Complete character scene integration and dynamic greeting generation
 
-#### **Day 1-2: Character Preview Modal**
-- [ ] Implement `CharacterPreviewModal.tsx` component
-- [ ] Integrate preview functionality in `MobileCharacterCard.tsx`
-- [ ] Test preview flow end-to-end
-- [ ] Add preview button functionality
+#### **Day 1-2: Character Scene Integration**
+- [ ] Enhance `CharacterPreviewModal.tsx` with scene loading
+- [ ] Add scene selection UI to preview modal
+- [ ] Update `MobileRoleplayChat.tsx` to handle scene context
+- [ ] Test scene integration end-to-end
 
-#### **Day 3-4: Database Schema**
-- [ ] Execute character table enhancements
-- [ ] Create memory system tables
-- [ ] Update conversations table
-- [ ] Test database integration
+#### **Day 3-4: Dynamic Greeting Generation**
+- [ ] Create `CharacterGreetingService.ts`
+- [ ] Implement AI-powered greeting generation
+- [ ] Add scene context to greeting generation
+- [ ] Test greeting generation with various characters
 
-#### **Day 5: Integration Testing**
-- [ ] Test complete user flow
-- [ ] Fix any integration issues
-- [ ] Optimize performance
-- [ ] Document current state
+#### **Day 5: Prompt Template Integration**
+- [ ] Create `PromptTemplateService.ts`
+- [ ] Implement database template loading
+- [ ] Add character variable substitution
+- [ ] Test prompt template integration
 
-### **Week 2: Memory System Implementation (September 8-14)**
+### **Week 4: Memory System & Advanced Features (September 8-14)**
 **Goal**: Complete memory system and library integration
 
-#### **Day 1-2: Memory Manager**
+#### **Day 1-2: Memory System**
+- [ ] Execute database schema updates
 - [ ] Implement `MemoryManager.ts` service
 - [ ] Create memory hooks for React components
-- [ ] Integrate with chat interface
-- [ ] Test memory persistence
+- [ ] Integrate memory with chat interface
 
 #### **Day 3-4: Library Integration**
 - [ ] Create roleplay library tab
@@ -372,47 +433,26 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 - [ ] Optimize image loading
 - [ ] Performance testing
 
-### **Week 3: Advanced Features (September 15-21)**
-**Goal**: Complete Phase 2 features
+### **Week 5: Testing & Polish (September 15-21)**
+**Goal**: Complete testing and final polish
 
-#### **Day 1-2: Model Management**
-- [ ] Create model selection interface
-- [ ] Implement model switching UI
-- [ ] Add model performance monitoring
-- [ ] Test model management
+#### **Day 1-2: Comprehensive Testing**
+- [ ] End-to-end testing across devices
+- [ ] Performance testing and optimization
+- [ ] Error handling and edge cases
+- [ ] User acceptance testing
 
-#### **Day 3-4: Testing & Bug Fixes**
-- [ ] Comprehensive testing across devices
-- [ ] Fix identified bugs and issues
-- [ ] Optimize error handling
-- [ ] Add comprehensive loading states
-
-#### **Day 5: Documentation & Polish**
+#### **Day 3-4: Documentation & Polish**
 - [ ] Update all documentation
 - [ ] Final performance optimization
-- [ ] User acceptance testing
+- [ ] Code review and cleanup
 - [ ] Prepare for production
 
-### **Week 4: Production Readiness (September 22-28)**
-**Goal**: Production-ready roleplay system
-
-#### **Day 1-2: Final Testing**
-- [ ] End-to-end testing
-- [ ] Performance testing
-- [ ] Security testing
-- [ ] User experience testing
-
-#### **Day 3-4: Production Deployment**
+#### **Day 5: Production Readiness**
 - [ ] Deploy to staging
 - [ ] Final testing in staging
 - [ ] Deploy to production
 - [ ] Monitor production metrics
-
-#### **Day 5: Launch & Monitoring**
-- [ ] Launch announcement
-- [ ] Monitor user feedback
-- [ ] Track key metrics
-- [ ] Plan future enhancements
 
 ---
 
@@ -469,6 +509,6 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 
 ---
 
-**Next Steps**: Implement character preview modal and memory system for complete user experience.
+**Next Steps**: Implement character scene integration and dynamic greeting generation for complete immersive experience.
 
 **Document Purpose**: This is the detailed technical implementation roadmap that provides specific tasks, timelines, and code examples for developers to follow during the roleplay feature implementation.
