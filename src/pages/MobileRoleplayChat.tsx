@@ -50,7 +50,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
 
   // Hooks
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   // Initialize conversation and load data
   useEffect(() => {
@@ -224,6 +224,10 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (insertError) throw insertError;
 
+      // ✅ DYNAMIC CONTENT TIER BASED ON CHARACTER AND USER:
+      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      console.log('🎭 Content tier:', contentTier, 'Character rating:', character.content_rating, 'User age verified:', profile?.age_verified);
+
       // Call the roleplay-chat edge function
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
@@ -232,7 +236,7 @@ const MobileRoleplayChat: React.FC = () => {
           character_id: character.id,
           model_provider: modelProvider,
           memory_tier: memoryTier,
-          content_tier: 'sfw',
+          content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
           scene_generation: false,
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
@@ -285,11 +289,14 @@ const MobileRoleplayChat: React.FC = () => {
         .map(msg => `${msg.sender === 'user' ? 'You' : character.name}: ${msg.content}`)
         .join(' | ');
       
+      // ✅ DYNAMIC CONTENT TIER FOR SCENE GENERATION:
+      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      
       // Call queue-job directly for SDXL generation
       const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: `Generate a scene showing ${character.name} in the current conversation context: ${conversationContext}`,
-          job_type: 'sdxl_image_fast',
+          job_type: 'sdxl_image_high', // ✅ HIGH QUALITY INSTEAD OF FAST
           metadata: {
             destination: 'roleplay_scene',
             character_id: character.id,
@@ -297,7 +304,7 @@ const MobileRoleplayChat: React.FC = () => {
             consistency_method: consistencySettings.method,
             conversation_id: conversationId,
             reference_mode: 'modify',
-            contentType: 'sfw'
+            contentType: contentTier // ✅ USE DYNAMIC CONTENT TIER
           }
         }
       });

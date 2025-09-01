@@ -348,10 +348,17 @@ async function callChatWorker(prompt: string, contentTier: string): Promise<stri
   // Get chat worker URL from cache or config
   const chatWorkerUrl = await getChatWorkerUrl();
   
+  // ✅ GET API KEY FOR CHAT WORKER (NOT WAN WORKER):
+  const apiKey = Deno.env.get('CHAT_WORKER_API_KEY');
+  if (!apiKey) {
+    throw new Error('CHAT_WORKER_API_KEY not configured');
+  }
+  
   const response = await fetch(`${chatWorkerUrl}/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`, // ✅ CORRECT API KEY FOR CHAT WORKER
     },
     body: JSON.stringify({
       prompt,
@@ -467,12 +474,22 @@ async function getChatWorkerUrl(): Promise<string> {
     return cachedChatWorkerUrl;
   }
 
-  // Get worker URL from environment or config
-  const workerUrl = Deno.env.get('CHAT_WORKER_URL');
-  if (!workerUrl) {
-    throw new Error('Chat worker URL not configured');
+  // ✅ GET WORKER URL FROM SYSTEM_CONFIG TABLE LIKE PLAYGROUND-CHAT:
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient<Database>(supabaseUrl, supabaseServiceKey);
+
+  const { data: systemConfig, error: configError } = await supabase
+    .from('system_config')
+    .select('config')
+    .single();
+
+  if (configError || !systemConfig?.config?.chatWorkerUrl) {
+    console.error('Failed to get chat worker URL from system_config:', configError);
+    throw new Error('Chat worker not configured in system_config table');
   }
 
+  const workerUrl = systemConfig.config.chatWorkerUrl;
   cachedChatWorkerUrl = workerUrl;
   cachedConfigFetchedAt = now;
   
