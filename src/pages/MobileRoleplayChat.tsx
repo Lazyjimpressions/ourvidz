@@ -53,14 +53,35 @@ const MobileRoleplayChat: React.FC = () => {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
+  const [kickoffError, setKickoffError] = useState<string | null>(null);
+
+  // Idempotency ref to prevent multiple initializations
+  const hasInitialized = useRef(false);
+  const currentRouteRef = useRef<string>('');
 
   // Hooks
   const { user, profile } = useAuth();
   const { getSignedUrl } = useSignedImageUrls();
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      hasInitialized.current = false;
+      currentRouteRef.current = '';
+    };
+  }, []);
+
   // Initialize conversation and load data
   useEffect(() => {
     const initializeConversation = async () => {
+      const routeKey = `${characterId}-${sceneId || 'none'}`;
+      
+      // Prevent reinitialization for same route
+      if (hasInitialized.current && currentRouteRef.current === routeKey) {
+        console.log('🔒 Preventing duplicate initialization for route:', routeKey);
+        return;
+      }
+
       if (!user || !characterId) return;
 
       try {
@@ -128,6 +149,11 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
+        // Mark route as initialized
+        hasInitialized.current = true;
+        currentRouteRef.current = routeKey;
+        setKickoffError(null);
+
         // Always create new conversation for fresh start
         const conversationTitle = loadedScene
           ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
@@ -162,6 +188,13 @@ const MobileRoleplayChat: React.FC = () => {
         // Make kickoff call to get character's opening message
         const contentTier = (loadedCharacter.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
         
+        console.log('🎬 Kickoff call with scene context:', {
+          character_id: characterId,
+          scene_context: loadedScene?.scene_prompt?.substring(0, 50) + '...' || 'none',
+          scene_system_prompt: loadedScene?.system_prompt?.substring(0, 50) + '...' || 'none',
+          content_tier: contentTier
+        });
+
         const { data, error } = await supabase.functions.invoke('roleplay-chat', {
           body: {
             kickoff: true,
@@ -176,7 +209,10 @@ const MobileRoleplayChat: React.FC = () => {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error('Kickoff error:', error);
+          throw error;
+        }
 
         // Replace loading message with actual opener
         const openerMessage: Message = {
@@ -189,12 +225,15 @@ const MobileRoleplayChat: React.FC = () => {
 
       } catch (error) {
         console.error('Error initializing conversation:', error);
-        // Fallback message
+        setKickoffError(error.message || 'Failed to start conversation');
+        
+        // Show retry message instead of fallback greeting
         setMessages([{
-          id: 'fallback',
-          content: `Hello! I'm ${character?.name || 'your character'}. How can I assist you today?`,
+          id: 'retry-needed',
+          content: "Couldn't set the scene. Tap retry to try again.",
           sender: 'character',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          metadata: { needsRetry: true }
         }]);
       } finally {
         setIsLoading(false);
@@ -202,7 +241,7 @@ const MobileRoleplayChat: React.FC = () => {
     };
 
     initializeConversation();
-  }, [user, characterId, sceneId]); // Remove memoryTier to prevent resets
+  }, [characterId, sceneId]); // Remove user to prevent auth-triggered resets
 
   // Separate effect to update memory tier without recreating conversation
   useEffect(() => {
@@ -272,7 +311,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_generation: false,
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
-          scene_context: selectedScene?.scene_prompt || null
+            scene_context: selectedScene?.scene_prompt || null,
+            scene_system_prompt: selectedScene?.system_prompt || null
         }
       });
 
@@ -370,12 +410,13 @@ const MobileRoleplayChat: React.FC = () => {
       console.error('Error generating scene:', error);
       setSceneJobStatus('failed');
       
-      // Add error message to chat
+      // Add friendly error message that doesn't disrupt chat
       const errorMessage: Message = {
         id: Date.now().toString(),
-        content: 'Sorry, I encountered an error while generating the scene. Please try again.',
+        content: "Scene generation isn't working right now, but we can keep chatting! 😊",
         sender: 'character',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        metadata: { isError: true }
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -466,11 +507,63 @@ const MobileRoleplayChat: React.FC = () => {
     navigate('/roleplay');
   };
 
+  // Retry kickoff function
+  const handleRetryKickoff = async () => {
+    if (!user || !characterId || !character) return;
+
+    try {
+      setIsLoading(true);
+      setKickoffError(null);
+      
+      setMessages([{
+        id: 'temp-retry',
+        content: 'Setting the scene...',
+        sender: 'character',
+        timestamp: new Date().toISOString()
+      }]);
+
+      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          kickoff: true,
+          conversation_id: conversationId,
+          character_id: characterId,
+          model_provider: modelProvider,
+          memory_tier: memoryTier,
+          content_tier: contentTier,
+          scene_context: selectedScene?.scene_prompt || null,
+          scene_system_prompt: selectedScene?.system_prompt || null,
+          user_id: user.id
+        }
+      });
+
+      if (error) throw error;
+
+      const openerMessage: Message = {
+        id: data.message_id || Date.now().toString(),
+        content: data.response || `Hello! I'm ${character.name}.`,
+        sender: 'character',
+        timestamp: new Date().toISOString()
+      };
+      setMessages([openerMessage]);
+    } catch (error) {
+      console.error('Retry kickoff error:', error);
+      setKickoffError(error.message || 'Failed to retry');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Context menu handlers
   const handleClearConversation = async () => {
     if (!user || !characterId || !character) return;
 
     try {
+      // Reset initialization state to allow fresh start
+      hasInitialized.current = false;
+      currentRouteRef.current = '';
+
       // Create brand new conversation
       const conversationTitle = selectedScene
         ? `${character.name} - ${selectedScene.scene_prompt.substring(0, 30)}...`
@@ -600,12 +693,14 @@ const MobileRoleplayChat: React.FC = () => {
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message) => (
-            <ChatMessage 
-              key={message.id} 
-              message={message} 
-              character={character}
-              onGenerateScene={handleGenerateScene}
-            />
+              <ChatMessage 
+                key={message.id}
+                message={message}
+                character={character}
+                signedCharacterImageUrl={signedCharacterImage}
+                onGenerateScene={handleGenerateScene}
+                onRetry={message.metadata?.needsRetry ? handleRetryKickoff : undefined}
+              />
           ))}
           
           {isLoading && (

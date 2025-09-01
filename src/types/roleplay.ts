@@ -43,6 +43,8 @@ export interface Message {
     image_url?: string;
     consistency_method?: string;
     job_id?: string;
+    needsRetry?: boolean;
+    isError?: boolean;
   };
 }
 

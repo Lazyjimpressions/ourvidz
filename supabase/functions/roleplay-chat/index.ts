@@ -152,7 +152,9 @@ serve(async (req) => {
       has_scene_context: !!scene_context, 
       has_scene_system_prompt: !!scene_system_prompt,
       character_id,
-      content_tier
+      content_tier,
+      scene_context_preview: scene_context ? scene_context.substring(0, 50) + '...' : 'none',
+      scene_system_prompt_preview: scene_system_prompt ? scene_system_prompt.substring(0, 50) + '...' : 'none'
     });
 
     // Create Supabase client
@@ -370,9 +372,12 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     characterContext += `${character.base_prompt}\\n`;
   }
 
-  // Scene-specific system prompt rules
+  // Scene-specific system prompt rules - CRITICAL: Apply scene system prompt
   if (cleanedSceneSystemPrompt) {
     characterContext += `\\nScene rules: ${cleanedSceneSystemPrompt}\\n`;
+    console.log('✅ Applied scene system prompt:', cleanedSceneSystemPrompt.substring(0, 100) + '...');
+  } else {
+    console.log('⚠️ No scene system prompt provided');
   }
   
   // Content tier instructions with stronger grounding
@@ -421,6 +426,15 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
   const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
   
   if (kickoff) {
+    console.log('🎬 Building kickoff system prompt with scene system prompt:', !!sceneSystemPrompt);
+    
+    // For kickoff, check if there are recent messages to avoid re-introductions
+    const hasRecentMessages = recentMessages && recentMessages.length > 0;
+    if (hasRecentMessages) {
+      console.log('⚠️ Recent messages exist, adjusting kickoff to continue conversation naturally');
+      return basePrompt + `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
+    }
+    
     return basePrompt + `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
   }
   
@@ -466,26 +480,47 @@ async function callChatWorker(systemPrompt: string, userMessage: string, content
     max_tokens: 512
   };
   
-  console.log('📤 Sending to chat worker:', { url: chatWorkerUrl, payload });
-  
-  const response = await fetch(`${chatWorkerUrl}/chat`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`, // ✅ CORRECT API KEY FOR CHAT WORKER
-    },
-    body: JSON.stringify(payload)
+  console.log('📤 Sending to chat worker:', { 
+    url: chatWorkerUrl, 
+    payload: {
+      ...payload,
+      messages: payload.messages.map(msg => ({
+        role: msg.role,
+        content: msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '')
+      }))
+    }
   });
+  
+  try {
+    const response = await fetch(`${chatWorkerUrl}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`, // ✅ CORRECT API KEY FOR CHAT WORKER
+      },
+      body: JSON.stringify(payload)
+    });
 
-  if (!response.ok) {
-    // ✅ BETTER ERROR LOGGING: Log response text for debugging
-    const errorText = await response.text();
-    console.error(`❌ Chat worker error ${response.status}:`, errorText);
-    throw new Error(`Chat worker error: ${response.status} - ${errorText}`);
+    if (!response.ok) {
+      // ✅ BETTER ERROR LOGGING: Log response text for debugging
+      const errorText = await response.text();
+      console.error(`❌ Chat worker error ${response.status}:`, errorText);
+      
+      // For probability tensor errors, provide a more helpful message
+      if (errorText.includes('probability tensor') || errorText.includes('inf') || errorText.includes('nan')) {
+        throw new Error('Chat model encountered a processing error. The conversation context may be too complex. Try starting a new conversation.');
+      }
+      
+      throw new Error(`Chat worker error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('✅ Chat worker response received:', data.response?.substring(0, 100) + '...');
+    return data.response || 'I apologize, but I encountered an error processing your message.';
+  } catch (error) {
+    console.error('❌ Chat worker request failed:', error);
+    throw error;
   }
-
-  const data = await response.json();
-  return data.response || 'I apologize, but I encountered an error processing your message.';
 }
 
 async function callOpenRouter(prompt: string, model: string, contentTier: string): Promise<string> {

@@ -8,7 +8,8 @@ import {
   Image as ImageIcon, 
   Download, 
   Share2,
-  Clock
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message } from '@/types/roleplay';
@@ -19,12 +20,16 @@ interface ChatMessageProps {
   message: Message;
   character: Character | null;
   onGenerateScene: () => void;
+  signedCharacterImageUrl?: string | null;
+  onRetry?: () => void;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   character,
-  onGenerateScene
+  onGenerateScene,
+  signedCharacterImageUrl,
+  onRetry
 }) => {
   const { isMobile } = useMobileDetection();
   const { getSignedUrl } = useSignedImageUrls();
@@ -34,10 +39,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [signedSceneImage, setSignedSceneImage] = useState<string | null>(null);
 
-  // Sign character image URL
+  // Sign character image URL (use passed prop if available)
   useEffect(() => {
     const signCharacterImage = async () => {
-      if (character?.image_url && !character.image_url.startsWith('http')) {
+      if (signedCharacterImageUrl) {
+        setSignedCharacterImage(signedCharacterImageUrl);
+      } else if (character?.image_url && !character.image_url.startsWith('http')) {
         try {
           const signed = await getSignedUrl(character.image_url, 'user-library');
           setSignedCharacterImage(signed);
@@ -51,7 +58,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     };
 
     signCharacterImage();
-  }, [character?.image_url, getSignedUrl]);
+  }, [character?.image_url, signedCharacterImageUrl, getSignedUrl]);
 
   // Sign scene image URL
   useEffect(() => {
@@ -155,6 +162,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             ${isMobile ? 'text-sm' : 'text-base'}
           `}>
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            
+            {/* Retry button for failed kickoff */}
+            {message.metadata?.needsRetry && onRetry && (
+              <div className="mt-3 pt-3 border-t border-gray-600">
+                <Button 
+                  onClick={onRetry}
+                  variant="outline"
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 text-white border-red-500"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retry Scene Setup
+                </Button>
+              </div>
+            )}
           </Card>
 
           {/* Scene Image */}
