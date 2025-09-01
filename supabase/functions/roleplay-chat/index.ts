@@ -220,9 +220,18 @@ serve(async (req) => {
     // Build context-aware prompt
     const promptStart = Date.now();
     const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context, scene_system_prompt);
-    const userMessage = kickoff ? 
-      "Introduce yourself and set the scene. Be natural and in-character." : 
-      message!;
+    
+    // ✅ PREVENT RE-INTRODUCTIONS: Check if conversation already has messages
+    let userMessage: string;
+    if (kickoff && recentMessages && recentMessages.length > 0) {
+      console.log('🔄 Conversation already has messages - avoiding re-introduction');
+      userMessage = "Continue the conversation naturally from where we left off.";
+    } else {
+      userMessage = kickoff ? 
+        "Introduce yourself and set the scene. Be natural and in-character." : 
+        message!;
+    }
+    
     const enhancedPrompt = buildEnhancedPrompt(userMessage, context, character, content_tier);
     promptTime = Date.now() - promptStart;
 
@@ -258,6 +267,10 @@ serve(async (req) => {
           status: 400
         });
     }
+
+    // Sanitize the response to remove generic greetings
+    response = sanitizeResponse(response, character, kickoff);
+    console.log('✅ Response after sanitization:', response.substring(0, 100) + '...');
 
     workerTime = Date.now() - workerStart;
 
@@ -326,8 +339,65 @@ serve(async (req) => {
   }
 });
 
-// Helper functions
-// Helper function to sanitize scene context
+// Function to sanitize model responses and remove generic greetings
+function sanitizeResponse(response: string, character: any, isKickoff: boolean = false): string {
+  if (!response) return response;
+  
+  let sanitized = response.trim();
+  
+  // List of generic greetings to remove (case insensitive)
+  const genericGreetings = [
+    'Hello! How can I assist you today?',
+    'Hi there! How can I help you?',
+    'Greetings! How may I assist you?',
+    'Hello! What can I do for you?',
+    'Hi! How can I be of service?',
+    'Hello there! How can I help?',
+    'Good day! How may I help you?',
+    'Hi! What would you like to know?',
+    'Hello! I\'m here to help.',
+    'Greetings! What can I do for you?'
+  ];
+  
+  // Remove generic greetings from start of response
+  for (const greeting of genericGreetings) {
+    const regex = new RegExp(`^${greeting.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i');
+    sanitized = sanitized.replace(regex, '');
+  }
+  
+  // Remove common AI assistant phrases
+  const aiPhrases = [
+    'As an AI assistant,',
+    'I\'m an AI and',
+    'As an artificial intelligence,',
+    'I\'m here to assist',
+    'How may I be of assistance',
+    'I\'m designed to help'
+  ];
+  
+  for (const phrase of aiPhrases) {
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    sanitized = sanitized.replace(regex, '');
+  }
+  
+  // If response is too short after sanitization and it's not a kickoff, keep original
+  if (sanitized.trim().length < 10 && !isKickoff) {
+    return response;
+  }
+  
+  // Clean up any resulting issues
+  sanitized = sanitized.replace(/^\s*[,.\-!?]+\s*/, ''); // Remove leading punctuation
+  sanitized = sanitized.replace(/\s+/g, ' ').trim(); // Clean whitespace
+  
+  // If completely empty after sanitization, use character-appropriate fallback
+  if (!sanitized.trim()) {
+    return isKickoff 
+      ? `*${character.name} looks around and takes in the scene*`
+      : `*${character.name} continues the conversation naturally*`;
+  }
+  
+  return sanitized;
+}
 function sanitizeSceneContext(sceneContext?: string): string | undefined {
   if (!sceneContext) return undefined;
   

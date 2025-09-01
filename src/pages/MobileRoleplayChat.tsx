@@ -185,8 +185,8 @@ const MobileRoleplayChat: React.FC = () => {
           timestamp: new Date().toISOString()
         }]);
 
-        // Make kickoff call to get character's opening message
-        const contentTier = (loadedCharacter.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+        // Make kickoff call to get character's opening message - FORCE NSFW MODE
+        const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
         
         console.log('🎬 Kickoff call with scene context:', {
           character_id: characterId,
@@ -295,9 +295,9 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (insertError) throw insertError;
 
-      // ✅ DYNAMIC CONTENT TIER BASED ON CHARACTER AND USER:
-      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
-      console.log('🎭 Content tier:', contentTier, 'Character rating:', character.content_rating, 'User age verified:', profile?.age_verified);
+      // ✅ FORCE NSFW MODE FOR CHAT:
+      const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
+      console.log('🎭 Content tier (forced):', contentTier);
 
       // Call the roleplay-chat edge function
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
@@ -361,8 +361,8 @@ const MobileRoleplayChat: React.FC = () => {
         .map(msg => `${msg.sender === 'user' ? 'You' : character.name}: ${msg.content}`)
         .join(' | ');
       
-      // ✅ DYNAMIC CONTENT TIER FOR SCENE GENERATION:
-      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      // ✅ FORCE NSFW MODE FOR SCENE GENERATION:
+      const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
       // Call queue-job directly for SDXL generation
       const { data, error } = await supabase.functions.invoke('queue-job', {
@@ -383,8 +383,10 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (error) throw error;
 
-      if (data && data.job_id) {
-        setSceneJobId(data.job_id);
+      if (data && (data.job_id || data.jobId)) {
+        const jobId = data.job_id || data.jobId; // ✅ FIX CAMEL/SNAKE CASE MISMATCH
+        console.log('🔧 Scene job queued with ID:', jobId);
+        setSceneJobId(jobId);
         setSceneJobStatus('processing');
         
         // Add queued message to chat
@@ -395,7 +397,7 @@ const MobileRoleplayChat: React.FC = () => {
           timestamp: new Date().toISOString(),
           metadata: {
             scene_generated: false,
-            job_id: data.job_id,
+            job_id: jobId, // ✅ USE NORMALIZED JOB ID
             consistency_method: consistencySettings.method
           }
         };
@@ -410,13 +412,16 @@ const MobileRoleplayChat: React.FC = () => {
       console.error('Error generating scene:', error);
       setSceneJobStatus('failed');
       
-      // Add friendly error message that doesn't disrupt chat
+      // Show friendly error message with retry option
       const errorMessage: Message = {
         id: Date.now().toString(),
-        content: "Scene generation isn't working right now, but we can keep chatting! 😊",
+        content: 'Scene generation failed. Want to try again?',
         sender: 'character',
         timestamp: new Date().toISOString(),
-        metadata: { isError: true }
+        metadata: { 
+          sceneError: true,
+          canRetryScene: true 
+        }
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
@@ -522,7 +527,7 @@ const MobileRoleplayChat: React.FC = () => {
         timestamp: new Date().toISOString()
       }]);
 
-      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
@@ -595,7 +600,7 @@ const MobileRoleplayChat: React.FC = () => {
         timestamp: new Date().toISOString()
       }]);
 
-      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
