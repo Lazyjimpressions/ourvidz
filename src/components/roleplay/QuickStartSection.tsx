@@ -15,6 +15,12 @@ interface Character {
   consistency_method?: string;
   interaction_count: number;
   likes_count: number;
+  appearance_tags?: string[];
+  traits?: string;
+  persona?: string;
+  gender?: string;
+  reference_image_url?: string;
+  seed_locked?: number;
 }
 
 interface QuickStartSectionProps {
@@ -42,7 +48,13 @@ export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
       category: char.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
       consistency_method: (char as any).consistency_method || 'i2i_reference',
       interaction_count: char.interaction_count,
-      likes_count: char.likes_count
+      likes_count: char.likes_count,
+      appearance_tags: char.appearance_tags,
+      traits: char.traits,
+      persona: char.persona,
+      gender: char.gender,
+      reference_image_url: char.reference_image_url,
+      seed_locked: (char as any).seed_locked
     }));
 
   if (quickStartCharacters.length === 0) {

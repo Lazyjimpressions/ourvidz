@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateCharacterPortrait } from '@/utils/characterImageUtils';
 import { CharacterPreviewModal } from './CharacterPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 interface Character {
   id: string;
@@ -25,6 +26,8 @@ interface Character {
   content_rating?: string;
   gender?: string;
   role?: string;
+  reference_image_url?: string;
+  seed_locked?: number;
 }
 
 interface MobileCharacterCardProps {
@@ -43,10 +46,39 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const [showSaveOption, setShowSaveOption] = useState(false);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
+  const [signedImageUrl, setSignedImageUrl] = useState<string>('');
   const { toast } = useToast();
   const { user } = useAuth();
 
   const imageUrl = character.image_url || character.preview_image_url;
+
+  // Sign image URL if it's a private storage path
+  useEffect(() => {
+    const signImageUrl = async () => {
+      if (!imageUrl) {
+        setSignedImageUrl('');
+        return;
+      }
+
+      // Check if URL needs signing (user-library or workspace-temp paths)
+      if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
+        try {
+          const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
+          const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
+          setSignedImageUrl(signed);
+        } catch (error) {
+          console.error('Failed to sign image URL:', error);
+          setSignedImageUrl(imageUrl); // Fallback to original
+        }
+      } else {
+        setSignedImageUrl(imageUrl); // Use as-is for public URLs
+      }
+    };
+
+    signImageUrl();
+  }, [imageUrl]);
+
+  const displayImageUrl = signedImageUrl || imageUrl;
 
   const handleCardClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -195,9 +227,9 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
       >
         {/* Character Image */}
         <div className="relative w-full h-full">
-          {imageUrl ? (
+          {displayImageUrl ? (
             <img 
-              src={imageUrl} 
+              src={displayImageUrl} 
               alt={character.name}
               className="w-full h-full object-cover"
               loading="lazy"
@@ -219,7 +251,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
           )}
 
           {/* Generate Image Button - Only for cards without images */}
-          {!imageUrl && user && (
+          {!displayImageUrl && user && (
             <div 
               className="absolute inset-0 bg-black/20 flex items-center justify-center z-10"
               onClick={(e) => e.stopPropagation()}
@@ -259,7 +291,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
             onClick={(e) => e.stopPropagation()}
           >
             {/* Generate Image Icon - Small and unobtrusive */}
-            {user && imageUrl && (
+            {user && displayImageUrl && (
               <Button
                 onClick={generateCharacterImage}
                 disabled={isGenerating}
