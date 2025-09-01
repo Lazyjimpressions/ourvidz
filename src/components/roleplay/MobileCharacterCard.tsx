@@ -175,32 +175,30 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
           </div>
         )}
 
-        {/* Generate Image Button */}
-        {!imageUrl && user && (
-          <div 
-            className="absolute inset-0 bg-black/20 flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
+        {/* Generate Image Button - Always visible for testing */}
+        <div 
+          className="absolute inset-0 bg-black/20 flex items-center justify-center"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            onClick={generateCharacterImage}
+            disabled={isGenerating}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs"
+            size="sm"
           >
-            <Button
-              onClick={generateCharacterImage}
-              disabled={isGenerating}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs"
-              size="sm"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-3 h-3 mr-1" />
-                  Generate Image
-                </>
-              )}
-            </Button>
-          </div>
-        )}
+            {isGenerating ? (
+              <>
+                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3 h-3 mr-1" />
+                Generate Image
+              </>
+            )}
+          </Button>
+        </div>
         
         {/* Overlay Actions */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors">
