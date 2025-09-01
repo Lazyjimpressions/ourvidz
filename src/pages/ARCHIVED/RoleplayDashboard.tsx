@@ -422,7 +422,6 @@ const RoleplayDashboard = () => {
           setSelectedCharacter(null);
         }}
         onStartChat={handleStartChat}
-        onSelectScene={handleSelectScene}
       />
     </div>
   );

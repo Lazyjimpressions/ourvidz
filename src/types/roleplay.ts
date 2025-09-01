@@ -4,7 +4,7 @@ export interface Character {
   id: string;
   name: string;
   description: string;
-  image_url?: string;
+  image_url: string;
   preview_image_url?: string;
   category?: string;
   consistency_method?: string;
@@ -33,7 +33,7 @@ export interface Character {
 export interface Message {
   id: string;
   content: string;
-  role: 'user' | 'assistant';
+  sender: 'user' | 'character';
   timestamp: string;
   scene_image?: string;
   consistency_method?: string;

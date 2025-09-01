@@ -14,18 +14,7 @@ import {
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { ConsistencySettings as IConsistencySettings } from '@/services/ImageConsistencyService';
-
-interface Character {
-  id: string;
-  name: string;
-  description: string;
-  image_url: string;
-  preview_image_url?: string;
-  category: string;
-  consistency_method: string;
-  base_prompt: string;
-  quick_start: boolean;
-}
+import { Character } from '@/types/roleplay';
 
 interface MobileCharacterSheetProps {
   character: Character;
@@ -111,7 +100,7 @@ export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
                 <p className="text-gray-400 text-sm mt-1">{character.description}</p>
                 <div className="flex gap-2 mt-2">
                   <Badge variant="secondary" className="text-xs">
-                    {character.category}
+                    {character.content_rating || 'general'}
                   </Badge>
                   <Badge variant="outline" className="text-xs">
                     {character.consistency_method}

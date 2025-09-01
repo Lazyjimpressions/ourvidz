@@ -155,7 +155,7 @@ export const getCharacterImagesFromLibrary = async (
       .order('created_at', { ascending: false });
 
     if (characterId) {
-      query = query.eq('metadata->character_id', characterId);
+      query = query.eq('roleplay_metadata->>character_id', characterId);
     }
 
     const { data, error } = await query;
@@ -189,14 +189,10 @@ export const saveCharacterImageToLibrary = async (
         user_id: userId,
         asset_type: 'image',
         original_prompt: prompt,
-        temp_storage_path: imageUrl,
-        metadata: {
-          ...metadata,
-          character_id: characterId,
-          destination: 'character_portrait',
-          source: 'roleplay_system'
-        },
-        visibility: 'private'
+        storage_path: imageUrl,
+        file_size_bytes: 0, // Will be updated when actual file is processed
+        mime_type: 'image/png', // Default for generated images
+        model_used: 'sdxl_fast', // From the job type
       });
 
     if (error) {

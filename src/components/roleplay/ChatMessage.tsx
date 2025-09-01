@@ -11,34 +11,11 @@ import {
   Clock
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-
-interface Character {
-  id: string;
-  name: string;
-  description: string;
-  image_url: string;
-  preview_image_url?: string;
-  category: string;
-  consistency_method: string;
-  base_prompt: string;
-  quick_start: boolean;
-}
-
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'character';
-  timestamp: string | Date; // Accept both string and Date
-  metadata?: {
-    scene_generated?: boolean;
-    image_url?: string;
-    consistency_method?: string;
-  };
-}
+import { Character, Message } from '@/types/roleplay';
 
 interface ChatMessageProps {
   message: Message;
-  character: Character;
+  character: Character | null;
   onGenerateScene: () => void;
 }
 
@@ -51,12 +28,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
 
-  const formatTime = (timestamp: string | Date) => {
+  const formatTime = (timestamp: string) => {
     try {
-      // Convert to Date object if it's a string
-      const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+      const date = new Date(timestamp);
       
-      // Check if the date is valid
       if (isNaN(date.getTime())) {
         console.warn('Invalid timestamp received:', timestamp);
         return 'Invalid time';
@@ -85,9 +60,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
 
   const handleShareScene = () => {
     if (message.metadata?.image_url) {
-      // For now, just copy the URL to clipboard
       navigator.clipboard.writeText(message.metadata.image_url);
-      // TODO: Implement proper sharing
     }
   };
 
@@ -105,8 +78,8 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               <User className="w-4 h-4 text-white" />
             ) : (
               <img 
-                src={character.image_url} 
-                alt={character.name}
+                src={character?.image_url || '/placeholder.svg'} 
+                alt={character?.name || 'Character'}
                 className="w-full h-full object-cover"
               />
             )}
@@ -118,7 +91,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           {/* Message Header */}
           <div className={`flex items-center gap-2 mb-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
             <span className="text-sm font-medium text-gray-300">
-              {isUser ? 'You' : character.name}
+              {isUser ? 'You' : character?.name || 'Character'}
             </span>
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <Clock className="w-3 h-3" />

@@ -20,11 +20,10 @@ import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
-import { imageConsistencyService } from '@/services/ImageConsistencyService';
+import { Character, Message, CharacterScene } from '@/types/roleplay';
+import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Character, Message, CharacterScene } from '@/types/roleplay';
-import type { ConsistencySettings } from '@/services/ImageConsistencyService';
 
 const MobileRoleplayChat: React.FC = () => {
   const { characterId } = useParams<{ characterId: string }>();
@@ -58,6 +57,37 @@ const MobileRoleplayChat: React.FC = () => {
       if (!user || !characterId) return;
 
       try {
+        // Load character data first
+        const { data: characterData, error: characterError } = await supabase
+          .from('characters')
+          .select('*')
+          .eq('id', characterId)
+          .single();
+
+        let loadedCharacter: Character;
+        if (characterError) {
+          console.error('Error loading character:', characterError);
+          // Fallback to mock data
+          loadedCharacter = {
+            id: characterId || '1',
+            name: 'Character',
+            description: 'A character in the roleplay system',
+            image_url: '/placeholder.svg',
+            consistency_method: 'i2i_reference',
+            base_prompt: 'You are a helpful character.',
+            quick_start: true
+          };
+        } else {
+          loadedCharacter = {
+            ...characterData,
+            image_url: characterData.image_url || characterData.preview_image_url || '/placeholder.svg',
+            consistency_method: characterData.consistency_method || 'i2i_reference',
+            base_prompt: characterData.base_prompt || 'You are a helpful character.',
+            quick_start: characterData.quick_start || false
+          };
+        }
+        setCharacter(loadedCharacter);
+
         // Check for existing conversation
         const { data: existingConversations, error: queryError } = await supabase
           .from('conversations')
@@ -88,7 +118,7 @@ const MobileRoleplayChat: React.FC = () => {
             // Add initial greeting
             const initialMessage: Message = {
               id: '1',
-              content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
+              content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
               sender: 'character',
               timestamp: new Date().toISOString()
             };
@@ -102,7 +132,7 @@ const MobileRoleplayChat: React.FC = () => {
               user_id: user.id,
               character_id: characterId,
               conversation_type: 'character_roleplay',
-              title: `Roleplay: Luna the Mystic`,
+              title: `Roleplay: ${loadedCharacter.name}`,
               status: 'active',
               memory_tier: memoryTier
             })
@@ -116,25 +146,12 @@ const MobileRoleplayChat: React.FC = () => {
           // Add initial greeting
           const initialMessage: Message = {
             id: '1',
-            content: 'Hello! I am Luna. I sense you have questions about the ancient arts. How may I assist you today?',
+            content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
             sender: 'character',
             timestamp: new Date().toISOString()
           };
           setMessages([initialMessage]);
         }
-
-        // Load character data
-        const mockCharacter: Character = {
-          id: characterId || '1',
-          name: 'Luna the Mystic',
-          description: 'A wise and mysterious character with deep knowledge of ancient magic',
-          image_url: '/placeholder.svg',
-          category: 'fantasy',
-          consistency_method: 'i2i_reference',
-          base_prompt: 'You are Luna, a wise and mysterious character with deep knowledge of ancient magic. You speak with wisdom and grace.',
-          quick_start: true
-        };
-        setCharacter(mockCharacter);
 
       } catch (error) {
         console.error('Error initializing conversation:', error);
@@ -450,7 +467,7 @@ const MobileRoleplayChat: React.FC = () => {
                 <h2 className="text-lg font-semibold text-white">{character.name}</h2>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
-                    {character.category}
+                    {character.content_rating || 'sfw'}
                   </Badge>
                   <Badge variant="outline" className="text-xs">
                     {character.consistency_method}
@@ -510,7 +527,7 @@ const MobileRoleplayChat: React.FC = () => {
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              <span className="text-sm">Luna is thinking...</span>
+              <span className="text-sm">{character?.name} is thinking...</span>
             </div>
           )}
           
@@ -537,7 +554,7 @@ const MobileRoleplayChat: React.FC = () => {
             modelProvider={modelProvider}
             onModelProviderChange={setModelProvider}
             consistencySettings={consistencySettings}
-            onConsistencySettingsChange={setConsistencySettings}
+            onConsistencySettingsChange={(settings) => setConsistencySettings(settings)}
           />
         )}
 
