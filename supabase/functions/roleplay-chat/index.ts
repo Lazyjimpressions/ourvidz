@@ -307,88 +307,93 @@ serve(async (req) => {
 });
 
 // Helper functions
-// ✅ FIX: Refactor buildRoleplayContext to use let and return system prompt
+// Helper function to sanitize scene context
+function sanitizeSceneContext(sceneContext?: string): string | undefined {
+  if (!sceneContext) return undefined;
+  
+  // Remove SQL fragments, system prompts, and excessive whitespace
+  let cleaned = sceneContext
+    .replace(/CREATE\s+TABLE\s+[^;]+;/gi, '')
+    .replace(/INSERT\s+INTO\s+[^;]+;/gi, '')
+    .replace(/SELECT\s+[^;]+;/gi, '')
+    .replace(/You are a[^.]*\./gi, '')
+    .replace(/\[SCENE_GENERATION\]/gi, '')
+    .replace(/\[CHARACTERS:[^\]]*\]/gi, '')
+    .replace(/\[CONTEXT:[^\]]*\]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Cap length to prevent token overflow
+  if (cleaned.length > 500) {
+    cleaned = cleaned.substring(0, 497) + '...';
+  }
+  
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+// ✅ FIX: Refactor buildRoleplayContext to use msg.sender and improve system prompt
 function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string): string {
-  // Character context
+  // Sanitize scene context
+  const cleanedSceneContext = sanitizeSceneContext(sceneContext);
+  
+  // Character context with stronger first-person focus
   let characterContext = `You are ${character.name}, a ${character.description}. `;
   
   if (character.traits) {
-    characterContext += `Personality: ${character.traits}. `;
+    characterContext += `Personality: ${character.traits}\\n`;
   }
   
   if (character.persona) {
-    characterContext += `Background: ${character.persona}. `;
+    characterContext += `Background: ${character.persona}\\n`;
   }
   
   if (character.base_prompt) {
-    characterContext += `Core behavior: ${character.base_prompt}. `;
+    characterContext += `${character.base_prompt}\\n`;
   }
   
-  // Content tier instructions
+  // Content tier instructions with stronger grounding
   if (contentTier === 'nsfw') {
     characterContext += `You can engage in adult content and romantic scenarios. Be direct and sensual while staying in character. `;
   } else {
     characterContext += `Keep content appropriate and family-friendly. `;
   }
   
-  // Recent conversation context
+  // Recent conversation context - FIX: Use msg.sender instead of msg.role
   const recentMessages = messages.slice(-5); // Last 5 messages
   let recentContext = '';
   if (recentMessages.length > 0) {
     recentContext = recentMessages.map(msg => 
-      `${msg.role === 'user' ? 'User' : character.name}: ${msg.content}`
-    ).join('\n');
+      `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
+    ).join('\\n');
   }
   
-  // Build full context
-  let fullContext = `${characterContext}\n\nRecent Conversation:\n${recentContext}`;
-  if (sceneContext) {
-    fullContext += `\n\nCurrent Scene Context:\n${sceneContext}`;
+  // Scene context
+  let sceneText = '';
+  if (cleanedSceneContext) {
+    sceneText = `\\n\\nCURRENT SETTING: ${cleanedSceneContext}\\n`;
   }
+  
+  // Build full context with enhanced first-person rules
+  const fullContext = `${characterContext}
+\\nRecent Conversation:\\n${recentContext}${sceneText}
+
+INTERACTION RULES:
+- Stay in first person as ${character.name}
+- Reference your physical sensations and emotional state
+- Respond naturally to the user's advances and questions
+- Maintain the character's personality and voice consistently
+- Use sensual but tasteful language appropriate for ${contentTier.toUpperCase()} content
+- Show your character's thoughts, feelings, and reactions
+- Reference the current setting and context in your responses
+
+Remember: You ARE ${character.name}. Think, speak, and act as this character would in this situation.`;
   
   return fullContext;
 }
 
-// ✅ SIMPLE: Build system prompt from character and scene context
+// ✅ FIX: Build system prompt separately with proper parameters
 function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string): string {
-  // Character foundation
-  let systemPrompt = `You are ${character.name}, a ${character.description}. `;
-  
-  // Character personality and voice
-  if (character.traits) {
-    systemPrompt += `Your personality: ${character.traits}. `;
-  }
-  
-  if (character.persona) {
-    systemPrompt += `Your background: ${character.persona}. `;
-  }
-  
-  if (character.base_prompt) {
-    systemPrompt += `Your core behavior: ${character.base_prompt}. `;
-  }
-  
-  // Content tier instructions
-  if (contentTier === 'nsfw') {
-    systemPrompt += `You can engage in adult content and romantic scenarios while staying in character.`;
-  } else {
-    systemPrompt += `Keep content appropriate and family-friendly, focusing on romantic tension.`;
-  }
-  
-  // Scene context integration (this is where the roleplay behavior comes from)
-  if (sceneContext) {
-    systemPrompt += `\n\n${sceneContext}`;
-  }
-  
-  // Recent conversation context
-  if (recentMessages.length > 0) {
-    systemPrompt += `\n\nRecent conversation:\n`;
-    recentMessages.slice(-3).forEach(msg => {
-      const speaker = msg.role === 'user' ? 'User' : character.name;
-      systemPrompt += `${speaker}: ${msg.content}\n`;
-    });
-  }
-  
-  return systemPrompt;
+  return buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext);
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
@@ -625,26 +630,33 @@ async function generateScene(supabase: any, characterId: string, response: strin
     // Extract scene description from response
     const scenePrompt = extractSceneFromResponse(response);
     if (!scenePrompt) {
+      console.log('🎬 No scene description found in response for scene generation');
       return { success: false };
     }
 
-    // Call image generation based on consistency method
+    console.log('🎬 Generating scene for character:', characterId, 'with prompt:', scenePrompt);
+
+    // ✅ FIX: Use sdxl_image_high for better quality scene generation
     let imageResponse;
-    if (consistencyMethod === 'i2i_reference') {
-      // Use queue-job for SDXL worker with i2i reference
+    if (consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid') {
+      // Use queue-job for SDXL worker with enhanced metadata
       imageResponse = await supabase.functions.invoke('queue-job', {
         body: {
-          prompt: scenePrompt,
-          job_type: 'sdxl_image_fast',
+          prompt: `Generate a scene showing ${scenePrompt}`,
+          job_type: 'sdxl_image_high', // ✅ CHANGED FROM sdxl_image_fast
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
             scene_type: 'chat_scene',
-            consistency_method: 'i2i_reference',
-            reference_strength: 0.35
+            consistency_method: consistencyMethod,
+            reference_strength: 0.45,
+            denoise_strength: 0.65,
+            skip_enhancement: false, // Allow enhancement for scene quality
+            reference_mode: 'style' // Use style reference for consistency
           }
         }
       });
+      console.log('🎬 SDXL scene generation queued:', imageResponse);
     } else {
       // Use replicate-image for Replicate API
       imageResponse = await supabase.functions.invoke('replicate-image', {
@@ -655,18 +667,20 @@ async function generateScene(supabase: any, characterId: string, response: strin
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
-            scene_type: 'chat_scene'
+            scene_type: 'chat_scene',
+            consistency_method: consistencyMethod
           }
         }
       });
+      console.log('🎬 Replicate scene generation initiated:', imageResponse);
     }
 
     return { 
       success: true, 
-      consistency_score: consistencyMethod === 'i2i_reference' ? 0.7 : 0.4 
+      consistency_score: consistencyMethod === 'i2i_reference' ? 0.8 : 0.5 
     };
   } catch (error) {
-    console.error('Scene generation error:', error);
+    console.error('🎬❌ Scene generation error:', error);
     return { success: false };
   }
 }
