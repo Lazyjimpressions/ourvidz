@@ -108,46 +108,49 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
-        // Check for existing conversation
-        const { data: existingConversations, error: queryError } = await supabase
-          .from('conversations')
-          .select('id, title, messages(*)')
-          .eq('user_id', user.id)
-          .eq('character_id', characterId)
-          .eq('conversation_type', 'character_roleplay')
-          .order('updated_at', { ascending: false })
-          .limit(1);
-
-        if (queryError) throw queryError;
-
+        // Check for existing conversation - ONLY if no scene is selected
         let conversation;
-        if (existingConversations && existingConversations.length > 0) {
-          conversation = existingConversations[0];
-          setConversationId(conversation.id);
-          
-          // Load existing messages
-          if (conversation.messages && conversation.messages.length > 0) {
-            const loadedMessages = conversation.messages.map((msg: any) => ({
-              id: msg.id,
-              content: msg.content,
-              sender: msg.sender as 'user' | 'character',
-              timestamp: msg.created_at
-            }));
-            setMessages(loadedMessages);
-          } else {
-            // Add initial greeting with scene context
-            const initialMessage: Message = {
-              id: '1',
-              content: selectedScene 
-                ? `Hello! I'm ${loadedCharacter.name}. ${selectedScene.scene_prompt}`
-                : `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
-              sender: 'character',
-              timestamp: new Date().toISOString()
-            };
-            setMessages([initialMessage]);
+        if (!sceneId) {
+          // No scene selected - check for existing conversation
+          const { data: existingConversations, error: queryError } = await supabase
+            .from('conversations')
+            .select('id, title, messages(*)')
+            .eq('user_id', user.id)
+            .eq('character_id', characterId)
+            .eq('conversation_type', 'character_roleplay')
+            .order('updated_at', { ascending: false })
+            .limit(1);
+
+          if (queryError) throw queryError;
+
+          if (existingConversations && existingConversations.length > 0) {
+            conversation = existingConversations[0];
+            setConversationId(conversation.id);
+            
+            // Load existing messages
+            if (conversation.messages && conversation.messages.length > 0) {
+              const loadedMessages = conversation.messages.map((msg: any) => ({
+                id: msg.id,
+                content: msg.content,
+                sender: msg.sender as 'user' | 'character',
+                timestamp: msg.created_at
+              }));
+              setMessages(loadedMessages);
+            } else {
+              // Add initial greeting
+              const initialMessage: Message = {
+                id: '1',
+                content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
+                sender: 'character',
+                timestamp: new Date().toISOString()
+              };
+              setMessages([initialMessage]);
+            }
           }
-        } else {
-          // Create new conversation
+        }
+
+        // If no existing conversation OR scene is selected, create new conversation
+        if (!conversation) {
           const { data: newConversation, error: insertError } = await supabase
             .from('conversations')
             .insert({

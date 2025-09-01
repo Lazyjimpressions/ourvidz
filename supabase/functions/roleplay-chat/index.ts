@@ -26,6 +26,8 @@ interface RoleplayChatRequest {
   content_tier: 'sfw' | 'nsfw';
   scene_generation?: boolean;
   user_id?: string;
+  // ✅ ADD SCENE CONTEXT:
+  scene_context?: string;
 }
 
 interface RoleplayChatResponse {
@@ -202,7 +204,7 @@ serve(async (req) => {
 
     // Build context-aware prompt
     const promptStart = Date.now();
-    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context);
+    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, requestBody.scene_context);
     const enhancedPrompt = buildEnhancedPrompt(message, context, character, content_tier);
     promptTime = Date.now() - promptStart;
 
