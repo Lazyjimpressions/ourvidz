@@ -35,7 +35,9 @@ const MobileRoleplayDashboard = () => {
     role: char.role,
     appearance_tags: char.appearance_tags,
     traits: char.traits,
-    persona: char.persona
+    persona: char.persona,
+    reference_image_url: char.reference_image_url,
+    seed_locked: (char as any).seed_locked
   }));
 
   const handleCharacterSelect = (characterId: string) => {

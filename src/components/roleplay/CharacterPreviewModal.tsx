@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ import {
   X
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { urlSigningService } from '@/lib/services/UrlSigningService';
 
 interface Character {
   id: string;
@@ -53,6 +54,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   isFavorite = false
 }) => {
   const { isMobile } = useMobileDetection();
+  const [signedImageUrl, setSignedImageUrl] = useState<string>('');
 
   // Debug logging
   console.log('🎭 CharacterPreviewModal:', {
@@ -69,6 +71,34 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
   const imageUrl = character.image_url || character.preview_image_url;
   const hasImage = !!imageUrl;
+
+  // Sign image URL if it's a private storage path
+  useEffect(() => {
+    const signImageUrl = async () => {
+      if (!imageUrl) {
+        setSignedImageUrl('');
+        return;
+      }
+
+      // Check if URL needs signing (user-library or workspace-temp paths)
+      if (imageUrl.includes('user-library/') || imageUrl.includes('workspace-temp/')) {
+        try {
+          const bucket = imageUrl.includes('user-library/') ? 'user-library' : 'workspace-temp';
+          const signed = await urlSigningService.getSignedUrl(imageUrl, bucket);
+          setSignedImageUrl(signed);
+        } catch (error) {
+          console.error('Failed to sign image URL:', error);
+          setSignedImageUrl(imageUrl); // Fallback to original
+        }
+      } else {
+        setSignedImageUrl(imageUrl); // Use as-is for public URLs
+      }
+    };
+
+    signImageUrl();
+  }, [imageUrl]);
+
+  const displayImageUrl = signedImageUrl || imageUrl;
 
   const handleStartChat = () => {
     console.log('🚀 Starting chat with character:', character.name);
@@ -115,9 +145,9 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               relative rounded-lg overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900
               ${hasImage ? 'aspect-square' : 'aspect-[4/3]'}
             `}>
-              {hasImage ? (
+              {displayImageUrl ? (
                 <img 
-                  src={imageUrl} 
+                  src={displayImageUrl} 
                   alt={character.name}
                   className="w-full h-full object-cover"
                   loading="lazy"

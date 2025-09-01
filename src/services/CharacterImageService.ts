@@ -34,7 +34,7 @@ export class CharacterImageService {
       const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: characterPrompt,
-          job_type: 'sdxl_image_fast',
+          job_type: 'sdxl_image_high',
           reference_image_url: params.referenceImageUrl,
           seed: params.seedLocked,
           metadata: {
