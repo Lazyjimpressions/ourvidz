@@ -12,10 +12,13 @@ import {
   User, 
   MessageCircle,
   Star,
-  X
+  X,
+  Image
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
+import { supabase } from '@/integrations/supabase/client';
+import { CharacterScene } from '@/types/roleplay';
 
 interface Character {
   id: string;
@@ -38,7 +41,7 @@ interface CharacterPreviewModalProps {
   character: Character | null;
   isOpen: boolean;
   onClose: () => void;
-  onStartChat: () => void;
+  onStartChat: (selectedScene?: CharacterScene) => void;
   onEditCharacter?: () => void;
   onFavorite?: () => void;
   isFavorite?: boolean;
@@ -55,13 +58,18 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 }) => {
   const { isMobile } = useMobileDetection();
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
+  const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
+  const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
+  const [isLoadingScenes, setIsLoadingScenes] = useState(false);
 
   // Debug logging
   console.log('🎭 CharacterPreviewModal:', {
     isOpen,
     characterName: character?.name,
     hasCharacter: !!character,
-    description: character?.description?.substring(0, 50) + '...'
+    description: character?.description?.substring(0, 50) + '...',
+    scenesCount: characterScenes.length,
+    selectedScene: selectedScene?.id
   });
 
   if (!character) {
@@ -98,16 +106,59 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
     signImageUrl();
   }, [imageUrl]);
 
-  const displayImageUrl = signedImageUrl || imageUrl;
+  // Load character scenes when character changes
+  useEffect(() => {
+    const loadCharacterScenes = async () => {
+      if (!character?.id) {
+        setCharacterScenes([]);
+        setSelectedScene(null);
+        return;
+      }
+
+      setIsLoadingScenes(true);
+      try {
+        const { data: scenes, error } = await supabase
+          .from('character_scenes')
+          .select('*')
+          .eq('character_id', character.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) {
+          console.error('Error loading character scenes:', error);
+          setCharacterScenes([]);
+        } else {
+          setCharacterScenes(scenes || []);
+          // Auto-select first scene if available
+          if (scenes && scenes.length > 0 && !selectedScene) {
+            setSelectedScene(scenes[0]);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading character scenes:', error);
+        setCharacterScenes([]);
+      } finally {
+        setIsLoadingScenes(false);
+      }
+    };
+
+    loadCharacterScenes();
+  }, [character?.id]);
 
   const handleStartChat = () => {
-    console.log('🚀 Starting chat with character:', character.name);
-    onStartChat();
+    console.log('🚀 Starting chat with character:', character.name, 'Scene:', selectedScene?.id);
+    onStartChat(selectedScene || undefined);
   };
 
   const handleClose = () => {
     console.log('❌ Closing modal for character:', character.name);
+    setSelectedScene(null); // Reset selection on close
     onClose();
+  };
+
+  const handleSceneSelect = (scene: CharacterScene) => {
+    setSelectedScene(scene);
+    console.log('🎬 Selected scene:', scene.scene_prompt.substring(0, 50) + '...');
   };
 
   return (
@@ -145,9 +196,9 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               relative rounded-lg overflow-hidden bg-gradient-to-br from-gray-700 to-gray-900
               ${hasImage ? 'aspect-square' : 'aspect-[4/3]'}
             `}>
-              {displayImageUrl ? (
+              {hasImage ? (
                 <img 
-                  src={displayImageUrl} 
+                  src={signedImageUrl || imageUrl} 
                   alt={character.name}
                   className="w-full h-full object-cover"
                   loading="lazy"
@@ -224,6 +275,49 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               )}
             </div>
 
+            {/* Character Scenes Section - Small and Discrete */}
+            {characterScenes.length > 0 && (
+              <div>
+                <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
+                  <Image className="w-3 h-3" />
+                  Scenes ({characterScenes.length})
+                </h4>
+                <div className="space-y-1">
+                  {characterScenes.map(scene => (
+                    <div 
+                      key={scene.id}
+                      onClick={() => handleSceneSelect(scene)}
+                      className={`
+                        text-xs text-gray-300 p-2 rounded border cursor-pointer transition-colors
+                        ${selectedScene?.id === scene.id 
+                          ? 'bg-blue-600/20 border-blue-500/50 text-blue-200' 
+                          : 'border-gray-600 hover:bg-gray-800/50 hover:border-gray-500'
+                        }
+                      `}
+                    >
+                      <div className="line-clamp-2 leading-tight">
+                        {scene.scene_prompt}
+                      </div>
+                      {scene.image_url && (
+                        <div className="flex items-center gap-1 mt-1 text-gray-400">
+                          <Image className="w-2 h-2" />
+                          <span className="text-xs">Has image</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Loading Scenes Indicator */}
+            {isLoadingScenes && (
+              <div className="text-xs text-gray-400 flex items-center gap-2">
+                <div className="w-3 h-3 border border-gray-600 border-t-blue-500 rounded-full animate-spin"></div>
+                Loading scenes...
+              </div>
+            )}
+
             {/* Appearance Tags */}
             {character.appearance_tags && character.appearance_tags.length > 0 && (
               <div>
@@ -274,7 +368,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               size="lg"
             >
               <Play className="w-4 h-4 mr-2" />
-              Start Chat
+              {selectedScene ? 'Start Scene' : 'Start Chat'}
             </Button>
             
             {onEditCharacter && (

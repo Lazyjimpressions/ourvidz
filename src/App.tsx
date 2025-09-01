@@ -65,6 +65,7 @@ function App() {
               <Route path="/playground" element={<ProtectedRoute><Playground /></ProtectedRoute>} />
               <Route path="/roleplay" element={<ProtectedRoute><MobileRoleplayDashboard /></ProtectedRoute>} />
               <Route path="/roleplay/chat/:characterId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
+              <Route path="/roleplay/chat/:characterId/scene/:sceneId" element={<ProtectedRoute><MobileRoleplayChat /></ProtectedRoute>} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

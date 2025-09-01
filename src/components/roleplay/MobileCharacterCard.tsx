@@ -8,6 +8,8 @@ import { generateCharacterPortrait } from '@/utils/characterImageUtils';
 import { CharacterPreviewModal } from './CharacterPreviewModal';
 import { supabase } from '@/integrations/supabase/client';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
+import { useNavigate } from 'react-router-dom';
+import { CharacterScene } from '@/types/roleplay';
 
 interface Character {
   id: string;
@@ -49,6 +51,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
   const { toast } = useToast();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const imageUrl = character.image_url || character.preview_image_url;
 
@@ -92,9 +95,17 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     setShowPreview(false);
   };
 
-  const handleStartChat = () => {
+  const handleStartChat = (selectedScene?: CharacterScene) => {
     setShowPreview(false);
-    onSelect(); // Navigate to chat
+    if (selectedScene) {
+      // Navigate with scene context
+      navigate(`/roleplay/chat/${character.id}/scene/${selectedScene.id}`);
+      console.log('🚀 Starting chat with scene:', selectedScene.id);
+    } else {
+      // Navigate without scene context
+      onSelect();
+      console.log('🚀 Starting chat without scene');
+    }
   };
 
   const handlePreview = (e: React.MouseEvent) => {

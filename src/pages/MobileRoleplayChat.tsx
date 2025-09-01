@@ -26,12 +26,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const MobileRoleplayChat: React.FC = () => {
-  const { characterId } = useParams<{ characterId: string }>();
+  const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
   const navigate = useNavigate();
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const [character, setCharacter] = useState<Character | null>(null);
+  const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
@@ -88,6 +89,25 @@ const MobileRoleplayChat: React.FC = () => {
         }
         setCharacter(loadedCharacter);
 
+        // Load scene data if sceneId is provided
+        if (sceneId) {
+          try {
+            const { data: sceneData, error: sceneError } = await supabase
+              .from('character_scenes')
+              .select('*')
+              .eq('id', sceneId)
+              .eq('character_id', characterId)
+              .single();
+
+            if (!sceneError && sceneData) {
+              setSelectedScene(sceneData);
+              console.log('🎬 Loaded scene context:', sceneData.scene_prompt.substring(0, 50) + '...');
+            }
+          } catch (error) {
+            console.error('Error loading scene:', error);
+          }
+        }
+
         // Check for existing conversation
         const { data: existingConversations, error: queryError } = await supabase
           .from('conversations')
@@ -115,10 +135,12 @@ const MobileRoleplayChat: React.FC = () => {
             }));
             setMessages(loadedMessages);
           } else {
-            // Add initial greeting
+            // Add initial greeting with scene context
             const initialMessage: Message = {
               id: '1',
-              content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
+              content: selectedScene 
+                ? `Hello! I'm ${loadedCharacter.name}. ${selectedScene.scene_prompt}`
+                : `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
               sender: 'character',
               timestamp: new Date().toISOString()
             };
@@ -132,7 +154,9 @@ const MobileRoleplayChat: React.FC = () => {
               user_id: user.id,
               character_id: characterId,
               conversation_type: 'character_roleplay',
-              title: `Roleplay: ${loadedCharacter.name}`,
+              title: selectedScene 
+                ? `Roleplay: ${loadedCharacter.name} - ${selectedScene.scene_prompt.substring(0, 30)}...`
+                : `Roleplay: ${loadedCharacter.name}`,
               status: 'active',
               memory_tier: memoryTier
             })
@@ -143,10 +167,12 @@ const MobileRoleplayChat: React.FC = () => {
           
           setConversationId(newConversation.id);
           
-          // Add initial greeting
+          // Add initial greeting with scene context
           const initialMessage: Message = {
             id: '1',
-            content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
+            content: selectedScene 
+              ? `Hello! I'm ${loadedCharacter.name}. ${selectedScene.scene_prompt}`
+              : `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
             sender: 'character',
             timestamp: new Date().toISOString()
           };
@@ -159,7 +185,7 @@ const MobileRoleplayChat: React.FC = () => {
     };
 
     initializeConversation();
-  }, [user, characterId, memoryTier]);
+  }, [user, characterId, sceneId, memoryTier]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
