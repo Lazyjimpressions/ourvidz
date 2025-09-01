@@ -20,6 +20,9 @@ import { MobileChatInput } from '@/components/roleplay/MobileChatInput';
 import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet';
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
+import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
+import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene } from '@/types/roleplay';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +40,8 @@ const MobileRoleplayChat: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
   const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
@@ -51,6 +56,7 @@ const MobileRoleplayChat: React.FC = () => {
 
   // Hooks
   const { user, profile } = useAuth();
+  const { getSignedUrl } = useSignedImageUrls();
 
   // Initialize conversation and load data
   useEffect(() => {
@@ -88,6 +94,18 @@ const MobileRoleplayChat: React.FC = () => {
           };
         }
         setCharacter(loadedCharacter);
+
+        // Sign character image URL for display
+        if (loadedCharacter.image_url && !loadedCharacter.image_url.startsWith('http')) {
+          try {
+            const signedUrl = await getSignedUrl(loadedCharacter.image_url, 'user-library');
+            setSignedCharacterImage(signedUrl);
+          } catch (error) {
+            console.error('Error signing character image:', error);
+          }
+        } else {
+          setSignedCharacterImage(loadedCharacter.image_url);
+        }
 
         // Load scene data if sceneId is provided
         if (sceneId) {
@@ -376,6 +394,18 @@ const MobileRoleplayChat: React.FC = () => {
 
           if (assetError) throw assetError;
 
+          // Sign the scene image URL
+          let signedImageUrl = assetData.temp_storage_path;
+          try {
+            if (!signedImageUrl.startsWith('http')) {
+              const bucket = signedImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+              const signed = await getSignedUrl(signedImageUrl, bucket);
+              if (signed) signedImageUrl = signed;
+            }
+          } catch (error) {
+            console.error('Error signing scene image URL:', error);
+          }
+
           // Update the last message with the image
           setMessages(prev => {
             const updatedMessages = [...prev];
@@ -385,7 +415,7 @@ const MobileRoleplayChat: React.FC = () => {
               lastMessage.metadata = {
                 ...lastMessage.metadata,
                 scene_generated: true,
-                image_url: assetData.temp_storage_path
+                image_url: signedImageUrl
               };
             }
             return updatedMessages;
@@ -482,72 +512,12 @@ const MobileRoleplayChat: React.FC = () => {
     <OurVidzDashboardLayout>
       <div className="flex flex-col h-screen bg-background">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border bg-card">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleBack}
-              className="text-white hover:bg-gray-800"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-            
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700">
-                <img 
-                  src={character.image_url} 
-                  alt={character.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">{character.name}</h2>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">
-                    {character.content_rating || 'sfw'}
-                  </Badge>
-                  <Badge variant="outline" className="text-xs">
-                    {character.consistency_method}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {/* Worker Health Indicator */}
-            <div className="flex items-center gap-1">
-              <div 
-                className={`w-2 h-2 rounded-full ${
-                  // chatWorker.isHealthy ? 'bg-green-500' : 'bg-gray-500' // Removed useWorkerStatus
-                  true ? 'bg-green-500' : 'bg-gray-500' // Placeholder for now
-                }`} 
-                title={true ? 'Chat Worker Online' : 'Chat Worker Offline'} // Placeholder for now
-              />
-              <span className="text-xs text-gray-400">
-                {true ? 'Online' : 'Offline'} {/* Placeholder for now */}
-              </span>
-            </div>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCharacterSheet(!showCharacterSheet)}
-              className="text-white hover:bg-gray-800"
-            >
-              <Settings className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowContextMenu(!showContextMenu)}
-              className="text-white hover:bg-gray-800"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
+        <RoleplayHeader
+          backTo="/roleplay"
+          characterName={character.name}
+          characterImage={signedCharacterImage || '/placeholder.svg'}
+          onSettingsClick={() => setShowSettingsModal(true)}
+        />
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -595,6 +565,18 @@ const MobileRoleplayChat: React.FC = () => {
             onConsistencySettingsChange={(settings) => setConsistencySettings(settings)}
           />
         )}
+
+        {/* Settings Modal */}
+        <RoleplaySettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          memoryTier={memoryTier}
+          onMemoryTierChange={setMemoryTier}
+          modelProvider={modelProvider}
+          onModelProviderChange={setModelProvider}
+          consistencySettings={consistencySettings}
+          onConsistencySettingsChange={setConsistencySettings}
+        />
 
         {/* Context Menu */}
         <ContextMenu

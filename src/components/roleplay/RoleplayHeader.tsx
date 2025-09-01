@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 interface RoleplayHeaderProps {
   showBackButton?: boolean;
+  backTo?: string;
   title?: string;
   subtitle?: string;
   characterName?: string;
@@ -18,6 +19,7 @@ interface RoleplayHeaderProps {
 
 export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
   showBackButton = true,
+  backTo = '/dashboard',
   title,
   subtitle,
   characterName,
@@ -39,11 +41,11 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(backTo)}
             className="h-8 px-2 text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
-            Dashboard
+            {backTo === '/roleplay' ? 'Roleplay' : 'Dashboard'}
           </Button>
         )}
         

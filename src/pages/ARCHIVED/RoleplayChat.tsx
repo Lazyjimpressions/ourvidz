@@ -24,7 +24,7 @@ import { RoleplayLeftSidebar } from '@/components/roleplay/ARCHIVED/RoleplayLeft
 import { CharacterDetailPane } from '@/components/roleplay/CharacterDetailPane';
 import { MessageBubble } from '@/components/playground/MessageBubble';
 import { RoleplayPromptInput } from '@/components/roleplay/RoleplayPromptInput';
-import { RoleplaySettingsModal, RoleplaySettings } from '@/components/roleplay/RoleplaySettingsModal';
+import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
 import { AddCharacterModal } from '@/components/roleplay/AddCharacterModal';
 import { SceneContextHeader } from '@/components/roleplay/ARCHIVED/SceneContextHeader';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
@@ -33,6 +33,7 @@ import { useSceneGeneration } from '@/hooks/useSceneGeneration';
 import { InlineImageDisplay } from '@/components/playground/InlineImageDisplay';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Card } from '@/components/ui/card';
+import { ConsistencySettings } from '@/services/ImageConsistencyService';
 
 const RoleplayChatInterface = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,15 +53,13 @@ const RoleplayChatInterface = () => {
   const [showAddCharacter, setShowAddCharacter] = useState(false);
   const [inputMode, setInputMode] = useState<'chat' | 'scene'>('chat');
 // Roleplay Settings
-const [roleplaySettings, setRoleplaySettings] = useState<RoleplaySettings>({
-  contentMode: 'nsfw', // NSFW-first default
-  responseStyle: 'detailed',
-  responseLength: 'medium',
-  autoSceneGeneration: false,
-  voiceModel: 'none',
-  enhancementModel: 'qwen_instruct',
-  sceneQuality: 'fast',
-  messageFrequency: 5
+const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
+const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
+const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
+  method: 'hybrid',
+  reference_strength: 0.35,
+  denoise_strength: 0.25,
+  modify_strength: 0.5
 });
 
 // Quick image local state
@@ -135,7 +134,7 @@ const [quickImageAsset, setQuickImageAsset] = useState<{assetId: string; imageUr
     conversationId: state.activeConversationId,
     characterName: character?.name,
     userCharacterId: userCharacterId || undefined,
-    contentMode: roleplaySettings.contentMode
+    contentMode: 'nsfw'
   });
 
 const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -213,7 +212,7 @@ useEffect(() => {
           const prompt = await generateSceneDescription(
             `Opening scene with ${character.name}`,
             character.name,
-            { userCharacterId: userCharacterId || undefined, contentMode: roleplaySettings.contentMode }
+            { userCharacterId: userCharacterId || undefined, contentMode: 'nsfw' }
           );
           
           // Build participants list for multi-character support
@@ -227,11 +226,10 @@ useEffect(() => {
             });
           }
           
-          console.log('🎭 Sending opening narration with settings:', { roleplaySettings, participants });
+          console.log('🎭 Sending opening narration');
           await sendMessage(prompt, { 
             conversationId: state.activeConversationId, 
             characterId: characterId || undefined,
-            roleplaySettings,
             participants
           });
           hasSentOpeningNarrationRef.current = true;
@@ -389,11 +387,10 @@ useEffect(() => {
         });
       }
       
-      console.log('💬 Sending message with settings:', { roleplaySettings, participants });
+      console.log('💬 Sending message');
       await sendMessage(inputMessage, { 
         characterId: characterId || undefined,
         conversationId: state.activeConversationId,
-        roleplaySettings,
         participants
       });
       setInputMessage('');
@@ -685,8 +682,12 @@ useEffect(() => {
       <RoleplaySettingsModal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
-        settings={roleplaySettings}
-        onSettingsChange={setRoleplaySettings}
+        memoryTier={memoryTier}
+        onMemoryTierChange={setMemoryTier}
+        modelProvider={modelProvider}
+        onModelProviderChange={setModelProvider}
+        consistencySettings={consistencySettings}
+        onConsistencySettingsChange={setConsistencySettings}
       />
 
       <AddCharacterModal

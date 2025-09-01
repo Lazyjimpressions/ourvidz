@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message } from '@/types/roleplay';
+import useSignedImageUrls from '@/hooks/useSignedImageUrls';
+import { useState, useEffect } from 'react';
 
 interface ChatMessageProps {
   message: Message;
@@ -25,8 +27,52 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onGenerateScene
 }) => {
   const { isMobile } = useMobileDetection();
+  const { getSignedUrl } = useSignedImageUrls();
   const isUser = message.sender === 'user';
   const hasScene = message.metadata?.scene_generated && message.metadata?.image_url;
+  
+  const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
+  const [signedSceneImage, setSignedSceneImage] = useState<string | null>(null);
+
+  // Sign character image URL
+  useEffect(() => {
+    const signCharacterImage = async () => {
+      if (character?.image_url && !character.image_url.startsWith('http')) {
+        try {
+          const signed = await getSignedUrl(character.image_url, 'user-library');
+          setSignedCharacterImage(signed);
+        } catch (error) {
+          console.error('Error signing character image:', error);
+          setSignedCharacterImage('/placeholder.svg');
+        }
+      } else {
+        setSignedCharacterImage(character?.image_url || '/placeholder.svg');
+      }
+    };
+
+    signCharacterImage();
+  }, [character?.image_url, getSignedUrl]);
+
+  // Sign scene image URL
+  useEffect(() => {
+    const signSceneImage = async () => {
+      if (message.metadata?.image_url && !message.metadata.image_url.startsWith('http')) {
+        try {
+          const bucket = message.metadata.image_url.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          const signed = await getSignedUrl(message.metadata.image_url, bucket);
+          setSignedSceneImage(signed);
+        } catch (error) {
+          console.error('Error signing scene image:', error);
+        }
+      } else {
+        setSignedSceneImage(message.metadata?.image_url || null);
+      }
+    };
+
+    if (hasScene) {
+      signSceneImage();
+    }
+  }, [message.metadata?.image_url, hasScene, getSignedUrl]);
 
   const formatTime = (timestamp: string) => {
     try {
@@ -78,7 +124,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               <User className="w-4 h-4 text-white" />
             ) : (
               <img 
-                src={character?.image_url || '/placeholder.svg'} 
+                src={signedCharacterImage || '/placeholder.svg'} 
                 alt={character?.name || 'Character'}
                 className="w-full h-full object-cover"
               />
@@ -112,12 +158,12 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
           </Card>
 
           {/* Scene Image */}
-          {hasScene && (
+          {hasScene && signedSceneImage && (
             <div className="mt-3">
               <Card className="overflow-hidden border-gray-700 bg-gray-900">
                 <div className="relative">
                   <img 
-                    src={message.metadata.image_url} 
+                    src={signedSceneImage} 
                     alt="Generated scene"
                     className="w-full h-auto max-h-64 object-cover"
                   />
