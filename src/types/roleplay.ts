@@ -52,6 +52,7 @@ export interface CharacterScene {
   conversation_id?: string;
   image_url?: string;
   scene_prompt: string;
+  system_prompt?: string;
   generation_metadata?: any;
   job_id?: string;
   created_at: string;

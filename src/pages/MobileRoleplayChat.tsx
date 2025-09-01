@@ -108,6 +108,7 @@ const MobileRoleplayChat: React.FC = () => {
         }
 
         // Load scene data if sceneId is provided
+        let loadedScene = null;
         if (sceneId) {
           try {
             const { data: sceneData, error: sceneError } = await supabase
@@ -118,6 +119,7 @@ const MobileRoleplayChat: React.FC = () => {
               .single();
 
             if (!sceneError && sceneData) {
+              loadedScene = sceneData;
               setSelectedScene(sceneData);
               console.log('🎬 Loaded scene context:', sceneData.scene_prompt.substring(0, 50) + '...');
             }
@@ -126,87 +128,99 @@ const MobileRoleplayChat: React.FC = () => {
           }
         }
 
-        // Check for existing conversation - ONLY if no scene is selected
-        let conversation;
-        if (!sceneId) {
-          // No scene selected - check for existing conversation
-          const { data: existingConversations, error: queryError } = await supabase
-            .from('conversations')
-            .select('id, title, messages(*)')
-            .eq('user_id', user.id)
-            .eq('character_id', characterId)
-            .eq('conversation_type', 'character_roleplay')
-            .order('updated_at', { ascending: false })
-            .limit(1);
+        // Always create new conversation for fresh start
+        const conversationTitle = loadedScene
+          ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
+          : `Roleplay: ${loadedCharacter.name}`;
 
-          if (queryError) throw queryError;
+        const { data: newConversation, error: insertError } = await supabase
+          .from('conversations')
+          .insert({
+            user_id: user.id,
+            character_id: characterId,
+            conversation_type: sceneId ? 'scene_roleplay' : 'character_roleplay',
+            title: conversationTitle,
+            status: 'active',
+            memory_tier: memoryTier,
+            memory_data: sceneId ? { scene_id: sceneId } : {}
+          })
+          .select()
+          .single();
 
-          if (existingConversations && existingConversations.length > 0) {
-            conversation = existingConversations[0];
-            setConversationId(conversation.id);
-            
-            // Load existing messages
-            if (conversation.messages && conversation.messages.length > 0) {
-              const loadedMessages = conversation.messages.map((msg: any) => ({
-                id: msg.id,
-                content: msg.content,
-                sender: msg.sender as 'user' | 'character',
-                timestamp: msg.created_at
-              }));
-              setMessages(loadedMessages);
-            } else {
-              // Add initial greeting
-              const initialMessage: Message = {
-                id: '1',
-                content: `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
-                sender: 'character',
-                timestamp: new Date().toISOString()
-              };
-              setMessages([initialMessage]);
-            }
+        if (insertError) throw insertError;
+        setConversationId(newConversation.id);
+
+        // Show "Setting the scene..." indicator
+        setIsLoading(true);
+        setMessages([{
+          id: 'temp-kickoff',
+          content: 'Setting the scene...',
+          sender: 'character',
+          timestamp: new Date().toISOString()
+        }]);
+
+        // Make kickoff call to get character's opening message
+        const contentTier = (loadedCharacter.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+        
+        const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+          body: {
+            kickoff: true,
+            conversation_id: newConversation.id,
+            character_id: characterId,
+            model_provider: modelProvider,
+            memory_tier: memoryTier,
+            content_tier: contentTier,
+            scene_context: loadedScene?.scene_prompt || null,
+            scene_system_prompt: loadedScene?.system_prompt || null,
+            user_id: user.id
           }
-        }
+        });
 
-        // If no existing conversation OR scene is selected, create new conversation
-        if (!conversation) {
-          const { data: newConversation, error: insertError } = await supabase
-            .from('conversations')
-            .insert({
-              user_id: user.id,
-              character_id: characterId,
-              conversation_type: 'character_roleplay',
-              title: selectedScene 
-                ? `Roleplay: ${loadedCharacter.name} - ${selectedScene.scene_prompt.substring(0, 30)}...`
-                : `Roleplay: ${loadedCharacter.name}`,
-              status: 'active',
-              memory_tier: memoryTier
-            })
-            .select()
-            .single();
+        if (error) throw error;
 
-          if (insertError) throw insertError;
-          
-          setConversationId(newConversation.id);
-          
-          // Add initial greeting with scene context
-          const initialMessage: Message = {
-            id: '1',
-            content: selectedScene 
-              ? `Hello! I'm ${loadedCharacter.name}. ${selectedScene.scene_prompt}`
-              : `Hello! I'm ${loadedCharacter.name}. How can I assist you today?`,
-            sender: 'character',
-            timestamp: new Date().toISOString()
-          };
-          setMessages([initialMessage]);
-        }
+        // Replace loading message with actual opener
+        const openerMessage: Message = {
+          id: data.message_id || Date.now().toString(),
+          content: data.response || `Hello! I'm ${loadedCharacter.name}.`,
+          sender: 'character',
+          timestamp: new Date().toISOString()
+        };
+        setMessages([openerMessage]);
 
       } catch (error) {
         console.error('Error initializing conversation:', error);
+        // Fallback message
+        setMessages([{
+          id: 'fallback',
+          content: `Hello! I'm ${character?.name || 'your character'}. How can I assist you today?`,
+          sender: 'character',
+          timestamp: new Date().toISOString()
+        }]);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     initializeConversation();
-  }, [user, characterId, sceneId, memoryTier]);
+  }, [user, characterId, sceneId]); // Remove memoryTier to prevent resets
+
+  // Separate effect to update memory tier without recreating conversation
+  useEffect(() => {
+    const updateMemoryTier = async () => {
+      if (!conversationId || !user) return;
+
+      try {
+        await supabase
+          .from('conversations')
+          .update({ memory_tier: memoryTier })
+          .eq('id', conversationId);
+      } catch (error) {
+        console.error('Error updating memory tier:', error);
+      }
+    };
+
+    updateMemoryTier();
+  }, [memoryTier, conversationId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -453,8 +467,72 @@ const MobileRoleplayChat: React.FC = () => {
   };
 
   // Context menu handlers
-  const handleClearConversation = () => {
-    setMessages([messages[0]]); // Keep the initial greeting
+  const handleClearConversation = async () => {
+    if (!user || !characterId || !character) return;
+
+    try {
+      // Create brand new conversation
+      const conversationTitle = selectedScene
+        ? `${character.name} - ${selectedScene.scene_prompt.substring(0, 30)}...`
+        : `Roleplay: ${character.name}`;
+
+      const { data: newConversation, error: insertError } = await supabase
+        .from('conversations')
+        .insert({
+          user_id: user.id,
+          character_id: characterId,
+          conversation_type: sceneId ? 'scene_roleplay' : 'character_roleplay',
+          title: conversationTitle,
+          status: 'active',
+          memory_tier: memoryTier,
+          memory_data: sceneId ? { scene_id: sceneId } : {}
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      setConversationId(newConversation.id);
+
+      // Reset messages and do kickoff again
+      setIsLoading(true);
+      setMessages([{
+        id: 'temp-kickoff',
+        content: 'Setting the scene...',
+        sender: 'character',
+        timestamp: new Date().toISOString()
+      }]);
+
+      const contentTier = (character.content_rating === 'nsfw' && profile?.age_verified) ? 'nsfw' : 'sfw';
+      
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
+        body: {
+          kickoff: true,
+          conversation_id: newConversation.id,
+          character_id: characterId,
+          model_provider: modelProvider,
+          memory_tier: memoryTier,
+          content_tier: contentTier,
+          scene_context: selectedScene?.scene_prompt || null,
+          scene_system_prompt: selectedScene?.system_prompt || null,
+          user_id: user.id
+        }
+      });
+
+      if (error) throw error;
+
+      const openerMessage: Message = {
+        id: data.message_id || Date.now().toString(),
+        content: data.response || `Hello! I'm ${character.name}.`,
+        sender: 'character',
+        timestamp: new Date().toISOString()
+      };
+      setMessages([openerMessage]);
+
+    } catch (error) {
+      console.error('Error clearing conversation:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleExportConversation = () => {

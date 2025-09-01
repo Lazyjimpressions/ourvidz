@@ -17,7 +17,7 @@ const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
 const ADMIN_ROLE_TTL_MS = 60_000;
 
 interface RoleplayChatRequest {
-  message: string;
+  message?: string; // Optional for kickoff
   conversation_id: string;
   character_id: string;
   model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
@@ -26,8 +26,9 @@ interface RoleplayChatRequest {
   content_tier: 'sfw' | 'nsfw';
   scene_generation?: boolean;
   user_id?: string;
-  // ✅ ADD SCENE CONTEXT:
   scene_context?: string;
+  scene_system_prompt?: string;
+  kickoff?: boolean; // New field for scene kickoff
 }
 
 interface RoleplayChatResponse {
@@ -39,6 +40,7 @@ interface RoleplayChatResponse {
   scene_generated?: boolean;
   consistency_score?: number;
   processing_time?: number;
+  message_id?: string; // For kickoff messages
 }
 
 interface Database {
@@ -128,19 +130,30 @@ serve(async (req) => {
       memory_tier,
       content_tier,
       scene_generation,
-      user_id
+      user_id,
+      scene_context,
+      scene_system_prompt,
+      kickoff
     } = requestBody;
 
-    // Validate required fields
-    if (!message || !conversation_id || !character_id || !model_provider || !memory_tier || !content_tier) {
+    // Validate required fields (message is optional for kickoff)
+    if ((!message && !kickoff) || !conversation_id || !character_id || !model_provider || !memory_tier || !content_tier) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'Missing required fields: message, conversation_id, character_id, model_provider, memory_tier, content_tier'
+        error: 'Missing required fields: conversation_id, character_id, model_provider, memory_tier, content_tier (message required unless kickoff=true)'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400
       });
     }
+
+    console.log('🎭 Roleplay request:', { 
+      kickoff, 
+      has_scene_context: !!scene_context, 
+      has_scene_system_prompt: !!scene_system_prompt,
+      character_id,
+      content_tier
+    });
 
     // Create Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -204,8 +217,11 @@ serve(async (req) => {
 
     // Build context-aware prompt
     const promptStart = Date.now();
-    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, requestBody.scene_context);
-    const enhancedPrompt = buildEnhancedPrompt(message, context, character, content_tier);
+    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context, scene_system_prompt);
+    const userMessage = kickoff ? 
+      "Introduce yourself and set the scene. Be natural and in-character." : 
+      message!;
+    const enhancedPrompt = buildEnhancedPrompt(userMessage, context, character, content_tier);
     promptTime = Date.now() - promptStart;
 
     // Route to appropriate model provider
@@ -214,12 +230,11 @@ serve(async (req) => {
     let modelUsed: string;
 
     switch (model_provider) {
-              case 'chat_worker':
-          // ✅ FIX: Build system prompt and pass user message separately
-          const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, requestBody.scene_context);
-          response = await callChatWorker(systemPrompt, message, content_tier);
-          modelUsed = 'chat_worker';
-          break;
+      case 'chat_worker':
+        const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff);
+        response = await callChatWorker(systemPrompt, userMessage, content_tier);
+        modelUsed = 'chat_worker';
+        break;
       case 'openrouter':
         response = await callOpenRouter(enhancedPrompt, model_variant || 'claude-3.5-sonnet', content_tier);
         modelUsed = `openrouter:${model_variant || 'claude-3.5-sonnet'}`;
@@ -246,22 +261,24 @@ serve(async (req) => {
 
     // Save assistant message to database
     const dbWriteStart = Date.now();
-    const { error: saveError } = await supabase
+    const { data: savedMessage, error: saveError } = await supabase
       .from('messages')
       .insert({
         conversation_id,
         sender: 'assistant',
         content: response,
-        message_type: 'roleplay_chat'
-      });
+        message_type: kickoff ? 'scene_kickoff' : 'roleplay_chat'
+      })
+      .select('id')
+      .single();
 
     if (saveError) {
       console.error('Failed to save assistant message:', saveError);
     }
 
-    // Update memory data if needed
+    // Update memory data if needed (not for kickoff)
     let memoryUpdated = false;
-    if (memory_tier !== 'conversation') {
+    if (memory_tier !== 'conversation' && !kickoff && message) {
       const memoryUpdate = await updateMemoryData(supabase, conversation_id, character_id, user_id, memory_tier, message, response);
       memoryUpdated = memoryUpdate;
     }
@@ -286,7 +303,8 @@ serve(async (req) => {
       memory_updated: memoryUpdated,
       scene_generated: sceneGenerated,
       consistency_score: consistencyScore,
-      processing_time: totalTime
+      processing_time: totalTime,
+      message_id: savedMessage?.id
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -331,10 +349,11 @@ function sanitizeSceneContext(sceneContext?: string): string | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
-// ✅ FIX: Refactor buildRoleplayContext to use msg.sender and improve system prompt
-function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string): string {
-  // Sanitize scene context
+function buildRoleplayContext(character: any, messages: any[], memoryTier: string, contentTier: string, sceneContext?: string, sceneSystemPrompt?: string): string {
+  // Sanitize scene context and system prompt
   const cleanedSceneContext = sanitizeSceneContext(sceneContext);
+  const cleanedSceneSystemPrompt = sceneSystemPrompt ? 
+    sceneSystemPrompt.substring(0, 300).replace(/\s+/g, ' ').trim() : null;
   
   // Character context with stronger first-person focus
   let characterContext = `You are ${character.name}, a ${character.description}. `;
@@ -349,6 +368,11 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
   
   if (character.base_prompt) {
     characterContext += `${character.base_prompt}\\n`;
+  }
+
+  // Scene-specific system prompt rules
+  if (cleanedSceneSystemPrompt) {
+    characterContext += `\\nScene rules: ${cleanedSceneSystemPrompt}\\n`;
   }
   
   // Content tier instructions with stronger grounding
@@ -385,15 +409,22 @@ INTERACTION RULES:
 - Use sensual but tasteful language appropriate for ${contentTier.toUpperCase()} content
 - Show your character's thoughts, feelings, and reactions
 - Reference the current setting and context in your responses
+- AVOID generic assistant phrases like "How can I assist you today?" or "I'm here to help"
+- Be conversational, natural, and in-character at all times
 
 Remember: You ARE ${character.name}. Think, speak, and act as this character would in this situation.`;
   
   return fullContext;
 }
 
-// ✅ FIX: Build system prompt separately with proper parameters
-function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string): string {
-  return buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext);
+function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean): string {
+  const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
+  
+  if (kickoff) {
+    return basePrompt + `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
+  }
+  
+  return basePrompt;
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
