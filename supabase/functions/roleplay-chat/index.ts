@@ -202,7 +202,7 @@ serve(async (req) => {
 
     // Build context-aware prompt
     const promptStart = Date.now();
-    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier);
+    const context = buildRoleplayContext(character, recentMessages, memory_tier, content_tier, scene_context);
     const enhancedPrompt = buildEnhancedPrompt(message, context, character, content_tier);
     promptTime = Date.now() - promptStart;
 

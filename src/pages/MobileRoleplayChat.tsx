@@ -231,7 +231,9 @@ const MobileRoleplayChat: React.FC = () => {
           memory_tier: memoryTier,
           content_tier: 'sfw',
           scene_generation: false,
-          user_id: user.id
+          user_id: user.id,
+          // ✅ ADD SCENE CONTEXT:
+          scene_context: selectedScene?.scene_prompt || null
         }
       });
 
