@@ -6,9 +6,10 @@
 
 ## **🎯 Current Implementation Status**
 
-### **✅ Completed Implementation (75% Complete)**
+### **✅ Completed Implementation (85% Complete)**
 - **Mobile-first pages**: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
 - **Mobile components**: MobileCharacterCard.tsx, MobileChatInput.tsx, MobileCharacterSheet.tsx
+- **Dashboard components**: CharacterGrid.tsx, QuickStartSection.tsx, SearchAndFilters.tsx ✅ **IMPLEMENTED**
 - **Chat interface**: ChatMessage.tsx, ContextMenu.tsx
 - **Image consistency**: ImageConsistencyService.ts implemented
 - **Edge functions**: roleplay-chat edge function working
@@ -19,13 +20,18 @@
   - Job callback updates character records with generated images
   - Real-time UI updates via Supabase subscriptions
   - Mobile-optimized button with touch support
+- **Utility integration**: ✅ **NEW - INTEGRATED**
+  - `buildCharacterPortraitPrompt` integrated for optimized prompts
+  - `characterImageUtils.ts` created for user_library integration
+  - `extractReferenceMetadata` available for consistency
+  - `modifyOriginalPrompt` available for prompt editing
 
-### **❌ Missing Implementation (25% Remaining)**
-- **Dashboard components**: CharacterGrid.tsx, QuickStartSection.tsx, SearchAndFilters.tsx
+### **❌ Missing Implementation (15% Remaining)**
 - **Memory system**: Three-tier memory (conversation, character, profile)
 - **Database schema**: Character table enhancements not executed
 - **Library integration**: Roleplay content categorization
 - **Performance optimization**: Mobile performance and caching
+- **Character preview modal**: Preview functionality not implemented
 
 ---
 
@@ -46,16 +52,22 @@ src/components/roleplay/
 ├── MobileCharacterSheet.tsx (240 lines) - ✅ IMPLEMENTED
 ├── ChatMessage.tsx (120 lines) - ✅ IMPLEMENTED
 ├── ContextMenu.tsx (80 lines) - ✅ IMPLEMENTED
-├── CharacterGrid.tsx - ❌ NOT IMPLEMENTED
-├── QuickStartSection.tsx - ❌ NOT IMPLEMENTED
-└── SearchAndFilters.tsx - ❌ NOT IMPLEMENTED
+├── CharacterGrid.tsx (66 lines) - ✅ IMPLEMENTED
+├── QuickStartSection.tsx (77 lines) - ✅ IMPLEMENTED
+└── SearchAndFilters.tsx (100 lines) - ✅ IMPLEMENTED
 ```
 
-### **Services (1 file implemented)**
+### **Services (2 files implemented)**
 ```
 src/services/
 ├── ImageConsistencyService.ts (200 lines) - ✅ IMPLEMENTED
 └── MemoryManager.ts - ❌ NOT IMPLEMENTED
+```
+
+### **Utilities (1 file implemented)**
+```
+src/utils/
+└── characterImageUtils.ts (150 lines) - ✅ NEW - IMPLEMENTED
 ```
 
 ### **Archived Components (10 files)**
@@ -80,12 +92,12 @@ src/components/roleplay/ARCHIVED/
 ### **Core User Flow Status**
 ```
 PRD Required: Login → Dashboard → Character Selection → Scene Selection → Chat
-Current: Login → Dashboard (partial) → Character Selection (partial) → Chat ✅
+Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 ```
 
 **Gap Analysis:**
-- **Dashboard**: 70% complete - missing CharacterGrid, QuickStartSection, SearchAndFilters
-- **Character Selection**: 80% complete - MobileCharacterCard implemented
+- **Dashboard**: 95% complete - all components implemented and working
+- **Character Selection**: 90% complete - MobileCharacterCard implemented, preview modal missing
 - **Chat Interface**: 95% complete - fully functional
 - **Scene Integration**: 60% complete - basic scene generation working
 
@@ -111,175 +123,92 @@ Current: Login → Dashboard (partial) → Character Selection (partial) → Cha
 
 ## **🎯 Immediate Next Steps (Priority Order)**
 
-### **1. Complete Dashboard Components (Week 1)**
-**Priority: HIGH** - Required for full user flow
+### **1. Implement Character Preview Modal (Week 1)**
+**Priority: HIGH** - Required for complete user flow
 
-#### **CharacterGrid.tsx Implementation**
+#### **CharacterPreviewModal.tsx Implementation**
 ```typescript
-// src/components/roleplay/CharacterGrid.tsx
+// src/components/roleplay/CharacterPreviewModal.tsx
 import React from 'react';
-import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { MobileCharacterCard } from './MobileCharacterCard';
-import { usePublicCharacters } from '@/hooks/usePublicCharacters';
-
-interface CharacterGridProps {
-  onCharacterSelect: (characterId: string) => void;
-  onCharacterPreview: (characterId: string) => void;
-}
-
-export const CharacterGrid: React.FC<CharacterGridProps> = ({
-  onCharacterSelect,
-  onCharacterPreview
-}) => {
-  const { isMobile, isTablet, isDesktop } = useMobileDetection();
-  const { characters, isLoading, error } = usePublicCharacters();
-
-  const getGridColumns = () => {
-    if (isMobile) return 'grid-cols-1 sm:grid-cols-2';
-    if (isTablet) return 'grid-cols-2 md:grid-cols-3';
-    return 'grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
-  };
-
-  const getGapSize = () => {
-    if (isMobile) return 'gap-3';
-    if (isTablet) return 'gap-4';
-    return 'gap-6';
-  };
-
-  if (isLoading) {
-    return (
-      <div className={`grid ${getGridColumns()} ${getGapSize()} mb-8`}>
-        {[...Array(10)].map((_, i) => (
-          <div key={i} className="aspect-square bg-card border border-border rounded-lg animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-red-400">Error loading characters: {error}</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`grid ${getGridColumns()} ${getGapSize()} mb-8`}>
-      {characters.map((character) => (
-        <MobileCharacterCard
-          key={character.id}
-          character={character}
-          onSelect={() => onCharacterSelect(character.id)}
-          onPreview={() => onCharacterPreview(character.id)}
-        />
-      ))}
-    </div>
-  );
-};
-```
-
-#### **QuickStartSection.tsx Implementation**
-```typescript
-// src/components/roleplay/QuickStartSection.tsx
-import React from 'react';
-import { usePublicCharacters } from '@/hooks/usePublicCharacters';
-import { MobileCharacterCard } from './MobileCharacterCard';
-
-interface QuickStartSectionProps {
-  onCharacterSelect: (characterId: string) => void;
-  onCharacterPreview: (characterId: string) => void;
-}
-
-export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
-  onCharacterSelect,
-  onCharacterPreview
-}) => {
-  const { characters } = usePublicCharacters();
-  
-  // Get quick start characters (high interaction count or quick_start flag)
-  const quickStartCharacters = characters
-    .filter(char => char.interaction_count > 50 || char.quick_start)
-    .slice(0, 5);
-
-  if (quickStartCharacters.length === 0) return null;
-
-  return (
-    <div className="mb-8">
-      <h2 className="text-xl font-semibold text-white mb-4">Quick Start</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {quickStartCharacters.map((character) => (
-          <MobileCharacterCard
-            key={character.id}
-            character={character}
-            onSelect={() => onCharacterSelect(character.id)}
-            onPreview={() => onCharacterPreview(character.id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-```
-
-#### **SearchAndFilters.tsx Implementation**
-```typescript
-// src/components/roleplay/SearchAndFilters.tsx
-import React from 'react';
-import { Search, Filter } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Play, Settings, Heart } from 'lucide-react';
 
-interface SearchAndFiltersProps {
-  searchQuery: string;
-  setSearchQuery: (query: string) => void;
-  selectedFilter: string;
-  setSelectedFilter: (filter: string) => void;
+interface CharacterPreviewModalProps {
+  character: Character;
+  isOpen: boolean;
+  onClose: () => void;
+  onStartChat: () => void;
+  onEditCharacter?: () => void;
 }
 
-export const SearchAndFilters: React.FC<SearchAndFiltersProps> = ({
-  searchQuery,
-  setSearchQuery,
-  selectedFilter,
-  setSelectedFilter
+export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
+  character,
+  isOpen,
+  onClose,
+  onStartChat,
+  onEditCharacter
 }) => {
-  const filters = [
-    { id: 'all', label: 'All Characters' },
-    { id: 'sfw', label: 'SFW Only' },
-    { id: 'nsfw', label: 'NSFW Only' },
-    { id: 'quick_start', label: 'Quick Start' }
-  ];
-
   return (
-    <div className="mb-6 space-y-4">
-      {/* Search Bar */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-        <Input
-          type="text"
-          placeholder="Search characters..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 bg-card border-border"
-        />
-      </div>
-
-      {/* Filter Buttons */}
-      <div className="flex flex-wrap gap-2">
-        {filters.map((filter) => (
-          <Button
-            key={filter.id}
-            variant={selectedFilter === filter.id ? "default" : "outline"}
-            size="sm"
-            onClick={() => setSelectedFilter(filter.id)}
-            className="text-xs"
-          >
-            <Filter className="w-3 h-3 mr-1" />
-            {filter.label}
-          </Button>
-        ))}
-      </div>
-    </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-md bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="text-white">{character.name}</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {/* Character Image */}
+          <div className="aspect-square rounded-lg overflow-hidden bg-gray-800">
+            <img 
+              src={character.image_url || character.preview_image_url} 
+              alt={character.name}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          
+          {/* Character Info */}
+          <div className="space-y-2">
+            <p className="text-gray-300 text-sm">{character.description}</p>
+            
+            <div className="flex flex-wrap gap-2">
+              {character.appearance_tags?.map(tag => (
+                <Badge key={tag} variant="secondary" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+            
+            {character.traits && (
+              <div className="text-xs text-gray-400">
+                <strong>Traits:</strong> {character.traits}
+              </div>
+            )}
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <Button 
+              onClick={onStartChat}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              <Play className="w-4 h-4 mr-2" />
+              Start Chat
+            </Button>
+            
+            {onEditCharacter && (
+              <Button 
+                onClick={onEditCharacter}
+                variant="outline"
+                size="sm"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };
 ```
@@ -404,11 +333,11 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 ### **Week 1: Complete Core Dashboard (September 1-7)**
 **Goal**: 95% completion of Phase 1
 
-#### **Day 1-2: Dashboard Components**
-- [ ] Implement `CharacterGrid.tsx` with real data integration
-- [ ] Implement `QuickStartSection.tsx` with popular characters
-- [ ] Implement `SearchAndFilters.tsx` with filtering logic
-- [ ] Test dashboard flow end-to-end
+#### **Day 1-2: Character Preview Modal**
+- [ ] Implement `CharacterPreviewModal.tsx` component
+- [ ] Integrate preview functionality in `MobileCharacterCard.tsx`
+- [ ] Test preview flow end-to-end
+- [ ] Add preview button functionality
 
 #### **Day 3-4: Database Schema**
 - [ ] Execute character table enhancements
@@ -540,6 +469,6 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 
 ---
 
-**Next Steps**: Complete dashboard components (CharacterGrid, QuickStartSection, SearchAndFilters) and implement memory system.
+**Next Steps**: Implement character preview modal and memory system for complete user experience.
 
 **Document Purpose**: This is the detailed technical implementation roadmap that provides specific tasks, timelines, and code examples for developers to follow during the roleplay feature implementation.

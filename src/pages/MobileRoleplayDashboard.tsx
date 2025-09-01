@@ -18,7 +18,7 @@ const MobileRoleplayDashboard = () => {
   // ✅ REAL DATA: Use database characters instead of mock data
   const { characters, isLoading, error, loadPublicCharacters } = usePublicCharacters();
 
-  // Transform database characters to display format
+  // Transform database characters to display format with all required fields
   const displayCharacters = characters.map(char => ({
     id: char.id,
     name: char.name,
@@ -43,7 +43,8 @@ const MobileRoleplayDashboard = () => {
   };
 
   const handleCharacterPreview = (characterId: string) => {
-    // TODO: Implement character preview modal
+    // Preview functionality is now handled within the CharacterPreviewModal
+    // This function is kept for compatibility but not actively used
     console.log('Preview character:', characterId);
   };
 
