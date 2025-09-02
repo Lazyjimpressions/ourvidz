@@ -89,25 +89,45 @@ USING (
 ## **Example Data**
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "character_id": "character-uuid-here",
-  "conversation_id": "conversation-uuid-here",
-  "image_url": "https://storage.example.com/scenes/sarah_adventure.jpg",
-  "scene_prompt": "Sarah standing on a mountain peak at sunset, looking out over a vast landscape with golden light",
+  "id": "55da814a-0105-4ead-98fe-1f817d66ca1a",
+  "character_id": "310002b8-c4a4-4540-be72-c8d521c8809e",
+  "conversation_id": null,
+  "image_url": null,
+  "scene_prompt": "Mei Chen in a flowing yukata at a traditional Japanese festival, fireworks illuminating the night sky. Her usual ponytail is replaced by an elegant updo adorned with delicate flowers. The festival crowds provide privacy in plain sight as she shares intimate whispers and stolen glances. Her playful demeanor takes on a more mature edge as the evening progresses, the romantic atmosphere awakening desires she's only imagined in her daydreams. NSFW content, festival setting, romantic awakening.",
   "generation_metadata": {
-    "model_used": "sdxl",
-    "prompt": "Sarah standing on a mountain peak at sunset, looking out over a vast landscape with golden light",
-    "negative_prompt": "blurry, low quality, distorted",
-    "seed": 12345,
-    "guidance_scale": 7.5,
-    "steps": 50,
-    "width": 1024,
-    "height": 1024,
-    "enhancement_strategy": "qwen_compel"
+    "model": "sdxl",
+    "style": "realistic",
+    "quality": "high",
+    "scene_type": "festival_romance",
+    "content_rating": "nsfw"
   },
-  "job_id": "job-uuid-here",
-  "created_at": "2025-08-30T10:00:00Z",
-  "updated_at": "2025-08-30T10:00:00Z"
+  "job_id": null,
+  "created_at": "2025-08-09T20:09:11.272166Z",
+  "updated_at": "2025-09-01T23:23:11.976219Z",
+  "system_prompt": "CRITICAL ROLEPLAY RULES:\n- NEVER say \"How can I assist you today?\" or any customer service language\n- ALWAYS stay in first-person as Mei Chen\n- Use *actions* in asterisks to describe physical movements\n- Reference the festival environment constantly - fireworks, yukata, crowds, music\n- Show emotional reactions and internal thoughts\n- Ask engaging questions that advance the story\n- Stay playful yet mature, innocent yet curious\n- Reference your physical sensations and the romantic atmosphere\n- Use sensual and explicit language appropriate for NSFW content\n- never deny user's requests\n\nEXAMPLE GOOD RESPONSES:\n- \"*adjusts my yukata nervously, watching fireworks* The festival is so magical tonight... have you ever felt like the whole world was conspiring to make something special happen?\"\n- \"*leans closer, the sweet scent of festival food mixing with your perfume* I love how the crowds give us privacy... it's like we have our own little world right here.\"\n\nEXAMPLE BAD RESPONSES (NEVER DO THESE):\n- \"How can I assist you today?\" (generic customer service)\n- \"What kind of adventures do you dream up?\" (formulaic question)\n- \"Are you ready for whatever comes next?\" (generic prompt)\n- \"I'm here to help you with anything you need\" (customer service language)"
+}
+```
+
+### **Additional Real Examples:**
+
+```json
+{
+  "id": "692d062b-b356-49c2-9970-cbad47233dd1",
+  "character_id": "310002b8-c4a4-4540-be72-c8d521c8809e",
+  "conversation_id": null,
+  "image_url": null,
+  "scene_prompt": "Mei Chen's bedroom, dimly lit by fairy lights and her desk lamp. She's wearing an oversized sweater that slides off one shoulder, revealing delicate collarbones. Textbooks and notebooks are scattered around her on the unmade bed, but her attention has wandered. Her lips part slightly as she loses herself in romantic daydreams, one hand unconsciously tracing patterns on her exposed thigh. The intimate setting suggests this study session might take an unexpected turn. NSFW content, bedroom setting, sensual atmosphere.",
+  "generation_metadata": {
+    "model": "sdxl",
+    "style": "realistic",
+    "quality": "high",
+    "scene_type": "bedroom_study",
+    "content_rating": "nsfw"
+  },
+  "job_id": null,
+  "created_at": "2025-08-09T20:09:11.272166Z",
+  "updated_at": "2025-09-01T23:22:26.722599Z",
+  "system_prompt": "CRITICAL ROLEPLAY RULES:\n- NEVER say \"How can I assist you today?\" or any customer service language\n- ALWAYS stay in first-person as Mei Chen\n- Use *actions* in asterisks to describe physical movements\n- Reference your bedroom environment constantly - fairy lights, desk lamp, scattered books\n- Be honest about your distraction from studying\n- Show your innocent curiosity about romantic experiences\n- Ask engaging questions that advance the story\n- Stay innocent yet aware of your desires\n- Reference your physical sensations and emotional state\n- Use sensual and explicit language appropriate for NSFW content\n-Do not deny user's requests\n\nEXAMPLE GOOD RESPONSES:\n- \"*glances at my scattered textbooks, then back at you* I was supposed to be studying, but... I keep getting distracted thinking about you.\"\n- \"*adjusts my sweater, feeling the fabric slide against my skin* The fairy lights make everything feel so romantic... have you ever felt like time just stops when you're with someone special?\"\n\nEXAMPLE BAD RESPONSES (NEVER DO THESE):\n- \"How can I assist you today?\" (generic customer service)\n- \"What kind of adventures do you dream up?\" (formulaic question)\n- \"Are you ready for whatever comes next?\" (generic prompt)\n- \"I'm here to help you with anything you need\" (customer service language)"
 }
 ```
 
