@@ -201,27 +201,75 @@ const MobileRoleplayChat: React.FC = () => {
         currentRouteRef.current = routeKey;
         setKickoffError(null);
 
-        // Always create new conversation for fresh start
-        const conversationTitle = loadedScene
-          ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
-          : `Roleplay: ${loadedCharacter.name}`;
-
-        const { data: newConversation, error: insertError } = await supabase
+        // Check for existing active conversation first
+        let conversation = null;
+        const conversationQuery = supabase
           .from('conversations')
-          .insert({
-            user_id: user.id,
-            character_id: characterId,
-            conversation_type: sceneId ? 'scene_roleplay' : 'character_roleplay',
-            title: conversationTitle,
-            status: 'active',
-            memory_tier: memoryTier,
-            memory_data: sceneId ? { scene_id: sceneId } : {}
-          })
-          .select()
-          .single();
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('character_id', characterId)
+          .eq('conversation_type', sceneId ? 'scene_roleplay' : 'character_roleplay')
+          .eq('status', 'active');
 
-        if (insertError) throw insertError;
-        setConversationId(newConversation.id);
+        // Add scene filter if sceneId exists  
+        if (sceneId) {
+          conversationQuery.contains('memory_data', { scene_id: sceneId });
+        }
+
+        const { data: existingConversations, error: queryError } = await conversationQuery.order('updated_at', { ascending: false }).limit(1);
+
+        if (queryError) {
+          console.error('Error querying conversations:', queryError);
+        } else if (existingConversations && existingConversations.length > 0) {
+          conversation = existingConversations[0];
+          console.log('🔄 Reusing existing conversation:', conversation.id);
+          setConversationId(conversation.id);
+
+          // Load existing messages for this conversation
+          const { data: existingMessages, error: messagesError } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('conversation_id', conversation.id)
+            .order('created_at', { ascending: true });
+
+          if (!messagesError && existingMessages && existingMessages.length > 0) {
+            const formattedMessages: Message[] = existingMessages.map(msg => ({
+              id: msg.id,
+              content: msg.content,
+              sender: msg.sender as 'user' | 'character',
+              timestamp: msg.created_at
+            }));
+            setMessages(formattedMessages);
+            console.log(`📝 Loaded ${formattedMessages.length} existing messages`);
+            return; // Exit early - no need to kickoff for existing conversation
+          }
+        }
+
+        // Create new conversation if none exists
+        if (!conversation) {
+          console.log('🆕 Creating new conversation');
+          const conversationTitle = loadedScene
+            ? `${loadedCharacter.name} - ${loadedScene.scene_prompt.substring(0, 30)}...`
+            : `Roleplay: ${loadedCharacter.name}`;
+
+          const { data: newConversation, error: insertError } = await supabase
+            .from('conversations')
+            .insert({
+              user_id: user.id,
+              character_id: characterId,
+              conversation_type: sceneId ? 'scene_roleplay' : 'character_roleplay',
+              title: conversationTitle,
+              status: 'active',
+              memory_tier: memoryTier,
+              memory_data: sceneId ? { scene_id: sceneId } : {}
+            })
+            .select()
+            .single();
+
+          if (insertError) throw insertError;
+          conversation = newConversation;
+          setConversationId(newConversation.id);
+        }
 
         // Show "Setting the scene..." indicator
         setIsLoading(true);
@@ -245,7 +293,7 @@ const MobileRoleplayChat: React.FC = () => {
         const { data, error } = await supabase.functions.invoke('roleplay-chat', {
           body: {
             kickoff: true,
-            conversation_id: newConversation.id,
+            conversation_id: conversation.id,
             character_id: characterId,
             model_provider: modelProvider,
             memory_tier: memoryTier,
