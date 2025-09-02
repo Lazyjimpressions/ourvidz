@@ -38,7 +38,11 @@ const MobileRoleplayDashboard = () => {
     traits: char.traits,
     persona: char.persona,
     reference_image_url: char.reference_image_url,
-    seed_locked: (char as any).seed_locked
+    seed_locked: (char as any).seed_locked,
+    // New voice-related fields
+    voice_examples: char.voice_examples || [],
+    forbidden_phrases: char.forbidden_phrases || [],
+    scene_behavior_rules: char.scene_behavior_rules || {}
   }));
 
   const handleCharacterSelect = (characterId: string) => {

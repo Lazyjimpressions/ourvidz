@@ -30,6 +30,10 @@ interface Character {
   role?: string;
   reference_image_url?: string;
   seed_locked?: number;
+  // New voice-related fields
+  voice_examples?: string[];
+  forbidden_phrases?: string[];
+  scene_behavior_rules?: any;
 }
 
 interface MobileCharacterCardProps {

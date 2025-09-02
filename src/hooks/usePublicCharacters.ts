@@ -22,6 +22,10 @@ interface PublicCharacter {
   gender?: string;
   content_rating?: string;
   role?: string;
+  // New voice-related fields
+  voice_examples?: string[];
+  forbidden_phrases?: string[];
+  scene_behavior_rules?: any;
 }
 
 export const usePublicCharacters = () => {

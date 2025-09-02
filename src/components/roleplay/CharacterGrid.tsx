@@ -11,6 +11,19 @@ interface Character {
   quick_start?: boolean;
   category?: string;
   consistency_method?: string;
+  // Additional fields for enhanced display
+  interaction_count?: number;
+  likes_count?: number;
+  content_rating?: string;
+  gender?: string;
+  role?: string;
+  appearance_tags?: string[];
+  traits?: string;
+  persona?: string;
+  // New voice-related fields
+  voice_examples?: string[];
+  forbidden_phrases?: string[];
+  scene_behavior_rules?: any;
 }
 
 interface CharacterGridProps {
