@@ -1,6 +1,6 @@
 # Table: prompt_templates
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Source of truth for all system prompts used by enhancement, chat, roleplay, and scene generation
 
@@ -9,7 +9,7 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (18 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - template_name (text, NOT NULL) - Human-readable template name
 - enhancer_model (text, NOT NULL) - Model used for enhancement (qwen_instruct, qwen_base)
@@ -24,6 +24,9 @@
 - metadata (jsonb) - Additional template metadata
 - created_at (timestamptz, default: now()) - Creation timestamp
 - updated_at (timestamptz, default: now()) - Last update timestamp
+- created_by (uuid, nullable) - User who created the template
+- description (text, nullable) - Human-readable description of the template
+- comment (text, nullable) - Additional comments or notes about the template
 ```
 
 ## **RLS Policies**
@@ -62,6 +65,8 @@ USING (
 - **Cache Management**: Changes require cache refresh via system_config_cache
 - **Active Status**: Only active templates are used in production
 - **Token Limits**: Must align with worker/model constraints
+- **Template Documentation**: Description and comment fields provide context for template usage
+- **Creator Tracking**: Templates track who created them for accountability
 
 ## **Template Selection Algorithm**
 1. **Exact Match**: Try 5-tuple: (target_model, enhancer_model, job_type, use_case, content_mode)

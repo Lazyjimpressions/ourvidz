@@ -1,6 +1,6 @@
 # Table: user_library
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Permanent user content storage for images, videos, and other generated assets
 
@@ -9,7 +9,7 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (22 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - user_id (uuid, NOT NULL) - Foreign key to profiles table
 - asset_type (text, NOT NULL) - Type of asset (image, video, etc.)
@@ -30,6 +30,8 @@
 - thumbnail_path (text, nullable) - Path to thumbnail image
 - width (integer, nullable) - Asset width in pixels (for images)
 - height (integer, nullable) - Asset height in pixels (for images)
+- content_category (text, default: 'general') - Content category classification
+- roleplay_metadata (jsonb, default: '{}') - Roleplay-specific metadata and context
 ```
 
 ## **RLS Policies**
@@ -60,6 +62,8 @@ USING (auth.uid() = user_id);
 - **Tagging System**: Users can add custom tags for organization
 - **Visibility Control**: Assets can be private, public, or shared
 - **Favorite System**: Users can mark assets as favorites for quick access
+- **Content Categorization**: Assets are automatically categorized by content type
+- **Roleplay Integration**: Roleplay metadata stores character and scene context
 
 ## **Example Data**
 ```json
@@ -83,7 +87,13 @@ USING (auth.uid() = user_id);
   "updated_at": "2025-08-30T10:00:00Z",
   "thumbnail_path": "user-uuid-here/thumbnails/beautiful-sunset.jpg",
   "width": 1024,
-  "height": 1024
+  "height": 1024,
+  "content_category": "landscape",
+  "roleplay_metadata": {
+    "character_id": "character-uuid-here",
+    "scene_context": "Mountain adventure scene",
+    "roleplay_session": "session-uuid-here"
+  }
 }
 ```
 

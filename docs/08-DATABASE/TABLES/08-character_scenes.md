@@ -1,6 +1,6 @@
 # Table: character_scenes
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Character-scene associations and scene generation for storyboard system
 
@@ -9,7 +9,7 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (10 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - character_id (uuid, nullable) - Foreign key to characters table
 - conversation_id (uuid, nullable) - Foreign key to conversations table
@@ -19,6 +19,7 @@
 - job_id (uuid, nullable) - Foreign key to jobs table
 - created_at (timestamptz, default: now()) - Creation timestamp
 - updated_at (timestamptz, default: now()) - Last update timestamp
+- system_prompt (text, nullable) - System prompt for scene generation
 ```
 
 ## **RLS Policies**
@@ -83,6 +84,7 @@ USING (
 - **Conversation Integration**: Scenes can be linked to conversations
 - **Image Storage**: Generated scene images stored in cloud storage
 - **Prompt Management**: Scene prompts guide AI generation
+- **System Prompts**: System prompts provide additional generation context and instructions
 
 ## **Example Data**
 ```json
