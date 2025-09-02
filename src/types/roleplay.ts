@@ -28,6 +28,10 @@ export interface Character {
   created_at?: string;
   updated_at?: string;
   user_id?: string;
+  // New voice-related fields
+  voice_examples?: string[];
+  forbidden_phrases?: string[];
+  scene_behavior_rules?: any;
 }
 
 export interface Message {

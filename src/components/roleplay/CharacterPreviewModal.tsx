@@ -121,7 +121,8 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           .from('character_scenes')
           .select('*')
           .eq('character_id', character.id)
-          .order('created_at', { ascending: false })
+          .eq('is_active', true)
+          .order('priority', { ascending: false })
           .limit(5);
 
         if (error) {
