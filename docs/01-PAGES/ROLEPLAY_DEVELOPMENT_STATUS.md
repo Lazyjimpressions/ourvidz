@@ -137,14 +137,116 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 
 ---
 
-## **🎯 Immediate Next Steps (Priority Order)**
+## **🎯 IMMEDIATE NEXT STEPS (PRIORITY ORDER)**
 
-### **1. Implement Character Scene Integration (Week 3, Days 1-2)**
-**Priority: HIGH** - Required for complete user flow
+### **1. Implement Edge Function Integration (Week 3, Days 1-3)**
+**Priority: CRITICAL** - Core functionality required
 
-#### **CharacterPreviewModal.tsx Scene Integration**
+#### **Day 1: Roleplay-Chat Edge Function Update**
+**File**: `supabase/functions/roleplay-chat/index.ts`
+
+**Key Changes:**
+1. **Replace hardcoded prompts** with database-driven approach
+2. **Integrate character voice examples** and forbidden phrases
+3. **Apply scene-specific rules** and starters
+4. **Implement response sanitization**
+
+**Implementation Steps:**
 ```typescript
-// Add scene loading and selection to existing modal
+// 1. Load Character with Voice Data
+async function loadCharacterWithVoice(characterId: string) {
+  const { data: character, error } = await supabase
+    .from('characters')
+    .select(`
+      *,
+      character_scenes!inner(
+        scene_rules,
+        scene_starters,
+        priority
+      )
+    `)
+    .eq('id', characterId)
+    .eq('character_scenes.is_active', true)
+    .order('character_scenes.priority', { ascending: false })
+    .single();
+    
+  return character;
+}
+
+// 2. Enhanced Prompt Building
+function buildEnhancedRoleplayContext(
+  character: any, 
+  sceneContext?: string, 
+  contentTier: string
+): string {
+  const voiceExamples = character.voice_examples?.join('\n') || '';
+  const sceneRules = character.character_scenes?.[0]?.scene_rules || '';
+  const sceneStarters = character.character_scenes?.[0]?.scene_starters || [];
+  
+  return `You are ${character.name}, a ${character.description}.
+
+CRITICAL RULES:
+- You ARE ${character.name}. Not an AI, not an assistant.
+- Respond ONLY as ${character.name} would respond.
+- Use "I" statements and first-person perspective.
+
+Voice Examples:
+${voiceExamples}
+
+Scene Rules: ${sceneRules}
+
+Scene Starters: ${sceneStarters.join(', ')}
+
+FORBIDDEN PHRASES (NEVER use):
+${character.forbidden_phrases?.join(', ') || ''}
+
+Remember: You ARE ${character.name}. Think, speak, and act as this character would.`;
+}
+
+// 3. Response Sanitization
+function sanitizeResponse(response: string, character: any): string {
+  let cleaned = response;
+  
+  character.forbidden_phrases?.forEach(phrase => {
+    const regex = new RegExp(phrase, 'gi');
+    cleaned = cleaned.replace(regex, '');
+  });
+  
+  if (!cleaned.includes('I ') && !cleaned.includes('*')) {
+    cleaned = `*looks at you with curiosity* ${cleaned}`;
+  }
+  
+  return cleaned;
+}
+```
+
+#### **Day 2: Enhance-Prompt Edge Function Update**
+**File**: `supabase/functions/enhance-prompt/index.ts`
+
+**Key Changes:**
+1. **Verify updated SDXL template** is being used
+2. **Test male character generation** improvements
+3. **Ensure negative prompts** integration
+
+#### **Day 3: Testing & Validation**
+- Test character voice consistency
+- Validate scene-specific behavior
+- Verify anti-assistant language elimination
+
+### **2. Implement Frontend Integration (Week 3, Days 4-6)**
+**Priority: HIGH** - User experience enhancement
+
+#### **Day 4: Character Preview Modal Enhancement**
+**File**: `src/components/roleplay/CharacterPreviewModal.tsx`
+
+**Key Changes:**
+1. **Add scene loading** and selection
+2. **Display voice examples** and forbidden phrases
+3. **Show scene-specific rules** and starters
+
+**Implementation:**
+```typescript
+// Add state for scenes
 const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
 const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
 
@@ -157,8 +259,7 @@ useEffect(() => {
       .from('character_scenes')
       .select('*')
       .eq('character_id', character.id)
-      .order('created_at', { ascending: false })
-      .limit(5);
+      .order('priority', { ascending: false });
       
     if (!error && scenes) {
       setCharacterScenes(scenes);
@@ -168,10 +269,10 @@ useEffect(() => {
   loadCharacterScenes();
 }, [character?.id]);
 
-// Scene selection UI (add to existing modal)
+// Add scene selection UI
 {characterScenes.length > 0 && (
   <div className="mb-4">
-    <h4 className="text-xs font-medium text-gray-400 mb-2">Scenes</h4>
+    <h4 className="text-xs font-medium text-gray-400 mb-2">Available Scenes</h4>
     <div className="space-y-2">
       {characterScenes.map(scene => (
         <div 
@@ -181,7 +282,22 @@ useEffect(() => {
             selectedScene?.id === scene.id ? 'bg-gray-800 border-blue-500' : ''
           }`}
         >
-          {scene.scene_prompt}
+          <div className="font-medium">{scene.scene_name || 'Unnamed Scene'}</div>
+          <div className="text-gray-400 text-xs mt-1">{scene.scene_description}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+// Add voice examples display
+{character.voice_examples && character.voice_examples.length > 0 && (
+  <div className="mb-4">
+    <h4 className="text-xs font-medium text-gray-400 mb-2">Voice Examples</h4>
+    <div className="space-y-2">
+      {character.voice_examples.map((example, index) => (
+        <div key={index} className="text-xs text-gray-300 p-2 bg-gray-800 rounded">
+          "{example}"
         </div>
       ))}
     </div>
@@ -189,12 +305,30 @@ useEffect(() => {
 )}
 ```
 
-### **2. Implement Dynamic Greeting Generation (Week 3, Days 3-4)**
-**Priority: HIGH** - Core feature for character immersion
+#### **Day 5: Mobile Roleplay Chat Enhancement**
+**File**: `src/pages/MobileRoleplayChat.tsx`
 
-#### **CharacterGreetingService.ts Implementation**
+**Key Changes:**
+1. **Integrate scene context** into chat
+2. **Apply character voice** examples
+3. **Use scene-specific rules** and starters
+
+#### **Day 6: Dashboard Integration**
+**File**: `src/pages/MobileRoleplayDashboard.tsx`
+
+**Key Changes:**
+1. **Display character voice** information
+2. **Show scene availability** for characters
+3. **Integrate enhanced** character preview
+
+### **3. Implement Advanced Features (Week 4, Days 7-9)**
+**Priority: MEDIUM** - Enhanced user experience
+
+#### **Day 7: Dynamic Greeting Generation**
+**File**: `src/services/CharacterGreetingService.ts`
+
+**Implementation:**
 ```typescript
-// src/services/CharacterGreetingService.ts
 export class CharacterGreetingService {
   static async generateGreeting(
     character: Character, 
@@ -214,25 +348,28 @@ export class CharacterGreetingService {
       
       if (error) throw error;
       
-      return data?.response || this.getFallbackGreeting(character);
+      return data?.response || this.getFallbackGreeting(character, scene);
     } catch (error) {
       console.error('Error generating greeting:', error);
-      return this.getFallbackGreeting(character);
+      return this.getFallbackGreeting(character, scene);
     }
   }
   
-  private static getFallbackGreeting(character: Character): string {
+  private static getFallbackGreeting(character: Character, scene?: CharacterScene): string {
+    if (scene?.scene_starters && scene.scene_starters.length > 0) {
+      return scene.scene_starters[Math.floor(Math.random() * scene.scene_starters.length)];
+    }
+    
     return `Hello! I'm ${character.name}. ${character.description}`;
   }
 }
 ```
 
-### **3. Implement Prompt Template Integration (Week 3, Day 5)**
-**Priority: HIGH** - Required for consistent character behavior
+#### **Day 8: Prompt Template Service**
+**File**: `src/services/PromptTemplateService.ts`
 
-#### **PromptTemplateService.ts Implementation**
+**Implementation:**
 ```typescript
-// src/services/PromptTemplateService.ts
 export class PromptTemplateService {
   static async getCharacterPrompt(
     character: Character,
@@ -264,32 +401,17 @@ export class PromptTemplateService {
       .replace('{{character_description}}', character.description)
       .replace('{{character_personality}}', character.traits || '')
       .replace('{{character_background}}', character.persona || '')
-      .replace('{{character_speaking_style}}', character.voice_tone || '')
-      .replace('{{character_goals}}', character.base_prompt || '');
-  }
-  
-  private static getDefaultPrompt(character: Character): string {
-    return `You are ${character.name}. ${character.description}. Stay in character and respond naturally.`;
+      .replace('{{voice_examples}}', character.voice_examples?.join('\n') || '')
+      .replace('{{scene_context}}', '');
   }
 }
 ```
 
-### **4. Implement Memory System (Week 4, Days 1-2)**
-**Priority: HIGH** - Core feature for user experience
+#### **Day 9: Memory System Foundation**
+**File**: `src/services/MemoryManager.ts`
 
-#### **MemoryManager.ts Implementation**
+**Implementation:**
 ```typescript
-// src/services/MemoryManager.ts
-import { supabase } from '@/integrations/supabase/client';
-
-interface Memory {
-  conversation_history?: string[];
-  character_preferences?: Record<string, any>;
-  user_profile?: Record<string, any>;
-  last_interaction?: string;
-  interaction_count?: number;
-}
-
 export class MemoryManager {
   async getConversationMemory(conversationId: string): Promise<Memory> {
     const { data } = await supabase
@@ -302,26 +424,10 @@ export class MemoryManager {
   }
   
   async getCharacterMemory(characterId: string, userId: string): Promise<Memory> {
-    const { data } = await supabase
-      .from('character_memories')
-      .select('memory_data')
-      .eq('character_id', characterId)
-      .eq('user_id', userId)
-      .single();
-    
-    return data?.memory_data || {};
+    // Implementation for character-specific memory
+    return {};
   }
   
-  async getProfileMemory(userId: string): Promise<Memory> {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('memory_data')
-      .eq('user_id', userId)
-      .single();
-    
-    return data?.memory_data || {};
-  }
-
   async updateConversationMemory(conversationId: string, memory: Partial<Memory>): Promise<void> {
     await supabase
       .from('conversations')
@@ -334,40 +440,40 @@ export class MemoryManager {
 }
 ```
 
-### **5. Database Schema Updates (Week 4, Day 1)**
-**Priority: HIGH** - Required for memory system
+### **4. Testing & Validation (Week 4, Days 10-12)**
+**Priority: HIGH** - Quality assurance
 
-#### **Execute Schema Updates**
-```sql
--- Character table enhancements
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS consistency_method TEXT DEFAULT 'i2i_reference';
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS seed_locked INTEGER;
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS base_prompt TEXT;
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS preview_image_url TEXT;
-ALTER TABLE characters ADD COLUMN IF NOT EXISTS quick_start BOOLEAN DEFAULT false;
+#### **Day 10: Character Voice Consistency Testing**
+- Test Mei Chen across all 3 scenes
+- Verify voice examples are applied
+- Check forbidden phrases are eliminated
 
--- Memory system tables
-CREATE TABLE IF NOT EXISTS character_memories (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  character_id UUID REFERENCES characters(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  memory_data JSONB DEFAULT '{}',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(character_id, user_id)
-);
+#### **Day 11: Scene Integration Testing**
+- Test scene-specific behavior rules
+- Verify scene starters are used
+- Validate context switching
 
--- Conversations table enhancements
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_tier TEXT DEFAULT 'conversation';
-ALTER TABLE conversations ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}';
+#### **Day 12: End-to-End Testing**
+- Complete user flow testing
+- Performance validation
+- Error handling verification
 
--- User profiles table enhancements
-ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}';
-```
+### **5. Performance & Polish (Week 4, Days 13-14)**
+**Priority: MEDIUM** - Optimization
+
+#### **Day 13: Performance Optimization**
+- Implement caching for character data
+- Optimize database queries
+- Add lazy loading for scenes
+
+#### **Day 14: Final Polish**
+- Code cleanup and documentation
+- Performance testing
+- Production readiness
 
 ---
 
-## **📊 Success Metrics & Monitoring**
+## **📊 SUCCESS METRICS & VALIDATION**
 
 ### **User Experience Metrics**
 - **Flow Completion Rate**: Target 90%+ from login to chat ✅ **ACHIEVED**
@@ -381,82 +487,60 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 - **Memory Usage**: Target <100MB on mobile ✅ **ACHIEVED**
 - **API Response Time**: Target <2 seconds ✅ **ACHIEVED**
 
-### **Business Metrics**
-- **User Retention**: Target 70%+ day 7 retention 🔄 **IN PROGRESS**
-- **Feature Adoption**: Target 80%+ character usage 🔄 **IN PROGRESS**
-- **User Satisfaction**: Target 4.5+ star rating 🔄 **IN PROGRESS**
-- **Revenue Impact**: Track premium feature adoption 🔄 **IN PROGRESS**
+### **New Roleplay Metrics (Phase 2)**
+- **Character Voice Consistency**: Target 95%+ responses maintain character voice
+- **Anti-Assistant Language**: Target 0% responses contain forbidden phrases
+- **Scene-Specific Behavior**: Target 90%+ responses reference scene context
+- **Response Quality**: Target 4.5+ star rating for character responses
 
 ---
 
 ## **🎯 COMPREHENSIVE NEXT STEPS PLAN**
 
-### **Week 3: Character Scene Integration & Dynamic Features (September 1-7)**
-**Goal**: Complete character scene integration and dynamic greeting generation
+### **Week 3: Edge Function Integration & Frontend (September 1-7)**
+**Goal**: Complete edge function integration and frontend enhancements
 
-#### **Day 1-2: Character Scene Integration**
+#### **Day 1-3: Edge Function Integration (CRITICAL)**
+- [ ] Update `roleplay-chat` edge function with database-driven prompts
+- [ ] Integrate character voice examples and forbidden phrases
+- [ ] Apply scene-specific rules and starters
+- [ ] Implement response sanitization
+- [ ] Update `enhance-prompt` edge function
+- [ ] Test and validate edge function changes
+
+#### **Day 4-6: Frontend Integration (HIGH PRIORITY)**
 - [ ] Enhance `CharacterPreviewModal.tsx` with scene loading
 - [ ] Add scene selection UI to preview modal
 - [ ] Update `MobileRoleplayChat.tsx` to handle scene context
-- [ ] Test scene integration end-to-end
+- [ ] Integrate enhanced character preview in dashboard
+- [ ] Test frontend integration end-to-end
 
-#### **Day 3-4: Dynamic Greeting Generation**
+### **Week 4: Advanced Features & Testing (September 8-14)**
+**Goal**: Complete advanced features and comprehensive testing
+
+#### **Day 7-9: Advanced Features**
 - [ ] Create `CharacterGreetingService.ts`
 - [ ] Implement AI-powered greeting generation
-- [ ] Add scene context to greeting generation
-- [ ] Test greeting generation with various characters
-
-#### **Day 5: Prompt Template Integration**
 - [ ] Create `PromptTemplateService.ts`
 - [ ] Implement database template loading
-- [ ] Add character variable substitution
-- [ ] Test prompt template integration
+- [ ] Build memory system foundation
 
-### **Week 4: Memory System & Advanced Features (September 8-14)**
-**Goal**: Complete memory system and library integration
+#### **Day 10-12: Testing & Validation**
+- [ ] Character voice consistency testing
+- [ ] Scene integration testing
+- [ ] End-to-end user flow testing
+- [ ] Performance validation
+- [ ] Error handling verification
 
-#### **Day 1-2: Memory System**
-- [ ] Execute database schema updates
-- [ ] Implement `MemoryManager.ts` service
-- [ ] Create memory hooks for React components
-- [ ] Integrate memory with chat interface
-
-#### **Day 3-4: Library Integration**
-- [ ] Create roleplay library tab
-- [ ] Implement roleplay content categorization
-- [ ] Add scene management features
-- [ ] Test library integration
-
-#### **Day 5: Performance Optimization**
-- [ ] Implement lazy loading
-- [ ] Add intelligent caching
-- [ ] Optimize image loading
-- [ ] Performance testing
-
-### **Week 5: Testing & Polish (September 15-21)**
-**Goal**: Complete testing and final polish
-
-#### **Day 1-2: Comprehensive Testing**
-- [ ] End-to-end testing across devices
-- [ ] Performance testing and optimization
-- [ ] Error handling and edge cases
-- [ ] User acceptance testing
-
-#### **Day 3-4: Documentation & Polish**
-- [ ] Update all documentation
-- [ ] Final performance optimization
-- [ ] Code review and cleanup
-- [ ] Prepare for production
-
-#### **Day 5: Production Readiness**
-- [ ] Deploy to staging
-- [ ] Final testing in staging
-- [ ] Deploy to production
-- [ ] Monitor production metrics
+#### **Day 13-14: Performance & Polish**
+- [ ] Performance optimization
+- [ ] Code cleanup and documentation
+- [ ] Final testing and validation
+- [ ] Production readiness
 
 ---
 
-## **🚨 Risk Mitigation**
+## **🚨 RISK MITIGATION**
 
 ### **Technical Risks**
 - **Breaking Changes**: Gradual migration with feature flags ✅ **MITIGATED**
@@ -465,14 +549,14 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 - **User Disruption**: Beta testing with power users ✅ **MITIGATED**
 
 ### **Development Risks**
-- **Scope Creep**: Strict adherence to PRD requirements ✅ **MITIGATED**
+- **Scope Creep**: Strict adherence to implementation plan ✅ **MITIGATED**
 - **Timeline Overrun**: Phased approach with clear milestones ✅ **MITIGATED**
 - **Quality Issues**: Comprehensive testing at each phase ✅ **MITIGATED**
 - **Integration Problems**: Thorough integration testing ✅ **MITIGATED**
 
 ---
 
-## **📈 Future Enhancements (Phase 3+)**
+## **📈 FUTURE ENHANCEMENTS (PHASE 3+)**
 
 ### **Advanced Features**
 - **Multi-character Roleplay**: Support for multiple characters in conversation
@@ -487,7 +571,7 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 
 ---
 
-## **📝 Implementation Notes**
+## **📝 IMPLEMENTATION NOTES**
 
 ### **Critical Decisions**
 1. **Image Consistency**: ✅ **IMPLEMENTED** - i2i reference method as default
@@ -509,6 +593,6 @@ ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS memory_data JSONB DEFAULT '{}
 
 ---
 
-**Next Steps**: Implement character scene integration and dynamic greeting generation for complete immersive experience.
+**Next Steps**: Start Phase 2 implementation with edge function integration for enhanced roleplay functionality.
 
-**Document Purpose**: This is the consolidated development status document that replaces 4 redundant roleplay MD files. It provides a single source of truth for implementation progress, next steps, and success metrics.
+**Document Purpose**: This is the consolidated development status document that provides a single source of truth for implementation progress, next steps, and success metrics.
