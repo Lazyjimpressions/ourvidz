@@ -28,6 +28,16 @@ import { imageConsistencyService, ConsistencySettings } from '@/services/ImageCo
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
+// Add prompt template interface
+interface PromptTemplate {
+  id: string;
+  template_name: string;
+  system_prompt: string;
+  use_case: string;
+  content_mode: string;
+  enhancer_model: string;
+}
+
 const MobileRoleplayChat: React.FC = () => {
   const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
   const navigate = useNavigate();
@@ -54,6 +64,8 @@ const MobileRoleplayChat: React.FC = () => {
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
   const [kickoffError, setKickoffError] = useState<string | null>(null);
+  // Add prompt template state
+  const [promptTemplate, setPromptTemplate] = useState<PromptTemplate | null>(null);
 
   // Idempotency ref to prevent multiple initializations
   const hasInitialized = useRef(false);
@@ -70,6 +82,32 @@ const MobileRoleplayChat: React.FC = () => {
       currentRouteRef.current = '';
     };
   }, []);
+
+  // Load prompt template for roleplay
+  const loadPromptTemplate = async (contentTier: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('prompt_templates')
+        .select('*')
+        .eq('use_case', 'character_roleplay')
+        .eq('content_mode', contentTier)
+        .eq('is_active', true)
+        .order('version', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        console.error('Error loading prompt template:', error);
+        return null;
+      }
+
+      console.log('✅ Loaded prompt template:', data.template_name);
+      return data;
+    } catch (error) {
+      console.error('Error in loadPromptTemplate:', error);
+      return null;
+    }
+  };
 
   // Initialize conversation and load data
   useEffect(() => {
@@ -112,10 +150,10 @@ const MobileRoleplayChat: React.FC = () => {
             consistency_method: characterData.consistency_method || 'i2i_reference',
             base_prompt: characterData.base_prompt || 'You are a helpful character.',
             quick_start: characterData.quick_start || false,
-            // Include new voice-related fields
-            voice_examples: characterData.voice_examples || [],
-            forbidden_phrases: characterData.forbidden_phrases || [],
-            scene_behavior_rules: characterData.scene_behavior_rules || {}
+            // Include new voice-related fields with type assertion
+            voice_examples: (characterData as any).voice_examples || [],
+            forbidden_phrases: (characterData as any).forbidden_phrases || [],
+            scene_behavior_rules: (characterData as any).scene_behavior_rules || {}
           };
         }
         setCharacter(loadedCharacter);
@@ -152,6 +190,11 @@ const MobileRoleplayChat: React.FC = () => {
             console.error('Error loading scene:', error);
           }
         }
+
+        // Load prompt template for roleplay
+        const loadedPromptTemplate = await loadPromptTemplate('nsfw');
+        setPromptTemplate(loadedPromptTemplate);
+        console.log('📝 Loaded prompt template:', loadedPromptTemplate?.template_name || 'none');
 
         // Mark route as initialized
         hasInitialized.current = true;
@@ -209,7 +252,10 @@ const MobileRoleplayChat: React.FC = () => {
             content_tier: contentTier,
             scene_context: loadedScene?.scene_prompt || null,
             scene_system_prompt: loadedScene?.system_prompt || null,
-            user_id: user.id
+            user_id: user.id,
+            // Add prompt template integration
+            prompt_template_id: loadedPromptTemplate?.id || null,
+            prompt_template_name: loadedPromptTemplate?.template_name || null
           }
         });
 
@@ -303,7 +349,7 @@ const MobileRoleplayChat: React.FC = () => {
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       console.log('🎭 Content tier (forced):', contentTier);
 
-      // Call the roleplay-chat edge function
+      // Call the roleplay-chat edge function with prompt template
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
           message: content.trim(),
@@ -315,8 +361,11 @@ const MobileRoleplayChat: React.FC = () => {
           scene_generation: false,
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
-            scene_context: selectedScene?.scene_prompt || null,
-            scene_system_prompt: selectedScene?.system_prompt || null
+          scene_context: selectedScene?.scene_prompt || null,
+          scene_system_prompt: selectedScene?.system_prompt || null,
+          // ✅ ADD PROMPT TEMPLATE INTEGRATION:
+          prompt_template_id: promptTemplate?.id || null,
+          prompt_template_name: promptTemplate?.template_name || null
         }
       });
 

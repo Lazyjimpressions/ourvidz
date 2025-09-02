@@ -29,6 +29,8 @@ interface RoleplayChatRequest {
   scene_context?: string;
   scene_system_prompt?: string;
   kickoff?: boolean; // New field for scene kickoff
+  prompt_template_id?: string; // Prompt template ID for enhanced prompts
+  prompt_template_name?: string; // Prompt template name for logging
 }
 
 interface RoleplayChatResponse {
@@ -133,7 +135,9 @@ serve(async (req) => {
       user_id,
       scene_context,
       scene_system_prompt,
-      kickoff
+      kickoff,
+      prompt_template_id,
+      prompt_template_name
     } = requestBody;
 
     // Validate required fields (message is optional for kickoff)
@@ -197,6 +201,28 @@ serve(async (req) => {
       });
     }
 
+    // Load prompt template if provided
+    let promptTemplate = null;
+    if (prompt_template_id) {
+      try {
+        const { data: templateData, error: templateError } = await supabase
+          .from('prompt_templates')
+          .select('*')
+          .eq('id', prompt_template_id)
+          .eq('is_active', true)
+          .single();
+        
+        if (!templateError && templateData) {
+          promptTemplate = templateData;
+          console.log('📝 Loaded prompt template:', templateData.template_name);
+        } else {
+          console.log('⚠️ Failed to load prompt template:', templateError);
+        }
+      } catch (error) {
+        console.error('Error loading prompt template:', error);
+      }
+    }
+
     // Get recent messages for context
     const { data: recentMessages, error: messagesError } = await supabase
       .from('messages')
@@ -242,7 +268,7 @@ serve(async (req) => {
 
     switch (model_provider) {
       case 'chat_worker':
-        const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff);
+        const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate);
         response = await callChatWorker(systemPrompt, userMessage, content_tier);
         modelUsed = 'chat_worker';
         break;
@@ -522,7 +548,71 @@ Remember: You ARE ${character.name}. Think, speak, and act as this character wou
   return fullContext;
 }
 
-function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean): string {
+function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any): string {
+  // If we have a prompt template, use it as the base and enhance with character context
+  if (promptTemplate && promptTemplate.system_prompt) {
+    console.log('📝 Using prompt template:', promptTemplate.template_name);
+    
+    let templatePrompt = promptTemplate.system_prompt;
+    
+    // Replace template placeholders with character data
+    templatePrompt = templatePrompt
+      .replace(/\{\{character_name\}\}/g, character.name)
+      .replace(/\{\{character_description\}\}/g, character.description || '')
+      .replace(/\{\{character_personality\}\}/g, character.traits || '')
+      .replace(/\{\{character_background\}\}/g, character.persona || '')
+      .replace(/\{\{character_speaking_style\}\}/g, character.voice_tone || '')
+      .replace(/\{\{character_goals\}\}/g, character.base_prompt || '')
+      .replace(/\{\{character_quirks\}\}/g, character.traits || '')
+      .replace(/\{\{character_relationships\}\}/g, '')
+      .replace(/\{\{voice_tone\}\}/g, character.voice_tone || '')
+      .replace(/\{\{mood\}\}/g, character.mood || '')
+      .replace(/\{\{character_visual_description\}\}/g, character.description || '')
+      .replace(/\{\{scene_context\}\}/g, sceneContext || '');
+    
+    // Add character-specific voice examples and forbidden phrases
+    if (character.voice_examples && character.voice_examples.length > 0) {
+      templatePrompt += `\\n\\nVOICE EXAMPLES - CRITICAL: Use these EXACT voice patterns:\\n`;
+      character.voice_examples.forEach((example: string, index: number) => {
+        templatePrompt += `Example ${index + 1}: "${example}"\\n`;
+      });
+    }
+    
+    if (character.forbidden_phrases && character.forbidden_phrases.length > 0) {
+      templatePrompt += `\\n\\nFORBIDDEN PHRASES - NEVER use these:\\n`;
+      character.forbidden_phrases.forEach((phrase: string) => {
+        templatePrompt += `- "${phrase}"\\n`;
+      });
+    }
+    
+    // Add scene-specific rules if available
+    if (character.activeScene) {
+      if (character.activeScene.scene_rules) {
+        templatePrompt += `\\n\\nSCENE BEHAVIOR - ALWAYS follow these rules:\\n${character.activeScene.scene_rules}\\n`;
+      }
+      if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
+        templatePrompt += `\\n\\nCONVERSATION STARTERS - Use these to begin or continue:\\n`;
+        character.activeScene.scene_starters.forEach((starter: string, index: number) => {
+          templatePrompt += `Starter ${index + 1}: "${starter}"\\n`;
+        });
+      }
+    }
+    
+    // Add kickoff-specific instructions
+    if (kickoff) {
+      const hasRecentMessages = recentMessages && recentMessages.length > 0;
+      if (hasRecentMessages) {
+        templatePrompt += `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
+      } else {
+        templatePrompt += `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
+      }
+    }
+    
+    return templatePrompt;
+  }
+  
+  // Fallback to original method if no template
+  console.log('⚠️ No prompt template provided, using fallback method');
   const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
   
   if (kickoff) {
