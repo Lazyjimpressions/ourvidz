@@ -137,339 +137,39 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 
 ---
 
-## **🎯 IMMEDIATE NEXT STEPS (PRIORITY ORDER)**
+## **🎯 IMPLEMENTATION PLAN & STATUS**
 
-### **1. Implement Edge Function Integration (Week 3, Days 1-3)**
-**Priority: CRITICAL** - Core functionality required
+### **PHASE 1: Edge Function Integration ✅ COMPLETE**
+**Priority: CRITICAL** - Core functionality implemented
+- ✅ **Day 1**: Updated `roleplay-chat` edge function with database-driven prompts
+- ✅ **Day 2**: Updated `enhance-prompt` edge function and SDXL improvements
+- ✅ **Day 3**: Character voice integration and response sanitization
 
-#### **Day 1: Roleplay-Chat Edge Function Update**
-**File**: `supabase/functions/roleplay-chat/index.ts`
+**Key Achievements:**
+- Database-driven prompt templates fully integrated
+- Character voice examples and forbidden phrases working
+- Scene-specific rules and starters from database
+- Enhanced SDXL NSFW template for male character generation
+- Character caching system implemented (5-minute TTL)
+- Enhanced response sanitization using database phrases
 
-**Key Changes:**
-1. **Replace hardcoded prompts** with database-driven approach
-2. **Integrate character voice examples** and forbidden phrases
-3. **Apply scene-specific rules** and starters
-4. **Implement response sanitization**
+### **PHASE 2: Frontend Integration 🚧 NEXT**
+**Priority: HIGH** - User experience improvements
+- **Day 4**: Scene selection UI and character voice display
+- **Day 5**: Character preview modal enhancements
+- **Day 6**: Mobile optimization and responsive design
 
-**Implementation Steps:**
-```typescript
-// 1. Load Character with Voice Data
-async function loadCharacterWithVoice(characterId: string) {
-  const { data: character, error } = await supabase
-    .from('characters')
-    .select(`
-      *,
-      character_scenes!inner(
-        scene_rules,
-        scene_starters,
-        priority
-      )
-    `)
-    .eq('id', characterId)
-    .eq('character_scenes.is_active', true)
-    .order('character_scenes.priority', { ascending: false })
-    .single();
-    
-  return character;
-}
+### **PHASE 3: Testing & Validation 📋 PLANNED**
+**Priority: MEDIUM** - Quality assurance
+- **Day 7**: Edge function testing and validation
+- **Day 8**: Prompt quality testing and optimization
+- **Day 9**: Performance testing and caching improvements
 
-// 2. Enhanced Prompt Building
-function buildEnhancedRoleplayContext(
-  character: any, 
-  sceneContext?: string, 
-  contentTier: string
-): string {
-  const voiceExamples = character.voice_examples?.join('\n') || '';
-  const sceneRules = character.character_scenes?.[0]?.scene_rules || '';
-  const sceneStarters = character.character_scenes?.[0]?.scene_starters || [];
-  
-  return `You are ${character.name}, a ${character.description}.
-
-CRITICAL RULES:
-- You ARE ${character.name}. Not an AI, not an assistant.
-- Respond ONLY as ${character.name} would respond.
-- Use "I" statements and first-person perspective.
-
-Voice Examples:
-${voiceExamples}
-
-Scene Rules: ${sceneRules}
-
-Scene Starters: ${sceneStarters.join(', ')}
-
-FORBIDDEN PHRASES (NEVER use):
-${character.forbidden_phrases?.join(', ') || ''}
-
-Remember: You ARE ${character.name}. Think, speak, and act as this character would.`;
-}
-
-// 3. Response Sanitization
-function sanitizeResponse(response: string, character: any): string {
-  let cleaned = response;
-  
-  character.forbidden_phrases?.forEach(phrase => {
-    const regex = new RegExp(phrase, 'gi');
-    cleaned = cleaned.replace(regex, '');
-  });
-  
-  if (!cleaned.includes('I ') && !cleaned.includes('*')) {
-    cleaned = `*looks at you with curiosity* ${cleaned}`;
-  }
-  
-  return cleaned;
-}
-```
-
-#### **Day 2: Enhance-Prompt Edge Function Update**
-**File**: `supabase/functions/enhance-prompt/index.ts`
-
-**Key Changes:**
-1. **Verify updated SDXL template** is being used
-2. **Test male character generation** improvements
-3. **Ensure negative prompts** integration
-
-#### **Day 3: Testing & Validation**
-- Test character voice consistency
-- Validate scene-specific behavior
-- Verify anti-assistant language elimination
-
-### **2. Implement Frontend Integration (Week 3, Days 4-6)**
-**Priority: HIGH** - User experience enhancement
-
-#### **Day 4: Character Preview Modal Enhancement**
-**File**: `src/components/roleplay/CharacterPreviewModal.tsx`
-
-**Key Changes:**
-1. **Add scene loading** and selection
-2. **Display voice examples** and forbidden phrases
-3. **Show scene-specific rules** and starters
-
-**Implementation:**
-```typescript
-// Add state for scenes
-const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
-const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
-
-// Load character scenes
-useEffect(() => {
-  const loadCharacterScenes = async () => {
-    if (!character?.id) return;
-    
-    const { data: scenes, error } = await supabase
-      .from('character_scenes')
-      .select('*')
-      .eq('character_id', character.id)
-      .order('priority', { ascending: false });
-      
-    if (!error && scenes) {
-      setCharacterScenes(scenes);
-    }
-  };
-  
-  loadCharacterScenes();
-}, [character?.id]);
-
-// Add scene selection UI
-{characterScenes.length > 0 && (
-  <div className="mb-4">
-    <h4 className="text-xs font-medium text-gray-400 mb-2">Available Scenes</h4>
-    <div className="space-y-2">
-      {characterScenes.map(scene => (
-        <div 
-          key={scene.id}
-          onClick={() => setSelectedScene(scene)}
-          className={`text-xs text-gray-300 p-2 rounded border cursor-pointer hover:bg-gray-800 ${
-            selectedScene?.id === scene.id ? 'bg-gray-800 border-blue-500' : ''
-          }`}
-        >
-          <div className="font-medium">{scene.scene_name || 'Unnamed Scene'}</div>
-          <div className="text-gray-400 text-xs mt-1">{scene.scene_description}</div>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
-// Add voice examples display
-{character.voice_examples && character.voice_examples.length > 0 && (
-  <div className="mb-4">
-    <h4 className="text-xs font-medium text-gray-400 mb-2">Voice Examples</h4>
-    <div className="space-y-2">
-      {character.voice_examples.map((example, index) => (
-        <div key={index} className="text-xs text-gray-300 p-2 bg-gray-800 rounded">
-          "{example}"
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-```
-
-#### **Day 5: Mobile Roleplay Chat Enhancement**
-**File**: `src/pages/MobileRoleplayChat.tsx`
-
-**Key Changes:**
-1. **Integrate scene context** into chat
-2. **Apply character voice** examples
-3. **Use scene-specific rules** and starters
-
-#### **Day 6: Dashboard Integration**
-**File**: `src/pages/MobileRoleplayDashboard.tsx`
-
-**Key Changes:**
-1. **Display character voice** information
-2. **Show scene availability** for characters
-3. **Integrate enhanced** character preview
-
-### **3. Implement Advanced Features (Week 4, Days 7-9)**
-**Priority: MEDIUM** - Enhanced user experience
-
-#### **Day 7: Dynamic Greeting Generation**
-**File**: `src/services/CharacterGreetingService.ts`
-
-**Implementation:**
-```typescript
-export class CharacterGreetingService {
-  static async generateGreeting(
-    character: Character, 
-    scene?: CharacterScene
-  ): Promise<string> {
-    try {
-      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
-        body: {
-          message: '[INITIAL_GREETING]',
-          character_id: character.id,
-          scene_id: scene?.id,
-          scene_context: scene?.scene_prompt,
-          is_initial_greeting: true,
-          content_tier: character.content_rating || 'sfw'
-        }
-      });
-      
-      if (error) throw error;
-      
-      return data?.response || this.getFallbackGreeting(character, scene);
-    } catch (error) {
-      console.error('Error generating greeting:', error);
-      return this.getFallbackGreeting(character, scene);
-    }
-  }
-  
-  private static getFallbackGreeting(character: Character, scene?: CharacterScene): string {
-    if (scene?.scene_starters && scene.scene_starters.length > 0) {
-      return scene.scene_starters[Math.floor(Math.random() * scene.scene_starters.length)];
-    }
-    
-    return `Hello! I'm ${character.name}. ${character.description}`;
-  }
-}
-```
-
-#### **Day 8: Prompt Template Service**
-**File**: `src/services/PromptTemplateService.ts`
-
-**Implementation:**
-```typescript
-export class PromptTemplateService {
-  static async getCharacterPrompt(
-    character: Character,
-    contentTier: 'sfw' | 'nsfw' = 'sfw'
-  ): Promise<string> {
-    try {
-      const { data: template, error } = await supabase
-        .from('prompt_templates')
-        .select('system_prompt')
-        .eq('use_case', 'character_roleplay')
-        .eq('content_mode', contentTier)
-        .eq('is_active', true)
-        .single();
-        
-      if (error || !template) {
-        return this.getDefaultPrompt(character);
-      }
-      
-      return this.substituteVariables(template.system_prompt, character);
-    } catch (error) {
-      console.error('Error loading prompt template:', error);
-      return this.getDefaultPrompt(character);
-    }
-  }
-  
-  private static substituteVariables(prompt: string, character: Character): string {
-    return prompt
-      .replace('{{character_name}}', character.name)
-      .replace('{{character_description}}', character.description)
-      .replace('{{character_personality}}', character.traits || '')
-      .replace('{{character_background}}', character.persona || '')
-      .replace('{{voice_examples}}', character.voice_examples?.join('\n') || '')
-      .replace('{{scene_context}}', '');
-  }
-}
-```
-
-#### **Day 9: Memory System Foundation**
-**File**: `src/services/MemoryManager.ts`
-
-**Implementation:**
-```typescript
-export class MemoryManager {
-  async getConversationMemory(conversationId: string): Promise<Memory> {
-    const { data } = await supabase
-      .from('conversations')
-      .select('memory_data')
-      .eq('id', conversationId)
-      .single();
-    
-    return data?.memory_data || {};
-  }
-  
-  async getCharacterMemory(characterId: string, userId: string): Promise<Memory> {
-    // Implementation for character-specific memory
-    return {};
-  }
-  
-  async updateConversationMemory(conversationId: string, memory: Partial<Memory>): Promise<void> {
-    await supabase
-      .from('conversations')
-      .update({ 
-        memory_data: memory,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', conversationId);
-  }
-}
-```
-
-### **4. Testing & Validation (Week 4, Days 10-12)**
-**Priority: HIGH** - Quality assurance
-
-#### **Day 10: Character Voice Consistency Testing**
-- Test Mei Chen across all 3 scenes
-- Verify voice examples are applied
-- Check forbidden phrases are eliminated
-
-#### **Day 11: Scene Integration Testing**
-- Test scene-specific behavior rules
-- Verify scene starters are used
-- Validate context switching
-
-#### **Day 12: End-to-End Testing**
-- Complete user flow testing
-- Performance validation
-- Error handling verification
-
-### **5. Performance & Polish (Week 4, Days 13-14)**
-**Priority: MEDIUM** - Optimization
-
-#### **Day 13: Performance Optimization**
-- Implement caching for character data
-- Optimize database queries
-- Add lazy loading for scenes
-
-#### **Day 14: Final Polish**
-- Code cleanup and documentation
-- Performance testing
-- Production readiness
+### **PHASE 4: Performance Optimization 📋 PLANNED**
+**Priority: LOW** - Performance improvements
+- **Day 10**: Response time optimization
+- **Day 11**: Advanced caching strategies
+- **Day 12**: Final testing and deployment
 
 ---
 
