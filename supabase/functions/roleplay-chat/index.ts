@@ -228,8 +228,8 @@ serve(async (req) => {
       .from('messages')
       .select('*')
       .eq('conversation_id', conversation_id)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('created_at', { ascending: true })
+      .limit(20);
 
     if (messagesError) {
       return new Response(JSON.stringify({
@@ -505,13 +505,16 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     characterContext += `Keep content appropriate and family-friendly. `;
   }
   
-  // Recent conversation context - FIX: Use msg.sender instead of msg.role
-  const recentMessages = messages.slice(-5); // Last 5 messages
+  // Recent conversation context - Get last 12 chronological messages for proper context
+  const recentMessages = messages.slice(-12); // Last 12 messages chronologically
   let recentContext = '';
   if (recentMessages.length > 0) {
     recentContext = recentMessages.map(msg => 
       `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
     ).join('\\n');
+    console.log(`📝 Context window: ${recentMessages.length} messages, latest message: "${recentMessages[recentMessages.length - 1]?.content?.substring(0, 50)}..."`);
+  } else {
+    console.log('📝 No recent messages for context');
   }
   
   // Scene context
