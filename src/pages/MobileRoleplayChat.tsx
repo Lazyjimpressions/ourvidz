@@ -111,7 +111,11 @@ const MobileRoleplayChat: React.FC = () => {
             image_url: characterData.image_url || characterData.preview_image_url || '/placeholder.svg',
             consistency_method: characterData.consistency_method || 'i2i_reference',
             base_prompt: characterData.base_prompt || 'You are a helpful character.',
-            quick_start: characterData.quick_start || false
+            quick_start: characterData.quick_start || false,
+            // Include new voice-related fields
+            voice_examples: characterData.voice_examples || [],
+            forbidden_phrases: characterData.forbidden_phrases || [],
+            scene_behavior_rules: characterData.scene_behavior_rules || {}
           };
         }
         setCharacter(loadedCharacter);
