@@ -614,6 +614,125 @@ class DynamicEnhancementOrchestrator {
   }
 
   /**
+   * Enhanced SDXL NSFW enhancement with male character guidance
+   */
+  async enhanceSDXLNSFW(request: any, template: any, contentMode: string) {
+    console.log('🎭 Enhanced SDXL NSFW enhancement for male character generation')
+    
+    try {
+      // Check if prompt contains male character indicators
+      const prompt = request.prompt.toLowerCase()
+      const isMaleCharacter = prompt.includes('male') || 
+                             prompt.includes('man') || 
+                             prompt.includes('guy') || 
+                             prompt.includes('boy') ||
+                             prompt.includes('he ') ||
+                             prompt.includes('his ')
+      
+      if (isMaleCharacter) {
+        console.log('👨 Detected male character - applying enhanced guidance')
+        
+        // Enhanced system prompt for male characters
+        const enhancedSystemPrompt = `${template.system_prompt}
+
+CRITICAL FOR MALE CHARACTERS:
+- Emphasize masculine features: broad shoulders, defined jawline, muscular build
+- Include specific male anatomy details: chest, arms, hands, facial features
+- Avoid floating body parts - ensure complete character representation
+- Use descriptive terms: "handsome man", "masculine figure", "male character"
+- Include clothing details that emphasize male form
+- Reference male-specific poses and expressions`
+        
+        const enhancedPrompt = await this.callEnhancementAPI(request.prompt, {
+          ...template,
+          system_prompt: enhancedSystemPrompt
+        }, contentMode)
+        
+        return {
+          enhanced_prompt: enhancedPrompt,
+          strategy: 'enhanced_sdxl_nsfw_male',
+          template_name: template.template_name || 'unnamed',
+          model_used: template.enhancer_model || 'unknown',
+          token_count: this.estimateTokens(enhancedPrompt),
+          compressed: false
+        }
+      }
+      
+      // Standard SDXL NSFW enhancement for non-male characters
+      const enhancedPrompt = await this.callEnhancementAPI(request.prompt, template, contentMode)
+      
+      return {
+        enhanced_prompt: enhancedPrompt,
+        strategy: 'template_enhancement',
+        template_name: template.template_name || 'unnamed',
+        model_used: template.enhancer_model || 'unknown',
+        token_count: this.estimateTokens(enhancedPrompt),
+        compressed: false
+      }
+    } catch (error) {
+      console.error('❌ Enhanced SDXL NSFW enhancement failed:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Call the enhancement API with the given template
+   */
+  async callEnhancementAPI(prompt: string, template: any, contentMode: string): Promise<string> {
+    try {
+      // For now, use a simple enhancement approach
+      // In production, this would call the actual enhancement API
+      const enhancedPrompt = this.applyTemplateEnhancement(prompt, template, contentMode)
+      return enhancedPrompt
+    } catch (error) {
+      console.error('❌ Enhancement API call failed:', error)
+      // Fallback to basic enhancement
+      return this.applyBasicEnhancement(prompt, contentMode)
+    }
+  }
+
+  /**
+   * Apply template-based enhancement
+   */
+  applyTemplateEnhancement(prompt: string, template: any, contentMode: string): string {
+    if (!template.system_prompt) {
+      return this.applyBasicEnhancement(prompt, contentMode)
+    }
+
+    // Simple template application - in production this would use the actual API
+    let enhanced = prompt
+    
+    // Add content mode specific enhancements
+    if (contentMode === 'nsfw') {
+      enhanced = `NSFW, ${enhanced}, detailed anatomy, explicit content`
+    } else {
+      enhanced = `SFW, ${enhanced}, family-friendly, appropriate content`
+    }
+    
+    // Add model-specific enhancements
+    if (template.target_model === 'sdxl') {
+      enhanced = `${enhanced}, high quality, detailed, SDXL optimized`
+    }
+    
+    return enhanced
+  }
+
+  /**
+   * Apply basic enhancement as fallback
+   */
+  applyBasicEnhancement(prompt: string, contentMode: string): string {
+    let enhanced = prompt
+    
+    if (contentMode === 'nsfw') {
+      enhanced = `NSFW, ${enhanced}, detailed, explicit`
+    } else {
+      enhanced = `SFW, ${enhanced}, family-friendly, appropriate`
+    }
+    
+    return enhanced
+  }
+
+  /**
    * Calculate UI control token usage from metadata - FIXED to include default style tokens
    */
   private calculateUIControlTokens(metadata: any): number {

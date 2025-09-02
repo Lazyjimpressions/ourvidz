@@ -835,3 +835,66 @@ function extractSceneFromResponse(response: string): string | null {
   
   return null;
 }
+
+// Module-level cache for character data (TTL 5 minutes)
+const characterCache = new Map<string, { character: any; ts: number }>();
+const CHARACTER_CACHE_TTL_MS = 300_000;
+
+// Enhanced function to load character with voice data and scene information
+async function loadCharacterWithVoice(supabase: any, characterId: string): Promise<any> {
+  // Check cache first
+  const cached = characterCache.get(characterId);
+  if (cached && (Date.now() - cached.ts) < CHARACTER_CACHE_TTL_MS) {
+    console.log('✅ Using cached character data for:', characterId);
+    return cached.character;
+  }
+  
+  console.log('🔄 Loading fresh character data for:', characterId);
+  
+  try {
+    // Load character with associated scenes
+    const { data: character, error: characterError } = await supabase
+      .from('characters')
+      .select(`
+        *,
+        character_scenes!inner(
+          scene_rules,
+          scene_starters,
+          priority,
+          scene_name,
+          scene_description
+        )
+      `)
+      .eq('id', characterId)
+      .eq('character_scenes.is_active', true)
+      .order('character_scenes.priority', { ascending: false });
+
+    if (characterError || !character) {
+      throw new Error('Character not found');
+    }
+
+    // Sort scenes by priority and get the highest priority scene
+    if (character.character_scenes && character.character_scenes.length > 0) {
+      character.character_scenes.sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
+      character.activeScene = character.character_scenes[0];
+    }
+
+    // Cache the character data
+    characterCache.set(characterId, {
+      character,
+      ts: Date.now()
+    });
+
+    console.log('✅ Character data loaded with voice examples and scenes:', {
+      name: character.name,
+      voiceExamplesCount: character.voice_examples?.length || 0,
+      forbiddenPhrasesCount: character.forbidden_phrases?.length || 0,
+      activeScene: character.activeScene ? 'Yes' : 'No'
+    });
+
+    return character;
+  } catch (error) {
+    console.error('❌ Error loading character with voice data:', error);
+    throw error;
+  }
+}
