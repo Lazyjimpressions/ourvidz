@@ -276,31 +276,68 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               )}
             </div>
 
-            {/* Character Scenes Section - Small and Discrete */}
+            {/* Character Scenes Section - Enhanced with Scene Details */}
             {characterScenes.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
                   <Image className="w-3 h-3" />
                   Scenes ({characterScenes.length})
                 </h4>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {characterScenes.map(scene => (
                     <div 
                       key={scene.id}
                       onClick={() => handleSceneSelect(scene)}
                       className={`
-                        text-xs text-gray-300 p-2 rounded border cursor-pointer transition-colors
+                        text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors
                         ${selectedScene?.id === scene.id 
                           ? 'bg-blue-600/20 border-blue-500/50 text-blue-200' 
                           : 'border-gray-600 hover:bg-gray-800/50 hover:border-gray-500'
                         }
                       `}
                     >
-                      <div className="line-clamp-2 leading-tight">
+                      {/* Scene Name and Description */}
+                      <div className="mb-2">
+                        <div className="font-medium text-gray-200">
+                          {scene.scene_name || 'Unnamed Scene'}
+                        </div>
+                        {scene.scene_description && (
+                          <div className="text-gray-400 mt-1 line-clamp-2">
+                            {scene.scene_description}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Scene Prompt */}
+                      <div className="line-clamp-2 leading-tight mb-2">
                         {scene.scene_prompt}
                       </div>
+                      
+                      {/* Scene Rules */}
+                      {scene.scene_rules && (
+                        <div className="text-gray-400 text-xs mb-2 p-2 bg-gray-800/50 rounded">
+                          <span className="font-medium">Rules:</span> {scene.scene_rules}
+                        </div>
+                      )}
+                      
+                      {/* Scene Starters */}
+                      {scene.scene_starters && scene.scene_starters.length > 0 && (
+                        <div className="text-gray-400 text-xs">
+                          <span className="font-medium">Starters:</span>
+                          <div className="mt-1 space-y-1">
+                            {scene.scene_starters.slice(0, 2).map((starter, index) => (
+                              <div key={index} className="italic">"{starter}"</div>
+                            ))}
+                            {scene.scene_starters.length > 2 && (
+                              <div className="text-gray-500">+{scene.scene_starters.length - 2} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Scene Image Indicator */}
                       {scene.image_url && (
-                        <div className="flex items-center gap-1 mt-1 text-gray-400">
+                        <div className="flex items-center gap-1 mt-2 text-gray-400">
                           <Image className="w-2 h-2" />
                           <span className="text-xs">Has image</span>
                         </div>

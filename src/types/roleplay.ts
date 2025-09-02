@@ -65,6 +65,13 @@ export interface CharacterScene {
   job_id?: string;
   created_at: string;
   updated_at: string;
+  // New scene-related fields
+  scene_name?: string;
+  scene_description?: string;
+  scene_rules?: string;
+  scene_starters?: string[];
+  priority?: number;
+  is_active?: boolean;
 }
 
 export interface Conversation {
