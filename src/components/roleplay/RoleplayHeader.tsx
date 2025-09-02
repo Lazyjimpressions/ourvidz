@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronLeft, MessageCircle, User, Settings } from 'lucide-react';
+import { ChevronLeft, MessageCircle, User, Settings, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -14,6 +14,7 @@ interface RoleplayHeaderProps {
   characterName?: string;
   characterImage?: string;
   onSettingsClick?: () => void;
+  onMenuClick?: () => void;
   className?: string;
 }
 
@@ -25,6 +26,7 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
   characterName,
   characterImage,
   onSettingsClick,
+  onMenuClick,
   className
 }) => {
   const navigate = useNavigate();
@@ -93,6 +95,17 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
 
       {/* Right Section */}
       <div className="flex items-center gap-2">
+        {onMenuClick && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onMenuClick}
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </Button>
+        )}
+        
         {onSettingsClick && (
           <Button
             variant="ghost"

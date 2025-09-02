@@ -10,8 +10,7 @@ import {
   Send, 
   Image as ImageIcon, 
   Settings, 
-  ArrowLeft, 
-  MoreVertical,
+  ArrowLeft,
   Sparkles,
   User,
   Bot
@@ -22,6 +21,7 @@ import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
 import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
+import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene } from '@/types/roleplay';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
@@ -74,6 +74,7 @@ const MobileRoleplayChat: React.FC = () => {
   // Hooks
   const { user, profile } = useAuth();
   const { getSignedUrl } = useSignedImageUrls();
+  const { toast } = useToast();
 
   // Cleanup on unmount
   useEffect(() => {
@@ -716,6 +717,19 @@ const MobileRoleplayChat: React.FC = () => {
     if (!user || !characterId || !character) return;
 
     try {
+      // Archive existing conversation if it exists
+      if (conversationId) {
+        await supabase
+          .from('conversations')
+          .update({ status: 'archived' })
+          .eq('id', conversationId)
+          .eq('user_id', user.id);
+      }
+
+      // Clear localStorage cache
+      const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
+      localStorage.removeItem(cacheKey);
+
       // Reset initialization state to allow fresh start
       hasInitialized.current = false;
       currentRouteRef.current = '';
@@ -741,6 +755,9 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (insertError) throw insertError;
       setConversationId(newConversation.id);
+
+      // Cache new conversation ID
+      localStorage.setItem(cacheKey, newConversation.id);
 
       // Reset messages and do kickoff again
       setIsLoading(true);
@@ -777,8 +794,19 @@ const MobileRoleplayChat: React.FC = () => {
       };
       setMessages([openerMessage]);
 
+      // Show success toast
+      toast({
+        title: "Conversation Restarted",
+        description: "A fresh conversation has been started with " + character.name,
+      });
+
     } catch (error) {
       console.error('Error clearing conversation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to restart conversation. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -843,6 +871,7 @@ const MobileRoleplayChat: React.FC = () => {
           backTo="/roleplay"
           characterName={character.name}
           characterImage={signedCharacterImage || '/placeholder.svg'}
+          onMenuClick={() => setShowContextMenu(true)}
           onSettingsClick={() => setShowSettingsModal(true)}
         />
 
