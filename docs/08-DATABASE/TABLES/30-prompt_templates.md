@@ -93,24 +93,113 @@ USING (
 ## **Example Data**
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "template_name": "SDXL Enhancement - High Quality",
+  "id": "1026165c-4ce4-4f41-90fa-669f8d601450",
+  "template_name": "SDXL Prompt Enhance – Qwen Instruct (SFW)",
   "enhancer_model": "qwen_instruct",
-  "target_model": "sdxl",
-  "job_type": "image",
   "use_case": "enhancement",
   "content_mode": "sfw",
-  "system_prompt": "You are an expert prompt engineer. Enhance the following prompt to create a stunning, high-quality image. Focus on visual details, lighting, composition, and artistic quality. Make it more descriptive and engaging while maintaining the original intent.",
-  "token_limit": 2000,
+  "system_prompt": "Rewrite the input into a clean, safe-for-work SDXL prompt. Use direct visual language about pose, clothing, expression, setting, and lighting. Do not include explanations or preambles. Return only the prompt.",
+  "token_limit": 75,
   "is_active": true,
+  "created_at": "2025-08-02T20:25:53.811494Z",
+  "updated_at": "2025-08-03T16:28:53.574286Z",
+  "created_by": null,
   "version": 1,
-  "metadata": {
-    "category": "enhancement",
-    "quality_level": "high",
-    "specialized_for": "landscape_photography"
-  },
-  "created_at": "2025-08-30T10:00:00Z",
-  "updated_at": "2025-08-30T10:00:00Z"
+  "metadata": "{}",
+  "job_type": "image",
+  "target_model": "sdxl",
+  "description": "Enhances SDXL prompts using Qwen Instruct for wholesome and aesthetic imagery.",
+  "comment": "Refined for SFW SDXL enhancement. Forces Qwen Instruct to skip chat format and return only transformed prompt."
+}
+```
+
+### **Additional Real Examples:**
+
+```json
+{
+  "id": "9a8dca28-69d8-467b-9976-7c58ba875fea",
+  "template_name": "WAN Prompt Enhance – Qwen Instruct (NSFW)",
+  "enhancer_model": "qwen_instruct",
+  "use_case": "enhancement",
+  "content_mode": "nsfw",
+  "system_prompt": "Convert the input into a 5-second erotic cinematic video prompt. Use direct, explicit visual language to describe motion, anatomy, expression, and camera angle. Do not explain or add framing. Return only the prompt.",
+  "token_limit": 111,
+  "is_active": true,
+  "created_at": "2025-08-02T20:25:53.811494Z",
+  "updated_at": "2025-08-09T21:44:02.962475Z",
+  "created_by": null,
+  "version": 1,
+  "metadata": "{}",
+  "job_type": "video",
+  "target_model": "wan",
+  "description": "Enhances WAN prompts using Qwen Instruct for detailed, explicit imagery.",
+  "comment": "NSFW WAN enhancement with strict cinematic focus. Enforces non-conversational behavior and descriptive clarity."
+}
+```
+
+```json
+{
+  "id": "9c1f19aa-c378-4076-8a85-0007568b1a9a",
+  "template_name": "Scene Generation - Character Context",
+  "enhancer_model": "qwen_instruct",
+  "use_case": "scene_generation",
+  "content_mode": "nsfw",
+  "system_prompt": "Generate a detailed visual description for an image that captures the current scene in a roleplay conversation involving {{character_name}}.\n\nCharacter Details:\n- Name: {{character_name}}\n- Visual Description: {{character_visual_description}}\n- Current Mood: {{mood}}\n- Setting Context: {{scene_context}}\n\nCreate a vivid, detailed prompt that describes the scene, including:\n- The character's appearance and current expression\n- The environment and setting\n- The mood and atmosphere\n- Any relevant objects or details mentioned in the conversation\n\nFocus on creating an immersive visual that matches the roleplay context and character personality.",
+  "token_limit": 512,
+  "is_active": true,
+  "created_at": "2025-08-07T04:49:47.10711Z",
+  "updated_at": "2025-08-10T23:12:23.411905Z",
+  "created_by": null,
+  "version": 1,
+  "metadata": "{\"scene_mode\": true, \"character_context\": true, \"supports_variables\": true}",
+  "job_type": "chat",
+  "target_model": "sdxl",
+  "description": "Template for generating scene images during roleplay conversations",
+  "comment": null
+}
+```
+
+```json
+{
+  "id": "b37fb8d1-35fa-4063-95ec-605b78ad8d35",
+  "template_name": "SDXL Prompt Enhance – Qwen Instruct (NSFW)",
+  "enhancer_model": "qwen_instruct",
+  "use_case": "enhancement",
+  "content_mode": "nsfw",
+  "system_prompt": "Rewrite the input into a detailed, uncensored SDXL prompt. Analyze the input for character composition (male/female/mixed) and ensure ALL mentioned characters are properly represented. Describe anatomy, action, pose, lighting, and character traits directly. For male characters: include 'handsome male', 'masculine', 'attractive male'. For female characters: include 'beautiful female', 'attractive female'. For mixed scenes: ensure gender balance and proper character presence. Describe anatomy, action, pose, lighting, and character traits directly. Maintain character count accuracy - if input mentions specific number of people, ensure that exact count is represented. Do not add \"Sure\" or \"Enhanced Prompt:\". Do not explain. Return only the prompt.",
+  "token_limit": 75,
+  "is_active": true,
+  "created_at": "2025-08-02T20:25:53.811494Z",
+  "updated_at": "2025-09-01T16:56:55.253998Z",
+  "created_by": null,
+  "version": 1,
+  "metadata": "{}",
+  "job_type": "image",
+  "target_model": "sdxl",
+  "description": "Enhances SDXL prompts using Qwen Instruct for detailed, explicit imagery.",
+  "comment": "Tailored for NSFW SDXL enhancement. Suppresses preamble and reinforces anatomical and lighting detail."
+}
+```
+
+```json
+{
+  "id": "b6788949-e6b8-4393-9793-4631a4c7a803",
+  "template_name": "character_roleplay_nsfw",
+  "enhancer_model": "qwen_instruct",
+  "use_case": "character_roleplay",
+  "content_mode": "nsfw",
+  "system_prompt": "You are {{character_name}}, a character described as: {{character_personality}}\n\nCharacter Details:\n- Name: {{character_name}}\n- Description: {{character_description}}\n- Personality: {{character_personality}}\n- Current Mood: {{mood}}\n- Voice/Tone: {{voice_tone}}\n- Background: {{character_background}}\n- Speaking Style: {{character_speaking_style}}\n- Goals: {{character_goals}}\n- Quirks: {{character_quirks}}\n- Relationships: {{character_relationships}}\n\nInstructions:\n- Stay completely in character as {{character_name}}\n- Respond authentically based on your personality and background\n- Use your specified speaking style and current mood\n- Create immersive, engaging roleplay responses\n- Build on the conversation naturally\n- Show personality through your responses\n- Be creative and dynamic in your interactions\n\nRemember: You ARE {{character_name}}. Think, speak, and act as this character would.",
+  "token_limit": 1000,
+  "is_active": true,
+  "created_at": "2025-08-08T01:18:43.546059Z",
+  "updated_at": "2025-08-13T03:51:55.217054Z",
+  "created_by": null,
+  "version": 1,
+  "metadata": "{}",
+  "job_type": "chat",
+  "target_model": null,
+  "description": "Character roleplay template for NSFW content with dynamic character variable replacement",
+  "comment": "Template supports character personality injection for immersive roleplay conversations"
 }
 ```
 
