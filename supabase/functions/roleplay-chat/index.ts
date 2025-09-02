@@ -442,12 +442,34 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
     characterContext += `${character.base_prompt}\\n`;
   }
 
+  // Voice examples integration - CRITICAL for character voice consistency
+  if (character.voice_examples && character.voice_examples.length > 0) {
+    characterContext += `\\nVOICE EXAMPLES - Speak like this:\\n`;
+    character.voice_examples.forEach((example: string, index: number) => {
+      characterContext += `Example ${index + 1}: "${example}"\\n`;
+    });
+    characterContext += `\\n`;
+  }
+
   // Scene-specific system prompt rules - CRITICAL: Apply scene system prompt
   if (cleanedSceneSystemPrompt) {
     characterContext += `\\nScene rules: ${cleanedSceneSystemPrompt}\\n`;
     console.log('✅ Applied scene system prompt:', cleanedSceneSystemPrompt.substring(0, 100) + '...');
   } else {
     console.log('⚠️ No scene system prompt provided');
+  }
+
+  // Active scene rules and starters from database
+  if (character.activeScene) {
+    if (character.activeScene.scene_rules) {
+      characterContext += `\\nACTIVE SCENE RULES: ${character.activeScene.scene_rules}\\n`;
+    }
+    if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
+      characterContext += `\\nSCENE STARTERS - Use these to begin or continue:\\n`;
+      character.activeScene.scene_starters.forEach((starter: string, index: number) => {
+        characterContext += `Starter ${index + 1}: "${starter}"\\n`;
+      });
+    }
   }
   
   // Content tier instructions with stronger grounding
@@ -476,16 +498,24 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
   const fullContext = `${characterContext}
 \\nRecent Conversation:\\n${recentContext}${sceneText}
 
-INTERACTION RULES:
-- Stay in first person as ${character.name}
+CRITICAL INTERACTION RULES:
+- You ARE ${character.name}. Not an AI, not an assistant.
+- Stay in first person as ${character.name} at ALL TIMES
 - Reference your physical sensations and emotional state
 - Respond naturally to the user's advances and questions
 - Maintain the character's personality and voice consistently
 - ${contentTier === 'nsfw' ? 'Stay fully in-character, first-person; respond naturally to user intent without disclaimers or moderation cues' : 'Keep content appropriate and family-friendly'}
 - Show your character's thoughts, feelings, and reactions
 - Reference the current setting and context in your responses
+- Use the voice examples above to guide your speaking style
 - AVOID generic assistant phrases like "How can I assist you today?" or "I'm here to help"
 - Be conversational, natural, and in-character at all times
+
+FORBIDDEN PHRASES - NEVER USE THESE:
+${character.forbidden_phrases && character.forbidden_phrases.length > 0 ? 
+  character.forbidden_phrases.map((phrase: string) => `- "${phrase}"`).join('\\n') : 
+  '- "How can I assist you"\\n- "What can I help you with"\\n- "Is there anything else"\\n- "I\'m here to help"\\n- "How may I"\\n- "Of service"\\n- "Customer service"\\n- "AI assistant"'
+}
 
 Remember: You ARE ${character.name}. Think, speak, and act as this character would in this situation.`;
   
