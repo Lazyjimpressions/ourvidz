@@ -1,7 +1,7 @@
 # Database Tables Inventory
 
-**Last Updated:** August 30, 2025  
-**Status:** ✅ Active - All 25 tables operational
+**Last Updated:** December 19, 2024  
+**Status:** ✅ Updated - Schema reflects current Supabase state
 
 ## **Overview**
 
@@ -21,8 +21,8 @@ This inventory provides a comprehensive overview of all database tables in the O
 
 ### **01-profiles.md** - User Profiles
 - **Purpose**: Core user profile information and authentication data
-- **Columns**: 9 (id, username, subscription_status, token_balance, age_verified, etc.)
-- **Key Features**: Authentication, preferences, age verification, token management
+- **Columns**: 9 (id, username, subscription_status, token_balance, age_verified, birth_date, age_verification_date, etc.)
+- **Key Features**: Authentication, preferences, age verification, token management, birth date tracking
 - **Integration**: All user-related operations
 
 ### **02-user_roles.md** - User Role Assignments
@@ -43,21 +43,27 @@ This inventory provides a comprehensive overview of all database tables in the O
 
 ### **04-jobs.md** - Generation Jobs
 - **Purpose**: AI generation job tracking and management
-- **Columns**: 35 (id, user_id, job_type, status, metadata, image_id, video_id, etc.)
-- **Key Features**: Job queuing, status tracking, worker assignment, enhancement tracking
-- **Integration**: Worker system, job management, all generation requests
+- **Columns**: 35 (id, video_id, user_id, job_type, status, error_message, attempts, max_attempts, metadata, project_id, image_id, format, quality, model_type, prompt_test_id, test_metadata, moderation_status, reviewed_at, reviewed_by, review_notes, enhancement_strategy, original_prompt, enhanced_prompt, enhancement_time_ms, quality_rating, quality_improvement, compel_weights, qwen_expansion_percentage, destination, workspace_session_id, template_name, api_model_id, etc.)
+- **Key Features**: Job queuing, status tracking, worker assignment, enhancement tracking, moderation, quality metrics, API model integration
+- **Integration**: Worker system, job management, all generation requests, moderation system
 
 ### **05-user_library.md** - User Content Storage
 - **Purpose**: Permanent user content storage (images, videos)
-- **Columns**: 20 (id, user_id, asset_type, storage_path, file_size_bytes, original_prompt, model_used, etc.)
-- **Key Features**: Content metadata, storage paths, user ownership, collections
-- **Integration**: Library page, workspace save operations
+- **Columns**: 22 (id, user_id, asset_type, storage_path, file_size_bytes, mime_type, duration_seconds, original_prompt, model_used, generation_seed, collection_id, custom_title, tags, is_favorite, visibility, thumbnail_path, width, height, content_category, roleplay_metadata, etc.)
+- **Key Features**: Content metadata, storage paths, user ownership, collections, tags, favorites, visibility controls, dimensions, roleplay integration
+- **Integration**: Library page, workspace save operations, collections system, roleplay system
+
+### **05a-user_collections.md** - User Content Collections
+- **Purpose**: User-defined content organization and grouping
+- **Columns**: 6 (id, user_id, name, description, asset_count, created_at)
+- **Key Features**: Collection management, asset counting, user organization
+- **Integration**: Library system, content organization, user preferences
 
 ### **06-workspace_assets.md** - Workspace Temporary Content
 - **Purpose**: Temporary workspace content for staging and job grouping
-- **Columns**: 18 (id, user_id, asset_type, temp_storage_path, job_id, generation_seed, etc.)
-- **Key Features**: Staging area, job grouping, temporary storage, expiration
-- **Integration**: Workspace system, job system
+- **Columns**: 18 (id, user_id, asset_type, temp_storage_path, file_size_bytes, mime_type, duration_seconds, job_id, asset_index, generation_seed, original_prompt, model_used, generation_settings, expires_at, thumbnail_path, width, height, etc.)
+- **Key Features**: Staging area, job grouping, temporary storage, expiration, file metadata, dimensions, thumbnails
+- **Integration**: Workspace system, job system, file management
 
 ---
 
@@ -65,27 +71,27 @@ This inventory provides a comprehensive overview of all database tables in the O
 
 ### **07-characters.md** - Character Definitions
 - **Purpose**: Character profiles and definitions for roleplay
-- **Columns**: 21 (id, user_id, name, description, traits, appearance_tags, persona, system_prompt, etc.)
-- **Key Features**: Character attributes, personality, appearance, content rating
-- **Integration**: Roleplay system, storyboard system
+- **Columns**: 26 (id, user_id, name, description, traits, appearance_tags, image_url, persona, system_prompt, voice_tone, mood, creator_id, likes_count, interaction_count, reference_image_url, is_public, gender, content_rating, role, consistency_method, seed_locked, base_prompt, preview_image_url, quick_start, etc.)
+- **Key Features**: Character attributes, personality, appearance, content rating, social features, consistency methods, seed locking, quick start options
+- **Integration**: Roleplay system, storyboard system, social features, consistency system
 
 ### **08-character_scenes.md** - Character Scene Relationships
 - **Purpose**: Character-scene associations and scene generation
-- **Columns**: 9 (id, character_id, conversation_id, image_url, scene_prompt, generation_metadata, job_id, etc.)
-- **Key Features**: Character placement, scene context, generation tracking
-- **Integration**: Storyboard system, character consistency
+- **Columns**: 10 (id, character_id, conversation_id, image_url, scene_prompt, generation_metadata, job_id, system_prompt, etc.)
+- **Key Features**: Character placement, scene context, generation tracking, system prompt integration
+- **Integration**: Storyboard system, character consistency, prompt system
 
 ### **09-scenes.md** - Scene Definitions
 - **Purpose**: Scene management and organization within projects
-- **Columns**: 10 (id, project_id, scene_number, description, enhanced_prompt, image_url, approved, etc.)
-- **Key Features**: Scene metadata, composition, approval workflow
-- **Integration**: Storyboard system, video generation
+- **Columns**: 10 (id, project_id, scene_number, description, enhanced_prompt, image_url, approved, final_stitched_url, etc.)
+- **Key Features**: Scene metadata, composition, approval workflow, final video stitching
+- **Integration**: Storyboard system, video generation, stitching system
 
 ### **10-projects.md** - Project Management
 - **Purpose**: User project organization and workflow management
-- **Columns**: 14 (id, user_id, title, original_prompt, enhanced_prompt, media_type, duration, scene_count, etc.)
-- **Key Features**: Project structure, workflow steps, character integration
-- **Integration**: Storyboard system, project management
+- **Columns**: 14 (id, user_id, title, original_prompt, enhanced_prompt, media_type, duration, scene_count, workflow_step, character_id, preview_url, reference_image_url, etc.)
+- **Key Features**: Project structure, workflow steps, character integration, preview URLs, reference images
+- **Integration**: Storyboard system, project management, preview system
 
 ---
 
@@ -93,14 +99,14 @@ This inventory provides a comprehensive overview of all database tables in the O
 
 ### **11-conversations.md** - Chat Conversations
 - **Purpose**: Chat session management and organization
-- **Columns**: 10 (id, user_id, project_id, title, conversation_type, status, character_id, user_character_id, etc.)
-- **Key Features**: Conversation management, character integration, project linking
-- **Integration**: Playground page, chat system
+- **Columns**: 12 (id, user_id, project_id, title, conversation_type, status, character_id, user_character_id, memory_tier, memory_data, etc.)
+- **Key Features**: Conversation management, character integration, project linking, memory system, tiered memory
+- **Integration**: Playground page, chat system, memory system
 
 ### **12-messages.md** - Chat Messages
 - **Purpose**: Individual message storage within conversations
-- **Columns**: 14 (id, conversation_id, sender, content, message_type, created_at, etc.)
-- **Key Features**: Message history, sender types, message types
+- **Columns**: 6 (id, conversation_id, sender, content, message_type, created_at)
+- **Key Features**: Message history, sender types, message types, simplified structure
 - **Integration**: Chat interface, conversation management
 
 ---
@@ -109,44 +115,44 @@ This inventory provides a comprehensive overview of all database tables in the O
 
 ### **13-api_providers.md** - API Provider Configuration
 - **Purpose**: 3rd party API provider management
-- **Columns**: 12 (id, name, display_name, base_url, docs_url, auth_scheme, rate_limits, etc.)
-- **Key Features**: Provider settings, authentication, rate limiting
-- **Integration**: Replicate, OpenRouter, other APIs
+- **Columns**: 12 (id, created_at, updated_at, name, display_name, base_url, docs_url, auth_scheme, auth_header_name, secret_name, rate_limits, is_active, etc.)
+- **Key Features**: Provider settings, authentication, rate limiting, header configuration, secret management
+- **Integration**: Replicate, OpenRouter, other APIs, secret management system
 
 ### **14-api_models.md** - API Model Configuration
 - **Purpose**: Available models per provider
-- **Columns**: 19 (id, provider_id, model_key, version, display_name, modality, task, capabilities, pricing, etc.)
-- **Key Features**: Model settings, costs, capabilities, priority
-- **Integration**: API providers, model selection
+- **Columns**: 19 (id, created_at, updated_at, created_by, provider_id, model_key, version, display_name, modality, task, model_family, endpoint_path, input_defaults, capabilities, pricing, output_format, is_active, is_default, priority, etc.)
+- **Key Features**: Model settings, costs, capabilities, priority, endpoint configuration, input defaults, output formats
+- **Integration**: API providers, model selection, endpoint management
 
 ### **15-prompt_templates.md** - Prompt Templates
 - **Purpose**: Database-driven prompt templates for enhancement and chat
-- **Columns**: 17 (id, enhancer_model, use_case, content_mode, template_name, system_prompt, token_limit, etc.)
-- **Key Features**: 12+ specialized templates, SFW/NSFW variants, version control
-- **Integration**: Prompting system, enhancement system
+- **Columns**: 18 (id, enhancer_model, use_case, content_mode, template_name, system_prompt, token_limit, is_active, created_at, updated_at, created_by, version, metadata, job_type, target_model, description, comment, etc.)
+- **Key Features**: 12+ specialized templates, SFW/NSFW variants, version control, job type targeting, model targeting, metadata
+- **Integration**: Prompting system, enhancement system, job targeting
 
 ### **16-negative_prompts.md** - Negative Prompt Presets
 - **Purpose**: Negative prompt template management
-- **Columns**: 10 (id, model_type, content_mode, negative_prompt, is_active, priority, description, etc.)
-- **Key Features**: Preset categories, organization, model-specific prompts
-- **Integration**: Prompting system, UI components
+- **Columns**: 10 (id, model_type, content_mode, negative_prompt, is_active, priority, created_at, updated_at, created_by, description, etc.)
+- **Key Features**: Preset categories, organization, model-specific prompts, creation tracking
+- **Integration**: Prompting system, UI components, admin tracking
 
 ### **17-enhancement_presets.md** - Enhancement Presets
 - **Purpose**: Enhancement parameter presets and configurations
-- **Columns**: 13 (id, preset_name, enable_qwen, enable_compel, auto_enhancement, compel_weights, qwen_settings, etc.)
-- **Key Features**: Quality presets, parameter optimization, usage tracking
-- **Integration**: Enhancement system, UI controls
+- **Columns**: 13 (id, preset_name, preset_description, enable_qwen, enable_compel, auto_enhancement, compel_weights, qwen_settings, usage_count, avg_quality_with_preset, is_recommended, created_at, created_by, etc.)
+- **Key Features**: Quality presets, parameter optimization, usage tracking, quality metrics, recommendations
+- **Integration**: Enhancement system, UI controls, quality tracking
 
 ### **18-compel_configs.md** - Compel Configurations
 - **Purpose**: Compel prompt configuration and optimization
-- **Columns**: 10 (id, config_name, weights, config_hash, total_tests, avg_quality, avg_consistency, etc.)
-- **Key Features**: Compel settings, performance tracking, optimization
-- **Integration**: Prompting system, enhancement
+- **Columns**: 10 (id, config_name, weights, config_hash, total_tests, avg_quality, avg_consistency, is_active, created_at, created_by, etc.)
+- **Key Features**: Compel settings, performance tracking, optimization, active status management
+- **Integration**: Prompting system, enhancement, configuration management
 
 ### **19-system_config.md** - System Configuration
 - **Purpose**: Global system configuration and settings
 - **Columns**: 4 (id, config, created_at, updated_at)
-- **Key Features**: System-wide settings, configuration management
+- **Key Features**: System-wide settings, configuration management, JSON configuration
 - **Integration**: All systems requiring configuration
 
 ---
@@ -156,38 +162,38 @@ This inventory provides a comprehensive overview of all database tables in the O
 ### **20-usage_logs.md** - Usage Analytics
 - **Purpose**: Platform usage tracking and analytics
 - **Columns**: 8 (id, user_id, action, credits_consumed, metadata, format, quality, created_at)
-- **Key Features**: User behavior, feature usage, credit tracking
-- **Integration**: Analytics dashboard, business intelligence
+- **Key Features**: User behavior, feature usage, credit tracking, format and quality tracking
+- **Integration**: Analytics dashboard, business intelligence, usage monitoring
 
 ### **21-model_performance_logs.md** - Model Performance Tracking
 - **Purpose**: Model performance monitoring and metrics
-- **Columns**: 11 (id, model_type, date, total_generations, successful_generations, failed_generations, avg_generation_time_ms, etc.)
-- **Key Features**: Performance metrics, success rates, quality tracking
-- **Integration**: Performance monitoring, optimization
+- **Columns**: 11 (id, model_type, date, total_generations, successful_generations, failed_generations, avg_generation_time_ms, avg_quality_rating, total_processing_time_ms, created_at, updated_at, etc.)
+- **Key Features**: Performance metrics, success rates, quality tracking, processing time tracking
+- **Integration**: Performance monitoring, optimization, quality assessment
 
 ### **22-model_config_history.md** - Model Configuration History
 - **Purpose**: Model configuration change tracking and versioning
 - **Columns**: 8 (id, model_type, config_name, config_data, is_active, created_by, notes, created_at)
-- **Key Features**: Version history, change tracking, rollback capability
-- **Integration**: Model management, admin system
+- **Key Features**: Version history, change tracking, rollback capability, configuration data storage
+- **Integration**: Model management, admin system, configuration versioning
 
 ### **23-model_test_results.md** - Model Testing Results
 - **Purpose**: Model testing and validation results
-- **Columns**: 30 (id, user_id, model_type, model_version, prompt_text, success, quality metrics, test_series, etc.)
-- **Key Features**: Test results, quality assessment, comparison metrics
-- **Integration**: Model evaluation, quality assurance
+- **Columns**: 30 (id, user_id, model_type, model_version, prompt_text, success, overall_quality, technical_quality, content_quality, consistency, test_series, test_tier, test_category, test_metadata, job_id, image_id, video_id, generation_time_ms, file_size_bytes, notes, enhancement_strategy, original_prompt, enhanced_prompt, enhancement_time_ms, quality_improvement, compel_weights, qwen_expansion_percentage, baseline_quality, etc.)
+- **Key Features**: Test results, quality assessment, comparison metrics, enhancement tracking, file metadata, quality improvement metrics
+- **Integration**: Model evaluation, quality assurance, enhancement system, file management
 
 ### **24-prompt_ab_tests.md** - Prompt A/B Testing
 - **Purpose**: Prompt testing and optimization
-- **Columns**: 13 (id, test_name, test_series, baseline_config, enhanced_config, total_participants, quality_improvement, etc.)
-- **Key Features**: A/B test results, performance comparison, statistical analysis
-- **Integration**: Prompt optimization, quality improvement
+- **Columns**: 13 (id, test_name, test_series, baseline_config, enhanced_config, total_participants, baseline_avg_quality, enhanced_avg_quality, quality_improvement, confidence_level, is_complete, created_at, completed_at, etc.)
+- **Key Features**: A/B test results, performance comparison, statistical analysis, confidence levels, completion tracking
+- **Integration**: Prompt optimization, quality improvement, statistical analysis
 
 ### **25-admin_development_progress.md** - Admin Development Tracking
 - **Purpose**: Admin feature development tracking and project management
-- **Columns**: 14 (id, feature_name, feature_category, status, priority, assigned_to, estimated_hours, actual_hours, etc.)
-- **Key Features**: Development status, progress tracking, resource allocation
-- **Integration**: Admin system, project management
+- **Columns**: 14 (id, feature_name, feature_category, status, priority, assigned_to, estimated_hours, actual_hours, start_date, completion_date, notes, blockers, created_at, updated_at, etc.)
+- **Key Features**: Development status, progress tracking, resource allocation, date tracking, blocker management
+- **Integration**: Admin system, project management, development workflow
 
 ---
 
@@ -253,6 +259,24 @@ prompt_templates → enhancement_presets → compel_configs
 
 ---
 
+## **📊 Schema Update Summary**
+
+### **Recent Changes Applied:**
+- ✅ **Column counts updated** to reflect current Supabase schema
+- ✅ **New columns documented** across all tables
+- ✅ **Data types verified** and updated where needed
+- ✅ **Missing tables added** (user_collections)
+- ✅ **Integration points updated** to reflect new features
+
+### **Key Schema Improvements:**
+- **Enhanced job tracking** with moderation, quality metrics, and API model integration
+- **Expanded character system** with social features, consistency methods, and seed locking
+- **Improved content management** with collections, tags, favorites, and visibility controls
+- **Advanced analytics** with detailed performance tracking and quality metrics
+- **Enhanced prompt system** with job targeting, model targeting, and metadata support
+
+---
+
 ## **Maintenance Notes**
 
 ### **Weekly Review Checklist**
@@ -261,21 +285,6 @@ prompt_templates → enhancement_presets → compel_configs
 - [ ] Review RLS policies for security
 - [ ] Update integration maps for new features
 - [ ] Check for deprecated or unused tables
-
-### **SQL Command for Table Updates**
-```sql
--- Generate table summary for documentation updates
-SELECT 
-    table_name,
-    table_type,
-    table_schema,
-    (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count,
-    (SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_name = t.table_name AND constraint_type = 'FOREIGN KEY') as foreign_key_count
-FROM information_schema.tables t
-WHERE table_schema = 'public' 
-AND table_type = 'BASE TABLE'
-ORDER BY table_name;
-```
 
 ---
 

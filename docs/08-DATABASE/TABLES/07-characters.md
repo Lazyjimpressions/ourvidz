@@ -1,6 +1,6 @@
 # Table: characters
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Character profiles and definitions for roleplay and storyboard systems
 
@@ -9,7 +9,7 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (26 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - user_id (uuid, nullable) - Foreign key to profiles table (creator)
 - name (text, NOT NULL) - Character name
@@ -31,6 +31,11 @@
 - gender (text, default: 'unspecified') - Character gender
 - content_rating (varchar(10), NOT NULL, default: 'sfw') - Content rating (sfw/nsfw)
 - role (text, default: 'ai') - Character role (ai/user)
+- consistency_method (text, default: 'i2i_reference') - Method for maintaining consistency
+- seed_locked (integer, nullable) - Locked generation seed for consistency
+- base_prompt (text, nullable) - Base prompt for character generation
+- preview_image_url (text, nullable) - Preview image for character display
+- quick_start (boolean, default: false) - Quick start character flag
 ```
 
 ## **RLS Policies**
@@ -85,6 +90,10 @@ USING (
 - **Reference Images**: Characters can have reference images for generation
 - **Interaction Tracking**: Tracks likes and interaction counts
 - **Role Assignment**: Characters can be AI-controlled or user-controlled
+- **Consistency Methods**: Supports i2i_reference and other consistency methods
+- **Seed Locking**: Can lock generation seeds for consistent character appearance
+- **Quick Start**: Special flag for characters that can be used immediately
+- **Social Features**: Public characters can receive likes and track interactions
 
 ## **Example Data**
 ```json

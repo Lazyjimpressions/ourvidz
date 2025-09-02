@@ -1,6 +1,6 @@
 # Table: jobs
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Track generation requests and link outputs (images/videos) with model/quality metadata
 
@@ -9,17 +9,39 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (35 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
-- user_id (uuid, NOT NULL) - Foreign key to profiles table
-- image_id (uuid, nullable) - Foreign key to images_videos table
 - video_id (uuid, nullable) - Foreign key to videos table
+- user_id (uuid, NOT NULL) - Foreign key to profiles table
 - job_type (text, NOT NULL) - Job type (sdxl_image_fast/high, video_fast/high, image7b_*, video7b_*)
-- model_type (text, nullable) - Model type used for generation
-- quality (text, nullable) - Quality setting (fast | high)
+- status (text, default: 'queued') - Job status (queued | processing | completed | failed)
+- error_message (text, nullable) - Error message if job failed
+- attempts (integer, default: 0) - Number of retry attempts
+- max_attempts (integer, default: 3) - Maximum retry attempts allowed
 - metadata (jsonb) - Job-specific metadata and parameters
-- status (text, NOT NULL) - Job status (queued | processing | completed | failed)
-- created_at (timestamptz, default: now()) - Job creation timestamp
+- project_id (uuid, nullable) - Foreign key to projects table
+- image_id (uuid, nullable) - Foreign key to images_videos table
+- format (text, nullable) - Output format (png, jpg, mp4, etc.)
+- quality (text, nullable) - Quality setting (fast | high)
+- model_type (text, nullable) - Model type used for generation
+- prompt_test_id (uuid, nullable) - Foreign key to prompt testing
+- test_metadata (jsonb) - Test-specific metadata
+- moderation_status (text, default: 'pending') - Content moderation status
+- reviewed_at (timestamptz, nullable) - When content was reviewed
+- reviewed_by (uuid, nullable) - Who reviewed the content
+- review_notes (text, nullable) - Review notes and comments
+- enhancement_strategy (varchar(50), nullable) - Enhancement strategy used
+- original_prompt (text, nullable) - Original user prompt
+- enhanced_prompt (text, nullable) - Enhanced prompt after processing
+- enhancement_time_ms (integer, nullable) - Time taken for enhancement
+- quality_rating (numeric, nullable) - Quality rating score
+- quality_improvement (numeric, nullable) - Quality improvement metric
+- compel_weights (jsonb, nullable) - Compel prompt weights
+- qwen_expansion_percentage (numeric, nullable) - Qwen expansion percentage
+- destination (text, default: 'library') - Where to save output
+- workspace_session_id (uuid, nullable) - Workspace session identifier
+- template_name (text, nullable) - Prompt template used
+- api_model_id (uuid, nullable) - Foreign key to API model configuration
 ```
 
 ## **RLS Policies**

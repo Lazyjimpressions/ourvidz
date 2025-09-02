@@ -1,6 +1,6 @@
 # Table: messages
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Individual message storage within conversations for chat and roleplay
 
@@ -9,13 +9,13 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (6 total columns - simplified structure)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - conversation_id (uuid, NOT NULL) - Foreign key to conversations table
 - sender (text, NOT NULL) - Message sender ('user' | 'assistant')
 - content (text, NOT NULL) - Message content
 - message_type (text, NOT NULL, default: 'text') - Message type (text, image, system)
-- created_at (timestamptz, NOT NULL, default: now()) - Message timestamp
+- created_at (timestamptz, NOT NULL) - Message timestamp
 ```
 
 ## **RLS Policies**
@@ -61,6 +61,8 @@ WITH CHECK (
 - **Message Types**: Support for text, image, and system messages
 - **Chronological Order**: Messages are ordered by created_at for conversation flow
 - **Conversation Access**: Users can only access messages in their own conversations
+- **Simplified Structure**: Streamlined schema focuses on core message functionality
+- **No Editing**: Messages cannot be edited once created (immutable design)
 
 ## **Example Data**
 ```json

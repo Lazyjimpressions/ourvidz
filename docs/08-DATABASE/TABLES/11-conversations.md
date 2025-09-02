@@ -1,6 +1,6 @@
 # Table: conversations
 
-**Last Updated:** August 30, 2025  
+**Last Updated:** December 19, 2024  
 **Status:** ✅ Active  
 **Purpose:** Chat session management and organization for playground and roleplay
 
@@ -9,17 +9,19 @@
 
 ## **Schema**
 ```sql
--- Key columns with descriptions
+-- Key columns with descriptions (12 total columns)
 - id (uuid, pk) - Primary key with auto-generated UUID
 - user_id (uuid, NOT NULL) - Foreign key to profiles table
 - project_id (uuid, nullable) - Foreign key to projects table
 - title (text, NOT NULL, default: 'New Conversation') - Conversation title/name
 - conversation_type (text, NOT NULL, default: 'general') - Type of conversation (general, roleplay, character_roleplay, admin, creative)
 - status (text, NOT NULL, default: 'active') - Conversation status (active, archived, deleted)
-- created_at (timestamptz, NOT NULL, default: now()) - Creation timestamp
-- updated_at (timestamptz, NOT NULL, default: now()) - Last update timestamp
+- created_at (timestamptz, NOT NULL) - Creation timestamp
+- updated_at (timestamptz, NOT NULL) - Last update timestamp
 - character_id (uuid, nullable) - Foreign key to characters table
 - user_character_id (uuid, nullable) - Foreign key to characters table (user's character)
+- memory_tier (text, default: 'conversation') - Memory tier for conversation context
+- memory_data (jsonb, default: '{}') - Memory data for conversation context
 ```
 
 ## **RLS Policies**
@@ -63,6 +65,8 @@ USING (auth.uid() = user_id);
 - **Project Linking**: project_id links conversations to storyboard projects
 - **Status Management**: Conversations can be active, archived, or deleted
 - **Auto-Timestamping**: updated_at is automatically updated when messages are added
+- **Memory System**: memory_tier and memory_data support conversation context and memory
+- **Memory Tiers**: Different memory levels (conversation, session, long-term) for context management
 
 ## **Example Data**
 ```json
@@ -76,7 +80,13 @@ USING (auth.uid() = user_id);
   "created_at": "2025-08-30T10:00:00Z",
   "updated_at": "2025-08-30T10:15:00Z",
   "character_id": "character-uuid-here",
-  "user_character_id": null
+  "user_character_id": null,
+  "memory_tier": "conversation",
+  "memory_data": {
+    "context": "Adventure in a magical forest",
+    "key_events": ["met Sarah", "found ancient map"],
+    "character_goals": "find the hidden treasure"
+  }
 }
 ```
 
