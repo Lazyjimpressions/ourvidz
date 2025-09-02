@@ -251,7 +251,7 @@ serve(async (req) => {
     let userMessage: string;
     if (kickoff && recentMessages && recentMessages.length > 0) {
       console.log('🔄 Conversation already has messages - avoiding re-introduction');
-      userMessage = "Continue the conversation naturally from where we left off.";
+      userMessage = "Continue naturally from the current context. Do not re-introduce yourself or restart the conversation.";
     } else {
       userMessage = kickoff ? 
         "Introduce yourself and set the scene. Be natural and in-character." : 
@@ -315,6 +315,17 @@ serve(async (req) => {
 
     if (saveError) {
       console.error('Failed to save assistant message:', saveError);
+    }
+    
+    // Update conversation updated_at timestamp after assistant message
+    try {
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversation_id);
+      console.log('✅ Updated conversation timestamp for:', conversation_id);
+    } catch (error) {
+      console.error('Failed to update conversation timestamp:', error);
     }
 
     // Update memory data if needed (not for kickoff)

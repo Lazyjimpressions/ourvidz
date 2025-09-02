@@ -203,26 +203,60 @@ const MobileRoleplayChat: React.FC = () => {
 
         // Check for existing active conversation first
         let conversation = null;
-        const conversationQuery = supabase
-          .from('conversations')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('character_id', characterId)
-          .eq('conversation_type', sceneId ? 'scene_roleplay' : 'character_roleplay')
-          .eq('status', 'active');
+        
+        // First try localStorage cache for quick lookup
+        const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
+        const cachedConversationId = localStorage.getItem(cacheKey);
+        
+        if (cachedConversationId) {
+          console.log('🔍 Checking cached conversation:', cachedConversationId);
+          const { data: cachedConv } = await supabase
+            .from('conversations')
+            .select('*')
+            .eq('id', cachedConversationId)
+            .eq('status', 'active')
+            .single();
+          
+          if (cachedConv) {
+            conversation = cachedConv;
+            console.log('✅ Using cached conversation:', conversation.id);
+          } else {
+            // Remove invalid cache
+            localStorage.removeItem(cacheKey);
+          }
+        }
+        
+        // Fallback to database query if no cached conversation
+        if (!conversation) {
+          const conversationQuery = supabase
+            .from('conversations')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('character_id', characterId)
+            .eq('conversation_type', sceneId ? 'scene_roleplay' : 'character_roleplay')
+            .eq('status', 'active');
 
         // Add scene filter if sceneId exists  
         if (sceneId) {
-          conversationQuery.contains('memory_data', { scene_id: sceneId });
+          conversationQuery.filter('memory_data->>scene_id', 'eq', sceneId);
+        } else {
+          conversationQuery.is('memory_data->>scene_id', null);
         }
 
-        const { data: existingConversations, error: queryError } = await conversationQuery.order('updated_at', { ascending: false }).limit(1);
+          const { data: existingConversations, error: queryError } = await conversationQuery.order('updated_at', { ascending: false }).limit(1);
 
-        if (queryError) {
-          console.error('Error querying conversations:', queryError);
-        } else if (existingConversations && existingConversations.length > 0) {
-          conversation = existingConversations[0];
-          console.log('🔄 Reusing existing conversation:', conversation.id);
+          if (queryError) {
+            console.error('Error querying conversations:', queryError);
+          } else if (existingConversations && existingConversations.length > 0) {
+            conversation = existingConversations[0];
+            console.log('🔄 Reusing existing conversation:', conversation.id);
+            
+            // Cache for future use
+            localStorage.setItem(cacheKey, conversation.id);
+          }
+        }
+        
+        if (conversation) {
           setConversationId(conversation.id);
 
           // Load existing messages for this conversation
@@ -236,11 +270,15 @@ const MobileRoleplayChat: React.FC = () => {
             const formattedMessages: Message[] = existingMessages.map(msg => ({
               id: msg.id,
               content: msg.content,
-              sender: msg.sender as 'user' | 'character',
+              sender: msg.sender === 'assistant' ? 'character' : msg.sender as 'user' | 'character',
               timestamp: msg.created_at
             }));
             setMessages(formattedMessages);
             console.log(`📝 Loaded ${formattedMessages.length} existing messages`);
+            
+            // Cache conversation ID in localStorage for quick reuse
+            localStorage.setItem(`conversation_${characterId}_${sceneId || 'general'}`, conversation.id);
+            
             return; // Exit early - no need to kickoff for existing conversation
           }
         }
@@ -392,6 +430,18 @@ const MobileRoleplayChat: React.FC = () => {
         });
 
       if (insertError) throw insertError;
+      
+      // Update conversation updated_at timestamp after user message
+      try {
+        await supabase
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', conversationId)
+          .eq('user_id', user.id);
+        console.log('✅ Updated conversation timestamp after user message');
+      } catch (error) {
+        console.error('Failed to update conversation timestamp:', error);
+      }
 
       // ✅ FORCE NSFW MODE FOR CHAT:
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
