@@ -65,11 +65,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     const signSceneImage = async () => {
       if (message.metadata?.image_url && !message.metadata.image_url.startsWith('http')) {
         try {
-          const bucket = message.metadata.image_url.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
+          // Default to workspace-temp for roleplay scene images
+          let bucket = 'workspace-temp';
+          
+          // Only check for user-library if explicitly indicated
+          if (message.metadata.image_url.includes('user-library') || 
+              message.metadata.image_url.includes('sdxl_image') ||
+              message.metadata.image_url.includes('image_high') ||
+              message.metadata.image_url.includes('image_fast')) {
+            bucket = 'user-library';
+          }
+          
           const signed = await getSignedUrl(message.metadata.image_url, bucket);
           setSignedSceneImage(signed);
         } catch (error) {
           console.error('Error signing scene image:', error);
+          // Fallback to raw path if signing fails
+          setSignedSceneImage(message.metadata?.raw_image_path || message.metadata?.image_url);
         }
       } else {
         setSignedSceneImage(message.metadata?.image_url || null);
@@ -79,7 +91,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     if (hasScene) {
       signSceneImage();
     }
-  }, [message.metadata?.image_url, hasScene, getSignedUrl]);
+  }, [message.metadata?.image_url, message.metadata?.raw_image_path, hasScene, getSignedUrl]);
 
   const formatTime = (timestamp: string) => {
     try {

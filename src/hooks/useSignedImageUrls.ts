@@ -23,7 +23,9 @@ const useSignedImageUrls = () => {
 
       // Auto-detect bucket if not provided
       if (!bucket) {
-        if (path.includes('sdxl_image_high') || path.includes('/sdxl_image_high/')) {
+        if (path.includes('workspace-temp') || path.includes('/workspace-temp/')) {
+          bucket = 'workspace-temp';
+        } else if (path.includes('sdxl_image_high') || path.includes('/sdxl_image_high/')) {
           bucket = 'sdxl_image_high';
         } else if (path.includes('sdxl_image_fast') || path.includes('/sdxl_image_fast/')) {
           bucket = 'sdxl_image_fast';
@@ -31,6 +33,8 @@ const useSignedImageUrls = () => {
           bucket = 'image_high';
         } else if (path.includes('image_fast') || path.includes('/image_fast/')) {
           bucket = 'image_fast';
+        } else if (path.includes('user-library') || path.includes('/user-library/')) {
+          bucket = 'user-library';
         } else {
           console.error('Cannot determine bucket from path and no bucket provided:', path);
           setError('Cannot determine bucket for signed URL generation');

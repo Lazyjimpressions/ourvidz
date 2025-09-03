@@ -45,6 +45,7 @@ export interface Message {
   metadata?: {
     scene_generated?: boolean;
     image_url?: string;
+    raw_image_path?: string;
     consistency_method?: string;
     job_id?: string;
     needsRetry?: boolean;

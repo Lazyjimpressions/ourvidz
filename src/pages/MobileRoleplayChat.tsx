@@ -27,6 +27,7 @@ import { Character, Message, CharacterScene } from '@/types/roleplay';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 
 // Add prompt template interface
 interface PromptTemplate {
@@ -606,30 +607,44 @@ const MobileRoleplayChat: React.FC = () => {
 
           if (assetError) throw assetError;
 
-          // Sign the scene image URL
+          // Use WorkspaceAssetService for reliable URL signing
           let signedImageUrl = assetData.temp_storage_path;
+          const rawImagePath = assetData.temp_storage_path;
+          
           try {
             if (!signedImageUrl.startsWith('http')) {
-              const bucket = signedImageUrl.includes('workspace-temp') ? 'workspace-temp' : 'user-library';
-              const signed = await getSignedUrl(signedImageUrl, bucket);
-              if (signed) signedImageUrl = signed;
+              // Use WorkspaceAssetService for consistent signing
+              const signed = await WorkspaceAssetService.generateSignedUrl({
+                temp_storage_path: assetData.temp_storage_path
+              });
+              if (signed) {
+                signedImageUrl = signed;
+              }
             }
           } catch (error) {
             console.error('Error signing scene image URL:', error);
           }
 
-          // Update the last message with the image
+          // Update the correct message by job_id (not just the last message)
           setMessages(prev => {
             const updatedMessages = [...prev];
-            const lastMessage = updatedMessages[updatedMessages.length - 1];
-            if (lastMessage && lastMessage.metadata?.job_id === jobId) {
-              lastMessage.content = 'Scene generated successfully! Here\'s a visual representation of our conversation.';
-              lastMessage.metadata = {
-                ...lastMessage.metadata,
+            
+            // Find the message with matching job_id
+            const messageIndex = updatedMessages.findIndex(msg => 
+              msg.metadata?.job_id === jobId
+            );
+            
+            if (messageIndex !== -1) {
+              const targetMessage = updatedMessages[messageIndex];
+              targetMessage.content = 'Scene generated successfully! Here\'s a visual representation of our conversation.';
+              targetMessage.metadata = {
+                ...targetMessage.metadata,
                 scene_generated: true,
-                image_url: signedImageUrl
+                image_url: signedImageUrl,
+                raw_image_path: rawImagePath // Store raw path as fallback
               };
             }
+            
             return updatedMessages;
           });
         } else if (data.status === 'failed') {
