@@ -200,7 +200,11 @@ export type Database = {
           id: string
           image_url: string | null
           job_id: string | null
+          priority: number | null
           scene_prompt: string
+          scene_rules: string | null
+          scene_starters: string[] | null
+          system_prompt: string | null
           updated_at: string | null
         }
         Insert: {
@@ -211,7 +215,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           job_id?: string | null
+          priority?: number | null
           scene_prompt: string
+          scene_rules?: string | null
+          scene_starters?: string[] | null
+          system_prompt?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -222,7 +230,11 @@ export type Database = {
           id?: string
           image_url?: string | null
           job_id?: string | null
+          priority?: number | null
           scene_prompt?: string
+          scene_rules?: string | null
+          scene_starters?: string[] | null
+          system_prompt?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -258,6 +270,7 @@ export type Database = {
           created_at: string | null
           creator_id: string | null
           description: string
+          forbidden_phrases: string[] | null
           gender: string | null
           id: string
           image_url: string | null
@@ -271,11 +284,13 @@ export type Database = {
           quick_start: boolean | null
           reference_image_url: string | null
           role: string | null
+          scene_behavior_rules: Json | null
           seed_locked: number | null
           system_prompt: string | null
           traits: string | null
           updated_at: string | null
           user_id: string | null
+          voice_examples: string[] | null
           voice_tone: string | null
         }
         Insert: {
@@ -286,6 +301,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           description: string
+          forbidden_phrases?: string[] | null
           gender?: string | null
           id?: string
           image_url?: string | null
@@ -299,11 +315,13 @@ export type Database = {
           quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
+          scene_behavior_rules?: Json | null
           seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
+          voice_examples?: string[] | null
           voice_tone?: string | null
         }
         Update: {
@@ -314,6 +332,7 @@ export type Database = {
           created_at?: string | null
           creator_id?: string | null
           description?: string
+          forbidden_phrases?: string[] | null
           gender?: string | null
           id?: string
           image_url?: string | null
@@ -327,11 +346,13 @@ export type Database = {
           quick_start?: boolean | null
           reference_image_url?: string | null
           role?: string | null
+          scene_behavior_rules?: Json | null
           seed_locked?: number | null
           system_prompt?: string | null
           traits?: string | null
           updated_at?: string | null
           user_id?: string | null
+          voice_examples?: string[] | null
           voice_tone?: string | null
         }
         Relationships: [
