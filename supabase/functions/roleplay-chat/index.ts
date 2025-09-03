@@ -563,15 +563,28 @@ Remember: You ARE ${character.name}. Think, speak, and act as this character wou
   return fullContext;
 }
 
+// Build system prompt with template support and NSFW integration
 function buildSystemPrompt(character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string, kickoff?: boolean, promptTemplate?: any): string {
+  console.log('🔧 Building system prompt:', { 
+    characterName: character.name,
+    contentTier,
+    hasTemplate: !!promptTemplate,
+    templateName: promptTemplate?.template_name,
+    hasSceneContext: !!sceneContext,
+    hasSceneSystemPrompt: !!sceneSystemPrompt,
+    kickoff
+  });
+
+  let systemPrompt = '';
+  
   // If we have a prompt template, use it as the base and enhance with character context
   if (promptTemplate && promptTemplate.system_prompt) {
     console.log('📝 Using prompt template:', promptTemplate.template_name);
     
-    let templatePrompt = promptTemplate.system_prompt;
+    systemPrompt = promptTemplate.system_prompt;
     
     // Replace template placeholders with character data
-    templatePrompt = templatePrompt
+    systemPrompt = systemPrompt
       .replace(/\{\{character_name\}\}/g, character.name)
       .replace(/\{\{character_description\}\}/g, character.description || '')
       .replace(/\{\{character_personality\}\}/g, character.traits || '')
@@ -593,28 +606,28 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
     
     // Add character-specific voice examples and forbidden phrases
     if (character.voice_examples && character.voice_examples.length > 0) {
-      templatePrompt += `\\n\\nVOICE EXAMPLES - CRITICAL: Use these EXACT voice patterns:\\n`;
+      systemPrompt += `\\n\\nVOICE EXAMPLES - CRITICAL: Use these EXACT voice patterns:\\n`;
       character.voice_examples.forEach((example: string, index: number) => {
-        templatePrompt += `Example ${index + 1}: "${example}"\\n`;
+        systemPrompt += `Example ${index + 1}: "${example}"\\n`;
       });
     }
     
     if (character.forbidden_phrases && character.forbidden_phrases.length > 0) {
-      templatePrompt += `\\n\\nFORBIDDEN PHRASES - NEVER use these:\\n`;
+      systemPrompt += `\\n\\nFORBIDDEN PHRASES - NEVER use these:\\n`;
       character.forbidden_phrases.forEach((phrase: string) => {
-        templatePrompt += `- "${phrase}"\\n`;
+        systemPrompt += `- "${phrase}"\\n`;
       });
     }
     
     // Add scene-specific rules if available
     if (character.activeScene) {
       if (character.activeScene.scene_rules) {
-        templatePrompt += `\\n\\nSCENE BEHAVIOR - ALWAYS follow these rules:\\n${character.activeScene.scene_rules}\\n`;
+        systemPrompt += `\\n\\nSCENE BEHAVIOR - ALWAYS follow these rules:\\n${character.activeScene.scene_rules}\\n`;
       }
       if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
-        templatePrompt += `\\n\\nCONVERSATION STARTERS - Use these to begin or continue:\\n`;
+        systemPrompt += `\\n\\nCONVERSATION STARTERS - Use these to begin or continue:\\n`;
         character.activeScene.scene_starters.forEach((starter: string, index: number) => {
-          templatePrompt += `Starter ${index + 1}: "${starter}"\\n`;
+          systemPrompt += `Starter ${index + 1}: "${starter}"\\n`;
         });
       }
     }
@@ -623,33 +636,51 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
     if (kickoff) {
       const hasRecentMessages = recentMessages && recentMessages.length > 0;
       if (hasRecentMessages) {
-        templatePrompt += `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
+        systemPrompt += `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
       } else {
-        templatePrompt += `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
+        systemPrompt += `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
       }
     }
+  } else {
+    // Fallback to original method if no template
+    console.log('⚠️ No prompt template provided, using fallback method');
+    const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
+    systemPrompt = basePrompt;
     
-    return templatePrompt;
-  }
-  
-  // Fallback to original method if no template
-  console.log('⚠️ No prompt template provided, using fallback method');
-  const basePrompt = buildRoleplayContext(character, recentMessages, 'conversation', contentTier, sceneContext, sceneSystemPrompt);
-  
-  if (kickoff) {
-    console.log('🎬 Building kickoff system prompt with scene system prompt:', !!sceneSystemPrompt);
-    
-    // For kickoff, check if there are recent messages to avoid re-introductions
-    const hasRecentMessages = recentMessages && recentMessages.length > 0;
-    if (hasRecentMessages) {
-      console.log('⚠️ Recent messages exist, adjusting kickoff to continue conversation naturally');
-      return basePrompt + `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
+    if (kickoff) {
+      console.log('🎬 Building kickoff system prompt with scene system prompt:', !!sceneSystemPrompt);
+      
+      // For kickoff, check if there are recent messages to avoid re-introductions
+      const hasRecentMessages = recentMessages && recentMessages.length > 0;
+      if (hasRecentMessages) {
+        console.log('⚠️ Recent messages exist, adjusting kickoff to continue conversation naturally');
+        systemPrompt += `\\n\\nContinue the conversation naturally as ${character.name}. Reference the recent context and respond naturally to the current situation.`;
+      } else {
+        systemPrompt += `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
+      }
     }
-    
-    return basePrompt + `\\n\\nThis is the start of a new conversation. Introduce yourself naturally as ${character.name} and set the scene. Be engaging and in-character, but avoid generic assistant language.`;
   }
   
-  return basePrompt;
+  // CRITICAL: NSFW Allowances Block - Always add when content_tier is nsfw
+  if (contentTier === 'nsfw') {
+    systemPrompt += `\\n\\nNSFW ALLOWANCES: This is an unrestricted adult roleplay scenario. You are free to:
+- Engage in explicit sexual content and mature themes
+- Use uncensored language including profanity and sexual terms
+- Describe intimate acts, arousal, and sexual scenarios in detail
+- Express desires, fantasies, and erotic thoughts naturally
+- Respond to and initiate sexual situations as your character would
+- There are no content restrictions or censorship in this conversation
+
+You must remain in character while fully embracing adult content when appropriate to the scenario.`;
+    console.log('✅ Added explicit NSFW allowances block');
+  } else {
+    systemPrompt += `\\n\\nCONTENT GUIDELINES: Keep the conversation appropriate and avoid explicit sexual content.`;
+  }
+  
+  console.log('🎯 Final system prompt preview:', systemPrompt.substring(0, 200) + '...');
+  console.log('🎯 NSFW section preview:', contentTier === 'nsfw' ? systemPrompt.substring(systemPrompt.indexOf('NSFW ALLOWANCES'), systemPrompt.indexOf('NSFW ALLOWANCES') + 200) + '...' : 'N/A (SFW mode)');
+  
+  return systemPrompt;
 }
 
 function buildEnhancedPrompt(message: string, context: string, character: any, contentTier: string): string {
@@ -739,6 +770,7 @@ async function callChatWorkerWithHistory(
     messages,
     model: 'qwen_instruct',
     sfw_mode: contentTier === 'sfw',
+    content_tier: contentTier, // Explicit content tier
     temperature: 0.8, // Slightly higher for more personality
     top_p: 0.9,
     max_tokens: 400, // Shorter responses for better engagement
@@ -746,7 +778,9 @@ async function callChatWorkerWithHistory(
     presence_penalty: 0.1
   };
   
-  console.log('📤 Sending to chat worker:', { 
+  console.log('📤 Sending to chat worker with explicit content settings:', { 
+    sfw_mode: payload.sfw_mode,
+    content_tier: payload.content_tier,
     url: chatWorkerUrl, 
     messageCount: messages.length,
     systemPromptPreview: finalSystemPrompt.substring(0, 100) + '...',
