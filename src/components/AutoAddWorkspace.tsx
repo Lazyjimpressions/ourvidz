@@ -27,37 +27,37 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
   const onAutoAddRef = useRef(onAutoAdd);
   onAutoAddRef.current = onAutoAdd;
 
-  // Enhanced bucket detection logic (from TestMediaGrid)
+  // Safe bucket detection logic - only use existing buckets
   const inferBucketFromJob = (job: any): string => {
     // Primary: Use bucket from metadata if available
     if (job.metadata?.bucket) {
-      console.log(`Using bucket from metadata: ${job.metadata.bucket}`);
       return job.metadata.bucket;
     }
 
     // Fallback logic based on job properties
     const mode = job.generation_mode || '';
     const quality = job.quality || 'fast';
-    const modelVariant = job.metadata?.model_variant || '';
-
-    // Enhanced model variants
-    if (modelVariant.includes('image7b')) {
-      const bucket = quality === 'high' ? 'image7b_high_enhanced' : 'image7b_fast_enhanced';
-      console.log(`Using enhanced bucket for ${modelVariant}: ${bucket}`);
-      return bucket;
-    }
 
     // SDXL models
     if (mode.includes('sdxl')) {
-      const bucket = quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
-      console.log(`Using SDXL bucket: ${bucket}`);
-      return bucket;
+      return quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
     }
 
-    // Default buckets
-    const bucket = quality === 'high' ? 'image_high' : 'image_fast';
-    console.log(`Using default bucket: ${bucket}`);
-    return bucket;
+    // Default buckets - only use known existing buckets
+    return quality === 'high' ? 'image_high' : 'image_fast';
+  };
+
+  // Helper to check if URL should be signed
+  const shouldSignUrl = (path: string): boolean => {
+    if (!path || typeof path !== 'string') return false;
+    if (path.startsWith('data:')) return false;
+    if (path.startsWith('http://') || path.startsWith('https://')) return false;
+    return true;
+  };
+
+  // Helper to normalize storage path
+  const normalizePath = (path: string): string => {
+    return path?.trim().replace(/^\/+|\/+$/g, '') || '';
   };
 
   // Process image jobs
@@ -83,7 +83,6 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
 
       setIsProcessing(true);
       setLoading(true);
-      console.log('🔄 Starting image signed URL generation for', unprocessedJobs.length, 'unprocessed jobs');
       
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
@@ -102,30 +101,36 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
           const jobPrompt = job.metadata?.prompt || job.prompt || 'No prompt available';
           const jobQuality = job.quality || 'fast';
           const jobModelType = job.generation_mode?.includes('sdxl') ? 'SDXL' : 'WAN';
-          console.log(`Processing image job ${job.id} with bucket: ${bucket}, paths:`, job.image_urls);
 
-          for (const path of job.image_urls) {
-            const key = `${bucket}|${path}`;
+          for (const rawPath of job.image_urls) {
+            const normalizedPath = normalizePath(rawPath);
+            
+            // Skip URLs that shouldn't be signed
+            if (!shouldSignUrl(normalizedPath)) {
+              if (onAutoAddRef.current) {
+                onAutoAddRef.current(rawPath, job.id, jobPrompt, 'image', jobQuality, jobModelType);
+              }
+              continue;
+            }
+
+            const key = `${bucket}|${normalizedPath}`;
 
             if (sessionCache[key]) {
-              result[path] = sessionCache[key];
-              console.log(`Using cached URL for ${path}`);
+              result[normalizedPath] = sessionCache[key];
               // Auto-add cached URLs to workspace
               if (onAutoAddRef.current) {
                 onAutoAddRef.current(sessionCache[key], job.id, jobPrompt, 'image', jobQuality, jobModelType);
               }
             } else {
               try {
-                console.log(`Requesting signed URL for bucket=${bucket}, path=${path}`);
                 const { data, error } = await supabase
                   .storage
                   .from(bucket)
-                  .createSignedUrl(path, 3600);
+                  .createSignedUrl(normalizedPath, 3600);
 
                 if (data?.signedUrl) {
-                  result[path] = data.signedUrl;
+                  result[normalizedPath] = data.signedUrl;
                   updatedCache[key] = data.signedUrl;
-                  console.log(`Successfully signed URL for ${path}`);
                   
                   // Preload image for better UX
                   const preload = new Image();
@@ -136,12 +141,10 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
                     onAutoAddRef.current(data.signedUrl, job.id, jobPrompt, 'image', jobQuality, jobModelType);
                   }
                 } else {
-                  console.error(`Failed to sign URL for ${path}:`, error);
-                  toast.error(`Failed to sign ${path} in ${bucket}`);
+                  console.warn(`Failed to sign URL for ${normalizedPath.substring(0, 50)}...`);
                 }
               } catch (error) {
-                console.error(`Error signing URL for ${path}:`, error);
-                toast.error(`Error signing ${path}`);
+                console.warn(`Error signing URL for ${normalizedPath.substring(0, 50)}...`);
               }
             }
           }
@@ -153,7 +156,6 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
         sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
         setSignedUrls(prev => ({ ...prev, ...result }));
         setProcessedJobs(newProcessedJobs);
-        console.log('✅ Image signed URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchSignedUrls:', error);
         toast.error('Failed to generate signed URLs');
@@ -188,7 +190,6 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
       }
 
       setIsProcessing(true);
-      console.log('🔄 Starting video signed URL generation for', unprocessedJobs.length, 'unprocessed jobs');
       
       const sessionCache = JSON.parse(sessionStorage.getItem('signed_urls') || '{}');
       const updatedCache = { ...sessionCache };
@@ -203,13 +204,22 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
           const jobQuality = job.quality || 'fast';
           const jobModelType = job.metadata?.model_type || 'WAN';
 
-          for (const path of attempts) {
-            if (!path) continue;
-            const key = `${bucket}|${path}`;
+          for (const rawPath of attempts) {
+            if (!rawPath) continue;
+            const normalizedPath = normalizePath(rawPath);
+            
+            // Skip URLs that shouldn't be signed
+            if (!shouldSignUrl(normalizedPath)) {
+              if (onAutoAddRef.current) {
+                onAutoAddRef.current(rawPath, job.id, jobPrompt, 'video', jobQuality, jobModelType);
+              }
+              break;
+            }
+
+            const key = `${bucket}|${normalizedPath}`;
 
             if (sessionCache[key]) {
-              result[path] = sessionCache[key];
-              console.log(`Using cached video URL for ${path}`);
+              result[normalizedPath] = sessionCache[key];
               // Auto-add cached URLs to workspace
               if (onAutoAddRef.current) {
                 onAutoAddRef.current(sessionCache[key], job.id, jobPrompt, 'video', jobQuality, jobModelType);
@@ -217,16 +227,14 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
               break;
             } else {
               try {
-                console.log(`Requesting signed video URL for bucket=${bucket}, path=${path}`);
                 const { data, error } = await supabase
                   .storage
                   .from(bucket)
-                  .createSignedUrl(path, 3600);
+                  .createSignedUrl(normalizedPath, 3600);
 
                 if (data?.signedUrl) {
-                  result[path] = data.signedUrl;
+                  result[normalizedPath] = data.signedUrl;
                   updatedCache[key] = data.signedUrl;
-                  console.log(`Successfully signed video URL for ${path}`);
                   
                   // Auto-add new URLs to workspace
                   if (onAutoAddRef.current) {
@@ -234,10 +242,10 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
                   }
                   break;
                 } else {
-                  console.error(`Failed to sign video URL for ${path}:`, error);
+                  console.warn(`Failed to sign video URL for ${normalizedPath.substring(0, 50)}...`);
                 }
               } catch (error) {
-                console.error(`Error signing video URL for ${path}:`, error);
+                console.warn(`Error signing video URL for ${normalizedPath.substring(0, 50)}...`);
               }
             }
           }
@@ -255,7 +263,6 @@ const AutoAddWorkspace = ({ onAutoAdd, imageJobs, videoJobs, isClearing = false 
         sessionStorage.setItem('signed_urls', JSON.stringify(updatedCache));
         setSignedUrls(prev => ({ ...prev, ...result }));
         setProcessedJobs(newProcessedJobs);
-        console.log('✅ Video signed URL generation completed. Total URLs:', Object.keys(result).length);
       } catch (error) {
         console.error('Error in fetchVideoSignedUrls:', error);
         toast.error('Failed to generate signed video URLs');

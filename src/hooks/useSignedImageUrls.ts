@@ -10,8 +10,8 @@ const useSignedImageUrls = () => {
       setLoading(true);
       setError(null);
 
-      // If path is already a full URL, return it directly
-      if (path.startsWith('http://') || path.startsWith('https://')) {
+      // If path is already a full URL or data URL, return it directly
+      if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
         return path;
       }
 
