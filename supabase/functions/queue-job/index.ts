@@ -83,14 +83,52 @@ serve(async (req) => {
       })
     }
 
-    // Normalize incoming fields
-    const body = jobRequest;
-    const originalPrompt = jobRequest.original_prompt || jobRequest.prompt || '';
-    const userMetadata = jobRequest.metadata || {};
+  // Normalize incoming fields
+  const body = jobRequest;
+  const originalPrompt = jobRequest.original_prompt || jobRequest.prompt || '';
+  const userMetadata = jobRequest.metadata || {};
 
-    const exactCopyMode = !!userMetadata.exact_copy_mode;
-    let referenceUrl = userMetadata.reference_image_url || jobRequest.reference_image_url || null;
-    const hasOriginalEnhancedPrompt = !!userMetadata.originalEnhancedPrompt;
+  const exactCopyMode = !!userMetadata.exact_copy_mode;
+  let referenceUrl = userMetadata.reference_image_url || jobRequest.reference_image_url || null;
+  const hasOriginalEnhancedPrompt = !!userMetadata.originalEnhancedPrompt;
+
+  // VIDEO REFERENCE HANDLING: Extract and process start/end reference URLs for WAN model
+  const isVideoJob = jobRequest.job_type.includes('video') || jobRequest.job_type.includes('wan');
+  let startRefUrl = userMetadata.start_reference_url || null;
+  let endRefUrl = userMetadata.end_reference_url || null;
+  
+  // Sign video reference URLs if they're storage paths
+  if (isVideoJob) {
+    if (startRefUrl && (startRefUrl.startsWith('user-library/') || startRefUrl.startsWith('workspace-temp/'))) {
+      try {
+        const bucketName = startRefUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+        const { data: signedData, error: signError } = await supabaseClient.storage
+          .from(bucketName)
+          .createSignedUrl(startRefUrl.replace(`${bucketName}/`, ''), 3600);
+        if (!signError && signedData?.signedUrl) {
+          startRefUrl = signedData.signedUrl;
+          console.log('✅ Queue-time START reference URL signed:', { originalPath: startRefUrl, bucket: bucketName });
+        }
+      } catch (error) {
+        console.warn('⚠️ Start reference URL signing failed:', error);
+      }
+    }
+    
+    if (endRefUrl && (endRefUrl.startsWith('user-library/') || endRefUrl.startsWith('workspace-temp/'))) {
+      try {
+        const bucketName = endRefUrl.startsWith('user-library/') ? 'user-library' : 'workspace-temp';
+        const { data: signedData, error: signError } = await supabaseClient.storage
+          .from(bucketName)
+          .createSignedUrl(endRefUrl.replace(`${bucketName}/`, ''), 3600);
+        if (!signError && signedData?.signedUrl) {
+          endRefUrl = signedData.signedUrl;
+          console.log('✅ Queue-time END reference URL signed:', { originalPath: endRefUrl, bucket: bucketName });
+        }
+      } catch (error) {
+        console.warn('⚠️ End reference URL signing failed:', error);
+      }
+    }
+  }
 
     // Queue-time signing optimization: sign storage path reference URLs
     if (referenceUrl && (referenceUrl.startsWith('user-library/') || referenceUrl.startsWith('workspace-temp/'))) {
@@ -370,6 +408,20 @@ serve(async (req) => {
     // Use explicit reference_strength from frontend (no override logic)
     const finalReferenceStrength = jobRequest.reference_strength;
     
+    // ENHANCED VIDEO REFERENCE HANDLING: Compute reference mode and set WAN worker config
+    let videoReferenceMode = 'none'; // none, single, start, end, both
+    if (isVideoJob) {
+      if (referenceUrl && !startRefUrl && !endRefUrl) {
+        videoReferenceMode = 'single'; // I2V-style single reference
+      } else if (startRefUrl && endRefUrl) {
+        videoReferenceMode = 'both'; // Start and end frames
+      } else if (startRefUrl) {
+        videoReferenceMode = 'start'; // Start frame only
+      } else if (endRefUrl) {
+        videoReferenceMode = 'end'; // End frame only
+      }
+    }
+    
     const queuePayload = {
       id: job.id,
       type: jobRequest.job_type.replace('wan_video_', 'video_'),
@@ -382,7 +434,13 @@ serve(async (req) => {
         guidance_scale: cfg,
         denoise_strength: denoise,
         resolution: getResolutionFromAspectRatio(userMetadata?.aspect_ratio),
-        seed: jobRequest.seed || userMetadata.seed
+        seed: jobRequest.seed || userMetadata.seed,
+        // VIDEO REFERENCE CONFIG: Explicitly set WAN worker reference frames
+        ...(isVideoJob && videoReferenceMode !== 'none' && {
+          first_frame: videoReferenceMode === 'start' || videoReferenceMode === 'both' ? startRefUrl : undefined,
+          last_frame: videoReferenceMode === 'end' || videoReferenceMode === 'both' ? endRefUrl : undefined,
+          image: videoReferenceMode === 'single' ? referenceUrl : undefined
+        })
       },
         metadata: {
           ...userMetadata,
@@ -392,6 +450,12 @@ serve(async (req) => {
           exact_copy_mode: isPromptlessUploadedExactCopy,
           reference_mode: isReferenceModify ? 'modify' : (isPromptlessUploadedExactCopy ? 'copy' : undefined),
           reference_image_url: referenceUrl || undefined,
+          // VIDEO REFERENCE METADATA: Include start/end URLs and computed mode
+          ...(isVideoJob && {
+            video_reference_mode: videoReferenceMode,
+            start_reference_url: startRefUrl,
+            end_reference_url: endRefUrl
+          }),
         // Keep original prompt/seed context for pure-inference workers
         originalEnhancedPrompt: userMetadata.originalEnhancedPrompt || undefined,
         originalSeed: userMetadata.seed || undefined,
@@ -426,6 +490,17 @@ serve(async (req) => {
       final_prompt_preview: enhancedPrompt.substring(0, 100) + '...',
       template_name: templateName,
       lock_hair: queuePayload.metadata.lock_hair, // Log Hair Lock setting
+      // VIDEO REFERENCE DEBUGGING
+      ...(isVideoJob && {
+        video_reference_mode: videoReferenceMode,
+        has_start_reference: !!startRefUrl,
+        has_end_reference: !!endRefUrl,
+        start_url_preview: startRefUrl ? startRefUrl.substring(0, 50) + '...' : 'none',
+        end_url_preview: endRefUrl ? endRefUrl.substring(0, 50) + '...' : 'none',
+        config_first_frame: !!queuePayload.config.first_frame,
+        config_last_frame: !!queuePayload.config.last_frame,
+        config_image: !!queuePayload.config.image
+      }),
       reference_profile: {
         type: queuePayload.metadata.reference_type,
         reference_strength: queuePayload.metadata.reference_strength,
