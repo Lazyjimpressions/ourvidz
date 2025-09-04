@@ -295,9 +295,9 @@ serve(async (req) => {
         });
     }
 
-    // Sanitize the response to remove generic greetings
-    response = sanitizeResponse(response, character, kickoff);
-    console.log('✅ Response after sanitization:', response.substring(0, 100) + '...');
+    // Optimize the response for Qwen Instruct performance
+    response = optimizeResponseForQwen(response, character, kickoff);
+    console.log('✅ Response after optimization:', response.substring(0, 100) + '...');
 
     workerTime = Date.now() - workerStart;
 
@@ -377,6 +377,27 @@ serve(async (req) => {
   }
 });
 
+// Function to optimize response for Qwen Instruct performance
+function optimizeResponseForQwen(response: string, character: any, isKickoff: boolean = false): string {
+  if (!response) return response;
+  
+  let optimized = response.trim();
+  
+  // Step 1: Sanitize generic greetings and AI phrases
+  optimized = sanitizeResponse(optimized, character, isKickoff);
+  
+  // Step 2: Optimize response length for Qwen (target 50-150 words)
+  optimized = optimizeResponseLength(optimized);
+  
+  // Step 3: Control action density (max 4 actions per response)
+  optimized = limitActionDensity(optimized);
+  
+  // Step 4: Detect and reduce repetition
+  optimized = reduceRepetition(optimized);
+  
+  return optimized;
+}
+
 // Function to sanitize model responses and remove generic greetings
 function sanitizeResponse(response: string, character: any, isKickoff: boolean = false): string {
   if (!response) return response;
@@ -435,6 +456,105 @@ function sanitizeResponse(response: string, character: any, isKickoff: boolean =
   }
   
   return sanitized;
+}
+
+// Optimize response length for Qwen Instruct (target 50-150 words)
+function optimizeResponseLength(response: string): string {
+  const words = response.split(/\s+/);
+  
+  // If response is within optimal range, return as-is
+  if (words.length >= 50 && words.length <= 150) {
+    return response;
+  }
+  
+  // If too long, truncate at natural break points
+  if (words.length > 150) {
+    console.log(`🔧 Response too long (${words.length} words), truncating to 150 words`);
+    return truncateAtNaturalBreak(response, 150);
+  }
+  
+  // If too short, return as-is (let Qwen generate more)
+  if (words.length < 50) {
+    console.log(`🔧 Response short (${words.length} words), keeping as-is for Qwen to expand`);
+    return response;
+  }
+  
+  return response;
+}
+
+// Truncate response at natural break points
+function truncateAtNaturalBreak(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  const truncated = words.slice(0, maxWords);
+  
+  // Find last complete sentence
+  const lastSentence = truncated.join(' ').lastIndexOf('.');
+  const lastExclamation = truncated.join(' ').lastIndexOf('!');
+  const lastQuestion = truncated.join(' ').lastIndexOf('?');
+  
+  const lastPunctuation = Math.max(lastSentence, lastExclamation, lastQuestion);
+  
+  if (lastPunctuation > 0) {
+    return truncated.join(' ').substring(0, lastPunctuation + 1);
+  }
+  
+  // If no punctuation found, just truncate
+  return truncated.join(' ');
+}
+
+// Limit action density to prevent overload (max 4 actions per response)
+function limitActionDensity(response: string): string {
+  const actions = response.match(/\*[^*]+\*/g) || [];
+  
+  if (actions.length <= 4) {
+    return response;
+  }
+  
+  console.log(`🔧 Too many actions (${actions.length}), limiting to 4`);
+  
+  // Keep first 4 actions, remove others
+  const limitedActions = actions.slice(0, 4);
+  let result = response;
+  
+  // Remove excess actions
+  actions.slice(4).forEach(action => {
+    result = result.replace(action, '');
+  });
+  
+  // Clean up any resulting double spaces or punctuation issues
+  result = result.replace(/\s+/g, ' ').trim();
+  result = result.replace(/\s*[,.\-!?]+\s*$/, ''); // Remove trailing punctuation
+  
+  return result;
+}
+
+// Detect and reduce repetition
+function reduceRepetition(response: string): string {
+  const words = response.toLowerCase().split(/\s+/);
+  const wordCount = new Map();
+  
+  // Count word frequency
+  words.forEach(word => {
+    // Clean word (remove punctuation)
+    const cleanWord = word.replace(/[^\w]/g, '');
+    if (cleanWord.length > 2) { // Only count words longer than 2 characters
+      wordCount.set(cleanWord, (wordCount.get(cleanWord) || 0) + 1);
+    }
+  });
+  
+  // Find repetitive words (used more than 3 times)
+  const repetitiveWords = Array.from(wordCount.entries())
+    .filter(([word, count]) => count > 3)
+    .map(([word]) => word);
+  
+  if (repetitiveWords.length > 0) {
+    console.log(`🔧 Repetitive words detected: ${repetitiveWords.join(', ')}`);
+    
+    // For now, just log the repetition - in future versions, we could implement
+    // more sophisticated replacement logic
+  }
+  
+  return response;
 }
 function sanitizeSceneContext(sceneContext?: string): string | undefined {
   if (!sceneContext) return undefined;
@@ -785,8 +905,8 @@ async function callChatWorkerWithHistory(
     content_tier: contentTier, // Explicit content tier
     temperature: 0.8, // Slightly higher for more personality
     top_p: 0.9,
-    max_tokens: 400, // Shorter responses for better engagement
-    frequency_penalty: 0.1, // Reduce repetition
+    max_tokens: 200, // Optimized for Qwen Instruct (reduced from 400)
+    frequency_penalty: 0.2, // Increased to reduce repetition
     presence_penalty: 0.1
   };
   
