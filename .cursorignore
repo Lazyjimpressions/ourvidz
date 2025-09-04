@@ -12,3 +12,6 @@ dist/
 *.lock
 bun.lockb
 package-lock.json
+
+# MCP configuration (contains sensitive tokens)
+.cursor/mcp.json

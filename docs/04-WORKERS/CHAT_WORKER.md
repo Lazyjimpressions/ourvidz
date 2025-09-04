@@ -14,6 +14,8 @@ The Chat Worker is a **pure inference engine** for AI conversation and prompt en
 - **Memory Management**: Smart loading/unloading with 15GB VRAM requirement
 - **Health Monitoring**: Comprehensive status endpoints
 - **Zero Content Restrictions**: No filtering or censorship
+- **Enhanced Error Handling**: OOM recovery, model validation, automatic retry
+- **SFW Filtering**: Opt-in content filtering with semantic preservation
 
 ---
 
@@ -40,8 +42,6 @@ VRAM_USAGE = "15GB"  # Peak usage during generation
 - **Performance**: 1-15 seconds for responses
 - **Port**: 7861 (dedicated)
 
-
-
 ---
 
 ## **🏗️ Pure Inference Architecture**
@@ -56,6 +56,8 @@ VRAM_USAGE = "15GB"  # Peak usage during generation
 - **Enhanced logging** throughout all worker interactions
 - **Memory optimization** and improved OOM handling
 - **Edge function control** over all prompt construction
+- **Model validation** with test inference on startup
+- **OOM error recovery** with automatic retry logic
 
 ### **Security Benefits**
 - Workers execute exactly what edge functions provide
@@ -174,7 +176,25 @@ VRAM_USAGE = "15GB"  # Peak usage during generation
     "/generate": "POST - Generic inference with messages array",
     "/health": "GET - Health check",
     "/worker/info": "GET - This information",
-    "/debug/model": "GET - Current model/debug status"
+    "/debug/model": "GET - Current model/debug status",
+    "/memory/status": "GET - Memory status and VRAM usage",
+    "/memory/load": "POST - Force load specific model",
+    "/memory/unload": "POST - Force unload models"
+  },
+  "message_format": {
+    "required": ["messages"],
+    "optional": ["max_tokens", "temperature", "top_p", "sfw_mode", "model"],
+    "example": {
+      "messages": [
+        {"role": "system", "content": "System prompt from edge function"},
+        {"role": "user", "content": "User message"}
+      ],
+      "max_tokens": 512,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "sfw_mode": false,
+      "model": "qwen_instruct"
+    }
   }
 }
 ```
@@ -266,8 +286,6 @@ The Chat Worker automatically registers itself with Supabase on startup:
 - **Memory Management:** Automatic cleanup and validation
 - **PyTorch 2.0 Compilation:** Performance optimization when available
 
-
-
 ---
 
 ## **🧠 Memory Management**
@@ -312,6 +330,87 @@ def optimize_chat_memory():
 
 ---
 
+## **🛡️ Enhanced Error Handling**
+
+### **OOM Error Recovery**
+- **Automatic Retry:** OOM errors trigger automatic cleanup and retry
+- **Memory Cleanup:** `torch.cuda.empty_cache()` called before retry
+- **Graceful Degradation:** Falls back to error response if retry fails
+- **Comprehensive Logging:** Detailed OOM event tracking and recovery metrics
+
+### **Model Validation**
+- **Startup Validation:** Test inference on model load
+- **Runtime Validation:** Continuous model health monitoring
+- **Fallback Handling:** Graceful degradation if validation fails
+- **Device Consistency:** Automatic device pinning and validation
+
+### **Error Recovery Mechanisms**
+```python
+# OOM handling with retry logic
+try:
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+except RuntimeError as e:
+    if "out of memory" in str(e).lower():
+        logger.warning("⚠️ OOM during tensor transfer, cleaning up...")
+        torch.cuda.empty_cache()
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+    else:
+        raise
+
+# Generation OOM handling
+try:
+    with torch.no_grad():
+        generated_ids = model.generate(**inputs, ...)
+except RuntimeError as e:
+    if "out of memory" in str(e).lower():
+        logger.warning("⚠️ OOM during generation, cleaning up and retrying...")
+        torch.cuda.empty_cache()
+        with torch.no_grad():
+            generated_ids = model.generate(**inputs, ...)
+    else:
+        raise
+```
+
+---
+
+## **🔒 SFW Filtering System**
+
+### **Implementation Details**
+- **Opt-in Only:** SFW mode must be explicitly requested via `sfw_mode: true`
+- **Semantic Preservation:** Maintains meaning while masking explicit terms
+- **Comprehensive Coverage:** 20+ explicit terms automatically detected
+- **Performance Optimized:** Minimal impact on response time
+- **User Control:** Users explicitly choose when to apply filtering
+
+### **Filtered Terms**
+```python
+redactions = [
+    'sex', 'sexual', 'explicit', 'porn', 'pornographic', 'nsfw',
+    'cum', 'orgasm', 'anal', 'vagina', 'penis', 'breast', 'boobs',
+    'blowjob', 'handjob', 'fuck', 'fucking', 'suck', 'lick', 'moan',
+    'nude', 'naked'
+]
+```
+
+### **SFW Filtering Process**
+```python
+def apply_sfw_filters(self, text: str) -> str:
+    """Apply minimal SFW redaction when explicitly requested by the user.
+    Keeps semantics but masks explicit terms to meet SFW mode requirements."""
+    try:
+        if not text:
+            return text
+        sanitized = text
+        for term in redactions:
+            for variant in (term, term.capitalize(), term.upper()):
+                sanitized = sanitized.replace(variant, '▇▇')
+        return sanitized
+    except Exception:
+        return text
+```
+
+---
+
 ## **📈 Monitoring and Logging**
 
 ### **Enhanced Logging**
@@ -333,6 +432,17 @@ logger.info(f"🎯 Pure inference mode: no template overrides detected")
 # Error logging
 logger.error(f"❌ Pure inference failed: {error}")
 logger.warning(f"⚠️ Fallback to original prompt due to error")
+
+# OOM and recovery logging
+logger.warning(f"⚠️ OOM during tensor transfer, cleaning up...")
+logger.info(f"🔄 Retrying after memory cleanup...")
+logger.info(f"✅ Recovery successful after {retry_count} attempts")
+
+# Model management logging
+logger.info(f"🔄 Loading Qwen 2.5-7B Instruct model...")
+logger.info(f"✅ Model validation successful")
+logger.info(f"✅ PyTorch 2.0 compilation applied")
+logger.info(f"🗑️ Unloading Qwen Instruct model...")
 ```
 
 ### **Performance Metrics**
@@ -414,6 +524,12 @@ HF_TOKEN=                  # Optional HuggingFace token
 RUNPOD_POD_ID=             # RunPod pod ID for auto-registration
 ```
 
+### **Optional Environment Variables**
+```bash
+QWEN_INSTRUCT_PATH=        # Override default Instruct model path
+QWEN_BASE_PATH=            # Override default Base model path
+```
+
 ### **RunPod Deployment**
 - **Chat Worker URL:** `https://{RUNPOD_POD_ID}-7861.proxy.runpod.net`
 - **Auto-Registration:** Detects `RUNPOD_POD_ID` and registers with Supabase
@@ -421,4 +537,75 @@ RUNPOD_POD_ID=             # RunPod pod ID for auto-registration
 
 ---
 
-**Note**: This worker provides the foundation for natural conversation and roleplay capabilities with a pure inference engine architecture. The Qwen 2.5-7B Instruct model ensures high-quality, contextually appropriate responses while maintaining complete edge function control over all prompts and logic.
+## **🔧 Model Management Details**
+
+### **Model Loading Process**
+```python
+def load_qwen_instruct_model(self, force=False):
+    """Load Qwen Instruct model with memory management"""
+    
+    # Check memory availability
+    if not self.check_memory_available(15):
+        logger.warning("⚠️ Insufficient VRAM for Qwen Instruct model")
+        return False
+    
+    # Load tokenizer and model
+    self.qwen_instruct_tokenizer = AutoTokenizer.from_pretrained(
+        self.instruct_model_path,
+        trust_remote_code=True,
+        local_files_only=True
+    )
+    
+    self.qwen_instruct_model = AutoModelForCausalLM.from_pretrained(
+        self.instruct_model_path,
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+        local_files_only=True
+    )
+    
+    # Store device and set to eval mode
+    self.instruct_model_device = next(self.qwen_instruct_model.parameters()).device
+    self.qwen_instruct_model.eval()
+    
+    # PyTorch 2.0 optimization
+    try:
+        self.qwen_instruct_model = torch.compile(self.qwen_instruct_model)
+        logger.info("✅ PyTorch 2.0 compilation applied")
+    except Exception as e:
+        logger.info(f"ℹ️ PyTorch 2.0 compilation not available: {e}")
+    
+    # Validate model with test inference
+    logger.info("🔍 Validating model with test inference...")
+    test_input = self.qwen_instruct_tokenizer(["test"], return_tensors="pt")
+    with torch.no_grad():
+        _ = self.qwen_instruct_model(**test_input.to(self.instruct_model_device))
+    logger.info("✅ Model validation successful")
+```
+
+### **Memory Status Monitoring**
+```python
+def log_gpu_memory(self):
+    """Log current GPU memory usage"""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / (1024**3)
+        cached = torch.cuda.memory_reserved() / (1024**3)
+        total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        logger.info(f"🔥 GPU Memory - Allocated: {allocated:.1f}GB, Cached: {cached:.1f}GB, Total: {total:.0f}GB")
+
+def check_memory_available(self, required_gb=15):
+    """Check if enough VRAM is available for model loading"""
+    if not torch.cuda.is_available():
+        return False
+        
+    total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    allocated = torch.cuda.memory_allocated() / (1024**3)
+    available = total - allocated
+    
+    logger.info(f"🔍 Memory check: {available:.1f}GB available, {required_gb}GB required")
+    return available >= required_gb
+```
+
+---
+
+**Note**: This worker provides the foundation for natural conversation and roleplay capabilities with a pure inference engine architecture. The Qwen 2.5-7B Instruct model ensures high-quality, contextually appropriate responses while maintaining complete edge function control over all prompts and logic. The enhanced error handling, SFW filtering, and comprehensive monitoring make it production-ready for high-volume AI conversation workloads.
