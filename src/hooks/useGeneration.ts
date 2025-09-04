@@ -110,18 +110,18 @@ export const useGeneration = () => {
       return;
     }
 
-    // Set timeout for stuck jobs (90 seconds) 
+    // Set timeout for stuck jobs (5 minutes) 
     const timeout = setTimeout(() => {
       console.warn('⏰ Generation timeout reached, stopping processing');
       setIsGenerating(false);
       setCurrentJob(null);
       setError('Generation took too long - this may indicate a server issue');
       toast({
-        title: "Generation Timeout",
+        title: "Generation Timeout", 
         description: "This is taking longer than expected. The system may be overloaded. Please try again.",
         variant: "destructive",
       });
-    }, 90000);
+    }, 300000);
     
     setTimeoutId(timeout);
 
