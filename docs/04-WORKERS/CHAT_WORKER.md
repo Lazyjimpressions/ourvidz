@@ -1,3 +1,4 @@
+
 # Chat Worker Documentation
 
 **Last Updated:** August 31, 2025  

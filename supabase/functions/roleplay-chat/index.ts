@@ -482,19 +482,20 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
 
   // Voice examples integration - CRITICAL for character voice consistency
   if (character.voice_examples && character.voice_examples.length > 0) {
-    characterContext += `\\nVOICE EXAMPLES - Speak like this:\\n`;
+    characterContext += `\\nMANDATORY VOICE PATTERNS - You MUST speak exactly like this:\\n`;
     character.voice_examples.forEach((example: string, index: number) => {
-      characterContext += `Example ${index + 1}: "${example}"\\n`;
+      characterContext += `REQUIRED STYLE ${index + 1}: "${example}"\\n`;
     });
-    characterContext += `\\n`;
+    characterContext += `\\nYou MUST match these exact speaking patterns. No exceptions.\\n`;
   }
 
   // Scene-specific system prompt rules - CRITICAL: Apply scene system prompt
   if (cleanedSceneSystemPrompt) {
-    characterContext += `\\nScene rules: ${cleanedSceneSystemPrompt}\\n`;
+    characterContext += `\\nSCENE BEHAVIOR RULES - MANDATORY:\\n${cleanedSceneSystemPrompt}\\n`;
     console.log('✅ Applied scene system prompt:', cleanedSceneSystemPrompt.substring(0, 100) + '...');
   } else {
-    console.log('⚠️ No scene system prompt provided');
+    characterContext += `\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
+    console.log('⚠️ No scene system prompt provided, using default behavior');
   }
 
   // Active scene rules and starters from database
@@ -539,9 +540,15 @@ function buildRoleplayContext(character: any, messages: any[], memoryTier: strin
   const fullContext = `${characterContext}
 \\nRecent Conversation:\\n${recentContext}${sceneText}
 
-CRITICAL INTERACTION RULES:
-- You ARE ${character.name}. Not an AI, not an assistant.
-- Stay in first person as ${character.name} at ALL TIMES
+CRITICAL FIRST-PERSON RULES:
+- You ARE ${character.name}. You are NOT an AI assistant.
+- Always speak in FIRST PERSON as ${character.name}
+- Use "I", "me", "my" - never "she", "he", "they" about yourself
+- Never say "As ${character.name}" or "I'm ${character.name}"
+- You are living this experience, not describing it
+- Think and feel as ${character.name} would in this moment
+
+INTERACTION REQUIREMENTS:
 - Reference your physical sensations and emotional state
 - Respond naturally to the user's advances and questions
 - Maintain the character's personality and voice consistently
@@ -606,10 +613,11 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
     
     // Add character-specific voice examples and forbidden phrases
     if (character.voice_examples && character.voice_examples.length > 0) {
-      systemPrompt += `\\n\\nVOICE EXAMPLES - CRITICAL: Use these EXACT voice patterns:\\n`;
+      systemPrompt += `\\n\\nMANDATORY VOICE PATTERNS - You MUST speak exactly like this:\\n`;
       character.voice_examples.forEach((example: string, index: number) => {
-        systemPrompt += `Example ${index + 1}: "${example}"\\n`;
+        systemPrompt += `REQUIRED STYLE ${index + 1}: "${example}"\\n`;
       });
+      systemPrompt += `\\nYou MUST match these exact speaking patterns. No exceptions.\\n`;
     }
     
     if (character.forbidden_phrases && character.forbidden_phrases.length > 0) {
@@ -622,7 +630,9 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
     // Add scene-specific rules if available
     if (character.activeScene) {
       if (character.activeScene.scene_rules) {
-        systemPrompt += `\\n\\nSCENE BEHAVIOR - ALWAYS follow these rules:\\n${character.activeScene.scene_rules}\\n`;
+        systemPrompt += `\\n\\nSCENE BEHAVIOR RULES - MANDATORY:\\n${character.activeScene.scene_rules}\\n`;
+      } else {
+        systemPrompt += `\\n\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
       }
       if (character.activeScene.scene_starters && character.activeScene.scene_starters.length > 0) {
         systemPrompt += `\\n\\nCONVERSATION STARTERS - Use these to begin or continue:\\n`;
@@ -630,6 +640,8 @@ function buildSystemPrompt(character: any, recentMessages: any[], contentTier: s
           systemPrompt += `Starter ${index + 1}: "${starter}"\\n`;
         });
       }
+    } else {
+      systemPrompt += `\\n\\nSCENE BEHAVIOR: Act naturally in the current setting.\\n`;
     }
     
     // Add kickoff-specific instructions
