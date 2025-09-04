@@ -32,6 +32,8 @@ const MobileSimplifiedWorkspace = () => {
     setReferenceImage,
     setReferenceMetadata,
     setExactCopyMode,
+    setBeginningRefImage,
+    setEndingRefImage,
     generate,
     deleteItem,
     clearItem,
@@ -42,11 +44,28 @@ const MobileSimplifiedWorkspace = () => {
     registerAssetRef
   } = useLibraryFirstWorkspace();
 
-  const handleGenerate = async (prompt: string, options?: any) => {
-    console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', prompt);
+  const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
+    console.log('🖼️ MOBILE: Setting reference image:', type, file.name);
+    
+    switch (type) {
+      case 'single':
+        setReferenceImage(file);
+        break;
+      case 'start':
+        setBeginningRefImage(file);
+        break;
+      case 'end':
+        setEndingRefImage(file);
+        break;
+    }
+  }, [setReferenceImage, setBeginningRefImage, setEndingRefImage]);
+
+  const handleGenerate = async (inputPrompt: string, options?: any) => {
+    console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', inputPrompt);
     console.log('📸 MOBILE WORKSPACE: Generation options:', options);
     
-    // Use the proper generate function from useLibraryFirstWorkspace
+    // Set the prompt first, then generate
+    setPrompt(inputPrompt);
     await generate();
   };
 
@@ -184,6 +203,7 @@ const MobileSimplifiedWorkspace = () => {
           isGenerating={isGenerating}
           currentMode={mode}
           onModeToggle={handleModeToggle}
+          onReferenceImageSet={handleReferenceImageSet}
         />
 
         {/* Lightbox */}
