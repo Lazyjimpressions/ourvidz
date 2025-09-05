@@ -26,9 +26,13 @@ const MobileSimplifiedWorkspace = () => {
     isGenerating,
     workspaceAssets,
     activeJobId,
+    quality,
+    selectedModel,
     // Actions
     updateMode,
     setPrompt,
+    setQuality,
+    setSelectedModel,
     setReferenceImage,
     setReferenceMetadata,
     setExactCopyMode,
@@ -63,6 +67,8 @@ const MobileSimplifiedWorkspace = () => {
   const handleGenerate = async (inputPrompt: string, options?: any) => {
     console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', inputPrompt);
     console.log('📸 MOBILE WORKSPACE: Generation options:', options);
+    console.log('📸 MOBILE WORKSPACE: Selected model:', selectedModel);
+    console.log('📸 MOBILE WORKSPACE: Quality:', quality);
     
     // Set the prompt first, then generate
     setPrompt(inputPrompt);
@@ -72,6 +78,15 @@ const MobileSimplifiedWorkspace = () => {
   const handleModeToggle = (mode: 'image' | 'video') => {
     console.log('🔄 MOBILE WORKSPACE: Mode changed to:', mode);
     updateMode(mode);
+  };
+
+  const handleModelTypeChange = (modelType: 'sdxl' | 'replicate') => {
+    console.log('🔄 MOBILE WORKSPACE: Model type changed to:', modelType);
+    if (modelType === 'replicate') {
+      setSelectedModel({ id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' });
+    } else {
+      setSelectedModel({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+    }
   };
 
   // Handle incoming reference image from library - prevent re-processing
@@ -199,10 +214,16 @@ const MobileSimplifiedWorkspace = () => {
 
         {/* Fixed Bottom Input */}
         <MobileSimplePromptInput
+          prompt={prompt}
+          onPromptChange={setPrompt}
           onGenerate={handleGenerate}
           isGenerating={isGenerating}
           currentMode={mode}
           onModeToggle={handleModeToggle}
+          modelType={selectedModel?.type || 'sdxl'}
+          onModelTypeChange={handleModelTypeChange}
+          quality={quality}
+          onQualityChange={setQuality}
           onReferenceImageSet={handleReferenceImageSet}
         />
 

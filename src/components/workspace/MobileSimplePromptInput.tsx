@@ -7,23 +7,32 @@ import { Camera, Video, Upload, X, Image } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface MobileSimplePromptInputProps {
+  prompt: string;
+  onPromptChange: (prompt: string) => void;
   onGenerate: (prompt: string, options?: any) => void;
   isGenerating: boolean;
   currentMode: 'image' | 'video';
   onModeToggle: (mode: 'image' | 'video') => void;
+  modelType: 'sdxl' | 'replicate';
+  onModelTypeChange: (type: 'sdxl' | 'replicate') => void;
+  quality: 'fast' | 'high';
+  onQualityChange: (quality: 'fast' | 'high') => void;
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
 }
 
 export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = ({
+  prompt,
+  onPromptChange,
   onGenerate,
   isGenerating,
   currentMode = 'image',
   onModeToggle,
+  modelType,
+  onModelTypeChange,
+  quality,
+  onQualityChange,
   onReferenceImageSet
 }) => {
-  const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState<string>('sdxl_fast');
-  const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   const [referenceImages, setReferenceImages] = useState<{
     single?: File;
     start?: File;
@@ -61,22 +70,14 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
 
-    // Determine format based on mode, model, and quality
-    let format = '';
-    if (currentMode === 'image') {
-      format = model === 'replicate' ? `rv51_${quality}` : `sdxl_image_${quality}`;
-    } else {
-      format = `video_${quality}`;
-    }
+    console.log('📱 MOBILE INPUT: Submitting with model type:', modelType, 'quality:', quality);
 
     onGenerate(prompt.trim(), { 
       mode: currentMode,
-      format,
-      model,
+      modelType,
       quality,
       referenceImages 
     });
-    setPrompt('');
   };
 
   return (
@@ -109,16 +110,16 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         {/* Model & Quality Selection for Images */}
         {currentMode === 'image' && (
           <div className="flex items-center gap-2">
-            <Select value={model} onValueChange={setModel}>
+            <Select value={modelType} onValueChange={(value: 'sdxl' | 'replicate') => onModelTypeChange(value)}>
               <SelectTrigger className="flex-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sdxl_fast">SDXL</SelectItem>
-                <SelectItem value="replicate">Replicate</SelectItem>
+                <SelectItem value="sdxl">SDXL</SelectItem>
+                <SelectItem value="replicate">RV5.1</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={quality} onValueChange={(value: 'fast' | 'high') => setQuality(value)}>
+            <Select value={quality} onValueChange={(value: 'fast' | 'high') => onQualityChange(value)}>
               <SelectTrigger className="flex-1">
                 <SelectValue />
               </SelectTrigger>
@@ -132,7 +133,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
 
         {/* Quality Selection for Videos */}
         {currentMode === 'video' && (
-          <Select value={quality} onValueChange={(value: 'fast' | 'high') => setQuality(value)}>
+          <Select value={quality} onValueChange={(value: 'fast' | 'high') => onQualityChange(value)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -226,7 +227,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             type="text"
             placeholder={`Enter prompt for ${currentMode}`}
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
+            onChange={(e) => onPromptChange(e.target.value)}
             disabled={isGenerating}
           />
           <Button type="submit" disabled={isGenerating} className="w-full">
