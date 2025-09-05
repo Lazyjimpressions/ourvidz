@@ -342,7 +342,12 @@ serve(async (req) => {
     let sceneGenerated = false;
     let consistencyScore = 0;
     if (scene_generation) {
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method);
+      // Build conversation history for scene context
+      const conversationHistory = recentMessages.map(msg => 
+        `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
+      );
+      
+      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory);
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
     }
@@ -1135,7 +1140,7 @@ async function updateMemoryData(
   }
 }
 
-async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string): Promise<{ success: boolean; consistency_score?: number }> {
+async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = []): Promise<{ success: boolean; consistency_score?: number }> {
   try {
     // ✅ ADD: Load character data with seed and reference image
     const { data: character, error: charError } = await supabase
@@ -1149,14 +1154,49 @@ async function generateScene(supabase: any, characterId: string, response: strin
       return { success: false };
     }
 
-    // Extract scene description from response
-    const scenePrompt = extractSceneFromResponse(response);
-    if (!scenePrompt) {
-      console.log('🎬 No scene description found in response for scene generation');
-      return { success: false };
+    // Enhanced scene analysis with comprehensive context
+    const sceneContext = analyzeSceneContent(response);
+    
+    // Populate character context
+    sceneContext.characters = [{
+      name: character.name,
+      visualDescription: character.description || 'attractive person',
+      role: 'main_character'
+    }];
+
+    // Generate AI-powered scene narrative
+    console.log('🎬 Generating scene narrative for character:', character.name);
+    
+    let scenePrompt: string;
+    try {
+      const narrativeResponse = await supabase.functions.invoke('scene-narrative', {
+        body: {
+          sceneContext,
+          conversationHistory,
+          characterName: character.name,
+          characterDescription: character.description || 'attractive person',
+          characterPersonality: character.persona || 'engaging and charismatic'
+        }
+      });
+
+      if (narrativeResponse.data?.success && narrativeResponse.data?.narrative) {
+        scenePrompt = narrativeResponse.data.narrative;
+        console.log('✅ AI-generated scene narrative:', scenePrompt.substring(0, 100) + '...');
+      } else {
+        throw new Error('Narrative generation failed');
+      }
+    } catch (narrativeError) {
+      console.log('🎬 Fallback to enhanced scene extraction:', narrativeError.message);
+      // Fallback to enhanced scene extraction
+      const extractedScene = extractSceneFromResponse(response);
+      if (!extractedScene) {
+        console.log('🎬 No scene description found in response for scene generation');
+        return { success: false };
+      }
+      scenePrompt = extractedScene;
     }
 
-    console.log('🎬 Generating scene for character:', character.name, 'with prompt:', scenePrompt);
+    console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
     console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
 
     // ✅ FIX: Use sdxl_image_high for better quality scene generation with character consistency
@@ -1172,6 +1212,7 @@ async function generateScene(supabase: any, characterId: string, response: strin
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
+            character_name: character.name, // ✅ CHARACTER CONTEXT
             scene_type: 'chat_scene',
             consistency_method: character.consistency_method || consistencyMethod,
             reference_strength: 0.45,
@@ -1179,13 +1220,14 @@ async function generateScene(supabase: any, characterId: string, response: strin
             skip_enhancement: false, // Allow enhancement for scene quality
             reference_mode: 'modify', // ✅ CHANGE TO MODIFY FOR BETTER CONSISTENCY
             seed_locked: true, // ✅ ADD SEED LOCK FLAG
-            character_name: character.name // ✅ ADD CHARACTER NAME FOR CONTEXT
+            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw', // ✅ DYNAMIC CONTENT TIER
+            scene_context: JSON.stringify(sceneContext) // ✅ FULL SCENE CONTEXT
           }
         }
       });
       console.log('🎬 SDXL scene generation queued with character consistency:', imageResponse);
     } else {
-      // Use replicate-image for Replicate API (fallback)
+      // Use replicate-image for Replicate API (fallback) with enhanced metadata
       imageResponse = await supabase.functions.invoke('replicate-image', {
         body: {
           prompt: scenePrompt,
@@ -1194,8 +1236,11 @@ async function generateScene(supabase: any, characterId: string, response: strin
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
+            character_name: character.name,
             scene_type: 'chat_scene',
-            consistency_method: consistencyMethod
+            consistency_method: consistencyMethod,
+            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            scene_context: JSON.stringify(sceneContext)
           }
         }
       });
@@ -1212,8 +1257,116 @@ async function generateScene(supabase: any, characterId: string, response: strin
   }
 }
 
+// Advanced scene detection patterns from archived system
+const SCENE_DETECTION_PATTERNS = {
+  roleplayActions: [/\*[^*]+\*/g, /\([^)]+\)/g],
+  movement: ['moves', 'walks', 'sits', 'stands', 'leans', 'approaches', 'steps', 'turns', 'reaches', 'bends'],
+  physicalInteractions: ['touches', 'kisses', 'embraces', 'holds', 'caresses', 'grabs', 'pulls', 'pushes', 'strokes', 'rubs'],
+  environmental: ['in the', 'at the', 'on the', 'bedroom', 'kitchen', 'bathroom', 'hotel', 'car', 'office', 'cafe', 'beach', 'forest'],
+  visual: ['wearing', 'dressed', 'naked', 'nude', 'clothing', 'outfit', 'lingerie', 'shirt', 'pants', 'dress', 'skirt'],
+  emotional: ['passionate', 'intimate', 'romantic', 'seductive', 'sensual', 'aroused', 'excited', 'nervous', 'confident', 'playful'],
+  positioning: ['close', 'near', 'against', 'beside', 'behind', 'in front of', 'on top of', 'under', 'between']
+};
+
+interface SceneContext {
+  characters: Array<{
+    name: string;
+    visualDescription: string;
+    role: string;
+  }>;
+  setting: string;
+  mood: string;
+  actions: string[];
+  isNSFW: boolean;
+  visualElements: string[];
+  positioning: string[];
+}
+
+function analyzeSceneContent(response: string): SceneContext {
+  const lowerResponse = response.toLowerCase();
+  
+  // Extract actions from asterisks and parentheses
+  const actions: string[] = [];
+  SCENE_DETECTION_PATTERNS.roleplayActions.forEach(pattern => {
+    const matches = response.match(pattern);
+    if (matches) {
+      actions.push(...matches.map(match => match.replace(/[*()]/g, '').trim()));
+    }
+  });
+  
+  // Detect movement and interactions
+  const detectedActions: string[] = [];
+  [...SCENE_DETECTION_PATTERNS.movement, ...SCENE_DETECTION_PATTERNS.physicalInteractions].forEach(action => {
+    if (lowerResponse.includes(action)) {
+      detectedActions.push(action);
+    }
+  });
+  
+  // Detect environment
+  let setting = 'intimate indoor setting';
+  SCENE_DETECTION_PATTERNS.environmental.forEach(env => {
+    if (lowerResponse.includes(env)) {
+      setting = env;
+    }
+  });
+  
+  // Detect mood
+  let mood = 'neutral';
+  SCENE_DETECTION_PATTERNS.emotional.forEach(emotion => {
+    if (lowerResponse.includes(emotion)) {
+      mood = emotion;
+    }
+  });
+  
+  // Detect visual elements
+  const visualElements: string[] = [];
+  SCENE_DETECTION_PATTERNS.visual.forEach(visual => {
+    if (lowerResponse.includes(visual)) {
+      visualElements.push(visual);
+    }
+  });
+  
+  // Detect positioning
+  const positioning: string[] = [];
+  SCENE_DETECTION_PATTERNS.positioning.forEach(pos => {
+    if (lowerResponse.includes(pos)) {
+      positioning.push(pos);
+    }
+  });
+  
+  // Determine NSFW content
+  const nsfwKeywords = ['naked', 'nude', 'intimate', 'passionate', 'seductive', 'sensual', 'aroused', 'sex', 'kiss', 'touch', 'caress'];
+  const isNSFW = nsfwKeywords.some(keyword => lowerResponse.includes(keyword));
+  
+  return {
+    characters: [], // Will be populated by caller
+    setting,
+    mood,
+    actions: [...actions, ...detectedActions].slice(0, 5), // Limit to top 5
+    isNSFW,
+    visualElements,
+    positioning
+  };
+}
+
 function extractSceneFromResponse(response: string): string | null {
-  // Simple scene extraction - look for scene descriptions
+  // Enhanced scene extraction with comprehensive analysis
+  const sceneContext = analyzeSceneContent(response);
+  
+  // If we have significant scene content, return enhanced description
+  if (sceneContext.actions.length > 0 || sceneContext.visualElements.length > 0 || sceneContext.positioning.length > 0) {
+    const sceneDescription = [
+      `Setting: ${sceneContext.setting}`,
+      `Mood: ${sceneContext.mood}`,
+      `Actions: ${sceneContext.actions.join(', ')}`,
+      `Visual elements: ${sceneContext.visualElements.join(', ')}`,
+      `Positioning: ${sceneContext.positioning.join(', ')}`
+    ].filter(part => !part.includes(': undefined') && !part.includes(': ')).join(' | ');
+    
+    return sceneDescription;
+  }
+  
+  // Fallback to simple keyword detection
   const sceneKeywords = ['scene', 'setting', 'background', 'environment', 'location'];
   const sentences = response.split(/[.!?]+/);
   
