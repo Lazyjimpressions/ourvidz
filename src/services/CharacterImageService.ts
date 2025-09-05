@@ -150,18 +150,23 @@ export class CharacterImageService {
         throw sceneError;
       }
 
-      // Queue generation job
+      // Queue generation job with character consistency
       const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: fullScenePrompt,
-          job_type: 'sdxl_image_fast',
+          job_type: 'sdxl_image_high', // ✅ UPGRADE TO HIGH QUALITY
+          seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
+          reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
           metadata: {
             destination: 'character_scene',
             character_id: characterId,
             scene_id: scene.id,
             conversation_id: conversationId,
             consistency_method: character.consistency_method || 'i2i_reference',
-            reference_strength: 0.35,
+            reference_strength: 0.45, // ✅ INCREASE REFERENCE STRENGTH
+            denoise_strength: 0.65, // ✅ ADD DENOISE STRENGTH
+            seed_locked: true, // ✅ ADD SEED LOCK FLAG
+            character_name: character.name, // ✅ ADD CHARACTER NAME FOR CONTEXT
             base_prompt: fullScenePrompt,
             update_scene_image: true
           }

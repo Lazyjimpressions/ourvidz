@@ -32,6 +32,8 @@ export interface Character {
   voice_examples?: string[];
   forbidden_phrases?: string[];
   scene_behavior_rules?: any;
+  // Character consistency fields
+  seed_locked?: number;
 }
 
 export interface Message {

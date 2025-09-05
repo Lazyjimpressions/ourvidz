@@ -517,18 +517,24 @@ const MobileRoleplayChat: React.FC = () => {
       // ✅ FORCE NSFW MODE FOR SCENE GENERATION:
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
-      // Call queue-job directly for SDXL generation
+      // Call queue-job directly for SDXL generation with character consistency
       const { data, error } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: `Generate a scene showing ${character.name} in the current conversation context: ${conversationContext}`,
           job_type: 'sdxl_image_high', // ✅ HIGH QUALITY INSTEAD OF FAST
+          seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
+          reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
           metadata: {
             destination: 'roleplay_scene',
             character_id: character.id,
             scene_type: 'chat_scene',
-            consistency_method: consistencySettings.method,
+            consistency_method: character.consistency_method || consistencySettings.method,
             conversation_id: conversationId,
             reference_mode: 'modify',
+            reference_strength: 0.45, // ✅ ADD REFERENCE STRENGTH
+            denoise_strength: 0.65, // ✅ ADD DENOISE STRENGTH
+            seed_locked: true, // ✅ ADD SEED LOCK FLAG
+            character_name: character.name, // ✅ ADD CHARACTER NAME FOR CONTEXT
             contentType: contentTier // ✅ USE DYNAMIC CONTENT TIER
           }
         }
