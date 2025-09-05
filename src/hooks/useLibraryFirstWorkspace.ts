@@ -165,10 +165,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [quality, setQuality] = useState<'fast' | 'high'>('fast');
   // Model Type Selection
   const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate'; display_name: string } => {
-    // Check localStorage
+    // Check localStorage for full model object (new format)
+    const savedModel = localStorage.getItem('workspace-selected-model');
+    if (savedModel) {
+      try {
+        const parsed = JSON.parse(savedModel);
+        if (parsed.id && parsed.type && parsed.display_name) {
+          return parsed;
+        }
+      } catch (e) {
+        console.warn('Failed to parse saved model, using default');
+      }
+    }
+
+    // Check old format for backwards compatibility
     const saved = localStorage.getItem('workspace-model-type');
     if (saved === 'replicate_rv51') {
-      // Legacy compatibility - convert to RV5.1 model format
+      // Legacy - will be upgraded by components that have access to real models
       return { id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' };
     } else if (saved === 'sdxl') {
       return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
@@ -191,9 +204,14 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => {
     if (!newModel) return;
     console.log('🔄 Model selection changed to:', newModel);
-    // Save simplified format for backwards compatibility
+    
+    // Save full model object (new format)
+    localStorage.setItem('workspace-selected-model', JSON.stringify(newModel));
+    
+    // Keep old format for backwards compatibility 
     const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
     localStorage.setItem('workspace-model-type', saveValue);
+    
     setSelectedModelInternal(newModel);
   }, []);
   
@@ -776,11 +794,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       let requestPayload;
       
       if (selectedModel?.type === 'replicate') {
-        // Guard: Check if model ID is valid
+        // Guard: Check if model ID is valid (not empty and not legacy)
         if (!selectedModel.id || selectedModel.id === 'legacy-rv51') {
           toast({
             title: "Model Selection Required",
-            description: "Please reselect the model and try again",
+            description: "Please select a valid Replicate model and try again",
             variant: "destructive",
           });
           return;
@@ -1164,7 +1182,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       // Apply model type only
       if (item.metadata?.modelType) {
         setSelectedModel({ 
-          id: item.metadata.modelType === 'replicate' ? 'rv51' : 'sdxl',
+          id: item.metadata.modelType === 'replicate' ? 'legacy-rv51' : 'sdxl',
           type: item.metadata.modelType === 'replicate' ? 'replicate' : 'sdxl',
           display_name: item.metadata.modelType === 'replicate' ? 'RV5.1' : 'SDXL'
         });
@@ -1200,7 +1218,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       
       if (item.metadata?.modelType) {
         setSelectedModel({ 
-          id: item.metadata.modelType === 'replicate' ? 'rv51' : 'sdxl',
+          id: item.metadata.modelType === 'replicate' ? 'legacy-rv51' : 'sdxl',
           type: item.metadata.modelType === 'replicate' ? 'replicate' : 'sdxl',
           display_name: item.metadata.modelType === 'replicate' ? 'RV5.1' : 'SDXL'
         });

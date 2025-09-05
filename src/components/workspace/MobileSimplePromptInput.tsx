@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Camera, Video, Upload, X, Image } from 'lucide-react';
 import { toast } from 'sonner';
+import { useImageModels } from '@/hooks/useApiModels';
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -13,8 +14,8 @@ export interface MobileSimplePromptInputProps {
   isGenerating: boolean;
   currentMode: 'image' | 'video';
   onModeToggle: (mode: 'image' | 'video') => void;
-  modelType: 'sdxl' | 'replicate';
-  onModelTypeChange: (type: 'sdxl' | 'replicate') => void;
+  selectedModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
+  onModelChange: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string }) => void;
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
@@ -27,12 +28,13 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   isGenerating,
   currentMode = 'image',
   onModeToggle,
-  modelType,
-  onModelTypeChange,
+  selectedModel,
+  onModelChange,
   quality,
   onQualityChange,
   onReferenceImageSet
 }) => {
+  const { data: imageModels, isLoading: modelsLoading } = useImageModels();
   const [referenceImages, setReferenceImages] = useState<{
     single?: File;
     start?: File;
@@ -70,11 +72,11 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
 
-    console.log('📱 MOBILE INPUT: Submitting with model type:', modelType, 'quality:', quality);
+    console.log('📱 MOBILE INPUT: Submitting with model:', selectedModel, 'quality:', quality);
 
     onGenerate(prompt.trim(), { 
       mode: currentMode,
-      modelType,
+      selectedModel,
       quality,
       referenceImages 
     });
@@ -110,13 +112,36 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         {/* Model & Quality Selection for Images */}
         {currentMode === 'image' && (
           <div className="flex items-center gap-2">
-            <Select value={modelType} onValueChange={(value: 'sdxl' | 'replicate') => onModelTypeChange(value)}>
+            <Select 
+              value={selectedModel?.id || ''} 
+              onValueChange={(modelId) => {
+                if (modelId === 'sdxl') {
+                  onModelChange({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+                } else {
+                  // Find the selected replicate model
+                  const replicateModel = imageModels?.find(m => 
+                    m.id === modelId && m.api_providers.name === 'replicate'
+                  );
+                  if (replicateModel) {
+                    onModelChange({
+                      id: replicateModel.id,
+                      type: 'replicate',
+                      display_name: replicateModel.display_name
+                    });
+                  }
+                }
+              }}
+            >
               <SelectTrigger className="flex-1">
-                <SelectValue />
+                <SelectValue placeholder="Select Model" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="sdxl">SDXL</SelectItem>
-                <SelectItem value="replicate">RV5.1</SelectItem>
+                {!modelsLoading && imageModels?.filter(m => m.api_providers.name === 'replicate').map(model => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.display_name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={quality} onValueChange={(value: 'fast' | 'high') => onQualityChange(value)}>

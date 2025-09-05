@@ -10,6 +10,7 @@ import { GenerationProgressIndicator } from '@/components/GenerationProgressIndi
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { toast } from 'sonner';
 import { toSharedFromWorkspace } from '@/lib/services/AssetMappers';
+import { useImageModels } from '@/hooks/useApiModels';
 
 
 const MobileSimplifiedWorkspace = () => {
@@ -17,6 +18,7 @@ const MobileSimplifiedWorkspace = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
+  const { data: imageModels, isLoading: modelsLoading } = useImageModels();
   
   // Use the proper library-first workspace hook with RV5.1 routing
   const {
@@ -80,14 +82,31 @@ const MobileSimplifiedWorkspace = () => {
     updateMode(mode);
   };
 
-  const handleModelTypeChange = (modelType: 'sdxl' | 'replicate') => {
-    console.log('🔄 MOBILE WORKSPACE: Model type changed to:', modelType);
-    if (modelType === 'replicate') {
-      setSelectedModel({ id: 'legacy-rv51', type: 'replicate', display_name: 'RV5.1' });
-    } else {
-      setSelectedModel({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
-    }
+  const handleModelChange = (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string }) => {
+    console.log('🔄 MOBILE WORKSPACE: Model changed to:', model);
+    setSelectedModel(model);
   };
+
+  // Auto-upgrade legacy model selections
+  useEffect(() => {
+    if (!modelsLoading && imageModels && selectedModel?.id === 'legacy-rv51') {
+      console.log('🔄 MOBILE: Upgrading legacy RV5.1 selection to real model');
+      const replicateModels = imageModels.filter(m => m.api_providers.name === 'replicate');
+      const defaultReplicate = replicateModels.find(m => m.is_default) || replicateModels[0];
+      
+      if (defaultReplicate) {
+        setSelectedModel({
+          id: defaultReplicate.id,
+          type: 'replicate',
+          display_name: defaultReplicate.display_name
+        });
+        toast.success(`Upgraded to ${defaultReplicate.display_name}`);
+      } else {
+        setSelectedModel({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
+        toast.error('No Replicate models available, switched to SDXL');
+      }
+    }
+  }, [modelsLoading, imageModels, selectedModel, setSelectedModel]);
 
   // Handle incoming reference image from library - prevent re-processing
   useEffect(() => {
@@ -220,8 +239,8 @@ const MobileSimplifiedWorkspace = () => {
           isGenerating={isGenerating}
           currentMode={mode}
           onModeToggle={handleModeToggle}
-          modelType={selectedModel?.type || 'sdxl'}
-          onModelTypeChange={handleModelTypeChange}
+          selectedModel={selectedModel}
+          onModelChange={handleModelChange}
           quality={quality}
           onQualityChange={setQuality}
           onReferenceImageSet={handleReferenceImageSet}
