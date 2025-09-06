@@ -441,9 +441,9 @@ serve(async (req) => {
           last_frame: videoReferenceMode === 'end' || videoReferenceMode === 'both' ? endRefUrl : undefined,
           image: videoReferenceMode === 'single' ? referenceUrl : undefined
         }),
-        // SOLVER CONFIG: Use euler solver to avoid CUSOLVER_STATUS_INTERNAL_ERROR with reference images
+        // SOLVER CONFIG: Use dpm++ solver to avoid CUSOLVER_STATUS_INTERNAL_ERROR with reference images
         ...(isVideoJob && {
-          sample_solver: 'euler'  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
+          sample_solver: 'dpm++'  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
         })
       },
         metadata: {

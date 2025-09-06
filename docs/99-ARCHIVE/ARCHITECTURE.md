@@ -258,7 +258,7 @@ class WANWorker:
 def generate_video(self, prompt, config):
     """Generate video with temporal consistency"""
     frame_num = config.get('frame_num', 83)
-    sample_solver = config.get('sample_solver', 'euler')  # Fixed: Changed from 'unipc' to avoid CUDA solver errors
+    sample_solver = config.get('sample_solver', 'dpm++')  # Fixed: Changed from 'unipc' to avoid CUDA solver errors
     sample_shift = config.get('sample_shift', 5.0)
     
     # Generate video with reference frame support
@@ -391,7 +391,7 @@ metadata JSONB {
   "generation_timestamp": "2025-07-16T...",
   "sample_steps": 25 | 50,
   "sample_guide_scale": 6.5 | 7.5,
-  "sample_solver": "euler",  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
+  "sample_solver": "dpm++",  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
   "sample_shift": 5.0,
   "batch_count": 1,
   "content_type": "image" | "video",
