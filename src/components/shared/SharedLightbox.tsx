@@ -228,8 +228,8 @@ export const SharedLightbox: React.FC<SharedLightboxProps> = ({
                 <PromptDetailsSlider
                   assetId={currentAsset.id}
                   assetType={currentAsset.type}
-                  jobType={currentAsset.metadata?.jobType}
-                  quality={currentAsset.metadata?.quality}
+                  jobType={currentAsset.metadata?.jobType || currentAsset.metadata?.format}
+                  quality={currentAsset.metadata?.quality || (currentAsset.metadata?.format?.toLowerCase().includes('high') ? 'high' : 'fast')}
                   trigger={
                     <Button
                       variant="ghost"

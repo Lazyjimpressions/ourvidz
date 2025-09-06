@@ -90,16 +90,23 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
   };
 
   const getJobTypeFormatted = () => {
+    // Prioritize fetched details over props
+    if (details?.jobType) return details.jobType;
     if (jobType) return jobType;
     
-    // Fallback formatting based on quality and type
-    const qualityText = quality === 'high' ? 'High Quality' : 'Fast';
+    // Fallback formatting based on fetched quality or prop quality
+    const detectedQuality = details?.quality || quality;
+    const qualityText = detectedQuality === 'high' ? 'High Quality' : 'Fast';
     const typeText = assetType === 'image' ? 'Image' : 'Video';
     return `${typeText} (${qualityText})`;
   };
 
   const getJobTypeBadgeVariant = () => {
-    if (quality === 'high') return 'border-purple-500/20 text-purple-400';
+    // Check fetched quality first, then prop quality
+    const detectedQuality = details?.quality || quality;
+    if (detectedQuality === 'high' || details?.jobType?.toLowerCase().includes('high')) {
+      return 'border-purple-500/20 text-purple-400';
+    }
     return 'border-blue-500/20 text-blue-400';
   };
 
@@ -116,7 +123,7 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto pr-2">
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/30 border-t-primary"></div>
