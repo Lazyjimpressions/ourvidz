@@ -258,7 +258,7 @@ class WANWorker:
 def generate_video(self, prompt, config):
     """Generate video with temporal consistency"""
     frame_num = config.get('frame_num', 83)
-    sample_solver = config.get('sample_solver', 'unipc')
+    sample_solver = config.get('sample_solver', 'euler')  # Fixed: Changed from 'unipc' to avoid CUDA solver errors
     sample_shift = config.get('sample_shift', 5.0)
     
     # Generate video with reference frame support

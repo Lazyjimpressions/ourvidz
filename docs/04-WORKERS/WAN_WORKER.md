@@ -129,7 +129,7 @@ def generate_video(job_data):
         sample_steps=job_data.get('sample_steps', 25),
         size=job_data.get('size', '480*832'),
         frame_num=job_data.get('frame_num', 83),  # 83 frames for 5-second video
-        sample_solver='unipc',
+        sample_solver='euler',  # Fixed: Changed from 'unipc' to avoid CUSOLVER_STATUS_INTERNAL_ERROR
         sample_shift=5.0
     )
     
@@ -175,7 +175,7 @@ def generate_image_to_video(job_data):
         sample_steps=job_data.get('sample_steps', 25),
         size=job_data.get('size', '480*832'),
         frame_num=job_data.get('frame_num', 83),
-        sample_solver='unipc',
+        sample_solver='euler',  # Fixed: Changed from 'unipc' to avoid CUSOLVER_STATUS_INTERNAL_ERROR
         sample_shift=5.0,
         **wan_params
     )
