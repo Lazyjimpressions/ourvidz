@@ -391,7 +391,7 @@ metadata JSONB {
   "generation_timestamp": "2025-07-16T...",
   "sample_steps": 25 | 50,
   "sample_guide_scale": 6.5 | 7.5,
-  "sample_solver": "unipc",
+  "sample_solver": "euler",  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
   "sample_shift": 5.0,
   "batch_count": 1,
   "content_type": "image" | "video",

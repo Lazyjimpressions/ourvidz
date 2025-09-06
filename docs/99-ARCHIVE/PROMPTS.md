@@ -419,7 +419,7 @@ const jobPayload = {
     size: '480*832',
     sample_steps: quality === 'high' ? 50 : 25,
     sample_guide_scale: quality === 'high' ? 7.5 : 6.5,
-    sample_solver: 'unipc',
+    sample_solver: 'euler',  // Fixed: Changed from 'unipc' to avoid CUDA solver errors
     sample_shift: 5.0,
     frame_num: format === 'video' ? 83 : 1,
     enhance_prompt: isEnhanced,
