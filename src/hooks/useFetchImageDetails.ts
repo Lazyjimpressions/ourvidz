@@ -11,6 +11,7 @@ interface ImageDetails {
   referenceStrength?: number;
   templateName?: string;
   jobType?: string;
+  quality?: string;
   // i2i settings
   denoiseStrength?: number;
   guidanceScale?: number;
@@ -56,7 +57,8 @@ export const useFetchImageDetails = () => {
         let enhancedPrompt = settings?.enhancedPrompt;
         let templateName = settings?.templateName;
         
-        let jobType;
+        let jobType = settings?.jobType;
+        let quality = settings?.quality;
         
         // If enhanced prompt or template name is missing and we have a job_id, try to backfill from jobs table
         if ((!enhancedPrompt || !templateName || !jobType) && workspaceAsset.job_id) {
@@ -70,7 +72,12 @@ export const useFetchImageDetails = () => {
           if (jobData) {
             enhancedPrompt = enhancedPrompt || jobData.enhanced_prompt;
             templateName = templateName || jobData.template_name;
-            jobType = jobData.format;
+            jobType = jobType || jobData.format;
+            
+            // Detect quality from job format
+            if (!quality && jobData.format) {
+              quality = jobData.format.toLowerCase().includes('high') ? 'high' : 'fast';
+            }
             
             // Merge job metadata into settings for i2i params
             if (jobData.metadata) {
@@ -103,6 +110,7 @@ export const useFetchImageDetails = () => {
           referenceStrength: settings?.referenceStrength || settings?.reference_strength,
           templateName,
           jobType,
+          quality,
           // i2i settings
           denoiseStrength,
           guidanceScale: settings?.guidance_scale || settings?.guidanceScale,
