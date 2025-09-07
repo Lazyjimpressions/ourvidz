@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Replicate from "https://esm.sh/replicate@0.25.2";
+import { getDatabaseNegativePrompts } from '../_shared/cache-utils.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -198,19 +199,11 @@ serve(async (req) => {
         const contentMode = body.metadata?.contentType; // Direct from UI toggle
         
         if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          const { data: negativeData, error: negativeError } = await supabase
-            .from('negative_prompts')
-            .select('negative_prompt')
-            .eq('model_type', normalizedModelType) // Use 'rv51' for RV5.1 models
-            .eq('content_mode', contentMode)
-            .eq('is_active', true)
-            .order('priority', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+          // Use shared utility function to get ALL negative prompts for the model/content mode
+          negativePrompt = await getDatabaseNegativePrompts(normalizedModelType, contentMode);
           
-          if (!negativeError && negativeData) {
-            negativePrompt = negativeData.negative_prompt;
-            console.log(`📝 Auto-populated negative prompt for ${normalizedModelType}_${contentMode}`);
+          if (negativePrompt) {
+            console.log(`📝 Auto-populated combined negative prompts for ${normalizedModelType}_${contentMode}`);
           }
         } else {
           console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
