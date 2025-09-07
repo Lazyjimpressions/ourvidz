@@ -89,23 +89,50 @@ serve(async (req) => {
 
     if (status === 'succeeded' && webhookPayload.output) {
       console.log('🎉 Prediction succeeded, processing output')
+      console.log('📋 Full webhook output structure:', JSON.stringify(webhookPayload.output, null, 2))
 
-      // Extract image URL from webhook output (same logic as polling function)
+      // Extract image URL from webhook output with improved logic to avoid composite grids
       let imageUrl: string | null = null
       
       if (typeof webhookPayload.output === 'string') {
         imageUrl = webhookPayload.output
+        console.log('✅ Using single string output:', imageUrl.substring(0, 100))
       } else if (Array.isArray(webhookPayload.output)) {
-        if (webhookPayload.output.length > 0) {
+        console.log('📊 Processing array output with', webhookPayload.output.length, 'items')
+        
+        // Look for individual image URLs, avoid composite grids
+        const individualImages = webhookPayload.output.filter((item: any) => {
+          if (typeof item === 'string') {
+            // Avoid URLs that suggest composite/grid images
+            return !item.includes('output.png') && !item.includes('grid') && !item.includes('combined')
+          }
+          if (typeof item === 'object' && item?.url) {
+            return !item.url.includes('output.png') && !item.url.includes('grid') && !item.url.includes('combined')
+          }
+          return false
+        })
+        
+        if (individualImages.length > 0) {
+          const selectedItem = individualImages[0]
+          if (typeof selectedItem === 'string') {
+            imageUrl = selectedItem
+          } else if (typeof selectedItem === 'object' && selectedItem?.url) {
+            imageUrl = selectedItem.url
+          }
+          console.log('✅ Selected individual image from', individualImages.length, 'candidates:', imageUrl?.substring(0, 100))
+        } else {
+          // Fallback to first item if no individual images found
           const firstItem = webhookPayload.output[0]
           if (typeof firstItem === 'string') {
             imageUrl = firstItem
           } else if (typeof firstItem === 'object' && firstItem?.url) {
             imageUrl = firstItem.url
           }
+          console.log('⚠️ No individual images found, using first item as fallback:', imageUrl?.substring(0, 100))
         }
       } else if (typeof webhookPayload.output === 'object' && webhookPayload.output?.url) {
         imageUrl = webhookPayload.output.url
+        console.log('✅ Using object URL output:', imageUrl.substring(0, 100))
       }
 
       if (!imageUrl || !imageUrl.startsWith('http')) {

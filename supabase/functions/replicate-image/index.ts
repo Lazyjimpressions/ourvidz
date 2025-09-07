@@ -230,6 +230,7 @@ serve(async (req) => {
     // Start with defaults from API model configuration
     const modelInput = {
       prompt: body.prompt,
+      num_outputs: 1, // Explicitly request single image to avoid grid composites
       ...apiModel.input_defaults
     };
     
