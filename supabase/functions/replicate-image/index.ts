@@ -291,9 +291,31 @@ serve(async (req) => {
         modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
       }
       
-      // Map scheduler (UI uses 'scheduler', model uses 'scheduler')
-      if (body.input.scheduler !== undefined && ['EulerA', 'MultistepDPM-Solver'].includes(body.input.scheduler)) {
-        modelInput.scheduler = body.input.scheduler;
+      // Map and validate scheduler - convert UI values to Replicate canonical values
+      if (body.input.scheduler !== undefined) {
+        const schedulerMap: Record<string, string> = {
+          'EulerA': 'K_EULER_ANCESTRAL',
+          'MultistepDPM-Solver': 'DPMSolverMultistep', 
+          'MultistepDPM': 'DPMSolverMultistep',
+          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
+          'DPMSolverMultistep': 'DPMSolverMultistep',
+          'K_EULER': 'K_EULER',
+          'DDIM': 'DDIM',
+          'HeunDiscrete': 'HeunDiscrete', 
+          'KarrasDPM': 'KarrasDPM',
+          'PNDM': 'PNDM'
+        };
+        
+        const allowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
+        const mappedScheduler = schedulerMap[body.input.scheduler];
+        
+        if (mappedScheduler && allowedSchedulers.includes(mappedScheduler)) {
+          modelInput.scheduler = mappedScheduler;
+          console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
+        } else {
+          console.log(`⚠️ Invalid scheduler "${body.input.scheduler}" - omitting scheduler parameter, letting Replicate use default`);
+          // Don't set scheduler - let Replicate use its default
+        }
       }
     }
     
