@@ -205,7 +205,10 @@ serve(async (req) => {
           provider_name: apiModel.api_providers.name,
           model_key: apiModel.model_key,
           version: apiModel.version,
-          api_model_configured: true
+          api_model_configured: true,
+          content_mode: body.metadata?.contentType || null, // Direct from toggle
+          negative_prompt_auto_populated: !!negativePrompt,
+          negative_prompt_source: negativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
         }
       })
       .select()
@@ -223,6 +226,37 @@ serve(async (req) => {
     }
 
     console.log('✅ Job created:', jobData.id);
+
+    // Auto-populate negative prompt based on content mode from toggle
+    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
+    
+    if (!negativePrompt) {
+      try {
+        // Use content mode directly from toggle - no detection or fallback
+        const contentMode = body.metadata?.contentType; // Direct from UI toggle
+        
+        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
+          const { data: negativeData, error: negativeError } = await supabase
+            .from('negative_prompts')
+            .select('negative_prompt')
+            .eq('model_type', normalizedModelType) // Use 'rv51' for RV5.1 models
+            .eq('content_mode', contentMode)
+            .eq('is_active', true)
+            .order('priority', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (!negativeError && negativeData) {
+            negativePrompt = negativeData.negative_prompt;
+            console.log(`📝 Auto-populated negative prompt for ${normalizedModelType}_${contentMode}`);
+          }
+        } else {
+          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
+      }
+    }
 
     // Build Replicate request using database model configuration
     console.log(`🎨 Generating with database model: ${apiModel.display_name} (${apiModel.model_key}:${apiModel.version})`);
@@ -270,10 +304,24 @@ serve(async (req) => {
       }
     }
     
+    // Apply auto-populated negative prompt if no user override
+    if (!modelInput.negative_prompt && negativePrompt) {
+      modelInput.negative_prompt = negativePrompt;
+    }
+    
     // Build model identifier from database fields
     const modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
 
     console.log('🔧 Model input configuration:', modelInput);
+    
+    // Enhanced logging for negative prompt debugging
+    console.log('🎯 Negative prompt configuration:', {
+      user_provided: !!body.input?.negative_prompt,
+      auto_populated: !!negativePrompt,
+      content_mode_from_toggle: body.metadata?.contentType || 'not_provided',
+      model_type: normalizedModelType,
+      final_negative_prompt: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : 'none'
+    });
 
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
