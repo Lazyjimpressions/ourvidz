@@ -188,7 +188,38 @@ serve(async (req) => {
       model_key: apiModel.model_key,
       normalized_model_type: normalizedModelType
     });
+
+    // Auto-populate negative prompt based on content mode from toggle
+    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
     
+    if (!negativePrompt) {
+      try {
+        // Use content mode directly from toggle - no detection or fallback
+        const contentMode = body.metadata?.contentType; // Direct from UI toggle
+        
+        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
+          const { data: negativeData, error: negativeError } = await supabase
+            .from('negative_prompts')
+            .select('negative_prompt')
+            .eq('model_type', normalizedModelType) // Use 'rv51' for RV5.1 models
+            .eq('content_mode', contentMode)
+            .eq('is_active', true)
+            .order('priority', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (!negativeError && negativeData) {
+            negativePrompt = negativeData.negative_prompt;
+            console.log(`📝 Auto-populated negative prompt for ${normalizedModelType}_${contentMode}`);
+          }
+        } else {
+          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
+      }
+    }
+
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
@@ -226,37 +257,6 @@ serve(async (req) => {
     }
 
     console.log('✅ Job created:', jobData.id);
-
-    // Auto-populate negative prompt based on content mode from toggle
-    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
-    
-    if (!negativePrompt) {
-      try {
-        // Use content mode directly from toggle - no detection or fallback
-        const contentMode = body.metadata?.contentType; // Direct from UI toggle
-        
-        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          const { data: negativeData, error: negativeError } = await supabase
-            .from('negative_prompts')
-            .select('negative_prompt')
-            .eq('model_type', normalizedModelType) // Use 'rv51' for RV5.1 models
-            .eq('content_mode', contentMode)
-            .eq('is_active', true)
-            .order('priority', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (!negativeError && negativeData) {
-            negativePrompt = negativeData.negative_prompt;
-            console.log(`📝 Auto-populated negative prompt for ${normalizedModelType}_${contentMode}`);
-          }
-        } else {
-          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
-        }
-      } catch (error) {
-        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
-      }
-    }
 
     // Build Replicate request using database model configuration
     console.log(`🎨 Generating with database model: ${apiModel.display_name} (${apiModel.model_key}:${apiModel.version})`);
