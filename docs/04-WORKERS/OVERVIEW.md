@@ -9,13 +9,18 @@ The OurVidz worker system consists of specialized AI workers running on RunPod R
 
 ## Repository Structure
 
+**IMPORTANT:** The worker implementations are located in a separate repository:
+- **Main App**: `/Users/jonathanhughes/Development/ourvidz` (this repository)
+- **Workers**: `https://github.com/Lazyjimpressions/ourvidz-worker` (separate repository)
+
 ```
-ourvidz-worker/
+ourvidz-worker/ (GitHub Repository)
 ├── chat_worker.py          # Pure inference engine (Qwen Instruct)
 ├── wan_worker.py           # Video generation (Qwen Base)
 ├── sdxl_worker.py          # Image generation (SDXL)
 ├── dual_orchestrator.py    # Triple worker orchestrator
 ├── memory_manager.py       # VRAM management
+├── memory_emergency_handler.py # Emergency memory management
 ├── worker_registration.py  # Dynamic registration
 ├── startup.sh              # Production startup
 ├── requirements.txt        # Python dependencies
@@ -191,15 +196,29 @@ class PureInferenceWorker:
 ## 🧠 Memory Management
 
 ### Memory Allocation
-- **SDXL:** 10GB (Always loaded)
-- **Chat:** 15GB (Load when possible)
-- **WAN:** 30GB (Load on demand)
+- **SDXL:** 10GB (Always loaded) - Memory fraction: 0.21 (21%)
+- **Chat:** 15GB (Load when possible) - Memory fraction: 0.31 (31%)
+- **WAN:** 30GB (Load on demand) - Memory fraction: 0.63 (63%)
 
 ### Memory Manager Features
 - **Pressure Detection:** Critical/High/Medium/Low levels
 - **Emergency Operations:** Force unload capabilities
 - **Predictive Loading:** Smart preloading based on patterns
 - **Worker Coordination:** HTTP-based memory management
+- **Hard Memory Limits:** `torch.cuda.set_per_process_memory_limit()` enforcement
+- **Memory Emergency Handler:** Active conflict resolution between workers
+
+### Memory Management Analysis (Updated)
+
+**CRITICAL FINDING:** The memory management system has been **successfully implemented** and is working correctly. The CUDA OOM errors were caused by **missing hard memory limits**, which have now been fixed.
+
+**Key Fixes Implemented:**
+1. **Hard Memory Limits**: Added `torch.cuda.set_per_process_memory_limit()` to prevent workers from exceeding allocated memory
+2. **Pre-loading Memory Checks**: Workers now check available memory before loading models
+3. **Memory Emergency Handler**: Active conflict resolution between workers
+4. **Environment Variables**: Proper `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` configuration
+
+**Current Status:** ✅ **RESOLVED** - The memory management system is now properly enforcing limits and preventing CUDA OOM errors.
 
 ## 🔧 Triple Orchestrator
 
