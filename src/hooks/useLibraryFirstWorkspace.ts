@@ -828,9 +828,20 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             width: dimensions.width,
             height: dimensions.height,
             num_outputs: numImages,
-            scheduler: 'EulerA'
+            scheduler: 'EulerA',
+            // I2I parameters for reference images
+            image: effRefUrl || undefined,
+            prompt_strength: effRefUrl ? (exactCopyMode ? 0.05 : (1 - computedReferenceStrength)) : undefined
           },
-          metadata: generationRequest.metadata
+          metadata: {
+            ...generationRequest.metadata,
+            // Include reference image URL for server fallback
+            reference_image_url: effRefUrl,
+            // Pass content type for safety checker
+            contentType: contentType,
+            // Pass aspect ratio for server-side dimension mapping
+            aspectRatio: finalAspectRatio
+          }
         };
       } else {
         // Use original payload for SDXL/WAN

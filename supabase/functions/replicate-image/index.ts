@@ -270,14 +270,14 @@ serve(async (req) => {
     
     // Apply user input overrides with validation
     if (body.input) {
-      // Map steps (UI uses 'steps', model uses 'steps')
+      // Map steps to num_inference_steps (Replicate schema)
       if (body.input.steps !== undefined) {
-        modelInput.steps = Math.min(Math.max(body.input.steps, 1), 100);
+        modelInput.num_inference_steps = Math.min(Math.max(body.input.steps, 1), 100);
       }
       
-      // Map guidance (UI uses 'guidance_scale', model uses 'guidance')  
+      // Map guidance_scale (keep same name for Replicate schema)
       if (body.input.guidance_scale !== undefined) {
-        modelInput.guidance = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        modelInput.guidance_scale = Math.min(Math.max(body.input.guidance_scale, 3.5), 15);
       }
       
       // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
@@ -286,6 +286,63 @@ serve(async (req) => {
       }
       if (body.input.height !== undefined) {
         modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
+      }
+      
+      // Map i2i parameters (image and prompt_strength)
+      if (body.input.image !== undefined) {
+        modelInput.image = body.input.image;
+        console.log('🖼️ I2I image set from input:', body.input.image);
+      } else if (body.metadata?.reference_image_url) {
+        modelInput.image = body.metadata.reference_image_url;
+        console.log('🖼️ I2I image set from metadata:', body.metadata.reference_image_url);
+      }
+      
+      if (body.input.prompt_strength !== undefined) {
+        modelInput.prompt_strength = Math.min(Math.max(body.input.prompt_strength, 0), 1);
+        console.log('🎚️ I2I prompt_strength set:', modelInput.prompt_strength);
+      } else if (body.metadata?.reference_strength) {
+        modelInput.prompt_strength = Math.min(Math.max(1 - body.metadata.reference_strength, 0), 1);
+        console.log('🎚️ I2I prompt_strength derived from reference_strength:', modelInput.prompt_strength);
+      } else if (body.metadata?.denoise_strength) {
+        modelInput.prompt_strength = Math.min(Math.max(body.metadata.denoise_strength, 0), 1);
+        console.log('🎚️ I2I prompt_strength derived from denoise_strength:', modelInput.prompt_strength);
+      }
+    }
+    
+    // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')
+    if (body.input?.negative_prompt !== undefined) {
+      modelInput.negative_prompt = body.input.negative_prompt;
+    }
+    
+    // Map seed (UI uses 'seed', model uses 'seed') - unconditional mapping
+    if (body.input?.seed !== undefined) {
+      modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
+    }
+    
+    // Map and validate scheduler - convert UI values to Replicate canonical values - unconditional mapping
+    if (body.input?.scheduler !== undefined) {
+      const schedulerMap: Record<string, string> = {
+        'EulerA': 'K_EULER_ANCESTRAL',
+          'MultistepDPM-Solver': 'DPMSolverMultistep', 
+          'MultistepDPM': 'DPMSolverMultistep',
+          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
+          'DPMSolverMultistep': 'DPMSolverMultistep',
+          'K_EULER': 'K_EULER',
+          'DDIM': 'DDIM',
+          'HeunDiscrete': 'HeunDiscrete', 
+          'KarrasDPM': 'KarrasDPM',
+          'PNDM': 'PNDM'
+        };
+        
+      const allowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
+      const mappedScheduler = schedulerMap[body.input.scheduler];
+      
+      if (mappedScheduler && allowedSchedulers.includes(mappedScheduler)) {
+        modelInput.scheduler = mappedScheduler;
+        console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
+      } else {
+        console.log(`⚠️ Invalid scheduler "${body.input.scheduler}" - omitting scheduler parameter, letting Replicate use default`);
+        // Don't set scheduler - let Replicate use its default
       }
     }
     
@@ -303,43 +360,6 @@ serve(async (req) => {
         modelInput.height = aspectRatioMap[aspectRatio].height;
         console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${modelInput.width}x${modelInput.height}`);
       }
-      
-      // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')
-      if (body.input.negative_prompt !== undefined) {
-        modelInput.negative_prompt = body.input.negative_prompt;
-      }
-      
-      // Map seed (UI uses 'seed', model uses 'seed')
-      if (body.input.seed !== undefined) {
-        modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
-      }
-      
-      // Map and validate scheduler - convert UI values to Replicate canonical values
-      if (body.input.scheduler !== undefined) {
-        const schedulerMap: Record<string, string> = {
-          'EulerA': 'K_EULER_ANCESTRAL',
-          'MultistepDPM-Solver': 'DPMSolverMultistep', 
-          'MultistepDPM': 'DPMSolverMultistep',
-          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
-          'DPMSolverMultistep': 'DPMSolverMultistep',
-          'K_EULER': 'K_EULER',
-          'DDIM': 'DDIM',
-          'HeunDiscrete': 'HeunDiscrete', 
-          'KarrasDPM': 'KarrasDPM',
-          'PNDM': 'PNDM'
-        };
-        
-        const allowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
-        const mappedScheduler = schedulerMap[body.input.scheduler];
-        
-        if (mappedScheduler && allowedSchedulers.includes(mappedScheduler)) {
-          modelInput.scheduler = mappedScheduler;
-          console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
-        } else {
-          console.log(`⚠️ Invalid scheduler "${body.input.scheduler}" - omitting scheduler parameter, letting Replicate use default`);
-          // Don't set scheduler - let Replicate use its default
-        }
-      }
     }
     
     // Apply auto-populated negative prompt if no user override
@@ -352,13 +372,21 @@ serve(async (req) => {
 
     console.log('🔧 Model input configuration:', modelInput);
     
-    // Enhanced logging for negative prompt debugging
-    console.log('🎯 Negative prompt configuration:', {
-      user_provided: !!body.input?.negative_prompt,
-      auto_populated: !!negativePrompt,
-      content_mode_from_toggle: body.metadata?.contentType || 'not_provided',
-      model_type: normalizedModelType,
-      final_negative_prompt: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : 'none'
+    // Enhanced logging for all input parameters sent to Replicate
+    console.log('🎯 Complete Replicate input object:', {
+      prompt: modelInput.prompt ? `${modelInput.prompt.substring(0, 50)}...` : 'none',
+      negative_prompt: modelInput.negative_prompt ? `${modelInput.negative_prompt.substring(0, 50)}...` : 'none',
+      width: modelInput.width,
+      height: modelInput.height,
+      num_inference_steps: modelInput.num_inference_steps,
+      guidance_scale: modelInput.guidance_scale,
+      scheduler: modelInput.scheduler,
+      seed: modelInput.seed,
+      num_outputs: modelInput.num_outputs,
+      disable_safety_checker: modelInput.disable_safety_checker,
+      image: modelInput.image ? 'present' : 'none',
+      prompt_strength: modelInput.prompt_strength,
+      content_mode: body.metadata?.contentType || 'not_provided'
     });
 
     // Create prediction with webhook
