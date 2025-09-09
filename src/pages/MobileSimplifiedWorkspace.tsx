@@ -207,7 +207,7 @@ const MobileSimplifiedWorkspace = () => {
     <OurVidzDashboardLayout>
       <div className="flex flex-col min-h-screen bg-background">
         {/* Main Content */}
-        <div className="flex-1 p-4 pb-32">
+        <div className="flex-1 p-2 pb-32">
           {/* Progress Indicator */}
           {isGenerating && (
             <div className="mb-4">
