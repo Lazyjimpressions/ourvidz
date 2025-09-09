@@ -266,7 +266,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   onMotionIntensityChange,
   soundEnabled = false,
   onSoundToggle,
-  aspectRatio = '16:9',
+  aspectRatio = '1:1',
   onAspectRatioChange,
   shotType = 'wide',
   onShotTypeChange,

@@ -261,6 +261,13 @@ serve(async (req) => {
       ...apiModel.input_defaults
     };
     
+    // Disable safety checker for NSFW content
+    const contentMode = body.metadata?.contentType;
+    if (contentMode === 'nsfw') {
+      modelInput.disable_safety_checker = true;
+      console.log('🔓 Safety checker disabled for NSFW content');
+    }
+    
     // Apply user input overrides with validation
     if (body.input) {
       // Map steps (UI uses 'steps', model uses 'steps')
@@ -279,6 +286,22 @@ serve(async (req) => {
       }
       if (body.input.height !== undefined) {
         modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
+      }
+    }
+    
+    // Map aspect ratio to dimensions if not explicitly provided
+    if (!body.input?.width && !body.input?.height && body.metadata?.aspectRatio) {
+      const aspectRatio = body.metadata.aspectRatio;
+      const aspectRatioMap: Record<string, { width: number; height: number }> = {
+        '1:1': { width: 1024, height: 1024 },
+        '16:9': { width: 1344, height: 768 },
+        '9:16': { width: 768, height: 1344 }
+      };
+      
+      if (aspectRatioMap[aspectRatio]) {
+        modelInput.width = aspectRatioMap[aspectRatio].width;
+        modelInput.height = aspectRatioMap[aspectRatio].height;
+        console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${modelInput.width}x${modelInput.height}`);
       }
       
       // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')

@@ -161,8 +161,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [referenceImageUrl, setReferenceImageUrl] = useState<string | null>(null);
   const [referenceStrength, setReferenceStrength] = useState(0.80); // Better default for character mode
-  const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('sfw');
-  const [quality, setQuality] = useState<'fast' | 'high'>('fast');
+  const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('nsfw');
+  const [quality, setQuality] = useState<'fast' | 'high'>('high');
   // Model Type Selection
   const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate'; display_name: string } => {
     // Check localStorage for full model object (new format)
@@ -223,7 +223,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [soundEnabled, setSoundEnabled] = useState(false);
   
   // Control Parameters
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '1:1' | '9:16'>('16:9');
+  const [aspectRatio, setAspectRatio] = useState<'16:9' | '1:1' | '9:16'>('1:1');
   const [shotType, setShotType] = useState<'wide' | 'medium' | 'close'>('wide');
   const [cameraAngle, setCameraAngle] = useState<'none' | 'eye_level' | 'low_angle' | 'over_shoulder' | 'overhead' | 'bird_eye'>('eye_level');
   const [style, setStyle] = useState('cinematic lighting, film grain, dramatic composition');

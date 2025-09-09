@@ -40,9 +40,9 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   quality,
   onQualityChange,
   onReferenceImageSet,
-  contentType = 'sfw',
+  contentType = 'nsfw',
   onContentTypeChange,
-  aspectRatio = '16:9',
+  aspectRatio = '1:1',
   onAspectRatioChange,
   onCollapsedChange
 }) => {
