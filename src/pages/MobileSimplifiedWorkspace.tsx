@@ -15,6 +15,7 @@ import { useImageModels } from '@/hooks/useApiModels';
 
 const MobileSimplifiedWorkspace = () => {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [isControlsExpanded, setIsControlsExpanded] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const processedRef = useRef(false);
@@ -30,11 +31,15 @@ const MobileSimplifiedWorkspace = () => {
     activeJobId,
     quality,
     selectedModel,
+    contentType,
+    aspectRatio,
     // Actions
     updateMode,
     setPrompt,
     setQuality,
     setSelectedModel,
+    setContentType,
+    setAspectRatio,
     setReferenceImage,
     setReferenceMetadata,
     setExactCopyMode,
@@ -207,7 +212,7 @@ const MobileSimplifiedWorkspace = () => {
     <OurVidzDashboardLayout>
       <div className="flex flex-col min-h-screen bg-background">
         {/* Main Content */}
-        <div className="flex-1 p-2 pb-32">
+        <div className={`flex-1 p-2 ${isControlsExpanded ? 'pb-80' : 'pb-32'}`}>
           {/* Progress Indicator */}
           {isGenerating && (
             <div className="mb-4">
@@ -244,6 +249,11 @@ const MobileSimplifiedWorkspace = () => {
           quality={quality}
           onQualityChange={setQuality}
           onReferenceImageSet={handleReferenceImageSet}
+          contentType={contentType}
+          onContentTypeChange={setContentType}
+          aspectRatio={aspectRatio}
+          onAspectRatioChange={setAspectRatio}
+          onCollapsedChange={setIsControlsExpanded}
         />
 
         {/* Lightbox */}
