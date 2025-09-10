@@ -294,15 +294,17 @@ serve(async (req) => {
     const capabilities = apiModel.capabilities || {};
     const allowedInputKeys = Array.isArray(capabilities.allowed_input_keys) ? capabilities.allowed_input_keys : [];
     const inputKeyMappings = (typeof capabilities.input_key_mappings === 'object' && capabilities.input_key_mappings && !Array.isArray(capabilities.input_key_mappings)) ? capabilities.input_key_mappings : {};
+    const allowedSchedulers = Array.isArray(capabilities.allowed_schedulers) ? capabilities.allowed_schedulers : [];
     
     // Handle scheduler aliases robustly - ensure it's an object, not array
-    let schedulerAliases = {};
+    let schedulerAliases: Record<string, string> = {};
     if (typeof capabilities.scheduler_aliases === 'object' && capabilities.scheduler_aliases && !Array.isArray(capabilities.scheduler_aliases)) {
-      schedulerAliases = capabilities.scheduler_aliases;
+      schedulerAliases = capabilities.scheduler_aliases as Record<string, string>;
     }
     
     console.log('🔧 Model capabilities:', {
       allowed_input_keys: allowedInputKeys,
+      allowed_schedulers: allowedSchedulers,
       scheduler_aliases: schedulerAliases,
       input_key_mappings: inputKeyMappings
     });
@@ -341,40 +343,33 @@ serve(async (req) => {
         modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
       }
       
-      // Map scheduler with model-specific aliases - always start with robust defaults
-      if (body.input.scheduler !== undefined) {
-        // Default scheduler mapping for Replicate SDXL models
-        const defaultSchedulerMap = {
-          'EulerA': 'K_EULER_ANCESTRAL',
-          'MultistepDPM-Solver': 'DPMSolverMultistep', 
-          'MultistepDPM': 'DPMSolverMultistep',
-          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
-          'DPMSolverMultistep': 'DPMSolverMultistep',
-          'K_EULER': 'K_EULER',
-          'DDIM': 'DDIM',
-          'HeunDiscrete': 'HeunDiscrete', 
-          'KarrasDPM': 'KarrasDPM',
-          'PNDM': 'PNDM'
-        };
-        
-        // Merge model-specific overrides if provided
-        const finalSchedulerMap = { ...defaultSchedulerMap, ...schedulerAliases };
-        
-        console.log('🔧 Final scheduler map:', finalSchedulerMap);
-        
-        // Map the scheduler
-        let mappedScheduler = finalSchedulerMap[body.input.scheduler] || body.input.scheduler;
-        
-        // Safety check: ensure mapped scheduler is in Replicate's allowed list
-        const replicateAllowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
-        if (!replicateAllowedSchedulers.includes(mappedScheduler)) {
-          console.log(`⚠️ Mapped scheduler "${mappedScheduler}" not in Replicate's allowed list, falling back to K_EULER_ANCESTRAL`);
-          mappedScheduler = 'K_EULER_ANCESTRAL';
+        // Map scheduler strictly using database capabilities
+        if (body.input.scheduler !== undefined) {
+          const allowed = Array.isArray(allowedSchedulers) ? allowedSchedulers : [];
+          let desired = body.input.scheduler;
+
+          // Apply optional alias mapping from DB
+          if (schedulerAliases && schedulerAliases[desired]) {
+            desired = schedulerAliases[desired];
+          }
+
+          if (allowed.length > 0) {
+            if (desired && allowed.includes(desired)) {
+              modelInput.scheduler = desired;
+            } else if (apiModel.input_defaults?.scheduler && allowed.includes(apiModel.input_defaults.scheduler)) {
+              modelInput.scheduler = apiModel.input_defaults.scheduler;
+              console.log(`⚠️ Scheduler "${body.input.scheduler}" not allowed. Using default from DB: ${modelInput.scheduler}`);
+            } else {
+              delete (modelInput as any).scheduler;
+              console.log(`⚠️ Scheduler "${body.input.scheduler}" not allowed and no valid default; omitting scheduler.`);
+            }
+          } else {
+            // No allowed list defined; pass through as-is
+            modelInput.scheduler = desired;
+          }
+
+          console.log(`🔧 Scheduler set to: ${modelInput.scheduler}`);
         }
-        
-        modelInput.scheduler = mappedScheduler;
-        console.log(`🔧 Scheduler validation: ${body.input.scheduler} -> ${finalSchedulerMap[body.input.scheduler] || 'unmapped'} -> final: ${mappedScheduler}`);
-      }
     }
     
     // Map aspect ratio to dimensions if not explicitly provided
@@ -400,15 +395,28 @@ serve(async (req) => {
     
     // Filter input to only allowed keys for this model to prevent 422 errors
     if (allowedInputKeys.length > 0) {
-      const filteredInput = {};
+      const filteredInput: Record<string, any> = {};
       Object.keys(modelInput).forEach(key => {
         if (allowedInputKeys.includes(key) || ['prompt', 'num_outputs'].includes(key)) {
-          filteredInput[key] = modelInput[key];
+          filteredInput[key] = (modelInput as any)[key];
         } else {
           console.log(`🚮 Filtered out unsupported input key: ${key}`);
         }
       });
-      Object.assign(modelInput, filteredInput);
+      Object.assign(modelInput as any, filteredInput);
+    }
+
+    // Remove null/undefined keys to satisfy Replicate schema
+    Object.keys(modelInput as any).forEach((key) => {
+      const val = (modelInput as any)[key];
+      if (val === null || val === undefined) {
+        delete (modelInput as any)[key];
+      }
+    });
+
+    // Ensure seed is a valid integer; otherwise omit
+    if ('seed' in (modelInput as any) && (typeof (modelInput as any).seed !== 'number' || Number.isNaN((modelInput as any).seed))) {
+      delete (modelInput as any).seed;
     }
     
     // Build model identifier from database fields
