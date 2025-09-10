@@ -160,8 +160,11 @@ serve(async (req) => {
     
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
+    // Detect if this is an i2i request based on reference image
+    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage);
+    
     // Normalize model_type for database constraint compatibility
-    const normalizeModelType = (modelFamily: string | null, modelKey: string): string => {                                              
+    const normalizeModelType = (modelFamily: string | null, modelKey: string, isI2I: boolean = false): string => {                                              
       if (!modelFamily) return 'rv51'; // Default fallback
       
       const family = modelFamily.toLowerCase();
@@ -173,7 +176,7 @@ serve(async (req) => {
       if (family.includes('sdxl') || key.includes('sdxl')) {
         // Check if this is a Replicate SDXL model (not local Lustify SDXL)
         if (apiModel.api_providers.name === 'replicate') {
-          return 'replicate-sdxl';
+          return isI2I ? 'replicate-sdxl-i2i' : 'replicate-sdxl';
         }
         return 'sdxl'; // Local Lustify SDXL
       }
@@ -183,7 +186,7 @@ serve(async (req) => {
       return 'rv51';
     };
     
-    const normalizedModelType = normalizeModelType(apiModel.model_family, apiModel.model_key);
+    const normalizedModelType = normalizeModelType(apiModel.model_family, apiModel.model_key, hasReferenceImage);
     
     console.log('🎯 Job parameters validated:', {
       jobType_from_body: body.job_type,
@@ -205,11 +208,24 @@ serve(async (req) => {
         const contentMode = body.metadata?.contentType; // Direct from UI toggle
         
         if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          // Use shared utility function to get ALL negative prompts for the model/content mode
-          negativePrompt = await getDatabaseNegativePrompts(normalizedModelType, contentMode);
+          // Determine generation mode for targeted negative prompts
+          const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
           
-          if (negativePrompt) {
-            console.log(`📝 Auto-populated combined negative prompts for ${normalizedModelType}_${contentMode}`);
+          // Use shared utility function to get ALL negative prompts for the model/content mode/generation mode
+          const { data: negativePrompts, error: negError } = await supabase
+            .from('negative_prompts')
+            .select('negative_prompt')
+            .eq('model_type', normalizedModelType.replace('-i2i', '')) // Remove i2i suffix for lookup
+            .eq('content_mode', contentMode)
+            .eq('generation_mode', generationMode)
+            .eq('is_active', true)
+            .order('priority', { ascending: false });
+          
+          if (!negError && negativePrompts?.length > 0) {
+            negativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
+            console.log(`📝 Auto-populated ${generationMode} negative prompts for ${normalizedModelType}_${contentMode}: ${negativePrompts.length} prompts`);
+          } else {
+            console.log(`⚠️ No ${generationMode} negative prompts found for ${normalizedModelType}_${contentMode}`);
           }
         } else {
           console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
@@ -274,16 +290,32 @@ serve(async (req) => {
       console.log('🔓 Safety checker disabled for NSFW content');
     }
     
-    // Apply user input overrides with validation
+    // Get model capabilities for input validation
+    const capabilities = apiModel.capabilities || {};
+    const allowedInputKeys = capabilities.allowed_input_keys || [];
+    const schedulerAliases = capabilities.scheduler_aliases || {};
+    const inputKeyMappings = capabilities.input_key_mappings || {};
+    
+    console.log('🔧 Model capabilities:', {
+      allowed_input_keys: allowedInputKeys,
+      scheduler_aliases: Object.keys(schedulerAliases),
+      input_key_mappings: Object.keys(inputKeyMappings)
+    });
+    
+    // Apply user input overrides with model-specific validation
     if (body.input) {
-      // Map steps (UI uses 'steps', model uses 'steps')
+      // Map steps with model-specific key names
       if (body.input.steps !== undefined) {
-        modelInput.steps = Math.min(Math.max(body.input.steps, 1), 100);
+        const stepsKey = inputKeyMappings.steps || 'steps';
+        modelInput[stepsKey] = Math.min(Math.max(body.input.steps, 1), 100);
+        console.log(`🔧 Mapped steps: ${body.input.steps} -> ${stepsKey}:${modelInput[stepsKey]}`);
       }
       
-      // Map guidance (UI uses 'guidance_scale', model uses 'guidance')  
+      // Map guidance_scale with model-specific key names
       if (body.input.guidance_scale !== undefined) {
-        modelInput.guidance = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        const guidanceKey = inputKeyMappings.guidance_scale || 'guidance_scale';
+        modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        console.log(`🔧 Mapped guidance_scale: ${body.input.guidance_scale} -> ${guidanceKey}:${modelInput[guidanceKey]}`);
       }
       
       // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
@@ -292,6 +324,37 @@ serve(async (req) => {
       }
       if (body.input.height !== undefined) {
         modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
+      }
+      
+      // Map negative prompt (always applies)
+      if (body.input.negative_prompt !== undefined) {
+        modelInput.negative_prompt = body.input.negative_prompt;
+      }
+      
+      // Map seed (always applies)
+      if (body.input.seed !== undefined) {
+        modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
+      }
+      
+      // Map scheduler with model-specific aliases (always applies)
+      if (body.input.scheduler !== undefined) {
+        // Use model-specific scheduler mapping if available
+        const modelSchedulerMap = schedulerAliases || {
+          'EulerA': 'K_EULER_ANCESTRAL',
+          'MultistepDPM-Solver': 'DPMSolverMultistep', 
+          'MultistepDPM': 'DPMSolverMultistep',
+          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
+          'DPMSolverMultistep': 'DPMSolverMultistep',
+          'K_EULER': 'K_EULER',
+          'DDIM': 'DDIM',
+          'HeunDiscrete': 'HeunDiscrete', 
+          'KarrasDPM': 'KarrasDPM',
+          'PNDM': 'PNDM'
+        };
+        
+        const mappedScheduler = modelSchedulerMap[body.input.scheduler] || body.input.scheduler;
+        modelInput.scheduler = mappedScheduler;
+        console.log(`🔧 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
       }
     }
     
@@ -309,48 +372,24 @@ serve(async (req) => {
         modelInput.height = aspectRatioMap[aspectRatio].height;
         console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${modelInput.width}x${modelInput.height}`);
       }
-      
-      // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')
-      if (body.input.negative_prompt !== undefined) {
-        modelInput.negative_prompt = body.input.negative_prompt;
-      }
-      
-      // Map seed (UI uses 'seed', model uses 'seed')
-      if (body.input.seed !== undefined) {
-        modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
-      }
-      
-      // Map and validate scheduler - convert UI values to Replicate canonical values
-      if (body.input.scheduler !== undefined) {
-        const schedulerMap: Record<string, string> = {
-          'EulerA': 'K_EULER_ANCESTRAL',
-          'MultistepDPM-Solver': 'DPMSolverMultistep', 
-          'MultistepDPM': 'DPMSolverMultistep',
-          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
-          'DPMSolverMultistep': 'DPMSolverMultistep',
-          'K_EULER': 'K_EULER',
-          'DDIM': 'DDIM',
-          'HeunDiscrete': 'HeunDiscrete', 
-          'KarrasDPM': 'KarrasDPM',
-          'PNDM': 'PNDM'
-        };
-        
-        const allowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
-        const mappedScheduler = schedulerMap[body.input.scheduler];
-        
-        if (mappedScheduler && allowedSchedulers.includes(mappedScheduler)) {
-          modelInput.scheduler = mappedScheduler;
-          console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
-        } else {
-          console.log(`⚠️ Invalid scheduler "${body.input.scheduler}" - omitting scheduler parameter, letting Replicate use default`);
-          // Don't set scheduler - let Replicate use its default
-        }
-      }
     }
     
     // Apply auto-populated negative prompt if no user override
     if (!modelInput.negative_prompt && negativePrompt) {
       modelInput.negative_prompt = negativePrompt;
+    }
+    
+    // Filter input to only allowed keys for this model to prevent 422 errors
+    if (allowedInputKeys.length > 0) {
+      const filteredInput = {};
+      Object.keys(modelInput).forEach(key => {
+        if (allowedInputKeys.includes(key) || ['prompt', 'num_outputs'].includes(key)) {
+          filteredInput[key] = modelInput[key];
+        } else {
+          console.log(`🚮 Filtered out unsupported input key: ${key}`);
+        }
+      });
+      Object.assign(modelInput, filteredInput);
     }
     
     // Build model identifier from database fields

@@ -900,6 +900,7 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           description: string | null
+          generation_mode: string | null
           id: string
           is_active: boolean | null
           model_type: string
@@ -912,6 +913,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          generation_mode?: string | null
           id?: string
           is_active?: boolean | null
           model_type?: string
@@ -924,6 +926,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           description?: string | null
+          generation_mode?: string | null
           id?: string
           is_active?: boolean | null
           model_type?: string

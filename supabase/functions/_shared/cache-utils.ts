@@ -365,11 +365,12 @@ export async function getDatabaseTemplate(
 }
 
 /**
- * Get database negative prompts
+ * Get database negative prompts with generation mode support
  */
 export async function getDatabaseNegativePrompts(
   modelType: string,
-  contentMode: string
+  contentMode: string,
+  generationMode: string = 'txt2img'
 ): Promise<string> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
@@ -381,16 +382,17 @@ export async function getDatabaseNegativePrompts(
     .select('negative_prompt')
     .eq('model_type', modelType)
     .eq('content_mode', contentMode)
+    .eq('generation_mode', generationMode)
     .eq('is_active', true)
     .order('priority', { ascending: true });
 
   if (error || !data || data.length === 0) {
-    console.warn(`⚠️ No negative prompts found for ${modelType}_${contentMode}`);
+    console.warn(`⚠️ No negative prompts found for ${modelType}_${contentMode}_${generationMode}`);
     return '';
   }
 
   const combined = data.map(d => d.negative_prompt).join(', ');
-  console.log(`✅ Database negative prompts loaded for ${modelType}_${contentMode}`);
+  console.log(`✅ Database negative prompts loaded for ${modelType}_${contentMode}_${generationMode}: ${data.length} prompts`);
   
   return combined;
 }
