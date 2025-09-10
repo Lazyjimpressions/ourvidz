@@ -42,7 +42,7 @@
 - **api_providers** (12 cols, 1 row) - External API configuration
 - **api_models** (19 cols, 1 row) - Model configurations & capabilities
 - **prompt_templates** (18 cols, 19 rows) - Prompt enhancement templates
-- **negative_prompts** (10 cols, 8 rows) - Negative prompt presets
+- **negative_prompts** (11 cols, 12 rows) - Negative prompt presets with generation mode support
 - **enhancement_presets** (13 cols, 4 rows) - Quality enhancement presets
 - **compel_configs** (10 cols, 0 rows) - Compel prompt configurations
 - **system_config** (4 cols, 1 row) - Global system settings
@@ -203,7 +203,7 @@ characters (10 characters)
 - **API Models**: 1 active model configured
 - **Prompt Templates**: 19 active templates
 - **Enhancement Presets**: 4 quality presets
-- **Negative Prompts**: 8 preset categories
+- **Negative Prompts**: 12 preset categories (including I2I-specific prompts)
 - **Edge Functions**: 23 active functions
 - **Storage Buckets**: 6 active buckets
 
@@ -517,6 +517,32 @@ supabase functions deploy [function-name]
 - **Performance Insights**: Live system metrics and optimization opportunities
 - **Security Monitoring**: Continuous RLS policy and access control validation
 - **Automated Documentation**: Keep this guide current with minimal effort
+
+---
+
+## **Enhanced System Tables**
+
+### **negative_prompts** (11 columns, 12 rows)
+**Purpose**: Negative prompt presets with generation mode support for different model types and content modes  
+**Key Columns**: 
+- `model_type`: Model family ('sdxl', 'rv51', 'replicate-sdxl', 'chat')
+- `content_mode`: Content type ('nsfw', 'sfw') 
+- `generation_mode`: Generation type ('txt2img', 'i2i') - **NEW COLUMN**
+- `negative_prompt`: The actual negative prompt terms
+- `priority`: Priority level (1, 2, 3...)
+- `is_active`: Whether the prompt is currently active
+
+**Current Data**:
+- **SDXL (Local Lustify)**: 8 rows for NSFW/SFW with multiple priority levels
+- **RV51 (Replicate)**: 8 rows for NSFW/SFW with multiple priority levels  
+- **Replicate SDXL**: 4 rows (2 txt2img + 2 i2i) with I2I-optimized minimal prompts
+- **Chat**: 2 rows for NSFW/SFW assistant anti-prompts
+
+**I2I Optimization**: 
+- **Regular prompts**: 7-12 terms for quality control
+- **I2I prompts**: 3 terms only (`'blurry, worst quality, jpeg artifacts'`) to prevent modification interference
+
+**Usage**: Edge functions query by `model_type`, `content_mode`, and `generation_mode` to get targeted negative prompts
 
 ---
 
