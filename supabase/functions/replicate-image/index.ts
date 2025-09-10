@@ -415,8 +415,12 @@ serve(async (req) => {
     });
 
     // Ensure seed is a valid integer; otherwise omit
-    if ('seed' in (modelInput as any) && (typeof (modelInput as any).seed !== 'number' || Number.isNaN((modelInput as any).seed))) {
-      delete (modelInput as any).seed;
+    if ('seed' in (modelInput as any)) {
+      const seed = (modelInput as any).seed;
+      if (seed === null || seed === undefined || typeof seed !== 'number' || Number.isNaN(seed)) {
+        delete (modelInput as any).seed;
+        console.log('🚮 Removed invalid seed value:', seed);
+      }
     }
     
     // Build model identifier from database fields
