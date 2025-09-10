@@ -278,9 +278,9 @@ serve(async (req) => {
     
     // Start with defaults from API model configuration
     const modelInput = {
-      prompt: body.prompt,
       num_outputs: 1, // Explicitly request single image to avoid grid composites
-      ...apiModel.input_defaults
+      ...apiModel.input_defaults,
+      prompt: body.prompt // Override with user's prompt (must come after spread to avoid being overwritten)
     };
     
     // Disable safety checker for NSFW content
