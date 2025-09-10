@@ -1,8 +1,6 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Replicate from "https://esm.sh/replicate@0.25.2";
-import { getDatabaseNegativePrompts } from '../_shared/cache-utils.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -44,83 +42,54 @@ serve(async (req) => {
       );
     }
 
-    // Resolve API model configuration - REQUIRED, no fallbacks
-    let apiModel = null;
-    
-    if (body.apiModelId) {
-      // Use specific model by ID
-      const { data: model, error: modelError } = await supabase
-        .from('api_models')
-        .select(`
-          *,
-          api_providers!inner(*)
-        `)
-        .eq('id', body.apiModelId)
-        .eq('is_active', true)
-        .single();
+    // Get model configuration using the new plug-and-play system
+    const { data: modelConfig, error: modelError } = await supabase
+      .rpc('get_model_configuration', { model_id: body.apiModelId })
+      .single();
 
-      if (modelError || !model) {
-        console.error('❌ Specified API model not found:', modelError);
-        return new Response(
-          JSON.stringify({ error: 'Specified API model not found or inactive' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-        );
-      }
-      apiModel = model;
-    } else {
-      // Use default model for replicate image generation - REQUIRE apiModelId instead
+    if (modelError || !modelConfig) {
+      console.error('❌ Model configuration not found:', modelError);
       return new Response(
-        JSON.stringify({ error: 'apiModelId is required for Replicate image generation' }),
+        JSON.stringify({ error: 'Model configuration not found' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-    
-    // Validate provider and get API key
-    if (apiModel.api_providers.name !== 'replicate') {
-      console.error('❌ Invalid provider for replicate-image function:', apiModel.api_providers.name);
-      return new Response(
-        JSON.stringify({ error: 'Model provider must be Replicate for this function' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-    
-    if (!apiModel.version) {
-      console.error('❌ Model version required for Replicate API:', apiModel.model_key);
-      return new Response(
-        JSON.stringify({ error: 'Model version is required in api_models table for Replicate models' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-    // Validate version format (Replicate uses a 32-64 char hex hash)
-    const versionId: string = apiModel.version;
-    const versionFormatOk = /^[a-f0-9]{32,64}$/i.test(versionId);
-    if (!versionFormatOk) {
-      console.error('❌ Invalid Replicate version format. Expected hex hash, got:', versionId);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid Replicate version format',
-          details: 'api_models.version must be the version ID (hash), not a model slug or name',
-          provided: versionId
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-    
-    const replicateApiKey = Deno.env.get(apiModel.api_providers.secret_name);
-    if (!replicateApiKey) {
-      console.error('❌ Replicate API key not found for secret:', apiModel.api_providers.secret_name);
-      return new Response(
-        JSON.stringify({ error: 'Replicate API key not configured in environment secrets' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-      );
-    }
-    
-    console.log('✅ Using Replicate model from database:', {
-      model_key: apiModel.model_key,
-      version: apiModel.version,
-      display_name: apiModel.display_name,
-      provider: apiModel.api_providers.name
+
+    console.log('✅ Using model configuration:', {
+      model_key: modelConfig.model_key,
+      version: modelConfig.version,
+      display_name: modelConfig.display_name,
+      provider_name: modelConfig.provider_name
     });
+
+    // Validate required parameters
+    if (!body.prompt) {
+      return new Response(
+        JSON.stringify({ error: "Missing required field: prompt" }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const jobType = body.job_type || body.jobType;
+    if (!jobType) {
+      console.error('❌ Missing job type for replicate-image function');
+      return new Response(
+        JSON.stringify({ error: 'Job type is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
+
+    // Get API key from provider configuration
+    const replicateApiKey = Deno.env.get(modelConfig.provider_secret_name);
+    if (!replicateApiKey) {
+      console.error('❌ API key not found for provider:', modelConfig.provider_secret_name);
+      return new Response(
+        JSON.stringify({ error: 'API key not configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
 
     const replicate = new Replicate({ auth: replicateApiKey });
 
@@ -138,81 +107,177 @@ serve(async (req) => {
       });
     }
 
-    // Generate image with model configuration
-    if (!body.prompt) {
-      return new Response(
-        JSON.stringify({ error: "Missing required field: prompt" }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
-      );
-    }
+    // Build UI parameters from request
+    const uiParams = {
+      prompt: body.prompt,
+      steps: body.input?.steps,
+      guidance_scale: body.input?.guidance_scale,
+      width: body.input?.width,
+      height: body.input?.height,
+      seed: body.input?.seed,
+      negative_prompt: body.input?.negative_prompt,
+      scheduler: body.input?.scheduler,
+      num_images: body.input?.num_outputs || 1,
+      image: body.input?.image,
+      prompt_strength: body.input?.prompt_strength
+    };
 
-    // Extract and validate job parameters - Accept any Replicate image model job type
-    const jobType = body.job_type || body.jobType;
-    if (!jobType) {
-      console.error('❌ Missing job type for replicate-image function');
+    // Validate parameters using database-driven validation
+    const { data: validationResult, error: validationError } = await supabase
+      .rpc('validate_model_parameters', { 
+        model_id_param: body.apiModelId, 
+        input_params: uiParams 
+      })
+      .single();
+
+    if (validationError || !validationResult.is_valid) {
+      console.error('❌ Parameter validation failed:', validationResult.errors);
       return new Response(
-        JSON.stringify({ error: 'Job type is required' }),
+        JSON.stringify({ 
+          error: 'Invalid parameters',
+          details: validationResult.errors 
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
-    
-    const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
-    
-    // Normalize model_type for database constraint compatibility
-    const normalizeModelType = (modelFamily: string | null, modelKey: string): string => {
-      if (!modelFamily) return 'rv51'; // Default fallback
-      
-      const family = modelFamily.toLowerCase();
-      const key = modelKey.toLowerCase();
-      
-      // Map model families to valid database enum values
-      if (family.includes('rv') || key.includes('realistic')) return 'rv51';
-      if (family.includes('flux') || key.includes('flux')) return 'flux';
-      if (family.includes('sdxl') || key.includes('sdxl')) return 'sdxl';
-      if (jobType.includes('rv51')) return 'rv51'; // Fallback from job_type
-      
-      // Final fallback
-      return 'rv51';
-    };
-    
-    const normalizedModelType = normalizeModelType(apiModel.model_family, apiModel.model_key);
-    
-    console.log('🎯 Job parameters validated:', {
-      jobType_from_body: body.job_type,
-      jobType_legacy: body.jobType,
-      final_jobType: jobType,
-      quality_from_body: body.quality,
-      final_quality: quality,
-      model_family_raw: apiModel.model_family,
-      model_key: apiModel.model_key,
-      normalized_model_type: normalizedModelType
-    });
 
-    // Auto-populate negative prompt based on content mode from toggle
-    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
-    
-    if (!negativePrompt) {
-      try {
-        // Use content mode directly from toggle - no detection or fallback
-        const contentMode = body.metadata?.contentType; // Direct from UI toggle
-        
-        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          // Use shared utility function to get ALL negative prompts for the model/content mode
-          negativePrompt = await getDatabaseNegativePrompts(normalizedModelType, contentMode);
-          
-          if (negativePrompt) {
-            console.log(`📝 Auto-populated combined negative prompts for ${normalizedModelType}_${contentMode}`);
+    // Map UI parameters to API parameters using database configuration
+    const { data: apiParams, error: mappingError } = await supabase
+      .rpc('map_ui_to_api_parameters', { 
+        model_id_param: body.apiModelId, 
+        ui_params: uiParams 
+      })
+      .single();
+
+    if (mappingError) {
+      console.error('❌ Parameter mapping failed:', mappingError);
+      return new Response(
+        JSON.stringify({ error: 'Parameter mapping failed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
+    // Apply quality preset if specified
+    if (quality && quality !== 'fast') {
+      const { data: qualityPreset, error: qualityError } = await supabase
+        .rpc('get_quality_preset', { 
+          model_id_param: body.apiModelId, 
+          quality: quality 
+        })
+        .single();
+
+      if (!qualityError && qualityPreset) {
+        // Merge quality preset parameters
+        Object.keys(qualityPreset).forEach(key => {
+          if (qualityPreset[key] !== null && qualityPreset[key] !== undefined) {
+            apiParams[key] = qualityPreset[key];
           }
-        } else {
-          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
-        }
-      } catch (error) {
-        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
+        });
+        console.log(`🎯 Applied ${quality} quality preset:`, qualityPreset);
       }
     }
 
+    // Handle I2I configuration if reference image is provided
+    if (body.input?.image || body.metadata?.reference_image_url) {
+      const { data: i2iConfig, error: i2iError } = await supabase
+        .rpc('get_i2i_configuration', { 
+          model_id_param: body.apiModelId,
+          reference_strength: body.metadata?.reference_strength,
+          exact_copy_mode: body.metadata?.exact_copy_mode || false
+        })
+        .single();
+
+      if (!i2iError && i2iConfig.is_supported) {
+        // Set I2I parameters
+        if (i2iConfig.image_param) {
+          apiParams[i2iConfig.image_param] = body.input?.image || body.metadata?.reference_image_url;
+        }
+        if (i2iConfig.strength_param) {
+          apiParams[i2iConfig.strength_param] = i2iConfig.strength_value;
+        }
+        console.log('🖼️ I2I configuration applied:', {
+          image_param: i2iConfig.image_param,
+          strength_param: i2iConfig.strength_param,
+          strength_value: i2iConfig.strength_value
+        });
+      }
+    }
+
+    // Handle aspect ratio mapping if dimensions not explicitly provided
+    if (!body.input?.width && !body.input?.height && body.metadata?.aspectRatio) {
+      const { data: dimensions, error: dimensionError } = await supabase
+        .rpc('get_aspect_ratio_dimensions', { 
+          model_id_param: body.apiModelId,
+          aspect_ratio: body.metadata.aspectRatio
+        })
+        .single();
+
+      if (!dimensionError && dimensions.width && dimensions.height) {
+        apiParams.width = dimensions.width;
+        apiParams.height = dimensions.height;
+        console.log(`📐 Mapped aspect ratio ${body.metadata.aspectRatio} to ${dimensions.width}x${dimensions.height}`);
+      }
+    }
+
+    // Handle scheduler mapping
+    if (body.input?.scheduler) {
+      const { data: mappedScheduler, error: schedulerError } = await supabase
+        .rpc('map_scheduler', { 
+          model_id_param: body.apiModelId,
+          ui_scheduler: body.input.scheduler
+        })
+        .single();
+
+      if (!schedulerError && mappedScheduler) {
+        apiParams.scheduler = mappedScheduler;
+        console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
+      }
+    }
+
+    // Handle content mode configuration (NSFW/SFW)
+    const contentMode = body.metadata?.contentType;
+    if (contentMode && modelConfig.content_mode_config?.[contentMode]) {
+      const modeConfig = modelConfig.content_mode_config[contentMode];
+      if (modeConfig.disable_safety_checker !== undefined) {
+        apiParams.disable_safety_checker = modeConfig.disable_safety_checker;
+        console.log(`🔓 Safety checker ${modeConfig.disable_safety_checker ? 'disabled' : 'enabled'} for ${contentMode} content`);
+      }
+    }
+
+    // Get and apply negative prompts using existing database system
+    if (!apiParams.negative_prompt) {
+      try {
+        // Map Replicate SDXL models to 'replicate-sdxl' model_type
+        let modelType = 'rv51'; // Default to RV51 for existing models
+        
+        if (modelConfig.model_family?.toLowerCase().includes('sdxl') && 
+            modelConfig.provider_name === 'replicate') {
+          modelType = 'replicate-sdxl';
+        } else if (modelConfig.model_key?.includes('realistic-vision')) {
+          modelType = 'rv51';
+        }
+        
+        // Use existing getDatabaseNegativePrompts function
+        const { getDatabaseNegativePrompts } = await import('../_shared/cache-utils.ts');
+        const negativePrompt = await getDatabaseNegativePrompts(modelType, contentMode || 'nsfw');
+        
+        if (negativePrompt) {
+          apiParams.negative_prompt = negativePrompt;
+          console.log(`📝 Applied negative prompts for ${modelType}_${contentMode}`);
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to get negative prompts:', error);
+      }
+    }
+
+    // Start with model defaults and merge with API parameters
+    const modelInput = {
+      ...modelConfig.input_defaults,
+      ...apiParams,
+      prompt: body.prompt
+    };
+
+    // Create job record
     const { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
@@ -221,18 +286,18 @@ serve(async (req) => {
         original_prompt: body.prompt,
         status: 'queued',
         quality: quality,
-        api_model_id: apiModel.id, // Always populated from database
-        model_type: normalizedModelType, // Normalized lowercase value
+        api_model_id: body.apiModelId,
+        model_type: modelConfig.model_family,
         format: 'image',
         metadata: {
           ...body.metadata,
-          provider_name: apiModel.api_providers.name,
-          model_key: apiModel.model_key,
-          version: apiModel.version,
-          api_model_configured: true,
-          content_mode: body.metadata?.contentType || null, // Direct from toggle
-          negative_prompt_auto_populated: !!negativePrompt,
-          negative_prompt_source: negativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
+          provider_name: modelConfig.provider_name,
+          model_key: modelConfig.model_key,
+          version: modelConfig.version,
+          content_mode: contentMode,
+          i2i_mode: body.metadata?.exact_copy_mode ? 'copy' : 'modify',
+          parameter_mapping_used: true,
+          configuration_source: 'database'
         }
       })
       .select()
@@ -251,127 +316,6 @@ serve(async (req) => {
 
     console.log('✅ Job created:', jobData.id);
 
-    // Build Replicate request using database model configuration
-    console.log(`🎨 Generating with database model: ${apiModel.display_name} (${apiModel.model_key}:${apiModel.version})`);
-    
-    // Start with defaults from API model configuration
-    const modelInput = {
-      prompt: body.prompt,
-      num_outputs: 1, // Explicitly request single image to avoid grid composites
-      ...apiModel.input_defaults
-    };
-    
-    // Disable safety checker for NSFW content
-    const contentMode = body.metadata?.contentType;
-    if (contentMode === 'nsfw') {
-      modelInput.disable_safety_checker = true;
-      console.log('🔓 Safety checker disabled for NSFW content');
-    }
-    
-    // Apply user input overrides with validation
-    if (body.input) {
-      // Map steps to num_inference_steps (Replicate schema)
-      if (body.input.steps !== undefined) {
-        modelInput.num_inference_steps = Math.min(Math.max(body.input.steps, 1), 100);
-      }
-      
-      // Map guidance_scale (keep same name for Replicate schema)
-      if (body.input.guidance_scale !== undefined) {
-        modelInput.guidance_scale = Math.min(Math.max(body.input.guidance_scale, 3.5), 15);
-      }
-      
-      // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
-      if (body.input.width !== undefined) {
-        modelInput.width = Math.min(Math.max(body.input.width, 64), 1920);
-      }
-      if (body.input.height !== undefined) {
-        modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
-      }
-      
-      // Map i2i parameters (image and prompt_strength)
-      if (body.input.image !== undefined) {
-        modelInput.image = body.input.image;
-        console.log('🖼️ I2I image set from input:', body.input.image);
-      } else if (body.metadata?.reference_image_url) {
-        modelInput.image = body.metadata.reference_image_url;
-        console.log('🖼️ I2I image set from metadata:', body.metadata.reference_image_url);
-      }
-      
-      if (body.input.prompt_strength !== undefined) {
-        modelInput.prompt_strength = Math.min(Math.max(body.input.prompt_strength, 0), 1);
-        console.log('🎚️ I2I prompt_strength set:', modelInput.prompt_strength);
-      } else if (body.metadata?.reference_strength) {
-        modelInput.prompt_strength = Math.min(Math.max(1 - body.metadata.reference_strength, 0), 1);
-        console.log('🎚️ I2I prompt_strength derived from reference_strength:', modelInput.prompt_strength);
-      } else if (body.metadata?.denoise_strength) {
-        modelInput.prompt_strength = Math.min(Math.max(body.metadata.denoise_strength, 0), 1);
-        console.log('🎚️ I2I prompt_strength derived from denoise_strength:', modelInput.prompt_strength);
-      }
-    }
-    
-    // Map negative prompt (UI uses 'negative_prompt', model uses 'negative_prompt')
-    if (body.input?.negative_prompt !== undefined) {
-      modelInput.negative_prompt = body.input.negative_prompt;
-    }
-    
-    // Map seed (UI uses 'seed', model uses 'seed') - unconditional mapping
-    if (body.input?.seed !== undefined) {
-      modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
-    }
-    
-    // Map and validate scheduler - convert UI values to Replicate canonical values - unconditional mapping
-    if (body.input?.scheduler !== undefined) {
-      const schedulerMap: Record<string, string> = {
-        'EulerA': 'K_EULER_ANCESTRAL',
-          'MultistepDPM-Solver': 'DPMSolverMultistep', 
-          'MultistepDPM': 'DPMSolverMultistep',
-          'K_EULER_ANCESTRAL': 'K_EULER_ANCESTRAL',
-          'DPMSolverMultistep': 'DPMSolverMultistep',
-          'K_EULER': 'K_EULER',
-          'DDIM': 'DDIM',
-          'HeunDiscrete': 'HeunDiscrete', 
-          'KarrasDPM': 'KarrasDPM',
-          'PNDM': 'PNDM'
-        };
-        
-      const allowedSchedulers = ['DDIM', 'DPMSolverMultistep', 'HeunDiscrete', 'KarrasDPM', 'K_EULER_ANCESTRAL', 'K_EULER', 'PNDM'];
-      const mappedScheduler = schedulerMap[body.input.scheduler];
-      
-      if (mappedScheduler && allowedSchedulers.includes(mappedScheduler)) {
-        modelInput.scheduler = mappedScheduler;
-        console.log(`📋 Scheduler mapped: ${body.input.scheduler} -> ${mappedScheduler}`);
-      } else {
-        console.log(`⚠️ Invalid scheduler "${body.input.scheduler}" - omitting scheduler parameter, letting Replicate use default`);
-        // Don't set scheduler - let Replicate use its default
-      }
-    }
-    
-    // Map aspect ratio to dimensions if not explicitly provided
-    if (!body.input?.width && !body.input?.height && body.metadata?.aspectRatio) {
-      const aspectRatio = body.metadata.aspectRatio;
-      const aspectRatioMap: Record<string, { width: number; height: number }> = {
-        '1:1': { width: 1024, height: 1024 },
-        '16:9': { width: 1344, height: 768 },
-        '9:16': { width: 768, height: 1344 }
-      };
-      
-      if (aspectRatioMap[aspectRatio]) {
-        modelInput.width = aspectRatioMap[aspectRatio].width;
-        modelInput.height = aspectRatioMap[aspectRatio].height;
-        console.log(`📐 Mapped aspect ratio ${aspectRatio} to ${modelInput.width}x${modelInput.height}`);
-      }
-    }
-    
-    // Apply auto-populated negative prompt if no user override
-    if (!modelInput.negative_prompt && negativePrompt) {
-      modelInput.negative_prompt = negativePrompt;
-    }
-    
-    // Build model identifier from database fields
-    const modelIdentifier = `${apiModel.model_key}:${apiModel.version}`;
-
-    console.log('🔧 Model input configuration:', modelInput);
-    
     // Enhanced logging for all input parameters sent to Replicate
     console.log('🎯 Complete Replicate input object:', {
       prompt: modelInput.prompt ? `${modelInput.prompt.substring(0, 50)}...` : 'none',
@@ -386,18 +330,18 @@ serve(async (req) => {
       disable_safety_checker: modelInput.disable_safety_checker,
       image: modelInput.image ? 'present' : 'none',
       prompt_strength: modelInput.prompt_strength,
-      content_mode: body.metadata?.contentType || 'not_provided'
+      content_mode: contentMode || 'not_provided',
+      configuration_source: 'database_driven'
     });
 
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;
     
-    console.log('🔧 Creating prediction with version:', versionId, 'for model_key:', apiModel.model_key);
-    console.log('🔧 Model input:', JSON.stringify(modelInput, null, 2));
+    console.log('🔧 Creating prediction with version:', modelConfig.version, 'for model_key:', modelConfig.model_key);
 
     try {
       const prediction = await replicate.predictions.create({
-        version: versionId,
+        version: modelConfig.version,
         input: modelInput,
         webhook: webhookUrl,
         webhook_events_filter: ["start", "completed"]
@@ -418,10 +362,10 @@ serve(async (req) => {
           metadata: {
             ...jobData.metadata,
             prediction_id: prediction.id,
-            model_identifier: modelIdentifier,
-            version_id: versionId,
+            model_identifier: `${modelConfig.model_key}:${modelConfig.version}`,
             input_used: modelInput,
-            webhook_url: webhookUrl
+            webhook_url: webhookUrl,
+            configuration_method: 'plug_and_play'
           }
         })
         .eq('id', jobData.id);
@@ -429,7 +373,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         jobId: jobData.id,
         predictionId: prediction.id,
-        status: 'queued'
+        status: 'queued',
+        configuration_method: 'plug_and_play'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -445,16 +390,21 @@ serve(async (req) => {
         url,
       });
 
+      // Get error handling configuration
+      const errorHandling = modelConfig.error_handling || {};
+      const errorMessages = errorHandling.error_messages || {};
+      
       // Mark job as failed with richer error info
       const errorPayload: Record<string, unknown> = {
         error: 'Prediction creation failed',
         message: err?.message,
         status,
         url,
-        model_key: apiModel.model_key,
-        version_id: versionId,
+        model_key: modelConfig.model_key,
+        version_id: modelConfig.version,
         hint: status === 404 ? 'Verify the version_id exists and is accessible to your API token' : undefined,
         code: status === 404 ? 'MODEL_VERSION_NOT_FOUND' : 'PREDICTION_CREATE_ERROR',
+        user_message: errorMessages[status === 404 ? 'MODEL_VERSION_NOT_FOUND' : 'PREDICTION_CREATE_ERROR'] || err?.message
       };
 
       await supabase
