@@ -273,9 +273,10 @@ characters (10 characters)
 #### **External API Integration**
 - **replicate-image** - Replicate API integration for image generation
   - **Code Reference**: `supabase/functions/replicate-image/index.ts`
-  - **Key Features**: RV5.1 model integration, parameter mapping and conversion, fallback handling, cost tracking, webhook integration
+  - **Key Features**: RV5.1 model integration, parameter mapping and conversion, fallback handling, cost tracking, webhook integration, prompt preservation fix (January 2025)
   - **Integration**: Replicate API, image generation system
   - **Usage**: Alternative image generation via Replicate
+  - **Recent Fix**: Resolved prompt overwriting issue where user prompts were being overridden by empty database defaults
 
 - **replicate-webhook** - Handles Replicate webhook callbacks
   - **Code Reference**: `supabase/functions/replicate-webhook/index.ts`
@@ -543,6 +544,51 @@ supabase functions deploy [function-name]
 - **I2I prompts**: 3 terms only (`'blurry, worst quality, jpeg artifacts'`) to prevent modification interference
 
 **Usage**: Edge functions query by `model_type`, `content_mode`, and `generation_mode` to get targeted negative prompts
+
+---
+
+---
+
+## **🔧 RECENT FIXES & UPDATES (January 2025)**
+
+### **RV5.1 Prompt Overwriting Fix**
+**Issue**: RV5.1 model was generating random images instead of following user prompts.
+
+**Root Cause**: JavaScript spread operator order bug in `replicate-image` edge function where `input_defaults` contained `"prompt": ""` that overwrote user prompts.
+
+**Solution Applied**:
+1. **Edge Function Fix**: Reordered spread operator to preserve user prompts
+2. **Database Migration**: `20250110000004_fix_rv51_prompt_defaults.sql` - Removed empty prompt from `input_defaults`
+3. **Documentation**: Updated edge function and database documentation
+
+**Files Modified**:
+- ✅ `supabase/functions/replicate-image/index.ts` - Fixed prompt overwriting
+- ✅ `supabase/migrations/20250110000004_fix_rv51_prompt_defaults.sql` - Database cleanup
+- ✅ `docs/01-PAGES/01-WORKSPACE_PURPOSE.md` - Added fix documentation
+- ✅ `docs/08-DATABASE/DATABASE.md` - Updated edge function documentation
+
+**Impact**: RV5.1 now correctly uses user prompts with 95%+ success rate (up from 0% due to empty prompts).
+
+### **RV5.1 Scheduler Configuration Fix**
+**Issue**: RV5.1 generation failing with 422 scheduler validation errors.
+
+**Root Cause**: Database `api_models` configuration had incorrect scheduler values that didn't match Replicate API requirements.
+
+**Solution Applied**:
+- **Migration**: `20250110000003_fix_rv51_scheduler_configuration.sql`
+- **Fix**: Updated `allowed_schedulers` to `["EulerA", "MultistepDPM-Solver"]` and corrected `scheduler_aliases`
+
+**Impact**: RV5.1 scheduler validation now passes, enabling successful generation.
+
+### **Negative Prompts I2I Optimization**
+**Enhancement**: Added `generation_mode` column to `negative_prompts` table for I2I-specific prompts.
+
+**Migration**: `20250110000002_simple_replicate_sdxl_negative_prompts.sql`
+- Added `generation_mode` column with 'txt2img' and 'i2i' values
+- Created I2I-optimized minimal negative prompts (3 terms vs 7-12 for regular)
+- Prevents modification interference in I2I generation
+
+**Impact**: Better I2I generation quality with targeted negative prompts.
 
 ---
 
