@@ -328,10 +328,11 @@ serve(async (req) => {
         console.log(`🔧 Mapped steps: ${body.input.steps} -> ${stepsKey}:${modelInput[stepsKey]}`);
       }
       
-      // Map guidance_scale with model-specific key names
+      // Map guidance_scale with model-specific key names - relax hard clamp
       if (body.input.guidance_scale !== undefined) {
         const guidanceKey = inputKeyMappings.guidance_scale || 'guidance_scale';
-        modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        // Only apply basic bounds unless capabilities specify strict limits
+        modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 1), 20);
         console.log(`🔧 Mapped guidance_scale: ${body.input.guidance_scale} -> ${guidanceKey}:${modelInput[guidanceKey]}`);
       }
 
@@ -420,6 +421,19 @@ serve(async (req) => {
 
           console.log(`🔧 Scheduler set to: ${modelInput.scheduler}`);
         }
+
+      // Generic pass-through for any remaining allowed input keys not handled by specific mappings
+      const specificlyMappedKeys = new Set([
+        'steps', 'num_inference_steps', 'guidance_scale', 'image', 'strength', 'prompt_strength',
+        'width', 'height', 'negative_prompt', 'seed', 'scheduler'
+      ]);
+      
+      Object.keys(body.input).forEach(inputKey => {
+        if (!specificlyMappedKeys.has(inputKey) && allowedInputKeys.includes(inputKey)) {
+          modelInput[inputKey] = body.input[inputKey];
+          console.log(`🔧 Generic pass-through: ${inputKey} = ${body.input[inputKey]}`);
+        }
+      });
     }
     
     // Map aspect ratio to dimensions if not explicitly provided
