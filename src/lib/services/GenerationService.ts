@@ -333,7 +333,7 @@ export class GenerationService {
         seed: request.metadata?.seed ? Number(request.metadata.seed) : undefined,
         width: request.metadata?.width || 1024,
         height: request.metadata?.height || 1024,
-        scheduler: request.metadata?.scheduler || 'EulerA'
+        scheduler: request.metadata?.scheduler || 'K_EULER'
       };
 
       const { data, error } = await supabase.functions.invoke('replicate-image', {

@@ -828,7 +828,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             width: dimensions.width,
             height: dimensions.height,
             num_outputs: numImages,
-            scheduler: 'EulerA',
+            scheduler: 'K_EULER',
             // I2I parameters for reference images
             image: effRefUrl || undefined,
             prompt_strength: effRefUrl ? (exactCopyMode ? 0.05 : (1 - computedReferenceStrength)) : undefined

@@ -2,9 +2,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Calendar, Clock, Image as ImageIcon, Video as VideoIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Download, Calendar, Clock, Image as ImageIcon, Video as VideoIcon, ChevronLeft, ChevronRight, X, Copy } from "lucide-react";
 import { UnifiedAsset } from "@/lib/services/OptimizedAssetService";
 import { useState, useEffect, useCallback } from "react";
+import { useFetchImageDetails } from "@/hooks/useFetchImageDetails";
+import { toast } from "sonner";
 
 interface AssetPreviewModalProps {
   assets: UnifiedAsset[];
@@ -22,6 +24,7 @@ export const AssetPreviewModal = ({
   onDownload
 }: AssetPreviewModalProps) => {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const { fetchDetails, details } = useFetchImageDetails();
 
   // Update current index when startIndex changes
   useEffect(() => {
@@ -29,6 +32,13 @@ export const AssetPreviewModal = ({
   }, [startIndex]);
 
   const currentAsset = assets[currentIndex] || null;
+
+  // Fetch generation details when current asset changes
+  useEffect(() => {
+    if (currentAsset && open) {
+      fetchDetails(currentAsset.id, currentAsset.type);
+    }
+  }, [currentAsset?.id, fetchDetails, open]);
 
   if (!currentAsset || assets.length === 0) return null;
 
@@ -74,6 +84,15 @@ export const AssetPreviewModal = ({
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   return (
@@ -297,6 +316,57 @@ export const AssetPreviewModal = ({
                     </div>
                   )}
                 </div>
+
+                {/* Generation Details */}
+                {details && (
+                  <div>
+                    <h3 className="font-semibold text-gray-300 mb-2">Generation Details</h3>
+                    <div className="space-y-2 text-sm text-gray-400">
+                      {details.seed && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Seed:</span>
+                          <code className="text-xs bg-gray-800 px-2 py-1 rounded font-mono">{details.seed}</code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => copyToClipboard(details.seed?.toString() || '')}
+                            className="h-6 w-6 p-0 text-gray-500 hover:text-white"
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )}
+                      
+                      {details.scheduler && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Scheduler:</span>
+                          <code className="text-xs bg-gray-800 px-2 py-1 rounded font-mono">{details.scheduler}</code>
+                        </div>
+                      )}
+                      
+                      {details.steps && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Steps:</span>
+                          <span>{details.steps}</span>
+                        </div>
+                      )}
+                      
+                      {details.guidanceScale && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">CFG Scale:</span>
+                          <span>{details.guidanceScale}</span>
+                        </div>
+                      )}
+                      
+                      {details.denoiseStrength && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">Denoise:</span>
+                          <span>{details.denoiseStrength}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
