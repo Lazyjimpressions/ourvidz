@@ -364,28 +364,46 @@ serve(async (req) => {
       return new Response('Failed to create job', { status: 500, headers: corsHeaders })
     }
 
-    // Auto-populate negative prompt for character portraits
-    let negativePrompt = jobRequest.negative_prompt || userMetadata.negative_prompt;
+    // Compose negative prompt: base negative + user-provided negative
+    let baseNegativePrompt = '';
+    let userProvidedNegative = jobRequest.negative_prompt || userMetadata.negative_prompt || '';
     
-    if (!negativePrompt && userMetadata.destination === 'character_portrait') {
-      try {
-        const { data: negativeData, error: negativeError } = await supabaseClient
-          .from('negative_prompts')
-          .select('negative_prompt')
-          .eq('model_type', 'sdxl')
-          .eq('content_mode', userMetadata.contentType || 'sfw')
-          .eq('is_active', true)
-          .order('priority', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (!negativeError && negativeData) {
-          negativePrompt = negativeData.negative_prompt;
-          console.log('📝 Auto-populated negative prompt for character portrait');
-        }
-      } catch (error) {
-        console.warn('Failed to auto-populate negative prompt:', error);
+    // Always fetch base negative prompts from database for SDXL models
+    try {
+      const contentMode = userMetadata.contentType || 'sfw';
+      const generationMode = (isPromptlessUploadedExactCopy || isReferenceModify) ? 'i2i' : 'txt2img';
+      
+      // Get base negative prompts from database
+      const { data: negativePrompts, error: negativeError } = await supabaseClient
+        .from('negative_prompts')
+        .select('negative_prompt')
+        .eq('model_type', 'sdxl')
+        .eq('content_mode', contentMode)
+        .eq('generation_mode', generationMode)
+        .eq('is_active', true)
+        .order('priority', { ascending: false });
+      
+      if (!negativeError && negativePrompts?.length > 0) {
+        baseNegativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
+        console.log(`📝 Fetched base ${generationMode} negative prompts for sdxl_${contentMode}: ${negativePrompts.length} prompts`);
+      } else {
+        console.log(`⚠️ No ${generationMode} negative prompts found for sdxl_${contentMode}`);
       }
+    } catch (error) {
+      console.warn('Failed to fetch base negative prompts:', error);
+    }
+    
+    // Compose final negative prompt: base + user additions
+    let finalNegativePrompt = '';
+    if (baseNegativePrompt && userProvidedNegative) {
+      finalNegativePrompt = `${baseNegativePrompt}, ${userProvidedNegative}`;
+      console.log('🎯 Composed negative prompt: base + user additions');
+    } else if (baseNegativePrompt) {
+      finalNegativePrompt = baseNegativePrompt;
+      console.log('🎯 Using base negative prompt only');
+    } else if (userProvidedNegative) {
+      finalNegativePrompt = userProvidedNegative;
+      console.log('🎯 Using user negative prompt only');
     }
 
     // Build worker payload
@@ -468,7 +486,7 @@ serve(async (req) => {
         reference_strength_overridden: isReferenceModify && (finalReferenceStrength !== jobRequest.reference_strength)
       },
       // ✅ FIXED: Only include negative_prompt for modify/txt2img flows
-      negative_prompt: isPromptlessUploadedExactCopy ? undefined : negativePrompt,
+      negative_prompt: isPromptlessUploadedExactCopy ? undefined : finalNegativePrompt,
       compel_enabled: jobRequest.compel_enabled || userMetadata.compel_enabled || false,
       compel_weights: jobRequest.compel_weights || userMetadata.compel_weights || undefined,
       // Legacy for compatibility
@@ -530,7 +548,9 @@ serve(async (req) => {
       reference_strength: queuePayload.metadata.reference_strength,
       exact_copy_mode: isPromptlessUploadedExactCopy,
       seed_locked: queuePayload.metadata.seed_locked,
-      negative_prompt_length: (queuePayload.negative_prompt || '').length
+      negative_prompt_length: (queuePayload.negative_prompt || '').length,
+      base_negative_length: baseNegativePrompt.length,
+      user_negative_length: userProvidedNegative.length
     });
 
     // Determine queue based on job type

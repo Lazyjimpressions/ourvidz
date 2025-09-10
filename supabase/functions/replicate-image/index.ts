@@ -199,40 +199,53 @@ serve(async (req) => {
       normalized_model_type: normalizedModelType
     });
 
-    // Auto-populate negative prompt based on content mode from toggle
-    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
+    // Compose negative prompt: base negative + user-provided negative
+    let baseNegativePrompt = '';
+    let userProvidedNegative = body.input?.negative_prompt || body.metadata?.negative_prompt || '';
     
-    if (!negativePrompt) {
-      try {
-        // Use content mode directly from toggle - no detection or fallback
-        const contentMode = body.metadata?.contentType; // Direct from UI toggle
+    // Always fetch base negative prompts from database
+    try {
+      // Use content mode directly from toggle - no detection or fallback
+      const contentMode = body.metadata?.contentType; // Direct from UI toggle
+      
+      if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
+        // Determine generation mode for targeted negative prompts
+        const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
         
-        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          // Determine generation mode for targeted negative prompts
-          const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
-          
-          // Use shared utility function to get ALL negative prompts for the model/content mode/generation mode
-          const { data: negativePrompts, error: negError } = await supabase
-            .from('negative_prompts')
-            .select('negative_prompt')
-            .eq('model_type', normalizedModelType.replace('-i2i', '')) // Remove i2i suffix for lookup
-            .eq('content_mode', contentMode)
-            .eq('generation_mode', generationMode)
-            .eq('is_active', true)
-            .order('priority', { ascending: false });
-          
-          if (!negError && negativePrompts?.length > 0) {
-            negativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
-            console.log(`📝 Auto-populated ${generationMode} negative prompts for ${normalizedModelType}_${contentMode}: ${negativePrompts.length} prompts`);
-          } else {
-            console.log(`⚠️ No ${generationMode} negative prompts found for ${normalizedModelType}_${contentMode}`);
-          }
+        // Get base negative prompts from database
+        const { data: negativePrompts, error: negError } = await supabase
+          .from('negative_prompts')
+          .select('negative_prompt')
+          .eq('model_type', normalizedModelType.replace('-i2i', '')) // Remove i2i suffix for lookup
+          .eq('content_mode', contentMode)
+          .eq('generation_mode', generationMode)
+          .eq('is_active', true)
+          .order('priority', { ascending: false });
+        
+        if (!negError && negativePrompts?.length > 0) {
+          baseNegativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
+          console.log(`📝 Fetched base ${generationMode} negative prompts for ${normalizedModelType}_${contentMode}: ${negativePrompts.length} prompts`);
         } else {
-          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
+          console.log(`⚠️ No ${generationMode} negative prompts found for ${normalizedModelType}_${contentMode}`);
         }
-      } catch (error) {
-        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
+      } else {
+        console.log('⚠️ No valid content mode provided from toggle, using empty base negative');
       }
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch base negative prompts:', error);
+    }
+    
+    // Compose final negative prompt: base + user additions
+    let finalNegativePrompt = '';
+    if (baseNegativePrompt && userProvidedNegative) {
+      finalNegativePrompt = `${baseNegativePrompt}, ${userProvidedNegative}`;
+      console.log('🎯 Composed negative prompt: base + user additions');
+    } else if (baseNegativePrompt) {
+      finalNegativePrompt = baseNegativePrompt;
+      console.log('🎯 Using base negative prompt only');
+    } else if (userProvidedNegative) {
+      finalNegativePrompt = userProvidedNegative;
+      console.log('🎯 Using user negative prompt only');
     }
 
     const { data: jobData, error: jobError } = await supabase
@@ -384,10 +397,7 @@ serve(async (req) => {
         modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
       }
       
-      // Map negative prompt (always applies)
-      if (body.input.negative_prompt !== undefined) {
-        modelInput.negative_prompt = body.input.negative_prompt;
-      }
+      // Skip individual negative_prompt mapping - we compose it separately
       
       // Map seed (always applies)
       if (body.input.seed !== undefined) {
@@ -452,9 +462,9 @@ serve(async (req) => {
       }
     }
     
-    // Apply auto-populated negative prompt if no user override
-    if (!modelInput.negative_prompt && negativePrompt) {
-      modelInput.negative_prompt = negativePrompt;
+    // Apply composed negative prompt (base + user additions)
+    if (finalNegativePrompt) {
+      modelInput.negative_prompt = finalNegativePrompt;
     }
     
     // Filter input to only allowed keys for this model to prevent 422 errors
@@ -494,8 +504,9 @@ serve(async (req) => {
     
     // Enhanced logging for negative prompt debugging
     console.log('🎯 Negative prompt configuration:', {
-      user_provided: !!body.input?.negative_prompt,
-      auto_populated: !!negativePrompt,
+      base_negative_length: baseNegativePrompt.length,
+      user_provided_length: userProvidedNegative.length,
+      composed_final_length: finalNegativePrompt.length,
       content_mode_from_toggle: body.metadata?.contentType || 'not_provided',
       model_type: normalizedModelType,
       final_negative_prompt: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : 'none'

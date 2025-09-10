@@ -298,6 +298,68 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                 </div>
               )}
 
+              {/* Generation Details - Universal for all jobs */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  <h4 className="font-medium text-xs">Generation Details</h4>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  {details.seed && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Seed:</span>
+                      <div className="flex items-center gap-1">
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{details.seed}</code>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(details.seed!.toString(), 'Seed')}
+                          className="h-4 w-4 p-0"
+                          aria-label="Copy seed"
+                        >
+                          <Copy className="h-2.5 w-2.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {details.steps && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Steps:</span>
+                      <span>{details.steps}</span>
+                    </div>
+                  )}
+
+                  {details.guidanceScale && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Guidance Scale:</span>
+                      <span>{details.guidanceScale}</span>
+                    </div>
+                  )}
+
+                  {details.scheduler && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Scheduler:</span>
+                      <Badge variant="outline" className="text-xs px-1.5 py-0.5">{details.scheduler}</Badge>
+                    </div>
+                  )}
+
+                  {details.denoiseStrength !== undefined && details.referenceStrength && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Denoise Strength:</span>
+                      <span>{(details.denoiseStrength * 100).toFixed(0)}%</span>
+                    </div>
+                  )}
+
+                  {details.generationTime && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Generation Time:</span>
+                      <span>{details.generationTime}s</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Verified i2i Settings - Only show if referenceStrength exists (actual i2i job) */}
               {details?.referenceStrength && (
                 <div className="space-y-2">
@@ -308,83 +370,37 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                       from job log
                     </Badge>
                   </div>
-                  <div className="space-y-1.5 text-xs">
-                    {details.referenceMode && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Reference Mode:</span>
-                        <span className="capitalize">{details.referenceMode}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Reference Strength:</span>
-                      <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
-                    </div>
+                   <div className="space-y-1.5 text-xs">
+                     {details.referenceMode && (
+                       <div className="flex items-center justify-between">
+                         <span className="text-muted-foreground">Reference Mode:</span>
+                         <span className="capitalize">{details.referenceMode}</span>
+                       </div>
+                     )}
+                     
+                     <div className="flex items-center justify-between">
+                       <span className="text-muted-foreground">Reference Strength:</span>
+                       <span>{(details.referenceStrength * 100).toFixed(0)}%</span>
+                     </div>
 
-                    {details.denoiseStrength !== undefined && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Denoise Strength:</span>
-                        <span>{(details.denoiseStrength * 100).toFixed(0)}%</span>
-                      </div>
-                    )}
+                     {details.lockHair !== undefined && (
+                       <div className="flex items-center justify-between">
+                         <span className="text-muted-foreground">Hair Lock:</span>
+                         <Badge variant={details.lockHair ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
+                           {details.lockHair ? 'ON' : 'OFF'}
+                         </Badge>
+                       </div>
+                     )}
 
-                    {details.guidanceScale && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Guidance Scale:</span>
-                        <span>{details.guidanceScale}</span>
-                      </div>
-                    )}
-
-                    {details.steps && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Steps:</span>
-                        <span>{details.steps}</span>
-                      </div>
-                    )}
-
-                    {details.seed && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Seed:</span>
-                        <div className="flex items-center gap-1">
-                          <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{details.seed}</code>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyToClipboard(details.seed!.toString(), 'Seed')}
-                            className="h-4 w-4 p-0"
-                            aria-label="Copy seed"
-                          >
-                            <Copy className="h-2.5 w-2.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {details.lockHair !== undefined && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Hair Lock:</span>
-                        <Badge variant={details.lockHair ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
-                          {details.lockHair ? 'ON' : 'OFF'}
-                        </Badge>
-                      </div>
-                    )}
-
-                    {details.exactCopyMode !== undefined && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Exact Copy Mode:</span>
-                        <Badge variant={details.exactCopyMode ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
-                          {details.exactCopyMode ? 'ON' : 'OFF'}
-                        </Badge>
-                      </div>
-                    )}
-
-                    {details.generationTime && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Generation Time:</span>
-                        <span>{details.generationTime}s</span>
-                      </div>
-                    )}
-                  </div>
+                     {details.exactCopyMode !== undefined && (
+                       <div className="flex items-center justify-between">
+                         <span className="text-muted-foreground">Exact Copy Mode:</span>
+                         <Badge variant={details.exactCopyMode ? "default" : "secondary"} className="text-xs px-1.5 py-0.5">
+                           {details.exactCopyMode ? 'ON' : 'OFF'}
+                         </Badge>
+                       </div>
+                     )}
+                   </div>
                 </div>
               )}
 
