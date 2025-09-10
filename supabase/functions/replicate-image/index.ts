@@ -161,7 +161,7 @@ serve(async (req) => {
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
     // Detect if this is an i2i request based on reference image
-    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage);
+    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
     
     // Normalize model_type for database constraint compatibility
     const normalizeModelType = (modelFamily: string | null, modelKey: string, isI2I: boolean = false): string => {                                              
@@ -280,8 +280,18 @@ serve(async (req) => {
     const modelInput = {
       num_outputs: 1, // Explicitly request single image to avoid grid composites
       ...apiModel.input_defaults,
-      prompt: body.prompt // Override with user's prompt (must come after spread to avoid being overwritten)
+      prompt: body.prompt || body.metadata?.original_prompt // Override with user's prompt (must come after spread to avoid being overwritten)
     };
+
+    // Ensure we have a prompt
+    if (!modelInput.prompt) {
+      return new Response(
+        JSON.stringify({ error: "No prompt provided in body.prompt or metadata.original_prompt" }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
     
     // Disable safety checker for NSFW content
     const contentMode = body.metadata?.contentType;
@@ -311,9 +321,9 @@ serve(async (req) => {
     
     // Apply user input overrides with model-specific validation
     if (body.input) {
-      // Map steps with model-specific key names
+      // Map steps with model-specific key names - handle both steps and num_inference_steps
       if (body.input.steps !== undefined) {
-        const stepsKey = inputKeyMappings.steps || 'steps';
+        const stepsKey = inputKeyMappings.steps || (allowedInputKeys.includes('num_inference_steps') ? 'num_inference_steps' : 'steps');
         modelInput[stepsKey] = Math.min(Math.max(body.input.steps, 1), 100);
         console.log(`🔧 Mapped steps: ${body.input.steps} -> ${stepsKey}:${modelInput[stepsKey]}`);
       }
@@ -323,6 +333,46 @@ serve(async (req) => {
         const guidanceKey = inputKeyMappings.guidance_scale || 'guidance_scale';
         modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
         console.log(`🔧 Mapped guidance_scale: ${body.input.guidance_scale} -> ${guidanceKey}:${modelInput[guidanceKey]}`);
+      }
+
+      // Handle i2i fields if this is an i2i request
+      if (hasReferenceImage) {
+        const imageKey = inputKeyMappings.i2i_image_key || 'image';
+        const strengthKey = inputKeyMappings.i2i_strength_key || 'strength';
+        
+        // Map image field
+        let imageValue = body.input.image || body.input[imageKey];
+        if (!imageValue && body.metadata) {
+          imageValue = body.metadata.reference_image_url || body.metadata.referenceImage;
+        }
+        
+        if (imageValue) {
+          modelInput[imageKey] = imageValue;
+          console.log(`🖼️ Mapped i2i image: ${imageKey} = ${typeof imageValue === 'string' ? imageValue.slice(0, 50) + '...' : imageValue}`);
+        } else {
+          console.error('❌ i2i request missing image data');
+          return new Response(
+            JSON.stringify({ error: "i2i request requires image data in input.image or metadata.reference_image_url" }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            }
+          );
+        }
+        
+        // Map strength field
+        let strengthValue = body.input[strengthKey] || body.input.prompt_strength;
+        if (strengthValue === undefined && body.metadata) {
+          strengthValue = body.metadata.reference_strength || body.metadata.denoise_strength;
+        }
+        
+        if (strengthValue !== undefined) {
+          modelInput[strengthKey] = Math.min(Math.max(parseFloat(strengthValue), 0.1), 1.0);
+          console.log(`💪 Mapped i2i strength: ${strengthKey} = ${modelInput[strengthKey]}`);
+        } else {
+          // Default strength for i2i
+          modelInput[strengthKey] = 0.7;
+          console.log(`💪 Using default i2i strength: ${strengthKey} = ${modelInput[strengthKey]}`);
+        }
       }
       
       // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
