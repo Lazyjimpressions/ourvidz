@@ -266,8 +266,8 @@ serve(async (req) => {
           version: apiModel.version,
           api_model_configured: true,
           content_mode: body.metadata?.contentType || null, // Direct from toggle
-          negative_prompt_auto_populated: !!negativePrompt,
-          negative_prompt_source: negativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
+          negative_prompt_auto_populated: !!finalNegativePrompt,
+          negative_prompt_source: finalNegativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
         }
       })
       .select()
