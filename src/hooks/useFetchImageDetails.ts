@@ -16,6 +16,7 @@ interface ImageDetails {
   denoiseStrength?: number;
   guidanceScale?: number;
   steps?: number;
+  scheduler?: string;
   lockHair?: boolean;
   exactCopyMode?: boolean;
   referenceMode?: string;
@@ -105,7 +106,7 @@ export const useFetchImageDetails = () => {
           originalPrompt: workspaceAsset.original_prompt,
           enhancedPrompt,
           negativePrompt: settings?.negativePrompt,
-          seed: settings?.seed,
+          seed: settings?.seed || workspaceAsset.generation_seed, // Fallback to workspace_assets.generation_seed
           generationTime: settings?.generationTime,
           referenceStrength: settings?.referenceStrength || settings?.reference_strength,
           templateName,
@@ -115,6 +116,7 @@ export const useFetchImageDetails = () => {
           denoiseStrength,
           guidanceScale: settings?.guidance_scale || settings?.guidanceScale,
           steps: settings?.steps || settings?.num_inference_steps,
+          scheduler: settings?.scheduler,
           lockHair: settings?.lock_hair || settings?.lockHair,
           exactCopyMode: settings?.exact_copy_mode || settings?.exactCopyMode,
           referenceMode: settings?.reference_mode || settings?.referenceMode,

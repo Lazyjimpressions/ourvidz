@@ -96,7 +96,7 @@ export const useImageRegeneration = (currentTile: MediaTile, originalDetails?: {
         guidance_scale: 6, // Reduced from 7.5 to allow more variation
         width: 1024,
         height: 1024,
-        scheduler: 'EulerA',
+        scheduler: 'K_EULER',
         exact_copy_mode: false, // Always false for i2i modify
         seed: state.keepSeed && originalDetails?.seed ? originalDetails.seed : undefined
       }

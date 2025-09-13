@@ -161,7 +161,7 @@ serve(async (req) => {
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
     // Detect if this is an i2i request based on reference image
-    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage);
+    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
     
     // Normalize model_type for database constraint compatibility
     const normalizeModelType = (modelFamily: string | null, modelKey: string, isI2I: boolean = false): string => {                                              
@@ -199,40 +199,53 @@ serve(async (req) => {
       normalized_model_type: normalizedModelType
     });
 
-    // Auto-populate negative prompt based on content mode from toggle
-    let negativePrompt = body.input?.negative_prompt || body.metadata?.negative_prompt;
+    // Compose negative prompt: base negative + user-provided negative
+    let baseNegativePrompt = '';
+    let userProvidedNegative = body.input?.negative_prompt || body.metadata?.negative_prompt || '';
     
-    if (!negativePrompt) {
-      try {
-        // Use content mode directly from toggle - no detection or fallback
-        const contentMode = body.metadata?.contentType; // Direct from UI toggle
+    // Always fetch base negative prompts from database
+    try {
+      // Use content mode directly from toggle - no detection or fallback
+      const contentMode = body.metadata?.contentType; // Direct from UI toggle
+      
+      if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
+        // Determine generation mode for targeted negative prompts
+        const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
         
-        if (contentMode && (contentMode === 'sfw' || contentMode === 'nsfw')) {
-          // Determine generation mode for targeted negative prompts
-          const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
-          
-          // Use shared utility function to get ALL negative prompts for the model/content mode/generation mode
-          const { data: negativePrompts, error: negError } = await supabase
-            .from('negative_prompts')
-            .select('negative_prompt')
-            .eq('model_type', normalizedModelType.replace('-i2i', '')) // Remove i2i suffix for lookup
-            .eq('content_mode', contentMode)
-            .eq('generation_mode', generationMode)
-            .eq('is_active', true)
-            .order('priority', { ascending: false });
-          
-          if (!negError && negativePrompts?.length > 0) {
-            negativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
-            console.log(`📝 Auto-populated ${generationMode} negative prompts for ${normalizedModelType}_${contentMode}: ${negativePrompts.length} prompts`);
-          } else {
-            console.log(`⚠️ No ${generationMode} negative prompts found for ${normalizedModelType}_${contentMode}`);
-          }
+        // Get base negative prompts from database
+        const { data: negativePrompts, error: negError } = await supabase
+          .from('negative_prompts')
+          .select('negative_prompt')
+          .eq('model_type', normalizedModelType.replace('-i2i', '')) // Remove i2i suffix for lookup
+          .eq('content_mode', contentMode)
+          .eq('generation_mode', generationMode)
+          .eq('is_active', true)
+          .order('priority', { ascending: false });
+        
+        if (!negError && negativePrompts?.length > 0) {
+          baseNegativePrompt = negativePrompts.map(np => np.negative_prompt).join(', ');
+          console.log(`📝 Fetched base ${generationMode} negative prompts for ${normalizedModelType}_${contentMode}: ${negativePrompts.length} prompts`);
         } else {
-          console.log('⚠️ No valid content mode provided from toggle, skipping negative prompt auto-population');
+          console.log(`⚠️ No ${generationMode} negative prompts found for ${normalizedModelType}_${contentMode}`);
         }
-      } catch (error) {
-        console.warn('⚠️ Failed to auto-populate negative prompt:', error);
+      } else {
+        console.log('⚠️ No valid content mode provided from toggle, using empty base negative');
       }
+    } catch (error) {
+      console.warn('⚠️ Failed to fetch base negative prompts:', error);
+    }
+    
+    // Compose final negative prompt: base + user additions
+    let finalNegativePrompt = '';
+    if (baseNegativePrompt && userProvidedNegative) {
+      finalNegativePrompt = `${baseNegativePrompt}, ${userProvidedNegative}`;
+      console.log('🎯 Composed negative prompt: base + user additions');
+    } else if (baseNegativePrompt) {
+      finalNegativePrompt = baseNegativePrompt;
+      console.log('🎯 Using base negative prompt only');
+    } else if (userProvidedNegative) {
+      finalNegativePrompt = userProvidedNegative;
+      console.log('🎯 Using user negative prompt only');
     }
 
     const { data: jobData, error: jobError } = await supabase
@@ -253,8 +266,8 @@ serve(async (req) => {
           version: apiModel.version,
           api_model_configured: true,
           content_mode: body.metadata?.contentType || null, // Direct from toggle
-          negative_prompt_auto_populated: !!negativePrompt,
-          negative_prompt_source: negativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
+          negative_prompt_auto_populated: !!finalNegativePrompt,
+          negative_prompt_source: finalNegativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
         }
       })
       .select()
@@ -280,8 +293,18 @@ serve(async (req) => {
     const modelInput = {
       num_outputs: 1, // Explicitly request single image to avoid grid composites
       ...apiModel.input_defaults,
-      prompt: body.prompt // Override with user's prompt (must come after spread to avoid being overwritten)
+      prompt: body.prompt || body.metadata?.original_prompt // Override with user's prompt (must come after spread to avoid being overwritten)
     };
+
+    // Ensure we have a prompt
+    if (!modelInput.prompt) {
+      return new Response(
+        JSON.stringify({ error: "No prompt provided in body.prompt or metadata.original_prompt" }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        }
+      );
+    }
     
     // Disable safety checker for NSFW content
     const contentMode = body.metadata?.contentType;
@@ -311,18 +334,59 @@ serve(async (req) => {
     
     // Apply user input overrides with model-specific validation
     if (body.input) {
-      // Map steps with model-specific key names
+      // Map steps with model-specific key names - handle both steps and num_inference_steps
       if (body.input.steps !== undefined) {
-        const stepsKey = inputKeyMappings.steps || 'steps';
+        const stepsKey = inputKeyMappings.steps || (allowedInputKeys.includes('num_inference_steps') ? 'num_inference_steps' : 'steps');
         modelInput[stepsKey] = Math.min(Math.max(body.input.steps, 1), 100);
         console.log(`🔧 Mapped steps: ${body.input.steps} -> ${stepsKey}:${modelInput[stepsKey]}`);
       }
       
-      // Map guidance_scale with model-specific key names
+      // Map guidance_scale with model-specific key names - relax hard clamp
       if (body.input.guidance_scale !== undefined) {
         const guidanceKey = inputKeyMappings.guidance_scale || 'guidance_scale';
-        modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 3.5), 7);
+        // Only apply basic bounds unless capabilities specify strict limits
+        modelInput[guidanceKey] = Math.min(Math.max(body.input.guidance_scale, 1), 20);
         console.log(`🔧 Mapped guidance_scale: ${body.input.guidance_scale} -> ${guidanceKey}:${modelInput[guidanceKey]}`);
+      }
+
+      // Handle i2i fields if this is an i2i request
+      if (hasReferenceImage) {
+        const imageKey = inputKeyMappings.i2i_image_key || 'image';
+        const strengthKey = inputKeyMappings.i2i_strength_key || 'strength';
+        
+        // Map image field
+        let imageValue = body.input.image || body.input[imageKey];
+        if (!imageValue && body.metadata) {
+          imageValue = body.metadata.reference_image_url || body.metadata.referenceImage;
+        }
+        
+        if (imageValue) {
+          modelInput[imageKey] = imageValue;
+          console.log(`🖼️ Mapped i2i image: ${imageKey} = ${typeof imageValue === 'string' ? imageValue.slice(0, 50) + '...' : imageValue}`);
+        } else {
+          console.error('❌ i2i request missing image data');
+          return new Response(
+            JSON.stringify({ error: "i2i request requires image data in input.image or metadata.reference_image_url" }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400,
+            }
+          );
+        }
+        
+        // Map strength field
+        let strengthValue = body.input[strengthKey] || body.input.prompt_strength;
+        if (strengthValue === undefined && body.metadata) {
+          strengthValue = body.metadata.reference_strength || body.metadata.denoise_strength;
+        }
+        
+        if (strengthValue !== undefined) {
+          modelInput[strengthKey] = Math.min(Math.max(parseFloat(strengthValue), 0.1), 1.0);
+          console.log(`💪 Mapped i2i strength: ${strengthKey} = ${modelInput[strengthKey]}`);
+        } else {
+          // Default strength for i2i
+          modelInput[strengthKey] = 0.7;
+          console.log(`💪 Using default i2i strength: ${strengthKey} = ${modelInput[strengthKey]}`);
+        }
       }
       
       // Map dimensions (UI uses 'width'/'height', model uses 'width'/'height')
@@ -333,10 +397,7 @@ serve(async (req) => {
         modelInput.height = Math.min(Math.max(body.input.height, 64), 1920);
       }
       
-      // Map negative prompt (always applies)
-      if (body.input.negative_prompt !== undefined) {
-        modelInput.negative_prompt = body.input.negative_prompt;
-      }
+      // Skip individual negative_prompt mapping - we compose it separately
       
       // Map seed (always applies)
       if (body.input.seed !== undefined) {
@@ -370,6 +431,19 @@ serve(async (req) => {
 
           console.log(`🔧 Scheduler set to: ${modelInput.scheduler}`);
         }
+
+      // Generic pass-through for any remaining allowed input keys not handled by specific mappings
+      const specificlyMappedKeys = new Set([
+        'steps', 'num_inference_steps', 'guidance_scale', 'image', 'strength', 'prompt_strength',
+        'width', 'height', 'negative_prompt', 'seed', 'scheduler'
+      ]);
+      
+      Object.keys(body.input).forEach(inputKey => {
+        if (!specificlyMappedKeys.has(inputKey) && allowedInputKeys.includes(inputKey)) {
+          modelInput[inputKey] = body.input[inputKey];
+          console.log(`🔧 Generic pass-through: ${inputKey} = ${body.input[inputKey]}`);
+        }
+      });
     }
     
     // Map aspect ratio to dimensions if not explicitly provided
@@ -388,9 +462,9 @@ serve(async (req) => {
       }
     }
     
-    // Apply auto-populated negative prompt if no user override
-    if (!modelInput.negative_prompt && negativePrompt) {
-      modelInput.negative_prompt = negativePrompt;
+    // Apply composed negative prompt (base + user additions)
+    if (finalNegativePrompt) {
+      modelInput.negative_prompt = finalNegativePrompt;
     }
     
     // Filter input to only allowed keys for this model to prevent 422 errors
@@ -430,8 +504,9 @@ serve(async (req) => {
     
     // Enhanced logging for negative prompt debugging
     console.log('🎯 Negative prompt configuration:', {
-      user_provided: !!body.input?.negative_prompt,
-      auto_populated: !!negativePrompt,
+      base_negative_length: baseNegativePrompt.length,
+      user_provided_length: userProvidedNegative.length,
+      composed_final_length: finalNegativePrompt.length,
       content_mode_from_toggle: body.metadata?.contentType || 'not_provided',
       model_type: normalizedModelType,
       final_negative_prompt: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : 'none'
