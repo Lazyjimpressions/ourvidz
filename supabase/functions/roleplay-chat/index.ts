@@ -44,6 +44,7 @@ interface RoleplayChatResponse {
   consistency_score?: number;
   processing_time?: number;
   message_id?: string; // For kickoff messages
+  scene_job_id?: string; // For scene generation job polling
 }
 
 interface Database {
@@ -123,6 +124,8 @@ serve(async (req) => {
   let dbWriteTime = 0;
 
   try {
+    // Extract authorization header for forwarding to other functions
+    const authHeader = req.headers.get('authorization');
     const requestBody: RoleplayChatRequest = await req.json();
     const {
       message,
@@ -361,6 +364,7 @@ serve(async (req) => {
     // Handle scene generation if requested
     let sceneGenerated = false;
     let consistencyScore = 0;
+    let sceneJobId = null;
     if (scene_generation) {
       console.log('🎬 Scene generation requested:', {
         character_id,
@@ -374,13 +378,15 @@ serve(async (req) => {
         `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
       );
       
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, requestBody.selected_image_model);
+      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, requestBody.selected_image_model, authHeader);
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
+      sceneJobId = sceneResult.job_id || null;
       
       console.log('🎬 Scene generation result:', {
         success: sceneGenerated,
-        consistency_score: consistencyScore
+        consistency_score: consistencyScore,
+        job_id: sceneJobId
       });
     }
 
@@ -394,7 +400,8 @@ serve(async (req) => {
       scene_generated: sceneGenerated,
       consistency_score: consistencyScore,
       processing_time: totalTime,
-      message_id: savedMessage?.id
+      message_id: savedMessage?.id,
+      scene_job_id: sceneJobId
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -1744,7 +1751,7 @@ function buildCharacterVisualDescription(character: any): string {
   return visualDescription;
 }
 
-async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = [], selectedImageModel?: string): Promise<{ success: boolean; consistency_score?: number }> {
+async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = [], selectedImageModel?: string, authHeader?: string): Promise<{ success: boolean; consistency_score?: number; job_id?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
       characterId,
@@ -1855,7 +1862,13 @@ async function generateScene(supabase: any, characterId: string, response: strin
     
     if (useSDXL) {
       // Use queue-job for SDXL worker with enhanced metadata and character consistency
+      const headers: Record<string, string> = {};
+      if (authHeader) {
+        headers['authorization'] = authHeader;
+      }
+      
       imageResponse = await supabase.functions.invoke('queue-job', {
+        headers,
         body: {
           prompt: enhancedScenePrompt,
           job_type: 'sdxl_image_high', // ✅ CHANGED FROM sdxl_image_fast
@@ -1966,7 +1979,13 @@ async function generateScene(supabase: any, characterId: string, response: strin
           const providerName = provider.name;
         
         if (providerName === 'replicate') {
+          const headers: Record<string, string> = {};
+          if (authHeader) {
+            headers['authorization'] = authHeader;
+          }
+          
           imageResponse = await supabase.functions.invoke('replicate-image', {
+            headers,
             body: {
               prompt: enhancedScenePrompt,
               apiModelId: modelConfig.id,
@@ -2044,9 +2063,21 @@ async function generateScene(supabase: any, characterId: string, response: strin
     }
 
     console.log('🎬 Scene generation completed successfully');
+    
+    // Extract job ID from the response if available
+    let jobId = null;
+    if (imageResponse?.data?.job_id) {
+      jobId = imageResponse.data.job_id;
+      console.log('✅ Scene generation job queued with ID:', jobId);
+    } else if (imageResponse?.data?.id) {
+      jobId = imageResponse.data.id;
+      console.log('✅ Scene generation prediction created with ID:', jobId);
+    }
+    
     return { 
       success: true, 
-      consistency_score: character.seed_locked ? 0.9 : 0.7 // ✅ HIGHER SCORE WITH SEED LOCK
+      consistency_score: character.seed_locked ? 0.9 : 0.7, // ✅ HIGHER SCORE WITH SEED LOCK
+      job_id: jobId
     };
   } catch (error) {
     console.error('🎬❌ Scene generation error:', error);
