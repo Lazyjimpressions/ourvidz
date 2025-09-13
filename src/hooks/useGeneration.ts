@@ -61,14 +61,22 @@ export const useGeneration = () => {
       setIsGenerating(false);
       setCurrentJob(null);
 
-      // Show detailed error toast
-      toast({
-        title: "Generation Failed",
-        description: errorMessage.includes('Edge Function') 
-          ? "Server communication error. Please try again."
-          : errorMessage,
-        variant: "destructive",
-      });
+      // Enhanced error handling for SDXL unavailability
+      if (errorMessage.includes('503') || errorMessage.includes('SDXL_DISABLED')) {
+        toast({
+          title: "SDXL Workers Unavailable",
+          description: "SDXL is currently offline. Try switching to Replicate models in settings.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Generation Failed",
+          description: errorMessage.includes('Edge Function') 
+            ? "Server communication error. Please try again."
+            : errorMessage,
+          variant: "destructive",
+        });
+      }
     }
   }, [toast]);
 

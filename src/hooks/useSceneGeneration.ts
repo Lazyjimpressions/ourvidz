@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useGeneration } from './useGeneration';
 import { RoleplayTemplate } from '@/components/playground/RoleplaySetup';
 import { toast } from 'sonner';
+import { GenerationFormat } from '@/types/generation';
 
 interface SceneContext {
   characters: Array<{
@@ -351,8 +352,38 @@ export const useSceneGeneration = () => {
       // Generate optimized prompt
       const prompt = generateSDXLPrompt(sceneContext, options);
 
-      // Use SDXL formats by default for scene prompts
-      const format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      // Check selected model from localStorage to determine format
+      const selectedModel = localStorage.getItem('workspace-selected-model');
+      let format: GenerationFormat;
+      let apiModelId: string | undefined;
+      
+      if (selectedModel) {
+        try {
+          const parsed = JSON.parse(selectedModel);
+          if (parsed.type === 'replicate') {
+            // Use Replicate formats for RV5.1
+            format = options.quality === 'high' ? 'rv51_high' : 'rv51_fast';
+            apiModelId = parsed.id;
+            console.log('🎭 Using Replicate model for scene generation:', { format, apiModelId: parsed.id, displayName: parsed.display_name });
+            
+            // Show toast for missing apiModelId
+            if (!apiModelId || apiModelId === 'legacy-rv51') {
+              toast.error('Replicate model not properly configured. Please reselect your model in settings.');
+              return;
+            }
+          } else {
+            // Default to SDXL
+            format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+            console.log('🎭 Using SDXL model for scene generation:', { format });
+          }
+        } catch (e) {
+          console.warn('Failed to parse selected model, defaulting to SDXL');
+          format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+        }
+      } else {
+        // Default to SDXL if no model selected
+        format = options.quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast';
+      }
 
       // Use character reference if available and requested
       let referenceImages = undefined;
@@ -371,7 +402,8 @@ export const useSceneGeneration = () => {
           sceneContext,
           characterContext: roleplayTemplate?.characters?.map(c => c.name).join(', ') || 'none',
           options,
-          contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw'
+          contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+          ...(apiModelId && { apiModelId })
         }
       });
 

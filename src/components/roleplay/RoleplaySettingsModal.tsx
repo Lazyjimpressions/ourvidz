@@ -107,7 +107,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
           {/* Memory Tier */}
           <div className="space-y-2">
             <Label>Memory Tier</Label>
-            <Select value={localMemoryTier} onValueChange={setLocalMemoryTier}>
+            <Select value={localMemoryTier} onValueChange={(value: 'conversation' | 'character' | 'profile') => setLocalMemoryTier(value)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
