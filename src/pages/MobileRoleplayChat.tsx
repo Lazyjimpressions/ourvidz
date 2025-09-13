@@ -461,7 +461,7 @@ const MobileRoleplayChat: React.FC = () => {
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
-          scene_generation: false,
+          scene_generation: true, // ✅ Enable automatic scene generation
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
@@ -513,64 +513,63 @@ const MobileRoleplayChat: React.FC = () => {
     setSceneJobStatus('queued');
     
     try {
-      // Build scene prompt from conversation context
-      const recentMessages = messages.slice(-3); // Last 3 messages for context
-      const conversationContext = recentMessages
-        .map(msg => `${msg.sender === 'user' ? 'You' : character.name}: ${msg.content}`)
-        .join(' | ');
-      
-      // ✅ FORCE NSFW MODE FOR SCENE GENERATION:
+      // ✅ ENHANCED: Use roleplay-chat edge function for scene generation
+      // This will use the enhanced scene generation logic with character visual context
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       
-      // Call queue-job directly for SDXL generation with character consistency
-      const { data, error } = await supabase.functions.invoke('queue-job', {
+      const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
-          prompt: `Generate a scene showing ${character.name} in the current conversation context: ${conversationContext}`,
-          job_type: 'sdxl_image_high', // ✅ HIGH QUALITY INSTEAD OF FAST
-          seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
-          reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
-          metadata: {
-            destination: 'roleplay_scene',
-            character_id: character.id,
-            scene_type: 'chat_scene',
-            consistency_method: character.consistency_method || consistencySettings.method,
-            conversation_id: conversationId,
-            reference_mode: 'modify',
-            reference_strength: 0.45, // ✅ ADD REFERENCE STRENGTH
-            denoise_strength: 0.65, // ✅ ADD DENOISE STRENGTH
-            seed_locked: true, // ✅ ADD SEED LOCK FLAG
-            character_name: character.name, // ✅ ADD CHARACTER NAME FOR CONTEXT
-            contentType: contentTier // ✅ USE DYNAMIC CONTENT TIER
-          }
+          message: 'Generate a scene based on our current conversation context.',
+          conversation_id: conversationId,
+          character_id: character.id,
+          model_provider: modelProvider,
+          memory_tier: memoryTier,
+          content_tier: contentTier,
+          scene_generation: true, // ✅ Enable scene generation
+          user_id: user.id,
+          scene_context: selectedScene?.scene_prompt || null,
+          scene_system_prompt: selectedScene?.system_prompt || null,
+          prompt_template_id: promptTemplate?.id || null,
+          prompt_template_name: promptTemplate?.template_name || null,
+          selected_image_model: selectedImageModel // ✅ Use selected image model
         }
       });
 
       if (error) throw error;
 
-      if (data && (data.job_id || data.jobId)) {
-        const jobId = data.job_id || data.jobId; // ✅ FIX CAMEL/SNAKE CASE MISMATCH
-        console.log('🔧 Scene job queued with ID:', jobId);
-        setSceneJobId(jobId);
-        setSceneJobStatus('processing');
-        
-        // Add queued message to chat
-        const queuedMessage: Message = {
-          id: Date.now().toString(),
-          content: 'Scene generation queued! I\'m creating a visual representation of our conversation...',
-          sender: 'character',
-          timestamp: new Date().toISOString(),
-          metadata: {
-            scene_generated: false,
-            job_id: jobId, // ✅ USE NORMALIZED JOB ID
-            consistency_method: consistencySettings.method
-          }
-        };
-        setMessages(prev => [...prev, queuedMessage]);
-        
-        // Start polling for job completion
-        pollJobCompletion(jobId);
+      // ✅ ENHANCED: Handle edge function response
+      if (data && data.success) {
+        if (data.scene_generated) {
+          setSceneJobStatus('completed');
+          console.log('🎬 Scene generated successfully with consistency score:', data.consistency_score);
+          
+          // Add success message to chat
+          const successMessage: Message = {
+            id: Date.now().toString(),
+            content: 'Scene generated successfully! I\'ve created a visual representation of our conversation.',
+            sender: 'character',
+            timestamp: new Date().toISOString(),
+            metadata: {
+              scene_generated: true,
+              consistency_method: consistencySettings.method
+            }
+          };
+          setMessages(prev => [...prev, successMessage]);
+          
+          toast({
+            title: 'Scene generated successfully!',
+            description: `Scene created for ${character.name} with consistency score: ${data.consistency_score || 'N/A'}`
+          });
+        } else {
+          setSceneJobStatus('failed');
+          toast({
+            title: 'Scene generation failed',
+            description: 'Could not generate scene from current conversation context',
+            variant: 'destructive'
+          });
+        }
       } else {
-        throw new Error('No job ID returned from queue-job');
+        throw new Error('Scene generation failed - no response from edge function');
       }
     } catch (error) {
       console.error('Error generating scene:', error);

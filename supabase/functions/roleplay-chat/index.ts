@@ -367,7 +367,7 @@ serve(async (req) => {
         `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
       );
       
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, request.selected_image_model);
+      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, body.selected_image_model);
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
     }
@@ -1800,10 +1800,12 @@ async function generateScene(supabase: any, characterId: string, response: strin
       // Fallback to enhanced scene extraction
       const extractedScene = extractSceneFromResponse(response);
       if (!extractedScene) {
-        console.log('🎬 No scene description found in response for scene generation');
-        return { success: false };
+        console.log('🎬 No specific scene description found, using conversation context for scene generation');
+        // Use conversation context as scene prompt if no specific scene is detected
+        scenePrompt = `A scene showing ${character.name} in conversation context: ${conversationHistory.slice(-2).join(' | ')}`;
+      } else {
+        scenePrompt = extractedScene;
       }
-      scenePrompt = extractedScene;
     }
 
     console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
@@ -2081,6 +2083,16 @@ function extractSceneFromResponse(response: string): string | null {
     ].filter(part => !part.includes(': undefined') && !part.includes(': ')).join(' | ');
     
     return sceneDescription;
+  }
+  
+  // ✅ ENHANCED: More lenient scene detection for roleplay conversations
+  // Check for roleplay-specific content even without explicit scene markers
+  const roleplayKeywords = ['conversation', 'chat', 'talk', 'discuss', 'respond', 'reply', 'say', 'tell', 'ask', 'answer'];
+  const hasRoleplayContent = roleplayKeywords.some(keyword => response.toLowerCase().includes(keyword));
+  
+  if (hasRoleplayContent && response.length > 20) {
+    // Generate a basic scene description for roleplay conversations
+    return `A conversation scene in ${sceneContext.setting} with ${sceneContext.mood} atmosphere`;
   }
   
   // Fallback to simple keyword detection
