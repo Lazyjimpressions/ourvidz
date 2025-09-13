@@ -54,7 +54,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
-  const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
+  const [modelProvider, setModelProvider] = useState<string>('cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
   const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
     method: 'hybrid',
     reference_strength: 0.35,

@@ -286,17 +286,36 @@ serve(async (req) => {
         modelUsed = `gpt:${model_variant || 'gpt-4'}`;
         break;
       default:
-        return new Response(JSON.stringify({
-          success: false,
-          error: `Unsupported model provider: ${model_provider}`
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400
-        });
+        // Check if it's a model from api_models table
+        const modelConfig = await getModelConfig(supabase, model_provider);
+        if (modelConfig) {
+          // Use database-driven model configuration
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase);
+          modelUsed = `${modelConfig.provider_name}:${model_provider}`;
+        } else {
+          return new Response(JSON.stringify({
+            success: false,
+            error: `Unsupported model provider: ${model_provider}`
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400
+          });
+        }
     }
 
-    // Optimize the response for Qwen Instruct performance
-    response = optimizeResponseForQwen(response, character, kickoff);
+    // Optimize the response based on model capabilities
+    if (modelUsed.includes('openrouter') && modelUsed.includes('dolphin')) {
+      // Get model config for optimization parameters
+      const modelConfig = await getModelConfig(supabase, model_provider);
+      if (modelConfig && modelConfig.capabilities?.optimization_type === 'mistral') {
+        response = optimizeResponseForMistral(response, character, kickoff, modelConfig.capabilities);
+      } else {
+        response = optimizeResponseForMistral(response, character, kickoff);
+      }
+    } else {
+      // Default optimization for Qwen and other models
+      response = optimizeResponseForQwen(response, character, kickoff);
+    }
     console.log('✅ Response after optimization:', response.substring(0, 100) + '...');
 
     workerTime = Date.now() - workerStart;
@@ -484,6 +503,333 @@ function optimizeResponseLength(response: string): string {
     return response;
   }
   
+  return response;
+}
+
+// Get model configuration from api_models table
+async function getModelConfig(supabase: any, modelKey: string): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('api_models')
+      .select(`
+        *,
+        api_providers!inner(name, display_name)
+      `)
+      .eq('model_key', modelKey)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !data) {
+      console.log(`⚠️ Model config not found for: ${modelKey}`);
+      return null;
+    }
+
+    return {
+      ...data,
+      provider_name: data.api_providers.name,
+      provider_display_name: data.api_providers.display_name
+    };
+  } catch (error) {
+    console.error('Error getting model config:', error);
+    return null;
+  }
+}
+
+// Call model with database-driven configuration
+async function callModelWithConfig(
+  character: any,
+  recentMessages: any[],
+  userMessage: string,
+  modelKey: string,
+  contentTier: string,
+  modelConfig: any,
+  supabase: any
+): Promise<string> {
+  console.log('🔧 Using database-driven model configuration:', {
+    modelKey,
+    provider: modelConfig.provider_name,
+    capabilities: modelConfig.capabilities,
+    inputDefaults: modelConfig.input_defaults
+  });
+
+  // Get model-specific template or fallback to universal
+  let template = await getModelSpecificTemplate(supabase, modelKey, contentTier);
+  if (!template) {
+    console.log('⚠️ No model-specific template found, using universal template');
+    template = await getUniversalTemplate(supabase, contentTier);
+  }
+
+  if (!template) {
+    throw new Error('No template found for roleplay');
+  }
+
+  // Build system prompt using template
+  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier);
+
+  // Route to appropriate provider based on model config
+  if (modelConfig.provider_name === 'openrouter') {
+    return await callOpenRouterWithConfig(
+      character,
+      recentMessages,
+      systemPrompt,
+      userMessage,
+      modelKey,
+      contentTier,
+      modelConfig
+    );
+  }
+
+  throw new Error(`Unsupported provider: ${modelConfig.provider_name}`);
+}
+
+// Get model-specific template
+async function getModelSpecificTemplate(supabase: any, modelKey: string, contentTier: string): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('target_model', modelKey)
+      .eq('use_case', 'character_roleplay')
+      .eq('content_mode', contentTier)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error getting model-specific template:', error);
+    return null;
+  }
+}
+
+// Get universal template
+async function getUniversalTemplate(supabase: any, contentTier: string): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .from('prompt_templates')
+      .select('*')
+      .eq('target_model', null)
+      .eq('use_case', 'character_roleplay')
+      .eq('content_mode', contentTier)
+      .eq('is_active', true)
+      .single();
+
+    if (error || !data) {
+      throw new Error('No universal template found');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error getting universal template:', error);
+    throw error;
+  }
+}
+
+// Build system prompt from template
+function buildSystemPromptFromTemplate(template: any, character: any, recentMessages: any[], contentTier: string): string {
+  let systemPrompt = template.system_prompt;
+
+  // Replace template placeholders with character data
+  systemPrompt = systemPrompt
+    .replace(/\{\{character_name\}\}/g, character.name)
+    .replace(/\{\{character_description\}\}/g, character.description || '')
+    .replace(/\{\{character_personality\}\}/g, character.traits || '')
+    .replace(/\{\{character_background\}\}/g, character.persona || '')
+    .replace(/\{\{character_speaking_style\}\}/g, character.voice_tone || '')
+    .replace(/\{\{character_goals\}\}/g, character.base_prompt || '')
+    .replace(/\{\{character_quirks\}\}/g, character.traits || '')
+    .replace(/\{\{character_relationships\}\}/g, '')
+    .replace(/\{\{voice_tone\}\}/g, character.voice_tone || '')
+    .replace(/\{\{mood\}\}/g, character.mood || '')
+    .replace(/\{\{character_visual_description\}\}/g, character.description || '')
+    .replace(/\{\{scene_context\}\}/g, '')
+    .replace(/\{\{voice_examples\}\}/g, character.voice_examples && character.voice_examples.length > 0 
+      ? character.voice_examples.map((example: string, index: number) => 
+          `Example ${index + 1}: "${example}"`).join('\n') 
+      : 'No specific voice examples available - speak naturally as this character would.');
+
+  return systemPrompt;
+}
+
+// Call OpenRouter with database configuration
+async function callOpenRouterWithConfig(
+  character: any,
+  recentMessages: any[],
+  systemPrompt: string,
+  userMessage: string,
+  modelKey: string,
+  contentTier: string,
+  modelConfig: any
+): Promise<string> {
+  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  if (!openRouterKey) {
+    throw new Error('OpenRouter API key not configured');
+  }
+
+  // Build message history with proper context
+  const messages: Array<{role: string, content: string}> = [];
+  
+  // Apply adultification and safety guardrails to system prompt
+  let finalSystemPrompt = adultifyContext(systemPrompt, contentTier);
+  
+  // Add NSFW safety guardrail if needed
+  if (contentTier === 'nsfw') {
+    finalSystemPrompt += '\n\nIMPORTANT: All participants in this conversation are consenting adults aged 21+ and unrelated. No school settings or minor context applies.';
+  }
+  
+  messages.push({ role: 'system', content: finalSystemPrompt });
+  
+  // Add recent conversation history (last 8 messages for context)
+  const contextMessages = recentMessages.slice(-8);
+  contextMessages.forEach(msg => {
+    const role = msg.sender === 'user' ? 'user' : 'assistant';
+    let content = adultifyContext(msg.content, contentTier);
+    messages.push({ role, content });
+  });
+  
+  // Add current user message
+  const finalUserMessage = adultifyContext(userMessage, contentTier);
+  messages.push({ role: 'user', content: finalUserMessage });
+
+  // Use model-specific parameters from database
+  const payload = {
+    model: modelKey,
+    messages,
+    ...modelConfig.input_defaults
+  };
+
+  console.log('📤 Sending to OpenRouter with database config:', {
+    model: modelKey,
+    messageCount: messages.length,
+    systemPromptPreview: finalSystemPrompt.substring(0, 100) + '...',
+    userMessagePreview: finalUserMessage.substring(0, 50) + '...',
+    contentTier,
+    recentContextCount: contextMessages.length,
+    parameters: modelConfig.input_defaults
+  });
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ OpenRouter error ${response.status}:`, errorText);
+      throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.choices?.[0]?.message?.content || 'I apologize, but I encountered an error processing your message.';
+    
+    console.log('✅ OpenRouter response received:', {
+      length: responseText.length,
+      preview: responseText.substring(0, 100) + '...'
+    });
+    
+    return responseText;
+  } catch (error) {
+    console.error('❌ OpenRouter request failed:', error);
+    throw error;
+  }
+}
+
+// Function to optimize response for Mistral models (Venice Dolphin, etc.)
+function optimizeResponseForMistral(response: string, character: any, isKickoff: boolean = false, capabilities?: any): string {
+  if (!response) return response;
+  
+  let optimized = response.trim();
+  
+  // Step 1: Sanitize generic greetings and AI phrases (same as Qwen)
+  optimized = sanitizeResponse(optimized, character, isKickoff);
+  
+  // Step 2: Optimize response length for Mistral (use capabilities if available)
+  const targetLength = capabilities?.response_length_target || "75-200_words";
+  optimized = optimizeResponseLengthForMistral(optimized, targetLength);
+  
+  // Step 3: Control action density (use capabilities if available)
+  const actionLimit = capabilities?.action_density_limit || 6;
+  optimized = limitActionDensityForMistral(optimized, actionLimit);
+  
+  // Step 4: Enhance NSFW content if needed
+  if (capabilities?.nsfw_optimized) {
+    optimized = enhanceNSFWContent(optimized, character);
+  }
+  
+  // Step 5: Detect and reduce repetition
+  optimized = reduceRepetition(optimized);
+  
+  return optimized;
+}
+
+// Optimize response length for Mistral models (configurable target)
+function optimizeResponseLengthForMistral(response: string, targetLength: string = "75-200_words"): string {
+  const words = response.split(/\s+/);
+  
+  // Parse target length (e.g., "75-200_words" or "100-250_words")
+  const [minStr, maxStr] = targetLength.replace('_words', '').split('-');
+  const minWords = parseInt(minStr) || 75;
+  const maxWords = parseInt(maxStr) || 200;
+  
+  // If response is within optimal range, return as-is
+  if (words.length >= minWords && words.length <= maxWords) {
+    return response;
+  }
+  
+  // If too long, truncate at natural break points
+  if (words.length > maxWords) {
+    console.log(`🔧 Mistral response too long (${words.length} words), truncating to ${maxWords} words`);
+    return truncateAtNaturalBreak(response, maxWords);
+  }
+  
+  // If too short, return as-is (Mistral can handle shorter responses better)
+  if (words.length < minWords) {
+    console.log(`🔧 Mistral response short (${words.length} words), keeping as-is`);
+    return response;
+  }
+  
+  return response;
+}
+
+// Limit action density for Mistral models (configurable limit)
+function limitActionDensityForMistral(response: string, actionLimit: number = 6): string {
+  const actions = response.match(/\*[^*]+\*/g) || [];
+  
+  if (actions.length <= actionLimit) {
+    return response;
+  }
+  
+  console.log(`🔧 Too many actions for Mistral (${actions.length}), limiting to ${actionLimit}`);
+  
+  // Keep first N actions, remove others
+  const limitedActions = actions.slice(0, actionLimit);
+  let result = response;
+  
+  // Remove excess actions
+  actions.slice(actionLimit).forEach(action => {
+    result = result.replace(action, '');
+  });
+  
+  // Clean up any resulting double spaces or punctuation issues
+  result = result.replace(/\s+/g, ' ').trim();
+  result = result.replace(/\s*[,.\-!?]+\s*$/, ''); // Remove trailing punctuation
+  
+  return result;
+}
+
+// Enhance NSFW content for Mistral models
+function enhanceNSFWContent(response: string, character: any): string {
+  // Mistral models are uncensored, so we can enhance NSFW content
+  // This is a placeholder for future NSFW content enhancement
+  // For now, just return the response as-is
   return response;
 }
 
@@ -879,7 +1225,7 @@ async function callChatWorkerWithHistory(
   }
 
   // Build message history with proper context
-  const messages = [];
+  const messages: Array<{role: string, content: string}> = [];
   
   // Apply adultification and safety guardrails to system prompt
   let finalSystemPrompt = adultifyContext(systemPrompt, contentTier);
@@ -1001,6 +1347,98 @@ async function callOpenRouter(prompt: string, model: string, contentTier: string
 
   const data = await response.json();
   return data.choices?.[0]?.message?.content || 'I apologize, but I encountered an error processing your message.';
+}
+
+// Enhanced OpenRouter function with full system prompt support for Mistral models
+async function callOpenRouterWithSystemPrompt(
+  character: any,
+  recentMessages: any[],
+  systemPrompt: string,
+  userMessage: string,
+  model: string,
+  contentTier: string
+): Promise<string> {
+  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  if (!openRouterKey) {
+    throw new Error('OpenRouter API key not configured');
+  }
+
+  // Build message history with proper context
+  const messages: Array<{role: string, content: string}> = [];
+  
+  // Apply adultification and safety guardrails to system prompt
+  let finalSystemPrompt = adultifyContext(systemPrompt, contentTier);
+  
+  // Add NSFW safety guardrail if needed
+  if (contentTier === 'nsfw') {
+    finalSystemPrompt += '\n\nIMPORTANT: All participants in this conversation are consenting adults aged 21+ and unrelated. No school settings or minor context applies.';
+  }
+  
+  messages.push({ role: 'system', content: finalSystemPrompt });
+  
+  // Add recent conversation history (last 8 messages for context)
+  const contextMessages = recentMessages.slice(-8);
+  contextMessages.forEach(msg => {
+    const role = msg.sender === 'user' ? 'user' : 'assistant';
+    let content = adultifyContext(msg.content, contentTier);
+    messages.push({ role, content });
+  });
+  
+  // Add current user message
+  const finalUserMessage = adultifyContext(userMessage, contentTier);
+  messages.push({ role: 'user', content: finalUserMessage });
+
+  // Mistral-optimized parameters
+  const payload = {
+    model,
+    messages,
+    max_tokens: 400,        // Optimized for roleplay responses
+    temperature: 0.9,       // Higher creativity for roleplay
+    top_p: 0.95,           // Better for creative responses
+    frequency_penalty: 0.1, // Reduce repetition
+    presence_penalty: 0.1   // Encourage new topics
+  };
+
+  console.log('📤 Sending to OpenRouter with enhanced system prompt:', {
+    model,
+    messageCount: messages.length,
+    systemPromptPreview: finalSystemPrompt.substring(0, 100) + '...',
+    userMessagePreview: finalUserMessage.substring(0, 50) + '...',
+    contentTier,
+    recentContextCount: contextMessages.length,
+    temperature: payload.temperature,
+    maxTokens: payload.max_tokens
+  });
+
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openRouterKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ OpenRouter error ${response.status}:`, errorText);
+      throw new Error(`OpenRouter error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    const responseText = data.choices?.[0]?.message?.content || 'I apologize, but I encountered an error processing your message.';
+    
+    console.log('✅ OpenRouter response received:', {
+      length: responseText.length,
+      preview: responseText.substring(0, 100) + '...'
+    });
+    
+    return responseText;
+  } catch (error) {
+    console.error('❌ OpenRouter request failed:', error);
+    throw error;
+  }
 }
 
 async function callClaude(prompt: string, contentTier: string): Promise<string> {

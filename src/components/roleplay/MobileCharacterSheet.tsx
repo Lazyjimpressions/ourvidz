@@ -13,6 +13,7 @@ import {
   Info
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { ConsistencySettings as IConsistencySettings } from '@/services/ImageConsistencyService';
 import { Character } from '@/types/roleplay';
 
@@ -21,8 +22,8 @@ interface MobileCharacterSheetProps {
   onClose: () => void;
   memoryTier: 'conversation' | 'character' | 'profile';
   onMemoryTierChange: (tier: 'conversation' | 'character' | 'profile') => void;
-  modelProvider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
-  onModelProviderChange: (provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt') => void;
+  modelProvider: string;
+  onModelProviderChange: (provider: string) => void;
   consistencySettings?: IConsistencySettings;
   onConsistencySettingsChange?: (settings: IConsistencySettings) => void;
 }
@@ -38,6 +39,7 @@ export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
   onConsistencySettingsChange
 }) => {
   const { isMobile } = useMobileDetection();
+  const { allModelOptions, isLoading: modelsLoading } = useRoleplayModels();
 
   const memoryTierOptions = [
     { value: 'conversation', label: 'Conversation Memory', description: 'Remembers only this conversation' },
@@ -45,12 +47,8 @@ export const MobileCharacterSheet: React.FC<MobileCharacterSheetProps> = ({
     { value: 'profile', label: 'Profile Memory', description: 'Remembers all your conversations and preferences' }
   ];
 
-  const modelProviderOptions = [
-    { value: 'chat_worker', label: 'Chat Worker', description: 'Our custom AI model' },
-    { value: 'openrouter', label: 'OpenRouter', description: 'Multiple AI models via OpenRouter' },
-    { value: 'claude', label: 'Claude', description: 'Anthropic Claude model' },
-    { value: 'gpt', label: 'GPT', description: 'OpenAI GPT model' }
-  ];
+  // Use dynamic model options from the hook
+  const modelProviderOptions = allModelOptions;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end">

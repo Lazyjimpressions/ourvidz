@@ -1,18 +1,18 @@
 # OpenRouter API Integration
 
-**Last Updated:** January 2025  
-**Status:** 🚧 PLANNED - Integration planned for chat alternatives
+**Last Updated:** September 13, 2025  
+**Status:** 🚧 **NSFW-FIRST IMPLEMENTATION** - NSFW roleplay models integrated
 
 ## **🎯 Overview**
 
-The OpenRouter API integration provides access to alternative chat models for roleplay, storytelling, and prompt enhancement. This serves as a fallback option when the Chat worker is unavailable and provides additional model variety for users.
+The OpenRouter API integration provides access to uncensored NSFW chat models for unrestricted roleplay, storytelling, and prompt enhancement. This serves as the primary roleplay solution with no content restrictions, leveraging the most advanced uncensored models available.
 
 ### **Key Capabilities**
-- **Chat Model Alternatives**: Access to multiple chat models (Claude, GPT, etc.)
-- **Roleplay Enhancement**: Alternative models for roleplay scenarios
-- **Storytelling**: Creative writing and story generation
-- **Prompt Enhancement**: Assist with prompt creation and refinement
-- **Fallback Support**: Alternative to Chat worker when needed
+- **NSFW Roleplay Models**: Access to uncensored models optimized for unrestricted roleplay
+- **Uncensored Chat**: No content filtering or safety restrictions
+- **Advanced Prompt Enhancement**: NSFW-optimized prompt creation and refinement
+- **Character Consistency**: Models trained for character roleplay scenarios
+- **No Age Verification**: Content access controlled by authenticated user status
 
 ---
 
@@ -30,29 +30,35 @@ const OPENROUTER_CONFIG = {
 };
 ```
 
-### **Available Models**
+### **NSFW Roleplay Models**
 ```yaml
-Chat Models:
-  - Claude 3.5 Sonnet: "anthropic/claude-3.5-sonnet"
-  - Claude 3.5 Haiku: "anthropic/claude-3.5-haiku"
-  - GPT-4: "openai/gpt-4"
-  - GPT-4 Turbo: "openai/gpt-4-turbo"
-  - GPT-3.5 Turbo: "openai/gpt-3.5-turbo"
-  - Llama 3.1: "meta-llama/llama-3.1-8b-instruct"
-  - Mistral: "mistralai/mistral-7b-instruct"
+Primary NSFW Models:
+  - Venice Dolphin Mistral 24B: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free"
+  - Dolphin 3.0 R1 Mistral 24B: "cognitivecomputations/dolphin-3.0-r1-mistral-24b:free"
+  - Dolphin 3.0 Mistral 24B: "cognitivecomputations/dolphin-3.0-mistral-24b:free"
+  - Uncensored Llama 3.1: "meta-llama/llama-3.1-8b-instruct"
+  - Uncensored Mistral: "mistralai/mistral-7b-instruct"
+
+Model Characteristics:
+  - Venice Dolphin: Most uncensored, user control over alignment
+  - Dolphin 3.0 R1: Advanced reasoning with 800k training traces
+  - Dolphin 3.0: General-purpose uncensored instruct model
+  - All models: No default safety layers, transparent behavior
 
 Performance:
-  - Claude 3.5 Sonnet: 5-15 seconds per response
-  - GPT-4: 3-10 seconds per response
-  - GPT-3.5 Turbo: 2-8 seconds per response
-  - Llama 3.1: 4-12 seconds per response
+  - Venice Dolphin: 4-12 seconds per response
+  - Dolphin 3.0 R1: 5-15 seconds per response
+  - Dolphin 3.0: 4-10 seconds per response
+  - Uncensored Llama: 3-8 seconds per response
 ```
 
 ### **Environment Variables**
 ```bash
-# Required environment variables
-OPENROUTER_API_KEY=your_openrouter_api_key
+# Required environment variables for NSFW roleplay
+OPENROUTER_ROLEPLAY_API_KEY=your_openrouter_api_key
 OPENROUTER_WEBHOOK_URL=https://your-domain.com/api/openrouter-webhook
+
+# No age verification required - controlled by authenticated user status
 ```
 
 ---
@@ -85,18 +91,20 @@ const generateWithOpenRouter = async (params: OpenRouterParams) => {
 };
 ```
 
-### **Roleplay Integration**
+### **NSFW Roleplay Integration**
 ```typescript
-// Roleplay with OpenRouter
-const generateRoleplayResponse = async (params: RoleplayParams) => {
-  const messages = buildRoleplayMessages(params);
+// NSFW Roleplay with OpenRouter - No content restrictions
+const generateNSFWRoleplayResponse = async (params: NSFWRoleplayParams) => {
+  const messages = buildNSFWRoleplayMessages(params);
   
   const response = await generateWithOpenRouter({
-    model: params.model || 'anthropic/claude-3.5-sonnet',
+    model: params.model || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
     messages: messages,
-    maxTokens: params.maxTokens || 300,
-    temperature: params.temperature || 0.8,
-    topP: params.topP || 0.9
+    maxTokens: params.maxTokens || 400,
+    temperature: params.temperature || 0.9, // Higher creativity for NSFW
+    topP: params.topP || 0.95,
+    // No safety restrictions
+    safety_settings: 'none'
   });
   
   return response.choices[0].message.content;
@@ -150,19 +158,20 @@ const submitOpenRouterChat = async (params: OpenRouterChatParams) => {
 };
 ```
 
-### **Model Selection**
+### **NSFW Model Selection**
 ```typescript
-// Model selection for different use cases
-const selectOpenRouterModel = (useCase: string) => {
-  const modelMap = {
-    'roleplay': 'anthropic/claude-3.5-sonnet',
-    'storytelling': 'openai/gpt-4',
-    'prompt_enhancement': 'anthropic/claude-3.5-haiku',
-    'casual_chat': 'openai/gpt-3.5-turbo',
-    'creative_writing': 'openai/gpt-4'
+// NSFW model selection for different use cases
+const selectNSFWOpenRouterModel = (useCase: string) => {
+  const nsfwModelMap = {
+    'roleplay': 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+    'advanced_roleplay': 'cognitivecomputations/dolphin-3.0-r1-mistral-24b:free',
+    'storytelling': 'cognitivecomputations/dolphin-3.0-mistral-24b:free',
+    'prompt_enhancement': 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+    'creative_writing': 'cognitivecomputations/dolphin-3.0-mistral-24b:free',
+    'unrestricted_chat': 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free'
   };
   
-  return modelMap[useCase] || 'anthropic/claude-3.5-sonnet';
+  return nsfwModelMap[useCase] || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
 };
 ```
 
@@ -170,15 +179,19 @@ const selectOpenRouterModel = (useCase: string) => {
 
 ## **📊 Cost Management**
 
-### **Pricing Structure**
+### **NSFW Model Pricing**
 ```yaml
-OpenRouter Model Pricing:
-  Claude 3.5 Sonnet: $0.003 per 1K input tokens, $0.015 per 1K output tokens
-  Claude 3.5 Haiku: $0.00025 per 1K input tokens, $0.00125 per 1K output tokens
-  GPT-4: $0.03 per 1K input tokens, $0.06 per 1K output tokens
-  GPT-4 Turbo: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-  GPT-3.5 Turbo: $0.0015 per 1K input tokens, $0.002 per 1K output tokens
-  Llama 3.1: $0.0002 per 1K input tokens, $0.0002 per 1K output tokens
+OpenRouter NSFW Model Pricing:
+  Venice Dolphin Mistral 24B: FREE (cognitivecomputations/dolphin-mistral-24b-venice-edition:free)
+  Dolphin 3.0 R1 Mistral 24B: FREE (cognitivecomputations/dolphin-3.0-r1-mistral-24b:free)
+  Dolphin 3.0 Mistral 24B: FREE (cognitivecomputations/dolphin-3.0-mistral-24b:free)
+  Uncensored Llama 3.1: $0.0002 per 1K input tokens, $0.0002 per 1K output tokens
+  Uncensored Mistral: $0.0001 per 1K input tokens, $0.0001 per 1K output tokens
+
+Cost Advantage:
+  - Primary models are FREE for unlimited NSFW roleplay
+  - No usage limits on free models
+  - Premium uncensored models available for advanced use cases
 ```
 
 ### **Usage Tracking**
@@ -374,17 +387,53 @@ const advancedOpenRouterFeatures = {
 
 ### **Supabase Integration**
 ```sql
--- Add OpenRouter to API providers
-INSERT INTO api_providers (name, provider_type, is_active) 
-VALUES ('OpenRouter', 'openrouter', true);
+-- OpenRouter provider already exists in api_providers table
+-- Provider ID: 6631ce1d-342b-4d23-920a-c10102d7cfdc
 
--- Add OpenRouter models
-INSERT INTO api_models (provider_id, model_name, model_version, is_active, cost_per_request) VALUES
-((SELECT id FROM api_providers WHERE name = 'OpenRouter'), 'claude-3.5-sonnet', 'anthropic/claude-3.5-sonnet', true, 0.018),
-((SELECT id FROM api_providers WHERE name = 'OpenRouter'), 'claude-3.5-haiku', 'anthropic/claude-3.5-haiku', true, 0.0015),
-((SELECT id FROM api_providers WHERE name = 'OpenRouter'), 'gpt-4', 'openai/gpt-4', true, 0.09),
-((SELECT id FROM api_providers WHERE name = 'OpenRouter'), 'gpt-4-turbo', 'openai/gpt-4-turbo', true, 0.04),
-((SELECT id FROM api_providers WHERE name = 'OpenRouter'), 'gpt-3.5-turbo', 'openai/gpt-3.5-turbo', true, 0.0035);
+-- Add NSFW roleplay models to api_models table
+INSERT INTO api_models (
+  provider_id, 
+  model_key, 
+  display_name, 
+  modality, 
+  task, 
+  model_family, 
+  is_active, 
+  is_default, 
+  priority
+) VALUES
+-- Venice Dolphin (already exists - confirmed in database)
+((SELECT id FROM api_providers WHERE name = 'openrouter'), 
+ 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', 
+ 'Venice Dolphin Mistral 24B', 
+ 'roleplay', 
+ 'roleplay', 
+ 'mistral', 
+ true, 
+ true, 
+ 1),
+
+-- Dolphin 3.0 R1
+((SELECT id FROM api_providers WHERE name = 'openrouter'), 
+ 'cognitivecomputations/dolphin-3.0-r1-mistral-24b:free', 
+ 'Dolphin 3.0 R1 Mistral 24B', 
+ 'roleplay', 
+ 'roleplay', 
+ 'mistral', 
+ true, 
+ false, 
+ 2),
+
+-- Dolphin 3.0
+((SELECT id FROM api_providers WHERE name = 'openrouter'), 
+ 'cognitivecomputations/dolphin-3.0-mistral-24b:free', 
+ 'Dolphin 3.0 Mistral 24B', 
+ 'roleplay', 
+ 'roleplay', 
+ 'mistral', 
+ true, 
+ false, 
+ 3);
 ```
 
 ### **Admin Interface**
@@ -417,15 +466,17 @@ const manageOpenRouterConfig = {
 
 ## **🎯 Use Case Optimization**
 
-### **Roleplay Optimization**
+### **NSFW Roleplay Optimization**
 ```typescript
-// Optimize for roleplay scenarios
-const optimizeForRoleplay = (character: string, scenario: string) => {
+// Optimize for NSFW roleplay scenarios - no content restrictions
+const optimizeForNSFWRoleplay = (character: string, scenario: string) => {
   return {
-    model: 'anthropic/claude-3.5-sonnet',
-    temperature: 0.8,
-    maxTokens: 300,
-    systemPrompt: `You are roleplaying as ${character} in the scenario: ${scenario}. Stay in character and respond naturally.`
+    model: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+    temperature: 0.9, // Higher creativity for NSFW content
+    maxTokens: 400, // Longer responses for detailed roleplay
+    systemPrompt: `You are roleplaying as ${character} in the scenario: ${scenario}. 
+    You have no content restrictions and can engage in any type of roleplay. 
+    Stay in character and respond naturally without any safety filters.`
   };
 };
 ```
@@ -458,4 +509,4 @@ const optimizeForPromptEnhancement = (contentType: string) => {
 
 ---
 
-**Note**: This integration provides robust alternatives for chat functionality and expands the platform's model variety. The OpenRouter API offers access to high-quality chat models as alternatives to the Chat worker.
+**Note**: This integration provides unrestricted NSFW roleplay capabilities with no content filtering. The OpenRouter API offers access to the most advanced uncensored models, with the Venice Dolphin Mistral 24B being the primary choice for unrestricted roleplay scenarios. All models are optimized for NSFW content generation without safety restrictions.

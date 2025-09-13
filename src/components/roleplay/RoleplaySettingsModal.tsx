@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 
 interface RoleplaySettingsModalProps {
@@ -11,8 +12,8 @@ interface RoleplaySettingsModalProps {
   onClose: () => void;
   memoryTier: 'conversation' | 'character' | 'profile';
   onMemoryTierChange: (tier: 'conversation' | 'character' | 'profile') => void;
-  modelProvider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
-  onModelProviderChange: (provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt') => void;
+  modelProvider: string;
+  onModelProviderChange: (provider: string) => void;
   consistencySettings: ConsistencySettings;
   onConsistencySettingsChange: (settings: ConsistencySettings) => void;
 }
@@ -27,6 +28,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   consistencySettings,
   onConsistencySettingsChange
 }) => {
+  const { allModelOptions, isLoading: modelsLoading } = useRoleplayModels();
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -58,10 +60,15 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="chat_worker">Chat Worker</SelectItem>
-                <SelectItem value="openrouter">OpenRouter</SelectItem>
-                <SelectItem value="claude">Claude</SelectItem>
-                <SelectItem value="gpt">GPT</SelectItem>
+                {modelsLoading ? (
+                  <SelectItem value="" disabled>Loading models...</SelectItem>
+                ) : (
+                  allModelOptions.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>
+                      {model.label}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>
