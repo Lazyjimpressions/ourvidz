@@ -20,7 +20,7 @@ interface RoleplayChatRequest {
   message?: string; // Optional for kickoff
   conversation_id: string;
   character_id: string;
-  model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
+  model_provider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt' | string;
   model_variant?: string;
   memory_tier: 'conversation' | 'character' | 'profile';
   content_tier: 'sfw' | 'nsfw';
@@ -664,7 +664,7 @@ async function callOpenRouterWithConfig(
   contentTier: string,
   modelConfig: any
 ): Promise<string> {
-  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
   }
@@ -1319,7 +1319,7 @@ async function callChatWorker(systemPrompt: string, userMessage: string, content
 }
 
 async function callOpenRouter(prompt: string, model: string, contentTier: string): Promise<string> {
-  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
   }
@@ -1358,7 +1358,7 @@ async function callOpenRouterWithSystemPrompt(
   model: string,
   contentTier: string
 ): Promise<string> {
-  const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
+  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
   }
