@@ -74,6 +74,21 @@ serve(async (req) => {
 
     const jobRequest: JobRequest = await req.json()
 
+    // Check if SDXL is available for SDXL jobs
+    if (jobRequest.job_type.startsWith('sdxl')) {
+      const sdxlEnabled = Deno.env.get('SDXL_QUEUE_ENABLED') !== 'false';
+      if (!sdxlEnabled) {
+        return new Response(JSON.stringify({
+          success: false,
+          code: 'SDXL_DISABLED',
+          error: 'Image worker unavailable'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 503
+        });
+      }
+    }
+
     // Validate job_type
     const validJobTypes = ['sdxl_image_fast', 'sdxl_image_high', 'video_fast', 'video_high', 'wan_video_fast', 'wan_video_high'];
     if (!jobRequest.job_type || !validJobTypes.includes(jobRequest.job_type)) {

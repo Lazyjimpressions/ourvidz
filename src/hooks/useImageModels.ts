@@ -60,7 +60,8 @@ export const useImageModels = () => {
         const formattedModels = data.map(model => ({
           ...model,
           provider_name: model.api_providers.name,
-          provider_display_name: model.api_providers.display_name
+          provider_display_name: model.api_providers.display_name,
+          capabilities: model.capabilities as ImageModel['capabilities'] || {}
         }));
 
         setImageModels(formattedModels);
@@ -94,7 +95,7 @@ export const useImageModels = () => {
       value: model.id,
       label: `${model.display_name} (${model.provider_display_name})`,
       type: 'api' as const,
-      capabilities: model.capabilities
+      capabilities: (model.capabilities || {}) as ImageModel['capabilities']
     }))
   ];
 

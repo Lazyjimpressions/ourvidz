@@ -362,14 +362,26 @@ serve(async (req) => {
     let sceneGenerated = false;
     let consistencyScore = 0;
     if (scene_generation) {
+      console.log('🎬 Scene generation requested:', {
+        character_id,
+        selected_image_model: requestBody.selected_image_model,
+        response_length: response.length,
+        consistency_method: character.consistency_method
+      });
+      
       // Build conversation history for scene context
       const conversationHistory = recentMessages.map(msg => 
         `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
       );
       
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, body.selected_image_model);
+      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, requestBody.selected_image_model);
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
+      
+      console.log('🎬 Scene generation result:', {
+        success: sceneGenerated,
+        consistency_score: consistencyScore
+      });
     }
 
     const totalTime = Date.now() - startTime;
@@ -1734,6 +1746,14 @@ function buildCharacterVisualDescription(character: any): string {
 
 async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = [], selectedImageModel?: string): Promise<{ success: boolean; consistency_score?: number }> {
   try {
+    console.log('🎬 Starting scene generation:', {
+      characterId,
+      responseLength: response.length,
+      consistencyMethod,
+      selectedImageModel,
+      conversationHistoryLength: conversationHistory.length
+    });
+    
     // ✅ ENHANCED: Load character data with comprehensive visual information
     const { data: character, error: charError } = await supabase
       .from('characters')
@@ -1760,6 +1780,13 @@ async function generateScene(supabase: any, characterId: string, response: strin
 
     // Enhanced scene analysis with comprehensive context
     const sceneContext = analyzeSceneContent(response);
+    console.log('🎬 Scene context analyzed:', {
+      setting: sceneContext.setting,
+      mood: sceneContext.mood,
+      actionsCount: sceneContext.actions.length,
+      visualElementsCount: sceneContext.visualElements.length,
+      isNSFW: sceneContext.isNSFW
+    });
     
     // ✅ ENHANCED: Build comprehensive character visual context
     const characterVisualDescription = buildCharacterVisualDescription(character);
@@ -1820,7 +1847,13 @@ async function generateScene(supabase: any, characterId: string, response: strin
     let imageResponse;
     const useSDXL = !selectedImageModel || selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
     
-    if (useSDXL && (consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid')) {
+    console.log('🎨 Image model routing decision:', {
+      selectedImageModel,
+      useSDXL,
+      consistencyMethod
+    });
+    
+    if (useSDXL) {
       // Use queue-job for SDXL worker with enhanced metadata and character consistency
       imageResponse = await supabase.functions.invoke('queue-job', {
         body: {
@@ -1856,7 +1889,7 @@ async function generateScene(supabase: any, characterId: string, response: strin
           id,
           model_key,
           display_name,
-          api_providers!inner(name, display_name),
+          provider_id,
           input_defaults,
           capabilities
         `)
@@ -1891,8 +1924,46 @@ async function generateScene(supabase: any, characterId: string, response: strin
           }
         });
       } else {
-        // Use API model for generation
-        const providerName = modelConfig.api_providers.name;
+        // Get provider information
+        const { data: provider, error: providerError } = await supabase
+          .from('api_providers')
+          .select('name, display_name')
+          .eq('id', modelConfig.provider_id)
+          .single();
+        
+        if (providerError || !provider) {
+          console.error('🎨❌ Provider not found for model:', modelConfig.provider_id);
+          // Fallback to SDXL
+          imageResponse = await supabase.functions.invoke('queue-job', {
+            body: {
+              prompt: enhancedScenePrompt,
+              job_type: 'sdxl_image_high',
+              seed: character.seed_locked,
+              reference_image_url: character.reference_image_url,
+              metadata: {
+                destination: 'roleplay_scene',
+                character_id: characterId,
+                character_name: character.name,
+                scene_type: 'chat_scene',
+                consistency_method: character.consistency_method || consistencyMethod,
+                reference_strength: 0.45,
+                denoise_strength: 0.65,
+                skip_enhancement: false,
+                reference_mode: 'modify',
+                seed_locked: true,
+                model_used: 'sdxl',
+                model_display_name: 'SDXL (Fallback)',
+                provider_name: 'local',
+                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                scene_context: JSON.stringify(sceneContext),
+                character_visual_description: characterVisualDescription,
+                fallback_reason: 'provider_not_found'
+              }
+            }
+          });
+        } else {
+          // Use API model for generation
+          const providerName = provider.name;
         
         if (providerName === 'replicate') {
           imageResponse = await supabase.functions.invoke('replicate-image', {
@@ -1940,30 +2011,39 @@ async function generateScene(supabase: any, characterId: string, response: strin
             }
           });
         }
+        }
       }
       
       console.log('🎨 API model scene generation queued:', imageResponse);
     } else {
-      // Use replicate-image for Replicate API (fallback) with enhanced metadata
-      imageResponse = await supabase.functions.invoke('replicate-image', {
+      // Fallback to SDXL if no model selected
+      console.log('🎨 No image model selected, using SDXL fallback');
+      imageResponse = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: enhancedScenePrompt,
-          apiModelId: 'replicate-rv5.1-model-id',
-          jobType: 'image_generation',
+          job_type: 'sdxl_image_high',
+          seed: character.seed_locked,
+          reference_image_url: character.reference_image_url,
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
             character_name: character.name,
             scene_type: 'chat_scene',
             consistency_method: consistencyMethod,
+            model_used: 'sdxl',
+            model_display_name: 'SDXL (Default)',
+            provider_name: 'local',
             contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
-            scene_context: JSON.stringify(sceneContext)
+            scene_context: JSON.stringify(sceneContext),
+            character_visual_description: characterVisualDescription,
+            seed_locked: true
           }
         }
       });
-      console.log('🎬 Replicate scene generation initiated:', imageResponse);
+      console.log('🎬 SDXL fallback scene generation queued:', imageResponse);
     }
 
+    console.log('🎬 Scene generation completed successfully');
     return { 
       success: true, 
       consistency_score: character.seed_locked ? 0.9 : 0.7 // ✅ HIGHER SCORE WITH SEED LOCK

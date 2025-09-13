@@ -55,6 +55,7 @@ const RoleplayChatInterface = () => {
 // Roleplay Settings
 const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
 const [modelProvider, setModelProvider] = useState<'chat_worker' | 'openrouter' | 'claude' | 'gpt'>('chat_worker');
+const [selectedImageModel, setSelectedImageModel] = useState<string>('sdxl');
 const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
   method: 'hybrid',
   reference_strength: 0.35,
@@ -685,7 +686,9 @@ useEffect(() => {
         memoryTier={memoryTier}
         onMemoryTierChange={setMemoryTier}
         modelProvider={modelProvider}
-        onModelProviderChange={setModelProvider}
+        onModelProviderChange={(provider) => setModelProvider(provider as 'chat_worker' | 'openrouter' | 'claude' | 'gpt')}
+        selectedImageModel={selectedImageModel}
+        onSelectedImageModelChange={setSelectedImageModel}
         consistencySettings={consistencySettings}
         onConsistencySettingsChange={setConsistencySettings}
       />

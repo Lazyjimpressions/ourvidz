@@ -54,14 +54,44 @@ const MobileRoleplayChat: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
-  const [modelProvider, setModelProvider] = useState<string>('cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
-  const [selectedImageModel, setSelectedImageModel] = useState<string>('sdxl');
-  const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
-    method: 'hybrid',
-    reference_strength: 0.35,
-    denoise_strength: 0.25,
-    modify_strength: 0.5
-  });
+  // Initialize settings with saved values or defaults
+  const initializeSettings = () => {
+    const savedSettings = localStorage.getItem('roleplay-settings');
+    if (savedSettings) {
+      try {
+        const parsed = JSON.parse(savedSettings);
+        return {
+          modelProvider: parsed.modelProvider || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+          selectedImageModel: parsed.selectedImageModel || 'sdxl',
+          consistencySettings: parsed.consistencySettings || {
+            method: 'hybrid',
+            reference_strength: 0.35,
+            denoise_strength: 0.25,
+            modify_strength: 0.5
+          }
+        };
+      } catch (error) {
+        console.warn('Failed to parse saved roleplay settings:', error);
+      }
+    }
+    
+    // Default values
+    return {
+      modelProvider: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+      selectedImageModel: 'sdxl',
+      consistencySettings: {
+        method: 'hybrid',
+        reference_strength: 0.35,
+        denoise_strength: 0.25,
+        modify_strength: 0.5
+      }
+    };
+  };
+  
+  const initialSettings = initializeSettings();
+  const [modelProvider, setModelProvider] = useState<string>(initialSettings.modelProvider);
+  const [selectedImageModel, setSelectedImageModel] = useState<string>(initialSettings.selectedImageModel);
+  const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>(initialSettings.consistencySettings);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
