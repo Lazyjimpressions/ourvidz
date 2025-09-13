@@ -31,6 +31,7 @@ interface RoleplayChatRequest {
   kickoff?: boolean; // New field for scene kickoff
   prompt_template_id?: string; // Prompt template ID for enhanced prompts
   prompt_template_name?: string; // Prompt template name for logging
+  selected_image_model?: string; // Selected image model for scene generation
 }
 
 interface RoleplayChatResponse {
@@ -366,7 +367,7 @@ serve(async (req) => {
         `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
       );
       
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory);
+      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, request.selected_image_model);
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
     }
@@ -1662,12 +1663,93 @@ async function updateMemoryData(
   }
 }
 
-async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = []): Promise<{ success: boolean; consistency_score?: number }> {
+// Build comprehensive character visual description for scene generation
+function buildCharacterVisualDescription(character: any): string {
+  let visualDescription = '';
+  
+  // Base description
+  if (character.description) {
+    visualDescription += character.description;
+  }
+  
+  // Add appearance tags for specific visual details
+  if (character.appearance_tags && character.appearance_tags.length > 0) {
+    visualDescription += `, ${character.appearance_tags.join(', ')}`;
+  }
+  
+  // Add personality traits that affect appearance
+  if (character.traits) {
+    const visualTraits = character.traits
+      .split(',')
+      .map(trait => trait.trim())
+      .filter(trait => 
+        trait.includes('hair') || 
+        trait.includes('eye') || 
+        trait.includes('skin') || 
+        trait.includes('style') || 
+        trait.includes('clothing') ||
+        trait.includes('appearance') ||
+        trait.includes('beautiful') ||
+        trait.includes('attractive') ||
+        trait.includes('elegant') ||
+        trait.includes('cute')
+      );
+    
+    if (visualTraits.length > 0) {
+      visualDescription += `, ${visualTraits.join(', ')}`;
+    }
+  }
+  
+  // Add base prompt visual elements
+  if (character.base_prompt) {
+    const visualElements = character.base_prompt
+      .split(/[.,;]/)
+      .map(element => element.trim())
+      .filter(element => 
+        element.includes('hair') || 
+        element.includes('eye') || 
+        element.includes('skin') || 
+        element.includes('style') || 
+        element.includes('clothing') ||
+        element.includes('appearance') ||
+        element.includes('beautiful') ||
+        element.includes('attractive') ||
+        element.includes('elegant') ||
+        element.includes('cute')
+      );
+    
+    if (visualElements.length > 0) {
+      visualDescription += `, ${visualElements.join(', ')}`;
+    }
+  }
+  
+  // Ensure we have a fallback description
+  if (!visualDescription.trim()) {
+    visualDescription = 'attractive person with distinctive features';
+  }
+  
+  console.log('🎨 Built character visual description:', visualDescription.substring(0, 100) + '...');
+  return visualDescription;
+}
+
+async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = [], selectedImageModel?: string): Promise<{ success: boolean; consistency_score?: number }> {
   try {
-    // ✅ ADD: Load character data with seed and reference image
+    // ✅ ENHANCED: Load character data with comprehensive visual information
     const { data: character, error: charError } = await supabase
       .from('characters')
-      .select('seed_locked, reference_image_url, consistency_method, name')
+      .select(`
+        seed_locked, 
+        reference_image_url, 
+        consistency_method, 
+        name,
+        description,
+        appearance_tags,
+        image_url,
+        preview_image_url,
+        base_prompt,
+        traits,
+        persona
+      `)
       .eq('id', characterId)
       .single();
 
@@ -1679,11 +1761,14 @@ async function generateScene(supabase: any, characterId: string, response: strin
     // Enhanced scene analysis with comprehensive context
     const sceneContext = analyzeSceneContent(response);
     
-    // Populate character context
+    // ✅ ENHANCED: Build comprehensive character visual context
+    const characterVisualDescription = buildCharacterVisualDescription(character);
     sceneContext.characters = [{
       name: character.name,
-      visualDescription: character.description || 'attractive person',
-      role: 'main_character'
+      visualDescription: characterVisualDescription,
+      role: 'main_character',
+      appearanceTags: character.appearance_tags || [],
+      referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
     }];
 
     // Generate AI-powered scene narrative
@@ -1696,8 +1781,11 @@ async function generateScene(supabase: any, characterId: string, response: strin
           sceneContext,
           conversationHistory,
           characterName: character.name,
-          characterDescription: character.description || 'attractive person',
-          characterPersonality: character.persona || 'engaging and charismatic'
+          characterDescription: characterVisualDescription,
+          characterPersonality: character.persona || 'engaging and charismatic',
+          characterAppearanceTags: character.appearance_tags || [],
+          characterTraits: character.traits || '',
+          referenceImage: character.reference_image_url || character.image_url || character.preview_image_url
         }
       });
 
@@ -1721,13 +1809,20 @@ async function generateScene(supabase: any, characterId: string, response: strin
     console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
     console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
 
-    // ✅ FIX: Use sdxl_image_high for better quality scene generation with character consistency
+    // ✅ ENHANCED: Build comprehensive scene prompt with character visual context
+    const enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
+    
+    console.log('🎨 Enhanced scene prompt with character visual context:', enhancedScenePrompt.substring(0, 150) + '...');
+    
+    // ✅ ENHANCED: Determine image model and route accordingly
     let imageResponse;
-    if (consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid') {
+    const useSDXL = !selectedImageModel || selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
+    
+    if (useSDXL && (consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid')) {
       // Use queue-job for SDXL worker with enhanced metadata and character consistency
       imageResponse = await supabase.functions.invoke('queue-job', {
         body: {
-          prompt: `Generate a scene showing ${scenePrompt}`,
+          prompt: enhancedScenePrompt,
           job_type: 'sdxl_image_high', // ✅ CHANGED FROM sdxl_image_fast
           seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
           reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
@@ -1748,11 +1843,109 @@ async function generateScene(supabase: any, characterId: string, response: strin
         }
       });
       console.log('🎬 SDXL scene generation queued with character consistency:', imageResponse);
+    } else if (!useSDXL && selectedImageModel) {
+      // ✅ ENHANCED: Use API model for scene generation
+      console.log('🎨 Using API model for scene generation:', selectedImageModel);
+      
+      // Get model configuration from database
+      const { data: modelConfig, error: modelError } = await supabase
+        .from('api_models')
+        .select(`
+          id,
+          model_key,
+          display_name,
+          api_providers!inner(name, display_name),
+          input_defaults,
+          capabilities
+        `)
+        .eq('id', selectedImageModel)
+        .eq('is_active', true)
+        .single();
+      
+      if (modelError || !modelConfig) {
+        console.error('🎨❌ API model not found:', selectedImageModel);
+        // Fallback to SDXL
+        imageResponse = await supabase.functions.invoke('queue-job', {
+          body: {
+            prompt: enhancedScenePrompt,
+            job_type: 'sdxl_image_high',
+            seed: character.seed_locked,
+            reference_image_url: character.reference_image_url,
+            metadata: {
+              destination: 'roleplay_scene',
+              character_id: characterId,
+              character_name: character.name,
+              scene_type: 'chat_scene',
+              consistency_method: character.consistency_method || consistencyMethod,
+              reference_strength: 0.45,
+              denoise_strength: 0.65,
+              skip_enhancement: false,
+              reference_mode: 'modify',
+              seed_locked: true,
+              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              scene_context: JSON.stringify(sceneContext),
+              fallback_reason: 'api_model_not_found'
+            }
+          }
+        });
+      } else {
+        // Use API model for generation
+        const providerName = modelConfig.api_providers.name;
+        
+        if (providerName === 'replicate') {
+          imageResponse = await supabase.functions.invoke('replicate-image', {
+            body: {
+              prompt: enhancedScenePrompt,
+              apiModelId: modelConfig.id,
+              jobType: 'image_generation',
+              metadata: {
+                destination: 'roleplay_scene',
+                character_id: characterId,
+                character_name: character.name,
+                scene_type: 'chat_scene',
+                consistency_method: consistencyMethod,
+                model_used: modelConfig.model_key,
+                model_display_name: modelConfig.display_name,
+                provider_name: providerName,
+                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                scene_context: JSON.stringify(sceneContext),
+                character_visual_description: characterVisualDescription
+              }
+            }
+          });
+        } else {
+          // For other providers, use queue-job with model specification
+          imageResponse = await supabase.functions.invoke('queue-job', {
+            body: {
+              prompt: enhancedScenePrompt,
+              job_type: 'api_image_generation',
+              api_model_id: modelConfig.id,
+              metadata: {
+                destination: 'roleplay_scene',
+                character_id: characterId,
+                character_name: character.name,
+                scene_type: 'chat_scene',
+                consistency_method: consistencyMethod,
+                model_used: modelConfig.model_key,
+                model_display_name: modelConfig.display_name,
+                provider_name: providerName,
+                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                scene_context: JSON.stringify(sceneContext),
+                character_visual_description: characterVisualDescription,
+                input_defaults: modelConfig.input_defaults,
+                capabilities: modelConfig.capabilities
+              }
+            }
+          });
+        }
+      }
+      
+      console.log('🎨 API model scene generation queued:', imageResponse);
     } else {
       // Use replicate-image for Replicate API (fallback) with enhanced metadata
       imageResponse = await supabase.functions.invoke('replicate-image', {
         body: {
-          prompt: scenePrompt,
+          prompt: enhancedScenePrompt,
           apiModelId: 'replicate-rv5.1-model-id',
           jobType: 'image_generation',
           metadata: {
@@ -1795,6 +1988,8 @@ interface SceneContext {
     name: string;
     visualDescription: string;
     role: string;
+    appearanceTags?: string[];
+    referenceImage?: string;
   }>;
   setting: string;
   mood: string;

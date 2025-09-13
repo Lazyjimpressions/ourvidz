@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { useImageModels } from '@/hooks/useImageModels';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 
 interface RoleplaySettingsModalProps {
@@ -14,6 +15,8 @@ interface RoleplaySettingsModalProps {
   onMemoryTierChange: (tier: 'conversation' | 'character' | 'profile') => void;
   modelProvider: string;
   onModelProviderChange: (provider: string) => void;
+  selectedImageModel: string;
+  onSelectedImageModelChange: (model: string) => void;
   consistencySettings: ConsistencySettings;
   onConsistencySettingsChange: (settings: ConsistencySettings) => void;
 }
@@ -25,10 +28,13 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   onMemoryTierChange,
   modelProvider,
   onModelProviderChange,
+  selectedImageModel,
+  onSelectedImageModelChange,
   consistencySettings,
   onConsistencySettingsChange
 }) => {
   const { allModelOptions, isLoading: modelsLoading } = useRoleplayModels();
+  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading } = useImageModels();
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md">
@@ -64,6 +70,27 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   <SelectItem value="" disabled>Loading models...</SelectItem>
                 ) : (
                   allModelOptions.map((model) => (
+                    <SelectItem key={model.value} value={model.value}>
+                      {model.label}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Image Model Selection */}
+          <div className="space-y-2">
+            <Label>Image Model</Label>
+            <Select value={selectedImageModel} onValueChange={onSelectedImageModelChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {imageModelsLoading ? (
+                  <SelectItem value="" disabled>Loading image models...</SelectItem>
+                ) : (
+                  imageModelOptions.map((model) => (
                     <SelectItem key={model.value} value={model.value}>
                       {model.label}
                     </SelectItem>

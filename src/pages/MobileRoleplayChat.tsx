@@ -55,6 +55,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   const [modelProvider, setModelProvider] = useState<string>('cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('sdxl');
   const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
     method: 'hybrid',
     reference_strength: 0.35,
@@ -343,7 +344,9 @@ const MobileRoleplayChat: React.FC = () => {
             user_id: user.id,
             // Add prompt template integration
             prompt_template_id: loadedPromptTemplate?.id || null,
-            prompt_template_name: loadedPromptTemplate?.template_name || null
+            prompt_template_name: loadedPromptTemplate?.template_name || null,
+            // Add image model selection
+            selected_image_model: selectedImageModel
           }
         });
 
@@ -465,7 +468,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_system_prompt: selectedScene?.system_prompt || null,
           // ✅ ADD PROMPT TEMPLATE INTEGRATION:
           prompt_template_id: promptTemplate?.id || null,
-          prompt_template_name: promptTemplate?.template_name || null
+          prompt_template_name: promptTemplate?.template_name || null,
+          // ✅ ADD IMAGE MODEL SELECTION:
+          selected_image_model: selectedImageModel
         }
       });
 
@@ -712,7 +717,8 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier,
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
-          user_id: user.id
+          user_id: user.id,
+          selected_image_model: selectedImageModel
         }
       });
 
@@ -801,7 +807,8 @@ const MobileRoleplayChat: React.FC = () => {
           content_tier: contentTier,
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
-          user_id: user.id
+          user_id: user.id,
+          selected_image_model: selectedImageModel
         }
       });
 
@@ -953,6 +960,8 @@ const MobileRoleplayChat: React.FC = () => {
           onMemoryTierChange={setMemoryTier}
           modelProvider={modelProvider}
           onModelProviderChange={setModelProvider}
+          selectedImageModel={selectedImageModel}
+          onSelectedImageModelChange={setSelectedImageModel}
           consistencySettings={consistencySettings}
           onConsistencySettingsChange={setConsistencySettings}
         />
