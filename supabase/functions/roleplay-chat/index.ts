@@ -290,7 +290,7 @@ serve(async (req) => {
         const modelConfig = await getModelConfig(supabase, model_provider);
         if (modelConfig) {
           // Use database-driven model configuration
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase);
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
           modelUsed = `${modelConfig.provider_name}:${model_provider}`;
         } else {
           return new Response(JSON.stringify({
@@ -543,7 +543,9 @@ async function callModelWithConfig(
   modelKey: string,
   contentTier: string,
   modelConfig: any,
-  supabase: any
+  supabase: any,
+  sceneContext?: string,
+  sceneSystemPrompt?: string
 ): Promise<string> {
   console.log('🔧 Using database-driven model configuration:', {
     modelKey,
@@ -552,19 +554,25 @@ async function callModelWithConfig(
     inputDefaults: modelConfig.input_defaults
   });
 
-  // Get model-specific template or fallback to universal
+  // Get template with priority: model-specific > universal
   let template = await getModelSpecificTemplate(supabase, modelKey, contentTier);
   if (!template) {
     console.log('⚠️ No model-specific template found, using universal template');
     template = await getUniversalTemplate(supabase, contentTier);
   }
 
+  // If we have scene context, enhance the template with scene-specific instructions
+  if (sceneContext && template) {
+    console.log('🎬 Enhancing template with scene context');
+    template = enhanceTemplateWithSceneContext(template, sceneContext, sceneSystemPrompt);
+  }
+
   if (!template) {
     throw new Error('No template found for roleplay');
   }
 
-  // Build system prompt using template
-  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier);
+  // Build system prompt using template with scene context
+  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt);
 
   // Route to appropriate provider based on model config
   if (modelConfig.provider_name === 'openrouter') {
@@ -629,7 +637,7 @@ async function getUniversalTemplate(supabase: any, contentTier: string): Promise
 }
 
 // Build system prompt from template
-function buildSystemPromptFromTemplate(template: any, character: any, recentMessages: any[], contentTier: string): string {
+function buildSystemPromptFromTemplate(template: any, character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string): string {
   let systemPrompt = template.system_prompt;
 
   // Replace template placeholders with character data
@@ -645,13 +653,54 @@ function buildSystemPromptFromTemplate(template: any, character: any, recentMess
     .replace(/\{\{voice_tone\}\}/g, character.voice_tone || '')
     .replace(/\{\{mood\}\}/g, character.mood || '')
     .replace(/\{\{character_visual_description\}\}/g, character.description || '')
-    .replace(/\{\{scene_context\}\}/g, '')
+    .replace(/\{\{scene_context\}\}/g, sceneContext || '')
     .replace(/\{\{voice_examples\}\}/g, character.voice_examples && character.voice_examples.length > 0 
       ? character.voice_examples.map((example: string, index: number) => 
           `Example ${index + 1}: "${example}"`).join('\n') 
       : 'No specific voice examples available - speak naturally as this character would.');
 
+  // If we have scene-specific system prompt, append it for enhanced scene awareness
+  if (sceneSystemPrompt && sceneSystemPrompt.trim()) {
+    console.log('🎬 Adding scene-specific system prompt to template');
+    systemPrompt += '\n\n' + sceneSystemPrompt;
+  }
+
   return systemPrompt;
+}
+
+// Enhance template with scene-specific context
+function enhanceTemplateWithSceneContext(template: any, sceneContext: string, sceneSystemPrompt?: string): any {
+  console.log('🎬 Enhancing template with scene context:', {
+    templateName: template.template_name,
+    hasSceneContext: !!sceneContext,
+    hasSceneSystemPrompt: !!sceneSystemPrompt,
+    sceneContextPreview: sceneContext.substring(0, 100) + '...'
+  });
+
+  // Create enhanced template
+  const enhancedTemplate = { ...template };
+  
+  // Add scene-specific instructions to the system prompt
+  let enhancedSystemPrompt = template.system_prompt;
+  
+  // Add scene context section
+  if (sceneContext) {
+    enhancedSystemPrompt += `\n\nSCENE CONTEXT:\n${sceneContext}\n`;
+  }
+  
+  // Add scene-specific system prompt if available
+  if (sceneSystemPrompt && sceneSystemPrompt.trim()) {
+    enhancedSystemPrompt += `\n\nSCENE-SPECIFIC RULES:\n${sceneSystemPrompt}\n`;
+  }
+  
+  // Add scene awareness instructions
+  enhancedSystemPrompt += `\n\nSCENE AWARENESS:\n- You are currently in the scene described above\n- Reference the scene environment, setting, and atmosphere in your responses\n- Stay consistent with the scene context and mood\n- Use scene-appropriate language and behavior\n- Maintain immersion in the scene setting\n`;
+  
+  enhancedTemplate.system_prompt = enhancedSystemPrompt;
+  enhancedTemplate.template_name = `${template.template_name} (Scene-Enhanced)`;
+  
+  console.log('✅ Template enhanced with scene context');
+  return enhancedTemplate;
 }
 
 // Call OpenRouter with database configuration
@@ -689,6 +738,15 @@ async function callOpenRouterWithConfig(
     let content = adultifyContext(msg.content, contentTier);
     messages.push({ role, content });
   });
+
+  // Add scene context as a system message if available (for models that benefit from it)
+  if (modelKey.includes('dolphin') || modelKey.includes('mistral')) {
+    // Mistral models benefit from scene context in conversation history
+    if (systemPrompt.includes('SCENE CONTEXT:')) {
+      console.log('🎬 Adding scene context for Mistral model');
+      // Scene context is already in system prompt, no need to duplicate
+    }
+  }
   
   // Add current user message
   const finalUserMessage = adultifyContext(userMessage, contentTier);
@@ -764,7 +822,12 @@ function optimizeResponseForMistral(response: string, character: any, isKickoff:
     optimized = enhanceNSFWContent(optimized, character);
   }
   
-  // Step 5: Detect and reduce repetition
+  // Step 5: Enhance scene awareness for Mistral models
+  if (capabilities?.scene_aware) {
+    optimized = enhanceSceneAwareness(optimized, character);
+  }
+  
+  // Step 6: Detect and reduce repetition
   optimized = reduceRepetition(optimized);
   
   return optimized;
@@ -830,6 +893,27 @@ function enhanceNSFWContent(response: string, character: any): string {
   // Mistral models are uncensored, so we can enhance NSFW content
   // This is a placeholder for future NSFW content enhancement
   // For now, just return the response as-is
+  return response;
+}
+
+// Enhance scene awareness for Mistral models
+function enhanceSceneAwareness(response: string, character: any): string {
+  // Ensure the response maintains scene context and environmental awareness
+  // This helps Mistral models stay consistent with scene settings
+  
+  // Check if response already has scene references
+  const hasSceneReference = response.includes('*') || 
+                           response.includes('library') || 
+                           response.includes('room') || 
+                           response.includes('setting') ||
+                           response.includes('environment');
+  
+  if (!hasSceneReference && response.length > 50) {
+    // Add subtle scene awareness if missing
+    console.log('🎬 Enhancing scene awareness in response');
+    // This is a placeholder for future scene awareness enhancement
+  }
+  
   return response;
 }
 
