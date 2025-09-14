@@ -1984,34 +1984,32 @@ async function generateScene(supabase: any, characterId: string, response: strin
             headers['authorization'] = authHeader;
           }
           
+          // Map model_key to appropriate Replicate job type
+          let replicateJobType: string;
+          switch (modelConfig.model_key) {
+            case 'lucataco/realistic-vision-v5.1':
+              replicateJobType = 'rv51_high';
+              break;
+            case 'lucataco/sdxl':
+              replicateJobType = 'sdxl_api_high';
+              break;
+            case 'stability-ai/sdxl':
+              replicateJobType = 'stability_sdxl_high';
+              break;
+            default:
+              // Use a generic high quality job type for unknown Replicate models
+              replicateJobType = 'rv51_high';
+              console.warn('🎨⚠️ Unknown Replicate model, using rv51_high as fallback:', modelConfig.model_key);
+          }
+          
           imageResponse = await supabase.functions.invoke('replicate-image', {
             headers,
             body: {
               prompt: enhancedScenePrompt,
               apiModelId: modelConfig.id,
-              jobType: 'image_generation',
-              metadata: {
-                destination: 'roleplay_scene',
-                character_id: characterId,
-                character_name: character.name,
-                scene_type: 'chat_scene',
-                consistency_method: consistencyMethod,
-                model_used: modelConfig.model_key,
-                model_display_name: modelConfig.display_name,
-                provider_name: providerName,
-                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
-                scene_context: JSON.stringify(sceneContext),
-                character_visual_description: characterVisualDescription
-              }
-            }
-          });
-        } else {
-          // For other providers, use queue-job with model specification
-          imageResponse = await supabase.functions.invoke('queue-job', {
-            body: {
-              prompt: enhancedScenePrompt,
-              job_type: 'api_image_generation',
-              api_model_id: modelConfig.id,
+              jobType: replicateJobType,
+              seed: character.seed_locked,
+              reference_image_url: character.reference_image_url,
               metadata: {
                 destination: 'roleplay_scene',
                 character_id: characterId,
@@ -2024,8 +2022,44 @@ async function generateScene(supabase: any, characterId: string, response: strin
                 contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
                 scene_context: JSON.stringify(sceneContext),
                 character_visual_description: characterVisualDescription,
-                input_defaults: modelConfig.input_defaults,
-                capabilities: modelConfig.capabilities
+                reference_strength: 0.45,
+                denoise_strength: 0.65
+              }
+            }
+          });
+        } else {
+          // Other API providers are not supported - fallback to SDXL
+          console.warn('🎨⚠️ Unsupported API provider, falling back to SDXL:', providerName);
+          const headers: Record<string, string> = {};
+          if (authHeader) {
+            headers['authorization'] = authHeader;
+          }
+          
+          imageResponse = await supabase.functions.invoke('queue-job', {
+            headers,
+            body: {
+              prompt: enhancedScenePrompt,
+              job_type: 'sdxl_image_high',
+              seed: character.seed_locked,
+              reference_image_url: character.reference_image_url,
+              metadata: {
+                destination: 'roleplay_scene',
+                character_id: characterId,
+                character_name: character.name,
+                scene_type: 'chat_scene',
+                consistency_method: character.consistency_method || consistencyMethod,
+                reference_strength: 0.45,
+                denoise_strength: 0.65,
+                skip_enhancement: false,
+                reference_mode: 'modify',
+                seed_locked: true,
+                model_used: 'sdxl',
+                model_display_name: 'SDXL (Fallback)',
+                provider_name: 'local',
+                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                scene_context: JSON.stringify(sceneContext),
+                character_visual_description: characterVisualDescription,
+                fallback_reason: 'unsupported_provider'
               }
             }
           });
@@ -2066,12 +2100,31 @@ async function generateScene(supabase: any, characterId: string, response: strin
     
     // Extract job ID from the response if available
     let jobId = null;
-    if (imageResponse?.data?.job_id) {
+    
+    // Check for errors in the image response
+    if (imageResponse?.error) {
+      console.error('🎬❌ Image generation failed:', imageResponse.error);
+      return { 
+        success: false, 
+        error: `Image generation failed: ${imageResponse.error.message || imageResponse.error}` 
+      };
+    }
+    
+    if (imageResponse?.data?.jobId) {
+      jobId = imageResponse.data.jobId;
+      console.log('✅ Scene generation job queued with ID:', jobId);
+    } else if (imageResponse?.data?.job_id) {
       jobId = imageResponse.data.job_id;
       console.log('✅ Scene generation job queued with ID:', jobId);
     } else if (imageResponse?.data?.id) {
       jobId = imageResponse.data.id;
       console.log('✅ Scene generation prediction created with ID:', jobId);
+    } else {
+      console.warn('⚠️ No job ID found in image response:', imageResponse);
+      return { 
+        success: false, 
+        error: 'Image generation completed but no job ID was returned' 
+      };
     }
     
     return { 
