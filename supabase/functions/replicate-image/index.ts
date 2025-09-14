@@ -161,7 +161,7 @@ serve(async (req) => {
     const quality = body.quality || (jobType.includes('_high') ? 'high' : 'fast');
     
     // Detect if this is an i2i request based on reference image
-    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
+    const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.reference_image_url);
     
     // Normalize model_type for database constraint compatibility
     const normalizeModelType = (modelFamily: string | null, modelKey: string, isI2I: boolean = false): string => {                                              
@@ -446,6 +446,85 @@ serve(async (req) => {
       });
     }
     
+    // Ensure seed mapping from top-level when not provided in input
+    if ((modelInput as any).seed === undefined && body.seed !== undefined) {
+      (modelInput as any).seed = Math.min(Math.max(body.seed, 0), 2147483647);
+    }
+
+    // Handle i2i mapping even if input block is missing
+    if (hasReferenceImage) {
+      const imageKey = inputKeyMappings.i2i_image_key || 'image';
+      const strengthKey = inputKeyMappings.i2i_strength_key || 'strength';
+      let imageValue = body.input?.image ?? body.input?.[imageKey] ?? body.metadata?.reference_image_url ?? body.metadata?.referenceImage ?? body.reference_image_url;
+      if (!imageValue) {
+        return new Response(
+          JSON.stringify({ error: "i2i request requires image data in input.image, metadata.reference_image_url, or reference_image_url" }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400,
+          }
+        );
+      }
+      if (typeof imageValue === 'string') {
+        let url = imageValue as string;
+        if (!/^https?:\/\//i.test(url) && !url.startsWith('data:')) {
+          const knownBuckets = ['user-library','workspace-temp','reference_images','sdxl_image_high','sdxl_image_fast'];
+          const parts = url.split('/');
+          let bucket = '';
+          let path = '';
+          if (knownBuckets.includes(parts[0])) {
+            bucket = parts[0];
+            path = parts.slice(1).join('/');
+          } else {
+            bucket = 'user-library';
+            path = url;
+          }
+          const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+          if (!signError && signed?.signedUrl) {
+            url = signed.signedUrl;
+            console.log(`🔏 Signed i2i image URL for bucket "${bucket}": ${url.slice(0, 60)}...`);
+          } else {
+            console.warn('⚠️ Failed to sign i2i image URL, using raw path:', signError);
+          }
+        }
+        (modelInput as any)[imageKey] = url;
+      } else {
+        (modelInput as any)[imageKey] = imageValue;
+      }
+
+      let strengthValue = body.input?.[strengthKey] ?? body.input?.prompt_strength ?? body.metadata?.reference_strength ?? body.metadata?.denoise_strength;
+      if (strengthValue !== undefined) {
+        (modelInput as any)[strengthKey] = Math.min(Math.max(parseFloat(strengthValue), 0.1), 1.0);
+      } else if ((modelInput as any)[strengthKey] === undefined) {
+        (modelInput as any)[strengthKey] = 0.7;
+      }
+    }
+
+    // Normalize scheduler regardless of source
+    if ((modelInput as any).scheduler !== undefined) {
+      let desired = (modelInput as any).scheduler;
+      if (schedulerAliases && schedulerAliases[desired]) {
+        desired = schedulerAliases[desired];
+      }
+      if (Array.isArray(allowedSchedulers) && allowedSchedulers.length > 0) {
+        // Try desired
+        if (allowedSchedulers.includes(desired)) {
+          (modelInput as any).scheduler = desired;
+        } else {
+          // Try DB default (after alias)
+          let def = apiModel.input_defaults?.scheduler;
+          if (def && schedulerAliases && schedulerAliases[def]) def = schedulerAliases[def];
+          if (def && allowedSchedulers.includes(def)) {
+            (modelInput as any).scheduler = def;
+          } else {
+            // Fallback to first allowed
+            (modelInput as any).scheduler = allowedSchedulers[0];
+          }
+          console.log(`⚠️ Scheduler normalized from "${(modelInput as any).scheduler}" to allowed value.`);
+        }
+      }
+      console.log(`🔧 Scheduler normalized to: ${(modelInput as any).scheduler}`);
+    }
+
     // Map aspect ratio to dimensions if not explicitly provided
     if (!body.input?.width && !body.input?.height && body.metadata?.aspectRatio) {
       const aspectRatio = body.metadata.aspectRatio;

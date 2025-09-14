@@ -2182,7 +2182,7 @@ const sceneContext = analyzeSceneContent(response);
       console.log('🎬 SDXL fallback scene generation queued:', imageResponse);
     }
 
-    console.log('🎬 Scene generation completed successfully');
+    console.log('🎬 Scene generation response received, validating...');
     
     // Extract job ID from the response if available
     let jobId = null;
