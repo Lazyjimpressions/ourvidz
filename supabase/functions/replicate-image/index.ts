@@ -163,35 +163,44 @@ serve(async (req) => {
     // Detect if this is an i2i request based on reference image
     const hasReferenceImage = !!(body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.reference_image_url);
     
+    // Normalize job_type for database constraint compatibility
+    const normalizeJobType = (jobType: string): string => {
+      // Sanitize invalid job types to valid database values
+      if (jobType.includes('stability_sdxl')) return 'sdxl_image_high';
+      if (jobType.includes('sdxl_api')) return 'sdxl_image_high';
+      if (jobType.includes('sdxl') && jobType.includes('high')) return 'sdxl_image_high';
+      if (jobType.includes('sdxl') && jobType.includes('fast')) return 'sdxl_image_fast';
+      if (jobType.includes('rv51')) return jobType.includes('high') ? 'rv51_high' : 'rv51_fast';
+      if (jobType.includes('flux')) return jobType.includes('high') ? 'flux_high' : 'flux_fast';
+      
+      // Default fallback for invalid job types
+      return jobType.includes('high') ? 'image_high' : 'image_fast';
+    };
+
     // Normalize model_type for database constraint compatibility
     const normalizeModelType = (modelFamily: string | null, modelKey: string, isI2I: boolean = false): string => {                                              
-      if (!modelFamily) return 'rv51'; // Default fallback
+      if (!modelFamily) return 'sdxl'; // Default to sdxl for Replicate
       
       const family = modelFamily.toLowerCase();
       const key = modelKey.toLowerCase();
       
-      // Map model families to valid database enum values
+      // For Replicate SDXL models, use 'sdxl' (not replicate-sdxl variants)
+      if (family.includes('sdxl') || key.includes('sdxl')) return 'sdxl';
       if (family.includes('rv') || key.includes('realistic')) return 'rv51';                                                            
       if (family.includes('flux') || key.includes('flux')) return 'flux';                                                               
-      if (family.includes('sdxl') || key.includes('sdxl')) {
-        // Check if this is a Replicate SDXL model (not local Lustify SDXL)
-        if (apiModel.api_providers.name === 'replicate') {
-          return isI2I ? 'replicate-sdxl-i2i' : 'replicate-sdxl';
-        }
-        return 'sdxl'; // Local Lustify SDXL
-      }
-      if (jobType.includes('rv51')) return 'rv51'; // Fallback from job_type                                                            
       
-      // Final fallback
-      return 'rv51';
+      // Final fallback to sdxl for Replicate models
+      return 'sdxl';
     };
     
+    const normalizedJobType = normalizeJobType(jobType);
     const normalizedModelType = normalizeModelType(apiModel.model_family, apiModel.model_key, hasReferenceImage);
     
-    console.log('🎯 Job parameters validated:', {
+    console.log('🎯 Job parameters validated and sanitized:', {
       jobType_from_body: body.job_type,
       jobType_legacy: body.jobType,
-      final_jobType: jobType,
+      original_jobType: jobType,
+      normalized_jobType: normalizedJobType,
       quality_from_body: body.quality,
       final_quality: quality,
       model_family_raw: apiModel.model_family,
@@ -248,11 +257,12 @@ serve(async (req) => {
       console.log('🎯 Using user negative prompt only');
     }
 
-    const { data: jobData, error: jobError } = await supabase
+    // Attempt to create job with sanitized values
+    let { data: jobData, error: jobError } = await supabase
       .from('jobs')
       .insert({
         user_id: user.id,
-        job_type: jobType,
+        job_type: normalizedJobType, // ✅ Use sanitized job type
         original_prompt: body.prompt,
         status: 'queued',
         quality: quality,
@@ -267,11 +277,58 @@ serve(async (req) => {
           api_model_configured: true,
           content_mode: body.metadata?.contentType || null, // Direct from toggle
           negative_prompt_auto_populated: !!finalNegativePrompt,
-          negative_prompt_source: finalNegativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none')
+          negative_prompt_source: finalNegativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none'),
+          original_job_type: jobType, // Keep original for debugging
+          sanitized_job_type: normalizedJobType
         }
       })
       .select()
       .single();
+
+    // If job creation failed due to constraint, try with fallback values
+    if (jobError && jobError.message?.includes('violates check constraint')) {
+      console.warn('⚠️ Job constraint violation, retrying with fallback values:', jobError.message);
+      
+      const fallbackJobType = 'image_high';
+      const fallbackModelType = 'sdxl';
+      
+      const { data: retryJobData, error: retryJobError } = await supabase
+        .from('jobs')
+        .insert({
+          user_id: user.id,
+          job_type: fallbackJobType,
+          original_prompt: body.prompt,
+          status: 'queued',
+          quality: quality,
+          api_model_id: apiModel.id,
+          model_type: fallbackModelType,
+          format: 'image',
+          metadata: {
+            ...body.metadata,
+            provider_name: apiModel.api_providers.name,
+            model_key: apiModel.model_key,
+            version: apiModel.version,
+            api_model_configured: true,
+            content_mode: body.metadata?.contentType || null,
+            negative_prompt_auto_populated: !!finalNegativePrompt,
+            negative_prompt_source: finalNegativePrompt ? 'database' : (body.input?.negative_prompt ? 'user' : 'none'),
+            original_job_type: jobType,
+            attempted_job_type: normalizedJobType,
+            fallback_job_type: fallbackJobType,
+            fallback_model_type: fallbackModelType,
+            constraint_retry: true
+          }
+        })
+        .select()
+        .single();
+      
+      jobData = retryJobData;
+      jobError = retryJobError;
+      
+      if (!retryJobError) {
+        console.log('✅ Job created with fallback values:', jobData.id);
+      }
+    }
 
     if (jobError || !jobData) {
       console.error('❌ Failed to create job:', jobError);
