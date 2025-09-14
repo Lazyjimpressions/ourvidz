@@ -65,10 +65,10 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     const signSceneImage = async () => {
       if (message.metadata?.image_url && !message.metadata.image_url.startsWith('http')) {
         try {
-          // Default to workspace-temp for roleplay scene images
+          // Improved signing robustness - try workspace-temp first for most scene images
           let bucket = 'workspace-temp';
           
-          // Only check for user-library if explicitly indicated
+          // Only check for user-library if path explicitly contains these indicators
           if (message.metadata.image_url.includes('user-library') || 
               message.metadata.image_url.includes('sdxl_image') ||
               message.metadata.image_url.includes('image_high') ||
@@ -76,11 +76,29 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             bucket = 'user-library';
           }
           
-          const signed = await getSignedUrl(message.metadata.image_url, bucket);
-          setSignedSceneImage(signed);
+          try {
+            const signed = await getSignedUrl(message.metadata.image_url, bucket);
+            setSignedSceneImage(signed);
+            console.log('🖼️ Scene image signed successfully with bucket:', bucket);
+          } catch (workspaceTempError) {
+            // If workspace-temp fails and we haven't tried user-library, try it as fallback
+            if (bucket === 'workspace-temp') {
+              console.log('🔄 Workspace-temp failed, trying user-library as fallback');
+              try {
+                const signed = await getSignedUrl(message.metadata.image_url, 'user-library');
+                setSignedSceneImage(signed);
+                console.log('✅ Scene image signed with user-library fallback');
+              } catch (userLibraryError) {
+                console.error('❌ Both buckets failed, using raw path:', userLibraryError);
+                setSignedSceneImage(message.metadata?.raw_image_path || message.metadata?.image_url);
+              }
+            } else {
+              throw workspaceTempError;
+            }
+          }
         } catch (error) {
           console.error('Error signing scene image:', error);
-          // Fallback to raw path if signing fails
+          // Fallback to raw path if all signing fails
           setSignedSceneImage(message.metadata?.raw_image_path || message.metadata?.image_url);
         }
       } else {

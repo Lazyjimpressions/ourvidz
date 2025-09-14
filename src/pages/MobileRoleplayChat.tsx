@@ -473,20 +473,25 @@ const MobileRoleplayChat: React.FC = () => {
           
           const assetId = jobData.image_id || jobData.video_id;
           if (assetId) {
-            // Get asset URL from workspace_assets
+            // Get asset URL from workspace_assets - use robust query
             const { data: assetData, error: assetError } = await supabase
               .from('workspace_assets')
               .select('temp_storage_path')
               .eq('job_id', jobId)
-              .maybeSingle();
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
 
             if (assetData?.temp_storage_path) {
+              console.log('🖼️ Asset temp_storage_path for job completion:', assetData.temp_storage_path);
+              
               // Update the message with the image URL
               setMessages(prev => prev.map(msg => {
                 if (msg.id === messageId) {
                   return {
                     ...msg,
                     scene_image: assetData.temp_storage_path,
+                    content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
                     metadata: {
                       ...msg.metadata,
                       image_url: assetData.temp_storage_path,
@@ -498,11 +503,13 @@ const MobileRoleplayChat: React.FC = () => {
                 return msg;
               }));
               
-              console.log('✅ Scene image loaded for message:', messageId);
+              console.log('✅ Scene image loaded for message:', messageId, 'with path:', assetData.temp_storage_path);
               toast({
                 title: 'Scene completed!',
                 description: 'Your scene image has been generated and is now visible in the chat.',
               });
+            } else {
+              console.error('❌ No temp_storage_path found for job:', jobId);
             }
           }
         } else if (jobData.status === 'failed') {
@@ -622,22 +629,26 @@ const MobileRoleplayChat: React.FC = () => {
       if (error) throw error;
 
       if (data && data.response) {
+        // Normalize job ID from various possible response fields
+        const newJobId = data.scene_job_id || data.job_id || data?.jobId || data?.data?.jobId;
+        
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
           sender: 'character',
           timestamp: new Date().toISOString(),
           metadata: {
-            scene_generated: data.scene_generated || false,
+            scene_generated: Boolean(newJobId),
             consistency_method: character.consistency_method,
-            job_id: data.scene_job_id || null
+            job_id: newJobId
           }
         };
         setMessages(prev => [...prev, characterMessage]);
         
         // Start job polling if scene generation was initiated
-        if (data.scene_generated && data.scene_job_id) {
-          pollJobCompletion(data.scene_job_id, characterMessage.id);
+        if (newJobId) {
+          console.log('🎬 Starting polling for auto-generated scene job:', newJobId);
+          pollJobCompletion(newJobId, characterMessage.id);
         }
       } else {
         throw new Error('No response from roleplay-chat function');
@@ -688,39 +699,35 @@ const MobileRoleplayChat: React.FC = () => {
 
       if (error) throw error;
 
-      // ✅ ENHANCED: Handle edge function response
-      if (data && data.success) {
-        if (data.scene_generated) {
-          setSceneJobStatus('completed');
-          console.log('🎬 Scene generated successfully with consistency score:', data.consistency_score);
-          
-          // Add success message to chat
-          const successMessage: Message = {
-            id: Date.now().toString(),
-            content: 'Scene generated successfully! I\'ve created a visual representation of our conversation.',
-            sender: 'character',
-            timestamp: new Date().toISOString(),
-            metadata: {
-              scene_generated: true,
-              consistency_method: consistencySettings.method
-            }
-          };
-          setMessages(prev => [...prev, successMessage]);
-          
-          toast({
-            title: 'Scene generated successfully!',
-            description: `Scene created for ${character.name} with consistency score: ${data.consistency_score || 'N/A'}`
-          });
-        } else {
-          setSceneJobStatus('failed');
-          toast({
-            title: 'Scene generation failed',
-            description: 'Could not generate scene from current conversation context',
-            variant: 'destructive'
-          });
-        }
+      // Normalize job ID from various possible response fields
+      const newJobId = data?.job_id || data?.scene_job_id || data?.data?.jobId || data?.data?.job_id;
+      
+      if (newJobId) {
+        // Add placeholder message that will be updated when job completes
+        const placeholderMessage: Message = {
+          id: Date.now().toString(),
+          content: 'Generating scene...',
+          sender: 'character',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            scene_generated: true,
+            job_id: newJobId,
+            consistency_method: consistencySettings.method
+          }
+        };
+        setMessages(prev => [...prev, placeholderMessage]);
+        
+        // Start polling for job completion
+        console.log('🎬 Starting polling for manual scene generation job:', newJobId);
+        pollJobCompletion(newJobId, placeholderMessage.id);
+        
+        // Show request confirmation toast
+        toast({
+          title: 'Scene requested',
+          description: "I'll post it here when it's ready."
+        });
       } else {
-        throw new Error('Scene generation failed - no response from edge function');
+        throw new Error('No job ID returned from scene generation request');
       }
     } catch (error) {
       console.error('Error generating scene:', error);
@@ -738,6 +745,12 @@ const MobileRoleplayChat: React.FC = () => {
         }
       };
       setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: 'Scene generation failed',
+        description: 'Could not generate scene from current conversation context',
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
