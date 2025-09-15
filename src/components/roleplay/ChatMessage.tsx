@@ -1,13 +1,14 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
+import { Download, Share2, RotateCcw } from 'lucide-react';
+import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
+import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   User, 
   Bot, 
   Image as ImageIcon, 
-  Download, 
-  Share2,
   Clock,
   RefreshCw
 } from 'lucide-react';
@@ -60,46 +61,23 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     signCharacterImage();
   }, [character?.image_url, signedCharacterImageUrl, getSignedUrl]);
 
-  // Sign scene image URL
+  // Sign scene image URL using workspace asset service
   useEffect(() => {
     const signSceneImage = async () => {
       if (message.metadata?.image_url && !message.metadata.image_url.startsWith('http')) {
         try {
-          // Improved signing robustness - try workspace-temp first for most scene images
-          let bucket = 'workspace-temp';
+          // Create asset-like object for signing
+          const assetLike = {
+            temp_storage_path: message.metadata.image_url,
+            user_id: 'temp' // WorkspaceAssetService handles this internally
+          };
           
-          // Only check for user-library if path explicitly contains these indicators
-          if (message.metadata.image_url.includes('user-library') || 
-              message.metadata.image_url.includes('sdxl_image') ||
-              message.metadata.image_url.includes('image_high') ||
-              message.metadata.image_url.includes('image_fast')) {
-            bucket = 'user-library';
-          }
-          
-          try {
-            const signed = await getSignedUrl(message.metadata.image_url, bucket);
-            setSignedSceneImage(signed);
-            console.log('🖼️ Scene image signed successfully with bucket:', bucket);
-          } catch (workspaceTempError) {
-            // If workspace-temp fails and we haven't tried user-library, try it as fallback
-            if (bucket === 'workspace-temp') {
-              console.log('🔄 Workspace-temp failed, trying user-library as fallback');
-              try {
-                const signed = await getSignedUrl(message.metadata.image_url, 'user-library');
-                setSignedSceneImage(signed);
-                console.log('✅ Scene image signed with user-library fallback');
-              } catch (userLibraryError) {
-                console.error('❌ Both buckets failed, using raw path:', userLibraryError);
-                setSignedSceneImage(message.metadata?.raw_image_path || message.metadata?.image_url);
-              }
-            } else {
-              throw workspaceTempError;
-            }
-          }
+          const signedUrl = await WorkspaceAssetService.generateSignedUrl(assetLike);
+          setSignedSceneImage(signedUrl);
+          console.log('✅ Scene image signed via WorkspaceAssetService');
         } catch (error) {
           console.error('Error signing scene image:', error);
-          // Fallback to raw path if all signing fails
-          setSignedSceneImage(message.metadata?.raw_image_path || message.metadata?.image_url);
+          setSignedSceneImage(message.metadata?.image_url);
         }
       } else {
         setSignedSceneImage(message.metadata?.image_url || null);
@@ -109,7 +87,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     if (hasScene) {
       signSceneImage();
     }
-  }, [message.metadata?.image_url, message.metadata?.raw_image_path, hasScene, getSignedUrl]);
+  }, [message.metadata?.image_url, hasScene]);
 
   const formatTime = (timestamp: string) => {
     try {

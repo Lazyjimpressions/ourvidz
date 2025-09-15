@@ -440,126 +440,59 @@ const MobileRoleplayChat: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Job polling function
-  const pollJobCompletion = async (jobId: string, messageId: string) => {
-    console.log('🔄 Starting job polling for:', jobId);
+  // Subscribe to workspace asset updates for job completion
+  const subscribeToJobCompletion = (jobId: string, messageId: string) => {
+    console.log('🔄 Subscribing to workspace_assets for job:', jobId);
     
-    let attempts = 0;
-    const maxAttempts = 40; // 2 minutes at 3 second intervals
-    
-    const pollInterval = setInterval(async () => {
-      try {
-        attempts++;
-        
-        const { data: jobData, error: jobError } = await supabase
-          .from('jobs')
-          .select('status, image_id, video_id, error_message')
-          .eq('id', jobId)
-          .single();
-
-        if (jobError) {
-          console.error('Failed to check job status:', jobError);
-          if (attempts >= maxAttempts) {
-            clearInterval(pollInterval);
-            console.log('❌ Job polling timed out for:', jobId);
+    const channel = supabase
+      .channel(`job-completion-${jobId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'workspace_assets',
+          filter: `job_id=eq.${jobId}`
+        },
+        (payload) => {
+          console.log('✅ Workspace asset created for job:', jobId, payload.new);
+          
+          const assetData = payload.new;
+          if (assetData?.temp_storage_path) {
+            // Update the message with the image URL
+            setMessages(prev => prev.map(msg => {
+              if (msg.id === messageId) {
+                return {
+                  ...msg,
+                  scene_image: assetData.temp_storage_path,
+                  content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
+                  metadata: {
+                    ...msg.metadata,
+                    image_url: assetData.temp_storage_path,
+                    asset_id: assetData.id,
+                    job_completed: true
+                  }
+                };
+              }
+              return msg;
+            }));
+            
+            toast({
+              title: 'Scene completed!',
+              description: 'Your scene image has been generated.',
+            });
           }
-          return;
-        }
-
-        console.log('📊 Job status check:', jobData.status, 'for job:', jobId);
-
-        if (jobData.status === 'completed') {
-          clearInterval(pollInterval);
           
-          const assetId = jobData.image_id || jobData.video_id;
-          if (assetId) {
-            // Get asset URL from workspace_assets - use robust query
-            const { data: assetData, error: assetError } = await supabase
-              .from('workspace_assets')
-              .select('temp_storage_path')
-              .eq('job_id', jobId)
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .single();
+          // Cleanup subscription after success
+          supabase.removeChannel(channel);
+        }
+      )
+      .subscribe();
 
-            if (assetData?.temp_storage_path) {
-              console.log('🖼️ Asset temp_storage_path for job completion:', assetData.temp_storage_path);
-              
-              // Update the message with the image URL
-              setMessages(prev => prev.map(msg => {
-                if (msg.id === messageId) {
-                  return {
-                    ...msg,
-                    scene_image: assetData.temp_storage_path,
-                    content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
-                    metadata: {
-                      ...msg.metadata,
-                      image_url: assetData.temp_storage_path,
-                      raw_image_path: assetData.temp_storage_path,
-                      job_completed: true
-                    }
-                  };
-                }
-                return msg;
-              }));
-              
-              console.log('✅ Scene image loaded for message:', messageId, 'with path:', assetData.temp_storage_path);
-              toast({
-                title: 'Scene completed!',
-                description: 'Your scene image has been generated and is now visible in the chat.',
-              });
-            } else {
-              console.error('❌ No temp_storage_path found for job:', jobId);
-            }
-          }
-        } else if (jobData.status === 'failed') {
-          clearInterval(pollInterval);
-          console.log('❌ Job failed:', jobId, jobData.error_message);
-          
-          // Update message to show error state
-          setMessages(prev => prev.map(msg => {
-            if (msg.id === messageId) {
-              return {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  isError: true,
-                  sceneError: true,
-                  canRetryScene: true,
-                  errorMessage: jobData.error_message || 'Scene generation failed'
-                }
-              };
-            }
-            return msg;
-          }));
-        } else if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-          console.log('⏰ Job polling timeout for:', jobId);
-          
-          // Update message to show timeout
-          setMessages(prev => prev.map(msg => {
-            if (msg.id === messageId) {
-              return {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  isError: true,
-                  sceneError: true,
-                  canRetryScene: true,
-                  errorMessage: 'Scene generation timed out'
-                }
-              };
-            }
-            return msg;
-          }));
-        }
-      } catch (error) {
-        console.error('Error polling job status:', error);
-        if (attempts >= maxAttempts) {
-          clearInterval(pollInterval);
-        }
-      }
-    }, 3000); // Poll every 3 seconds
+    // Fallback cleanup after 2 minutes
+    setTimeout(() => {
+      supabase.removeChannel(channel);
+    }, 120000);
   };
 
   const handleSendMessage = async (content: string) => {
@@ -648,7 +581,7 @@ const MobileRoleplayChat: React.FC = () => {
         // Start job polling if scene generation was initiated
         if (newJobId) {
           console.log('🎬 Starting polling for auto-generated scene job:', newJobId);
-          pollJobCompletion(newJobId, characterMessage.id);
+          subscribeToJobCompletion(newJobId, characterMessage.id);
         }
       } else {
         throw new Error('No response from roleplay-chat function');
@@ -719,7 +652,7 @@ const MobileRoleplayChat: React.FC = () => {
         
         // Start polling for job completion
         console.log('🎬 Starting polling for manual scene generation job:', newJobId);
-        pollJobCompletion(newJobId, placeholderMessage.id);
+        subscribeToJobCompletion(newJobId, placeholderMessage.id);
         
         // Show request confirmation toast
         toast({
