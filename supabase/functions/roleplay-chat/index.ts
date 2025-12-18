@@ -2092,22 +2092,22 @@ const sceneContext = analyzeSceneContent(response);
             headers['authorization'] = authHeader;
           }
           
-          // Map model_key to appropriate Replicate job type
+          // Map model_key to appropriate Replicate job type - use valid database values
           let replicateJobType: string;
           switch (modelConfig.model_key) {
             case 'lucataco/realistic-vision-v5.1':
               replicateJobType = 'rv51_high';
               break;
             case 'lucataco/sdxl':
-              replicateJobType = 'sdxl_api_high';
+              replicateJobType = 'sdxl_image_high';
               break;
             case 'stability-ai/sdxl':
-              replicateJobType = 'stability_sdxl_high';
+              replicateJobType = 'sdxl_image_high'; // ✅ FIXED: Use valid job type
               break;
             default:
               // Use a generic high quality job type for unknown Replicate models
-              replicateJobType = 'rv51_high';
-              console.warn('🎨⚠️ Unknown Replicate model, using rv51_high as fallback:', modelConfig.model_key);
+              replicateJobType = 'image_high';
+              console.warn('🎨⚠️ Unknown Replicate model, using image_high as fallback:', modelConfig.model_key);
           }
           
           imageResponse = await supabase.functions.invoke('replicate-image', {
@@ -2204,7 +2204,7 @@ const sceneContext = analyzeSceneContent(response);
       console.log('🎬 SDXL fallback scene generation queued:', imageResponse);
     }
 
-    console.log('🎬 Scene generation completed successfully');
+    console.log('🎬 Scene generation response received, validating...');
     
     // Extract job ID from the response if available
     let jobId = null;

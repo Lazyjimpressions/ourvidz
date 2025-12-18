@@ -3,6 +3,7 @@ import { useGeneration } from './useGeneration';
 import { RoleplayTemplate } from '@/components/playground/RoleplaySetup';
 import { toast } from 'sonner';
 import { GenerationFormat } from '@/types/generation';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
 
 interface SceneContext {
   characters: Array<{
@@ -182,158 +183,72 @@ export const useSceneGeneration = () => {
     }
   }, []);
 
-  // Convert scene context to optimized SDXL Lustify prompt
+  // Generate simplified SDXL prompt using existing character builder + scene context
   const generateSDXLPrompt = useCallback((
     sceneContext: SceneContext,
     options: SceneGenerationOptions = {}
   ): string => {
-    const { style = 'lustify', quality = 'fast' } = options;
-    const maxTokens = 75; // SDXL Lustify limit
+    const { quality = 'fast' } = options;
     
-    // Build quality tokens
-    const qualityTokens = ['score_9', 'score_8_up', 'masterpiece', 'best quality'];
+    // Extract 2-3 key scene keywords from content
+    const sceneKeywords: string[] = [];
     
-    // Build character tokens from roleplay context
-    const characterTokens: string[] = [];
-    if (sceneContext.characters.length > 0) {
-      const mainCharacter = sceneContext.characters[0];
-      // Extract clean character description tokens
-      const characterDesc = mainCharacter.visualDescription
-        .toLowerCase()
-        .replace(/[^a-zA-Z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(token => token.length > 2 && !['the', 'and', 'with', 'her', 'his', 'has'].includes(token))
-        .slice(0, 6);
-      
-      characterTokens.push('1girl', 'beautiful woman', ...characterDesc);
-    }
-    // Ensure we always include baseline character tokens
-    if (characterTokens.length === 0) {
-      characterTokens.push('1girl', 'beautiful woman');
-    }
-
-    // Build scene and action tokens
-    const sceneTokens: string[] = [];
-    
-    // Add mood and setting
-    if (sceneContext.mood) {
-      sceneTokens.push(sceneContext.mood + ' atmosphere');
+    // Add mood if present
+    if (sceneContext.mood && sceneContext.mood !== 'intimate') {
+      sceneKeywords.push(sceneContext.mood);
     }
     
-    // Add setting details
+    // Add setting if specific
     const cleanSetting = sceneContext.setting
       .replace(/^(intimate |indoor |outdoor )/i, '')
       .trim();
-    if (cleanSetting && cleanSetting !== 'setting') {
-      sceneTokens.push(cleanSetting);
+    if (cleanSetting && cleanSetting !== 'setting' && cleanSetting.length < 15) {
+      sceneKeywords.push(cleanSetting);
     }
     
-    // Add key visual elements
-    const relevantVisuals = sceneContext.visualElements
-      .filter(element => element.length > 2 && !['skin', 'body', 'face'].includes(element))
-      .slice(0, 3);
-    sceneTokens.push(...relevantVisuals);
+    // Add one key visual element if present
+    const keyVisual = sceneContext.visualElements
+      .filter(element => element.length > 2 && !['skin', 'body', 'face'].includes(element))[0];
+    if (keyVisual) {
+      sceneKeywords.push(keyVisual);
+    }
 
-    // Add action context if available
-    if (sceneContext.actions.length > 0) {
-      const mainAction = sceneContext.actions[0]
-        .toLowerCase()
-        .replace(/[^a-zA-Z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(word => word.length > 3)
-        .slice(0, 2)
-        .join(' ');
+    // Use existing character portrait builder as base
+    let basePrompt = '';
+    if (sceneContext.characters.length > 0) {
+      const character = sceneContext.characters[0];
+      // Convert to character format for existing builder
+      const characterData = {
+        name: character.name,
+        appearance_tags: character.visualDescription.split(' ').filter(tag => tag.length > 2),
+        gender: character.role.includes('female') || character.name.toLowerCase() === 'mei' ? 'female' : 'unspecified'
+      };
       
-      if (mainAction) {
-        sceneTokens.push(mainAction);
-      }
+      // Import and use existing character prompt builder
+      basePrompt = buildCharacterPortraitPrompt(characterData);
+    } else {
+      basePrompt = 'score_9, score_8_up, masterpiece, best quality, 1girl, beautiful woman, portrait, photorealistic';
     }
 
-    // Build NSFW/adult tokens
-    const nsfwTokens: string[] = [];
-    if (sceneContext.isNSFW) {
-      nsfwTokens.push(
-        'lustify style',
-        'anatomically correct',
-        'detailed anatomy',
-        'intimate scene',
-        'sensual'
-      );
-    }
-
-    // Build technical quality tokens
-    const technicalTokens = [
-      'studio photography',
-      'cinematic lighting',
-      'high detail',
-      'sharp focus'
-    ];
+    // Add scene keywords to base prompt if there's room
+    const baseTokens = basePrompt.split(', ');
+    const maxTokens = 77; // SDXL limit
+    const availableTokens = maxTokens - baseTokens.length;
     
-    if (quality === 'high') {
-      technicalTokens.push('ultra detailed', '8k resolution');
+    if (availableTokens > 0 && sceneKeywords.length > 0) {
+      const finalKeywords = sceneKeywords.slice(0, Math.min(availableTokens, 3));
+      basePrompt += ', ' + finalKeywords.join(', ');
     }
 
-    // Smart token assembly with strict deduplication
-    const allTokenGroups = [
-      { tokens: qualityTokens, priority: 1, maxCount: 4 },
-      { tokens: characterTokens, priority: 2, maxCount: 8 },
-      { tokens: sceneTokens, priority: 3, maxCount: 6 },
-      { tokens: nsfwTokens, priority: 4, maxCount: 5 },
-      { tokens: technicalTokens, priority: 5, maxCount: 4 }
-    ];
-
-    const finalTokens: string[] = [];
-    const usedTokensSet = new Set<string>();
-    
-    // Add tokens by priority while avoiding duplicates
-    for (const group of allTokenGroups) {
-      let addedFromGroup = 0;
-      
-      for (const token of group.tokens) {
-        if (finalTokens.length >= maxTokens) break;
-        if (addedFromGroup >= group.maxCount) break;
-        
-        const normalizedToken = token.toLowerCase().trim();
-        
-        // Skip if already used or too similar to existing tokens
-        if (usedTokensSet.has(normalizedToken)) continue;
-        if (Array.from(usedTokensSet).some(used => 
-          used.includes(normalizedToken) || normalizedToken.includes(used)
-        )) continue;
-        
-        finalTokens.push(token);
-        usedTokensSet.add(normalizedToken);
-        addedFromGroup++;
-      }
-      
-      if (finalTokens.length >= maxTokens) break;
-    }
-
-    const prompt = finalTokens.join(', ');
-    
-    console.log('🎨 Optimized SDXL prompt generated:', {
-      prompt,
-      tokenCount: finalTokens.length,
+    console.log('🎨 Simplified SDXL scene prompt:', {
+      basePrompt,
+      tokenCount: basePrompt.split(', ').length,
       maxTokens,
-      sceneContext: {
-        characters: sceneContext.characters.length,
-        isNSFW: sceneContext.isNSFW,
-        mood: sceneContext.mood,
-        setting: sceneContext.setting,
-        actions: sceneContext.actions.length,
-        visualElements: sceneContext.visualElements.length
-      },
-      tokenBreakdown: {
-        quality: qualityTokens.length,
-        character: characterTokens.length,
-        scene: sceneTokens.length,
-        nsfw: nsfwTokens.length,
-        technical: technicalTokens.length,
-        final: finalTokens.length
-      }
+      sceneKeywords,
+      character: sceneContext.characters[0]?.name || 'none'
     });
 
-    return prompt;
+    return basePrompt;
   }, []);
 
   // Generate scene image with enhanced options
