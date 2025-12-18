@@ -661,7 +661,7 @@ async function getUniversalTemplate(supabase: any, contentTier: string): Promise
     const { data, error } = await supabase
       .from('prompt_templates')
       .select('*')
-      .eq('target_model', null)
+      .is('target_model', null)
       .eq('use_case', 'character_roleplay')
       .eq('content_mode', contentTier)
       .eq('is_active', true)

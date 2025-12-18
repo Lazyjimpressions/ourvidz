@@ -583,7 +583,22 @@ const MobileRoleplayChat: React.FC = () => {
   };
 
   const handleSendMessage = async (content: string) => {
-    if (!content.trim() || !character || !conversationId || !user) return;
+    console.log('📤 handleSendMessage called:', { 
+      content: content.trim(), 
+      hasCharacter: !!character, 
+      conversationId, 
+      hasUser: !!user 
+    });
+    
+    if (!content.trim() || !character || !conversationId || !user) {
+      console.error('❌ Cannot send message - missing required data:', {
+        hasContent: !!content.trim(),
+        hasCharacter: !!character,
+        hasConversationId: !!conversationId,
+        hasUser: !!user
+      });
+      return;
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
