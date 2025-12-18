@@ -20,7 +20,9 @@ import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { CharacterInfoDrawer } from '@/components/roleplay/CharacterInfoDrawer';
 import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
+import { ModelSelector } from '@/components/roleplay/ModelSelector';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { Character, Message, CharacterScene } from '@/types/roleplay';
@@ -28,6 +30,8 @@ import { imageConsistencyService, ConsistencySettings } from '@/services/ImageCo
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
+import { useImageModels } from '@/hooks/useImageModels';
 
 // Add prompt template interface
 interface PromptTemplate {
@@ -49,36 +53,66 @@ const MobileRoleplayChat: React.FC = () => {
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [showCharacterInfo, setShowCharacterInfo] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
-  // Initialize settings with saved values or defaults
+  
+  // Load models from database
+  const { allModelOptions: roleplayModelOptions, isLoading: roleplayModelsLoading } = useRoleplayModels();
+  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading } = useImageModels();
+  
+  // Initialize settings with saved values or database defaults (API models only, not local)
   const initializeSettings = () => {
     const savedSettings = localStorage.getItem('roleplay-settings');
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
-        return {
-          modelProvider: parsed.modelProvider || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-          selectedImageModel: parsed.selectedImageModel || 'sdxl',
-          consistencySettings: parsed.consistencySettings || {
-            method: 'hybrid',
-            reference_strength: 0.35,
-            denoise_strength: 0.25,
-            modify_strength: 0.5
-          }
-        };
+        // Validate saved settings against available models
+        const savedChatModel = parsed.modelProvider;
+        const savedImageModel = parsed.selectedImageModel;
+        
+        // Validate chat model - must be an API model (model_key), not local
+        const isValidChatModel = roleplayModelOptions.some(m => 
+          m.value === savedChatModel && !m.isLocal
+        );
+        
+        // Validate image model - must be an API model (UUID) or 'sdxl' if local worker available
+        const isValidImageModel = imageModelOptions.some(m => 
+          m.value === savedImageModel
+        ) || (savedImageModel === 'sdxl' && imageModelOptions.some(m => m.value === 'sdxl'));
+        
+        if (isValidChatModel && isValidImageModel) {
+          return {
+            modelProvider: savedChatModel,
+            selectedImageModel: savedImageModel,
+            consistencySettings: parsed.consistencySettings || {
+              method: 'hybrid',
+              reference_strength: 0.35,
+              denoise_strength: 0.25,
+              modify_strength: 0.5
+            }
+          };
+        }
       } catch (error) {
         console.warn('Failed to parse saved roleplay settings:', error);
       }
     }
     
-    // Default values
+    // Default to first available API model (not local)
+    const defaultChatModel = roleplayModelOptions.find(m => !m.isLocal)?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
+    // Default to first available API image model (UUID), not 'sdxl'
+    // IMPORTANT: Only use API models (type === 'api'), never default to 'sdxl' local model
+    const defaultImageModel = imageModelOptions.find(m => m.type === 'api')?.value || null;
+    
+    if (!defaultImageModel) {
+      console.error('❌ No API image models available - image generation will fail. Please configure Replicate models in database.');
+    }
+    
     return {
-      modelProvider: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
-      selectedImageModel: 'sdxl',
+      modelProvider: defaultChatModel,
+      selectedImageModel: defaultImageModel || '', // Empty string if no API models - edge function will handle gracefully
       consistencySettings: {
         method: 'hybrid',
         reference_strength: 0.35,
@@ -88,14 +122,38 @@ const MobileRoleplayChat: React.FC = () => {
     };
   };
   
-  const initialSettings = initializeSettings();
-  const [modelProvider, setModelProvider] = useState<string>(initialSettings.modelProvider);
-  const [selectedImageModel, setSelectedImageModel] = useState<string>(initialSettings.selectedImageModel);
-  const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>(initialSettings.consistencySettings);
+  // Initialize settings after models are loaded
+  const [modelProvider, setModelProvider] = useState<string>('cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
+  const [selectedImageModel, setSelectedImageModel] = useState<string>(''); // Will be set from database API models (not 'sdxl')
+  const [consistencySettings, setConsistencySettings] = useState<ConsistencySettings>({
+    method: 'hybrid',
+    reference_strength: 0.35,
+    denoise_strength: 0.25,
+    modify_strength: 0.5
+  });
+  
+  // Update defaults when models are loaded (only once)
+  const hasInitializedModelDefaults = useRef(false);
+  useEffect(() => {
+    if (!roleplayModelsLoading && !imageModelsLoading && !hasInitializedModelDefaults.current && roleplayModelOptions.length > 0 && imageModelOptions.length > 0) {
+      const settings = initializeSettings();
+      setModelProvider(settings.modelProvider);
+      setSelectedImageModel(settings.selectedImageModel);
+      setConsistencySettings(settings.consistencySettings);
+      hasInitializedModelDefaults.current = true;
+      console.log('✅ Initialized model defaults from database:', {
+        chatModel: settings.modelProvider,
+        imageModel: settings.selectedImageModel,
+        chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
+        imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
+      });
+    }
+  }, [roleplayModelsLoading, imageModelsLoading, roleplayModelOptions, imageModelOptions]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
   const [kickoffError, setKickoffError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
   // Add prompt template state
   const [promptTemplate, setPromptTemplate] = useState<PromptTemplate | null>(null);
 
@@ -153,9 +211,13 @@ const MobileRoleplayChat: React.FC = () => {
         return;
       }
 
-      if (!user || !characterId) return;
+      if (!user || !characterId) {
+        setIsInitializing(false);
+        return;
+      }
 
       try {
+        setIsInitializing(true);
         // Load character data first
         const { data: characterData, error: characterError } = await supabase
           .from('characters')
@@ -203,9 +265,10 @@ const MobileRoleplayChat: React.FC = () => {
           setSignedCharacterImage(loadedCharacter.image_url);
         }
 
-        // Load scene data if sceneId is provided
+        // Load scene data - auto-select if no sceneId provided
         let loadedScene = null;
         if (sceneId) {
+          // Load specific scene if provided in URL
           try {
             const { data: sceneData, error: sceneError } = await supabase
               .from('character_scenes')
@@ -221,6 +284,29 @@ const MobileRoleplayChat: React.FC = () => {
             }
           } catch (error) {
             console.error('Error loading scene:', error);
+          }
+        } else {
+          // Auto-select first available scene if no sceneId provided
+          // This makes scenes optional - can start without scene
+          try {
+            const { data: scenes, error: scenesError } = await supabase
+              .from('character_scenes')
+              .select('*')
+              .eq('character_id', characterId)
+              .order('priority', { ascending: false })
+              .limit(1);
+
+            if (!scenesError && scenes && scenes.length > 0) {
+              loadedScene = scenes[0];
+              setSelectedScene(scenes[0]);
+              console.log('🎬 Auto-selected scene:', scenes[0].scene_prompt.substring(0, 50) + '...');
+            } else {
+              // No scenes available - that's okay, can start without scene
+              console.log('ℹ️ No scenes available for character, starting without scene context');
+            }
+          } catch (error) {
+            console.error('Error loading scenes for auto-select:', error);
+            // Continue without scene - it's optional
           }
         }
 
@@ -408,6 +494,7 @@ const MobileRoleplayChat: React.FC = () => {
         }]);
       } finally {
         setIsLoading(false);
+        setIsInitializing(false);
       }
     };
 
@@ -597,6 +684,15 @@ const MobileRoleplayChat: React.FC = () => {
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       console.log('🎭 Content tier (forced):', contentTier);
 
+      // Validate image model - must be a valid UUID (API model), not 'sdxl' or empty
+      const validImageModel = selectedImageModel && selectedImageModel !== 'sdxl' && selectedImageModel.trim() !== '' 
+        ? selectedImageModel 
+        : null;
+      
+      if (!validImageModel) {
+        console.warn('⚠️ No valid API image model selected - scene generation will be skipped');
+      }
+
       // Call the roleplay-chat edge function with prompt template
       const { data, error } = await supabase.functions.invoke('roleplay-chat', {
         body: {
@@ -606,7 +702,7 @@ const MobileRoleplayChat: React.FC = () => {
           model_provider: modelProvider,
           memory_tier: memoryTier,
           content_tier: contentTier, // ✅ DYNAMIC CONTENT TIER
-          scene_generation: true, // ✅ Enable automatic scene generation
+          scene_generation: !!validImageModel, // ✅ Only enable if valid API model available
           user_id: user.id,
           // ✅ ADD SCENE CONTEXT:
           scene_context: selectedScene?.scene_prompt || null,
@@ -614,8 +710,8 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ ADD PROMPT TEMPLATE INTEGRATION:
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
-          // ✅ ADD IMAGE MODEL SELECTION:
-          selected_image_model: selectedImageModel
+          // ✅ ADD IMAGE MODEL SELECTION (only if valid):
+          selected_image_model: validImageModel
         }
       });
 
@@ -642,16 +738,31 @@ const MobileRoleplayChat: React.FC = () => {
       } else {
         throw new Error('No response from roleplay-chat function');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
-      // Fallback response
+      console.error('Error details:', {
+        message: error.message,
+        context: error.context,
+        status: error.status,
+        body: error.body
+      });
+      
+      // Show user-friendly error message
+      const errorDetails = error.message || 'Unknown error';
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'I apologize, but I seem to be having trouble connecting right now. Could you try again in a moment?',
+        content: `I apologize, but I'm having trouble connecting right now. Error: ${errorDetails}. Please check your model settings or try again.`,
         sender: 'character',
         timestamp: new Date().toISOString()
       };
       setMessages(prev => [...prev, errorMessage]);
+      
+      // Show toast notification
+      toast({
+        title: 'Chat Error',
+        description: errorDetails,
+        variant: 'destructive'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -798,25 +909,54 @@ const MobileRoleplayChat: React.FC = () => {
 
   // Context menu handlers
   const handleClearConversation = async () => {
-    if (!user || !characterId || !character) return;
+    if (!user || !characterId || !character) {
+      console.warn('Cannot clear conversation: missing user, characterId, or character');
+      toast({
+        title: 'Error',
+        description: 'Cannot reset conversation. Please try again.',
+        variant: 'destructive'
+      });
+      return;
+    }
 
     try {
-      // Archive existing conversation if it exists
-      if (conversationId) {
-        await supabase
-          .from('conversations')
-          .update({ status: 'archived' })
-          .eq('id', conversationId)
-          .eq('user_id', user.id);
+      console.log('🔄 Clearing conversation...');
+      
+      // Archive ALL active conversations for this character/user
+      const { error: archiveError } = await supabase
+        .from('conversations')
+        .update({ status: 'archived' })
+        .eq('character_id', characterId)
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+      
+      if (archiveError) {
+        console.error('Error archiving conversations:', archiveError);
+      } else {
+        console.log('✅ Archived all active conversations');
       }
 
-      // Clear localStorage cache
-      const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
-      localStorage.removeItem(cacheKey);
+      // Clear ALL localStorage conversation caches for this character
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(`conversation_${characterId}_`)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      console.log(`✅ Cleared ${keysToRemove.length} conversation cache(s)`);
 
-      // Reset initialization state to allow fresh start
-      hasInitialized.current = false;
-      currentRouteRef.current = '';
+      // Show success message
+      toast({
+        title: 'Conversation Reset',
+        description: 'Starting a new conversation...',
+      });
+      
+      // Small delay to show toast, then reload
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
 
       // Create brand new conversation
       const conversationTitle = selectedScene
@@ -938,11 +1078,26 @@ const MobileRoleplayChat: React.FC = () => {
     console.log('Report character');
   };
 
-  if (!character) {
+  if (!character || isInitializing) {
     return (
       <OurVidzDashboardLayout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-white">Loading character...</div>
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <div className="text-center space-y-4">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div className="text-white text-lg">Loading character...</div>
+            {kickoffError && (
+              <div className="text-red-400 text-sm max-w-md">
+                <p>Error: {kickoffError}</p>
+                <Button 
+                  onClick={handleRetryKickoff}
+                  className="mt-2"
+                  variant="outline"
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </OurVidzDashboardLayout>
     );
@@ -952,13 +1107,17 @@ const MobileRoleplayChat: React.FC = () => {
     <OurVidzDashboardLayout>
       <div className="flex flex-col h-screen bg-background">
         {/* Header */}
-        <RoleplayHeader
-          backTo="/roleplay"
-          characterName={character.name}
-          characterImage={signedCharacterImage || '/placeholder.svg'}
-          onMenuClick={() => setShowContextMenu(true)}
-          onSettingsClick={() => setShowSettingsModal(true)}
-        />
+        <div className="relative">
+          <RoleplayHeader
+            backTo="/roleplay"
+            characterName={character.name}
+            characterImage={signedCharacterImage || '/placeholder.svg'}
+            onMenuClick={() => setShowCharacterInfo(true)}
+            onSettingsClick={() => setShowSettingsModal(true)}
+            onResetClick={handleClearConversation}
+          />
+          {/* Model Selector removed - available in Settings drawer to prevent header overlap */}
+        </div>
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -987,6 +1146,7 @@ const MobileRoleplayChat: React.FC = () => {
 
         {/* Input Area */}
         <div className="border-t border-border p-4 bg-card">
+          {/* Model Selector removed - available in Settings drawer to prevent overlap */}
           <MobileChatInput 
             onSend={handleSendMessage}
             onGenerateScene={handleGenerateScene}
@@ -995,19 +1155,20 @@ const MobileRoleplayChat: React.FC = () => {
           />
         </div>
 
-        {/* Character Sheet - Bottom Sheet (Mobile) or Sidebar (Desktop) */}
-        {showCharacterSheet && (
-          <MobileCharacterSheet 
-            character={character}
-            onClose={() => setShowCharacterSheet(false)}
-            memoryTier={memoryTier}
-            onMemoryTierChange={setMemoryTier}
-            modelProvider={modelProvider}
-            onModelProviderChange={setModelProvider}
-            consistencySettings={consistencySettings}
-            onConsistencySettingsChange={(settings) => setConsistencySettings(settings)}
-          />
-        )}
+        {/* Character Info Drawer - Non-blocking sidebar */}
+        <CharacterInfoDrawer
+          character={character}
+          isOpen={showCharacterInfo}
+          onClose={() => setShowCharacterInfo(false)}
+          onSceneSelect={(scene) => {
+            setSelectedScene(scene);
+            // Optionally navigate to scene URL
+            if (scene.id) {
+              navigate(`/roleplay/chat/${characterId}/scene/${scene.id}`, { replace: true });
+            }
+          }}
+          selectedSceneId={selectedScene?.id}
+        />
 
         {/* Settings Modal */}
         <RoleplaySettingsModal

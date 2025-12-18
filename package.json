@@ -17,7 +17,12 @@
     "sync:schema:cli": "node scripts/sync-schema-cli.js",
     "sync:schema:edge": "node scripts/sync-schema-safe.js",
     "sync:schema:local": "node scripts/sync-supabase-schema.js",
-    "query:supabase": "node scripts/query-supabase.js"
+    "query:supabase": "node scripts/query-supabase.js",
+    "test:roleplay": "npx tsx scripts/test-roleplay/run-all-roleplay-tests.ts",
+    "test:roleplay:character": "npx tsx scripts/test-roleplay/test-character-selection.ts",
+    "test:roleplay:chat": "npx tsx scripts/test-roleplay/test-chat-interactions.ts",
+    "test:roleplay:prompts": "npx tsx scripts/test-roleplay/test-system-prompts.ts",
+    "test:roleplay:database": "npx tsx scripts/test-roleplay/test-database-state.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.4",

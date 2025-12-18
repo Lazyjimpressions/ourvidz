@@ -126,13 +126,18 @@ Configuration:
 ```
 
 ### **Edge Functions Deployment**
-```bash
-# Deploy all edge functions
-supabase functions deploy
 
-# Deploy specific function
-supabase functions deploy queue-job
-```
+**IMPORTANT: We use Supabase online dashboard, NOT CLI**
+
+Edge functions are deployed via:
+1. Supabase Dashboard → Edge Functions
+2. Upload function code from `supabase/functions/[function-name]/`
+3. Set environment variables in Supabase Dashboard → Settings → Edge Functions
+
+**Available MCP Tools:**
+- Use `mcp_supabase_list_edge_functions` to check deployed functions
+- Use `mcp_supabase_get_edge_function` to view function code
+- Use `mcp_supabase_deploy_edge_function` to deploy functions (if available)
 
 ### **Environment Configuration**
 ```bash

@@ -1,60 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { 
-  Play, 
-  Settings, 
   Heart, 
   Sparkles, 
-  User, 
   MessageCircle,
-  Star,
   X,
-  Image
+  Image as ImageIcon
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { supabase } from '@/integrations/supabase/client';
 import { CharacterScene } from '@/types/roleplay';
+import { Character } from '@/types/roleplay';
 
-interface Character {
-  id: string;
-  name: string;
-  description: string;
-  image_url?: string;
-  preview_image_url?: string;
-  appearance_tags?: string[];
-  traits?: string;
-  persona?: string;
-  interaction_count?: number;
-  likes_count?: number;
-  content_rating?: string;
-  gender?: string;
-  role?: string;
-  quick_start?: boolean;
-}
-
-interface CharacterPreviewModalProps {
+interface CharacterInfoDrawerProps {
   character: Character | null;
   isOpen: boolean;
   onClose: () => void;
-  onStartChat: (selectedScene?: CharacterScene) => void;
-  onEditCharacter?: () => void;
-  onFavorite?: () => void;
-  isFavorite?: boolean;
+  onSceneSelect?: (scene: CharacterScene) => void;
+  selectedSceneId?: string;
 }
 
-export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
+export const CharacterInfoDrawer: React.FC<CharacterInfoDrawerProps> = ({
   character,
   isOpen,
   onClose,
-  onStartChat,
-  onEditCharacter,
-  onFavorite,
-  isFavorite = false
+  onSceneSelect,
+  selectedSceneId
 }) => {
   const { isMobile } = useMobileDetection();
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
@@ -62,10 +36,7 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [isLoadingScenes, setIsLoadingScenes] = useState(false);
 
-  // Removed excessive debug logging to prevent console spam
-
   if (!character) {
-    console.log('❌ No character provided to modal');
     return null;
   }
 
@@ -113,17 +84,22 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
           .from('character_scenes')
           .select('*')
           .eq('character_id', character.id)
-          // .eq('is_active', true)  // Temporarily removed to debug
           .order('priority', { ascending: false })
-          .limit(5);
+          .limit(10);
 
         if (error) {
           console.error('Error loading character scenes:', error);
           setCharacterScenes([]);
         } else {
           setCharacterScenes(scenes || []);
-          // Auto-select first scene if available
-          if (scenes && scenes.length > 0 && !selectedScene) {
+          // Auto-select scene if selectedSceneId matches
+          if (selectedSceneId && scenes) {
+            const matched = scenes.find(s => s.id === selectedSceneId);
+            if (matched) {
+              setSelectedScene(matched);
+            }
+          } else if (scenes && scenes.length > 0 && !selectedScene) {
+            // Auto-select first scene if available
             setSelectedScene(scenes[0]);
           }
         }
@@ -135,62 +111,45 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
       }
     };
 
-    loadCharacterScenes();
-  }, [character?.id]);
-
-  const handleStartChat = () => {
-    // Close modal first
-    const sceneToStart = selectedScene || undefined;
-    onClose();
-    
-    // Direct navigation - no setTimeout delays that cause dark screen
-    // The modal will close naturally as we navigate away
-    onStartChat(sceneToStart);
-  };
-
-  const handleClose = () => {
-    setSelectedScene(null); // Reset selection on close
-    onClose();
-  };
+    if (isOpen) {
+      loadCharacterScenes();
+    }
+  }, [character?.id, isOpen, selectedSceneId]);
 
   const handleSceneSelect = (scene: CharacterScene) => {
     setSelectedScene(scene);
+    if (onSceneSelect) {
+      onSceneSelect(scene);
+    }
   };
 
   return (
-    <Dialog 
-      open={isOpen} 
-      onOpenChange={(open) => {
-        // Only close if explicitly set to false (prevents accidental closes)
-        if (!open) {
-          handleClose();
-        }
-      }}
-    >
-      <DialogContent 
+    <Sheet open={isOpen} onOpenChange={onClose}>
+      <SheetContent 
+        side="right" 
         className={`
-          max-w-md w-[95vw] h-[90vh] flex flex-col
+          w-[90vw] sm:w-[400px] 
+          flex flex-col
           bg-card border-border p-0
-          ${isMobile ? 'rounded-none' : 'rounded-lg'}
+          ${isMobile ? 'rounded-none' : ''}
         `}
-        hideClose={true} // Hide the built-in close button
       >
         {/* Header - Fixed */}
-        <DialogHeader className="p-4 pb-2 flex-shrink-0 border-b border-border">
+        <SheetHeader className="p-4 pb-2 flex-shrink-0 border-b border-border">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold text-white line-clamp-1">
+            <SheetTitle className="text-lg font-semibold text-white line-clamp-1">
               {character.name}
-            </DialogTitle>
+            </SheetTitle>
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleClose}
+              onClick={onClose}
               className="h-8 w-8 p-0 text-gray-400 hover:text-white hover:bg-gray-800"
             >
               <X className="w-4 h-4" />
             </Button>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
@@ -229,20 +188,6 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                   {character.content_rating.toUpperCase()}
                 </div>
               )}
-
-              {/* Favorite Button */}
-              {onFavorite && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onFavorite}
-                  className="absolute bottom-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 border-0"
-                >
-                  <Heart 
-                    className={`w-4 h-4 ${isFavorite ? 'fill-red-500 text-red-500' : 'text-white'}`} 
-                  />
-                </Button>
-              )}
             </div>
           </div>
 
@@ -279,11 +224,11 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
               )}
             </div>
 
-            {/* Character Scenes Section - Enhanced with Scene Details */}
+            {/* Character Scenes Section */}
             {characterScenes.length > 0 && (
               <div>
                 <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
-                  <Image className="w-3 h-3" />
+                  <ImageIcon className="w-3 h-3" />
                   Scenes ({characterScenes.length})
                 </h4>
                 <div className="space-y-2">
@@ -312,39 +257,9 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                       </div>
                       
                       {/* Scene Prompt */}
-                      <div className="line-clamp-2 leading-tight mb-2">
+                      <div className="line-clamp-2 leading-tight">
                         {scene.scene_prompt}
                       </div>
-                      
-                      {/* Scene Rules */}
-                      {scene.scene_rules && (
-                        <div className="text-gray-400 text-xs mb-2 p-2 bg-gray-800/50 rounded">
-                          <span className="font-medium">Rules:</span> {scene.scene_rules}
-                        </div>
-                      )}
-                      
-                      {/* Scene Starters */}
-                      {scene.scene_starters && scene.scene_starters.length > 0 && (
-                        <div className="text-gray-400 text-xs">
-                          <span className="font-medium">Starters:</span>
-                          <div className="mt-1 space-y-1">
-                            {scene.scene_starters.slice(0, 2).map((starter, index) => (
-                              <div key={index} className="italic">"{starter}"</div>
-                            ))}
-                            {scene.scene_starters.length > 2 && (
-                              <div className="text-gray-500">+{scene.scene_starters.length - 2} more</div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Scene Image Indicator */}
-                      {scene.image_url && (
-                        <div className="flex items-center gap-1 mt-2 text-gray-400">
-                          <Image className="w-2 h-2" />
-                          <span className="text-xs">Has image</span>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
@@ -399,32 +314,8 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
             )}
           </div>
         </div>
-
-        {/* Action Buttons - Fixed at bottom */}
-        <div className="p-4 pt-2 border-t border-border flex-shrink-0 bg-card">
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleStartChat}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-              size="lg"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              {selectedScene ? 'Start Scene' : 'Start Chat'}
-            </Button>
-            
-            {onEditCharacter && (
-              <Button 
-                onClick={onEditCharacter}
-                variant="outline"
-                size="lg"
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 };
+

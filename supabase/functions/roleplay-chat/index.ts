@@ -291,19 +291,30 @@ serve(async (req) => {
         break;
       default:
         // Check if it's a model from api_models table
-        const modelConfig = await getModelConfig(supabase, model_provider);
-        if (modelConfig) {
-          // Use database-driven model configuration
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
-          modelUsed = `${modelConfig.provider_name}:${model_provider}`;
-        } else {
-          return new Response(JSON.stringify({
-            success: false,
-            error: `Unsupported model provider: ${model_provider}`
-          }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            status: 400
-          });
+        try {
+          const modelConfig = await getModelConfig(supabase, model_provider);
+          if (modelConfig) {
+            console.log('✅ Model config found:', {
+              model_key: model_provider,
+              provider: modelConfig.provider_name,
+              display_name: modelConfig.display_name
+            });
+            // Use database-driven model configuration
+            response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
+            modelUsed = `${modelConfig.provider_name}:${model_provider}`;
+          } else {
+            console.error('❌ Model config not found for:', model_provider);
+            return new Response(JSON.stringify({
+              success: false,
+              error: `Unsupported model provider: ${model_provider}. Model not found in api_models table.`
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              status: 400
+            });
+          }
+        } catch (modelError) {
+          console.error('❌ Error in model configuration lookup:', modelError);
+          throw new Error(`Model configuration error: ${modelError instanceof Error ? modelError.message : String(modelError)}`);
         }
     }
 
@@ -409,10 +420,21 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Roleplay chat error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    console.error('❌ Roleplay chat error:', {
+      message: errorMessage,
+      stack: errorStack,
+      model_provider: requestBody?.model_provider,
+      character_id: requestBody?.character_id,
+      conversation_id: requestBody?.conversation_id
+    });
+    
     return new Response(JSON.stringify({
       success: false,
-      error: 'Internal server error',
+      error: errorMessage || 'Internal server error',
+      details: process.env.NODE_ENV === 'development' ? errorStack : undefined,
       processing_time: Date.now() - startTime
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

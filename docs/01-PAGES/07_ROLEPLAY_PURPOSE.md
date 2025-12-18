@@ -1,7 +1,7 @@
 # Roleplay Purpose & PRD (Product Requirements Document)
 
-**Last Updated:** August 30, 2025  
-**Status:** 🚧 **PRD Implementation Phase**  
+**Last Updated:** December 17, 2025  
+**Status:** 🚧 **PRD Refactor Phase - Simple Mobile-First**  
 **Priority:** **HIGH** - Core MVP Feature
 
 ## **🎯 Purpose Statement**
@@ -31,38 +31,43 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 ## **🏗️ Core Functionality Requirements**
 
 ### **Primary Features (MVP)**
-1. **Character Selection Dashboard** - Mobile-first grid with preview images
+1. **Character Selection Dashboard** - Mobile-first grid, immediate chat start
 2. **Chat Interface** - Responsive chat with character avatars and streaming
-3. **Scene Integration** - Optional scene selection with visual preview
+3. **Scene Integration** - Auto-selected scenes, optional manual selection in chat
 4. **Memory System** - Three-tier memory (conversation, character, profile)
 5. **Image Consistency** - Hybrid approach using i2i reference (70%+ consistency)
+6. **Non-Blocking UI** - Drawers for character info, scenes, and settings (no modal blockers)
 
 ### **Secondary Features (Phase 2)**
 1. **Custom Character Creation** - Character builder with real-time preview
 2. **Scene Generation** - Dynamic scene creation with consistency controls
 3. **Model Management** - Admin/power user model selection and configuration
-4. **Mobile Optimization** - Touch gestures, swipe navigation, responsive design
+4. **Advanced Mobile Gestures** - Swipe navigation, advanced touch gestures, pinch-to-zoom
+5. **Long-Press Actions** - Context menus and advanced message actions
 
 ## **🎨 UX/UI Design Requirements**
 
 ### **Layout Structure**
-- **Mobile-First Dashboard**: Grid layout with character cards optimized for touch
-- **Responsive Chat**: Full-screen chat view with bottom input bar
-- **Slide-out Panels**: Collapsible panels for advanced options
+- **Mobile-First Dashboard**: Grid layout with character cards optimized for touch (44px minimum)
+- **Responsive Chat**: Full-screen chat view with bottom input bar, immediate start
+- **Slide-out Drawers**: Non-blocking drawers for character info, scenes, and settings
 - **Bottom Navigation**: Mobile-optimized navigation bar
+- **No Blocking Modals**: All advanced features accessible via drawers, not modals
 
 ### **User Flow**
 1. **Login → Dashboard**: Grid of character cards with "Quick Start" section
-2. **Character Selection**: Tap character card → character details → start chat
-3. **Optional Scene Selection**: Choose pre-generated scene or create custom
-4. **Chat Interface**: Full-screen chat with character avatars and scene integration
-5. **Scene Generation**: Automatic scene generation with consistency controls
+2. **Character Selection**: Tap character card → start chat immediately (preview optional via long-press or button)
+3. **Scene Integration**: Auto-select best available scene, or start without scene (select later in chat)
+4. **Chat Interface**: Full-screen chat with character avatars, scene integration, and optional drawers
+5. **Scene Generation**: Automatic scene generation with consistency controls (Phase 2)
 
 ### **Key Interactions**
 - **Touch-Optimized Cards**: Large touch targets with proper spacing (44px minimum)
-- **Swipe Gestures**: Swipe for navigation and quick actions
-- **Long-Press Actions**: Context menus for message actions (500ms threshold)
-- **Pinch-to-Zoom**: Image viewing and scene preview
+- **Immediate Chat Start**: Single tap on character card starts chat (<1 second)
+- **Optional Preview**: Long-press (500ms) or preview button opens character info drawer
+- **Drawer Gestures**: Swipe from edges to open character info or settings drawers
+- **Pinch-to-Zoom**: Image viewing and scene preview (Phase 2)
+- **Swipe Gestures**: Advanced navigation gestures (Phase 2)
 
 ## **🔧 Technical Requirements**
 
@@ -81,9 +86,9 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 ## **📊 Success Criteria & Metrics**
 
 ### **User Experience Metrics**
-- **Flow Completion**: 90%+ success rate from login to chat
-- **Character Selection**: <30 seconds average selection time
-- **Chat Initiation**: <10 seconds to start conversation
+- **Flow Completion**: 95%+ success rate from login to chat (improved by removing blockers)
+- **Character Selection**: <5 seconds average selection time (immediate start)
+- **Chat Initiation**: <1 second to start conversation (direct navigation, no modals)
 - **Session Duration**: 15+ minutes average session length
 
 ### **Technical Performance Metrics**
@@ -147,6 +152,13 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 2. **Memory Architecture**: Three-tier system with user controls and optimization
 3. **Mobile Priority**: Design mobile-first with progressive desktop enhancement
 4. **Performance Focus**: Optimize for speed and reliability over advanced features
+5. **UI/UX Philosophy**: Immediate action, optional complexity, no blocking modals
+
+### **UI/UX Principles**
+- **Immediate Action**: Click → Chat starts instantly
+- **Optional Complexity**: Advanced features in drawers, not blockers
+- **Mobile-First**: Touch-optimized, no modal stacking
+- **Progressive Disclosure**: Simple by default, advanced when needed
 
 ### **Development Guidelines**
 - **Component Reusability**: Design components for reuse across pages
@@ -162,6 +174,25 @@ Provide a mobile-first, character-consistent chat experience with integrated vis
 
 ---
 
-**Status**: PRD finalized and ready for implementation. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
+## **📋 Refactor Notes (December 2025)**
+
+**Refactor Rationale:** Based on user feedback and competitor analysis (Character.ai, Janitor.ai, Chub.ai), the roleplay flow has been simplified to eliminate modal blockers and enable immediate chat start. This refactor addresses:
+- Dark screen overlay persistence issues
+- Complex workflow with too many modals
+- Mobile-unfriendly modal stacking
+- User confusion about required vs optional steps
+
+**Key Refactor Changes:**
+- Preview modal is now optional (long-press or button), not required
+- Scenes auto-select or are optional (can start without scene)
+- All advanced features moved to non-blocking drawers
+- Direct navigation eliminates modal/navigation race conditions
+- Improved metrics: <1s chat initiation, <5s character selection, 95%+ flow completion
+
+**Refactor Plan:** See `.cursor/plans/roleplay_refactor_-_simple_mobile-first_16bb523a.plan.md`
+
+---
+
+**Status**: PRD updated to reflect Simple Mobile-First refactor. This document serves as the strategic foundation for all roleplay development decisions and success metrics.
 
 **Document Purpose**: This is the definitive Product Requirements Document (PRD) that defines the business goals, user requirements, and success criteria for the roleplay feature. It serves as the strategic foundation for all development decisions.

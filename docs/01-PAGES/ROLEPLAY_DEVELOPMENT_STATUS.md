@@ -1,12 +1,27 @@
 # Roleplay Development Status - Consolidated
 
-**Last Updated:** September 1, 2025  
-**Status:** 🚧 **Phase 2 Implementation - 85% Complete**  
+**Last Updated:** December 17, 2025  
+**Status:** 🔄 **Refactor Phase - Simple Mobile-First**  
 **Purpose:** Single source of truth for roleplay development status, implementation details, and next steps
+
+**Current Phase:** Simple Mobile-First Refactor - Eliminating modal blockers, enabling immediate chat start
+**Refactor Plan:** See `.cursor/plans/roleplay_refactor_-_simple_mobile-first_16bb523a.plan.md`
 
 ## **🎯 Current Implementation Status**
 
-### **✅ Completed Implementation (85% Complete)**
+### **🔄 Refactor Phase: Simple Mobile-First (December 2025)**
+**Goal:** Eliminate modal blockers, enable immediate chat start, fix dark screen issues
+
+**Key Changes:**
+- Remove preview modal as required step
+- Enable direct navigation: Click card → Chat starts immediately
+- Auto-select scenes or allow no scene
+- Convert modals to non-blocking drawers
+- Fix dark screen overlay persistence issues
+
+**Status:** Planning complete, implementation in progress
+
+### **✅ Completed Implementation (Pre-Refactor - 85% Complete)**
 - **Mobile-first pages**: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
 - **Mobile components**: MobileCharacterCard.tsx, MobileChatInput.tsx, MobileCharacterSheet.tsx
 - **Dashboard components**: CharacterGrid.tsx, QuickStartSection.tsx, SearchAndFilters.tsx ✅ **IMPLEMENTED**
@@ -107,8 +122,9 @@ src/components/roleplay/ARCHIVED/
 
 ### **Core User Flow Status**
 ```
-PRD Required: Login → Dashboard → Character Selection → Scene Selection → Chat
-Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
+PRD Required (Updated): Login → Dashboard → Immediate Chat Start → Optional Drawers
+Previous: Login → Dashboard ✅ → Character Selection ✅ → Preview Modal → Chat ✅
+Refactor Target: Login → Dashboard → Chat (immediate) → Optional Drawers
 ```
 
 **Gap Analysis:**
@@ -194,9 +210,9 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 ## **📊 SUCCESS METRICS & VALIDATION**
 
 ### **User Experience Metrics**
-- **Flow Completion Rate**: Target 90%+ from login to chat ✅ **ACHIEVED**
-- **Character Selection Time**: Target <30 seconds ✅ **ACHIEVED**
-- **Chat Initiation Time**: Target <10 seconds ✅ **ACHIEVED**
+- **Flow Completion Rate**: Target 95%+ from login to chat (improved from 90%) 🔄 **REFACTOR TARGET**
+- **Character Selection Time**: Target <5 seconds (improved from <30s) 🔄 **REFACTOR TARGET**
+- **Chat Initiation Time**: Target <1 second (improved from <10s) 🔄 **REFACTOR TARGET**
 - **Session Duration**: Target 15+ minutes average 🔄 **IN PROGRESS**
 
 ### **Technical Performance**
@@ -311,6 +327,12 @@ Current: Login → Dashboard ✅ → Character Selection ✅ → Chat ✅
 
 ---
 
-**Next Steps**: Start Phase 2 implementation with edge function integration for enhanced roleplay functionality.
+**Next Steps**: 
+1. Implement Simple Mobile-First refactor (see refactor plan)
+2. Eliminate modal blockers and enable immediate chat start
+3. Convert modals to non-blocking drawers
+4. Fix dark screen overlay issues
+
+**Refactor Plan Reference**: `.cursor/plans/roleplay_refactor_-_simple_mobile-first_16bb523a.plan.md`
 
 **Document Purpose**: This is the consolidated development status document that provides a single source of truth for implementation progress, next steps, and success metrics.

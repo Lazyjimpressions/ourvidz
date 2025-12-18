@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Eye, Sparkles, Loader2, Save } from 'lucide-react';
+import { Eye, Sparkles, Loader2, Save, Heart, MessageCircle, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateCharacterPortrait } from '@/utils/characterImageUtils';
@@ -10,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useNavigate } from 'react-router-dom';
 import { CharacterScene } from '@/types/roleplay';
+import { cn } from '@/lib/utils';
 
 interface Character {
   id: string;
@@ -91,8 +93,9 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
     e.preventDefault();
     e.stopPropagation();
     
-    // Show preview modal instead of direct navigation
-    setShowPreview(true);
+    // Direct navigation - no modal blocker
+    // This fixes the dark screen issue by eliminating modal/navigation race conditions
+    navigate(`/roleplay/chat/${character.id}`);
   };
 
   const handlePreviewClose = () => {
@@ -100,15 +103,16 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   };
 
   const handleStartChat = (selectedScene?: CharacterScene) => {
+    // Close preview modal
     setShowPreview(false);
+    
+    // Direct navigation - no setTimeout delays that cause dark screen
     if (selectedScene) {
       // Navigate with scene context
       navigate(`/roleplay/chat/${character.id}/scene/${selectedScene.id}`);
-      console.log('🚀 Starting chat with scene:', selectedScene.id);
     } else {
       // Navigate without scene context
-      onSelect();
-      console.log('🚀 Starting chat without scene');
+      navigate(`/roleplay/chat/${character.id}`);
     }
   };
 
@@ -229,15 +233,16 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   return (
     <>
       <div 
-        className={`
-          relative group cursor-pointer
-          ${isMobile ? 'aspect-square' : 'aspect-[4/5]'}
-          rounded-lg overflow-hidden
-          bg-card border border-border
-          transition-all duration-200
-          hover:shadow-lg hover:scale-[1.02]
-          ${isTouchDevice ? 'touch-manipulation' : ''}
-        `}
+        className={cn(
+          "relative group cursor-pointer",
+          isMobile ? 'aspect-square' : 'aspect-[4/5]',
+          "rounded-xl overflow-hidden",
+          "bg-card border border-border",
+          "transition-all duration-300",
+          "hover:shadow-2xl hover:scale-[1.03] hover:border-blue-500/50",
+          isTouchDevice && 'touch-manipulation',
+          "shadow-md"
+        )}
         onClick={handleCardClick}
       >
         {/* Character Image */}
@@ -258,10 +263,15 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
             </div>
           )}
           
-          {/* Quick Start Badge - Minimal */}
-          {character.quick_start && (
-            <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded font-medium">
-              Quick
+          {/* Content Rating Badge */}
+          {character.content_rating && (
+            <div className={cn(
+              "absolute top-2 left-2 text-xs px-2 py-0.5 rounded-full font-medium backdrop-blur-sm",
+              character.content_rating === 'nsfw' 
+                ? "bg-purple-600/80 text-white border border-purple-400/50"
+                : "bg-green-600/80 text-white border border-green-400/50"
+            )}>
+              {character.content_rating.toUpperCase()}
             </div>
           )}
 
@@ -292,10 +302,44 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
             </div>
           )}
           
-          {/* Text Overlay - Minimal and clean */}
-          <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-            <h3 className="text-white font-medium text-sm line-clamp-1">{character.name}</h3>
-            <p className="text-white/70 text-xs line-clamp-1 mt-0.5">{character.description}</p>
+          {/* Text Overlay - Enhanced with stats */}
+          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 via-black/70 to-transparent">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-white font-semibold text-sm line-clamp-1">{character.name}</h3>
+                <p className="text-white/80 text-xs line-clamp-1 mt-0.5">{character.description}</p>
+              </div>
+              {/* Quick Start Badge - Moved here */}
+              {character.quick_start && (
+                <Badge className="bg-blue-600 text-white text-xs px-1.5 py-0.5 flex-shrink-0">
+                  Quick
+                </Badge>
+              )}
+            </div>
+            
+            {/* Stats Row */}
+            {(character.interaction_count !== undefined || character.likes_count !== undefined) && (
+              <div className="flex items-center gap-3 mt-2 text-xs text-white/70">
+                {character.interaction_count !== undefined && character.interaction_count > 0 && (
+                  <div className="flex items-center gap-1">
+                    <MessageCircle className="w-3 h-3" />
+                    <span>{character.interaction_count.toLocaleString()}</span>
+                  </div>
+                )}
+                {character.likes_count !== undefined && character.likes_count > 0 && (
+                  <div className="flex items-center gap-1">
+                    <Heart className="w-3 h-3 fill-red-500 text-red-500" />
+                    <span>{character.likes_count.toLocaleString()}</span>
+                  </div>
+                )}
+                {character.interaction_count !== undefined && character.interaction_count > 50 && (
+                  <div className="flex items-center gap-1 text-yellow-400">
+                    <TrendingUp className="w-3 h-3" />
+                    <span>Popular</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           
           {/* Action Icons - Minimal, always visible on mobile */}

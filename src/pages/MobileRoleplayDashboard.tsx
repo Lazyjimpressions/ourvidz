@@ -6,9 +6,11 @@ import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, MessageCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useCharacterSessions } from '@/hooks/useCharacterSessions';
+import { MobileCharacterCard } from '@/components/roleplay/MobileCharacterCard';
 
 const MobileRoleplayDashboard = () => {
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
@@ -18,6 +20,7 @@ const MobileRoleplayDashboard = () => {
 
   // ✅ REAL DATA: Use database characters instead of mock data
   const { characters, isLoading, error, loadPublicCharacters } = usePublicCharacters();
+  const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
 
   // Transform database characters to display format with all required fields
   const displayCharacters = characters.map(char => ({
@@ -105,6 +108,56 @@ const MobileRoleplayDashboard = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-white">Roleplay</h1>
           <p className="text-gray-400 mt-1">Chat with AI characters</p>
         </div>
+        
+        {/* Ongoing Conversations Section */}
+        {ongoingSessions.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="w-4 h-4 text-green-400" />
+              <h2 className="text-base font-medium text-white">Recent Chats</h2>
+            </div>
+            <div className={`
+              grid gap-3
+              ${isMobile ? 'grid-cols-1' : 'grid-cols-2 lg:grid-cols-3'}
+            `}>
+              {ongoingSessions.slice(0, 6).map((session) => {
+                const character = characters.find(c => c.id === session.character_id);
+                if (!character) return null;
+                
+                return (
+                  <div key={session.character_id} className="relative">
+                    <MobileCharacterCard
+                      character={{
+                        id: character.id,
+                        name: character.name,
+                        description: character.description,
+                        image_url: character.image_url,
+                        preview_image_url: character.reference_image_url || character.image_url,
+                        quick_start: false,
+                        category: character.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
+                        consistency_method: (character as any).consistency_method || 'i2i_reference',
+                        interaction_count: character.interaction_count,
+                        likes_count: character.likes_count,
+                        appearance_tags: character.appearance_tags,
+                        traits: character.traits,
+                        persona: character.persona,
+                        gender: character.gender,
+                        reference_image_url: character.reference_image_url,
+                        seed_locked: (character as any).seed_locked
+                      }}
+                      onSelect={() => navigate(`/roleplay/chat/${session.character_id}`)}
+                      onPreview={() => console.log('Preview:', session.character_id)}
+                    />
+                    <div className="absolute top-2 right-2 flex items-center gap-1 bg-green-600/80 text-white text-xs px-2 py-1 rounded-full">
+                      <MessageCircle className="w-3 h-3" />
+                      <span>{session.total_messages}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         
         {/* Quick Start Section */}
         <QuickStartSection onCharacterSelect={handleCharacterSelect} />

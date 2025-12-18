@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useLocalModelHealth } from './useLocalModelHealth';
 
 export interface ImageModel {
   id: string;
@@ -27,6 +28,7 @@ export const useImageModels = () => {
   const [imageModels, setImageModels] = useState<ImageModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { sdxlWorker } = useLocalModelHealth();
 
   useEffect(() => {
     const loadImageModels = async () => {
@@ -77,7 +79,8 @@ export const useImageModels = () => {
   }, []);
 
   // Create model options for UI components
-  const modelOptions = [
+  // Include local SDXL model if worker is available
+  const localModelOptions = sdxlWorker.isAvailable ? [
     {
       value: 'sdxl',
       label: 'SDXL (Local)',
@@ -90,14 +93,17 @@ export const useImageModels = () => {
         reference_images: true,
         seed_control: true
       }
-    },
-    ...imageModels.map(model => ({
-      value: model.id,
-      label: `${model.display_name} (${model.provider_display_name})`,
-      type: 'api' as const,
-      capabilities: (model.capabilities || {}) as ImageModel['capabilities']
-    }))
-  ];
+    }
+  ] : [];
+
+  const apiModelOptions = imageModels.map(model => ({
+    value: model.id,
+    label: `${model.display_name} (${model.provider_display_name})`,
+    type: 'api' as const,
+    capabilities: (model.capabilities || {}) as ImageModel['capabilities']
+  }));
+
+  const modelOptions = [...localModelOptions, ...apiModelOptions];
 
   return {
     imageModels,

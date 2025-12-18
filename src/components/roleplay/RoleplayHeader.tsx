@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronLeft, MessageCircle, User, Settings, MoreVertical } from 'lucide-react';
+import { ChevronLeft, MessageCircle, User, Settings, MoreVertical, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -15,6 +15,7 @@ interface RoleplayHeaderProps {
   characterImage?: string;
   onSettingsClick?: () => void;
   onMenuClick?: () => void;
+  onResetClick?: () => void;
   className?: string;
 }
 
@@ -27,6 +28,7 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
   characterImage,
   onSettingsClick,
   onMenuClick,
+  onResetClick,
   className
 }) => {
   const navigate = useNavigate();
@@ -94,7 +96,24 @@ export const RoleplayHeader: React.FC<RoleplayHeaderProps> = ({
       </div>
 
       {/* Right Section */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        {onResetClick && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onResetClick();
+            }}
+            className="h-8 px-2 text-muted-foreground hover:text-foreground flex items-center gap-1"
+            title="Reset Conversation"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span className="text-xs">Reset</span>
+          </Button>
+        )}
+        
         {onMenuClick && (
           <Button
             variant="ghost"

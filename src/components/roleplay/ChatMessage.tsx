@@ -14,7 +14,9 @@ import {
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { Character, Message } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
+import { MessageActions } from './MessageActions';
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 interface ChatMessageProps {
   message: Message;
@@ -130,17 +132,33 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   };
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex gap-3 max-w-[80%] ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+    <div className={cn(
+      "flex group",
+      isUser ? 'justify-end' : 'justify-start',
+      "mb-4"
+    )}>
+      <div className={cn(
+        "flex gap-3",
+        isUser ? 'flex-row-reverse' : 'flex-row',
+        isMobile ? 'max-w-[90%]' : 'max-w-[75%]'
+      )}>
         {/* Avatar */}
-        <div className={`flex-shrink-0 ${isUser ? 'order-2' : 'order-1'}`}>
-          <div className={`
-            w-8 h-8 rounded-full overflow-hidden
-            ${isUser ? 'bg-blue-600' : 'bg-gray-700'}
-            flex items-center justify-center
-          `}>
+        <div className={cn(
+          "flex-shrink-0",
+          isUser ? 'order-2' : 'order-1'
+        )}>
+          <div className={cn(
+            "rounded-full overflow-hidden flex items-center justify-center",
+            isUser 
+              ? "w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg" 
+              : "w-10 h-10 bg-gray-700 shadow-lg ring-2 ring-gray-600",
+            !isMobile && "w-12 h-12"
+          )}>
             {isUser ? (
-              <User className="w-4 h-4 text-white" />
+              <User className={cn(
+                "text-white",
+                isMobile ? "w-5 h-5" : "w-6 h-6"
+              )} />
             ) : (
               <img 
                 src={signedCharacterImage || '/placeholder.svg'} 
@@ -152,10 +170,20 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
         </div>
 
         {/* Message Content */}
-        <div className={`flex flex-col ${isUser ? 'order-1' : 'order-2'}`}>
+        <div className={cn(
+          "flex flex-col gap-1",
+          isUser ? 'order-1 items-end' : 'order-2 items-start'
+        )}>
           {/* Message Header */}
-          <div className={`flex items-center gap-2 mb-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
-            <span className="text-sm font-medium text-gray-300">
+          <div className={cn(
+            "flex items-center gap-2",
+            isUser ? 'justify-end' : 'justify-start'
+          )}>
+            <span className={cn(
+              "font-semibold",
+              isUser ? "text-blue-400" : "text-gray-300",
+              isMobile ? "text-xs" : "text-sm"
+            )}>
               {isUser ? 'You' : character?.name || 'Character'}
             </span>
             <div className="flex items-center gap-1 text-xs text-gray-500">
@@ -164,72 +192,104 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </div>
           </div>
 
-          {/* Message Bubble */}
-          <Card className={`
-            p-3 rounded-lg
-            ${isUser 
-              ? 'bg-blue-600 text-white' 
-              : 'bg-gray-800 text-white border-gray-700'
-            }
-            ${isMobile ? 'text-sm' : 'text-base'}
-          `}>
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+          {/* Message Bubble with Actions */}
+          <div className={cn(
+            "flex items-start gap-2",
+            isUser ? 'flex-row-reverse' : 'flex-row'
+          )}>
+            <Card className={cn(
+              "rounded-2xl shadow-lg",
+              isUser 
+                ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-0' 
+                : 'bg-gray-800 text-white border-gray-700',
+              isMobile ? 'px-4 py-3 text-sm' : 'px-5 py-4 text-base',
+              "max-w-full"
+            )}>
+              <p className={cn(
+                "whitespace-pre-wrap break-words leading-relaxed",
+                isMobile ? "text-sm" : "text-base"
+              )}>
+                {message.content}
+              </p>
+              
+              {/* Retry button for failed kickoff */}
+              {message.metadata?.needsRetry && onRetry && (
+                <div className="mt-3 pt-3 border-t border-white/20">
+                  <Button 
+                    onClick={onRetry}
+                    variant="outline"
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700 text-white border-red-500"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry Scene Setup
+                  </Button>
+                </div>
+              )}
+            </Card>
             
-            {/* Retry button for failed kickoff */}
-            {message.metadata?.needsRetry && onRetry && (
-              <div className="mt-3 pt-3 border-t border-gray-600">
-                <Button 
-                  onClick={onRetry}
-                  variant="outline"
-                  size="sm"
-                  className="bg-red-600 hover:bg-red-700 text-white border-red-500"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Retry Scene Setup
-                </Button>
-              </div>
-            )}
-          </Card>
+            {/* Message Actions */}
+            <div className={cn(
+              "flex-shrink-0 pt-1",
+              isUser ? 'order-2' : 'order-1'
+            )}>
+              <MessageActions
+                message={message}
+                onCopy={() => {
+                  navigator.clipboard.writeText(message.content);
+                }}
+                onDownload={message.metadata?.image_url ? handleDownloadImage : undefined}
+                onShare={message.metadata?.image_url ? handleShareScene : undefined}
+                showOnHover={!isMobile}
+              />
+            </div>
+          </div>
 
           {/* Scene Image */}
           {hasScene && signedSceneImage && (
-            <div className="mt-3">
-              <Card className="overflow-hidden border-gray-700 bg-gray-900">
-                <div className="relative">
+            <div className={cn(
+              "mt-3",
+              isUser ? 'ml-auto' : 'mr-auto',
+              isMobile ? 'max-w-full' : 'max-w-md'
+            )}>
+              <Card className="overflow-hidden border-gray-700 bg-gray-900 rounded-xl shadow-xl">
+                <div className="relative group">
                   <img 
                     src={signedSceneImage} 
                     alt="Generated scene"
-                    className="w-full h-auto max-h-64 object-cover"
+                    className="w-full h-auto max-h-96 object-cover rounded-t-xl"
                   />
                   
-                  {/* Scene Actions */}
-                  <div className="absolute top-2 right-2 flex gap-1">
+                  {/* Scene Actions - Show on hover */}
+                  <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={handleDownloadImage}
-                      className="bg-black/50 hover:bg-black/70 text-white border-0"
+                      className="bg-black/70 hover:bg-black/90 text-white border-0 backdrop-blur-sm"
                     >
-                      <Download className="w-3 h-3" />
+                      <Download className="w-4 h-4" />
                     </Button>
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={handleShareScene}
-                      className="bg-black/50 hover:bg-black/70 text-white border-0"
+                      className="bg-black/70 hover:bg-black/90 text-white border-0 backdrop-blur-sm"
                     >
-                      <Share2 className="w-3 h-3" />
+                      <Share2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
                 
                 {/* Scene Metadata */}
-                <div className="p-2 bg-gray-800">
-                  <div className="flex items-center justify-between text-xs text-gray-400">
-                    <span>Generated Scene</span>
-                    <Badge variant="outline" className="text-xs">
-                      {message.metadata.consistency_method}
-                    </Badge>
+                <div className="p-3 bg-gray-800/80 backdrop-blur-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-gray-300">Generated Scene</span>
+                    {message.metadata.consistency_method && (
+                      <Badge variant="outline" className="text-xs bg-gray-700/50 border-gray-600">
+                        {message.metadata.consistency_method}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -243,9 +303,9 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                 size="sm"
                 variant="outline"
                 onClick={onGenerateScene}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0"
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-xl transition-all"
               >
-                <ImageIcon className="w-3 h-3 mr-1" />
+                <ImageIcon className={cn("mr-1.5", isMobile ? "w-3 h-3" : "w-4 h-4")} />
                 Generate Scene
               </Button>
             </div>

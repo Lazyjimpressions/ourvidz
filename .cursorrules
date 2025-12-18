@@ -1,0 +1,43 @@
+# Cursor Rules for OurVidz Project
+
+## Supabase Configuration
+
+**IMPORTANT: We DO NOT use Supabase CLI. We ONLY use Supabase online.**
+- All edge functions are deployed via Supabase online dashboard
+- Use Supabase MCP tools for all database operations, edge function management, and schema changes
+- Never attempt to use `supabase` CLI commands
+
+Supabase credentials are available in `.env` file:
+- `VITE_SUPABASE_URL` - Supabase project URL ✅ Available
+- `VITE_SUPABASE_PUBLISHABLE_KEY` - Supabase anonymous key ✅ Available (same as ANON_KEY)
+- `SUPABASE_SERVICE_ROLE_KEY` - ✅ Available in `.env` for test scripts
+
+## Test User
+
+The test suite uses the existing logged-in user:
+- Username/Email: `pokercpa05`
+- User is referenced from the `auth.users` table via email lookup
+- Test scripts automatically find this user by email
+
+## Environment Variables
+
+When running tests, ensure these are set:
+- `VITE_SUPABASE_URL` or `SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY` or `SUPABASE_ANON_KEY`
+- `TEST_USER_EMAIL` (optional, defaults to "pokercpa05@example.com" or searches for "pokercpa05")
+
+## Test Execution
+
+Run tests with:
+```bash
+npm run test:roleplay
+```
+
+Individual test suites:
+```bash
+npm run test:roleplay:character
+npm run test:roleplay:chat
+npm run test:roleplay:prompts
+npm run test:roleplay:database
+```
+

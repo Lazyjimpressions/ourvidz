@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Image as ImageIcon, Sparkles } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { cn } from '@/lib/utils';
 
 interface MobileChatInputProps {
   onSend: (message: string) => void;
@@ -85,9 +86,9 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
               focus:border-blue-500 focus:ring-blue-500
             `}
             style={{
-              minHeight: isMobile ? '48px' : '40px',
-              paddingTop: isMobile ? '12px' : '8px',
-              paddingBottom: isMobile ? '12px' : '8px'
+              minHeight: isMobile ? '52px' : '40px',
+              paddingTop: isMobile ? '14px' : '8px',
+              paddingBottom: isMobile ? '14px' : '8px'
             }}
           />
           
@@ -104,13 +105,12 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
           onClick={handleSend}
           disabled={!message.trim() || isLoading}
           size={isMobile ? "default" : "sm"}
-          className={`
-            bg-blue-600 hover:bg-blue-700 text-white
-            ${isMobile ? 'w-12 h-12' : 'w-10 h-10'}
-            flex-shrink-0
-          `}
+          className={cn(
+            "bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0",
+            isMobile ? 'min-w-[44px] min-h-[44px] w-12 h-12' : 'w-10 h-10'
+          )}
         >
-          <Send className="w-4 h-4" />
+          <Send className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
         </Button>
       </div>
 
@@ -122,7 +122,7 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
             size="sm"
             onClick={() => setMessage(prev => prev + ' 👋')}
             disabled={isLoading}
-            className="text-gray-400 hover:text-white"
+            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
           >
             👋
           </Button>
@@ -131,7 +131,7 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
             size="sm"
             onClick={() => setMessage(prev => prev + ' ❤️')}
             disabled={isLoading}
-            className="text-gray-400 hover:text-white"
+            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
           >
             ❤️
           </Button>
@@ -140,7 +140,7 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
             size="sm"
             onClick={() => setMessage(prev => prev + ' 😊')}
             disabled={isLoading}
-            className="text-gray-400 hover:text-white"
+            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
           >
             😊
           </Button>
@@ -149,7 +149,7 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
             size="sm"
             onClick={() => setMessage(prev => prev + ' 🤔')}
             disabled={isLoading}
-            className="text-gray-400 hover:text-white"
+            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
           >
             🤔
           </Button>
