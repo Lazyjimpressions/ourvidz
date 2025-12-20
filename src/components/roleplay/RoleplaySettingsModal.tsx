@@ -8,10 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
-import { useLocalModelHealth } from '@/hooks/useLocalModelHealth';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface RoleplaySettingsModalProps {
@@ -39,9 +38,8 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   consistencySettings,
   onConsistencySettingsChange
 }) => {
-  const { allModelOptions, isLoading: modelsLoading } = useRoleplayModels();
-  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading } = useImageModels();
-  const { chatWorker, sdxlWorker } = useLocalModelHealth();
+  const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
+  const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
   const { toast } = useToast();
   
   // Local state for form data
@@ -50,23 +48,56 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   const [localSelectedImageModel, setLocalSelectedImageModel] = useState(selectedImageModel);
   const [localConsistencySettings, setLocalConsistencySettings] = useState(consistencySettings);
   
-  // Load saved settings from localStorage
+  // Helper to validate if a chat model is available
+  const isValidChatModel = (modelValue: string): boolean => {
+    const model = allModelOptions.find(m => m.value === modelValue);
+    return model ? model.isAvailable : false;
+  };
+
+  // Helper to validate if an image model is available
+  const isValidImageModel = (modelValue: string): boolean => {
+    const model = imageModelOptions.find(m => m.value === modelValue);
+    return model ? model.isAvailable : false;
+  };
+
+  // Load saved settings from localStorage with validation
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !modelsLoading && !imageModelsLoading) {
       const savedSettings = localStorage.getItem('roleplay-settings');
       if (savedSettings) {
         try {
           const parsed = JSON.parse(savedSettings);
           setLocalMemoryTier(parsed.memoryTier || memoryTier);
-          setLocalModelProvider(parsed.modelProvider || modelProvider);
-          setLocalSelectedImageModel(parsed.selectedImageModel || selectedImageModel);
+
+          // Validate saved chat model - fall back to default if unavailable
+          const savedChatModel = parsed.modelProvider;
+          if (savedChatModel && isValidChatModel(savedChatModel)) {
+            setLocalModelProvider(savedChatModel);
+          } else if (defaultChatModel) {
+            setLocalModelProvider(defaultChatModel.value);
+            console.log('⚠️ Saved chat model unavailable, using default:', defaultChatModel.value);
+          } else {
+            setLocalModelProvider(modelProvider);
+          }
+
+          // Validate saved image model - fall back to default if unavailable
+          const savedImageModel = parsed.selectedImageModel;
+          if (savedImageModel && isValidImageModel(savedImageModel)) {
+            setLocalSelectedImageModel(savedImageModel);
+          } else if (defaultImageModel) {
+            setLocalSelectedImageModel(defaultImageModel.value);
+            console.log('⚠️ Saved image model unavailable, using default:', defaultImageModel.value);
+          } else {
+            setLocalSelectedImageModel(selectedImageModel);
+          }
+
           setLocalConsistencySettings(parsed.consistencySettings || consistencySettings);
         } catch (error) {
           console.warn('Failed to parse saved roleplay settings:', error);
         }
       }
     }
-  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings]);
+  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings, modelsLoading, imageModelsLoading, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
   
   // Save settings to localStorage
   const saveSettings = () => {
@@ -172,6 +203,12 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
               {/* Image Model Selection */}
               <div className="space-y-2">
                 <Label>Image Model</Label>
+                {!sdxlWorkerHealthy && (
+                  <div className="flex items-center gap-2 p-2 bg-amber-900/20 border border-amber-700/50 rounded text-xs text-amber-300 mb-2">
+                    <WifiOff className="w-3 h-3 flex-shrink-0" />
+                    <span>Local SDXL offline - using cloud models</span>
+                  </div>
+                )}
                 <Select value={localSelectedImageModel} onValueChange={setLocalSelectedImageModel}>
                   <SelectTrigger>
                     <SelectValue />
@@ -184,23 +221,30 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                     ) : (
                       imageModelOptions.map((model) => {
                         const isLocal = model.type === 'local';
-                        const isAvailable = isLocal ? sdxlWorker.isAvailable : true;
                         return (
-                          <SelectItem 
-                            key={model.value} 
+                          <SelectItem
+                            key={model.value}
                             value={model.value}
-                            disabled={!isAvailable}
+                            disabled={!model.isAvailable}
                           >
-                            <div className="flex items-center justify-between w-full">
-                              <span className={!isAvailable ? 'opacity-50' : ''}>{model.label}</span>
-                              {isLocal && !isAvailable && (
-                                <Badge variant="secondary" className="ml-2 text-xs">
-                                  Unavailable
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <span className={!model.isAvailable ? 'opacity-50' : ''}>{model.label}</span>
+                              {isLocal && !model.isAvailable && (
+                                <Badge variant="destructive" className="ml-2 text-xs flex items-center gap-1">
+                                  <WifiOff className="w-3 h-3" />
+                                  Offline
                                 </Badge>
                               )}
-                              {isLocal && isAvailable && (
-                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400">
-                                  Available
+                              {isLocal && model.isAvailable && (
+                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Online
+                                </Badge>
+                              )}
+                              {!isLocal && (
+                                <Badge variant="outline" className="ml-2 text-xs text-blue-400 border-blue-400 flex items-center gap-1">
+                                  <Cloud className="w-3 h-3" />
+                                  API
                                 </Badge>
                               )}
                             </div>
@@ -219,6 +263,21 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
             </TabsContent>
 
             <TabsContent value="models" className="space-y-6 mt-0">
+              {/* Local Worker Status Banner */}
+              {!chatWorkerHealthy && (
+                <Card className="p-3 bg-amber-900/20 border-amber-700/50">
+                  <div className="flex items-start gap-2">
+                    <WifiOff className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm">
+                      <p className="text-amber-400 font-medium">Local AI Workers Offline</p>
+                      <p className="text-amber-300/70 text-xs mt-1">
+                        Local models are currently unavailable. Cloud API models are recommended for reliable performance.
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {/* Model Provider Selection */}
               <div className="space-y-2">
                 <Label>Model Provider</Label>
@@ -233,24 +292,30 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       <SelectItem value="" disabled>No roleplay models available</SelectItem>
                     ) : (
                       allModelOptions.map((model) => {
-                        const isLocal = model.isLocal;
-                        const isAvailable = isLocal ? chatWorker.isAvailable : true;
                         return (
-                          <SelectItem 
-                            key={model.value} 
+                          <SelectItem
+                            key={model.value}
                             value={model.value}
-                            disabled={!isAvailable}
+                            disabled={!model.isAvailable}
                           >
-                            <div className="flex items-center justify-between w-full">
-                              <span className={!isAvailable ? 'opacity-50' : ''}>{model.label}</span>
-                              {isLocal && !isAvailable && (
-                                <Badge variant="secondary" className="ml-2 text-xs">
-                                  Unavailable
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <span className={!model.isAvailable ? 'opacity-50' : ''}>{model.label}</span>
+                              {model.isLocal && !model.isAvailable && (
+                                <Badge variant="destructive" className="ml-2 text-xs flex items-center gap-1">
+                                  <WifiOff className="w-3 h-3" />
+                                  Offline
                                 </Badge>
                               )}
-                              {isLocal && isAvailable && (
-                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400">
-                                  Available
+                              {model.isLocal && model.isAvailable && (
+                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Online
+                                </Badge>
+                              )}
+                              {!model.isLocal && (
+                                <Badge variant="outline" className="ml-2 text-xs text-blue-400 border-blue-400 flex items-center gap-1">
+                                  <Cloud className="w-3 h-3" />
+                                  API
                                 </Badge>
                               )}
                             </div>
@@ -274,12 +339,22 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-semibold text-white">{selectedModel.label}</h3>
-                        {selectedModel.isLocal && (
-                          <Badge 
-                            variant={chatWorker.isAvailable ? "outline" : "secondary"}
-                            className={chatWorker.isAvailable ? "text-green-400 border-green-400" : ""}
-                          >
-                            {chatWorker.isAvailable ? "Available" : "Unavailable"}
+                        {selectedModel.isLocal ? (
+                          selectedModel.isAvailable ? (
+                            <Badge variant="outline" className="text-green-400 border-green-400 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Online
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="flex items-center gap-1">
+                              <WifiOff className="w-3 h-3" />
+                              Offline
+                            </Badge>
+                          )
+                        ) : (
+                          <Badge variant="outline" className="text-blue-400 border-blue-400 flex items-center gap-1">
+                            <Cloud className="w-3 h-3" />
+                            API
                           </Badge>
                         )}
                       </div>
@@ -371,43 +446,68 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                           nsfw: true
                         };
                         const isSelected = model.value === localModelProvider;
+                        const isDisabled = !model.isAvailable;
                         return (
                           <button
                             key={model.value}
-                            onClick={() => setLocalModelProvider(model.value)}
+                            onClick={() => !isDisabled && setLocalModelProvider(model.value)}
+                            disabled={isDisabled}
                             className={cn(
                               "w-full text-left p-3 rounded-lg border transition-colors",
-                              isSelected 
-                                ? "bg-blue-600/20 border-blue-500" 
-                                : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                              isDisabled
+                                ? "bg-gray-800/30 border-gray-700 cursor-not-allowed opacity-60"
+                                : isSelected
+                                  ? "bg-blue-600/20 border-blue-500"
+                                  : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
                             )}
                           >
                             <div className="flex items-center justify-between mb-1">
                               <span className={cn(
                                 "text-sm font-medium",
+                                isDisabled ? "text-gray-500" :
                                 isSelected ? "text-blue-400" : "text-white"
                               )}>
                                 {model.label}
                               </span>
-                              {isSelected && (
-                                <CheckCircle2 className="w-4 h-4 text-blue-400" />
-                              )}
+                              <div className="flex items-center gap-2">
+                                {model.isLocal && isDisabled && (
+                                  <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                                    <WifiOff className="w-3 h-3" />
+                                    Offline
+                                  </Badge>
+                                )}
+                                {model.isLocal && !isDisabled && (
+                                  <Badge variant="outline" className="text-xs text-green-400 border-green-400 flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    Online
+                                  </Badge>
+                                )}
+                                {!model.isLocal && (
+                                  <Badge variant="outline" className="text-xs text-blue-400 border-blue-400 flex items-center gap-1">
+                                    <Cloud className="w-3 h-3" />
+                                    API
+                                  </Badge>
+                                )}
+                                {isSelected && !isDisabled && (
+                                  <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                                )}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2 mt-2">
                               {modelCaps.speed && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className={cn("text-xs", isDisabled && "opacity-50")}>
                                   <Zap className="w-3 h-3 mr-1" />
                                   {modelCaps.speed}
                                 </Badge>
                               )}
                               {modelCaps.cost === 'free' && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className={cn("text-xs", isDisabled && "opacity-50")}>
                                   <DollarSign className="w-3 h-3 mr-1" />
                                   Free
                                 </Badge>
                               )}
                               {modelCaps.nsfw && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className={cn("text-xs", isDisabled && "opacity-50")}>
                                   <Shield className="w-3 h-3 mr-1" />
                                   NSFW
                                 </Badge>

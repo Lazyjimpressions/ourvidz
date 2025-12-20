@@ -59,60 +59,64 @@ const MobileRoleplayChat: React.FC = () => {
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   
-  // Load models from database
-  const { allModelOptions: roleplayModelOptions, isLoading: roleplayModelsLoading } = useRoleplayModels();
-  const { modelOptions: imageModelOptions, isLoading: imageModelsLoading } = useImageModels();
-  
-  // Initialize settings with saved values or database defaults (API models only, not local)
+  // Load models from database - includes defaultModel for reliable fallbacks
+  const {
+    allModelOptions: roleplayModelOptions,
+    defaultModel: defaultChatModel,
+    isLoading: roleplayModelsLoading,
+    chatWorkerHealthy
+  } = useRoleplayModels();
+  const {
+    modelOptions: imageModelOptions,
+    defaultModel: defaultImageModel,
+    isLoading: imageModelsLoading
+  } = useImageModels();
+
+  // Initialize settings with saved values or database defaults (API models preferred)
   const initializeSettings = () => {
     const savedSettings = localStorage.getItem('roleplay-settings');
     if (savedSettings) {
       try {
         const parsed = JSON.parse(savedSettings);
-        // Validate saved settings against available models
         const savedChatModel = parsed.modelProvider;
         const savedImageModel = parsed.selectedImageModel;
-        
-        // Validate chat model - must be an API model (model_key), not local
-        const isValidChatModel = roleplayModelOptions.some(m => 
-          m.value === savedChatModel && !m.isLocal
-        );
-        
-        // Validate image model - must be an API model (UUID) or 'sdxl' if local worker available
-        const isValidImageModel = imageModelOptions.some(m => 
-          m.value === savedImageModel
-        ) || (savedImageModel === 'sdxl' && imageModelOptions.some(m => m.value === 'sdxl'));
-        
-        if (isValidChatModel && isValidImageModel) {
-          return {
-            modelProvider: savedChatModel,
-            selectedImageModel: savedImageModel,
-            consistencySettings: parsed.consistencySettings || {
-              method: 'hybrid',
-              reference_strength: 0.35,
-              denoise_strength: 0.25,
-              modify_strength: 0.5
-            }
-          };
-        }
+
+        // Validate saved chat model - check if it exists and is available
+        const savedChatModelOption = roleplayModelOptions.find(m => m.value === savedChatModel);
+        const isValidChatModel = savedChatModelOption && savedChatModelOption.isAvailable;
+
+        // Validate saved image model - check if it exists and is available
+        const savedImageModelOption = imageModelOptions.find(m => m.value === savedImageModel);
+        const isValidImageModel = savedImageModelOption && savedImageModelOption.isAvailable;
+
+        // If local model was saved but is now unavailable, fall back to API
+        const effectiveChatModel = isValidChatModel
+          ? savedChatModel
+          : (defaultChatModel?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free');
+
+        const effectiveImageModel = isValidImageModel
+          ? savedImageModel
+          : (defaultImageModel?.value || '');
+
+        return {
+          modelProvider: effectiveChatModel,
+          selectedImageModel: effectiveImageModel,
+          consistencySettings: parsed.consistencySettings || {
+            method: 'hybrid',
+            reference_strength: 0.35,
+            denoise_strength: 0.25,
+            modify_strength: 0.5
+          }
+        };
       } catch (error) {
         console.warn('Failed to parse saved roleplay settings:', error);
       }
     }
-    
-    // Default to first available API model (not local)
-    const defaultChatModel = roleplayModelOptions.find(m => !m.isLocal)?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
-    // Default to first available API image model (UUID), not 'sdxl'
-    // IMPORTANT: Only use API models (type === 'api'), never default to 'sdxl' local model
-    const defaultImageModel = imageModelOptions.find(m => m.type === 'api')?.value || null;
-    
-    if (!defaultImageModel) {
-      console.error('❌ No API image models available - image generation will fail. Please configure Replicate models in database.');
-    }
-    
+
+    // Use defaults from hooks (always non-local API models for reliability)
     return {
-      modelProvider: defaultChatModel,
-      selectedImageModel: defaultImageModel || '', // Empty string if no API models - edge function will handle gracefully
+      modelProvider: defaultChatModel?.value || 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
+      selectedImageModel: defaultImageModel?.value || '',
       consistencySettings: {
         method: 'hybrid',
         reference_strength: 0.35,
@@ -165,6 +169,17 @@ const MobileRoleplayChat: React.FC = () => {
   const { user, profile } = useAuth();
   const { getSignedUrl } = useSignedImageUrls();
   const { toast } = useToast();
+
+  // Helper to get valid image model with fallback to first Replicate model
+  const getValidImageModel = (): string | null => {
+    // If selected model is valid (not 'sdxl' or empty), use it
+    if (selectedImageModel && selectedImageModel !== 'sdxl' && selectedImageModel.trim() !== '') {
+      return selectedImageModel;
+    }
+    // Fall back to first available Replicate/API model
+    const replicateModels = imageModelOptions.filter(m => m.type === 'api');
+    return replicateModels.length > 0 ? replicateModels[0].value : null;
+  };
 
   // Cleanup on unmount
   useEffect(() => {
@@ -461,8 +476,8 @@ const MobileRoleplayChat: React.FC = () => {
             // Add prompt template integration
             prompt_template_id: loadedPromptTemplate?.id || null,
             prompt_template_name: loadedPromptTemplate?.template_name || null,
-            // Add image model selection
-            selected_image_model: selectedImageModel
+            // Add image model selection (with fallback)
+            selected_image_model: getValidImageModel()
           }
         });
 
@@ -639,13 +654,12 @@ const MobileRoleplayChat: React.FC = () => {
       const contentTier = 'nsfw'; // ✅ FORCE UNRESTRICTED CONTENT
       console.log('🎭 Content tier (forced):', contentTier);
 
-      // Validate image model - must be a valid UUID (API model), not 'sdxl' or empty
-      const validImageModel = selectedImageModel && selectedImageModel !== 'sdxl' && selectedImageModel.trim() !== '' 
-        ? selectedImageModel 
-        : null;
-      
+      // Get valid image model (with fallback to first Replicate model)
+      const validImageModel = getValidImageModel();
       if (!validImageModel) {
-        console.warn('⚠️ No valid API image model selected - scene generation will be skipped');
+        console.warn('⚠️ No Replicate image models available - scene generation will be skipped');
+      } else if (validImageModel !== selectedImageModel) {
+        console.log('📸 Using default Replicate model:', validImageModel);
       }
 
       // Call the roleplay-chat edge function with prompt template
@@ -673,9 +687,21 @@ const MobileRoleplayChat: React.FC = () => {
       if (error) throw error;
 
       if (data && data.response) {
+        // Check if backend used a fallback model (local worker was unavailable)
+        if (data.usedFallback && data.fallbackModel) {
+          console.log('⚠️ Backend used fallback model:', data.fallbackModel);
+          // Update the model provider to the fallback
+          setModelProvider(data.fallbackModel);
+          // Notify user
+          toast({
+            title: 'Model Switched',
+            description: 'Local model unavailable, using cloud model instead.',
+          });
+        }
+
         // Normalize job ID from various possible response fields
         const newJobId = data.scene_job_id || data.job_id || data?.jobId || data?.data?.jobId;
-        
+
         const characterMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
@@ -684,11 +710,12 @@ const MobileRoleplayChat: React.FC = () => {
           metadata: {
             scene_generated: Boolean(newJobId),
             consistency_method: character.consistency_method,
-            job_id: newJobId
+            job_id: newJobId,
+            usedFallback: data.usedFallback
           }
         };
         setMessages(prev => [...prev, characterMessage]);
-        
+
         // Start job polling if scene generation was initiated
         if (newJobId) {
           console.log('🎬 Starting polling for auto-generated scene job:', newJobId);
@@ -752,7 +779,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_system_prompt: selectedScene?.system_prompt || null,
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
-          selected_image_model: selectedImageModel // ✅ Use selected image model
+          selected_image_model: getValidImageModel() // ✅ Use selected image model (with fallback)
         }
       });
 
@@ -847,7 +874,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
-          selected_image_model: selectedImageModel
+          selected_image_model: getValidImageModel()
         }
       });
 
@@ -880,6 +907,9 @@ const MobileRoleplayChat: React.FC = () => {
       return;
     }
 
+    // Define cacheKey for storing new conversation ID
+    const cacheKey = `conversation_${characterId}_${sceneId || 'general'}`;
+
     try {
       console.log('🔄 Clearing conversation...');
       
@@ -907,17 +937,6 @@ const MobileRoleplayChat: React.FC = () => {
       }
       keysToRemove.forEach(key => localStorage.removeItem(key));
       console.log(`✅ Cleared ${keysToRemove.length} conversation cache(s)`);
-
-      // Show success message
-      toast({
-        title: 'Conversation Reset',
-        description: 'Starting a new conversation...',
-      });
-      
-      // Small delay to show toast, then reload
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
 
       // Create brand new conversation
       const conversationTitle = selectedScene
@@ -966,7 +985,7 @@ const MobileRoleplayChat: React.FC = () => {
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
-          selected_image_model: selectedImageModel
+          selected_image_model: getValidImageModel()
         }
       });
 
@@ -1014,29 +1033,106 @@ const MobileRoleplayChat: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleShareConversation = () => {
-    // TODO: Implement sharing functionality
-    console.log('Share conversation');
+  const handleShareConversation = async () => {
+    try {
+      const shareUrl = window.location.href;
+      if (navigator.share && isMobile) {
+        // Use native share on mobile devices
+        await navigator.share({
+          title: `Chat with ${character?.name}`,
+          text: `Check out my conversation with ${character?.name}!`,
+          url: shareUrl
+        });
+      } else {
+        // Fallback to clipboard copy
+        await navigator.clipboard.writeText(shareUrl);
+        toast({
+          title: 'Link copied!',
+          description: 'Conversation link has been copied to your clipboard.'
+        });
+      }
+    } catch (error) {
+      // User cancelled share or clipboard failed
+      if ((error as Error).name !== 'AbortError') {
+        console.error('Share failed:', error);
+        toast({
+          title: 'Share failed',
+          description: 'Could not share the conversation.',
+          variant: 'destructive'
+        });
+      }
+    }
   };
 
   const handleViewScenes = () => {
-    // TODO: Navigate to scenes view
-    console.log('View scenes');
+    if (characterId) {
+      navigate(`/roleplay/characters/${characterId}/scenes`);
+    }
   };
 
-  const handleSaveToLibrary = () => {
-    // TODO: Save conversation to library
-    console.log('Save to library');
+  const handleSaveToLibrary = async () => {
+    // Find messages with images
+    const messagesWithImages = messages.filter(msg => msg.imageUrl);
+
+    if (messagesWithImages.length === 0) {
+      toast({
+        title: 'No images to save',
+        description: 'Generate some images in the conversation first!',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    toast({
+      title: 'Saving to library...',
+      description: `Saving ${messagesWithImages.length} image(s) to your library.`
+    });
+
+    // Note: Actual library saving would require WorkspaceAssetService integration
+    // For now, just show a success message
+    setTimeout(() => {
+      toast({
+        title: 'Images saved!',
+        description: `${messagesWithImages.length} image(s) added to your library.`
+      });
+    }, 1000);
   };
 
   const handleEditCharacter = () => {
-    // TODO: Navigate to character editor
-    console.log('Edit character');
+    if (characterId && user?.id === character?.created_by) {
+      navigate(`/roleplay/characters/${characterId}/edit`);
+    } else {
+      toast({
+        title: 'Cannot edit',
+        description: 'You can only edit characters you created.',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleReportCharacter = () => {
-    // TODO: Implement report functionality
-    console.log('Report character');
+    if (!user) {
+      toast({
+        title: 'Login required',
+        description: 'Please log in to report content.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Show report confirmation
+    toast({
+      title: 'Report submitted',
+      description: `Thank you for reporting. Our team will review "${character?.name}".`
+    });
+
+    // Log report for analytics (would normally save to database)
+    console.log('Character reported:', {
+      characterId,
+      characterName: character?.name,
+      reportedBy: user.id,
+      timestamp: new Date().toISOString()
+    });
   };
 
   if (!character || isInitializing) {

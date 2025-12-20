@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useLocalModelHealth } from './useLocalModelHealth';
+import { ModelRoutingService, DEFAULT_CHAT_MODELS } from '@/lib/services/ModelRoutingService';
 
 export interface RoleplayModel {
   id: string;
@@ -22,6 +23,7 @@ export interface ModelOption {
   description: string;
   provider: string;
   isLocal: boolean;
+  isAvailable: boolean; // NEW: indicates if model is currently available
   capabilities?: {
     speed?: 'fast' | 'medium' | 'slow';
     cost?: 'free' | 'low' | 'medium' | 'high';
@@ -41,14 +43,17 @@ export const useRoleplayModels = () => {
   const [error, setError] = useState<string | null>(null);
   const { chatWorker } = useLocalModelHealth();
 
-  // Local models - conditionally available based on health check
-  const localModels: ModelOption[] = chatWorker.isAvailable ? [
+  // Local models - always included but marked unavailable if worker is down
+  const localModels: ModelOption[] = [
     {
       value: 'qwen-local',
       label: 'Qwen 2.5-7B-Instruct (Local)',
-      description: 'Local model - fast & private',
+      description: chatWorker.isAvailable
+        ? 'Local model - fast & private'
+        : 'Local model - currently offline',
       provider: 'Local',
       isLocal: true,
+      isAvailable: chatWorker.isAvailable, // Health-based availability
       capabilities: {
         speed: 'fast',
         cost: 'free',
@@ -61,7 +66,7 @@ export const useRoleplayModels = () => {
         is_default: false
       }
     }
-  ] : [];
+  ];
 
   // Load API models from database
   useEffect(() => {
@@ -113,16 +118,17 @@ export const useRoleplayModels = () => {
   }, []);
 
   // Convert API models to ModelOption format
-  const apiModelOptions: ModelOption[] = apiModels.map(model => {
+  const databaseModelOptions: ModelOption[] = apiModels.map(model => {
     // Extract capabilities from model if available
     const capabilities = (model as any).capabilities || {};
-    
+
     return {
       value: model.model_key,
       label: model.display_name,
       description: getModelDescription(model),
       provider: model.provider_display_name,
       isLocal: false,
+      isAvailable: true, // API models are always available
       capabilities: {
         speed: capabilities.speed || (model.provider_name === 'openrouter' ? 'medium' : 'fast'),
         cost: capabilities.cost || (model.provider_name === 'openrouter' ? 'free' : 'low'),
@@ -137,15 +143,59 @@ export const useRoleplayModels = () => {
     };
   });
 
-  // Combine local and API models (local only if available)
+  // If no database models, use hardcoded DEFAULT_CHAT_MODELS as fallback
+  const fallbackModelOptions: ModelOption[] = DEFAULT_CHAT_MODELS.map((model, index) => ({
+    value: model.modelKey,
+    label: model.displayName,
+    description: model.description,
+    provider: 'OpenRouter',
+    isLocal: false,
+    isAvailable: true,
+    capabilities: {
+      speed: 'medium' as const,
+      cost: model.tier === 'free' ? 'free' as const : 'medium' as const,
+      nsfw: true,
+      quality: 'high' as const
+    },
+    metadata: {
+      priority: index + 1,
+      is_default: index === 0
+    }
+  }));
+
+  // Use database models if available, otherwise use fallback
+  const apiModelOptions: ModelOption[] = databaseModelOptions.length > 0
+    ? databaseModelOptions
+    : fallbackModelOptions;
+
+  // Combine local and API models
+  // Local models are included but may be marked unavailable
   const allModelOptions = [...localModels, ...apiModelOptions];
+
+  // Default model is ALWAYS a non-local (API) model to ensure reliability
+  // This is the model that should be used when no valid selection is made
+  const defaultModel: ModelOption = apiModelOptions.find(m => m.metadata?.is_default)
+    || apiModelOptions[0]
+    || {
+      // Ultimate fallback using ModelRoutingService defaults
+      value: ModelRoutingService.getDefaultChatModelKey(),
+      label: DEFAULT_CHAT_MODELS[0].displayName,
+      description: DEFAULT_CHAT_MODELS[0].description,
+      provider: 'OpenRouter',
+      isLocal: false,
+      isAvailable: true,
+      capabilities: { speed: 'medium', cost: 'free', nsfw: true, quality: 'high' },
+      metadata: { is_default: true }
+    };
 
   return {
     localModels,
     apiModels,
     allModelOptions,
+    defaultModel, // NEW: Always returns a reliable non-local default
     isLoading,
     error,
+    chatWorkerHealthy: chatWorker.isAvailable, // NEW: Expose health status
     refresh: () => {
       // Trigger reload by updating a dependency
       setApiModels([]);

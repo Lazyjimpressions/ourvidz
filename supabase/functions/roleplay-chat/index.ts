@@ -270,52 +270,59 @@ serve(async (req) => {
     let response: string;
     let modelUsed: string;
 
-    switch (model_provider) {
-      case 'chat_worker':
-        const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate);
-        // Use the enhanced chat worker with conversation history
-        response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
-        modelUsed = 'chat_worker';
-        break;
-      case 'openrouter':
-        response = await callOpenRouter(enhancedPrompt, model_variant || 'claude-3.5-sonnet', content_tier);
-        modelUsed = `openrouter:${model_variant || 'claude-3.5-sonnet'}`;
-        break;
-      case 'claude':
-        response = await callClaude(enhancedPrompt, content_tier);
-        modelUsed = 'claude';
-        break;
-      case 'gpt':
-        response = await callGPT(enhancedPrompt, model_variant || 'gpt-4', content_tier);
-        modelUsed = `gpt:${model_variant || 'gpt-4'}`;
-        break;
-      default:
-        // Check if it's a model from api_models table
-        try {
-          const modelConfig = await getModelConfig(supabase, model_provider);
-          if (modelConfig) {
-            console.log('✅ Model config found:', {
-              model_key: model_provider,
-              provider: modelConfig.provider_name,
-              display_name: modelConfig.display_name
-            });
-            // Use database-driven model configuration
-            response = await callModelWithConfig(character, recentMessages || [], userMessage, model_provider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
-            modelUsed = `${modelConfig.provider_name}:${model_provider}`;
-          } else {
-            console.error('❌ Model config not found for:', model_provider);
-            return new Response(JSON.stringify({
-              success: false,
-              error: `Unsupported model provider: ${model_provider}. Model not found in api_models table.`
-            }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-              status: 400
-            });
-          }
-        } catch (modelError) {
-          console.error('❌ Error in model configuration lookup:', modelError);
-          throw new Error(`Model configuration error: ${modelError instanceof Error ? modelError.message : String(modelError)}`);
+    // Determine effective model provider (with health check for local models)
+    let effectiveModelProvider = model_provider;
+    let usedFallback = false;
+
+    // Handle local model requests (chat_worker or qwen-local)
+    if (model_provider === 'chat_worker' || model_provider === 'qwen-local') {
+      const isLocalHealthy = await checkLocalChatWorkerHealth(supabase);
+      if (isLocalHealthy) {
+        effectiveModelProvider = 'chat_worker';
+        console.log('✅ Local chat worker is healthy, using local model');
+      } else {
+        // Fallback to OpenRouter
+        effectiveModelProvider = await getDefaultOpenRouterModel(supabase);
+        usedFallback = true;
+        console.log('⚠️ Local chat worker unavailable, falling back to:', effectiveModelProvider);
+      }
+    }
+
+    // Route to appropriate model provider
+    if (effectiveModelProvider === 'chat_worker') {
+      // Local Qwen model
+      const systemPrompt = buildSystemPrompt(character, recentMessages, content_tier, scene_context, scene_system_prompt, kickoff, promptTemplate);
+      response = await callChatWorkerWithHistory(character, recentMessages || [], systemPrompt, userMessage, content_tier);
+      modelUsed = 'chat_worker';
+    } else {
+      // API model - look up in database
+      try {
+        const modelConfig = await getModelConfig(supabase, effectiveModelProvider);
+        if (modelConfig) {
+          console.log('✅ Model config found:', {
+            model_key: effectiveModelProvider,
+            provider: modelConfig.provider_name,
+            display_name: modelConfig.display_name,
+            usedFallback
+          });
+          // Use database-driven model configuration
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
+          modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
+        } else {
+          console.error('❌ Model config not found for:', effectiveModelProvider);
+          return new Response(JSON.stringify({
+            success: false,
+            error: `Model not found: ${effectiveModelProvider}. Please ensure it exists in api_models table.`,
+            usedFallback
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 400
+          });
         }
+      } catch (modelError) {
+        console.error('❌ Error in model configuration lookup:', modelError);
+        throw new Error(`Model configuration error: ${modelError instanceof Error ? modelError.message : String(modelError)}`);
+      }
     }
 
     // Optimize the response based on model capabilities
@@ -412,7 +419,10 @@ serve(async (req) => {
       consistency_score: consistencyScore,
       processing_time: totalTime,
       message_id: savedMessage?.id,
-      scene_job_id: sceneJobId
+      scene_job_id: sceneJobId,
+      // Include fallback info so frontend can update UI
+      usedFallback,
+      fallbackModel: usedFallback ? effectiveModelProvider : undefined
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -546,6 +556,60 @@ function optimizeResponseLength(response: string): string {
   }
   
   return response;
+}
+
+// Check if local chat worker is healthy
+async function checkLocalChatWorkerHealth(supabase: any): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('system_config')
+      .select('config')
+      .single();
+
+    if (error || !data?.config?.workerHealthCache?.chatWorker) {
+      console.log('⚠️ No health cache found for chat worker');
+      return false;
+    }
+
+    const healthCache = data.config.workerHealthCache.chatWorker;
+    const lastChecked = new Date(healthCache.lastChecked).getTime();
+    const isRecent = Date.now() - lastChecked < 120000; // 2 minutes
+
+    const isHealthy = healthCache.isHealthy === true && isRecent && healthCache.workerUrl;
+    console.log('🏥 Chat worker health check:', {
+      isHealthy,
+      lastChecked: healthCache.lastChecked,
+      isRecent,
+      hasWorkerUrl: !!healthCache.workerUrl
+    });
+
+    return isHealthy;
+  } catch (error) {
+    console.error('Error checking chat worker health:', error);
+    return false;
+  }
+}
+
+// Get default OpenRouter model from database or hardcoded fallback
+async function getDefaultOpenRouterModel(supabase: any): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from('api_models')
+      .select('model_key')
+      .eq('modality', 'roleplay')
+      .eq('is_active', true)
+      .eq('is_default', true)
+      .single();
+
+    if (data?.model_key) {
+      return data.model_key;
+    }
+  } catch (error) {
+    console.log('Using hardcoded default OpenRouter model');
+  }
+
+  // Hardcoded fallback
+  return 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
 }
 
 // Get model configuration from api_models table
@@ -1444,36 +1508,7 @@ async function callChatWorker(systemPrompt: string, userMessage: string, content
   return callChatWorkerWithHistory(null, [], systemPrompt, userMessage, contentTier);
 }
 
-async function callOpenRouter(prompt: string, model: string, contentTier: string): Promise<string> {
-  const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
-  if (!openRouterKey) {
-    throw new Error('OpenRouter API key not configured');
-  }
-
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openRouterKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: 'You are a helpful AI assistant.' },
-        { role: 'user', content: prompt }
-      ],
-      max_tokens: 1000,
-      temperature: 0.7
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenRouter error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'I apologize, but I encountered an error processing your message.';
-}
+// NOTE: Legacy callOpenRouter removed - use callModelWithConfig with database-driven configuration
 
 // Enhanced OpenRouter function with full system prompt support for Mistral models
 async function callOpenRouterWithSystemPrompt(
@@ -1567,66 +1602,7 @@ async function callOpenRouterWithSystemPrompt(
   }
 }
 
-async function callClaude(prompt: string, contentTier: string): Promise<string> {
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!anthropicKey) {
-    throw new Error('Anthropic API key not configured');
-  }
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${anthropicKey}`,
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      messages: [
-        { role: 'user', content: prompt }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Claude error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.content?.[0]?.text || 'I apologize, but I encountered an error processing your message.';
-}
-
-async function callGPT(prompt: string, model: string, contentTier: string): Promise<string> {
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!openaiKey) {
-    throw new Error('OpenAI API key not configured');
-  }
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: 'You are a helpful AI assistant.' },
-        { role: 'user', content: prompt }
-      ],
-      max_tokens: 1000,
-      temperature: 0.7
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`OpenAI error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || 'I apologize, but I encountered an error processing your message.';
-}
+// NOTE: callClaude and callGPT removed - use api_models table with appropriate providers instead
 
 async function getChatWorkerUrl(): Promise<string> {
   const now = Date.now();

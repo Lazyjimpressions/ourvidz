@@ -24,6 +24,14 @@ export interface ImageModel {
   };
 }
 
+export interface ImageModelOption {
+  value: string;
+  label: string;
+  type: 'local' | 'api';
+  isAvailable: boolean;
+  capabilities?: ImageModel['capabilities'];
+}
+
 export const useImageModels = () => {
   const [imageModels, setImageModels] = useState<ImageModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,12 +87,13 @@ export const useImageModels = () => {
   }, []);
 
   // Create model options for UI components
-  // Include local SDXL model if worker is available
-  const localModelOptions = sdxlWorker.isAvailable ? [
+  // Include local SDXL model (always listed, but marked unavailable if worker is down)
+  const localModelOptions: ImageModelOption[] = [
     {
       value: 'sdxl',
-      label: 'SDXL (Local)',
-      type: 'local' as const,
+      label: sdxlWorker.isAvailable ? 'SDXL (Local)' : 'SDXL (Local - Offline)',
+      type: 'local',
+      isAvailable: sdxlWorker.isAvailable,
       capabilities: {
         nsfw: true,
         speed: 'fast',
@@ -94,22 +103,31 @@ export const useImageModels = () => {
         seed_control: true
       }
     }
-  ] : [];
+  ];
 
-  const apiModelOptions = imageModels.map(model => ({
+  const apiModelOptions: ImageModelOption[] = imageModels.map(model => ({
     value: model.id,
     label: `${model.display_name} (${model.provider_display_name})`,
-    type: 'api' as const,
+    type: 'api',
+    isAvailable: true, // API models are always available
     capabilities: (model.capabilities || {}) as ImageModel['capabilities']
   }));
 
-  const modelOptions = [...localModelOptions, ...apiModelOptions];
+  const modelOptions: ImageModelOption[] = [...localModelOptions, ...apiModelOptions];
+
+  // Default model is ALWAYS a non-local (API) model to ensure reliability
+  // This is the model used when no valid selection is made
+  const defaultModel: ImageModelOption | null = apiModelOptions.find(m =>
+    imageModels.find(im => im.id === m.value && im.is_default)
+  ) || apiModelOptions[0] || null;
 
   return {
     imageModels,
     modelOptions,
+    defaultModel, // NEW: Always returns a reliable non-local default
     isLoading,
     error,
+    sdxlWorkerHealthy: sdxlWorker.isAvailable, // NEW: Expose health status
     refetch: () => {
       setIsLoading(true);
       setError(null);

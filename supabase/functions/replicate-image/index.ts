@@ -68,11 +68,50 @@ serve(async (req) => {
       }
       apiModel = model;
     } else {
-      // Use default model for replicate image generation - REQUIRE apiModelId instead
-      return new Response(
-        JSON.stringify({ error: 'apiModelId is required for Replicate image generation' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
+      // No apiModelId provided - get default Replicate image model
+      console.log('📸 No apiModelId provided, fetching default Replicate image model...');
+
+      const { data: defaultModel, error: defaultError } = await supabase
+        .from('api_models')
+        .select(`
+          *,
+          api_providers!inner(*)
+        `)
+        .eq('modality', 'image')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .eq('api_providers.name', 'replicate')
+        .single();
+
+      if (defaultError || !defaultModel) {
+        // Fallback: get any active Replicate image model
+        console.log('⚠️ No default model found, trying first active Replicate image model...');
+        const { data: fallbackModel, error: fallbackError } = await supabase
+          .from('api_models')
+          .select(`
+            *,
+            api_providers!inner(*)
+          `)
+          .eq('modality', 'image')
+          .eq('is_active', true)
+          .eq('api_providers.name', 'replicate')
+          .order('priority', { ascending: true })
+          .limit(1)
+          .single();
+
+        if (fallbackError || !fallbackModel) {
+          console.error('❌ No Replicate image models available:', fallbackError);
+          return new Response(
+            JSON.stringify({ error: 'No Replicate image models configured. Please add one in api_models table.' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+          );
+        }
+        apiModel = fallbackModel;
+        console.log('✅ Using fallback Replicate model:', fallbackModel.display_name);
+      } else {
+        apiModel = defaultModel;
+        console.log('✅ Using default Replicate model:', defaultModel.display_name);
+      }
     }
     
     // Validate provider and get API key
