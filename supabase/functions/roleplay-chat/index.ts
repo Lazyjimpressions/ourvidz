@@ -32,6 +32,46 @@ interface RoleplayChatRequest {
   prompt_template_id?: string; // Prompt template ID for enhanced prompts
   prompt_template_name?: string; // Prompt template name for logging
   selected_image_model?: string; // Selected image model for scene generation
+  scene_style?: 'character_only' | 'pov' | 'both_characters'; // Scene composition style
+}
+
+// User character interface for scene generation
+interface UserCharacterForScene {
+  id: string;
+  name: string;
+  gender: 'male' | 'female' | 'other';
+  appearance_tags: string[];
+  persona?: string;
+  image_url?: string;
+}
+
+// Scene style tokens for image generation
+const SCENE_STYLE_TOKENS = {
+  character_only: [],
+  pov: ['pov', 'first person view', 'looking at viewer'],
+  both_characters: ['two people', 'couple', 'facing each other']
+} as const;
+
+// Build user visual description for scene generation
+function buildUserVisualDescriptionForScene(
+  gender: 'male' | 'female' | 'other',
+  appearanceTags: string[]
+): string {
+  const genderTokens: Record<string, string[]> = {
+    male: ['1boy', 'handsome man'],
+    female: ['1girl', 'beautiful woman'],
+    other: ['1person', 'attractive person']
+  };
+
+  const baseTokens = genderTokens[gender] || genderTokens.other;
+
+  // Clean and limit appearance tags
+  const cleanTags = appearanceTags
+    .filter(tag => tag && tag.trim().length > 2)
+    .map(tag => tag.trim().toLowerCase())
+    .slice(0, 8); // Limit to 8 appearance tags
+
+  return [...baseTokens, ...cleanTags].join(', ');
 }
 
 interface RoleplayChatResponse {
@@ -188,10 +228,20 @@ serve(async (req) => {
       });
     }
 
-    // Get conversation and memory data
+    // Get conversation and memory data with user character
     const { data: conversation, error: conversationError } = await supabase
       .from('conversations')
-      .select('*')
+      .select(`
+        *,
+        user_character:characters!user_character_id(
+          id,
+          name,
+          gender,
+          appearance_tags,
+          persona,
+          image_url
+        )
+      `)
       .eq('id', conversation_id)
       .single();
 
@@ -305,8 +355,8 @@ serve(async (req) => {
             display_name: modelConfig.display_name,
             usedFallback
           });
-          // Use database-driven model configuration
-          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt);
+          // Use database-driven model configuration with user character
+          response = await callModelWithConfig(character, recentMessages || [], userMessage, effectiveModelProvider, content_tier, modelConfig, supabase, scene_context, scene_system_prompt, conversation.user_character);
           modelUsed = `${modelConfig.provider_name}:${effectiveModelProvider}`;
         } else {
           console.error('❌ Model config not found for:', effectiveModelProvider);
@@ -392,11 +442,22 @@ serve(async (req) => {
       });
       
       // Build conversation history for scene context
-      const conversationHistory = recentMessages.map(msg => 
-        `${msg.sender === 'user' ? 'User' : character.name}: ${msg.content}`
+      const conversationHistory = recentMessages.map(msg =>
+        `${msg.sender === 'user' ? (conversation.user_character?.name || 'User') : character.name}: ${msg.content}`
       );
-      
-      const sceneResult = await generateScene(supabase, character_id, response, character.consistency_method, conversationHistory, requestBody.selected_image_model, authHeader);
+
+      // Pass user character and scene style for enhanced scene generation
+      const sceneResult = await generateScene(
+        supabase,
+        character_id,
+        response,
+        character.consistency_method,
+        conversationHistory,
+        requestBody.selected_image_model,
+        authHeader,
+        conversation.user_character as UserCharacterForScene | null,
+        requestBody.scene_style || 'character_only'
+      );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
       sceneJobId = sceneResult.job_id || null;
@@ -651,7 +712,8 @@ async function callModelWithConfig(
   modelConfig: any,
   supabase: any,
   sceneContext?: string,
-  sceneSystemPrompt?: string
+  sceneSystemPrompt?: string,
+  userCharacter?: UserCharacterForTemplate | null
 ): Promise<string> {
   console.log('🔧 Using database-driven model configuration:', {
     modelKey,
@@ -677,8 +739,8 @@ async function callModelWithConfig(
     throw new Error('No template found for roleplay');
   }
 
-  // Build system prompt using template with scene context
-  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt);
+  // Build system prompt using template with scene context and user character
+  const systemPrompt = buildSystemPromptFromTemplate(template, character, recentMessages, contentTier, sceneContext, sceneSystemPrompt, userCharacter);
 
   // Route to appropriate provider based on model config
   if (modelConfig.provider_name === 'openrouter') {
@@ -742,8 +804,38 @@ async function getUniversalTemplate(supabase: any, contentTier: string): Promise
   }
 }
 
+// Helper to get pronouns for user character
+function getUserPronoun(gender: string | null | undefined, type: 'subject' | 'object' | 'possessive'): string {
+  const pronouns: Record<string, Record<string, string>> = {
+    male: { subject: 'he', object: 'him', possessive: 'his' },
+    female: { subject: 'she', object: 'her', possessive: 'her' },
+    other: { subject: 'they', object: 'them', possessive: 'their' }
+  };
+  const normalizedGender = (gender?.toLowerCase() || 'other');
+  const genderPronouns = pronouns[normalizedGender] || pronouns.other;
+  return genderPronouns[type] || pronouns.other[type];
+}
+
+// User character interface for template substitution
+interface UserCharacterForTemplate {
+  id: string;
+  name: string;
+  gender: string | null;
+  appearance_tags: string[] | null;
+  persona: string | null;
+  image_url: string | null;
+}
+
 // Build system prompt from template
-function buildSystemPromptFromTemplate(template: any, character: any, recentMessages: any[], contentTier: string, sceneContext?: string, sceneSystemPrompt?: string): string {
+function buildSystemPromptFromTemplate(
+  template: any,
+  character: any,
+  recentMessages: any[],
+  contentTier: string,
+  sceneContext?: string,
+  sceneSystemPrompt?: string,
+  userCharacter?: UserCharacterForTemplate | null
+): string {
   let systemPrompt = template.system_prompt;
 
   // Replace template placeholders with character data
@@ -760,10 +852,32 @@ function buildSystemPromptFromTemplate(template: any, character: any, recentMess
     .replace(/\{\{mood\}\}/g, character.mood || '')
     .replace(/\{\{character_visual_description\}\}/g, character.description || '')
     .replace(/\{\{scene_context\}\}/g, sceneContext || '')
-    .replace(/\{\{voice_examples\}\}/g, character.voice_examples && character.voice_examples.length > 0 
-      ? character.voice_examples.map((example: string, index: number) => 
-          `Example ${index + 1}: "${example}"`).join('\n') 
+    .replace(/\{\{voice_examples\}\}/g, character.voice_examples && character.voice_examples.length > 0
+      ? character.voice_examples.map((example: string, index: number) =>
+          `Example ${index + 1}: "${example}"`).join('\n')
       : 'No specific voice examples available - speak naturally as this character would.');
+
+  // Replace user character placeholders
+  const userName = userCharacter?.name || 'User';
+  const userGender = userCharacter?.gender || 'other';
+  const userAppearance = userCharacter?.appearance_tags?.join(', ') || '';
+  const userPersona = userCharacter?.persona || '';
+
+  systemPrompt = systemPrompt
+    .replace(/\{\{user_name\}\}/g, userName)
+    .replace(/\{\{user_gender\}\}/g, userGender)
+    .replace(/\{\{user_appearance\}\}/g, userAppearance)
+    .replace(/\{\{user_persona\}\}/g, userPersona)
+    .replace(/\{\{user_pronoun_they\}\}/g, getUserPronoun(userGender, 'subject'))
+    .replace(/\{\{user_pronoun_them\}\}/g, getUserPronoun(userGender, 'object'))
+    .replace(/\{\{user_pronoun_their\}\}/g, getUserPronoun(userGender, 'possessive'));
+
+  console.log('👤 User character substitution:', {
+    userName,
+    userGender,
+    hasAppearance: !!userAppearance,
+    hasPersona: !!userPersona
+  });
 
   // If we have scene-specific system prompt, append it for enhanced scene awareness
   if (sceneSystemPrompt && sceneSystemPrompt.trim()) {
@@ -1749,14 +1863,26 @@ function buildCharacterVisualDescription(character: any): string {
   return visualDescription;
 }
 
-async function generateScene(supabase: any, characterId: string, response: string, consistencyMethod: string, conversationHistory: string[] = [], selectedImageModel?: string, authHeader?: string): Promise<{ success: boolean; consistency_score?: number; job_id?: string }> {
+async function generateScene(
+  supabase: any,
+  characterId: string,
+  response: string,
+  consistencyMethod: string,
+  conversationHistory: string[] = [],
+  selectedImageModel?: string,
+  authHeader?: string,
+  userCharacter?: UserCharacterForScene | null,
+  sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only'
+): Promise<{ success: boolean; consistency_score?: number; job_id?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
       characterId,
       responseLength: response.length,
       consistencyMethod,
       selectedImageModel,
-      conversationHistoryLength: conversationHistory.length
+      conversationHistoryLength: conversationHistory.length,
+      sceneStyle,
+      hasUserCharacter: !!userCharacter
     });
     
     // ✅ ENHANCED: Load character data with comprehensive visual information
@@ -1929,10 +2055,36 @@ const sceneContext = analyzeSceneContent(response);
     console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
     console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
 
-    // ✅ ENHANCED: Build comprehensive scene prompt with character visual context
-    const enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
-    
-    console.log('🎨 Enhanced scene prompt with character visual context:', enhancedScenePrompt.substring(0, 150) + '...');
+    // ✅ ENHANCED: Build comprehensive scene prompt with character and user visual context
+    let enhancedScenePrompt: string;
+
+    // Get scene style tokens
+    const styleTokens = SCENE_STYLE_TOKENS[sceneStyle] || [];
+    const styleTokensStr = styleTokens.length > 0 ? `, ${styleTokens.join(', ')}` : '';
+
+    if (sceneStyle === 'both_characters' && userCharacter) {
+      // Both characters in scene - include user visual description
+      const userVisualDescription = buildUserVisualDescriptionForScene(
+        userCharacter.gender,
+        userCharacter.appearance_tags || []
+      );
+
+      enhancedScenePrompt = `Generate a scene showing ${character.name} (${characterVisualDescription}) and ${userCharacter.name} (${userVisualDescription}) together${styleTokensStr}, in the following scenario: ${scenePrompt}. Both characters should maintain their distinctive appearances. Composition: two people interacting.`;
+
+      console.log('🎬 Scene style: both_characters - including user:', userCharacter.name);
+    } else if (sceneStyle === 'pov' && userCharacter) {
+      // POV scene - first person view from user's perspective looking at character
+      enhancedScenePrompt = `Generate a first-person POV scene${styleTokensStr} showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should be looking at the viewer. Camera angle: first person perspective.`;
+
+      console.log('🎬 Scene style: pov - first person view');
+    } else {
+      // Character only (default) - current behavior
+      enhancedScenePrompt = `Generate a scene showing ${character.name}, ${characterVisualDescription}, in the following scenario: ${scenePrompt}. The character should maintain their distinctive appearance and visual characteristics throughout the scene.`;
+
+      console.log('🎬 Scene style: character_only (default)');
+    }
+
+    console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
     
     // ✅ ENHANCED: Determine image model and route accordingly
     let imageResponse;

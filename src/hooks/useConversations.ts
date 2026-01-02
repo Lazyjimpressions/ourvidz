@@ -2,6 +2,15 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+export interface ConversationUserCharacter {
+  id: string;
+  name: string;
+  gender: 'male' | 'female' | 'other';
+  appearance_tags: string[];
+  persona?: string;
+  image_url?: string;
+}
+
 export interface ConversationInfo {
   id: string;
   user_id: string;
@@ -10,6 +19,7 @@ export interface ConversationInfo {
   status: string;
   character_id?: string | null;
   user_character_id?: string | null;
+  user_character?: ConversationUserCharacter | null;
   created_at: string;
   updated_at: string;
   message_count?: number;
@@ -33,7 +43,15 @@ export const useConversations = (characterId?: string) => {
         .from('conversations')
         .select(`
           *,
-          messages(count)
+          messages(count),
+          user_character:characters!user_character_id(
+            id,
+            name,
+            gender,
+            appearance_tags,
+            persona,
+            image_url
+          )
         `)
         .eq('user_id', user.id);
 
@@ -87,12 +105,50 @@ export const useConversations = (characterId?: string) => {
         .eq('user_id', user?.id);
 
       if (error) throw error;
-      
-      setConversations(prev => prev.map(conv => 
+
+      setConversations(prev => prev.map(conv =>
         conv.id === conversationId ? { ...conv, status } : conv
       ));
     } catch (err) {
       console.error('Error updating conversation status:', err);
+      throw err;
+    }
+  };
+
+  const setUserCharacter = async (conversationId: string, userCharacterId: string | null) => {
+    try {
+      const { data, error } = await supabase
+        .from('conversations')
+        .update({ user_character_id: userCharacterId })
+        .eq('id', conversationId)
+        .eq('user_id', user?.id)
+        .select(`
+          user_character:characters!user_character_id(
+            id,
+            name,
+            gender,
+            appearance_tags,
+            persona,
+            image_url
+          )
+        `)
+        .single();
+
+      if (error) throw error;
+
+      setConversations(prev => prev.map(conv =>
+        conv.id === conversationId
+          ? {
+              ...conv,
+              user_character_id: userCharacterId,
+              user_character: data?.user_character as ConversationUserCharacter | null
+            }
+          : conv
+      ));
+
+      return data?.user_character;
+    } catch (err) {
+      console.error('Error setting user character:', err);
       throw err;
     }
   };
@@ -107,6 +163,7 @@ export const useConversations = (characterId?: string) => {
     error,
     loadConversations,
     deleteConversation,
-    updateConversationStatus
+    updateConversationStatus,
+    setUserCharacter
   };
 };

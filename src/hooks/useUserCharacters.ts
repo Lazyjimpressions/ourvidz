@@ -29,6 +29,7 @@ export interface UserCharacter {
 export const useUserCharacters = () => {
   const { user } = useAuth();
   const [characters, setCharacters] = useState<UserCharacter[]>([]);
+  const [defaultCharacterId, setDefaultCharacterId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -141,16 +142,72 @@ export const useUserCharacters = () => {
         .eq('user_id', user?.id);
 
       if (error) throw error;
-      
+
       setCharacters(prev => prev.filter(char => char.id !== id));
+
+      // If deleted character was the default, clear it
+      if (defaultCharacterId === id) {
+        setDefaultCharacterId(null);
+      }
     } catch (err) {
       console.error('Error deleting character:', err);
       throw err;
     }
   };
 
+  // Load default user character from profile
+  const loadDefaultCharacter = async () => {
+    if (!user?.id) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('default_user_character_id')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error loading default character:', error);
+        return null;
+      }
+
+      setDefaultCharacterId(data?.default_user_character_id || null);
+      return data?.default_user_character_id || null;
+    } catch (err) {
+      console.error('Error loading default character:', err);
+      return null;
+    }
+  };
+
+  // Set default user character in profile
+  const setDefaultCharacter = async (characterId: string | null) => {
+    if (!user?.id) throw new Error('User not authenticated');
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ default_user_character_id: characterId })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setDefaultCharacterId(characterId);
+      console.log('✅ Default user character updated:', characterId);
+    } catch (err) {
+      console.error('Error setting default character:', err);
+      throw err;
+    }
+  };
+
+  // Get the default character object
+  const getDefaultCharacter = (): UserCharacter | null => {
+    if (!defaultCharacterId) return null;
+    return characters.find(c => c.id === defaultCharacterId) || null;
+  };
+
   useEffect(() => {
     loadUserCharacters();
+    loadDefaultCharacter();
   }, [user?.id]);
 
   return {
@@ -160,6 +217,11 @@ export const useUserCharacters = () => {
     loadUserCharacters,
     createUserCharacter,
     updateUserCharacter,
-    deleteUserCharacter
+    deleteUserCharacter,
+    // Default character management
+    defaultCharacterId,
+    getDefaultCharacter,
+    setDefaultCharacter,
+    loadDefaultCharacter
   };
 };

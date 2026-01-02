@@ -1,165 +1,191 @@
-# Supabase Local Development Setup for OurVidz
+# Supabase Setup for OurVidz
 
-## ✅ GitHub-Safe File Structure
+## Overview
 
-This setup is designed to work seamlessly with GitHub syncing.
+OurVidz uses **Supabase Online Only** - no local Supabase development. All database operations, edge functions, and migrations are managed through:
+
+1. **Supabase Online Dashboard** - For edge function deployment and manual operations
+2. **MCP Server** - For Claude Code to interact with the database directly
+
+**Project Details:**
+- **Account**: lazyjimpressions
+- **Project URL**: https://supabase.com/dashboard/project/ulmdmzhcdwfadbvfpckt
+- **Project Ref**: `ulmdmzhcdwfadbvfpckt`
+
+## Important: No CLI Usage
+
+Per project guidelines in `CLAUDE.md`:
+- **DO NOT** use `supabase` CLI commands
+- All edge functions are deployed via the Supabase online dashboard
+- Use MCP tools for database operations and schema changes
+
+## File Structure
 
 ### What Gets Committed to GitHub:
 ```
 ourvidz/
 ├── supabase/
-│   ├── config.toml              ✅ Committed (project config)
-│   ├── migrations/              ✅ Committed (schema versions)
-│   ├── functions/               ✅ Committed (edge functions)
-│   ├── seed.sql                 ✅ Committed (sample data)
-│   └── .gitignore              ✅ Committed (ignore rules)
-├── scripts/
-│   ├── sync-schema-*.js        ✅ Committed (utility scripts)
-│   └── setup-local-supabase.sh ✅ Committed (setup guide)
-├── docs/
-│   └── SUPABASE_SCHEMA.md      ✅ Committed (schema documentation)
-└── .env                         ✅ Committed (public keys only)
+│   ├── migrations/              ✅ Schema version history (reference only)
+│   └── functions/               ✅ Edge function source code
+├── src/
+│   └── integrations/supabase/
+│       ├── client.ts            ✅ Supabase client setup
+│       └── types.ts             ✅ Generated TypeScript types
+└── docs/
+    └── SUPABASE_SCHEMA.md       ✅ Schema documentation
 ```
 
 ### What Never Gets Committed:
 ```
 ourvidz/
-├── supabase/
-│   ├── .temp/                   ❌ Ignored (local DB data)
-│   ├── .branches/               ❌ Ignored (branch data)
-│   └── .env.local              ❌ Ignored (secrets)
-├── .env.local                   ❌ Ignored (project secrets)
-└── node_modules/                ❌ Ignored (dependencies)
+├── .mcp.json                    ❌ Contains access tokens
+├── .cursor/mcp.json             ❌ Contains access tokens
+├── .env.local                   ❌ Project secrets
+└── .env                         ❌ Environment variables (if contains secrets)
 ```
 
-## Setting Up Local Supabase
+## MCP Server Setup
 
-### Step 1: Global Setup (One-time for all projects)
+Claude Code interacts directly with Supabase using the MCP server. This enables:
+- Querying the database with `execute_sql`
+- Listing tables and viewing schema with `list_tables`
+- Applying migrations with `apply_migration`
+- Viewing logs and advisories
+- Generating TypeScript types
 
-```bash
-# Install Supabase CLI
-brew install supabase/tap/supabase
+### Configuration Files
 
-# Login to Supabase (stores token in ~/.supabase/)
-supabase login
-```
+Create these files locally (they are gitignored):
 
-### Step 2: Project Setup (In ourvidz directory)
-
-```bash
-cd /Users/jonathanhughes/Development/ourvidz
-
-# Link to your remote project
-supabase link --project-ref ulmdmzhcdwfadbvfpckt
-
-# Pull the remote database schema
-supabase db pull
-
-# Start local Supabase (creates .temp/ directory)
-supabase start
-```
-
-### Step 3: Environment Variables
-
-Create `.env.local` (never committed):
-```bash
-# Get these from Supabase Dashboard > Settings > API
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SUPABASE_DB_PASSWORD=your-db-password
-```
-
-## How This Works with GitHub
-
-### When You Pull from GitHub:
-1. You get all migrations, functions, and config
-2. Run `supabase start` to create local database
-3. Run `supabase db reset` to apply migrations
-
-### When You Push to GitHub:
-1. Local `.temp/` directory is ignored
-2. Only schema changes (migrations) are committed
-3. Collaborators can recreate exact same DB locally
-
-### Making Schema Changes:
-
-```bash
-# Option 1: Create migration from changes
-supabase db diff --use-migra -f new_feature
-
-# Option 2: Pull changes from remote
-supabase db pull
-
-# Apply migrations locally
-supabase db reset
-```
-
-## Claude Code Integration
-
-### To give Claude Code visibility:
-
-1. **Run the schema sync:**
-```bash
-npm run sync:schema
-```
-
-2. **Claude Code can then read:**
-- `docs/SUPABASE_SCHEMA.md` - Current schema documentation
-- `supabase/migrations/*.sql` - Schema history
-- `src/integrations/supabase/types.ts` - TypeScript types
-
-### Available NPM Scripts:
+**Claude Code** (`.mcp.json` in project root):
 ```json
 {
-  "sync:schema": "node scripts/fetch-schema-direct.js",
-  "sync:schema:cli": "node scripts/sync-schema-cli.js",
-  "query:supabase": "node scripts/query-supabase.js"
+  "mcpServers": {
+    "supabase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server@latest",
+        "--access-token",
+        "<your-supabase-access-token>",
+        "--project-ref",
+        "ulmdmzhcdwfadbvfpckt"
+      ],
+      "env": {}
+    }
+  }
 }
 ```
+
+**Cursor** (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server@latest",
+        "--access-token",
+        "<your-supabase-access-token>",
+        "--project-ref",
+        "ulmdmzhcdwfadbvfpckt"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+
+> **Get your access token from**: https://supabase.com/dashboard/account/tokens
+>
+> **Never commit real tokens to the repository.**
+
+## Common Operations
+
+### Applying Schema Changes (via MCP)
+
+When Claude Code needs to make schema changes:
+```
+Use mcp__supabase-lazyjimpressions__apply_migration with:
+- project_id: "ulmdmzhcdwfadbvfpckt"
+- name: "descriptive_migration_name"
+- query: "SQL statement"
+```
+
+### Querying Data (via MCP)
+
+For read operations or data modifications:
+```
+Use mcp__supabase-lazyjimpressions__execute_sql with:
+- project_id: "ulmdmzhcdwfadbvfpckt"
+- query: "SELECT * FROM table_name"
+```
+
+### Deploying Edge Functions
+
+Edge functions are deployed via the **Supabase Online Dashboard**:
+1. Go to https://supabase.com/dashboard/project/ulmdmzhcdwfadbvfpckt/functions
+2. Create or update the function
+3. Paste the code from `supabase/functions/<function-name>/index.ts`
+
+### Generating TypeScript Types (via MCP)
+
+```
+Use mcp__supabase-lazyjimpressions__generate_typescript_types with:
+- project_id: "ulmdmzhcdwfadbvfpckt"
+```
+
+Then update `src/integrations/supabase/types.ts` with the output.
 
 ## Security Best Practices
 
 ### DO Commit:
-- ✅ Public anon key in `.env`
-- ✅ Migration files
-- ✅ Edge function code
-- ✅ Config files
+- ✅ Edge function source code (`supabase/functions/`)
+- ✅ Migration SQL files (for reference/history)
+- ✅ TypeScript types
+- ✅ Schema documentation
 
 ### NEVER Commit:
+- ❌ Access tokens or API keys
+- ❌ `.mcp.json` or `.cursor/mcp.json` files
 - ❌ Service role keys
 - ❌ Database passwords
-- ❌ `.env.local` files
-- ❌ `.temp/` directories
-- ❌ Database dumps with real data
+- ❌ `.env` files with secrets
+
+## Environment Variables
+
+For local development, create `.env.local` (gitignored):
+```bash
+# Public keys (safe to use in frontend)
+VITE_SUPABASE_URL=https://ulmdmzhcdwfadbvfpckt.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<your-anon-key>
+
+# Private keys (server-side only, for test scripts)
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
+```
+
+Get these values from: https://supabase.com/dashboard/project/ulmdmzhcdwfadbvfpckt/settings/api
 
 ## Troubleshooting
 
-### If supabase/.temp/ was accidentally tracked:
-```bash
-# Remove from git tracking
-git rm -r --cached supabase/.temp/
+### MCP Connection Issues
 
-# Commit the removal
-git commit -m "Remove local Supabase temp files from tracking"
-```
+1. Verify your access token is valid at https://supabase.com/dashboard/account/tokens
+2. Check the project ref matches: `ulmdmzhcdwfadbvfpckt`
+3. Ensure `.mcp.json` is properly formatted JSON
 
-### To completely reset local database:
-```bash
-# Stop local Supabase
-supabase stop
+### Edge Function Deployment
 
-# Remove temp directory
-rm -rf supabase/.temp/
+If an edge function isn't working:
+1. Check logs at https://supabase.com/dashboard/project/ulmdmzhcdwfadbvfpckt/logs
+2. Verify secrets are configured in the dashboard
+3. Check the function's import statements use Deno-compatible URLs
 
-# Start fresh
-supabase start
-supabase db reset
-```
+### Type Mismatches
 
-## Benefits of This Setup
-
-1. **GitHub Safe**: No sensitive data or large DB files in repo
-2. **Team Friendly**: Anyone can recreate exact DB locally
-3. **Version Controlled**: All schema changes tracked in migrations
-4. **AI Accessible**: Claude Code can read schema documentation
-5. **Secure**: Service keys stay local, never in GitHub
-6. **Efficient**: Only text files (SQL migrations) in repo
+If TypeScript types are out of sync:
+1. Generate fresh types via MCP
+2. Update `src/integrations/supabase/types.ts`
+3. Run `npm run build` to verify

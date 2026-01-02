@@ -77,6 +77,19 @@ export interface CharacterScene {
   is_active?: boolean;
 }
 
+/**
+ * User character representation for roleplay (subset of Character)
+ * Used when the user wants to be represented in the conversation
+ */
+export interface UserCharacter {
+  id: string;
+  name: string;
+  gender: 'male' | 'female' | 'other';
+  appearance_tags: string[];
+  persona?: string;
+  image_url?: string;
+}
+
 export interface Conversation {
   id: string;
   user_id: string;
@@ -88,13 +101,25 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
   messages?: Message[];
+  // User character linkage
+  user_character_id?: string;
+  user_character?: UserCharacter;
 }
+
+/**
+ * Scene style options for image generation
+ * - character_only: Only show the AI character (default, current behavior)
+ * - pov: First-person view from user's perspective
+ * - both_characters: Show both AI character and user character in scene
+ */
+export type SceneStyle = 'character_only' | 'pov' | 'both_characters';
 
 export interface RoleplaySettings {
   memoryTier: 'conversation' | 'character' | 'profile';
   modelProvider: 'chat_worker' | 'openrouter' | 'claude' | 'gpt';
   contentTier: 'sfw' | 'nsfw';
   sceneGeneration: boolean;
+  sceneStyle?: SceneStyle;
 }
 
 export interface ConsistencySettings {

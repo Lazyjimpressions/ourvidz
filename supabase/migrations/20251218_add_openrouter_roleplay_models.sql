@@ -1,5 +1,8 @@
 -- Migration: Add recommended OpenRouter roleplay models for NSFW chat
--- Run this via Supabase Dashboard SQL Editor
+-- Applied via Supabase MCP on 2025-12-31
+--
+-- PREREQUISITE: This migration requires a unique constraint on api_models.model_key
+-- The constraint was added via migration: 20251231_add_unique_constraint_model_key
 
 -- First, ensure OpenRouter provider exists
 INSERT INTO api_providers (id, name, display_name, base_url, auth_scheme, is_active)

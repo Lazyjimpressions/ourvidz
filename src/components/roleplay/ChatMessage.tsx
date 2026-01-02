@@ -13,7 +13,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
-import { Character, Message } from '@/types/roleplay';
+import { Character, Message, UserCharacter } from '@/types/roleplay';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
 import { MessageActions } from './MessageActions';
 import { useState, useEffect } from 'react';
@@ -22,16 +22,20 @@ import { cn } from '@/lib/utils';
 interface ChatMessageProps {
   message: Message;
   character: Character | null;
+  userCharacter?: UserCharacter | null;
   onGenerateScene: () => void;
   signedCharacterImageUrl?: string | null;
+  signedUserCharacterImageUrl?: string | null;
   onRetry?: () => void;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
   message,
   character,
+  userCharacter,
   onGenerateScene,
   signedCharacterImageUrl,
+  signedUserCharacterImageUrl,
   onRetry
 }) => {
   const { isMobile } = useMobileDetection();
@@ -151,10 +155,18 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             !isMobile && "w-12 h-12"
           )}>
             {isUser ? (
-              <User className={cn(
-                "text-white",
-                isMobile ? "w-5 h-5" : "w-6 h-6"
-              )} />
+              signedUserCharacterImageUrl ? (
+                <img
+                  src={signedUserCharacterImageUrl}
+                  alt={userCharacter?.name || 'You'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User className={cn(
+                  "text-white",
+                  isMobile ? "w-5 h-5" : "w-6 h-6"
+                )} />
+              )
             ) : (
               <img 
                 src={signedCharacterImage || '/placeholder.svg'} 
@@ -180,7 +192,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
               isUser ? "text-blue-400" : "text-gray-300",
               isMobile ? "text-xs" : "text-sm"
             )}>
-              {isUser ? 'You' : character?.name || 'Character'}
+              {isUser ? (userCharacter?.name || 'You') : (character?.name || 'Character')}
             </span>
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <Clock className="w-3 h-3" />

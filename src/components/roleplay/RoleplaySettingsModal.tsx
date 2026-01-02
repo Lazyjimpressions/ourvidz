@@ -8,10 +8,13 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
+import { useUserCharacters } from '@/hooks/useUserCharacters';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useToast } from '@/hooks/use-toast';
-import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud } from 'lucide-react';
+import { Zap, DollarSign, Shield, CheckCircle2, Info, WifiOff, Cloud, User, Eye, Users, Camera } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SceneStyle } from '@/types/roleplay';
 
 interface RoleplaySettingsModalProps {
   isOpen: boolean;
@@ -24,6 +27,11 @@ interface RoleplaySettingsModalProps {
   onSelectedImageModelChange: (model: string) => void;
   consistencySettings: ConsistencySettings;
   onConsistencySettingsChange: (settings: ConsistencySettings) => void;
+  // User character and scene style
+  selectedUserCharacterId?: string | null;
+  onUserCharacterChange?: (characterId: string | null) => void;
+  sceneStyle?: SceneStyle;
+  onSceneStyleChange?: (style: SceneStyle) => void;
 }
 
 export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
@@ -36,17 +44,25 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   selectedImageModel,
   onSelectedImageModelChange,
   consistencySettings,
-  onConsistencySettingsChange
+  onConsistencySettingsChange,
+  selectedUserCharacterId,
+  onUserCharacterChange,
+  sceneStyle = 'character_only',
+  onSceneStyleChange
 }) => {
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
   const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
+  const { characters: userCharacters, isLoading: userCharactersLoading, defaultCharacterId, setDefaultCharacter } = useUserCharacters();
   const { toast } = useToast();
-  
+
   // Local state for form data
   const [localMemoryTier, setLocalMemoryTier] = useState(memoryTier);
   const [localModelProvider, setLocalModelProvider] = useState(modelProvider);
   const [localSelectedImageModel, setLocalSelectedImageModel] = useState(selectedImageModel);
   const [localConsistencySettings, setLocalConsistencySettings] = useState(consistencySettings);
+  const [localUserCharacterId, setLocalUserCharacterId] = useState<string | null>(selectedUserCharacterId || null);
+  const [localSceneStyle, setLocalSceneStyle] = useState<SceneStyle>(sceneStyle);
+  const [setAsDefault, setSetAsDefault] = useState(false);
   
   // Helper to validate if a chat model is available
   const isValidChatModel = (modelValue: string): boolean => {
@@ -100,27 +116,49 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings, modelsLoading, imageModelsLoading, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
   
   // Save settings to localStorage
-  const saveSettings = () => {
+  const saveSettings = async () => {
     const settings = {
       memoryTier: localMemoryTier,
       modelProvider: localModelProvider,
       selectedImageModel: localSelectedImageModel,
-      consistencySettings: localConsistencySettings
+      consistencySettings: localConsistencySettings,
+      userCharacterId: localUserCharacterId,
+      sceneStyle: localSceneStyle
     };
-    
+
     localStorage.setItem('roleplay-settings', JSON.stringify(settings));
-    
+
+    // Save default character to profile if checkbox is checked
+    if (setAsDefault && localUserCharacterId && localUserCharacterId !== defaultCharacterId) {
+      try {
+        await setDefaultCharacter(localUserCharacterId);
+        console.log('✅ Default character saved to profile');
+      } catch (error) {
+        console.error('Failed to save default character:', error);
+        toast({
+          title: 'Warning',
+          description: 'Settings saved, but failed to set default character.',
+          variant: 'destructive'
+        });
+      }
+    }
+
     // Update parent state
     onMemoryTierChange(localMemoryTier);
     onModelProviderChange(localModelProvider);
     onSelectedImageModelChange(localSelectedImageModel);
     onConsistencySettingsChange(localConsistencySettings);
-    
+    onUserCharacterChange?.(localUserCharacterId);
+    onSceneStyleChange?.(localSceneStyle);
+
     toast({
       title: 'Settings saved',
       description: 'Your roleplay settings have been saved successfully.'
     });
-    
+
+    // Reset setAsDefault checkbox
+    setSetAsDefault(false);
+
     onClose();
   };
   
@@ -131,8 +169,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
       setLocalModelProvider(modelProvider);
       setLocalSelectedImageModel(selectedImageModel);
       setLocalConsistencySettings(consistencySettings);
+      setLocalUserCharacterId(selectedUserCharacterId || null);
+      setLocalSceneStyle(sceneStyle);
     }
-  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings]);
+  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings, selectedUserCharacterId, sceneStyle]);
   const selectedModel = allModelOptions?.find(m => m.value === localModelProvider) || allModelOptions?.[0] || null;
   const getModelCapabilities = (model: typeof selectedModel) => {
     if (!model) {
@@ -162,8 +202,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
         
         <div className="flex-1 overflow-y-auto px-4">
           <Tabs defaultValue="general" className="flex flex-col">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="identity">Identity</TabsTrigger>
             <TabsTrigger value="models">Models</TabsTrigger>
             <TabsTrigger value="advanced">Advanced</TabsTrigger>
           </TabsList>
@@ -260,6 +301,216 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   </p>
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="identity" className="space-y-6 mt-0">
+              {/* Your Character Selection */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Your Character
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Choose how you appear in the roleplay. The AI will use your name and pronouns.
+                </p>
+                <Select
+                  value={localUserCharacterId || 'none'}
+                  onValueChange={(value) => setLocalUserCharacterId(value === 'none' ? null : value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your character..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-gray-400" />
+                        <span>Anonymous (You)</span>
+                      </div>
+                    </SelectItem>
+                    {userCharactersLoading ? (
+                      <SelectItem value="" disabled>Loading characters...</SelectItem>
+                    ) : userCharacters.length === 0 ? (
+                      <SelectItem value="" disabled>No characters created yet</SelectItem>
+                    ) : (
+                      userCharacters.map((char) => (
+                        <SelectItem key={char.id} value={char.id}>
+                          <div className="flex items-center gap-2">
+                            {char.image_url ? (
+                              <img
+                                src={char.image_url}
+                                alt={char.name}
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <User className="w-4 h-4 text-blue-400" />
+                            )}
+                            <span>{char.name}</span>
+                            {char.gender && (
+                              <Badge variant="outline" className="text-xs ml-1">
+                                {char.gender}
+                              </Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {userCharacters.length === 0 && !userCharactersLoading && (
+                  <p className="text-xs text-blue-400 mt-1">
+                    Create a character in your profile settings to personalize your roleplay experience.
+                  </p>
+                )}
+
+                {/* Set as Default Checkbox */}
+                {localUserCharacterId && localUserCharacterId !== 'none' && (
+                  <div className="flex items-center space-x-2 mt-3 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <Checkbox
+                      id="setAsDefault"
+                      checked={setAsDefault || localUserCharacterId === defaultCharacterId}
+                      onCheckedChange={(checked) => setSetAsDefault(!!checked)}
+                      disabled={localUserCharacterId === defaultCharacterId}
+                    />
+                    <label
+                      htmlFor="setAsDefault"
+                      className="text-sm cursor-pointer flex-1"
+                    >
+                      {localUserCharacterId === defaultCharacterId ? (
+                        <span className="text-green-400 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          This is your default character
+                        </span>
+                      ) : (
+                        <span>Set as default for new conversations</span>
+                      )}
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Scene Style Selection */}
+              <div className="space-y-3">
+                <Label className="flex items-center gap-2">
+                  <Camera className="w-4 h-4" />
+                  Scene Style
+                </Label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Choose how you appear in generated scene images.
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setLocalSceneStyle('character_only')}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      localSceneStyle === 'character_only'
+                        ? "bg-blue-600/20 border-blue-500"
+                        : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Eye className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <div className="font-medium text-white text-sm">Focus on Character</div>
+                        <div className="text-xs text-gray-400">Show only the AI character in scenes</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setLocalSceneStyle('pov')}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      localSceneStyle === 'pov'
+                        ? "bg-blue-600/20 border-blue-500"
+                        : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Eye className="w-5 h-5 text-purple-400" />
+                      <div>
+                        <div className="font-medium text-white text-sm">First Person View</div>
+                        <div className="text-xs text-gray-400">See the scene from your perspective</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setLocalSceneStyle('both_characters')}
+                    disabled={!localUserCharacterId}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg border transition-colors",
+                      !localUserCharacterId
+                        ? "bg-gray-800/30 border-gray-700 cursor-not-allowed opacity-60"
+                        : localSceneStyle === 'both_characters'
+                          ? "bg-blue-600/20 border-blue-500"
+                          : "bg-gray-700/50 border-gray-600 hover:bg-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Users className="w-5 h-5 text-blue-400" />
+                      <div>
+                        <div className="font-medium text-white text-sm">Show Both of Us</div>
+                        <div className="text-xs text-gray-400">
+                          {localUserCharacterId
+                            ? "Show both you and the AI character"
+                            : "Select a character above to enable"}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Selected Character Preview */}
+              {localUserCharacterId && (
+                <Card className="p-4 bg-gray-800/50 border-gray-700">
+                  {(() => {
+                    const selectedChar = userCharacters.find(c => c.id === localUserCharacterId);
+                    if (!selectedChar) return null;
+                    return (
+                      <div className="flex items-start gap-3">
+                        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+                          {selectedChar.image_url ? (
+                            <img
+                              src={selectedChar.image_url}
+                              alt={selectedChar.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <User className="w-6 h-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-white">{selectedChar.name}</span>
+                            {selectedChar.gender && (
+                              <Badge variant="outline" className="text-xs">
+                                {selectedChar.gender}
+                              </Badge>
+                            )}
+                          </div>
+                          {selectedChar.appearance_tags && selectedChar.appearance_tags.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {selectedChar.appearance_tags.slice(0, 4).map((tag, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs bg-gray-700">
+                                  {tag}
+                                </Badge>
+                              ))}
+                              {selectedChar.appearance_tags.length > 4 && (
+                                <Badge variant="secondary" className="text-xs bg-gray-700">
+                                  +{selectedChar.appearance_tags.length - 4}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="models" className="space-y-6 mt-0">

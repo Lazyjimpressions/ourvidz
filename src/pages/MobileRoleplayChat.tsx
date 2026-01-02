@@ -25,7 +25,7 @@ import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsMod
 import { ModelSelector } from '@/components/roleplay/ModelSelector';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
-import { Character, Message, CharacterScene } from '@/types/roleplay';
+import { Character, Message, CharacterScene, SceneStyle } from '@/types/roleplay';
 import { imageConsistencyService, ConsistencySettings } from '@/services/ImageConsistencyService';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -135,6 +135,7 @@ const MobileRoleplayChat: React.FC = () => {
     denoise_strength: 0.25,
     modify_strength: 0.5
   });
+  const [sceneStyle, setSceneStyle] = useState<'character_only' | 'pov' | 'both_characters'>('character_only');
   
   // Update defaults when models are loaded (only once)
   const hasInitializedModelDefaults = useRef(false);
@@ -477,7 +478,9 @@ const MobileRoleplayChat: React.FC = () => {
             prompt_template_id: loadedPromptTemplate?.id || null,
             prompt_template_name: loadedPromptTemplate?.template_name || null,
             // Add image model selection (with fallback)
-            selected_image_model: getValidImageModel()
+            selected_image_model: getValidImageModel(),
+            // Scene style for user representation in images
+            scene_style: sceneStyle
           }
         });
 
@@ -680,7 +683,9 @@ const MobileRoleplayChat: React.FC = () => {
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
-          selected_image_model: validImageModel
+          selected_image_model: validImageModel,
+          // ✅ Scene style for user representation in images
+          scene_style: sceneStyle
         }
       });
 
@@ -779,7 +784,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_system_prompt: selectedScene?.system_prompt || null,
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
-          selected_image_model: getValidImageModel() // ✅ Use selected image model (with fallback)
+          selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
+          scene_style: sceneStyle // ✅ Scene style for user representation
         }
       });
 
@@ -874,7 +880,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
-          selected_image_model: getValidImageModel()
+          selected_image_model: getValidImageModel(),
+          scene_style: sceneStyle // ✅ Scene style for user representation
         }
       });
 
@@ -985,7 +992,8 @@ const MobileRoleplayChat: React.FC = () => {
           scene_context: selectedScene?.scene_prompt || null,
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
-          selected_image_model: getValidImageModel()
+          selected_image_model: getValidImageModel(),
+          scene_style: sceneStyle // ✅ Scene style for user representation
         }
       });
 
@@ -1239,6 +1247,8 @@ const MobileRoleplayChat: React.FC = () => {
           onSelectedImageModelChange={setSelectedImageModel}
           consistencySettings={consistencySettings}
           onConsistencySettingsChange={setConsistencySettings}
+          sceneStyle={sceneStyle}
+          onSceneStyleChange={setSceneStyle}
         />
 
         {/* Context Menu */}
