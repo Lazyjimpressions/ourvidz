@@ -32,6 +32,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { WorkspaceAssetService } from '@/lib/services/WorkspaceAssetService';
 import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { useImageModels } from '@/hooks/useImageModels';
+import { useUserCharacters } from '@/hooks/useUserCharacters';
 
 // Add prompt template interface
 interface PromptTemplate {
@@ -72,6 +73,17 @@ const MobileRoleplayChat: React.FC = () => {
     isLoading: imageModelsLoading
   } = useImageModels();
 
+  // Load user characters for identity settings
+  const {
+    characters: userCharacters,
+    defaultCharacterId,
+    isLoading: userCharactersLoading
+  } = useUserCharacters();
+
+  // User character state
+  const [selectedUserCharacterId, setSelectedUserCharacterId] = useState<string | null>(null);
+  const [signedUserCharacterImage, setSignedUserCharacterImage] = useState<string | null>(null);
+
   // Initialize settings with saved values or database defaults (API models preferred)
   const initializeSettings = () => {
     const savedSettings = localStorage.getItem('roleplay-settings');
@@ -106,7 +118,9 @@ const MobileRoleplayChat: React.FC = () => {
             reference_strength: 0.35,
             denoise_strength: 0.25,
             modify_strength: 0.5
-          }
+          },
+          userCharacterId: parsed.userCharacterId || null,
+          sceneStyle: parsed.sceneStyle || 'character_only'
         };
       } catch (error) {
         console.warn('Failed to parse saved roleplay settings:', error);
@@ -122,7 +136,9 @@ const MobileRoleplayChat: React.FC = () => {
         reference_strength: 0.35,
         denoise_strength: 0.25,
         modify_strength: 0.5
-      }
+      },
+      userCharacterId: null,
+      sceneStyle: 'character_only' as const
     };
   };
   
@@ -145,15 +161,21 @@ const MobileRoleplayChat: React.FC = () => {
       setModelProvider(settings.modelProvider);
       setSelectedImageModel(settings.selectedImageModel);
       setConsistencySettings(settings.consistencySettings);
+      // Use saved user character, or fall back to profile default
+      const effectiveUserCharacterId = settings.userCharacterId || defaultCharacterId || null;
+      setSelectedUserCharacterId(effectiveUserCharacterId);
+      setSceneStyle(settings.sceneStyle);
       hasInitializedModelDefaults.current = true;
       console.log('✅ Initialized model defaults from database:', {
         chatModel: settings.modelProvider,
         imageModel: settings.selectedImageModel,
+        userCharacterId: effectiveUserCharacterId,
+        sceneStyle: settings.sceneStyle,
         chatModelType: roleplayModelOptions.find(m => m.value === settings.modelProvider)?.isLocal ? 'local' : 'api',
         imageModelType: imageModelOptions.find(m => m.value === settings.selectedImageModel)?.type || 'unknown'
       });
     }
-  }, [roleplayModelsLoading, imageModelsLoading, roleplayModelOptions, imageModelOptions]);
+  }, [roleplayModelsLoading, imageModelsLoading, roleplayModelOptions, imageModelOptions, defaultCharacterId]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [sceneJobId, setSceneJobId] = useState<string | null>(null);
   const [sceneJobStatus, setSceneJobStatus] = useState<'idle' | 'queued' | 'processing' | 'completed' | 'failed'>('idle');
@@ -189,6 +211,68 @@ const MobileRoleplayChat: React.FC = () => {
       currentRouteRef.current = '';
     };
   }, []);
+
+  // Get the selected user character object
+  const selectedUserCharacter = selectedUserCharacterId
+    ? userCharacters.find(c => c.id === selectedUserCharacterId) || null
+    : null;
+
+  // Load signed URL for user character image
+  useEffect(() => {
+    const loadUserCharacterImage = async () => {
+      if (!selectedUserCharacter?.image_url) {
+        setSignedUserCharacterImage(null);
+        return;
+      }
+
+      if (selectedUserCharacter.image_url.startsWith('http')) {
+        setSignedUserCharacterImage(selectedUserCharacter.image_url);
+      } else {
+        try {
+          const signedUrl = await getSignedUrl(selectedUserCharacter.image_url, 'user-library');
+          setSignedUserCharacterImage(signedUrl);
+        } catch (error) {
+          console.error('Error signing user character image:', error);
+          setSignedUserCharacterImage(null);
+        }
+      }
+    };
+
+    loadUserCharacterImage();
+  }, [selectedUserCharacter?.image_url, getSignedUrl]);
+
+  // Update conversation's user_character_id when user changes it in settings
+  const hasUpdatedUserCharacter = useRef(false);
+  useEffect(() => {
+    const updateConversationUserCharacter = async () => {
+      // Skip if no conversation or if this is initial load
+      if (!conversationId || !hasInitializedModelDefaults.current) return;
+
+      // Skip if we already updated this session (prevent loop)
+      if (hasUpdatedUserCharacter.current) {
+        hasUpdatedUserCharacter.current = false;
+        return;
+      }
+
+      try {
+        const { error } = await supabase
+          .from('conversations')
+          .update({ user_character_id: selectedUserCharacterId })
+          .eq('id', conversationId)
+          .eq('user_id', user?.id);
+
+        if (error) {
+          console.error('Error updating conversation user character:', error);
+        } else {
+          console.log('✅ Updated conversation user_character_id:', selectedUserCharacterId);
+        }
+      } catch (err) {
+        console.error('Error updating conversation user character:', err);
+      }
+    };
+
+    updateConversationUserCharacter();
+  }, [selectedUserCharacterId, conversationId, user?.id]);
 
   // Load prompt template for roleplay
   const loadPromptTemplate = async (contentTier: string) => {
@@ -434,7 +518,8 @@ const MobileRoleplayChat: React.FC = () => {
               title: conversationTitle,
               status: 'active',
               memory_tier: memoryTier,
-              memory_data: sceneId ? { scene_id: sceneId } : {}
+              memory_data: sceneId ? { scene_id: sceneId } : {},
+              user_character_id: selectedUserCharacterId || null
             })
             .select()
             .single();
@@ -959,7 +1044,8 @@ const MobileRoleplayChat: React.FC = () => {
           title: conversationTitle,
           status: 'active',
           memory_tier: memoryTier,
-          memory_data: sceneId ? { scene_id: sceneId } : {}
+          memory_data: sceneId ? { scene_id: sceneId } : {},
+          user_character_id: selectedUserCharacterId || null
         })
         .select()
         .single();
@@ -1187,11 +1273,13 @@ const MobileRoleplayChat: React.FC = () => {
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((message) => (
-              <ChatMessage 
+              <ChatMessage
                 key={message.id}
                 message={message}
                 character={character}
+                userCharacter={selectedUserCharacter}
                 signedCharacterImageUrl={signedCharacterImage}
+                signedUserCharacterImageUrl={signedUserCharacterImage}
                 onGenerateScene={handleGenerateScene}
                 onRetry={message.metadata?.needsRetry ? handleRetryKickoff : undefined}
               />
@@ -1247,6 +1335,8 @@ const MobileRoleplayChat: React.FC = () => {
           onSelectedImageModelChange={setSelectedImageModel}
           consistencySettings={consistencySettings}
           onConsistencySettingsChange={setConsistencySettings}
+          selectedUserCharacterId={selectedUserCharacterId}
+          onUserCharacterChange={setSelectedUserCharacterId}
           sceneStyle={sceneStyle}
           onSceneStyleChange={setSceneStyle}
         />

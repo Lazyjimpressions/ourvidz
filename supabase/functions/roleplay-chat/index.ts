@@ -2107,26 +2107,26 @@ const sceneContext = analyzeSceneContent(response);
         headers,
         body: {
           prompt: enhancedScenePrompt,
-          job_type: 'sdxl_image_high', // ✅ CHANGED FROM sdxl_image_fast
-          seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
-          reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
+          job_type: 'sdxl_image_high',
+          // NOTE: No seed specified - use random for scene variety while reference_image maintains character consistency
+          reference_image_url: character.reference_image_url,
           metadata: {
             destination: 'roleplay_scene',
             character_id: characterId,
-            character_name: character.name, // ✅ CHARACTER CONTEXT
+            character_name: character.name,
             scene_type: 'chat_scene',
             consistency_method: character.consistency_method || consistencyMethod,
             reference_strength: 0.45,
             denoise_strength: 0.65,
-            skip_enhancement: false, // Allow enhancement for scene quality
-            reference_mode: 'modify', // ✅ CHANGE TO MODIFY FOR BETTER CONSISTENCY
-            seed_locked: true, // ✅ ADD SEED LOCK FLAG
-            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw', // ✅ DYNAMIC CONTENT TIER
-            scene_context: JSON.stringify(sceneContext) // ✅ FULL SCENE CONTEXT
+            skip_enhancement: false,
+            reference_mode: 'modify',
+            seed_locked: false, // Random seed for scene variety
+            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            scene_context: JSON.stringify(sceneContext)
           }
         }
       });
-      console.log('🎬 SDXL scene generation queued with character consistency:', imageResponse);
+      console.log('🎬 SDXL scene generation queued with random seed for variety:', imageResponse);
     } else if (!useSDXL && selectedImageModel) {
       // ✅ ENHANCED: Use API model for scene generation
       console.log('🎨 Using API model for scene generation:', selectedImageModel);
@@ -2153,7 +2153,7 @@ const sceneContext = analyzeSceneContent(response);
           body: {
             prompt: enhancedScenePrompt,
             job_type: 'sdxl_image_high',
-            seed: character.seed_locked,
+            // No seed - use random for scene variety
             reference_image_url: character.reference_image_url,
             metadata: {
               destination: 'roleplay_scene',
@@ -2165,7 +2165,7 @@ const sceneContext = analyzeSceneContent(response);
               denoise_strength: 0.65,
               skip_enhancement: false,
               reference_mode: 'modify',
-              seed_locked: true,
+              seed_locked: false,
               contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               fallback_reason: 'api_model_not_found'
@@ -2187,7 +2187,7 @@ const sceneContext = analyzeSceneContent(response);
             body: {
               prompt: enhancedScenePrompt,
               job_type: 'sdxl_image_high',
-              seed: character.seed_locked,
+              // No seed - use random for scene variety
               reference_image_url: character.reference_image_url,
               metadata: {
                 destination: 'roleplay_scene',
@@ -2199,7 +2199,7 @@ const sceneContext = analyzeSceneContent(response);
                 denoise_strength: 0.65,
                 skip_enhancement: false,
                 reference_mode: 'modify',
-                seed_locked: true,
+                seed_locked: false,
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',
@@ -2244,7 +2244,7 @@ const sceneContext = analyzeSceneContent(response);
               prompt: enhancedScenePrompt,
               apiModelId: modelConfig.id,
               jobType: replicateJobType,
-              seed: character.seed_locked,
+              // No seed - use random for scene variety
               reference_image_url: character.reference_image_url,
               metadata: {
                 destination: 'roleplay_scene',
@@ -2276,7 +2276,7 @@ const sceneContext = analyzeSceneContent(response);
             body: {
               prompt: enhancedScenePrompt,
               job_type: 'sdxl_image_high',
-              seed: character.seed_locked,
+              // No seed - use random for scene variety
               reference_image_url: character.reference_image_url,
               metadata: {
                 destination: 'roleplay_scene',
@@ -2288,7 +2288,7 @@ const sceneContext = analyzeSceneContent(response);
                 denoise_strength: 0.65,
                 skip_enhancement: false,
                 reference_mode: 'modify',
-                seed_locked: true,
+                seed_locked: false,
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',
@@ -2311,7 +2311,7 @@ const sceneContext = analyzeSceneContent(response);
         body: {
           prompt: enhancedScenePrompt,
           job_type: 'sdxl_image_high',
-          seed: character.seed_locked,
+          // No seed - use random for scene variety
           reference_image_url: character.reference_image_url,
           metadata: {
             destination: 'roleplay_scene',
@@ -2325,7 +2325,7 @@ const sceneContext = analyzeSceneContent(response);
             contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
             scene_context: JSON.stringify(sceneContext),
             character_visual_description: characterVisualDescription,
-            seed_locked: true
+            seed_locked: false
           }
         }
       });
@@ -2363,9 +2363,9 @@ const sceneContext = analyzeSceneContent(response);
       };
     }
     
-    return { 
-      success: true, 
-      consistency_score: character.seed_locked ? 0.9 : 0.7, // ✅ HIGHER SCORE WITH SEED LOCK
+    return {
+      success: true,
+      consistency_score: character.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
       job_id: jobId
     };
   } catch (error) {
