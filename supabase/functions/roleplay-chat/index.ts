@@ -2176,7 +2176,7 @@ const sceneContext = analyzeSceneContent(response);
     // ✅ CRITICAL FIX: Optimize prompt for CLIP's 77-token limit
     // CLIP tokenizes prompts and truncates everything after 77 tokens
     // We need to compress the prompt while preserving the most important parts (scenario)
-    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt);
+    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || []);
     console.log('🔧 CLIP optimization:', {
       original_length: enhancedScenePrompt.length,
       optimized_length: optimizedPrompt.length,
@@ -2821,9 +2821,10 @@ function estimateCLIPTokens(text: string): number {
 
 /**
  * Optimize prompt for CLIP's 77-token limit
- * Priority: Scenario description > Character appearance > Composition instructions
+ * Priority: Scenario description (MOST IMPORTANT) > Essential visual tags > Character name
+ * Strategy: Preserve as much scenario as possible, compress everything else
  */
-function optimizePromptForCLIP(fullPrompt: string, scenarioText: string): string {
+function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appearanceTags: string[] = []): string {
   const MAX_CLIP_TOKENS = 75; // Safety margin below 77 limit
   const currentTokens = estimateCLIPTokens(fullPrompt);
   
@@ -2833,74 +2834,129 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string): string
   
   console.log(`⚠️ Prompt exceeds CLIP limit: ${currentTokens} tokens, optimizing to ${MAX_CLIP_TOKENS}...`);
   
-  // Extract key components from the prompt
+  // Extract scenario - this is the MOST IMPORTANT part
   const scenarioMatch = fullPrompt.match(/in the following scenario: (.+?)(?:\. Both characters|\. The character|\. Composition|$)/s);
-  const scenario = scenarioMatch ? scenarioMatch[1].trim() : scenarioText;
+  let scenario = scenarioMatch ? scenarioMatch[1].trim() : scenarioText;
   
-  // Extract character descriptions (simplified)
-  const charMatch = fullPrompt.match(/showing (.+?) \(/);
-  const charName = charMatch ? charMatch[1] : '';
+  // Extract character name
+  const charMatch = fullPrompt.match(/showing (.+?)(?: \(|\s+\(|,|$)/);
+  const charName = charMatch ? charMatch[1].trim().replace(/"/g, '') : '';
   
-  // Build optimized prompt with priority:
-  // 1. Essential character tags (compressed)
-  // 2. Scenario (most important - preserve as much as possible)
-  // 3. Composition (minimal)
+  // Extract ONLY visual appearance tags (not personality)
+  // Prefer appearance_tags array if available, otherwise extract from prompt
+  const visualTags = appearanceTags.length > 0 
+    ? appearanceTags.slice(0, 8).join(', ') 
+    : extractVisualTagsOnly(fullPrompt);
   
-  // Compress character description to key tags only
-  const essentialTags = extractEssentialTags(fullPrompt);
+  // Strategy: Allocate tokens as:
+  // - Scenario: 60 tokens (most important - preserve as much as possible)
+  // - Visual tags: 10 tokens
+  // - Character name: 2 tokens
+  // - Structure words: 3 tokens
   
-  // Build scenario - prioritize first 200 chars (most important actions)
-  const optimizedScenario = scenario.length > 200 
-    ? scenario.substring(0, 200).replace(/\s+\w+$/, '') + '...'
-    : scenario;
+  // Calculate max scenario length (60 tokens = ~252 chars)
+  const maxScenarioChars = 250;
   
-  // Build optimized prompt
-  let optimized = '';
-  if (charName) {
-    optimized = `${charName}, ${essentialTags}, ${optimizedScenario}`;
-  } else {
-    optimized = `${essentialTags}, ${optimizedScenario}`;
+  // Trim scenario if needed, but preserve the beginning (most important actions)
+  if (scenario.length > maxScenarioChars) {
+    // Find a good breaking point (end of sentence or comma)
+    let breakPoint = maxScenarioChars;
+    const lastPeriod = scenario.lastIndexOf('.', maxScenarioChars);
+    const lastComma = scenario.lastIndexOf(',', maxScenarioChars);
+    
+    if (lastPeriod > maxScenarioChars - 50) {
+      breakPoint = lastPeriod + 1;
+    } else if (lastComma > maxScenarioChars - 30) {
+      breakPoint = lastComma + 1;
+    }
+    
+    scenario = scenario.substring(0, breakPoint).trim();
   }
   
-  // If still too long, compress scenario further
+  // Build optimized prompt: Character name + essential visual tags + scenario
+  // Format: "CharacterName, tag1, tag2, tag3, scenario text"
+  let optimized = '';
+  
+  if (charName && visualTags) {
+    optimized = `${charName}, ${visualTags}, ${scenario}`;
+  } else if (charName) {
+    optimized = `${charName}, ${scenario}`;
+  } else if (visualTags) {
+    optimized = `${visualTags}, ${scenario}`;
+  } else {
+    optimized = scenario;
+  }
+  
+  // Final check - if still too long, trim from the end (scenario)
   let tokens = estimateCLIPTokens(optimized);
   if (tokens > MAX_CLIP_TOKENS) {
     const excessTokens = tokens - MAX_CLIP_TOKENS;
-    const charsToRemove = excessTokens * 4.2;
-    optimized = optimized.substring(0, optimized.length - Math.ceil(charsToRemove) - 10) + '...';
+    const charsToRemove = Math.ceil(excessTokens * 4.2);
+    // Trim from scenario end, preserve character name and tags
+    const scenarioStart = optimized.lastIndexOf(scenario);
+    if (scenarioStart > 0) {
+      const beforeScenario = optimized.substring(0, scenarioStart);
+      const scenarioPart = scenario.substring(0, scenario.length - charsToRemove - 10).trim();
+      optimized = `${beforeScenario}${scenarioPart}`;
+    } else {
+      optimized = optimized.substring(0, optimized.length - charsToRemove - 10);
+    }
     tokens = estimateCLIPTokens(optimized);
   }
   
   console.log(`✅ Optimized prompt: ${tokens} tokens (was ${currentTokens})`);
+  console.log(`📝 Optimized preview: ${optimized.substring(0, 150)}...`);
   return optimized;
 }
 
 /**
- * Extract essential tags from character description
- * Removes redundant words and keeps only key visual descriptors
+ * Extract ONLY visual appearance tags (no personality/behavior)
+ * Uses appearance_tags array if available, otherwise filters from description
  */
-function extractEssentialTags(prompt: string): string {
-  // Extract appearance tags from parentheses
+function extractVisualTagsOnly(prompt: string): string {
+  // Visual-only keywords to look for
+  const visualKeywords = [
+    'asian', 'athletic', 'flexible', 'dance team', 'captain', 'confident posture',
+    'graceful movements', 'sports bra', 'dance shorts', 'leotard', 'dance shoes',
+    'sweaty', 'muscular', 'toned body', 'long hair', 'bright eyes', 'determined expression',
+    'captivating smile', 'tall', 'curly hair', 'sweat pants', 'athletic build',
+    'casual style', '1boy', '1girl', 'handsome', 'beautiful', 'petite', 'tall'
+  ];
+  
+  // Try to extract from appearance_tags pattern first
   const appearanceMatch = prompt.match(/\(([^)]+)\)/);
   if (!appearanceMatch) return '';
   
   const appearanceText = appearanceMatch[1];
   
-  // Split by commas and filter
+  // Split and filter for visual-only tags
   const tags = appearanceText
     .split(',')
     .map(tag => tag.trim())
     .filter(tag => {
-      // Remove personality/behavior descriptions (keep only visual)
       const lower = tag.toLowerCase();
-      return !lower.includes('leader') && 
-             !lower.includes('commands') && 
-             !lower.includes('seeks') &&
-             !lower.includes('direct') &&
-             !lower.includes('loves') &&
-             tag.length > 2;
+      
+      // Keep if it matches visual keywords
+      if (visualKeywords.some(keyword => lower.includes(keyword))) {
+        return true;
+      }
+      
+      // Remove personality/behavior words
+      const personalityWords = [
+        'leader', 'commands', 'seeks', 'direct', 'loves', 'wants', 'knows',
+        'stunning', 'incredible', 'natural', 'attention', 'passion', 'desires',
+        'intense', 'experiences', 'match', 'energy', 'control', 'intimate'
+      ];
+      
+      if (personalityWords.some(word => lower.includes(word))) {
+        return false;
+      }
+      
+      // Keep short visual descriptors (2-4 words, mostly nouns/adjectives)
+      const wordCount = tag.split(/\s+/).length;
+      return wordCount <= 4 && tag.length > 2 && tag.length < 30;
     })
-    .slice(0, 12); // Limit to 12 most important tags
+    .slice(0, 8); // Limit to 8 most important visual tags
   
   return tags.join(', ');
 }
