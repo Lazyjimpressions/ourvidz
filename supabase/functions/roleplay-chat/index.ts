@@ -2858,19 +2858,25 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
   const maxScenarioChars = 250;
   
   // Trim scenario if needed, but preserve the beginning (most important actions)
+  // Always trim at word boundaries to avoid mid-word cuts
   if (scenario.length > maxScenarioChars) {
-    // Find a good breaking point (end of sentence or comma)
+    // Find a good breaking point (end of sentence, comma, or at least word boundary)
     let breakPoint = maxScenarioChars;
     const lastPeriod = scenario.lastIndexOf('.', maxScenarioChars);
     const lastComma = scenario.lastIndexOf(',', maxScenarioChars);
+    const lastSpace = scenario.lastIndexOf(' ', maxScenarioChars);
     
+    // Prefer sentence end, then comma, then at least word boundary
     if (lastPeriod > maxScenarioChars - 50) {
       breakPoint = lastPeriod + 1;
     } else if (lastComma > maxScenarioChars - 30) {
       breakPoint = lastComma + 1;
+    } else if (lastSpace > 0) {
+      breakPoint = lastSpace; // At least cut at word boundary, not mid-word
     }
     
     scenario = scenario.substring(0, breakPoint).trim();
+    console.log(`✂️ Scenario trimmed to ${scenario.length} chars at word boundary`);
   }
   
   // Build optimized prompt: Character name + essential visual tags + scenario
@@ -2887,19 +2893,53 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
     optimized = scenario;
   }
   
-  // Final check - if still too long, trim from the end (scenario)
+  // Final check - if still too long, trim from the end (scenario) at word boundaries
   let tokens = estimateCLIPTokens(optimized);
   if (tokens > MAX_CLIP_TOKENS) {
     const excessTokens = tokens - MAX_CLIP_TOKENS;
     const charsToRemove = Math.ceil(excessTokens * 4.2);
-    // Trim from scenario end, preserve character name and tags
+    
+    // Find where scenario starts in optimized prompt
     const scenarioStart = optimized.lastIndexOf(scenario);
     if (scenarioStart > 0) {
       const beforeScenario = optimized.substring(0, scenarioStart);
-      const scenarioPart = scenario.substring(0, scenario.length - charsToRemove - 10).trim();
+      // Trim scenario at word boundary (find last space before cut point)
+      const targetScenarioLength = scenario.length - charsToRemove - 10;
+      let cutPoint = Math.max(0, targetScenarioLength);
+      
+      // Find last word boundary (space, period, comma) before cut point
+      const lastSpace = scenario.lastIndexOf(' ', cutPoint);
+      const lastPeriod = scenario.lastIndexOf('.', cutPoint);
+      const lastComma = scenario.lastIndexOf(',', cutPoint);
+      
+      // Use the closest punctuation/space to cut point
+      const boundaryPoints = [lastSpace, lastPeriod, lastComma].filter(p => p > 0 && p < cutPoint);
+      if (boundaryPoints.length > 0) {
+        cutPoint = Math.max(...boundaryPoints) + 1; // Include the punctuation/space
+      } else if (lastSpace > 0) {
+        cutPoint = lastSpace; // At least cut at word boundary
+      }
+      
+      const scenarioPart = scenario.substring(0, cutPoint).trim();
       optimized = `${beforeScenario}${scenarioPart}`;
     } else {
-      optimized = optimized.substring(0, optimized.length - charsToRemove - 10);
+      // Fallback: trim from end at word boundary
+      const targetLength = optimized.length - charsToRemove - 10;
+      let cutPoint = Math.max(0, targetLength);
+      
+      // Find last word boundary
+      const lastSpace = optimized.lastIndexOf(' ', cutPoint);
+      const lastPeriod = optimized.lastIndexOf('.', cutPoint);
+      const lastComma = optimized.lastIndexOf(',', cutPoint);
+      
+      const boundaryPoints = [lastSpace, lastPeriod, lastComma].filter(p => p > 0 && p < cutPoint);
+      if (boundaryPoints.length > 0) {
+        cutPoint = Math.max(...boundaryPoints) + 1;
+      } else if (lastSpace > 0) {
+        cutPoint = lastSpace;
+      }
+      
+      optimized = optimized.substring(0, cutPoint).trim();
     }
     tokens = estimateCLIPTokens(optimized);
   }
