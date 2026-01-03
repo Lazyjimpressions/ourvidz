@@ -467,7 +467,8 @@ serve(async (req) => {
         conversation.user_character as UserCharacterForScene | null,
         requestBody.scene_style || 'character_only',
         requestBody.consistency_settings, // Pass user's consistency settings from UI
-        conversation_id // ✅ FIX: Pass conversation_id to link scene to conversation
+        conversation_id, // ✅ FIX: Pass conversation_id to link scene to conversation
+        content_tier // ✅ FIX: Pass content_tier to respect NSFW setting
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1885,7 +1886,8 @@ async function generateScene(
   userCharacter?: UserCharacterForScene | null,
   sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only',
   consistencySettings?: ConsistencySettings,
-  conversationId?: string // ✅ FIX: Add conversation_id parameter
+  conversationId?: string, // ✅ FIX: Add conversation_id parameter
+  contentTier: 'sfw' | 'nsfw' = 'nsfw' // ✅ FIX: Add content_tier parameter, default NSFW
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
@@ -2276,7 +2278,7 @@ const sceneContext = analyzeSceneContent(response);
             reference_mode: 'modify',
             seed_locked: seedLocked,
             seed: seedLocked, // Pass seed for seed_locked method
-            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
             scene_context: JSON.stringify(sceneContext)
           }
         }
@@ -2324,7 +2326,7 @@ const sceneContext = analyzeSceneContent(response);
               reference_mode: 'modify',
               seed_locked: seedLocked,
               seed: seedLocked,
-              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               fallback_reason: 'api_model_not_found'
             }
@@ -2364,7 +2366,7 @@ const sceneContext = analyzeSceneContent(response);
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',
-                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
                 scene_context: JSON.stringify(sceneContext),
                 character_visual_description: characterVisualDescription,
                 fallback_reason: 'provider_not_found'
@@ -2445,7 +2447,7 @@ const sceneContext = analyzeSceneContent(response);
               selected_image_model: selectedImageModel || null, // Track what was requested
               effective_image_model: effectiveImageModel, // Track what was actually used
               provider_name: providerName,
-              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               character_visual_description: characterVisualDescription,
               reference_strength: refStrength,
@@ -2513,7 +2515,7 @@ const sceneContext = analyzeSceneContent(response);
               selected_image_model: selectedImageModel || null,
               effective_image_model: effectiveImageModel,
               provider_name: providerName,
-              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               character_visual_description: characterVisualDescription,
               reference_strength: refStrength,
@@ -2566,7 +2568,7 @@ const sceneContext = analyzeSceneContent(response);
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',
-                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+                contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
                 scene_context: JSON.stringify(sceneContext),
                 character_visual_description: characterVisualDescription,
                 fallback_reason: 'unsupported_provider'
@@ -2598,7 +2600,7 @@ const sceneContext = analyzeSceneContent(response);
             model_used: 'sdxl',
             model_display_name: 'SDXL (Default)',
             provider_name: 'local',
-            contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+            contentType: contentTier === 'nsfw' || sceneContext.isNSFW ? 'nsfw' : 'sfw',
             scene_context: JSON.stringify(sceneContext),
             character_visual_description: characterVisualDescription,
             seed_locked: false

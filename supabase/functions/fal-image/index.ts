@@ -217,7 +217,8 @@ serve(async (req) => {
     };
 
     const jobType = normalizeJobType(body.job_type || body.jobType, isVideo, quality);
-    const contentMode = body.metadata?.contentType || 'sfw';
+    // Default to NSFW for this platform - safety checker off by default
+    const contentMode = body.metadata?.contentType || 'nsfw';
 
     // Detect if this is an i2i request
     const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
