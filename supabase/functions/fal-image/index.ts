@@ -358,8 +358,9 @@ serve(async (req) => {
       })
       .eq('id', jobData.id);
 
-    // Call fal.ai API using their queue endpoint
-    const falEndpoint = `https://queue.fal.run/${apiModel.model_key}`;
+    // Call fal.ai API using their synchronous endpoint
+    // Note: fal.run is for sync, queue.fal.run is for async/polling
+    const falEndpoint = `https://fal.run/${apiModel.model_key}`;
 
     console.log('🚀 Calling fal.ai API:', {
       endpoint: falEndpoint,

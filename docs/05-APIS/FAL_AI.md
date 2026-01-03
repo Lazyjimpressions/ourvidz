@@ -383,7 +383,8 @@ The fal-image edge function handles both image and video generation via fal.ai.
 Uses REST API directly (not SDK) for Deno compatibility:
 
 ```typescript
-const response = await fetch(`https://queue.fal.run/${model.model_key}`, {
+// Synchronous endpoint - returns results directly
+const response = await fetch(`https://fal.run/${model.model_key}`, {
   method: 'POST',
   headers: {
     'Authorization': `Key ${falApiKey}`,
@@ -391,6 +392,8 @@ const response = await fetch(`https://queue.fal.run/${model.model_key}`, {
   },
   body: JSON.stringify(modelInput)
 });
+
+// Note: queue.fal.run is for async/polling, fal.run is for sync
 ```
 
 ### Webhook Support (Future)
