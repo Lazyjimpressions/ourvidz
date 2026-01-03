@@ -642,16 +642,22 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       // Use the already computed reference strength from above
 
       const generationRequest = {
-        job_type: (mode === 'image' 
-          ? (selectedModel?.type === 'replicate' 
+        job_type: (mode === 'image'
+          ? (selectedModel?.type === 'replicate'
               ? (quality === 'high' ? 'rv51_high' : 'rv51_fast')
-              : (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'))
-          : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast')
+              : selectedModel?.type === 'fal'
+                ? 'fal_image'
+                : (quality === 'high' ? 'sdxl_image_high' : 'sdxl_image_fast'))
+          : (selectedModel?.type === 'fal'
+              ? 'fal_video'
+              : (quality === 'high' ? 'wan_video_high' : 'wan_video_fast'))
         ),
         prompt: finalPrompt,
         quality: quality,
         // format omitted - let edge function default based on job_type
-        model_type: mode === 'image' ? (selectedModel?.type === 'replicate' ? 'rv51' : 'sdxl') : 'wan',
+        model_type: mode === 'image'
+          ? (selectedModel?.type === 'replicate' ? 'rv51' : selectedModel?.type === 'fal' ? 'sdxl' : 'sdxl')
+          : (selectedModel?.type === 'fal' ? 'sdxl' : 'wan'),
         reference_image_url: effRefUrl,
         reference_strength: computedReferenceStrength,
         seed: finalSeed,
@@ -868,11 +874,13 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         };
         const dimensions = aspectRatioMap[finalAspectRatio] || { width: 1024, height: 1024 };
 
-        // Build fal.ai-specific payload
+        // Build fal.ai-specific payload (supports both image and video)
+        const isFalVideo = mode === 'video';
         requestPayload = {
           prompt: finalPrompt,
           apiModelId: selectedModel.id,
-          job_type: 'fal_image',
+          job_type: isFalVideo ? 'fal_video' : 'fal_image',
+          modality: isFalVideo ? 'video' : 'image',
           quality: quality,
           input: {
             image_size: dimensions,
@@ -880,15 +888,28 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             guidance_scale: guidanceScale,
             negative_prompt: negativePrompt,
             seed: lockSeed && finalSeed ? finalSeed : undefined,
-            // I2I parameters for reference images
-            image_url: effRefUrl || undefined,
-            strength: effRefUrl ? computedReferenceStrength : undefined
+            // I2I parameters for reference images (image mode)
+            image_url: !isFalVideo ? (effRefUrl || undefined) : undefined,
+            strength: !isFalVideo && effRefUrl ? computedReferenceStrength : undefined,
+            // Video-specific parameters
+            ...(isFalVideo && {
+              // For WAN I2V: start image is the reference image
+              image: startRefUrl || effRefUrl || undefined,
+              duration: videoDuration || 5,
+              // Motion intensity maps to num_inference_steps for video
+              num_inference_steps: Math.round(25 + (motionIntensity || 0.5) * 25)
+            })
           },
           metadata: {
             ...generationRequest.metadata,
             reference_image_url: effRefUrl,
+            start_reference_url: startRefUrl,
+            end_reference_url: endRefUrl,
             contentType: contentType,
-            aspectRatio: finalAspectRatio
+            aspectRatio: finalAspectRatio,
+            modality: isFalVideo ? 'video' : 'image',
+            duration: isFalVideo ? videoDuration : undefined,
+            motion_intensity: isFalVideo ? motionIntensity : undefined
           }
         };
       } else {

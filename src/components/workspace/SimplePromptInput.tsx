@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
-import { useImageModels } from '@/hooks/useApiModels';
+import { useImageModels, useVideoModels } from '@/hooks/useApiModels';
 import { useToast } from '@/hooks/use-toast';
 import { NegativePromptPresets } from '@/components/ui/negative-prompt-presets';
 
@@ -317,8 +317,9 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   targetGarments = [],
   onTargetGarmentsChange
 }) => {
-  // Fetch available image models from API
+  // Fetch available image and video models from API
   const { data: imageModels = [], isLoading: modelsLoading } = useImageModels();
+  const { data: videoModels = [], isLoading: videoModelsLoading } = useVideoModels();
 
   // Base negative prompt hook - use 'sdxl' for both model types to ensure consistency  
   const negativePromptModelType = mode === 'image' ? 'sdxl' : 'ltx';
@@ -339,6 +340,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showStylePopup, setShowStylePopup] = useState(false);
   const [showEnhancePopup, setShowEnhancePopup] = useState(false);
   const [showModelPopup, setShowModelPopup] = useState(false);
+  const [showVideoModelPopup, setShowVideoModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const { toast } = useToast();
@@ -878,15 +880,67 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                 ) : (
                   /* Video mode controls */
                   <div className="flex items-center gap-1">
-                    {/* Model Selection */}
-                    <button 
-                      onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')} 
+                    {/* Quality Toggle */}
+                    <button
+                      onClick={() => onQualityChange(quality === 'fast' ? 'high' : 'fast')}
                       className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
                         quality === 'high' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'
                       }`}
                     >
                       {quality === 'high' ? 'HIGH' : 'FAST'}
                     </button>
+
+                    {/* Video Model Selection */}
+                    <div className="relative">
+                      <button
+                        onClick={() => {
+                          setShowVideoModelPopup(!showVideoModelPopup);
+                          setShowEnhancePopup(false);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors min-w-[60px]"
+                      >
+                        {selectedModel?.type === 'fal' ? selectedModel.display_name : 'WAN'}
+                        <ChevronDown size={8} />
+                      </button>
+                      {showVideoModelPopup && (
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[120px] max-h-32 overflow-y-auto">
+                          {/* Built-in WAN option (local worker) */}
+                          <button
+                            onClick={() => {
+                              onSelectedModelChange?.({ id: 'wan', type: 'sdxl', display_name: 'WAN' });
+                              setShowVideoModelPopup(false);
+                            }}
+                            className={`w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors ${
+                              selectedModel?.id === 'wan' || !selectedModel?.type || selectedModel?.type === 'sdxl' ? 'bg-muted' : ''
+                            }`}
+                          >
+                            WAN (Local)
+                          </button>
+                          {/* API video models from database (fal, etc.) */}
+                          {!videoModelsLoading && videoModels.map((model) => (
+                            <button
+                              key={model.id}
+                              onClick={() => {
+                                onSelectedModelChange?.({
+                                  id: model.id,
+                                  type: model.api_providers.name as 'replicate' | 'fal',
+                                  display_name: model.display_name
+                                });
+                                setShowVideoModelPopup(false);
+                              }}
+                              className={`w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors ${
+                                selectedModel?.id === model.id ? 'bg-muted' : ''
+                              }`}
+                            >
+                              {model.display_name}
+                            </button>
+                          ))}
+                          {videoModelsLoading && (
+                            <div className="px-2 py-1 text-[10px] text-muted-foreground">Loading models...</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Length */}
                     <button 
