@@ -71,7 +71,8 @@ serve(async (req) => {
     }
 
     // Resolve API model configuration
-    let apiModel = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let apiModel: any = null;
 
     if (body.apiModelId) {
       // Use specific model by ID
@@ -140,6 +141,15 @@ serve(async (req) => {
       }
     }
 
+    // Guard: ensure apiModel is not null (TypeScript narrowing)
+    if (!apiModel) {
+      console.error('❌ No API model resolved');
+      return new Response(
+        JSON.stringify({ error: 'Failed to resolve API model' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      );
+    }
+
     // Validate provider is fal
     if (apiModel.api_providers.name !== 'fal') {
       console.error('❌ Invalid provider for fal-image function:', apiModel.api_providers.name);
@@ -159,11 +169,17 @@ serve(async (req) => {
       );
     }
 
+    // Capture model info for use later (avoids TypeScript narrowing issues in nested try-catch)
+    const modelKey = apiModel.model_key;
+    const modelDisplayName = apiModel.display_name;
+    const providerName = apiModel.api_providers.name;
+    const modelModality = apiModel.modality;
+
     console.log('✅ Using fal.ai model from database:', {
-      model_key: apiModel.model_key,
-      display_name: apiModel.display_name,
-      provider: apiModel.api_providers.name,
-      modality: apiModel.modality
+      model_key: modelKey,
+      display_name: modelDisplayName,
+      provider: providerName,
+      modality: modelModality
     });
 
     // Require prompt
@@ -498,33 +514,80 @@ serve(async (req) => {
         resultType
       });
 
+      // Download the image from fal.ai and upload to Supabase storage
+      // This is required for the realtime subscription to work (frontend expects temp_storage_path)
+      let storagePath = '';
+      let fileSizeBytes = 0;
+
+      try {
+        console.log('📥 Downloading image from fal.ai...');
+        const imageResponse = await fetch(resultUrl);
+        if (!imageResponse.ok) {
+          throw new Error(`Failed to download image: ${imageResponse.status}`);
+        }
+
+        const imageBuffer = await imageResponse.arrayBuffer();
+        fileSizeBytes = imageBuffer.byteLength;
+
+        // Generate storage path: workspace-temp/{user_id}/{job_id}_{timestamp}.{ext}
+        const extension = resultType === 'video' ? 'mp4' : 'png';
+        const timestamp = Date.now();
+        storagePath = `${user.id}/${jobData.id}_${timestamp}.${extension}`;
+
+        console.log('📤 Uploading to Supabase storage:', storagePath);
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('workspace-temp')
+          .upload(storagePath, imageBuffer, {
+            contentType: resultType === 'video' ? 'video/mp4' : 'image/png',
+            upsert: true
+          });
+
+        if (uploadError) {
+          console.error('❌ Failed to upload to storage:', uploadError);
+          // Fall back to using the external URL
+          storagePath = resultUrl;
+        } else {
+          console.log('✅ Image uploaded to storage:', uploadData.path);
+          storagePath = uploadData.path;
+        }
+      } catch (downloadError) {
+        console.error('❌ Failed to download/upload image:', downloadError);
+        // Fall back to using the external URL
+        storagePath = resultUrl;
+      }
+
       // Update job with result
       await supabase
         .from('jobs')
         .update({
           status: 'completed',
           completed_at: new Date().toISOString(),
-          result_url: resultUrl,
+          result_url: storagePath, // Use storage path for consistency
           metadata: {
             ...jobData.metadata,
             result_type: resultType,
             fal_response: falResult,
-            input_used: modelInput
+            input_used: modelInput,
+            original_fal_url: resultUrl // Keep original for reference
           }
         })
         .eq('id', jobData.id);
 
-      // Store in workspace_assets
+      // Store in workspace_assets with temp_storage_path (required for realtime subscription)
       const { error: assetError } = await supabase
         .from('workspace_assets')
         .insert({
           user_id: user.id,
           job_id: jobData.id,
           asset_type: resultType,
-          asset_url: resultUrl,
-          prompt: body.prompt,
-          metadata: {
-            model_key: apiModel.model_key,
+          temp_storage_path: storagePath, // ✅ Frontend expects this column, not asset_url
+          file_size_bytes: fileSizeBytes,
+          mime_type: resultType === 'video' ? 'video/mp4' : 'image/png',
+          original_prompt: body.prompt,
+          model_used: modelKey,
+          generation_settings: {
+            model_key: modelKey,
             provider: 'fal',
             content_mode: contentMode,
             generation_mode: generationMode
@@ -533,6 +596,8 @@ serve(async (req) => {
 
       if (assetError) {
         console.warn('⚠️ Failed to create workspace asset:', assetError);
+      } else {
+        console.log('✅ Workspace asset created with temp_storage_path');
       }
 
       return new Response(JSON.stringify({
