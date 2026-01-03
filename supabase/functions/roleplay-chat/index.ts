@@ -2290,7 +2290,7 @@ const sceneContext = analyzeSceneContent(response);
           // Fallback to SDXL
           imageResponse = await supabase.functions.invoke('queue-job', {
             body: {
-              prompt: enhancedScenePrompt,
+              prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
               job_type: 'sdxl_image_high',
               // No seed - use random for scene variety
               reference_image_url: character.reference_image_url,
@@ -2809,30 +2809,26 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
 // We need to optimize prompts to fit within 77 tokens while preserving the most important content
 
 /**
- * Estimate CLIP tokens (more accurate than character-based estimation)
- * CLIP uses a specific tokenizer - average is ~4.2 chars per token
+ * Estimate CLIP tokens (matches enhance-prompt's conservative approach)
+ * CLIP uses a specific tokenizer - use 4 chars per token (more conservative than 4.2)
  */
 function estimateCLIPTokens(text: string): number {
   if (!text || typeof text !== 'string') return 0;
-  // CLIP tokenizer is more efficient with punctuation and special chars
-  // Average: 4.2 characters per token
-  return Math.ceil(text.length / 4.2);
+  // Use 4 chars per token (matches enhance-prompt) - more conservative than 4.2
+  return Math.ceil(text.length / 4);
 }
 
 /**
  * Optimize prompt for CLIP's 77-token limit
- * Priority: Scenario description (MOST IMPORTANT) > Essential visual tags > Character name
- * Strategy: Preserve as much scenario as possible, compress everything else
+ * Strategy: Keep prompt VERY short - just essential scenario + minimal visual tags
+ * Use negative prompts for quality/style guidance (handled by replicate-image)
+ * 
+ * Approach matches enhance-prompt: simple truncation at natural break points
  */
 function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appearanceTags: string[] = []): string {
   const MAX_CLIP_TOKENS = 75; // Safety margin below 77 limit
-  const currentTokens = estimateCLIPTokens(fullPrompt);
-  
-  if (currentTokens <= MAX_CLIP_TOKENS) {
-    return fullPrompt; // Already within limit
-  }
-  
-  console.log(`⚠️ Prompt exceeds CLIP limit: ${currentTokens} tokens, optimizing to ${MAX_CLIP_TOKENS}...`);
+  const AVG_CHARS_PER_TOKEN = 4; // More conservative than 4.2 (matches enhance-prompt)
+  const TARGET_CHARS = MAX_CLIP_TOKENS * AVG_CHARS_PER_TOKEN; // 300 chars max
   
   // Extract scenario - this is the MOST IMPORTANT part
   const scenarioMatch = fullPrompt.match(/in the following scenario: (.+?)(?:\. Both characters|\. The character|\. Composition|$)/s);
@@ -2842,10 +2838,8 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
   const charMatch = fullPrompt.match(/showing (.+?)(?: \(|\s+\(|,|$)/);
   const charName = charMatch ? charMatch[1].trim().replace(/"/g, '') : '';
   
-  // ✅ CRITICAL FIX: Remove character name references from scenario to save tokens
-  // Character names in scenario waste tokens since we already have it in the prefix
+  // ✅ CRITICAL: Remove character name references from scenario to save tokens
   if (charName) {
-    // Remove full name and variations (with/without quotes, first name only, etc.)
     const nameParts = charName.split(' ');
     const firstName = nameParts[0];
     const fullNamePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
@@ -2856,53 +2850,18 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
       .replace(quotedNamePattern, '')
       .replace(fullNamePattern, '')
       .replace(firstNamePattern, '')
-      .replace(/\s+/g, ' ') // Clean up multiple spaces
+      .replace(/\s+/g, ' ')
       .trim();
-    
-    console.log(`🧹 Removed character name references from scenario, saved tokens`);
   }
   
-  // Extract ONLY visual appearance tags (not personality)
-  // Prefer appearance_tags array if available, otherwise extract from prompt
+  // Extract ONLY essential visual tags (limit to 3-4 most important)
   const visualTags = appearanceTags.length > 0 
-    ? appearanceTags.slice(0, 8).join(', ') 
-    : extractVisualTagsOnly(fullPrompt);
+    ? appearanceTags.slice(0, 4).join(', ') // Reduced from 8 to 4
+    : extractVisualTagsOnly(fullPrompt).split(', ').slice(0, 4).join(', ');
   
-  // Strategy: Allocate tokens as:
-  // - Scenario: 60 tokens (most important - preserve as much as possible)
-  // - Visual tags: 10 tokens
-  // - Character name: 2 tokens
-  // - Structure words: 3 tokens
-  
-  // Calculate max scenario length (60 tokens = ~252 chars)
-  const maxScenarioChars = 250;
-  
-  // Trim scenario if needed, but preserve the beginning (most important actions)
-  // Always trim at word boundaries to avoid mid-word cuts
-  if (scenario.length > maxScenarioChars) {
-    // Find a good breaking point (end of sentence, comma, or at least word boundary)
-    let breakPoint = maxScenarioChars;
-    const lastPeriod = scenario.lastIndexOf('.', maxScenarioChars);
-    const lastComma = scenario.lastIndexOf(',', maxScenarioChars);
-    const lastSpace = scenario.lastIndexOf(' ', maxScenarioChars);
-    
-    // Prefer sentence end, then comma, then at least word boundary
-    if (lastPeriod > maxScenarioChars - 50) {
-      breakPoint = lastPeriod + 1;
-    } else if (lastComma > maxScenarioChars - 30) {
-      breakPoint = lastComma + 1;
-    } else if (lastSpace > 0) {
-      breakPoint = lastSpace; // At least cut at word boundary, not mid-word
-    }
-    
-    scenario = scenario.substring(0, breakPoint).trim();
-    console.log(`✂️ Scenario trimmed to ${scenario.length} chars at word boundary`);
-  }
-  
-  // Build optimized prompt: Character name + essential visual tags + scenario
-  // Format: "CharacterName, tag1, tag2, tag3, scenario text"
+  // Build minimal prompt: Character name + 3-4 visual tags + scenario
+  // Format: "CharacterName, tag1, tag2, tag3, scenario"
   let optimized = '';
-  
   if (charName && visualTags) {
     optimized = `${charName}, ${visualTags}, ${scenario}`;
   } else if (charName) {
@@ -2913,73 +2872,36 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
     optimized = scenario;
   }
   
-  // Final check - if still too long, trim from the end (scenario) at word boundaries
-  let tokens = estimateCLIPTokens(optimized);
-  if (tokens > MAX_CLIP_TOKENS) {
-    const excessTokens = tokens - MAX_CLIP_TOKENS;
-    const charsToRemove = Math.ceil(excessTokens * 4.2);
+  // ✅ SIMPLIFIED: Use enhance-prompt's approach - simple truncation at natural break points
+  if (optimized.length > TARGET_CHARS) {
+    let cutoff = TARGET_CHARS;
+    const lastComma = optimized.lastIndexOf(',', cutoff);
+    const lastPeriod = optimized.lastIndexOf('.', cutoff);
+    const lastSpace = optimized.lastIndexOf(' ', cutoff);
     
-    // Find where scenario starts in optimized prompt
-    const scenarioStart = optimized.lastIndexOf(scenario);
-    if (scenarioStart > 0) {
-      const beforeScenario = optimized.substring(0, scenarioStart);
-      // Trim scenario at word boundary (find last space before cut point)
-      const targetScenarioLength = scenario.length - charsToRemove - 10;
-      let cutPoint = Math.max(0, targetScenarioLength);
-      
-      // Find last word boundary (space, period, comma) before cut point
-      // ✅ FIX: Search backwards from cutPoint to find the nearest boundary
-      let foundBoundary = false;
-      for (let i = cutPoint; i >= 0 && i > cutPoint - 20; i--) {
-        const char = scenario[i];
-        if (char === '.' || char === ',' || char === ' ') {
-          cutPoint = i + (char === ' ' ? 0 : 1); // Include punctuation, exclude space
-          foundBoundary = true;
-          break;
-        }
-      }
-      
-      // Fallback: find last space if no punctuation found
-      if (!foundBoundary) {
-        const lastSpace = scenario.lastIndexOf(' ', cutPoint);
-        if (lastSpace > 0) {
-          cutPoint = lastSpace;
-        }
-      }
-      
-      const scenarioPart = scenario.substring(0, cutPoint).trim();
-      optimized = `${beforeScenario}${scenarioPart}`;
-    } else {
-      // Fallback: trim from end at word boundary
-      const targetLength = optimized.length - charsToRemove - 10;
-      let cutPoint = Math.max(0, targetLength);
-      
-      // ✅ FIX: Search backwards from cutPoint to find the nearest boundary
-      let foundBoundary = false;
-      for (let i = cutPoint; i >= 0 && i > cutPoint - 20; i--) {
-        const char = optimized[i];
-        if (char === '.' || char === ',' || char === ' ') {
-          cutPoint = i + (char === ' ' ? 0 : 1); // Include punctuation, exclude space
-          foundBoundary = true;
-          break;
-        }
-      }
-      
-      // Fallback: find last space if no punctuation found
-      if (!foundBoundary) {
-        const lastSpace = optimized.lastIndexOf(' ', cutPoint);
-        if (lastSpace > 0) {
-          cutPoint = lastSpace;
-        }
-      }
-      
-      optimized = optimized.substring(0, cutPoint).trim();
+    // Prefer natural break points (matches enhance-prompt logic)
+    if (lastComma > cutoff * 0.8) {
+      cutoff = lastComma;
+    } else if (lastPeriod > cutoff * 0.8) {
+      cutoff = lastPeriod + 1;
+    } else if (lastSpace > cutoff * 0.9) {
+      cutoff = lastSpace;
     }
-    tokens = estimateCLIPTokens(optimized);
+    
+    optimized = optimized.substring(0, cutoff).trim();
+    
+    console.log('✂️ Token optimization applied (enhance-prompt style):', {
+      originalLength: fullPrompt.length,
+      optimizedLength: optimized.length,
+      cutoffPosition: cutoff,
+      estimatedTokens: Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN)
+    });
   }
   
-  console.log(`✅ Optimized prompt: ${tokens} tokens (was ${currentTokens})`);
+  const finalTokens = Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN);
+  console.log(`✅ Optimized prompt: ${finalTokens} tokens (target: ${MAX_CLIP_TOKENS})`);
   console.log(`📝 Optimized preview: ${optimized.substring(0, 150)}...`);
+  
   return optimized;
 }
 
