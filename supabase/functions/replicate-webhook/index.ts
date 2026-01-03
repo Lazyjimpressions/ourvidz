@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Replicate from "https://esm.sh/replicate@0.25.2"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -241,7 +242,67 @@ serve(async (req) => {
 
       console.log('🎨 Workspace asset created:', workspaceAsset.id)
 
-      // Update job to completed
+      // ✅ VALIDATION: Fetch actual prediction from Replicate to see what was actually used
+      let replicateActualInput = null;
+      let replicateActualOutput = null;
+      let promptLength = 0;
+      let promptTruncated = false;
+      
+      try {
+        const replicateApiToken = Deno.env.get('REPLICATE_API_TOKEN');
+        if (replicateApiToken) {
+          const replicate = new Replicate({ token: replicateApiToken });
+          const actualPrediction = await replicate.predictions.get(predictionId);
+          
+          console.log('🔍 VALIDATION: Fetched actual Replicate prediction:', {
+            id: actualPrediction.id,
+            status: actualPrediction.status,
+            has_input: !!actualPrediction.input,
+            has_output: !!actualPrediction.output,
+            input_keys: actualPrediction.input ? Object.keys(actualPrediction.input) : []
+          });
+          
+          replicateActualInput = actualPrediction.input;
+          replicateActualOutput = actualPrediction.output;
+          
+          // Check prompt length
+          if (actualPrediction.input?.prompt) {
+            promptLength = String(actualPrediction.input.prompt).length;
+            const originalPromptLength = job.original_prompt?.length || job.metadata?.prompt?.length || 0;
+            promptTruncated = promptLength < originalPromptLength;
+            
+            console.log('📏 VALIDATION: Prompt length check:', {
+              actual_length: promptLength,
+              original_length: originalPromptLength,
+              truncated: promptTruncated,
+              actual_prompt_preview: String(actualPrediction.input.prompt).substring(0, 100) + '...'
+            });
+            
+            if (promptTruncated) {
+              console.warn('⚠️ VALIDATION: Prompt appears to have been truncated by Replicate!');
+            }
+          }
+          
+          // Log what Replicate actually used vs what we sent
+          console.log('📊 VALIDATION: What we sent vs what Replicate used:', {
+            sent_seed: job.metadata?.input_used?.seed,
+            actual_seed: actualPrediction.input?.seed,
+            sent_strength: job.metadata?.input_used?.strength || job.metadata?.input_used?.prompt_strength,
+            actual_strength: actualPrediction.input?.strength || actualPrediction.input?.prompt_strength,
+            sent_image: !!job.metadata?.input_used?.image,
+            actual_image: !!actualPrediction.input?.image,
+            sent_prompt_length: job.original_prompt?.length || job.metadata?.prompt?.length || 0,
+            actual_prompt_length: promptLength
+          });
+        } else {
+          console.warn('⚠️ REPLICATE_API_TOKEN not configured, skipping validation fetch');
+        }
+      } catch (validationError) {
+        console.error('❌ Failed to fetch actual prediction for validation:', validationError);
+        // Don't fail the webhook if validation fetch fails
+      }
+
+      // Update job to completed with validation data
       await supabase
         .from('jobs')
         .update({ 
@@ -253,7 +314,12 @@ serve(async (req) => {
             output_url: imageUrl,
             output_snapshot: JSON.stringify(webhookPayload.output).substring(0, 500),
             storage_path: uploadData.path,
-            webhook_processed: true
+            webhook_processed: true,
+            // ✅ VALIDATION: Store what Replicate actually used
+            replicate_actual_input: replicateActualInput,
+            replicate_actual_output: replicateActualOutput,
+            prompt_length: promptLength,
+            prompt_truncated: promptTruncated
           }
         })
         .eq('id', job.id)

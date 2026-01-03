@@ -360,6 +360,78 @@ export const PromptDetailsSlider: React.FC<PromptDetailsSliderProps> = ({
                 </div>
               </div>
 
+              {/* ✅ VALIDATION: Replicate Actual Data - Show what Replicate actually used */}
+              {details?.replicateActualInput && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400" />
+                    <h4 className="font-medium text-xs">Replicate Validation</h4>
+                    <Badge variant="outline" className="text-xs border-blue-500/20 text-blue-400 px-1.5 py-0.5">
+                      actual API data
+                    </Badge>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    {details.promptLength !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Prompt Length:</span>
+                        <div className="flex items-center gap-1">
+                          <span>{details.promptLength} chars</span>
+                          {details.promptTruncated && (
+                            <Badge variant="destructive" className="text-xs px-1 py-0">
+                              Truncated
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {details.replicateActualInput?.seed !== undefined && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Actual Seed:</span>
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{details.replicateActualInput.seed}</code>
+                      </div>
+                    )}
+                    
+                    {(details.replicateActualInput?.strength !== undefined || details.replicateActualInput?.prompt_strength !== undefined) && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Actual Strength:</span>
+                        <span>{(details.replicateActualInput.strength || details.replicateActualInput.prompt_strength || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {details.replicateActualInput?.image && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Used Reference Image:</span>
+                        <Badge variant="default" className="text-xs px-1.5 py-0.5">Yes</Badge>
+                      </div>
+                    )}
+                    
+                    {details.replicateActualInput?.prompt && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Actual Prompt:</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => copyToClipboard(details.replicateActualInput.prompt, 'Actual prompt')}
+                            className="h-4 w-4 p-0"
+                            aria-label="Copy actual prompt"
+                          >
+                            <Copy className="h-2.5 w-2.5" />
+                          </Button>
+                        </div>
+                        <div className="text-xs bg-muted/50 p-2 rounded border max-h-20 overflow-y-auto">
+                          <p className="break-words leading-relaxed whitespace-pre-wrap">
+                            {String(details.replicateActualInput.prompt).substring(0, 200)}
+                            {String(details.replicateActualInput.prompt).length > 200 && '...'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Verified i2i Settings - Only show if referenceStrength exists (actual i2i job) */}
               {details?.referenceStrength && (
                 <div className="space-y-2">

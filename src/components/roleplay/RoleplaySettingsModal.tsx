@@ -794,68 +794,47 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                     <Label htmlFor="method" className="text-sm">Method</Label>
                     <Select 
                       value={localConsistencySettings.method} 
-                      onValueChange={(value: 'hybrid' | 'i2i_reference' | 'seed_locked') => 
-                        setLocalConsistencySettings({ ...localConsistencySettings, method: value })
-                      }
+                      onValueChange={(value: 'hybrid' | 'i2i_reference' | 'seed_locked') => {
+                        console.log('🎨 Consistency method changed:', value);
+                        setLocalConsistencySettings({ ...localConsistencySettings, method: value });
+                      }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select consistency method...">
-                          {localConsistencySettings.method === 'hybrid' && 'Hybrid'}
-                          {localConsistencySettings.method === 'i2i_reference' && 'Reference Image'}
-                          {localConsistencySettings.method === 'seed_locked' && 'Seed Locked'}
-                        </SelectValue>
+                        <SelectValue placeholder="Select consistency method..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem 
                           value="hybrid"
                           disabled={(!character?.reference_image_url && !character?.seed_locked)}
                         >
-                          <div className="flex flex-col">
-                            <span>Hybrid</span>
-                            <span className="text-xs text-muted-foreground">
-                              Combines seed locking with reference image
-                            </span>
-                            {(!character?.reference_image_url && !character?.seed_locked) && (
-                              <span className="text-xs text-amber-400 mt-1">
-                                Requires reference image or seed
-                              </span>
-                            )}
-                          </div>
+                          Hybrid
                         </SelectItem>
                         <SelectItem 
                           value="i2i_reference"
                           disabled={!character?.reference_image_url}
                         >
-                          <div className="flex flex-col">
-                            <span>Reference Image</span>
-                            <span className="text-xs text-muted-foreground">
-                              Uses reference image for character consistency
-                            </span>
-                            {!character?.reference_image_url && (
-                              <span className="text-xs text-amber-400 mt-1">
-                                Character needs a reference image
-                              </span>
-                            )}
-                          </div>
+                          Reference Image
                         </SelectItem>
                         <SelectItem 
                           value="seed_locked"
                           disabled={!character?.seed_locked}
                         >
-                          <div className="flex flex-col">
-                            <span>Seed Locked</span>
-                            <span className="text-xs text-muted-foreground">
-                              Uses fixed seed for consistent character generation
-                            </span>
-                            {!character?.seed_locked && (
-                              <span className="text-xs text-amber-400 mt-1">
-                                Character needs a locked seed value
-                              </span>
-                            )}
-                          </div>
+                          Seed Locked
                         </SelectItem>
                       </SelectContent>
                     </Select>
+                    {/* Method descriptions */}
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {localConsistencySettings.method === 'hybrid' && (
+                        <p>Combines seed locking with reference image for maximum consistency</p>
+                      )}
+                      {localConsistencySettings.method === 'i2i_reference' && (
+                        <p>Uses reference image for character consistency</p>
+                      )}
+                      {localConsistencySettings.method === 'seed_locked' && (
+                        <p>Uses fixed seed for consistent character generation</p>
+                      )}
+                    </div>
                     {localConsistencySettings.method === 'i2i_reference' && !character?.reference_image_url && (
                       <p className="text-xs text-amber-400 mt-1">
                         ⚠️ Reference Image method requires a character reference image. Falling back to hybrid or seed_locked.

@@ -20,10 +20,34 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
+    
+    // ✅ VALIDATION: Check prompt length
+    const promptLength = body.prompt?.length || 0;
+    const MAX_PROMPT_LENGTH = 2000; // Most Replicate models support up to 2000 chars, some more
+    const promptTooLong = promptLength > MAX_PROMPT_LENGTH;
+    
+    if (promptTooLong) {
+      console.warn(`⚠️ VALIDATION: Prompt is ${promptLength} chars, exceeds recommended ${MAX_PROMPT_LENGTH} chars`);
+    }
+    
     console.log('🎬 Replicate request received:', {
       prompt: body.prompt?.slice(0, 100),
+      prompt_length: promptLength,
+      prompt_too_long: promptTooLong,
       apiModelId: body.apiModelId,
       jobType: body.jobType
+    });
+    
+    // ✅ AUDIT: Log consistency settings received
+    console.log('📥 AUDIT: Consistency settings received:', {
+      consistency_method: body.metadata?.consistency_method,
+      reference_strength: body.metadata?.reference_strength,
+      denoise_strength: body.metadata?.denoise_strength,
+      seed_locked: body.metadata?.seed_locked,
+      seed_in_metadata: body.metadata?.seed,
+      input_object: body.input,
+      has_reference_image_url: !!body.reference_image_url,
+      reference_image_url_preview: body.reference_image_url ? body.reference_image_url.substring(0, 50) + '...' : null
     });
 
     // Get authenticated user
@@ -737,6 +761,23 @@ serve(async (req) => {
       model_type: normalizedModelType,
       final_negative_prompt: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : 'none'
     });
+    
+    // ✅ AUDIT: Log final payload being sent to Replicate API
+    console.log('📤 AUDIT: Final Replicate API payload:', JSON.stringify({
+      version: versionId,
+      model_key: apiModel.model_key,
+      model_identifier: modelIdentifier,
+      input: modelInput,
+      consistency_method: body.metadata?.consistency_method,
+      has_seed: 'seed' in modelInput,
+      seed_value: (modelInput as any).seed,
+      has_image: 'image' in modelInput,
+      image_preview: (modelInput as any).image ? String((modelInput as any).image).substring(0, 50) + '...' : null,
+      has_strength: 'strength' in modelInput || 'prompt_strength' in modelInput,
+      strength_value: (modelInput as any).strength || (modelInput as any).prompt_strength,
+      prompt_preview: modelInput.prompt?.substring(0, 100) + '...',
+      negative_prompt_preview: modelInput.negative_prompt ? modelInput.negative_prompt.substring(0, 100) + '...' : null
+    }, null, 2));
 
     // Create prediction with webhook
     const webhookUrl = `${supabaseUrl}/functions/v1/replicate-webhook`;

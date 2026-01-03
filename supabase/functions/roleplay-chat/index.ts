@@ -2356,34 +2356,51 @@ const sceneContext = analyzeSceneContent(response);
             });
           }
           
+          // ✅ AUDIT: Log what we're sending to replicate-image
+          const requestBody = {
+            prompt: enhancedScenePrompt,
+            apiModelId: modelConfig.id,
+            jobType: replicateJobType,
+            reference_image_url: character.reference_image_url, // Top level for detection
+            input: Object.keys(input).length > 0 ? input : undefined, // Only include if not empty
+            metadata: {
+              destination: 'roleplay_scene',
+              character_id: characterId,
+              character_name: character.name,
+              scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+              conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
+              scene_type: 'chat_scene',
+              consistency_method: finalConsistencyMethod,
+              model_used: modelConfig.model_key,
+              model_display_name: modelConfig.display_name,
+              provider_name: providerName,
+              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              scene_context: JSON.stringify(sceneContext),
+              character_visual_description: characterVisualDescription,
+              reference_strength: refStrength,
+              denoise_strength: denoiseStrength,
+              seed_locked: seedLocked,
+              seed: seedLocked // Also in metadata for fallback detection
+            }
+          };
+          
+          console.log('📤 AUDIT: Sending to replicate-image:', JSON.stringify({
+            consistency_method: finalConsistencyMethod,
+            requiresSeed,
+            requiresI2I,
+            input_object: input,
+            has_reference_image: !!character.reference_image_url,
+            reference_strength: refStrength,
+            denoise_strength: denoiseStrength,
+            seed_locked: seedLocked,
+            prompt_preview: enhancedScenePrompt.substring(0, 100) + '...',
+            apiModelId: modelConfig.id,
+            jobType: replicateJobType
+          }, null, 2));
+          
           imageResponse = await supabase.functions.invoke('replicate-image', {
             headers,
-            body: {
-              prompt: enhancedScenePrompt,
-              apiModelId: modelConfig.id,
-              jobType: replicateJobType,
-              reference_image_url: character.reference_image_url, // Top level for detection
-              input: Object.keys(input).length > 0 ? input : undefined, // Only include if not empty
-              metadata: {
-                destination: 'roleplay_scene',
-                character_id: characterId,
-                character_name: character.name,
-                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
-                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
-                scene_type: 'chat_scene',
-                consistency_method: finalConsistencyMethod,
-                model_used: modelConfig.model_key,
-                model_display_name: modelConfig.display_name,
-                provider_name: providerName,
-                contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
-                scene_context: JSON.stringify(sceneContext),
-                character_visual_description: characterVisualDescription,
-                reference_strength: refStrength,
-                denoise_strength: denoiseStrength,
-                seed_locked: seedLocked,
-                seed: seedLocked // Also in metadata for fallback detection
-              }
-            }
+            body: requestBody
           });
         } else {
           // Other API providers are not supported - fallback to SDXL

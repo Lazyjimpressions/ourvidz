@@ -25,6 +25,11 @@ interface ImageDetails {
   cameraAngle?: string;
   shotType?: string;
   style?: string;
+  // ✅ VALIDATION: Replicate actual data
+  replicateActualInput?: any;
+  replicateActualOutput?: any;
+  promptLength?: number;
+  promptTruncated?: boolean;
 }
 
 export const useFetchImageDetails = () => {
@@ -89,7 +94,8 @@ export const useFetchImageDetails = () => {
               enhancedPrompt: !!enhancedPrompt, 
               templateName: !!templateName,
               jobType,
-              hasJobMetadata: !!jobData.metadata
+              hasJobMetadata: !!jobData.metadata,
+              hasReplicateValidation: !!(jobData.metadata?.replicate_actual_input || jobData.metadata?.replicate_actual_output)
             });
           }
         }
@@ -102,6 +108,12 @@ export const useFetchImageDetails = () => {
           denoiseStrength = 1 - settings.referenceStrength;
         }
 
+        // ✅ VALIDATION: Extract Replicate validation data from job metadata
+        const replicateActualInput = settings?.replicate_actual_input;
+        const replicateActualOutput = settings?.replicate_actual_output;
+        const promptLength = settings?.prompt_length;
+        const promptTruncated = settings?.prompt_truncated;
+        
         setDetails({
           originalPrompt: workspaceAsset.original_prompt,
           enhancedPrompt,
@@ -124,7 +136,12 @@ export const useFetchImageDetails = () => {
           aspectRatio: settings?.aspect_ratio || settings?.aspectRatio,
           cameraAngle: settings?.camera_angle || settings?.cameraAngle,
           shotType: settings?.shot_type || settings?.shotType,
-          style: settings?.style
+          style: settings?.style,
+          // ✅ VALIDATION: Replicate actual data
+          replicateActualInput,
+          replicateActualOutput,
+          promptLength,
+          promptTruncated
         });
         return;
       }
