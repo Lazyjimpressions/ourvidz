@@ -575,6 +575,9 @@ serve(async (req) => {
         .eq('id', jobData.id);
 
       // Store in workspace_assets with temp_storage_path (required for realtime subscription)
+      // Extract seed from fal.ai response (required for workspace_assets NOT NULL constraint)
+      const generationSeed = falResult.seed || Math.floor(Math.random() * 1000000000);
+
       const { error: assetError } = await supabase
         .from('workspace_assets')
         .insert({
@@ -586,11 +589,13 @@ serve(async (req) => {
           mime_type: resultType === 'video' ? 'video/mp4' : 'image/png',
           original_prompt: body.prompt,
           model_used: modelKey,
+          generation_seed: generationSeed, // ✅ Required: NOT NULL constraint
           generation_settings: {
             model_key: modelKey,
             provider: 'fal',
             content_mode: contentMode,
-            generation_mode: generationMode
+            generation_mode: generationMode,
+            seed: generationSeed
           }
         });
 
