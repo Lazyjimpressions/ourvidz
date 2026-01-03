@@ -2330,14 +2330,40 @@ const sceneContext = analyzeSceneContent(response);
               console.warn('🎨⚠️ Unknown Replicate model, using image_high as fallback:', modelConfig.model_key);
           }
           
+          // ✅ FIX: Determine consistency method and build input object accordingly
+          const finalConsistencyMethod = consistencySettings?.method || consistencyMethod;
+          const requiresSeed = finalConsistencyMethod === 'seed_locked' || finalConsistencyMethod === 'hybrid';
+          const requiresI2I = finalConsistencyMethod === 'i2i_reference' || finalConsistencyMethod === 'hybrid';
+          
+          // Build input object for Replicate based on consistency method
+          const input: Record<string, any> = {};
+          
+          // Add seed if method requires it
+          if (requiresSeed && seedLocked !== null && seedLocked !== undefined) {
+            input.seed = seedLocked;
+            console.log('🔒 Seed locked method: passing seed to Replicate input:', seedLocked);
+          }
+          
+          // Add image and strength if method requires i2i
+          if (requiresI2I && character.reference_image_url) {
+            input.image = character.reference_image_url;
+            // Map reference_strength to strength (Replicate uses strength, not denoise_strength)
+            // Strength is inverse of denoise: higher reference_strength = lower strength
+            input.strength = refStrength !== undefined ? refStrength : 0.7;
+            console.log('🖼️ I2I method: passing reference image and strength to Replicate input:', {
+              image: character.reference_image_url.substring(0, 50) + '...',
+              strength: input.strength
+            });
+          }
+          
           imageResponse = await supabase.functions.invoke('replicate-image', {
             headers,
             body: {
               prompt: enhancedScenePrompt,
               apiModelId: modelConfig.id,
               jobType: replicateJobType,
-              // No seed - use random for scene variety
-              reference_image_url: character.reference_image_url,
+              reference_image_url: character.reference_image_url, // Top level for detection
+              input: Object.keys(input).length > 0 ? input : undefined, // Only include if not empty
               metadata: {
                 destination: 'roleplay_scene',
                 character_id: characterId,
@@ -2345,7 +2371,7 @@ const sceneContext = analyzeSceneContent(response);
                 scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
                 conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
                 scene_type: 'chat_scene',
-                consistency_method: consistencySettings?.method || consistencyMethod,
+                consistency_method: finalConsistencyMethod,
                 model_used: modelConfig.model_key,
                 model_display_name: modelConfig.display_name,
                 provider_name: providerName,
@@ -2355,7 +2381,7 @@ const sceneContext = analyzeSceneContent(response);
                 reference_strength: refStrength,
                 denoise_strength: denoiseStrength,
                 seed_locked: seedLocked,
-                seed: seedLocked
+                seed: seedLocked // Also in metadata for fallback detection
               }
             }
           });

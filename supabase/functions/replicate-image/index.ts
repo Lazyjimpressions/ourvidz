@@ -469,15 +469,24 @@ serve(async (req) => {
           );
         }
         
-        // Map strength field
+        // ✅ FIX: Map strength field - prioritize reference_strength from metadata when consistency method requires i2i
+        const consistencyMethod = body.metadata?.consistency_method;
+        const requiresI2I = consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid';
+        
         let strengthValue = body.input[strengthKey] || body.input.prompt_strength;
         if (strengthValue === undefined && body.metadata) {
-          strengthValue = body.metadata.reference_strength || body.metadata.denoise_strength;
+          // Prioritize reference_strength from metadata when consistency method requires i2i
+          if (requiresI2I && body.metadata.reference_strength !== undefined) {
+            strengthValue = body.metadata.reference_strength;
+            console.log(`💪 Using reference_strength from metadata for ${consistencyMethod}: ${strengthValue}`);
+          } else {
+            strengthValue = body.metadata.reference_strength || body.metadata.denoise_strength;
+          }
         }
         
         if (strengthValue !== undefined) {
           modelInput[strengthKey] = Math.min(Math.max(parseFloat(strengthValue), 0.1), 1.0);
-          console.log(`💪 Mapped i2i strength: ${strengthKey} = ${modelInput[strengthKey]}`);
+          console.log(`💪 Mapped i2i strength: ${strengthKey} = ${modelInput[strengthKey]} (method: ${consistencyMethod || 'unknown'})`);
         } else {
           // Default strength for i2i
           modelInput[strengthKey] = 0.7;
@@ -495,9 +504,23 @@ serve(async (req) => {
       
       // Skip individual negative_prompt mapping - we compose it separately
       
-      // Map seed (always applies)
-      if (body.input.seed !== undefined) {
+      // ✅ FIX: Map seed only if consistency method requires it
+      const consistencyMethod = body.metadata?.consistency_method;
+      const requiresSeed = consistencyMethod === 'seed_locked' || consistencyMethod === 'hybrid';
+      
+      if (requiresSeed) {
+        // Check multiple sources for seed, prioritize input.seed
+        const seedValue = body.input?.seed ?? body.seed ?? body.metadata?.seed;
+        if (seedValue !== undefined && seedValue !== null) {
+          modelInput.seed = Math.min(Math.max(parseInt(seedValue), 0), 2147483647);
+          console.log(`🔒 Consistency method "${consistencyMethod}" requires seed: ${modelInput.seed}`);
+        } else {
+          console.warn(`⚠️ Consistency method "${consistencyMethod}" requires seed but none provided`);
+        }
+      } else if (body.input.seed !== undefined) {
+        // If seed provided but not required by method, still apply it (for backward compatibility)
         modelInput.seed = Math.min(Math.max(body.input.seed, 0), 2147483647);
+        console.log(`🔧 Seed provided but not required by method "${consistencyMethod}", applying anyway: ${modelInput.seed}`);
       }
       
         // Map scheduler strictly using database capabilities
@@ -542,9 +565,21 @@ serve(async (req) => {
       });
     }
     
-    // Ensure seed mapping from top-level when not provided in input
-    if ((modelInput as any).seed === undefined && body.seed !== undefined) {
+    // ✅ FIX: Ensure seed mapping from top-level or metadata when consistency method requires it
+    const consistencyMethod = body.metadata?.consistency_method;
+    const requiresSeed = consistencyMethod === 'seed_locked' || consistencyMethod === 'hybrid';
+    
+    if (requiresSeed && (modelInput as any).seed === undefined) {
+      // Check top-level seed, then metadata seed
+      const seedValue = body.seed ?? body.metadata?.seed;
+      if (seedValue !== undefined && seedValue !== null) {
+        (modelInput as any).seed = Math.min(Math.max(parseInt(seedValue), 0), 2147483647);
+        console.log(`🔒 Applied seed from top-level/metadata for ${consistencyMethod}: ${(modelInput as any).seed}`);
+      }
+    } else if (!requiresSeed && (modelInput as any).seed === undefined && body.seed !== undefined) {
+      // Backward compatibility: apply seed even if not required
       (modelInput as any).seed = Math.min(Math.max(body.seed, 0), 2147483647);
+      console.log(`🔧 Applied seed from top-level (not required by method): ${(modelInput as any).seed}`);
     }
 
     // Handle i2i mapping even if input block is missing
@@ -587,11 +622,27 @@ serve(async (req) => {
         (modelInput as any)[imageKey] = imageValue;
       }
 
-      let strengthValue = body.input?.[strengthKey] ?? body.input?.prompt_strength ?? body.metadata?.reference_strength ?? body.metadata?.denoise_strength;
+      // ✅ FIX: Prioritize reference_strength from metadata when consistency method requires i2i
+      const consistencyMethod = body.metadata?.consistency_method;
+      const requiresI2I = consistencyMethod === 'i2i_reference' || consistencyMethod === 'hybrid';
+      
+      let strengthValue = body.input?.[strengthKey] ?? body.input?.prompt_strength;
+      if (strengthValue === undefined && body.metadata) {
+        // Prioritize reference_strength from metadata when consistency method requires i2i
+        if (requiresI2I && body.metadata.reference_strength !== undefined) {
+          strengthValue = body.metadata.reference_strength;
+          console.log(`💪 Using reference_strength from metadata for ${consistencyMethod}: ${strengthValue}`);
+        } else {
+          strengthValue = body.metadata.reference_strength ?? body.metadata.denoise_strength;
+        }
+      }
+      
       if (strengthValue !== undefined) {
         (modelInput as any)[strengthKey] = Math.min(Math.max(parseFloat(strengthValue), 0.1), 1.0);
+        console.log(`💪 Mapped i2i strength (fallback): ${strengthKey} = ${(modelInput as any)[strengthKey]} (method: ${consistencyMethod || 'unknown'})`);
       } else if ((modelInput as any)[strengthKey] === undefined) {
         (modelInput as any)[strengthKey] = 0.7;
+        console.log(`💪 Using default i2i strength (fallback): ${strengthKey} = ${(modelInput as any)[strengthKey]}`);
       }
     }
 

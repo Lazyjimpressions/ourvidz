@@ -1370,6 +1370,11 @@ const MobileRoleplayChat: React.FC = () => {
           onUserCharacterChange={setSelectedUserCharacterId}
           sceneStyle={sceneStyle}
           onSceneStyleChange={setSceneStyle}
+          characterId={characterId || undefined}
+          character={character ? {
+            reference_image_url: character.reference_image_url,
+            seed_locked: (character as any).seed_locked
+          } : null}
         />
 
         {/* Quick Settings Drawer (Mobile) - Auto-saves to localStorage */}

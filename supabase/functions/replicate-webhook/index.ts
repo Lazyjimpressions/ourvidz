@@ -260,6 +260,65 @@ serve(async (req) => {
 
       console.log('✅ Job completed via webhook:', job.id)
 
+      // ✅ FIX: Handle roleplay_scene destination - link images to character_scenes
+      if (job.metadata?.destination === 'roleplay_scene') {
+        const sceneId = job.metadata.scene_id;
+        const characterId = job.metadata.character_id;
+        
+        if (sceneId && workspaceAsset) {
+          try {
+            // Update character_scenes record with image URL
+            const imageUrl = workspaceAsset.temp_storage_path;
+            const { error: sceneUpdateError } = await supabase
+              .from('character_scenes')
+              .update({
+                image_url: imageUrl,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', sceneId);
+
+            if (!sceneUpdateError) {
+              console.log(`✅ Scene ${sceneId} updated with image URL: ${imageUrl}`);
+            } else {
+              console.error('Failed to update scene with image URL:', sceneUpdateError);
+            }
+          } catch (error) {
+            console.error('Error updating roleplay scene:', error);
+          }
+        } else if (characterId && workspaceAsset && !sceneId) {
+          // Fallback: If no scene_id but we have character_id, try to find scene
+          console.log('⚠️ No scene_id in metadata, attempting to find scene by character_id and conversation_id');
+          const conversationId = job.metadata.conversation_id;
+          
+          if (conversationId) {
+            // Try to find existing scene for this conversation
+            const { data: existingScene, error: findError } = await supabase
+              .from('character_scenes')
+              .select('id')
+              .eq('character_id', characterId)
+              .eq('conversation_id', conversationId)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (!findError && existingScene) {
+              const imageUrl = workspaceAsset.temp_storage_path;
+              const { error: sceneUpdateError } = await supabase
+                .from('character_scenes')
+                .update({
+                  image_url: imageUrl,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', existingScene.id);
+
+              if (!sceneUpdateError) {
+                console.log(`✅ Found and updated scene ${existingScene.id} with image URL`);
+              }
+            }
+          }
+        }
+      }
+
       return new Response(JSON.stringify({ 
         success: true, 
         jobId: job.id,

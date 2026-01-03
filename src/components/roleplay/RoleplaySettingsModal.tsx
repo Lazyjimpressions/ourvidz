@@ -32,6 +32,12 @@ interface RoleplaySettingsModalProps {
   onUserCharacterChange?: (characterId: string | null) => void;
   sceneStyle?: SceneStyle;
   onSceneStyleChange?: (style: SceneStyle) => void;
+  // Character data for validation
+  characterId?: string;
+  character?: {
+    reference_image_url?: string | null;
+    seed_locked?: number | null;
+  } | null;
 }
 
 export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
@@ -48,7 +54,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
   selectedUserCharacterId,
   onUserCharacterChange,
   sceneStyle = 'character_only',
-  onSceneStyleChange
+  onSceneStyleChange,
+  characterId,
+  character
 }) => {
   const { allModelOptions, defaultModel: defaultChatModel, isLoading: modelsLoading, chatWorkerHealthy } = useRoleplayModels();
   const { modelOptions: imageModelOptions, defaultModel: defaultImageModel, isLoading: imageModelsLoading, sdxlWorkerHealthy } = useImageModels();
@@ -777,7 +785,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
               {/* Consistency Settings */}
               <Card className="p-4">
                 <div className="space-y-4">
-                  <Label className="font-medium">Image Consistency</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="font-medium">Image Consistency</Label>
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </div>
                   
                   <div className="space-y-2">
                     <Label htmlFor="method" className="text-sm">Method</Label>
@@ -788,14 +799,78 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select consistency method...">
+                          {localConsistencySettings.method === 'hybrid' && 'Hybrid'}
+                          {localConsistencySettings.method === 'i2i_reference' && 'Reference Image'}
+                          {localConsistencySettings.method === 'seed_locked' && 'Seed Locked'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="hybrid">Hybrid</SelectItem>
-                        <SelectItem value="i2i_reference">Reference Image</SelectItem>
-                        <SelectItem value="seed_locked">Seed Locked</SelectItem>
+                        <SelectItem 
+                          value="hybrid"
+                          disabled={(!character?.reference_image_url && !character?.seed_locked)}
+                        >
+                          <div className="flex flex-col">
+                            <span>Hybrid</span>
+                            <span className="text-xs text-muted-foreground">
+                              Combines seed locking with reference image
+                            </span>
+                            {(!character?.reference_image_url && !character?.seed_locked) && (
+                              <span className="text-xs text-amber-400 mt-1">
+                                Requires reference image or seed
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                        <SelectItem 
+                          value="i2i_reference"
+                          disabled={!character?.reference_image_url}
+                        >
+                          <div className="flex flex-col">
+                            <span>Reference Image</span>
+                            <span className="text-xs text-muted-foreground">
+                              Uses reference image for character consistency
+                            </span>
+                            {!character?.reference_image_url && (
+                              <span className="text-xs text-amber-400 mt-1">
+                                Character needs a reference image
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
+                        <SelectItem 
+                          value="seed_locked"
+                          disabled={!character?.seed_locked}
+                        >
+                          <div className="flex flex-col">
+                            <span>Seed Locked</span>
+                            <span className="text-xs text-muted-foreground">
+                              Uses fixed seed for consistent character generation
+                            </span>
+                            {!character?.seed_locked && (
+                              <span className="text-xs text-amber-400 mt-1">
+                                Character needs a locked seed value
+                              </span>
+                            )}
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
+                    {localConsistencySettings.method === 'i2i_reference' && !character?.reference_image_url && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        ⚠️ Reference Image method requires a character reference image. Falling back to hybrid or seed_locked.
+                      </p>
+                    )}
+                    {localConsistencySettings.method === 'seed_locked' && !character?.seed_locked && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        ⚠️ Seed Locked method requires a character seed value. Falling back to hybrid or i2i_reference.
+                      </p>
+                    )}
+                    {localConsistencySettings.method === 'hybrid' && !character?.reference_image_url && !character?.seed_locked && (
+                      <p className="text-xs text-amber-400 mt-1">
+                        ⚠️ Hybrid method requires either a reference image or seed value. Some features may not work.
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
