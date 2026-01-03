@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Camera, Video, Upload, X, Image, ChevronUp, ChevronDown, Settings } from 'lucide-react';
 import { toast } from 'sonner';
-import { useImageModels } from '@/hooks/useApiModels';
+import { useImageModels, useVideoModels } from '@/hooks/useApiModels';
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -16,8 +16,8 @@ export interface MobileSimplePromptInputProps {
   isGenerating: boolean;
   currentMode: 'image' | 'video';
   onModeToggle: (mode: 'image' | 'video') => void;
-  selectedModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
-  onModelChange: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string }) => void;
+  selectedModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null;
+  onModelChange: (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }) => void;
   quality: 'fast' | 'high';
   onQualityChange: (quality: 'fast' | 'high') => void;
   onReferenceImageSet?: (file: File, type: 'single' | 'start' | 'end') => void;
@@ -47,6 +47,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
   onCollapsedChange
 }) => {
   const { data: imageModels, isLoading: modelsLoading } = useImageModels();
+  const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
   const [referenceImages, setReferenceImages] = useState<{
     single?: File;
     start?: File;
@@ -199,21 +200,19 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             {/* Model & Quality Selection for Images */}
             {currentMode === 'image' && (
               <div className="flex items-center gap-2">
-                <Select 
-                  value={selectedModel?.id || ''} 
+                <Select
+                  value={selectedModel?.id || ''}
                   onValueChange={(modelId) => {
                     if (modelId === 'sdxl') {
                       onModelChange({ id: 'sdxl', type: 'sdxl', display_name: 'SDXL' });
                     } else {
-                      // Find the selected replicate model
-                      const replicateModel = imageModels?.find(m => 
-                        m.id === modelId && m.api_providers.name === 'replicate'
-                      );
-                      if (replicateModel) {
+                      // Find the selected API model (replicate or fal)
+                      const apiModel = imageModels?.find(m => m.id === modelId);
+                      if (apiModel) {
                         onModelChange({
-                          id: replicateModel.id,
-                          type: 'replicate',
-                          display_name: replicateModel.display_name
+                          id: apiModel.id,
+                          type: apiModel.api_providers.name as 'replicate' | 'fal',
+                          display_name: apiModel.display_name
                         });
                       }
                     }
@@ -223,8 +222,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     <SelectValue placeholder="Select Model" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="sdxl">SDXL</SelectItem>
-                    {!modelsLoading && imageModels?.filter(m => m.api_providers.name === 'replicate').map(model => (
+                    <SelectItem value="sdxl">SDXL (Local)</SelectItem>
+                    {!modelsLoading && imageModels?.map(model => (
                       <SelectItem key={model.id} value={model.id}>
                         {model.display_name}
                       </SelectItem>
@@ -243,17 +242,49 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
               </div>
             )}
 
-            {/* Quality Selection for Videos */}
+            {/* Model & Quality Selection for Videos */}
             {currentMode === 'video' && (
-              <Select value={quality} onValueChange={(value: 'fast' | 'high') => onQualityChange(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fast">Fast</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select
+                  value={selectedModel?.id || 'wan'}
+                  onValueChange={(modelId) => {
+                    if (modelId === 'wan') {
+                      onModelChange({ id: 'wan', type: 'sdxl', display_name: 'WAN' });
+                    } else {
+                      // Find the selected API video model (fal, etc.)
+                      const apiModel = videoModels?.find(m => m.id === modelId);
+                      if (apiModel) {
+                        onModelChange({
+                          id: apiModel.id,
+                          type: apiModel.api_providers.name as 'replicate' | 'fal',
+                          display_name: apiModel.display_name
+                        });
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select Model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="wan">WAN (Local)</SelectItem>
+                    {!videoModelsLoading && videoModels?.map(model => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.display_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={quality} onValueChange={(value: 'fast' | 'high') => onQualityChange(value)}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fast">Fast</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             )}
 
             {/* Reference Image Upload */}

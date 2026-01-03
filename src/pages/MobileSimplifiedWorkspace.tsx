@@ -87,7 +87,7 @@ const MobileSimplifiedWorkspace = () => {
     updateMode(mode);
   };
 
-  const handleModelChange = (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string }) => {
+  const handleModelChange = (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }) => {
     console.log('🔄 MOBILE WORKSPACE: Model changed to:', model);
     setSelectedModel(model);
   };
