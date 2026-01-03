@@ -2478,6 +2478,62 @@ const sceneContext = analyzeSceneContent(response);
             headers,
             body: requestBody
           });
+        } else if (providerName === 'fal') {
+          // Route to fal-image edge function
+          const headers: Record<string, string> = {};
+          if (authHeader) {
+            headers['authorization'] = authHeader;
+          }
+
+          // Build fal.ai-specific request body
+          const falRequestBody = {
+            prompt: enhancedScenePrompt, // Use full prompt - fal.ai has 8K+ char limits
+            apiModelId: modelConfig.id,
+            job_type: 'fal_image',
+            quality: 'high',
+            input: {
+              image_size: { width: 1024, height: 1024 },
+              num_inference_steps: 30,
+              guidance_scale: 7.5,
+              seed: seedLocked ?? undefined,
+              // I2I parameters if reference image exists
+              image_url: character.reference_image_url || undefined,
+              strength: character.reference_image_url ? (refStrength ?? 0.7) : undefined
+            },
+            metadata: {
+              destination: 'roleplay_scene',
+              character_id: characterId,
+              character_name: character.name,
+              scene_id: sceneId,
+              conversation_id: conversationId || null,
+              scene_type: 'chat_scene',
+              consistency_method: finalConsistencyMethod,
+              model_used: modelConfig.model_key,
+              model_display_name: modelConfig.display_name,
+              selected_image_model: selectedImageModel || null,
+              effective_image_model: effectiveImageModel,
+              provider_name: providerName,
+              contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
+              scene_context: JSON.stringify(sceneContext),
+              character_visual_description: characterVisualDescription,
+              reference_strength: refStrength,
+              seed_locked: seedLocked
+            }
+          };
+
+          console.log('📤 AUDIT: Sending to fal-image:', JSON.stringify({
+            consistency_method: finalConsistencyMethod,
+            has_reference_image: !!character.reference_image_url,
+            reference_strength: refStrength,
+            seed_locked: seedLocked,
+            prompt_length: enhancedScenePrompt.length,
+            apiModelId: modelConfig.id
+          }, null, 2));
+
+          imageResponse = await supabase.functions.invoke('fal-image', {
+            headers,
+            body: falRequestBody
+          });
         } else {
           // Other API providers are not supported - fallback to SDXL
           console.warn('🎨⚠️ Unsupported API provider, falling back to SDXL:', providerName);

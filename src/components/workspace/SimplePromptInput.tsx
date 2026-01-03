@@ -188,9 +188,9 @@ export interface SimplePromptInputProps {
   // Enhancement model selection
   enhancementModel?: 'qwen_base' | 'qwen_instruct' | 'none';
   onEnhancementModelChange?: (model: 'qwen_base' | 'qwen_instruct' | 'none') => void;
-  // Model selection (SDXL or Replicate models from database)
-  selectedModel?: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
-  onSelectedModelChange?: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => void;
+  // Model selection (SDXL or API models from database - replicate, fal, etc.)
+  selectedModel?: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null;
+  onSelectedModelChange?: (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => void;
   // Exact copy workflow
   exactCopyMode?: boolean;
   onExactCopyModeChange?: (on: boolean) => void;
@@ -702,15 +702,15 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                           >
                             SDXL
                           </button>
-                          {/* Replicate models from database */}
+                          {/* API models from database (replicate, fal, etc.) */}
                           {!modelsLoading && imageModels.map((model) => (
-                            <button 
+                            <button
                               key={model.id}
                               onClick={() => {
-                                onSelectedModelChange?.({ 
-                                  id: model.id, 
-                                  type: 'replicate', 
-                                  display_name: model.display_name 
+                                onSelectedModelChange?.({
+                                  id: model.id,
+                                  type: model.api_providers.name as 'replicate' | 'fal',
+                                  display_name: model.display_name
                                 });
                                 setShowModelPopup(false);
                               }}

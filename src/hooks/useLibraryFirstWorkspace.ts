@@ -21,7 +21,7 @@ export interface LibraryFirstWorkspaceState {
   referenceStrength: number;
   contentType: 'sfw' | 'nsfw';
   quality: 'fast' | 'high';
-  selectedModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null;
+  selectedModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null;
   
   // Video-specific State
   beginningRefImage: File | null;
@@ -86,7 +86,7 @@ export interface LibraryFirstWorkspaceActions {
   setReferenceStrength: (strength: number) => void;
   setContentType: (type: 'sfw' | 'nsfw') => void;
   setQuality: (quality: 'fast' | 'high') => void;
-  setSelectedModel: (model: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => void;
+  setSelectedModel: (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => void;
   setBeginningRefImage: (image: File | null) => void;
   setEndingRefImage: (image: File | null) => void;
   setVideoDuration: (duration: number) => void;
@@ -164,7 +164,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [contentType, setContentType] = useState<'sfw' | 'nsfw'>('nsfw');
   const [quality, setQuality] = useState<'fast' | 'high'>('high');
   // Model Type Selection
-  const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate'; display_name: string } => {
+  const initializeSelectedModel = (): { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } => {
     // Check localStorage for full model object (new format)
     const savedModel = localStorage.getItem('workspace-selected-model');
     if (savedModel) {
@@ -191,7 +191,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     return { id: 'sdxl', type: 'sdxl', display_name: 'SDXL' };
   };
   
-  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate'; display_name: string }>(() => {
+  const [selectedModel, setSelectedModelInternal] = useState<{ id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string }>(() => {
     try {
       return initializeSelectedModel();
     } catch (error) {
@@ -201,7 +201,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   });
   
   // Wrapper to persist changes
-  const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate'; display_name: string } | null) => {
+  const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => {
     if (!newModel) return;
     console.log('🔄 Model selection changed to:', newModel);
     
@@ -781,8 +781,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       });
 
 
-      // STAGING-FIRST: Route strictly by selectedModel - Replicate goes to replicate-image, SDXL goes to queue-job
-      const edgeFunction = selectedModel?.type === 'replicate' ? 'replicate-image' : 'queue-job';
+      // STAGING-FIRST: Route strictly by selectedModel - Replicate/Fal go to respective edge functions, SDXL goes to queue-job
+      const edgeFunction = selectedModel?.type === 'fal'
+        ? 'fal-image'
+        : selectedModel?.type === 'replicate'
+          ? 'replicate-image'
+          : 'queue-job';
       
       console.log('🚀 ROUTING:', {
         selectedModel,
@@ -843,11 +847,55 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             aspectRatio: finalAspectRatio
           }
         };
+      } else if (selectedModel?.type === 'fal') {
+        // Guard: Check if model ID is valid
+        if (!selectedModel.id) {
+          toast({
+            title: "Model Selection Required",
+            description: "Please select a valid fal.ai model and try again",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Convert aspect ratio to width/height for fal.ai (min 1024)
+        const aspectRatioMap: Record<string, { width: number; height: number }> = {
+          '1:1': { width: 1024, height: 1024 },
+          '16:9': { width: 1344, height: 768 },
+          '9:16': { width: 768, height: 1344 },
+          '3:2': { width: 1216, height: 832 },
+          '2:3': { width: 832, height: 1216 }
+        };
+        const dimensions = aspectRatioMap[finalAspectRatio] || { width: 1024, height: 1024 };
+
+        // Build fal.ai-specific payload
+        requestPayload = {
+          prompt: finalPrompt,
+          apiModelId: selectedModel.id,
+          job_type: 'fal_image',
+          quality: quality,
+          input: {
+            image_size: dimensions,
+            num_inference_steps: steps,
+            guidance_scale: guidanceScale,
+            negative_prompt: negativePrompt,
+            seed: lockSeed && finalSeed ? finalSeed : undefined,
+            // I2I parameters for reference images
+            image_url: effRefUrl || undefined,
+            strength: effRefUrl ? computedReferenceStrength : undefined
+          },
+          metadata: {
+            ...generationRequest.metadata,
+            reference_image_url: effRefUrl,
+            contentType: contentType,
+            aspectRatio: finalAspectRatio
+          }
+        };
       } else {
         // Use original payload for SDXL/WAN
         requestPayload = generationRequest;
       }
-      
+
       const { data, error } = await supabase.functions.invoke(edgeFunction, {
         body: requestPayload
       });
@@ -875,7 +923,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           createdAt: now,
           status: 'processing',
           url: undefined,
-          modelType: mode === 'image' ? (selectedModel?.type === 'replicate' ? selectedModel.display_name : 'SDXL') : 'WAN',
+          modelType: mode === 'image' ? (selectedModel?.type === 'fal' || selectedModel?.type === 'replicate' ? selectedModel.display_name : 'SDXL') : 'WAN',
           duration: mode === 'video' ? (videoDuration || undefined) : undefined,
           metadata: {
             job_id: jobId,
@@ -887,7 +935,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       }
       
       // Show success message with model info
-      const modelLabel = selectedModel?.type === 'replicate' ? `${selectedModel.display_name} (replicate)` : 'SDXL/WAN (workers)';
+      const modelLabel = selectedModel?.type === 'fal'
+        ? `${selectedModel.display_name} (fal.ai)`
+        : selectedModel?.type === 'replicate'
+          ? `${selectedModel.display_name} (replicate)`
+          : 'SDXL/WAN (workers)';
       toast({
         title: `${mode === 'image' ? 'Image' : 'Video'} Generation Started`,
         description: `Generating with ${modelLabel}...`,
