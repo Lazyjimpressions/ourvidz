@@ -477,9 +477,9 @@ serve(async (req) => {
       if (hasReferenceImage) {
         const imageKey = inputKeyMappings.i2i_image_key || 'image';
         const strengthKey = inputKeyMappings.i2i_strength_key || 'strength';
-        
-        // Map image field
-        let imageValue = body.input.image || body.input[imageKey];
+
+        // Map image field - check all possible locations where reference image could be passed
+        let imageValue = body.input.image || body.input[imageKey] || body.reference_image_url;
         if (!imageValue && body.metadata) {
           imageValue = body.metadata.reference_image_url || body.metadata.referenceImage;
         }
