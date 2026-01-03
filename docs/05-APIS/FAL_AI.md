@@ -1,7 +1,7 @@
 # fal.ai API Integration
 
 **Last Updated:** January 3, 2026
-**Status:** 🔬 RESEARCH - Integration planned, NSFW capabilities pending testing
+**Status:** ✅ IMPLEMENTED - Edge function created, NSFW capabilities pending testing
 
 ## Overview
 
@@ -214,7 +214,10 @@ const input = {
 
 ### api_providers Entry
 
+**Status:** ✅ Configured
+
 ```sql
+-- Provider ID: 4ddf0d58-c5e6-436a-b1bd-d44a2c20d6e3
 INSERT INTO api_providers (
   name, display_name, base_url,
   auth_scheme, auth_header_name, secret_name, is_active
@@ -226,49 +229,23 @@ INSERT INTO api_providers (
 
 ### api_models Entries
 
+**Status:** ✅ Configured (4 models)
+
+| Model | model_key | Modality | char_limit |
+|-------|-----------|----------|------------|
+| Seedream v4 | `fal-ai/seedream-v4` | image | 10,000 |
+| Seedream v4 Edit | `fal-ai/seedream-v4/edit` | image | 10,000 |
+| Seedream v4.5 Edit | `fal-ai/seedream-v4-5/edit` | image | 10,000 |
+| WAN 2.1 I2V | `fal-ai/wan/v2.1/i2v` | video | 1,500 |
+
+**Query configured models:**
 ```sql
--- Seedream v4 Text-to-Image
-INSERT INTO api_models (
-  provider_id, model_key, display_name, version,
-  modality, task, model_family, is_active, priority,
-  input_defaults, capabilities
-) VALUES (
-  (SELECT id FROM api_providers WHERE name = 'fal'),
-  'fal-ai/bytedance/seedream/v4/text-to-image',
-  'Seedream v4',
-  NULL,  -- fal uses model paths, not version hashes
-  'image', 'generation', 'seedream', true, 10,
-  '{"image_size": {"width": 1024, "height": 1024}, "num_inference_steps": 30, "guidance_scale": 7.5}',
-  '{"nsfw_status": "to_be_tested", "safety_checker_param": "safety_checker"}'
-);
-
--- Seedream v4 Edit (I2I)
-INSERT INTO api_models (
-  provider_id, model_key, display_name,
-  modality, task, model_family, is_active, priority,
-  input_defaults, capabilities
-) VALUES (
-  (SELECT id FROM api_providers WHERE name = 'fal'),
-  'fal-ai/bytedance/seedream/v4/edit',
-  'Seedream v4 Edit',
-  'image', 'style_transfer', 'seedream', true, 11,
-  '{"image_size": {"width": 1024, "height": 1024}, "strength": 0.5}',
-  '{"nsfw_status": "to_be_tested", "supports_i2i": true}'
-);
-
--- WAN Image (for NSFW testing)
-INSERT INTO api_models (
-  provider_id, model_key, display_name,
-  modality, task, model_family, is_active, priority,
-  input_defaults, capabilities
-) VALUES (
-  (SELECT id FROM api_providers WHERE name = 'fal'),
-  'fal-ai/wan/v2.1/image',
-  'WAN 2.1 Image',
-  'image', 'generation', 'wan', true, 12,
-  '{"image_size": {"width": 1024, "height": 1024}}',
-  '{"nsfw_status": "expected_good", "permissive_policy": true}'
-);
+SELECT model_key, display_name, modality,
+       capabilities->>'char_limit' as char_limit,
+       capabilities->>'nsfw_status' as nsfw_status
+FROM api_models
+WHERE model_key LIKE 'fal-ai/%'
+ORDER BY modality, model_key;
 ```
 
 ---
@@ -308,12 +285,24 @@ A woman in elegant evening dress, standing in art gallery,
 cinematic lighting, professional photography, 8k resolution
 ```
 
-### CLIP Token Considerations
+### Character Limits (NOT Token Limits)
 
-- Seedream uses CLIP-like tokenization
-- Optimal prompt length: 50-150 tokens
-- Front-load important terms
-- Avoid excessive detail that gets truncated
+**IMPORTANT:** fal.ai uses CHARACTER limits, NOT tokenizer-enforced caps like CLIP (77 tokens).
+
+| Model | Character Limit | Notes |
+|-------|-----------------|-------|
+| Seedream v4/v4.5 | 8,000-12,000 chars | Best for RP scene extraction |
+| Z-Image Turbo | 4,000-6,000 chars | Not currently configured |
+| FLUX/Kontext | 2,000-4,000 chars | Not currently configured |
+| Wan Image | 6,000-8,000 chars | Permissive for NSFW |
+| WAN I2V (Video) | 1,000-2,000 chars max | Video prompts are shorter |
+
+This is fundamentally different from Replicate/local SDXL which uses CLIP tokenization (77 token hard limit ≈ 320 chars).
+
+**Best Practices:**
+- Front-load important terms (quality matters more at start)
+- Seedream handles detailed prompts well (8K+ chars)
+- Video models need concise prompts (under 2K chars)
 
 ### Resolution Constraints
 
@@ -325,45 +314,88 @@ cinematic lighting, professional photography, 8k resolution
 
 ## Integration Architecture
 
-### Edge Function Pattern
+### Edge Function
+
+**File:** `supabase/functions/fal-image/index.ts`
+
+The fal-image edge function handles both image and video generation via fal.ai.
+
+**Key Features:**
+- Database-driven model configuration via `api_models` table
+- Automatic provider validation (must be 'fal')
+- Character limit validation per model type
+- I2I support with reference image URL signing
+- NSFW support via `enable_safety_checker: false`
+- Job tracking with status updates
+- Automatic workspace_assets creation on completion
+
+**Request Format:**
 
 ```typescript
-// supabase/functions/fal-image/index.ts
-import * as fal from "@fal-ai/serverless-client";
+// POST /functions/v1/fal-image
+{
+  prompt: string,
+  apiModelId?: string,           // UUID from api_models table
+  job_type?: string,             // 'fal_image' or 'fal_video'
+  quality?: string,              // 'high' or 'fast'
+  metadata?: {
+    contentType?: 'sfw' | 'nsfw',
+    aspectRatio?: '1:1' | '16:9' | '9:16',
+    referenceImage?: string      // For I2I
+  },
+  input?: {
+    image_size?: { width: number, height: number },
+    num_inference_steps?: number,
+    guidance_scale?: number,
+    negative_prompt?: string,
+    seed?: number,
+    strength?: number,           // For I2I
+    // Video-specific:
+    num_frames?: number,
+    resolution?: string,
+    fps?: number
+  }
+}
+```
 
-serve(async (req) => {
-  const { prompt, modelKey, options } = await req.json();
+**Response Format:**
 
-  // Get model config from database
-  const model = await getApiModel(modelKey);
+```typescript
+// Immediate result (fast models)
+{
+  jobId: string,
+  status: 'completed',
+  resultUrl: string,
+  resultType: 'image' | 'video'
+}
 
-  // Configure fal client
-  fal.config({ credentials: Deno.env.get('FAL_KEY') });
+// Queued result (async models)
+{
+  jobId: string,
+  requestId: string,  // fal.ai request_id for polling
+  status: 'queued',
+  message: 'Request queued with fal.ai'
+}
+```
 
-  // Submit to fal
-  const result = await fal.subscribe(model.model_key, {
-    input: {
-      prompt,
-      safety_checker: options.contentType === 'nsfw' ? false : true,
-      ...model.input_defaults,
-      ...options
-    }
-  });
+### API Call Pattern
 
-  return new Response(JSON.stringify(result));
+Uses REST API directly (not SDK) for Deno compatibility:
+
+```typescript
+const response = await fetch(`https://queue.fal.run/${model.model_key}`, {
+  method: 'POST',
+  headers: {
+    'Authorization': `Key ${falApiKey}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(modelInput)
 });
 ```
 
-### Webhook Alternative
+### Webhook Support (Future)
 
-fal.ai supports webhooks for long-running predictions:
-
-```typescript
-const result = await fal.subscribe(modelKey, {
-  input: inputData,
-  webhookUrl: "https://your-project.supabase.co/functions/v1/fal-webhook"
-});
-```
+fal.ai supports webhooks for long-running predictions. Not currently implemented - uses polling via `fal.subscribe()` pattern instead.
 
 ---
 
