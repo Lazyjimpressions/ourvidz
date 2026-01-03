@@ -2175,8 +2175,8 @@ const sceneContext = analyzeSceneContent(response);
     
     // ✅ CRITICAL FIX: Optimize prompt for CLIP's 77-token limit
     // CLIP tokenizes prompts and truncates everything after 77 tokens
-    // We need to compress the prompt while preserving the most important parts (scenario)
-    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || []);
+    // We need to compress the prompt while preserving the most important parts (actions + scenario)
+    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt, character.appearance_tags || [], sceneContext);
     console.log('🔧 CLIP optimization:', {
       original_length: enhancedScenePrompt.length,
       optimized_length: optimizedPrompt.length,
@@ -2809,26 +2809,203 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
 // We need to optimize prompts to fit within 77 tokens while preserving the most important content
 
 /**
- * Estimate CLIP tokens (matches enhance-prompt's conservative approach)
- * CLIP uses a specific tokenizer - use 4 chars per token (more conservative than 4.2)
+ * Estimate CLIP tokens (based on real-world Replicate behavior)
+ * CLIP tokenizer is more aggressive - ~3.8 chars per token in practice
  */
 function estimateCLIPTokens(text: string): number {
   if (!text || typeof text !== 'string') return 0;
-  // Use 4 chars per token (matches enhance-prompt) - more conservative than 4.2
-  return Math.ceil(text.length / 4);
+  // ✅ FIX: Use 3.8 chars per token based on actual Replicate behavior
+  // 293 chars = 77 tokens (at limit), so 293/77 = 3.8
+  return Math.ceil(text.length / 3.8);
+}
+
+/**
+ * Extract action phrases from scenario text
+ * Prioritizes physical interactions over movement verbs
+ * Returns 3-5 key action phrases (2-4 words each)
+ */
+function extractActionPhrases(scenario: string, sceneContext?: SceneContext): string[] {
+  const actionPhrases: string[] = [];
+  const lowerScenario = scenario.toLowerCase();
+  
+  // First, try to use sceneContext.actions if available
+  if (sceneContext?.actions && sceneContext.actions.length > 0) {
+    // Use actions from sceneContext, but expand them into phrases
+    sceneContext.actions.slice(0, 5).forEach(action => {
+      // Find the action verb in the scenario and extract surrounding context
+      const actionLower = action.toLowerCase();
+      const actionIndex = lowerScenario.indexOf(actionLower);
+      if (actionIndex !== -1) {
+        // Extract 2-4 word phrase around the action
+        const start = Math.max(0, actionIndex - 15);
+        const end = Math.min(scenario.length, actionIndex + action.length + 20);
+        let phrase = scenario.substring(start, end).trim();
+        
+        // Clean up phrase boundaries
+        const firstSpace = phrase.indexOf(' ');
+        if (firstSpace > 0 && firstSpace < 10) {
+          phrase = phrase.substring(firstSpace).trim();
+        }
+        const lastSpace = phrase.lastIndexOf(' ');
+        if (lastSpace > phrase.length - 10 && lastSpace > 0) {
+          phrase = phrase.substring(0, lastSpace).trim();
+        }
+        
+        // Limit to 4 words max
+        const words = phrase.split(/\s+/);
+        if (words.length > 4) {
+          phrase = words.slice(0, 4).join(' ');
+        }
+        
+        if (phrase.length > 3 && phrase.length < 40) {
+          actionPhrases.push(phrase);
+        }
+      }
+    });
+  }
+  
+  // If we don't have enough from sceneContext, scan scenario for action verbs
+  if (actionPhrases.length < 3) {
+    // Combine physical interactions and movement verbs (prioritize physical interactions)
+    const allActionVerbs = [...SCENE_DETECTION_PATTERNS.physicalInteractions, ...SCENE_DETECTION_PATTERNS.movement];
+    
+    for (const verb of allActionVerbs) {
+      if (actionPhrases.length >= 5) break; // Limit to 5 phrases
+      
+      const verbLower = verb.toLowerCase();
+      const verbIndex = lowerScenario.indexOf(verbLower);
+      
+      if (verbIndex !== -1) {
+        // Extract 2-4 word phrase around the verb
+        const start = Math.max(0, verbIndex - 15);
+        const end = Math.min(scenario.length, verbIndex + verb.length + 20);
+        let phrase = scenario.substring(start, end).trim();
+        
+        // Clean up phrase boundaries at word boundaries
+        const firstSpace = phrase.indexOf(' ');
+        if (firstSpace > 0 && firstSpace < 10) {
+          phrase = phrase.substring(firstSpace).trim();
+        }
+        const lastSpace = phrase.lastIndexOf(' ');
+        if (lastSpace > phrase.length - 10 && lastSpace > 0) {
+          phrase = phrase.substring(0, lastSpace).trim();
+        }
+        
+        // Limit to 4 words max
+        const words = phrase.split(/\s+/);
+        if (words.length > 4) {
+          phrase = words.slice(0, 4).join(' ');
+        }
+        
+        // Only add if it's a valid phrase and not already included
+        if (phrase.length > 3 && phrase.length < 40) {
+          const phraseLower = phrase.toLowerCase();
+          const isDuplicate = actionPhrases.some(existing => 
+            existing.toLowerCase().includes(phraseLower) || phraseLower.includes(existing.toLowerCase())
+          );
+          if (!isDuplicate) {
+            actionPhrases.push(phrase);
+          }
+        }
+      }
+    }
+  }
+  
+  // Prioritize physical interactions over movement (reorder if needed)
+  const physicalFirst = actionPhrases.sort((a, b) => {
+    const aIsPhysical = SCENE_DETECTION_PATTERNS.physicalInteractions.some(verb => 
+      a.toLowerCase().includes(verb)
+    );
+    const bIsPhysical = SCENE_DETECTION_PATTERNS.physicalInteractions.some(verb => 
+      b.toLowerCase().includes(verb)
+    );
+    if (aIsPhysical && !bIsPhysical) return -1;
+    if (!aIsPhysical && bIsPhysical) return 1;
+    return 0;
+  });
+  
+  // Limit to 5 phrases max (target: 3-5 phrases, ~15-20 tokens)
+  return physicalFirst.slice(0, 5);
+}
+
+/**
+ * Extract essential setting/atmosphere from scenario
+ * Removes action phrases and character names, keeps setting description
+ * Truncates from end to preserve beginning context
+ */
+function extractEssentialSetting(scenario: string, actionPhrases: string[]): string {
+  let setting = scenario;
+  
+  // Remove action phrases from scenario
+  actionPhrases.forEach(phrase => {
+    const regex = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    setting = setting.replace(regex, '').trim();
+  });
+  
+  // Clean up multiple spaces and punctuation
+  setting = setting
+    .replace(/\s+/g, ' ')
+    .replace(/\s*\.\s*\./g, '.')
+    .replace(/\s*,\s*,/g, ',')
+    .trim();
+  
+  // Extract setting keywords (environmental patterns)
+  const settingKeywords: string[] = [];
+  SCENE_DETECTION_PATTERNS.environmental.forEach(env => {
+    if (setting.toLowerCase().includes(env)) {
+      settingKeywords.push(env);
+    }
+  });
+  
+  // If we have setting keywords, prioritize them
+  if (settingKeywords.length > 0) {
+    // Find sentences/phrases containing setting keywords
+    const sentences = setting.split(/[.!?]+/).filter(s => s.trim().length > 0);
+    const settingSentences = sentences.filter(s => 
+      settingKeywords.some(keyword => s.toLowerCase().includes(keyword))
+    );
+    
+    if (settingSentences.length > 0) {
+      // Use first setting sentence, truncate if needed
+      let result = settingSentences[0].trim();
+      if (result.length > 100) {
+        // Truncate at word boundary
+        const lastSpace = result.lastIndexOf(' ', 100);
+        if (lastSpace > 80) {
+          result = result.substring(0, lastSpace).trim();
+        } else {
+          result = result.substring(0, 100).trim();
+        }
+      }
+      return result;
+    }
+  }
+  
+  // Fallback: use beginning of scenario (first 100 chars, truncate at word boundary)
+  if (setting.length > 100) {
+    const lastSpace = setting.lastIndexOf(' ', 100);
+    if (lastSpace > 80) {
+      return setting.substring(0, lastSpace).trim();
+    }
+    return setting.substring(0, 100).trim();
+  }
+  
+  return setting;
 }
 
 /**
  * Optimize prompt for CLIP's 77-token limit
- * Strategy: Keep prompt VERY short - just essential scenario + minimal visual tags
+ * Strategy: Prioritize action verbs and interactions (conversation "spirit")
  * Use negative prompts for quality/style guidance (handled by replicate-image)
  * 
- * Approach matches enhance-prompt: simple truncation at natural break points
+ * New approach: Preserve actions, truncate descriptive/setting text first
  */
-function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appearanceTags: string[] = []): string {
-  const MAX_CLIP_TOKENS = 75; // Safety margin below 77 limit
-  const AVG_CHARS_PER_TOKEN = 4; // More conservative than 4.2 (matches enhance-prompt)
-  const TARGET_CHARS = MAX_CLIP_TOKENS * AVG_CHARS_PER_TOKEN; // 300 chars max
+function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appearanceTags: string[] = [], sceneContext?: SceneContext): string {
+  // ✅ CRITICAL FIX: CLIP tokenizer is more aggressive than 4 chars/token
+  // Real-world testing shows ~3.8 chars/token, so target 65 tokens for safety
+  const MAX_CLIP_TOKENS = 65; // ✅ FIX: Very aggressive - 65 tokens (was 70, was 75)
+  const AVG_CHARS_PER_TOKEN = 3.8; // ✅ FIX: More accurate based on Replicate behavior
+  const TARGET_CHARS = Math.floor(MAX_CLIP_TOKENS * AVG_CHARS_PER_TOKEN); // 247 chars max
   
   // Extract scenario - this is the MOST IMPORTANT part
   const scenarioMatch = fullPrompt.match(/in the following scenario: (.+?)(?:\. Both characters|\. The character|\. Composition|$)/s);
@@ -2838,68 +3015,235 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
   const charMatch = fullPrompt.match(/showing (.+?)(?: \(|\s+\(|,|$)/);
   const charName = charMatch ? charMatch[1].trim().replace(/"/g, '') : '';
   
-  // ✅ CRITICAL: Remove character name references from scenario to save tokens
+  // ✅ CRITICAL FIX: Aggressively remove ALL character name references from scenario
+  // This includes: full name, ALL name parts (first, middle, last), quoted variations
   if (charName) {
-    const nameParts = charName.split(' ');
+    const nameParts = charName.split(' ').filter(p => p.length > 0);
     const firstName = nameParts[0];
-    const fullNamePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-    const firstNamePattern = new RegExp(`\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-    const quotedNamePattern = new RegExp(`"${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi');
+    const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
     
+    // Build comprehensive patterns to catch ALL variations
+    const patterns: RegExp[] = [];
+    
+    // 1. Quoted full name: "Lily Lilith Chen"
+    patterns.push(new RegExp(`"${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi'));
+    
+    // 2. Full name with word boundaries: Lily Lilith Chen
+    patterns.push(new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
+    
+    // 3. Remove EACH name part individually (catches middle names like "Lilith")
+    nameParts.forEach(part => {
+      // Quoted name part: "Lilith"
+      patterns.push(new RegExp(`"${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi'));
+      // Name part with word boundaries: Lilith
+      patterns.push(new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
+    });
+    
+    // 4. "AnyNamePart" LastName pattern: "Lilith" Chen (catches middle+last)
+    if (lastName) {
+      nameParts.slice(0, -1).forEach(part => { // All parts except last
+        patterns.push(new RegExp(`"${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s+${lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'gi'));
+        patterns.push(new RegExp(`\\b${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+${lastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'));
+      });
+    }
+    
+    // Apply all patterns
+    patterns.forEach(pattern => {
+      scenario = scenario.replace(pattern, '');
+    });
+    
+    // Clean up multiple spaces, periods, and trim
     scenario = scenario
-      .replace(quotedNamePattern, '')
-      .replace(fullNamePattern, '')
-      .replace(firstNamePattern, '')
       .replace(/\s+/g, ' ')
+      .replace(/\s*\.\s*\./g, '.') // Fix double periods
+      .replace(/\s*,\s*,/g, ',') // Fix double commas
       .trim();
+    
+    console.log(`🧹 Removed character name references from scenario (${nameParts.length} name parts), saved tokens`);
   }
+  
+  // ✅ NEW: Extract action phrases from scenario text (PRIORITY: preserve actions)
+  // Action phrases are critical for matching conversation "spirit"
+  const actionPhrases = extractActionPhrases(scenario, sceneContext);
   
   // Extract ONLY essential visual tags (limit to 3-4 most important)
   const visualTags = appearanceTags.length > 0 
-    ? appearanceTags.slice(0, 4).join(', ') // Reduced from 8 to 4
+    ? appearanceTags.slice(0, 4).join(', ') // Allow 4 tags since we're prioritizing actions
     : extractVisualTagsOnly(fullPrompt).split(', ').slice(0, 4).join(', ');
   
-  // Build minimal prompt: Character name + 3-4 visual tags + scenario
-  // Format: "CharacterName, tag1, tag2, tag3, scenario"
+  // ✅ RESTRUCTURED: Build prompt with actions prioritized
+  // Format: "CharacterName, tags, key actions, essential setting"
+  // Priority: Name (2 tokens) > Tags (8 tokens) > Actions (20 tokens) > Setting (remaining)
   let optimized = '';
+  
+  // Start with character name and tags
   if (charName && visualTags) {
-    optimized = `${charName}, ${visualTags}, ${scenario}`;
+    optimized = `${charName}, ${visualTags}`;
   } else if (charName) {
-    optimized = `${charName}, ${scenario}`;
+    optimized = charName;
   } else if (visualTags) {
-    optimized = `${visualTags}, ${scenario}`;
-  } else {
-    optimized = scenario;
+    optimized = visualTags;
   }
   
-  // ✅ SIMPLIFIED: Use enhance-prompt's approach - simple truncation at natural break points
+  // Add action phrases (HIGHEST PRIORITY after name/tags)
+  if (actionPhrases.length > 0) {
+    const actionsText = actionPhrases.join(', ');
+    if (optimized) {
+      optimized = `${optimized}, ${actionsText}`;
+    } else {
+      optimized = actionsText;
+    }
+  }
+  
+  // Extract essential setting/atmosphere (truncate descriptive text, preserve beginning for context)
+  const essentialSetting = extractEssentialSetting(scenario, actionPhrases);
+  if (essentialSetting) {
+    if (optimized) {
+      optimized = `${optimized}, ${essentialSetting}`;
+    } else {
+      optimized = essentialSetting;
+    }
+  }
+  
+  // ✅ SMART TRUNCATION: Preserve action phrases, truncate setting text first
+  // Strategy: Only truncate from the end if it's setting text, preserve actions
   if (optimized.length > TARGET_CHARS) {
-    let cutoff = TARGET_CHARS;
-    const lastComma = optimized.lastIndexOf(',', cutoff);
-    const lastPeriod = optimized.lastIndexOf('.', cutoff);
-    const lastSpace = optimized.lastIndexOf(' ', cutoff);
-    
-    // Prefer natural break points (matches enhance-prompt logic)
-    if (lastComma > cutoff * 0.8) {
-      cutoff = lastComma;
-    } else if (lastPeriod > cutoff * 0.8) {
-      cutoff = lastPeriod + 1;
-    } else if (lastSpace > cutoff * 0.9) {
-      cutoff = lastSpace;
+    // Find where actions end and setting begins
+    const actionsText = actionPhrases.length > 0 ? actionPhrases.join(', ') : '';
+    let actionsEndIndex = -1;
+    if (actionsText && optimized.includes(actionsText)) {
+      actionsEndIndex = optimized.indexOf(actionsText) + actionsText.length;
     }
     
-    optimized = optimized.substring(0, cutoff).trim();
+    // If we have actions, try to truncate only the setting part
+    if (actionsEndIndex > 0 && actionsEndIndex < optimized.length) {
+      // Calculate how much we need to truncate
+      const excessChars = optimized.length - TARGET_CHARS;
+      const settingStart = actionsEndIndex + 2; // +2 for ", " separator
+      
+      if (settingStart < optimized.length) {
+        // Truncate setting text from the end
+        const settingText = optimized.substring(settingStart);
+        let truncatedSetting = settingText;
+        
+        if (truncatedSetting.length > excessChars) {
+          // Truncate setting at word boundary
+          const targetSettingLength = truncatedSetting.length - excessChars;
+          let cutoff = targetSettingLength;
+          
+          // Find word boundary
+          const lastComma = truncatedSetting.lastIndexOf(',', cutoff);
+          const lastPeriod = truncatedSetting.lastIndexOf('.', cutoff);
+          const lastSpace = truncatedSetting.lastIndexOf(' ', cutoff);
+          
+          if (lastComma > cutoff * 0.8) {
+            cutoff = lastComma;
+          } else if (lastPeriod > cutoff * 0.8) {
+            cutoff = lastPeriod + 1;
+          } else if (lastSpace > cutoff * 0.9) {
+            cutoff = lastSpace;
+          }
+          
+          truncatedSetting = truncatedSetting.substring(0, cutoff).trim();
+        }
+        
+        // Rebuild with truncated setting
+        optimized = optimized.substring(0, settingStart) + truncatedSetting;
+      } else {
+        // No setting text, truncate from end (shouldn't happen, but fallback)
+        let cutoff = TARGET_CHARS;
+        const lastComma = optimized.lastIndexOf(',', cutoff);
+        const lastSpace = optimized.lastIndexOf(' ', cutoff);
+        
+        if (lastComma > cutoff * 0.8) {
+          cutoff = lastComma;
+        } else if (lastSpace > cutoff * 0.9) {
+          cutoff = lastSpace;
+        }
+        
+        optimized = optimized.substring(0, cutoff).trim();
+      }
+    } else {
+      // No actions found, use standard truncation
+      let cutoff = TARGET_CHARS;
+      const lastComma = optimized.lastIndexOf(',', cutoff);
+      const lastPeriod = optimized.lastIndexOf('.', cutoff);
+      const lastSpace = optimized.lastIndexOf(' ', cutoff);
+      
+      if (lastComma > cutoff * 0.8) {
+        cutoff = lastComma;
+      } else if (lastPeriod > cutoff * 0.8) {
+        cutoff = lastPeriod + 1;
+      } else if (lastSpace > cutoff * 0.9) {
+        cutoff = lastSpace;
+      }
+      
+      optimized = optimized.substring(0, cutoff).trim();
+    }
     
-    console.log('✂️ Token optimization applied (enhance-prompt style):', {
+    console.log('✂️ Smart truncation applied (preserve actions):', {
       originalLength: fullPrompt.length,
       optimizedLength: optimized.length,
-      cutoffPosition: cutoff,
+      actionsPreserved: actionPhrases.length,
+      estimatedTokens: Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN)
+    });
+  } else if (optimized.length > TARGET_CHARS - 10) {
+    // ✅ FIX: Also truncate if we're within 10 chars of limit (safety margin)
+    // CLIP tokenizer can be unpredictable, so be conservative
+    // But still preserve actions
+    const actionsText = actionPhrases.length > 0 ? actionPhrases.join(', ') : '';
+    let actionsEndIndex = -1;
+    if (actionsText && optimized.includes(actionsText)) {
+      actionsEndIndex = optimized.indexOf(actionsText) + actionsText.length;
+    }
+    
+    if (actionsEndIndex > 0 && actionsEndIndex < optimized.length) {
+      // Truncate only setting
+      const settingStart = actionsEndIndex + 2;
+      if (settingStart < optimized.length) {
+        const settingText = optimized.substring(settingStart);
+        const targetSettingLength = Math.max(0, settingText.length - 10);
+        
+        if (targetSettingLength < settingText.length) {
+          let cutoff = targetSettingLength;
+          const lastComma = settingText.lastIndexOf(',', cutoff);
+          const lastSpace = settingText.lastIndexOf(' ', cutoff);
+          
+          if (lastComma > cutoff * 0.8) {
+            cutoff = lastComma;
+          } else if (lastSpace > cutoff * 0.9) {
+            cutoff = lastSpace;
+          }
+          
+          const truncatedSetting = settingText.substring(0, cutoff).trim();
+          optimized = optimized.substring(0, settingStart) + truncatedSetting;
+        }
+      }
+    } else {
+      // Standard truncation
+      let cutoff = TARGET_CHARS - 10;
+      const lastComma = optimized.lastIndexOf(',', cutoff);
+      const lastSpace = optimized.lastIndexOf(' ', cutoff);
+      
+      if (lastComma > cutoff * 0.8) {
+        cutoff = lastComma;
+      } else if (lastSpace > cutoff * 0.9) {
+        cutoff = lastSpace;
+      }
+      
+      optimized = optimized.substring(0, cutoff).trim();
+    }
+    
+    console.log('✂️ Safety truncation applied (preserve actions):', {
+      originalLength: fullPrompt.length,
+      optimizedLength: optimized.length,
+      actionsPreserved: actionPhrases.length,
       estimatedTokens: Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN)
     });
   }
   
   const finalTokens = Math.ceil(optimized.length / AVG_CHARS_PER_TOKEN);
-  console.log(`✅ Optimized prompt: ${finalTokens} tokens (target: ${MAX_CLIP_TOKENS})`);
+  console.log(`✅ Optimized prompt: ${finalTokens} tokens (target: ${MAX_CLIP_TOKENS}, max: 77)`);
   console.log(`📝 Optimized preview: ${optimized.substring(0, 150)}...`);
   
   return optimized;
