@@ -466,7 +466,8 @@ serve(async (req) => {
         authHeader,
         conversation.user_character as UserCharacterForScene | null,
         requestBody.scene_style || 'character_only',
-        requestBody.consistency_settings // Pass user's consistency settings from UI
+        requestBody.consistency_settings, // Pass user's consistency settings from UI
+        conversation_id // ✅ FIX: Pass conversation_id to link scene to conversation
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1883,8 +1884,9 @@ async function generateScene(
   authHeader?: string,
   userCharacter?: UserCharacterForScene | null,
   sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only',
-  consistencySettings?: ConsistencySettings
-): Promise<{ success: boolean; consistency_score?: number; job_id?: string }> {
+  consistencySettings?: ConsistencySettings,
+  conversationId?: string // ✅ FIX: Add conversation_id parameter
+): Promise<{ success: boolean; consistency_score?: number; job_id?: string; scene_id?: string; error?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
       characterId,
@@ -2097,6 +2099,45 @@ const sceneContext = analyzeSceneContent(response);
     console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
     console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
 
+    // ✅ FIX: Create scene record in character_scenes table before generating image
+    let sceneId: string | null = null;
+    try {
+      const { data: sceneRecord, error: sceneError } = await supabase
+        .from('character_scenes')
+        .insert({
+          character_id: characterId,
+          conversation_id: conversationId || null,
+          scene_prompt: scenePrompt,
+          system_prompt: null,
+          generation_metadata: {
+            model_used: selectedImageModel ? 'api_model' : 'sdxl',
+            consistency_method: consistencySettings?.method || consistencyMethod,
+            reference_strength: refStrength,
+            denoise_strength: denoiseStrength,
+            seed_locked: seedLocked,
+            scene_type: 'chat_scene',
+            scene_style: sceneStyle,
+            scene_context: sceneContext,
+            character_visual_description: characterVisualDescription
+          },
+          job_id: null, // Will be updated when job is queued
+          priority: 0
+        })
+        .select('id')
+        .single();
+
+      if (sceneError || !sceneRecord) {
+        console.error('🎬❌ Failed to create scene record:', sceneError);
+        // Continue with generation but scene won't be linked
+      } else {
+        sceneId = sceneRecord.id;
+        console.log('✅ Scene record created with ID:', sceneId);
+      }
+    } catch (error) {
+      console.error('🎬❌ Error creating scene record:', error);
+      // Continue with generation but scene won't be linked
+    }
+
     // ✅ ENHANCED: Build comprehensive scene prompt with character and user visual context
     let enhancedScenePrompt: string;
 
@@ -2156,6 +2197,8 @@ const sceneContext = analyzeSceneContent(response);
             destination: 'roleplay_scene',
             character_id: characterId,
             character_name: character.name,
+            scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+            conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
             scene_type: 'chat_scene',
             consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
             reference_strength: refStrength,
@@ -2202,6 +2245,8 @@ const sceneContext = analyzeSceneContent(response);
               destination: 'roleplay_scene',
               character_id: characterId,
               character_name: character.name,
+              scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+              conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
               scene_type: 'chat_scene',
               consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
               reference_strength: refStrength,
@@ -2237,6 +2282,8 @@ const sceneContext = analyzeSceneContent(response);
                 destination: 'roleplay_scene',
                 character_id: characterId,
                 character_name: character.name,
+                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
                 scene_type: 'chat_scene',
                 consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
                 reference_strength: refStrength,
@@ -2295,6 +2342,8 @@ const sceneContext = analyzeSceneContent(response);
                 destination: 'roleplay_scene',
                 character_id: characterId,
                 character_name: character.name,
+                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
                 scene_type: 'chat_scene',
                 consistency_method: consistencySettings?.method || consistencyMethod,
                 model_used: modelConfig.model_key,
@@ -2329,6 +2378,8 @@ const sceneContext = analyzeSceneContent(response);
                 destination: 'roleplay_scene',
                 character_id: characterId,
                 character_name: character.name,
+                scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+                conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
                 scene_type: 'chat_scene',
                 consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
                 reference_strength: refStrength,
@@ -2365,6 +2416,8 @@ const sceneContext = analyzeSceneContent(response);
             destination: 'roleplay_scene',
             character_id: characterId,
             character_name: character.name,
+            scene_id: sceneId, // ✅ FIX: Include scene_id to link image to scene
+            conversation_id: conversationId || null, // ✅ FIX: Include conversation_id
             scene_type: 'chat_scene',
             consistency_method: consistencyMethod,
             model_used: 'sdxl',
@@ -2411,14 +2464,31 @@ const sceneContext = analyzeSceneContent(response);
       };
     }
     
+    // ✅ FIX: Update scene record with job_id if scene was created
+    if (sceneId && jobId) {
+      try {
+        await supabase
+          .from('character_scenes')
+          .update({ job_id: jobId })
+          .eq('id', sceneId);
+        console.log('✅ Scene record updated with job_id:', jobId);
+      } catch (error) {
+        console.error('⚠️ Failed to update scene with job_id:', error);
+      }
+    }
+
     return {
       success: true,
       consistency_score: character.reference_image_url ? 0.8 : 0.6, // Consistency via reference image, random seed for variety
-      job_id: jobId
+      job_id: jobId,
+      scene_id: sceneId ? sceneId : undefined // ✅ FIX: Return scene_id for reference (convert null to undefined)
     };
   } catch (error) {
     console.error('🎬❌ Scene generation error:', error);
-    return { success: false };
+    return { 
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
   }
 }
 
