@@ -264,74 +264,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                     </SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-
-              {/* Image Model Selection */}
-              <div className="space-y-2">
-                <Label>Image Model</Label>
-                {!sdxlWorkerHealthy && (
-                  <div className="flex items-center gap-2 p-2 bg-amber-900/20 border border-amber-700/50 rounded text-xs text-amber-300 mb-2">
-                    <WifiOff className="w-3 h-3 flex-shrink-0" />
-                    <span>Local SDXL offline - using cloud models</span>
-                  </div>
-                )}
-                <Select 
-                  key={`image-model-${localSelectedImageModel || 'none'}`}
-                  value={localSelectedImageModel || undefined} 
-                  onValueChange={(value) => {
-                    console.log('📸 Image model changed:', value);
-                    setLocalSelectedImageModel(value);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select image model..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {imageModelsLoading ? (
-                      <SelectItem value="__loading__" disabled>Loading image models...</SelectItem>
-                    ) : imageModelOptions.length === 0 ? (
-                      <SelectItem value="__none__" disabled>No image models available</SelectItem>
-                    ) : (
-                      imageModelOptions.map((model) => {
-                        const isLocal = model.type === 'local';
-                        return (
-                          <SelectItem
-                            key={model.value}
-                            value={model.value}
-                            disabled={!model.isAvailable}
-                          >
-                            <div className="flex items-center justify-between w-full gap-2">
-                              <span className={!model.isAvailable ? 'opacity-50' : ''}>{model.label}</span>
-                              {isLocal && !model.isAvailable && (
-                                <Badge variant="destructive" className="ml-2 text-xs flex items-center gap-1">
-                                  <WifiOff className="w-3 h-3" />
-                                  Offline
-                                </Badge>
-                              )}
-                              {isLocal && model.isAvailable && (
-                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400 flex items-center gap-1">
-                                  <CheckCircle2 className="w-3 h-3" />
-                                  Online
-                                </Badge>
-                              )}
-                              {!isLocal && (
-                                <Badge variant="outline" className="ml-2 text-xs text-blue-400 border-blue-400 flex items-center gap-1">
-                                  <Cloud className="w-3 h-3" />
-                                  API
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        );
-                      })
-                    )}
-                  </SelectContent>
-                </Select>
-                {imageModelOptions.length === 0 && !imageModelsLoading && (
-                  <p className="text-xs text-yellow-400 mt-1">
-                    ⚠️ No image models configured. Please add models in Admin settings.
-                  </p>
-                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Controls how much conversation history the AI remembers.
+                </p>
               </div>
             </TabsContent>
 
@@ -561,9 +496,9 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 </Card>
               )}
 
-              {/* Model Provider Selection */}
+              {/* Chat Model Selection */}
               <div className="space-y-2">
-                <Label>Model Provider</Label>
+                <Label>Chat Model</Label>
                 <Select value={localModelProvider} onValueChange={setLocalModelProvider}>
                   <SelectTrigger>
                     <SelectValue />
@@ -615,7 +550,75 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                 )}
               </div>
 
-              {/* Model Information Card */}
+              {/* Image Model Selection */}
+              <div className="space-y-2">
+                <Label>Image Model</Label>
+                {!sdxlWorkerHealthy && (
+                  <div className="flex items-center gap-2 p-2 bg-amber-900/20 border border-amber-700/50 rounded text-xs text-amber-300 mb-2">
+                    <WifiOff className="w-3 h-3 flex-shrink-0" />
+                    <span>Local SDXL offline - using cloud models</span>
+                  </div>
+                )}
+                <Select
+                  key={`image-model-${localSelectedImageModel || 'none'}`}
+                  value={localSelectedImageModel || undefined}
+                  onValueChange={(value) => {
+                    console.log('📸 Image model changed:', value);
+                    setLocalSelectedImageModel(value);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select image model..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {imageModelsLoading ? (
+                      <SelectItem value="__loading__" disabled>Loading image models...</SelectItem>
+                    ) : imageModelOptions.length === 0 ? (
+                      <SelectItem value="__none__" disabled>No image models available</SelectItem>
+                    ) : (
+                      imageModelOptions.map((model) => {
+                        const isLocal = model.type === 'local';
+                        return (
+                          <SelectItem
+                            key={model.value}
+                            value={model.value}
+                            disabled={!model.isAvailable}
+                          >
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <span className={!model.isAvailable ? 'opacity-50' : ''}>{model.label}</span>
+                              {isLocal && !model.isAvailable && (
+                                <Badge variant="destructive" className="ml-2 text-xs flex items-center gap-1">
+                                  <WifiOff className="w-3 h-3" />
+                                  Offline
+                                </Badge>
+                              )}
+                              {isLocal && model.isAvailable && (
+                                <Badge variant="outline" className="ml-2 text-xs text-green-400 border-green-400 flex items-center gap-1">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Online
+                                </Badge>
+                              )}
+                              {!isLocal && (
+                                <Badge variant="outline" className="ml-2 text-xs text-blue-400 border-blue-400 flex items-center gap-1">
+                                  <Cloud className="w-3 h-3" />
+                                  API
+                                </Badge>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })
+                    )}
+                  </SelectContent>
+                </Select>
+                {imageModelOptions.length === 0 && !imageModelsLoading && (
+                  <p className="text-xs text-yellow-400 mt-1">
+                    ⚠️ No image models configured. Please add models in Admin settings.
+                  </p>
+                )}
+              </div>
+
+              {/* Chat Model Information Card */}
               {selectedModel && capabilities && (
                 <Card className="p-4 bg-gray-800/50 border-gray-700">
                   <div className="space-y-4">

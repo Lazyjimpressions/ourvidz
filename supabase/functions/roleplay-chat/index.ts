@@ -2109,48 +2109,40 @@ const sceneContext = analyzeSceneContent(response);
     // Default to Replicate API models (not local SDXL) when no model specified
     const isLocalSDXL = selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
     
-    // If no model specified, try to get default Replicate model from database
+    // If no model specified, try to get default image model from database
     let effectiveImageModel = selectedImageModel;
     if (!effectiveImageModel || effectiveImageModel.trim() === '') {
-      console.log('📸 No image model specified, fetching default Replicate model from database...');
-      
-      // First, get Replicate provider ID
-      const { data: replicateProvider } = await supabase
-        .from('api_providers')
-        .select('id')
-        .eq('name', 'replicate')
-        .single();
-      
-      if (replicateProvider) {
-        // Get active Replicate models
-        const { data: defaultModels } = await supabase
-          .from('api_models')
-          .select('id, model_key, display_name')
-          .eq('is_active', true)
-          .eq('provider_id', replicateProvider.id)
-          .order('display_name', { ascending: true })
-          .limit(1);
-        
-        if (defaultModels && defaultModels.length > 0) {
-          effectiveImageModel = defaultModels[0].id;
-          console.log('✅ Using default Replicate model:', defaultModels[0].display_name, `(${defaultModels[0].id})`);
-        }
+      console.log('📸 No image model specified, fetching default image model from database...');
+
+      // First, look for the default model (is_default = true)
+      const { data: defaultModels } = await supabase
+        .from('api_models')
+        .select('id, model_key, display_name, api_providers!inner(name)')
+        .eq('is_active', true)
+        .eq('is_default', true)
+        .eq('modality', 'image')
+        .limit(1);
+
+      if (defaultModels && defaultModels.length > 0) {
+        effectiveImageModel = defaultModels[0].id;
+        console.log('✅ Using default image model:', defaultModels[0].display_name, `(${defaultModels[0].api_providers.name})`);
       }
-      
-      // Fallback: get any active API model if no Replicate models found
+
+      // Fallback: get any active image model if no default found
       if (!effectiveImageModel) {
         const { data: fallbackModels } = await supabase
           .from('api_models')
-          .select('id, model_key, display_name')
+          .select('id, model_key, display_name, api_providers!inner(name)')
           .eq('is_active', true)
-          .order('display_name', { ascending: true })
+          .eq('modality', 'image')
+          .order('priority', { ascending: false })
           .limit(1);
-        
+
         if (fallbackModels && fallbackModels.length > 0) {
           effectiveImageModel = fallbackModels[0].id;
-          console.log('✅ Using fallback active API model:', fallbackModels[0].display_name, `(${fallbackModels[0].id})`);
+          console.log('✅ Using fallback active image model:', fallbackModels[0].display_name, `(${fallbackModels[0].api_providers.name})`);
         } else {
-          console.warn('⚠️ No active API models found, will fall back to local SDXL if needed');
+          console.warn('⚠️ No active image models found, will fall back to local SDXL if needed');
         }
       }
     }

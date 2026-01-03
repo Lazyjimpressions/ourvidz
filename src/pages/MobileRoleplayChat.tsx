@@ -651,9 +651,51 @@ const MobileRoleplayChat: React.FC = () => {
   }, [messages]);
 
   // Subscribe to workspace asset updates for job completion
-  const subscribeToJobCompletion = (jobId: string, messageId: string) => {
-    console.log('🔄 Subscribing to workspace_assets for job:', jobId);
-    
+  // ✅ FIX: Check for existing asset first (handles sync providers like fal.ai)
+  const subscribeToJobCompletion = async (jobId: string, messageId: string) => {
+    console.log('🔄 Checking/subscribing to workspace_assets for job:', jobId);
+
+    // Helper to update message with asset data
+    const updateMessageWithAsset = (assetData: { temp_storage_path: string; id: string }) => {
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === messageId) {
+          return {
+            ...msg,
+            scene_image: assetData.temp_storage_path,
+            content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
+            metadata: {
+              ...msg.metadata,
+              image_url: assetData.temp_storage_path,
+              asset_id: assetData.id,
+              job_completed: true
+            }
+          };
+        }
+        return msg;
+      }));
+
+      toast({
+        title: 'Scene completed!',
+        description: 'Your scene image has been generated.',
+      });
+    };
+
+    // ✅ FIX: First check if asset already exists (for sync providers like fal.ai)
+    const { data: existingAsset, error: queryError } = await supabase
+      .from('workspace_assets')
+      .select('id, temp_storage_path')
+      .eq('job_id', jobId)
+      .maybeSingle();
+
+    if (!queryError && existingAsset?.temp_storage_path) {
+      console.log('✅ Asset already exists for job (sync provider):', jobId);
+      updateMessageWithAsset(existingAsset);
+      return; // No need to subscribe
+    }
+
+    // Asset doesn't exist yet - subscribe for async providers (replicate, etc.)
+    console.log('🔄 Asset not found, subscribing for updates...');
+
     const channel = supabase
       .channel(`job-completion-${jobId}`)
       .on(
@@ -666,33 +708,12 @@ const MobileRoleplayChat: React.FC = () => {
         },
         (payload) => {
           console.log('✅ Workspace asset created for job:', jobId, payload.new);
-          
-          const assetData = payload.new;
+
+          const assetData = payload.new as { temp_storage_path?: string; id: string };
           if (assetData?.temp_storage_path) {
-            // Update the message with the image URL
-            setMessages(prev => prev.map(msg => {
-              if (msg.id === messageId) {
-                return {
-                  ...msg,
-                  scene_image: assetData.temp_storage_path,
-                  content: msg.content.replace('Generating scene...', 'Here\'s your scene!'),
-                  metadata: {
-                    ...msg.metadata,
-                    image_url: assetData.temp_storage_path,
-                    asset_id: assetData.id,
-                    job_completed: true
-                  }
-                };
-              }
-              return msg;
-            }));
-            
-            toast({
-              title: 'Scene completed!',
-              description: 'Your scene image has been generated.',
-            });
+            updateMessageWithAsset({ temp_storage_path: assetData.temp_storage_path, id: assetData.id });
           }
-          
+
           // Cleanup subscription after success
           supabase.removeChannel(channel);
         }
