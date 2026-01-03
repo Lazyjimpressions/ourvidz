@@ -1,8 +1,65 @@
 # Roleplay UI/UX Best Practices Documentation
 
-**Last Updated:** December 17, 2025  
-**Status:** ✅ **Implemented & Documented**  
+**Last Updated:** January 2, 2026
+**Status:** ✅ **Implemented & Documented**
 **Purpose:** Document best practices research and implementation for roleplay feature UI/UX
+
+---
+
+## January 2026 Mobile UX Improvements
+
+### New Components Added
+
+#### 1. MobileChatHeader
+- **Purpose**: Simplified header for mobile (56px height vs 48px)
+- **Pattern**: `[< Back] [Avatar + Name] [... Menu]`
+- **Features**: Consolidated menu (Reset, Settings, Character Info, Share, Report)
+- **File**: `src/components/roleplay/MobileChatHeader.tsx`
+
+#### 2. ChatBottomNav
+- **Purpose**: Bottom navigation bar for mobile
+- **Pattern**: `[Character Info] [Generate Scene] [Settings]`
+- **Features**: 56px height, 44px touch targets, hides when keyboard visible
+- **File**: `src/components/roleplay/ChatBottomNav.tsx`
+
+#### 3. QuickSettingsDrawer
+- **Purpose**: Mobile-friendly settings as bottom sheet
+- **Pattern**: Slide-up bottom sheet with common settings
+- **Features**: Chat model, Image model, Scene style, Advanced settings link
+- **File**: `src/components/roleplay/QuickSettingsDrawer.tsx`
+
+#### 4. DesktopChatLayout
+- **Purpose**: Side-by-side layout for desktop
+- **Pattern**: Character info panel + Chat area
+- **Features**: Collapsible sidebar, responsive breakpoints
+- **File**: `src/components/roleplay/DesktopChatLayout.tsx`
+
+### New Hooks Added
+
+#### 1. useKeyboardVisible
+- **Purpose**: Detect keyboard visibility on mobile
+- **Features**: Uses visualViewport API, fallback to focus events
+- **File**: `src/hooks/useKeyboardVisible.ts`
+
+#### 2. useRoleplaySettings
+- **Purpose**: Shared settings state across components
+- **Features**: localStorage persistence, model validation, defaults
+- **File**: `src/hooks/useRoleplaySettings.ts`
+
+### Component Updates
+
+#### MobileChatInput
+- Removed inline "Generate Scene" button (moved to ChatBottomNav)
+- Made emoji quick actions optional via `showEmojiTray` prop
+- Added collapsible emoji tray (tap to toggle)
+- Added safe area padding for iOS
+
+#### ChatMessage
+- Added relative timestamps (e.g., "just now", "2m ago")
+- Added skeleton loader for scene images
+- Improved image loading state handling
+
+---
 
 ## Research Summary
 

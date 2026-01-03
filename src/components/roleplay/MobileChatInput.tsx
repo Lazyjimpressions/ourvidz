@@ -1,24 +1,31 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Send, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { Send, Smile } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { cn } from '@/lib/utils';
 
 interface MobileChatInputProps {
   onSend: (message: string) => void;
-  onGenerateScene: () => void;
+  onGenerateScene?: () => void; // Optional - for desktop inline button
   isLoading: boolean;
   isMobile: boolean;
+  placeholder?: string;
+  showEmojiTray?: boolean; // Control emoji tray visibility
 }
+
+const QUICK_EMOJIS = ['👋', '❤️', '😊', '🤔', '😈', '🔥'];
 
 export const MobileChatInput: React.FC<MobileChatInputProps> = ({
   onSend,
   onGenerateScene,
   isLoading,
-  isMobile
+  isMobile,
+  placeholder = "Type your message...",
+  showEmojiTray = false
 }) => {
   const [message, setMessage] = useState('');
+  const [emojiTrayOpen, setEmojiTrayOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { isTouchDevice } = useMobileDetection();
 
@@ -26,6 +33,7 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
     if (message.trim() && !isLoading) {
       onSend(message);
       setMessage('');
+      setEmojiTrayOpen(false);
       // Focus back to input after sending
       setTimeout(() => {
         inputRef.current?.focus();
@@ -40,61 +48,93 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
     }
   };
 
-  const handleGenerateScene = () => {
-    if (!isLoading) {
-      onGenerateScene();
-    }
+  const insertEmoji = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    inputRef.current?.focus();
   };
 
-  // Auto-focus on mobile for better UX
+  // Auto-focus on mount for mobile
   useEffect(() => {
     if (isMobile && inputRef.current) {
-      inputRef.current.focus();
+      // Delay to avoid keyboard issues on page load
+      const timer = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [isMobile]);
 
   return (
-    <div className="space-y-3">
-      {/* Scene Generation Button */}
-      <div className="flex justify-center">
-        <Button
-          onClick={handleGenerateScene}
-          disabled={isLoading}
-          variant="outline"
-          size="sm"
-          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0"
-        >
-          <Sparkles className="w-4 h-4 mr-2" />
-          Generate Scene
-        </Button>
-      </div>
+    <div
+      className="space-y-2"
+      style={{
+        paddingBottom: isMobile ? 'env(safe-area-inset-bottom, 0px)' : undefined
+      }}
+    >
+      {/* Emoji Tray - Collapsible on mobile */}
+      {showEmojiTray && emojiTrayOpen && isMobile && (
+        <div className="flex justify-center gap-1 py-2 animate-in slide-in-from-bottom-2 duration-200">
+          {QUICK_EMOJIS.map((emoji) => (
+            <Button
+              key={emoji}
+              variant="ghost"
+              size="sm"
+              onClick={() => insertEmoji(emoji)}
+              disabled={isLoading}
+              className="min-w-[40px] min-h-[40px] text-lg hover:bg-accent"
+            >
+              {emoji}
+            </Button>
+          ))}
+        </div>
+      )}
 
-      {/* Message Input */}
+      {/* Message Input Row */}
       <div className="flex items-end gap-2">
+        {/* Emoji Toggle - Mobile only */}
+        {showEmojiTray && isMobile && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEmojiTrayOpen(!emojiTrayOpen)}
+            className={cn(
+              "flex-shrink-0 min-w-[44px] min-h-[44px]",
+              emojiTrayOpen && "bg-accent"
+            )}
+            aria-label="Toggle emoji tray"
+          >
+            <Smile className="w-5 h-5 text-muted-foreground" />
+          </Button>
+        )}
+
+        {/* Input Field */}
         <div className="flex-1 relative">
           <Input
             ref={inputRef}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Type your message..."
+            placeholder={placeholder}
             disabled={isLoading}
-            className={`
-              pr-12 resize-none
-              ${isTouchDevice ? 'text-base' : 'text-sm'}
-              bg-gray-800 border-gray-700 text-white placeholder-gray-400
-              focus:border-blue-500 focus:ring-blue-500
-            `}
+            className={cn(
+              "pr-12 resize-none",
+              isTouchDevice ? 'text-base' : 'text-sm',
+              "bg-card border-border text-foreground placeholder-muted-foreground",
+              "focus:border-primary focus:ring-primary"
+            )}
             style={{
-              minHeight: isMobile ? '52px' : '40px',
-              paddingTop: isMobile ? '14px' : '8px',
-              paddingBottom: isMobile ? '14px' : '8px'
+              minHeight: isMobile ? '48px' : '40px',
+              paddingTop: isMobile ? '12px' : '8px',
+              paddingBottom: isMobile ? '12px' : '8px'
             }}
           />
-          
+
           {/* Character count indicator */}
-          {message.length > 0 && (
-            <div className="absolute bottom-1 right-2 text-xs text-gray-400">
+          {message.length > 400 && (
+            <div className={cn(
+              "absolute bottom-1 right-2 text-xs",
+              message.length > 480 ? "text-destructive" : "text-muted-foreground"
+            )}>
               {message.length}/500
             </div>
           )}
@@ -106,55 +146,14 @@ export const MobileChatInput: React.FC<MobileChatInputProps> = ({
           disabled={!message.trim() || isLoading}
           size={isMobile ? "default" : "sm"}
           className={cn(
-            "bg-blue-600 hover:bg-blue-700 text-white flex-shrink-0",
+            "bg-primary hover:bg-primary/90 text-primary-foreground flex-shrink-0",
             isMobile ? 'min-w-[44px] min-h-[44px] w-12 h-12' : 'w-10 h-10'
           )}
+          aria-label="Send message"
         >
           <Send className={cn(isMobile ? "w-5 h-5" : "w-4 h-4")} />
         </Button>
       </div>
-
-      {/* Quick Actions */}
-      {isMobile && (
-        <div className="flex justify-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMessage(prev => prev + ' 👋')}
-            disabled={isLoading}
-            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
-          >
-            👋
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMessage(prev => prev + ' ❤️')}
-            disabled={isLoading}
-            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
-          >
-            ❤️
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMessage(prev => prev + ' 😊')}
-            disabled={isLoading}
-            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
-          >
-            😊
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setMessage(prev => prev + ' 🤔')}
-            disabled={isLoading}
-            className="min-w-[44px] min-h-[44px] text-gray-400 hover:text-white text-lg"
-          >
-            🤔
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

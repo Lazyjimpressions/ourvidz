@@ -45,6 +45,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [signedSceneImage, setSignedSceneImage] = useState<string | null>(null);
+  const [sceneImageLoading, setSceneImageLoading] = useState(true);
 
   // Sign character image URL (use passed prop if available)
   useEffect(() => {
@@ -95,19 +96,39 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
     }
   }, [message.metadata?.image_url, hasScene]);
 
-  const formatTime = (timestamp: string) => {
+  // Format timestamp as relative time (e.g., "just now", "2 mins ago")
+  const formatRelativeTime = (timestamp: string) => {
     try {
       const date = new Date(timestamp);
-      
+
       if (isNaN(date.getTime())) {
         console.warn('Invalid timestamp received:', timestamp);
         return 'Invalid time';
       }
-      
-      return date.toLocaleTimeString([], { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-      });
+
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffSecs < 60) {
+        return 'just now';
+      } else if (diffMins < 60) {
+        return `${diffMins}m ago`;
+      } else if (diffHours < 24) {
+        return `${diffHours}h ago`;
+      } else if (diffDays === 1) {
+        return 'yesterday';
+      } else if (diffDays < 7) {
+        return `${diffDays}d ago`;
+      } else {
+        return date.toLocaleDateString([], {
+          month: 'short',
+          day: 'numeric'
+        });
+      }
     } catch (error) {
       console.error('Error formatting time:', error, 'Timestamp:', timestamp);
       return 'Invalid time';
@@ -196,7 +217,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             </span>
             <div className="flex items-center gap-1 text-xs text-gray-500">
               <Clock className="w-3 h-3" />
-              {formatTime(message.timestamp)}
+              {formatRelativeTime(message.timestamp)}
             </div>
           </div>
 
@@ -262,10 +283,21 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
             )}>
               <Card className="overflow-hidden border-gray-700 bg-gray-900 rounded-xl shadow-xl">
                 <div className="relative group">
-                  <img 
-                    src={signedSceneImage} 
+                  {/* Skeleton loader */}
+                  {sceneImageLoading && (
+                    <div className="w-full h-64 bg-gray-800 animate-pulse rounded-t-xl flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-gray-600" />
+                    </div>
+                  )}
+                  <img
+                    src={signedSceneImage}
                     alt="Generated scene"
-                    className="w-full h-auto max-h-96 object-cover rounded-t-xl"
+                    className={cn(
+                      "w-full h-auto max-h-96 object-cover rounded-t-xl transition-opacity duration-300",
+                      sceneImageLoading ? "opacity-0 h-0" : "opacity-100"
+                    )}
+                    onLoad={() => setSceneImageLoading(false)}
+                    onError={() => setSceneImageLoading(false)}
                   />
                   
                   {/* Scene Actions - Show on hover */}

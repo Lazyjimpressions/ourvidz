@@ -1,25 +1,42 @@
 # Roleplay Development Status - Consolidated
 
-**Last Updated:** December 17, 2025  
-**Status:** 🔄 **Refactor Phase - Simple Mobile-First**  
+**Last Updated:** January 2, 2026
+**Status:** ✅ **Mobile UX Improvements Phase - Complete**
 **Purpose:** Single source of truth for roleplay development status, implementation details, and next steps
 
-**Current Phase:** Simple Mobile-First Refactor - Eliminating modal blockers, enabling immediate chat start
-**Refactor Plan:** See `.cursor/plans/roleplay_refactor_-_simple_mobile-first_16bb523a.plan.md`
+**Current Phase:** Mobile UX improvements and progressive enhancement
+**Previous Phase:** Simple Mobile-First Refactor - Completed
 
 ## **🎯 Current Implementation Status**
 
-### **🔄 Refactor Phase: Simple Mobile-First (December 2025)**
+### **✅ Mobile UX Improvements Phase (January 2026)**
+**Goal:** Improve mobile UX across chat experience, navigation, and settings accessibility
+
+**Completed Changes:**
+- ✅ Created simplified MobileChatHeader component (56px height, consolidated menu)
+- ✅ Added ChatBottomNav with primary actions (Character Info, Generate Scene, Settings)
+- ✅ Created QuickSettingsDrawer (bottom sheet for mobile-friendly settings)
+- ✅ Simplified MobileChatInput (removed inline generate button, optional emoji tray)
+- ✅ Added useKeyboardVisible hook for mobile keyboard detection
+- ✅ Created useRoleplaySettings hook for shared settings state
+- ✅ Created DesktopChatLayout for side-by-side desktop layouts
+- ✅ Improved ChatMessage with relative timestamps and image loading skeletons
+- ✅ Integrated responsive header (mobile vs desktop variants)
+- ✅ Added safe area handling for iOS devices
+
+**Status:** Implementation complete, ready for testing
+
+### **✅ Previous: Simple Mobile-First Refactor (December 2025)**
 **Goal:** Eliminate modal blockers, enable immediate chat start, fix dark screen issues
 
-**Key Changes:**
-- Remove preview modal as required step
-- Enable direct navigation: Click card → Chat starts immediately
-- Auto-select scenes or allow no scene
-- Convert modals to non-blocking drawers
-- Fix dark screen overlay persistence issues
+**Completed Changes:**
+- ✅ Removed preview modal as required step
+- ✅ Enabled direct navigation: Click card → Chat starts immediately
+- ✅ Auto-select scenes or allow no scene
+- ✅ Converted modals to non-blocking drawers
+- ✅ Fixed dark screen overlay persistence issues
 
-**Status:** Planning complete, implementation in progress
+**Status:** Complete
 
 ### **✅ Completed Implementation (Pre-Refactor - 85% Complete)**
 - **Mobile-first pages**: MobileRoleplayDashboard.tsx, MobileRoleplayChat.tsx
@@ -67,18 +84,32 @@ src/pages/
 └── MobileRoleplayChat.tsx (632 lines) - ✅ IMPLEMENTED
 ```
 
-### **Components (9 files implemented)**
+### **Components (16 active files, 11 archived)**
 ```
 src/components/roleplay/
-├── MobileCharacterCard.tsx (140 lines) - ✅ IMPLEMENTED
-├── MobileChatInput.tsx (150 lines) - ✅ IMPLEMENTED
-├── MobileCharacterSheet.tsx (240 lines) - ✅ IMPLEMENTED
-├── ChatMessage.tsx (120 lines) - ✅ IMPLEMENTED
-├── ContextMenu.tsx (80 lines) - ✅ IMPLEMENTED
-├── CharacterGrid.tsx (66 lines) - ✅ IMPLEMENTED
-├── QuickStartSection.tsx (77 lines) - ✅ IMPLEMENTED
-├── SearchAndFilters.tsx (100 lines) - ✅ IMPLEMENTED
-└── CharacterPreviewModal.tsx (296 lines) - ✅ NEW - IMPLEMENTED
+├── MobileCharacterCard.tsx - ✅ IMPLEMENTED
+├── MobileChatInput.tsx - ✅ UPDATED (simplified, emoji tray optional)
+├── MobileCharacterSheet.tsx - ✅ IMPLEMENTED
+├── MobileChatHeader.tsx - ✅ NEW (simplified mobile header)
+├── ChatBottomNav.tsx - ✅ NEW (bottom navigation)
+├── QuickSettingsDrawer.tsx - ✅ NEW (mobile settings bottom sheet)
+├── DesktopChatLayout.tsx - ✅ NEW (side-by-side desktop layout)
+├── ChatMessage.tsx - ✅ UPDATED (relative timestamps, image skeletons)
+├── ContextMenu.tsx - ✅ IMPLEMENTED
+├── CharacterGrid.tsx - ✅ IMPLEMENTED
+├── QuickStartSection.tsx - ✅ IMPLEMENTED
+├── SearchAndFilters.tsx - ✅ IMPLEMENTED
+├── CharacterPreviewModal.tsx - ✅ IMPLEMENTED
+├── RoleplayHeader.tsx - ✅ IMPLEMENTED (desktop header)
+├── RoleplaySettingsModal.tsx - ✅ IMPLEMENTED (full settings modal)
+└── CharacterInfoDrawer.tsx - ✅ IMPLEMENTED
+```
+
+### **New Hooks (2 files)**
+```
+src/hooks/
+├── useKeyboardVisible.ts - ✅ NEW (keyboard detection for mobile)
+└── useRoleplaySettings.ts - ✅ NEW (shared settings state)
 ```
 
 ### **Services (2 files implemented)**

@@ -2,14 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { OurVidzDashboardLayout } from '@/components/OurVidzDashboardLayout';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
+import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Send, 
-  Image as ImageIcon, 
-  Settings, 
+import {
+  Send,
+  Image as ImageIcon,
+  Settings,
   ArrowLeft,
   Sparkles,
   User,
@@ -20,8 +21,11 @@ import { MobileCharacterSheet } from '@/components/roleplay/MobileCharacterSheet
 import { ChatMessage } from '@/components/roleplay/ChatMessage';
 import { ContextMenu } from '@/components/roleplay/ContextMenu';
 import { RoleplayHeader } from '@/components/roleplay/RoleplayHeader';
+import { MobileChatHeader } from '@/components/roleplay/MobileChatHeader';
+import { ChatBottomNav } from '@/components/roleplay/ChatBottomNav';
 import { CharacterInfoDrawer } from '@/components/roleplay/CharacterInfoDrawer';
 import { RoleplaySettingsModal } from '@/components/roleplay/RoleplaySettingsModal';
+import { QuickSettingsDrawer } from '@/components/roleplay/QuickSettingsDrawer';
 import { ModelSelector } from '@/components/roleplay/ModelSelector';
 import { useToast } from '@/hooks/use-toast';
 import useSignedImageUrls from '@/hooks/useSignedImageUrls';
@@ -48,8 +52,9 @@ const MobileRoleplayChat: React.FC = () => {
   const { characterId, sceneId } = useParams<{ characterId: string; sceneId?: string }>();
   const navigate = useNavigate();
   const { isMobile, isTablet, isDesktop } = useMobileDetection();
+  const { isKeyboardVisible } = useKeyboardVisible();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
   const [character, setCharacter] = useState<Character | null>(null);
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -57,6 +62,7 @@ const MobileRoleplayChat: React.FC = () => {
   const [showCharacterInfo, setShowCharacterInfo] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [signedCharacterImage, setSignedCharacterImage] = useState<string | null>(null);
   const [memoryTier, setMemoryTier] = useState<'conversation' | 'character' | 'profile'>('conversation');
   
@@ -1267,8 +1273,19 @@ const MobileRoleplayChat: React.FC = () => {
   return (
     <OurVidzDashboardLayout>
       <div className="flex flex-col h-screen bg-background">
-        {/* Header */}
-        <div className="relative">
+        {/* Header - Mobile uses simplified header, Desktop uses full header */}
+        {isMobile ? (
+          <MobileChatHeader
+            backTo="/roleplay"
+            characterName={character.name}
+            characterImage={signedCharacterImage || '/placeholder.svg'}
+            onCharacterInfoClick={() => setShowCharacterInfo(true)}
+            onSettingsClick={() => setShowSettingsModal(true)}
+            onResetClick={handleClearConversation}
+            onShareClick={handleShareConversation}
+            onReportClick={handleReportCharacter}
+          />
+        ) : (
           <RoleplayHeader
             backTo="/roleplay"
             characterName={character.name}
@@ -1277,11 +1294,15 @@ const MobileRoleplayChat: React.FC = () => {
             onSettingsClick={() => setShowSettingsModal(true)}
             onResetClick={handleClearConversation}
           />
-          {/* Model Selector removed - available in Settings drawer to prevent header overlap */}
-        </div>
+        )}
 
-        {/* Chat Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Chat Messages - Add padding for bottom nav on mobile */}
+        <div
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+          style={{
+            paddingBottom: isMobile && !isKeyboardVisible ? '80px' : undefined
+          }}
+        >
           {messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -1333,7 +1354,7 @@ const MobileRoleplayChat: React.FC = () => {
           selectedSceneId={selectedScene?.id}
         />
 
-        {/* Settings Modal */}
+        {/* Settings Modal (Desktop) */}
         <RoleplaySettingsModal
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
@@ -1350,6 +1371,35 @@ const MobileRoleplayChat: React.FC = () => {
           sceneStyle={sceneStyle}
           onSceneStyleChange={setSceneStyle}
         />
+
+        {/* Quick Settings Drawer (Mobile) */}
+        <QuickSettingsDrawer
+          isOpen={showQuickSettings}
+          onClose={() => setShowQuickSettings(false)}
+          onAdvancedSettingsClick={() => setShowSettingsModal(true)}
+          modelProvider={modelProvider}
+          onModelProviderChange={setModelProvider}
+          selectedImageModel={selectedImageModel}
+          onSelectedImageModelChange={setSelectedImageModel}
+          sceneStyle={sceneStyle}
+          onSceneStyleChange={setSceneStyle}
+          chatModels={roleplayModelOptions}
+          imageModels={imageModelOptions}
+          chatWorkerHealthy={chatWorkerHealthy}
+          sdxlWorkerHealthy={false}
+          hasUserCharacter={!!selectedUserCharacterId}
+        />
+
+        {/* Bottom Navigation (Mobile) */}
+        {isMobile && (
+          <ChatBottomNav
+            onCharacterInfoClick={() => setShowCharacterInfo(true)}
+            onGenerateSceneClick={handleGenerateScene}
+            onSettingsClick={() => setShowQuickSettings(true)}
+            isGenerating={isLoading}
+            isVisible={!isKeyboardVisible}
+          />
+        )}
 
         {/* Context Menu */}
         <ContextMenu
