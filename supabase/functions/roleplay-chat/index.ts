@@ -2842,6 +2842,26 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
   const charMatch = fullPrompt.match(/showing (.+?)(?: \(|\s+\(|,|$)/);
   const charName = charMatch ? charMatch[1].trim().replace(/"/g, '') : '';
   
+  // ✅ CRITICAL FIX: Remove character name references from scenario to save tokens
+  // Character names in scenario waste tokens since we already have it in the prefix
+  if (charName) {
+    // Remove full name and variations (with/without quotes, first name only, etc.)
+    const nameParts = charName.split(' ');
+    const firstName = nameParts[0];
+    const fullNamePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    const firstNamePattern = new RegExp(`\\b${firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    const quotedNamePattern = new RegExp(`"${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`, 'gi');
+    
+    scenario = scenario
+      .replace(quotedNamePattern, '')
+      .replace(fullNamePattern, '')
+      .replace(firstNamePattern, '')
+      .replace(/\s+/g, ' ') // Clean up multiple spaces
+      .trim();
+    
+    console.log(`🧹 Removed character name references from scenario, saved tokens`);
+  }
+  
   // Extract ONLY visual appearance tags (not personality)
   // Prefer appearance_tags array if available, otherwise extract from prompt
   const visualTags = appearanceTags.length > 0 
@@ -2908,16 +2928,23 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
       let cutPoint = Math.max(0, targetScenarioLength);
       
       // Find last word boundary (space, period, comma) before cut point
-      const lastSpace = scenario.lastIndexOf(' ', cutPoint);
-      const lastPeriod = scenario.lastIndexOf('.', cutPoint);
-      const lastComma = scenario.lastIndexOf(',', cutPoint);
+      // ✅ FIX: Search backwards from cutPoint to find the nearest boundary
+      let foundBoundary = false;
+      for (let i = cutPoint; i >= 0 && i > cutPoint - 20; i--) {
+        const char = scenario[i];
+        if (char === '.' || char === ',' || char === ' ') {
+          cutPoint = i + (char === ' ' ? 0 : 1); // Include punctuation, exclude space
+          foundBoundary = true;
+          break;
+        }
+      }
       
-      // Use the closest punctuation/space to cut point
-      const boundaryPoints = [lastSpace, lastPeriod, lastComma].filter(p => p > 0 && p < cutPoint);
-      if (boundaryPoints.length > 0) {
-        cutPoint = Math.max(...boundaryPoints) + 1; // Include the punctuation/space
-      } else if (lastSpace > 0) {
-        cutPoint = lastSpace; // At least cut at word boundary
+      // Fallback: find last space if no punctuation found
+      if (!foundBoundary) {
+        const lastSpace = scenario.lastIndexOf(' ', cutPoint);
+        if (lastSpace > 0) {
+          cutPoint = lastSpace;
+        }
       }
       
       const scenarioPart = scenario.substring(0, cutPoint).trim();
@@ -2927,16 +2954,23 @@ function optimizePromptForCLIP(fullPrompt: string, scenarioText: string, appeara
       const targetLength = optimized.length - charsToRemove - 10;
       let cutPoint = Math.max(0, targetLength);
       
-      // Find last word boundary
-      const lastSpace = optimized.lastIndexOf(' ', cutPoint);
-      const lastPeriod = optimized.lastIndexOf('.', cutPoint);
-      const lastComma = optimized.lastIndexOf(',', cutPoint);
+      // ✅ FIX: Search backwards from cutPoint to find the nearest boundary
+      let foundBoundary = false;
+      for (let i = cutPoint; i >= 0 && i > cutPoint - 20; i--) {
+        const char = optimized[i];
+        if (char === '.' || char === ',' || char === ' ') {
+          cutPoint = i + (char === ' ' ? 0 : 1); // Include punctuation, exclude space
+          foundBoundary = true;
+          break;
+        }
+      }
       
-      const boundaryPoints = [lastSpace, lastPeriod, lastComma].filter(p => p > 0 && p < cutPoint);
-      if (boundaryPoints.length > 0) {
-        cutPoint = Math.max(...boundaryPoints) + 1;
-      } else if (lastSpace > 0) {
-        cutPoint = lastSpace;
+      // Fallback: find last space if no punctuation found
+      if (!foundBoundary) {
+        const lastSpace = optimized.lastIndexOf(' ', cutPoint);
+        if (lastSpace > 0) {
+          cutPoint = lastSpace;
+        }
       }
       
       optimized = optimized.substring(0, cutPoint).trim();
