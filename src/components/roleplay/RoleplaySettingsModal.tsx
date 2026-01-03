@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -84,9 +84,10 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     return model ? model.isAvailable : false;
   };
 
-  // Load saved settings from localStorage with validation
+  // Load saved settings from localStorage with validation (only when modal opens)
+  const hasLoadedSettingsRef = useRef(false);
   useEffect(() => {
-    if (isOpen && !modelsLoading && !imageModelsLoading) {
+    if (isOpen && !modelsLoading && !imageModelsLoading && !hasLoadedSettingsRef.current) {
       const savedSettings = localStorage.getItem('roleplay-settings');
       if (savedSettings) {
         try {
@@ -106,22 +107,42 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
 
           // Validate saved image model - fall back to default if unavailable
           const savedImageModel = parsed.selectedImageModel;
-          if (savedImageModel && isValidImageModel(savedImageModel)) {
+          if (savedImageModel && savedImageModel.trim() !== '' && isValidImageModel(savedImageModel)) {
             setLocalSelectedImageModel(savedImageModel);
           } else if (defaultImageModel) {
             setLocalSelectedImageModel(defaultImageModel.value);
             console.log('⚠️ Saved image model unavailable, using default:', defaultImageModel.value);
-          } else {
+          } else if (selectedImageModel && selectedImageModel.trim() !== '') {
             setLocalSelectedImageModel(selectedImageModel);
+          } else {
+            // No valid model - leave empty (will show placeholder)
+            setLocalSelectedImageModel('');
           }
 
           setLocalConsistencySettings(parsed.consistencySettings || consistencySettings);
+          hasLoadedSettingsRef.current = true;
         } catch (error) {
           console.warn('Failed to parse saved roleplay settings:', error);
         }
+      } else {
+        // No saved settings, initialize from props
+        setLocalMemoryTier(memoryTier);
+        setLocalModelProvider(modelProvider);
+        // Use selectedImageModel if valid, otherwise default or empty
+        if (selectedImageModel && selectedImageModel.trim() !== '') {
+          setLocalSelectedImageModel(selectedImageModel);
+        } else if (defaultImageModel) {
+          setLocalSelectedImageModel(defaultImageModel.value);
+        } else {
+          setLocalSelectedImageModel('');
+        }
+        setLocalConsistencySettings(consistencySettings);
+        hasLoadedSettingsRef.current = true;
       }
+    } else if (!isOpen) {
+      hasLoadedSettingsRef.current = false;
     }
-  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings, modelsLoading, imageModelsLoading, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
+  }, [isOpen, modelsLoading, imageModelsLoading, memoryTier, modelProvider, selectedImageModel, consistencySettings, allModelOptions, imageModelOptions, defaultChatModel, defaultImageModel]);
   
   // Save settings to localStorage
   const saveSettings = async () => {
@@ -170,17 +191,13 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
     onClose();
   };
   
-  // Reset to current props when modal opens
+  // Initialize user character and scene style from props when modal opens
   useEffect(() => {
     if (isOpen) {
-      setLocalMemoryTier(memoryTier);
-      setLocalModelProvider(modelProvider);
-      setLocalSelectedImageModel(selectedImageModel);
-      setLocalConsistencySettings(consistencySettings);
       setLocalUserCharacterId(selectedUserCharacterId || null);
       setLocalSceneStyle(sceneStyle);
     }
-  }, [isOpen, memoryTier, modelProvider, selectedImageModel, consistencySettings, selectedUserCharacterId, sceneStyle]);
+  }, [isOpen, selectedUserCharacterId, sceneStyle]);
   const selectedModel = allModelOptions?.find(m => m.value === localModelProvider) || allModelOptions?.[0] || null;
   const getModelCapabilities = (model: typeof selectedModel) => {
     if (!model) {
@@ -258,15 +275,22 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                     <span>Local SDXL offline - using cloud models</span>
                   </div>
                 )}
-                <Select value={localSelectedImageModel} onValueChange={setLocalSelectedImageModel}>
+                <Select 
+                  key={`image-model-${localSelectedImageModel || 'none'}`}
+                  value={localSelectedImageModel || undefined} 
+                  onValueChange={(value) => {
+                    console.log('📸 Image model changed:', value);
+                    setLocalSelectedImageModel(value);
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select image model..." />
                   </SelectTrigger>
                   <SelectContent>
                     {imageModelsLoading ? (
-                      <SelectItem value="" disabled>Loading image models...</SelectItem>
+                      <SelectItem value="__loading__" disabled>Loading image models...</SelectItem>
                     ) : imageModelOptions.length === 0 ? (
-                      <SelectItem value="" disabled>No image models available</SelectItem>
+                      <SelectItem value="__none__" disabled>No image models available</SelectItem>
                     ) : (
                       imageModelOptions.map((model) => {
                         const isLocal = model.type === 'local';
@@ -793,6 +817,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                   <div className="space-y-2">
                     <Label htmlFor="method" className="text-sm">Method</Label>
                     <Select 
+                      key={`consistency-method-${localConsistencySettings.method}`}
                       value={localConsistencySettings.method} 
                       onValueChange={(value: 'hybrid' | 'i2i_reference' | 'seed_locked') => {
                         console.log('🎨 Consistency method changed:', value);
@@ -800,11 +825,7 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue>
-                          {localConsistencySettings.method === 'hybrid' && 'Hybrid'}
-                          {localConsistencySettings.method === 'i2i_reference' && 'Reference Image'}
-                          {localConsistencySettings.method === 'seed_locked' && 'Seed Locked'}
-                        </SelectValue>
+                        <SelectValue placeholder="Select consistency method..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem 

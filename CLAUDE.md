@@ -35,8 +35,8 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 | Modality | Local (RunPod) | Closed (Cloud) |
 |----------|----------------|----------------|
 | **Chat** | Qwen (`qwen-local` via `chat_worker`) | OpenRouter (Dolphin, etc.) |
-| **Images** | SDXL (via `wan` worker) | Replicate |
-| **Video** | WAN 2.1 + Qwen 7B | Replicate (future) |
+| **Images** | SDXL (via `wan` worker) | Replicate, fal.ai (Seedream) |
+| **Video** | WAN 2.1 + Qwen 7B | fal.ai (WAN I2V) |
 
 ### Routing Best Practice
 
@@ -99,6 +99,9 @@ The system supports two model pathways that must ALWAYS have fallback/alternativ
 - All edge functions deployed via Supabase online dashboard
 - Use Supabase MCP tools for database operations and schema changes
 - Never use `supabase` CLI commands
+- **Account**: `lazyjimpressions` Supabase account
+- **Project**: `ourvidz` (ID: `ulmdmzhcdwfadbvfpckt`)
+- **MCP Tool**: Use `mcp__supabase-lazyjimpressions__*` tools (NOT itmanager1341)
 
 **Test User**: `pokercpa05` (found via email lookup in `auth.users`)
 
