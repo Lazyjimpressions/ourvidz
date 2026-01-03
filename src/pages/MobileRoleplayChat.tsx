@@ -199,15 +199,27 @@ const MobileRoleplayChat: React.FC = () => {
   const { getSignedUrl } = useSignedImageUrls();
   const { toast } = useToast();
 
-  // Helper to get valid image model with fallback to first Replicate model
+  // Helper to get valid image model with fallback to first active Replicate model
+  // Always returns a valid Replicate model UUID (never null) to avoid defaulting to local SDXL
   const getValidImageModel = (): string | null => {
     // If selected model is valid (not 'sdxl' or empty), use it
-    if (selectedImageModel && selectedImageModel !== 'sdxl' && selectedImageModel.trim() !== '') {
-      return selectedImageModel;
+    if (selectedImageModel && selectedImageModel !== 'sdxl' && selectedImageModel !== 'sdxl_image_high' && selectedImageModel !== 'sdxl_image_fast' && selectedImageModel.trim() !== '') {
+      // Verify it's still available
+      const modelExists = imageModelOptions.find(m => m.value === selectedImageModel && m.isAvailable);
+      if (modelExists) {
+        return selectedImageModel;
+      }
+      console.warn('⚠️ Selected image model no longer available, falling back to default Replicate model');
     }
-    // Fall back to first available Replicate/API model
-    const replicateModels = imageModelOptions.filter(m => m.type === 'api');
-    return replicateModels.length > 0 ? replicateModels[0].value : null;
+    // Fall back to first available Replicate/API model (prioritize active models from database)
+    const replicateModels = imageModelOptions.filter(m => m.type === 'api' && m.isAvailable);
+    if (replicateModels.length > 0) {
+      console.log('📸 Using default Replicate model:', replicateModels[0].value);
+      return replicateModels[0].value;
+    }
+    // If no API models available, return null (edge function will handle fallback)
+    console.warn('⚠️ No Replicate image models available');
+    return null;
   };
 
   // Cleanup on unmount

@@ -1,13 +1,13 @@
 # Image-to-Image (I2I) System
 
-**Last Updated:** January 2025  
-**Status:** ✅ ACTIVE - SDXL worker implementation complete, 3rd party API integration planned
+**Last Updated:** January 3, 2026
+**Status:** ✅ PRODUCTION - Local SDXL + Replicate API fallback
 
-## **🎯 System Overview**
+## Overview
 
-The I2I system enables users to modify existing images while preserving subject/pose/composition. It's a shared feature across multiple pages (Workspace, Library, Storyboard) and supports both SDXL worker and 3rd party API approaches.
+The I2I system enables users to modify existing images while preserving subject/pose/composition. It supports both local SDXL worker and Replicate API models.
 
-### **Core Use Cases**
+### Core Use Cases
 1. **Subject Modification**: Change specific elements while preserving person/pose
 2. **Composition Modification**: Modify backgrounds, lighting, etc.
 3. **Exact Copying**: Create high-fidelity copies (manual selection required)
@@ -15,278 +15,322 @@ The I2I system enables users to modify existing images while preserving subject/
 
 ---
 
-## **✅ Current Implementation (SDXL Worker)**
+## Provider Architecture
 
-### **Technical Architecture**
+### Image Generation Providers
 
-#### **Frontend Components**
-- **SimplePromptInput** (`src/components/workspace/SimplePromptInput.tsx`)
-  - Reference image upload and display
-  - Mode switching (MODIFY vs COPY)
-  - Reference strength controls
-  - Style control management
+| Provider | Type | Use Case |
+|----------|------|----------|
+| Local SDXL (RunPod) | Primary | Fast, private, cost-effective |
+| Replicate API | Fallback/Alternative | Cloud-based, multiple models |
+| fal.ai | Planned | SFW/suggestive content, editing |
 
-#### **Backend Integration**
-- **queue-job Edge Function** (`supabase/functions/queue-job/index.ts`)
-  - Parameter validation and conversion
-  - Mode detection and routing
-  - Reference strength to denoise_strength conversion
+**Note:** OpenRouter is for chat/roleplay only - it does NOT support image generation.
 
-#### **SDXL Worker Processing**
-- **Model**: SDXL Lustify (NSFW-optimized)
-- **Parameters**: denoise_strength, guidance_scale, steps
-- **Enhancement**: Qwen 2.5-7B Base for prompt enhancement
+### Provider Routing
 
-### **Mode Implementation**
+```
+User Request → Queue-Job Edge Function
+                    ↓
+    ┌───────────────┴───────────────┐
+    ↓                               ↓
+Local SDXL Worker              Replicate API
+(via Redis queue)              (direct API call)
+    ↓                               ↓
+sdxl_queue → RunPod           replicate-image → Replicate
+    ↓                               ↓
+  Result                        Webhook → Result
+```
 
-#### **Modify Mode (Default)**
+---
+
+## Current Implementation
+
+### Local SDXL Worker
+
+**Edge Function:** `supabase/functions/queue-job/index.ts`
+
 ```typescript
-// Default behavior for all references
+// Queue I2I job to local SDXL worker
+const jobPayload = {
+  job_type: 'sdxl_image_high',
+  prompt: enhancedPrompt,
+  reference_image_url: signedImageUrl,
+  exact_copy_mode: false,  // true for COPY mode
+  skip_enhancement: false,
+  denoise_strength: 0.5,   // Default for MODIFY mode
+  guidance_scale: 7.5,
+  steps: 25
+};
+```
+
+**Worker Processing:**
+- Model: SDXL Lustify (NSFW-optimized)
+- Enhancement: Qwen 2.5-7B Base for prompt enhancement
+- Performance: 3-8 seconds per image
+
+### Replicate API
+
+**Edge Function:** `supabase/functions/replicate-image/index.ts`
+
+```typescript
+// I2I via Replicate
+const replicatePayload = {
+  prompt: body.prompt,
+  apiModelId: selectedModel.id,
+  metadata: {
+    reference_image_url: referenceUrl,
+    consistency_method: 'i2i_reference',
+    reference_strength: 0.5,
+    contentType: 'nsfw'
+  },
+  input: {
+    image: referenceImageUrl,
+    strength: 0.5,
+    guidance_scale: 7.5
+  }
+};
+```
+
+---
+
+## Mode Implementation
+
+### Modify Mode (Default)
+
+```typescript
 const modifyDefaults = {
-  referenceStrength: 0.5,        // Worker converts to denoise_strength = 0.5
+  referenceStrength: 0.5,        // Balanced modification
   enhancementEnabled: true,
   styleControlsEnabled: true,
-  guidanceScale: 7.5,            // Worker default for high quality
-  steps: 25                      // Worker default for high quality
+  guidanceScale: 7.5,
+  steps: 25
 };
 ```
 
-#### **Copy Mode (Manual Selection)**
+- User must provide a modification prompt
+- Enhancement applies cinematic/quality terms
+- Style controls (lighting, mood) active
+
+### Copy Mode (Manual Toggle)
+
 ```typescript
-// Manual toggle required for exact copying
 const copyDefaults = {
-  referenceStrength: 0.95,       // Worker clamps denoise_strength to ≤0.05
+  referenceStrength: 0.95,       // Minimal modification
   enhancementEnabled: false,
   styleControlsEnabled: false,
-  guidanceScale: 1.0,            // Worker exact copy mode
-  steps: 15                      // Worker exact copy mode
+  guidanceScale: 1.0,            // Exact copy mode
+  steps: 15
 };
 ```
 
-### **Parameter Flow**
+- User must explicitly toggle COPY mode
+- No prompt enhancement applied
+- Worker clamps denoise_strength to ≤0.05
 
-#### **Frontend → Edge Function**
+---
+
+## Frontend Components
+
+### SimplePromptInput
+
+**File:** `src/components/workspace/SimplePromptInput.tsx`
+
+- Reference image upload and display
+- Mode switching (MODIFY ↔ COPY)
+- Reference strength slider
+- Style control toggles
+
+### Mode Toggle Behavior
+
 ```typescript
-// queue-job edge function processing
-if (exactCopyMode) {
-  // Set exact_copy_mode flag - worker handles optimization
-  exact_copy_mode: true,
-  skip_enhancement: true,
-  // Worker will clamp denoise_strength to ≤0.05, set CFG=1.0
-} else {
-  // Normal modify mode - use worker defaults
+// Upload behavior
+onUpload → setMode('modify')  // Always default to MODIFY
+         → setReferenceStrength(0.5)
+
+// Toggle behavior
+MODIFY → COPY:
+  → setReferenceStrength(0.95)
+  → setEnhancementEnabled(false)
+
+COPY → MODIFY:
+  → setReferenceStrength(0.5)
+  → setEnhancementEnabled(true)
+```
+
+---
+
+## Parameter Flow
+
+### Frontend → Edge Function
+
+```typescript
+// MODIFY mode
+{
   exact_copy_mode: false,
   skip_enhancement: false,
-  // Worker uses denoise_strength = 0.5 (default), CFG=7.5
+  reference_strength: 0.5  // Worker converts to denoise_strength
+}
+
+// COPY mode
+{
+  exact_copy_mode: true,
+  skip_enhancement: true,
+  reference_strength: 0.95  // Worker clamps to ≤0.05 denoise
 }
 ```
 
-#### **SDXL Worker Processing**
-```python
-# For exact copy mode
-if job.get('exact_copy_mode'):
-    denoise_strength = min(denoise_strength, 0.05)  # Clamp to ≤0.05
-    guidance_scale = 1.0     # Minimal guidance
-    negative_prompt = ""     # No negatives
-    # Skip all enhancement and style controls
-else:
-    # Normal modify mode - use worker defaults
-    denoise_strength = 0.5   # Worker default for i2i
-    guidance_scale = 7.5     # Worker default for high quality
-    # Apply normal enhancement and style controls
+### Reference Strength Conversion
+
+```typescript
+// For MODIFY mode: invert for denoise
+const denoiseStrength = 1 - referenceStrength;
+
+// For COPY mode: clamp to minimal modification
+const denoiseStrength = Math.min(1 - referenceStrength, 0.05);
 ```
-
-### **UI/UX Implementation**
-
-#### **Default State**
-- **Mode**: Always "modify" (never default to copy)
-- **Visual**: Clear "MOD" indicator
-- **Behavior**: User must manually toggle to "COPY"
-
-#### **Upload Behavior**
-- **Upload Image** → Auto-enable "modify" mode
-- **Reference Strength**: 0.5
-- **No Auto-switch** to copy mode
-
-#### **Mode Toggle**
-- **MOD → COPY**: Sets reference strength to 0.95, disables enhancement
-- **COPY → MOD**: Sets reference strength to 0.5, enables enhancement
-- **Visual Feedback**: Clear mode indicators with appropriate styling
-
-### **Reference Types**
-
-#### **Workspace/Library Items**
-- **Metadata Extraction**: Original prompt, seed, generation parameters
-- **Default Mode**: Modify (strength 0.5)
-- **Copy Mode**: Uses original prompt and seed for consistency
-
-#### **Uploaded Images**
-- **No Metadata**: No original prompt or seed available
-- **Default Mode**: Modify (strength 0.5)
-- **Copy Mode**: Uses minimal preservation prompt
 
 ---
 
-## **🚧 Planned Implementation (3rd Party APIs)**
+## Fallback Strategy
 
-### **Replicate API Integration**
+### Priority Order
 
-#### **RV5.1 Model**
-- **Model**: Replicate RV5.1 (Realistic Vision 5.1)
-- **Use Case**: Alternative to SDXL for i2i
-- **Advantages**: Different style, potentially better for certain use cases
-- **Integration**: Via Supabase API providers table
-
-#### **Implementation Plan**
 ```typescript
-// API provider configuration
-const replicateConfig = {
-  provider: 'replicate',
-  model: 'rv5.1',
-  endpoint: 'https://api.replicate.com/v1/predictions',
-  parameters: {
-    denoise_strength: 0.5,  // Map from reference strength
-    guidance_scale: 7.5,
-    steps: 25
-  }
-};
-```
-
-### **OpenRouter API Integration**
-
-#### **Alternative Models**
-- **SDXL 1.0**: Standard SDXL model
-- **SDXL Turbo**: Faster generation
-- **Other Models**: As available through OpenRouter
-
-#### **Implementation Plan**
-```typescript
-// OpenRouter configuration
-const openRouterConfig = {
-  provider: 'openrouter',
-  models: ['sdxl-1.0', 'sdxl-turbo'],
-  endpoint: 'https://openrouter.ai/api/v1',
-  parameters: {
-    denoise_strength: 0.5,
-    guidance_scale: 7.5,
-    steps: 25
-  }
-};
-```
-
-### **API Provider Management**
-
-#### **Supabase Tables**
-- **api_providers**: Provider configuration and credentials
-- **api_models**: Available models per provider
-- **Admin Interface**: Manage providers and models
-
-#### **Fallback Strategy**
-```typescript
-// Priority order for i2i generation
-const i2iPriority = [
-  'sdxl-worker',      // Primary: Internal SDXL worker
-  'replicate-rv5.1',  // Secondary: Replicate RV5.1
-  'openrouter-sdxl',  // Tertiary: OpenRouter SDXL
-  'openrouter-turbo'  // Fallback: OpenRouter Turbo
+const i2iFallbackOrder = [
+  'local-sdxl',    // Primary: Local SDXL worker (fastest, private)
+  'replicate',     // Secondary: Replicate API models
+  'fal-ai'         // Future: fal.ai for SFW/editing
 ];
 ```
 
+### Health Check Logic
+
+```typescript
+// Check local worker health before routing
+const localHealth = await checkWorkerHealth('wanWorker');  // Shared GPU
+
+if (localHealth.isHealthy) {
+  return queueToLocalWorker(jobPayload);
+} else {
+  // Fallback to Replicate
+  const model = await getDefaultReplicateModel();
+  return callReplicateAPI(jobPayload, model);
+}
+```
+
 ---
 
-## **🔧 Technical Implementation Details**
+## Negative Prompt Handling
 
-### **Parameter Mapping**
+### Generation Mode Detection
 
-#### **Reference Strength Conversion**
 ```typescript
-// Frontend reference strength to worker denoise_strength
-const convertReferenceStrength = (referenceStrength: number, mode: 'modify' | 'copy') => {
-  if (mode === 'copy') {
-    return Math.min(referenceStrength, 0.05); // Clamp for exact copy
+// Automatic detection based on reference image
+const hasReferenceImage = !!(body.reference_image_url || body.input?.image);
+const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
+```
+
+### Database Query
+
+```sql
+-- I2I-specific negative prompts (minimal to avoid interference)
+SELECT negative_prompt FROM negative_prompts
+WHERE model_type = 'sdxl'
+  AND content_mode = 'nsfw'
+  AND generation_mode = 'i2i'  -- Separate from txt2img
+  AND is_active = true
+ORDER BY priority DESC;
+```
+
+### I2I Optimization
+
+| Mode | Negative Prompt Terms |
+|------|----------------------|
+| txt2img | 7-12 terms (quality control) |
+| i2i | 3 terms only (minimal interference) |
+
+Rationale: Excessive negative prompts interfere with I2I modification fidelity.
+
+---
+
+## Error Handling
+
+### Worker Failures
+
+```typescript
+if (workerError) {
+  // Log and fallback
+  console.error('❌ SDXL worker failed:', workerError);
+
+  if (fallbackEnabled) {
+    return await callReplicateAPI(payload);
   }
-  return 1 - referenceStrength; // Invert for modify mode
-};
+
+  throw new Error('I2I generation failed');
+}
 ```
 
-#### **Mode Detection**
+### API Failures
+
 ```typescript
-// Determine i2i mode based on user input and settings
-const detectI2IMode = (referenceImage: string, exactCopyMode: boolean, prompt: string) => {
-  if (!referenceImage) return 'none';
-  if (exactCopyMode) return 'copy';
-  if (prompt.trim()) return 'modify';
-  return 'modify'; // Default to modify
+if (replicateError) {
+  // Cannot fallback further - return error
+  return {
+    error: 'Image generation failed',
+    details: replicateError.message,
+    fallback_attempted: true
+  };
+}
+```
+
+---
+
+## Performance
+
+### Generation Times
+
+| Provider | Mode | Time |
+|----------|------|------|
+| Local SDXL | MODIFY | 3-8s |
+| Local SDXL | COPY | 2-4s |
+| Replicate | MODIFY | 5-15s |
+
+### Quality Settings
+
+| Quality | Steps | Guidance | Use Case |
+|---------|-------|----------|----------|
+| Fast | 15 | 7.0 | Quick previews |
+| High | 25 | 7.5 | Final output |
+
+---
+
+## Future Enhancements
+
+### Planned: fal.ai Integration
+
+```typescript
+// fal.ai for SFW/suggestive content and editing
+const falConfig = {
+  provider: 'fal',
+  model: 'fal-ai/bytedance/seedream/v4/edit',
+  capabilities: ['i2i', 'editing', 'enhancement'],
+  nsfw_support: 'to_be_tested'  // Pending real-world testing
 };
 ```
 
-### **Error Handling**
+### Advanced Features
 
-#### **Worker Failures**
-- **Fallback**: Switch to 3rd party API
-- **Retry Logic**: Attempt with different parameters
-- **User Feedback**: Clear error messages and recovery options
-
-#### **API Failures**
-- **Provider Switch**: Try next available provider
-- **Parameter Adjustment**: Reduce quality for faster generation
-- **Graceful Degradation**: Fall back to basic generation
-
----
-
-## **📊 Performance Considerations**
-
-### **Generation Times**
-- **SDXL Worker**: 3-8 seconds per image
-- **Replicate RV5.1**: 5-15 seconds per image
-- **OpenRouter SDXL**: 3-10 seconds per image
-
-### **Cost Optimization**
-- **Provider Selection**: Choose based on cost and quality requirements
-- **Batch Processing**: Group multiple i2i requests
-- **Caching**: Cache common reference images
-
-### **Quality vs Speed**
-- **High Quality**: Use SDXL worker with full enhancement
-- **Fast Generation**: Use OpenRouter Turbo or reduced parameters
-- **Balanced**: Use Replicate RV5.1 with moderate settings
-
----
-
-## **🎯 Future Enhancements**
-
-### **Advanced Features**
 1. **Multi-Reference**: Support multiple reference images
 2. **Style Transfer**: Apply artistic styles to references
 3. **Batch I2I**: Process multiple images with same modification
 4. **Character Consistency**: Advanced character preservation
 
-### **Integration Opportunities**
-1. **Storyboard System**: I2I for scene continuity
-2. **Library Management**: Bulk i2i operations
-3. **Workflow Automation**: Automated i2i pipelines
-
-### **Quality Improvements**
-1. **Better Parameter Tuning**: AI-optimized parameter selection
-2. **Enhanced Prompting**: Intelligent prompt modification
-3. **Result Comparison**: Side-by-side comparison tools
-
 ---
 
-## **🔍 Testing and Validation**
+## Related Documentation
 
-### **Test Scenarios**
-1. **Subject Modification**: Change clothing, accessories, etc.
-2. **Background Changes**: Modify scene backgrounds
-3. **Exact Copying**: Verify high-fidelity reproduction
-4. **Error Handling**: Test fallback scenarios
-
-### **Quality Metrics**
-1. **Subject Preservation**: Maintain person/character consistency
-2. **Modification Accuracy**: Apply requested changes correctly
-3. **Artifact Reduction**: Minimize generation artifacts
-4. **User Satisfaction**: Track user feedback and preferences
-
----
-
-**Note**: This system is actively developed and will be enhanced with 3rd party API integration. The current SDXL worker implementation provides a solid foundation for the expanded system.
+- [REPLICATE_API.md](../05-APIS/REPLICATE_API.md) - Replicate integration details
+- [FAL_AI.md](../05-APIS/FAL_AI.md) - fal.ai platform integration
+- [PROMPTING_SYSTEM.md](./PROMPTING_SYSTEM.md) - Prompt templates
+- [SDXL_WORKER.md](../04-WORKERS/SDXL_WORKER.md) - Local worker details

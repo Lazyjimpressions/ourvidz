@@ -1,8 +1,8 @@
 # Replicate Image Edge Function
 
-**File:** `supabase/functions/replicate-image/index.ts`  
-**Last Updated:** January 2025  
-**Status:** ✅ Enhanced with I2I Detection and Generation Mode Support
+**File:** `supabase/functions/replicate-image/index.ts`
+**Last Updated:** January 3, 2026
+**Status:** ✅ PRODUCTION - Database-driven with I2I Detection and Generation Mode Support
 
 ## **Overview**
 

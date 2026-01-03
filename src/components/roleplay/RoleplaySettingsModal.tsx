@@ -800,7 +800,11 @@ export const RoleplaySettingsModal: React.FC<RoleplaySettingsModalProps> = ({
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select consistency method..." />
+                        <SelectValue>
+                          {localConsistencySettings.method === 'hybrid' && 'Hybrid'}
+                          {localConsistencySettings.method === 'i2i_reference' && 'Reference Image'}
+                          {localConsistencySettings.method === 'seed_locked' && 'Seed Locked'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem 

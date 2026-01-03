@@ -1,423 +1,328 @@
 # Replicate API Integration
 
-**Last Updated:** January 2025  
-**Status:** ✅ ACTIVE - RV5.1 model integrated, additional models planned
+**Last Updated:** January 3, 2026
+**Status:** ✅ PRODUCTION - Database-driven model configuration with I2I and T2I support
 
-## **🎯 Overview**
+## Overview
 
-The Replicate API integration provides access to alternative image generation models, starting with RV5.1 (Realistic Vision 5.1). This serves as a fallback option when the SDXL worker is unavailable and provides additional model variety for users.
+The Replicate API integration provides cloud-based image generation through any Replicate-hosted model. Models are configured via the `api_models` database table, enabling zero-code model additions through the admin dashboard.
 
-### **Key Capabilities**
-- **RV5.1 Model**: High-quality realistic image generation
-- **Fallback Support**: Alternative to SDXL worker when needed
-- **Model Variety**: Access to multiple Replicate models
-- **Cost Optimization**: Pay-per-use model with transparent pricing
-
----
-
-## **🔧 Technical Setup**
-
-### **API Configuration**
-```typescript
-// Replicate API Configuration
-const REPLICATE_CONFIG = {
-  baseUrl: 'https://api.replicate.com/v1',
-  apiKey: process.env.REPLICATE_API_KEY,
-  defaultModel: 'stability-ai/realistic-vision-v5.1',
-  timeout: 300000, // 5 minutes
-  retryAttempts: 3
-};
-```
-
-### **Model Specifications**
-```yaml
-RV5.1 Model:
-  Name: "stability-ai/realistic-vision-v5.1"
-  Type: Text-to-Image
-  License: CreativeML Open RAIL-M
-  Resolution: 1024x1024 (default)
-  Performance: 10-30 seconds per image
-  Cost: ~$0.05 per image
-```
-
-### **Environment Variables**
-```bash
-# Required environment variables
-REPLICATE_API_KEY=your_replicate_api_key
-REPLICATE_WEBHOOK_URL=https://your-domain.com/api/replicate-webhook
-```
+### Key Capabilities
+- **Database-Driven Models**: Add/configure models via admin UI without code changes
+- **I2I + T2I Support**: Automatic detection and optimized handling
+- **CLIP Token Validation**: Warns when prompts exceed 77-token limit
+- **Dynamic Negative Prompts**: Content-mode and generation-mode aware
+- **Webhook-Based Completion**: Async job handling via `replicate-webhook`
 
 ---
 
-## **🎨 RV5.1 Implementation**
+## Architecture
 
-### **Model Integration**
-```typescript
-// RV5.1 model integration
-const generateWithRV51 = async (params: RV51Params) => {
-  const prediction = await replicate.predictions.create({
-    version: "stability-ai/realistic-vision-v5.1",
-    input: {
-      prompt: params.prompt,
-      negative_prompt: params.negativePrompt || "",
-      width: params.width || 1024,
-      height: params.height || 1024,
-      num_outputs: params.batchSize || 1,
-      guidance_scale: params.guidanceScale || 7.5,
-      num_inference_steps: params.steps || 25,
-      seed: params.seed || Math.floor(Math.random() * 1000000)
-    },
-    webhook: REPLICATE_CONFIG.webhookUrl,
-    webhook_events_filter: ["completed"]
-  });
-  
-  return prediction;
-};
+### Request Flow
+
+```
+Frontend → replicate-image Edge Function → Replicate API → replicate-webhook → workspace_assets
 ```
 
-### **Parameter Mapping**
-```typescript
-// Map frontend parameters to RV5.1
-const mapToRV51Params = (frontendParams: FrontendParams) => {
-  return {
-    prompt: frontendParams.prompt,
-    negative_prompt: frontendParams.negativePrompt || "",
-    width: frontendParams.width || 1024,
-    height: frontendParams.height || 1024,
-    num_outputs: frontendParams.batchSize || 1,
-    guidance_scale: frontendParams.guidanceScale || 7.5,
-    num_inference_steps: frontendParams.steps || 25,
-    seed: frontendParams.seed || Math.floor(Math.random() * 1000000)
-  };
-};
-```
+1. **Frontend** submits request with `apiModelId` or uses default
+2. **Edge Function** resolves model config from `api_models` table
+3. **Replicate API** runs prediction with webhook URL
+4. **Webhook Handler** downloads result, uploads to storage, updates job
 
-### **I2I Support (Planned)**
-```typescript
-// Future I2I support for RV5.1
-const generateI2IWithRV51 = async (params: RV51I2IParams) => {
-  const prediction = await replicate.predictions.create({
-    version: "stability-ai/realistic-vision-v5.1",
-    input: {
-      prompt: params.prompt,
-      negative_prompt: params.negativePrompt || "",
-      image: params.referenceImageUrl,
-      strength: params.denoiseStrength || 0.5,
-      guidance_scale: params.guidanceScale || 7.5,
-      num_inference_steps: params.steps || 25
-    },
-    webhook: REPLICATE_CONFIG.webhookUrl,
-    webhook_events_filter: ["completed"]
-  });
-  
-  return prediction;
-};
-```
+### Database Schema
 
----
-
-## **🔗 Frontend Integration**
-
-### **Job Submission**
-```typescript
-// Frontend job submission to Replicate
-const submitReplicateJob = async (params: ReplicateJobParams) => {
-  const jobData = {
-    job_type: 'replicate_rv51',
-    provider: 'replicate',
-    model: 'stability-ai/realistic-vision-v5.1',
-    prompt: params.prompt,
-    negative_prompt: params.negativePrompt,
-    batch_size: params.batchSize || 1,
-    width: params.width || 1024,
-    height: params.height || 1024,
-    guidance_scale: params.guidanceScale || 7.5,
-    steps: params.steps || 25,
-    
-    // I2I parameters (future)
-    reference_image_url: params.referenceImageUrl,
-    denoise_strength: params.denoiseStrength,
-    
-    // Fallback configuration
-    fallback_to_sdxl: params.fallbackToSDXL || false
-  };
-  
-  return await queueJob(jobData);
-};
-```
-
-### **Progress Tracking**
-```typescript
-// Track Replicate job progress
-const trackReplicateProgress = (predictionId: string) => {
-  const checkStatus = async () => {
-    const prediction = await replicate.predictions.get(predictionId);
-    
-    switch (prediction.status) {
-      case 'starting':
-        updateProgressUI({ status: 'starting', percentage: 10 });
-        break;
-      case 'processing':
-        updateProgressUI({ status: 'processing', percentage: 50 });
-        break;
-      case 'succeeded':
-        updateProgressUI({ status: 'completed', percentage: 100 });
-        handleCompletedPrediction(prediction);
-        break;
-      case 'failed':
-        updateProgressUI({ status: 'failed', percentage: 0 });
-        handleFailedPrediction(prediction);
-        break;
-    }
-  };
-  
-  // Poll status every 2 seconds
-  const interval = setInterval(checkStatus, 2000);
-  return () => clearInterval(interval);
-};
-```
-
----
-
-## **📊 Cost Management**
-
-### **Pricing Structure**
-```yaml
-RV5.1 Model Pricing:
-  Base Cost: $0.05 per image
-  Batch Discount: 10% for 3+ images
-  Resolution Scaling:
-    512x512: $0.025 per image
-    1024x1024: $0.05 per image
-    1536x1536: $0.075 per image
-```
-
-### **Usage Tracking**
-```typescript
-// Track Replicate API usage
-const trackReplicateUsage = (prediction: ReplicatePrediction) => {
-  const usage = {
-    provider: 'replicate',
-    model: prediction.model,
-    cost: calculateCost(prediction),
-    tokens_used: prediction.metrics?.tokens || 0,
-    timestamp: new Date().toISOString()
-  };
-  
-  logUsage(usage);
-};
-```
-
-### **Budget Management**
-```typescript
-// Budget management for Replicate usage
-const checkReplicateBudget = async (userId: string) => {
-  const monthlyUsage = await getMonthlyUsage(userId, 'replicate');
-  const userPlan = await getUserPlan(userId);
-  
-  if (monthlyUsage.cost > userPlan.replicateBudget) {
-    throw new Error('Replicate budget exceeded');
-  }
-  
-  return true;
-};
-```
-
----
-
-## **🔍 Error Handling**
-
-### **Common Issues**
-```typescript
-// Handle Replicate API errors
-const handleReplicateError = (error: any, jobData: any) => {
-  if (error.status === 429) {
-    // Rate limit exceeded
-    return {
-      error: 'Rate limit exceeded, please try again later',
-      retryAfter: error.headers['retry-after'],
-      fallback: true
-    };
-  }
-  
-  if (error.status === 402) {
-    // Payment required
-    return {
-      error: 'Payment required for Replicate API',
-      fallback: true
-    };
-  }
-  
-  if (error.status === 500) {
-    // Server error
-    return {
-      error: 'Replicate service temporarily unavailable',
-      fallback: true
-    };
-  }
-  
-  return {
-    error: 'Unknown Replicate API error',
-    fallback: true
-  };
-};
-```
-
-### **Fallback Strategy**
-```typescript
-// Fallback to SDXL worker if Replicate fails
-const handleReplicateFallback = async (jobData: any) => {
-  if (jobData.fallback_to_sdxl) {
-    // Convert to SDXL job
-    const sdxlJob = {
-      ...jobData,
-      job_type: 'sdxl_image_high',
-      target_worker: 'sdxl'
-    };
-    
-    return await queueJob(sdxlJob);
-  }
-  
-  throw new Error('Replicate generation failed and fallback disabled');
-};
-```
-
----
-
-## **📈 Performance Monitoring**
-
-### **Response Time Tracking**
-```typescript
-// Monitor Replicate response times
-const monitorReplicatePerformance = (prediction: ReplicatePrediction) => {
-  const startTime = new Date(prediction.created_at);
-  const endTime = new Date(prediction.completed_at);
-  const duration = endTime.getTime() - startTime.getTime();
-  
-  const metrics = {
-    provider: 'replicate',
-    model: prediction.model,
-    duration_ms: duration,
-    status: prediction.status,
-    timestamp: new Date().toISOString()
-  };
-  
-  logPerformanceMetrics(metrics);
-};
-```
-
-### **Quality Monitoring**
-```typescript
-// Monitor generation quality
-const monitorReplicateQuality = (prediction: ReplicatePrediction) => {
-  if (prediction.status === 'failed') {
-    logQualityIssue('replicate_generation_failed', prediction);
-  }
-  
-  if (prediction.metrics?.duration > 60000) { // 60 seconds
-    logQualityIssue('slow_replicate_generation', prediction);
-  }
-  
-  // Check output quality
-  if (prediction.output && Array.isArray(prediction.output)) {
-    prediction.output.forEach((imageUrl, index) => {
-      validateImageQuality(imageUrl, `replicate_rv51_${index}`);
-    });
-  }
-};
-```
-
----
-
-## **🚀 Future Enhancements**
-
-### **Additional Models**
-```yaml
-Planned Replicate Models:
-  - SDXL 1.0: "stability-ai/sdxl"
-  - SDXL Turbo: "stability-ai/sdxl-turbo"
-  - Realistic Vision 6.0: "stability-ai/realistic-vision-v6"
-  - Custom Models: User-trained models
-```
-
-### **Advanced Features**
-```typescript
-// Future advanced features
-const advancedReplicateFeatures = {
-  // Multi-model comparison
-  compareModels: async (prompt: string, models: string[]) => {
-    const results = await Promise.all(
-      models.map(model => generateWithModel(prompt, model))
-    );
-    return results;
-  },
-  
-  // Style transfer
-  styleTransfer: async (imageUrl: string, style: string) => {
-    // Implement style transfer with Replicate
-  },
-  
-  // Batch processing
-  batchProcess: async (prompts: string[]) => {
-    // Process multiple prompts efficiently
-  }
-};
-```
-
-### **Integration Opportunities**
-1. **Model Selection UI**: Let users choose between different Replicate models
-2. **Quality Comparison**: Side-by-side comparison of different models
-3. **Cost Optimization**: Automatic model selection based on cost/quality requirements
-
----
-
-## **🔧 Configuration Management**
-
-### **Supabase Integration**
+#### api_providers Table
 ```sql
--- API providers table
-CREATE TABLE api_providers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name VARCHAR(255) NOT NULL,
-  provider_type VARCHAR(50) NOT NULL,
-  api_key_encrypted TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- API models table
-CREATE TABLE api_models (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider_id UUID REFERENCES api_providers(id),
-  model_name VARCHAR(255) NOT NULL,
-  model_version VARCHAR(100),
-  is_active BOOLEAN DEFAULT true,
-  cost_per_request DECIMAL(10,4),
-  created_at TIMESTAMP DEFAULT NOW()
+-- Replicate provider entry
+INSERT INTO api_providers (
+  name, display_name, base_url,
+  auth_scheme, auth_header_name, secret_name, is_active
+) VALUES (
+  'replicate', 'Replicate', 'https://api.replicate.com/v1',
+  'bearer', 'Authorization', 'REPLICATE_API_TOKEN', true
 );
 ```
 
-### **Admin Interface**
+#### api_models Table
+```sql
+-- Example: RV5.1 model configuration
+INSERT INTO api_models (
+  provider_id, model_key, display_name, version,
+  modality, task, model_family, is_active, is_default, priority,
+  input_defaults, capabilities
+) VALUES (
+  (SELECT id FROM api_providers WHERE name = 'replicate'),
+  'lucataco/realistic-vision-v5.1',
+  'Realistic Vision 5.1',
+  'a45f82a1382bed5c7aeb861dac7c7d191b0fdf74d8d57c4a0e6ed7d4d0bf7d24', -- Version hash
+  'image', 'generation', 'rv51', true, true, 1,
+  '{"width": 1024, "height": 1024, "num_inference_steps": 25, "guidance_scale": 7.5}',
+  '{"allowed_input_keys": ["prompt", "negative_prompt", "width", "height", "num_inference_steps", "guidance_scale", "scheduler", "seed", "num_outputs"], "allowed_schedulers": ["K_EULER_ANCESTRAL", "DPMSolverMultistep", "DDIM"]}'
+);
+```
+
+**Critical Fields:**
+- `version`: Must be the Replicate version hash (32-64 hex chars), NOT the model slug
+- `model_key`: Human-readable model identifier (e.g., `lucataco/realistic-vision-v5.1`)
+- `capabilities.allowed_input_keys`: Whitelist to prevent 422 errors
+- `input_defaults`: Default parameters applied to every request
+
+---
+
+## Edge Function: replicate-image
+
+**File:** `supabase/functions/replicate-image/index.ts`
+
+### Model Resolution
+
 ```typescript
-// Admin interface for managing Replicate configuration
-const manageReplicateConfig = {
-  // Add new model
-  addModel: async (modelConfig: ModelConfig) => {
-    return await supabase.from('api_models').insert(modelConfig);
-  },
-  
-  // Update model settings
-  updateModel: async (modelId: string, updates: Partial<ModelConfig>) => {
-    return await supabase.from('api_models').update(updates).eq('id', modelId);
-  },
-  
-  // Monitor usage
-  getUsageStats: async (timeframe: string) => {
-    return await supabase.rpc('get_replicate_usage_stats', { timeframe });
-  }
+// Priority order for model selection:
+// 1. Explicit apiModelId provided in request
+// 2. Default Replicate image model (is_default = true)
+// 3. First active Replicate image model by priority
+
+if (body.apiModelId) {
+  // Use specific model by ID
+  apiModel = await getModelById(body.apiModelId);
+} else {
+  // Get default Replicate image model
+  apiModel = await getDefaultReplicateModel();
+}
+```
+
+### CLIP Token Validation
+
+```typescript
+// CLIP hard limit: 77 tokens - everything after is truncated
+const estimatedTokens = Math.ceil(promptLength / 4.2); // ~4.2 chars per token
+const MAX_CLIP_TOKENS = 77;
+
+if (estimatedTokens > MAX_CLIP_TOKENS) {
+  console.warn(`⚠️ Prompt exceeds ${MAX_CLIP_TOKENS} token limit - will be truncated`);
+}
+```
+
+### I2I Detection
+
+```typescript
+// Automatic I2I detection based on reference image presence
+const hasReferenceImage = !!(
+  body.input?.image ||
+  body.metadata?.referenceImage ||
+  body.metadata?.reference_image_url ||
+  body.reference_image_url
+);
+
+// Generation mode determines negative prompt selection
+const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
+```
+
+### Negative Prompt Composition
+
+```sql
+-- Database query for negative prompts
+SELECT negative_prompt FROM negative_prompts
+WHERE model_type = 'sdxl'  -- Normalized from model_family
+  AND content_mode = 'nsfw'  -- From UI toggle
+  AND generation_mode = 'txt2img'  -- Detected from request
+  AND is_active = true
+ORDER BY priority DESC;
+```
+
+Final negative prompt: `${baseNegativePrompt}, ${userProvidedNegative}`
+
+### Safety Checker
+
+```typescript
+// NSFW content disables safety checker
+if (contentMode === 'nsfw') {
+  modelInput.disable_safety_checker = true;
+}
+```
+
+---
+
+## Edge Function: replicate-webhook
+
+**File:** `supabase/functions/replicate-webhook/index.ts`
+
+### Webhook Flow
+
+1. Receive Replicate webhook POST with prediction result
+2. Verify HMAC-SHA256 signature (if `REPLICATE_WEBHOOK_SECRET` configured)
+3. Extract image URL from output (filters grid/composite images)
+4. Download and upload to `workspace-temp` storage bucket
+5. Create `workspace_assets` record
+6. Update job status to `completed`
+
+### Image Filtering
+
+```typescript
+// Skip composite/grid images from multi-output predictions
+const isCompositeImage = (url: string) => {
+  return url.includes('output.png') ||
+         url.includes('grid') ||
+         url.includes('combined');
 };
 ```
 
 ---
 
-**Note**: This integration provides a robust fallback option for image generation and expands the platform's model variety. The RV5.1 model offers high-quality realistic image generation as an alternative to the SDXL worker.
+## Frontend Integration
+
+### Job Submission
+
+```typescript
+// Submit to replicate-image edge function
+const response = await supabase.functions.invoke('replicate-image', {
+  body: {
+    prompt: enhancedPrompt,
+    apiModelId: selectedModel.id,  // UUID from api_models
+    job_type: 'sdxl_image_high',   // For job tracking
+    quality: 'high',               // 'high' or 'fast'
+    metadata: {
+      contentType: 'nsfw',         // Content mode toggle
+      original_prompt: userPrompt,
+      // I2I fields if applicable:
+      reference_image_url: referenceUrl,
+      consistency_method: 'i2i_reference',
+      reference_strength: 0.5
+    },
+    input: {
+      // Model-specific overrides
+      steps: 25,
+      guidance_scale: 7.5,
+      scheduler: 'K_EULER_ANCESTRAL'
+    }
+  }
+});
+```
+
+### Model Selection (Admin Dashboard)
+
+Models are managed via `ApiModelsTab.tsx`:
+- **Modality**: `image` for image generation
+- **Task**: `generation` for T2I/I2I
+- **Provider**: Must be `replicate`
+- **Version**: Replicate version hash (required)
+
+---
+
+## Model Configuration
+
+### Required Capabilities JSONB
+
+```json
+{
+  "allowed_input_keys": [
+    "prompt", "negative_prompt", "width", "height",
+    "num_inference_steps", "guidance_scale", "scheduler",
+    "seed", "num_outputs", "image", "strength"
+  ],
+  "allowed_schedulers": [
+    "K_EULER_ANCESTRAL", "DPMSolverMultistep", "DDIM",
+    "K_EULER", "HeunDiscrete", "KarrasDPM", "PNDM"
+  ],
+  "scheduler_aliases": {
+    "EulerA": "K_EULER_ANCESTRAL",
+    "MultistepDPM": "DPMSolverMultistep"
+  },
+  "input_key_mappings": {
+    "steps": "num_inference_steps",
+    "i2i_image_key": "image",
+    "i2i_strength_key": "strength"
+  }
+}
+```
+
+### Input Defaults JSONB
+
+```json
+{
+  "width": 1024,
+  "height": 1024,
+  "num_inference_steps": 25,
+  "guidance_scale": 7.5,
+  "scheduler": "K_EULER_ANCESTRAL"
+}
+```
+
+---
+
+## Pricing
+
+| Model | Approximate Cost |
+|-------|-----------------|
+| RV5.1 | ~$0.05/image |
+| SDXL | ~$0.04/image |
+| FLUX | ~$0.025/image |
+
+Actual costs vary by resolution and inference steps. Track via `usage_logs` table.
+
+---
+
+## Error Handling
+
+### Common Errors
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `Model version required` | Missing `version` in api_models | Add Replicate version hash |
+| `Invalid version format` | Version is slug, not hash | Use 32-64 char hex hash |
+| `No Replicate models configured` | No active models in api_models | Add model via admin |
+| `422 Unprocessable Entity` | Unsupported input parameter | Update `allowed_input_keys` |
+
+### Fallback Strategy
+
+```typescript
+// If specific apiModelId not found, try:
+// 1. Default Replicate image model (is_default = true)
+// 2. First active Replicate image model by priority
+// 3. Return 500 error if no models configured
+```
+
+---
+
+## Environment Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `REPLICATE_API_TOKEN` | Replicate API authentication |
+| `REPLICATE_WEBHOOK_SECRET` | Webhook signature verification (optional) |
+
+Secrets are referenced via `api_providers.secret_name` field.
+
+---
+
+## Testing
+
+### Verify Model Configuration
+
+```sql
+-- Check active Replicate image models
+SELECT display_name, model_key, version, is_default, priority
+FROM api_models
+WHERE modality = 'image'
+  AND is_active = true
+  AND provider_id = (SELECT id FROM api_providers WHERE name = 'replicate')
+ORDER BY priority ASC;
+```
+
+### Monitor Job Status
+
+```sql
+-- Check recent Replicate jobs
+SELECT id, job_type, status, model_type, created_at
+FROM jobs
+WHERE metadata->>'provider_name' = 'replicate'
+ORDER BY created_at DESC
+LIMIT 10;
+```
+
+---
+
+## Related Documentation
+
+- [REPLICATE_IMAGE_EDGE_FUNCTION.md](../04-WORKERS/REPLICATE_IMAGE_EDGE_FUNCTION.md) - Detailed edge function docs
+- [I2I_SYSTEM.md](../03-SYSTEMS/I2I_SYSTEM.md) - Image-to-image workflow
+- Admin Dashboard: API Providers Tab, API Models Tab

@@ -2103,6 +2103,56 @@ const sceneContext = analyzeSceneContent(response);
     console.log('🎬 Generating scene for character:', character.name, 'with enhanced prompt');
     console.log('🎬 Using character seed:', character.seed_locked, 'and reference image:', character.reference_image_url);
 
+    // ✅ FIX: Determine effective image model early (before scene record creation)
+    // Default to Replicate API models (not local SDXL) when no model specified
+    const isLocalSDXL = selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
+    
+    // If no model specified, try to get default Replicate model from database
+    let effectiveImageModel = selectedImageModel;
+    if (!effectiveImageModel || effectiveImageModel.trim() === '') {
+      console.log('📸 No image model specified, fetching default Replicate model from database...');
+      
+      // First, get Replicate provider ID
+      const { data: replicateProvider } = await supabase
+        .from('api_providers')
+        .select('id')
+        .eq('name', 'replicate')
+        .single();
+      
+      if (replicateProvider) {
+        // Get active Replicate models
+        const { data: defaultModels } = await supabase
+          .from('api_models')
+          .select('id, model_key, display_name')
+          .eq('is_active', true)
+          .eq('provider_id', replicateProvider.id)
+          .order('display_name', { ascending: true })
+          .limit(1);
+        
+        if (defaultModels && defaultModels.length > 0) {
+          effectiveImageModel = defaultModels[0].id;
+          console.log('✅ Using default Replicate model:', defaultModels[0].display_name, `(${defaultModels[0].id})`);
+        }
+      }
+      
+      // Fallback: get any active API model if no Replicate models found
+      if (!effectiveImageModel) {
+        const { data: fallbackModels } = await supabase
+          .from('api_models')
+          .select('id, model_key, display_name')
+          .eq('is_active', true)
+          .order('display_name', { ascending: true })
+          .limit(1);
+        
+        if (fallbackModels && fallbackModels.length > 0) {
+          effectiveImageModel = fallbackModels[0].id;
+          console.log('✅ Using fallback active API model:', fallbackModels[0].display_name, `(${fallbackModels[0].id})`);
+        } else {
+          console.warn('⚠️ No active API models found, will fall back to local SDXL if needed');
+        }
+      }
+    }
+
     // ✅ FIX: Create scene record in character_scenes table before generating image
     let sceneId: string | null = null;
     try {
@@ -2115,6 +2165,8 @@ const sceneContext = analyzeSceneContent(response);
           system_prompt: null,
           generation_metadata: {
             model_used: selectedImageModel ? 'api_model' : 'sdxl',
+            selected_image_model: selectedImageModel || null, // Track what was requested
+            effective_image_model: effectiveImageModel || null, // Track what was actually used
             consistency_method: consistencySettings?.method || consistencyMethod,
             reference_strength: refStrength,
             denoise_strength: denoiseStrength,
@@ -2185,12 +2237,13 @@ const sceneContext = analyzeSceneContent(response);
       scenario_preserved: optimizedPrompt.includes(scenePrompt.substring(0, 50))
     });
     
-    // ✅ ENHANCED: Determine image model and route accordingly
+    // ✅ ENHANCED: Determine image model routing (effectiveImageModel already determined above)
     let imageResponse;
-    const useSDXL = !selectedImageModel || selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
+    const useSDXL = isLocalSDXL || (!effectiveImageModel || effectiveImageModel.trim() === '');
     
     console.log('🎨 Image model routing decision:', {
       selectedImageModel,
+      effectiveImageModel,
       useSDXL,
       consistencyMethod
     });
@@ -2229,9 +2282,9 @@ const sceneContext = analyzeSceneContent(response);
         }
       });
       console.log('🎬 SDXL scene generation queued with random seed for variety:', imageResponse);
-    } else if (!useSDXL && selectedImageModel) {
+    } else if (!useSDXL && effectiveImageModel) {
       // ✅ ENHANCED: Use API model for scene generation
-      console.log('🎨 Using API model for scene generation:', selectedImageModel);
+      console.log('🎨 Using API model for scene generation:', effectiveImageModel);
       
       // Get model configuration from database
       const { data: modelConfig, error: modelError } = await supabase
@@ -2244,12 +2297,12 @@ const sceneContext = analyzeSceneContent(response);
           input_defaults,
           capabilities
         `)
-        .eq('id', selectedImageModel)
+        .eq('id', effectiveImageModel)
         .eq('is_active', true)
         .single();
       
       if (modelError || !modelConfig) {
-        console.error('🎨❌ API model not found:', selectedImageModel);
+        console.error('🎨❌ API model not found:', effectiveImageModel);
         // Fallback to SDXL
         imageResponse = await supabase.functions.invoke('queue-job', {
           body: {
@@ -2389,6 +2442,8 @@ const sceneContext = analyzeSceneContent(response);
               consistency_method: finalConsistencyMethod,
               model_used: modelConfig.model_key,
               model_display_name: modelConfig.display_name,
+              selected_image_model: selectedImageModel || null, // Track what was requested
+              effective_image_model: effectiveImageModel, // Track what was actually used
               provider_name: providerName,
               contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
