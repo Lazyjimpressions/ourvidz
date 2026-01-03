@@ -21,13 +21,17 @@ serve(async (req) => {
 
     const body = await req.json();
     
-    // ✅ VALIDATION: Check prompt length
+    // ✅ VALIDATION: Check CLIP token limit (77 tokens hard limit)
     const promptLength = body.prompt?.length || 0;
-    const MAX_PROMPT_LENGTH = 2000; // Most Replicate models support up to 2000 chars, some more
-    const promptTooLong = promptLength > MAX_PROMPT_LENGTH;
+    const estimatedTokens = Math.ceil(promptLength / 4.2); // CLIP tokenizer: ~4.2 chars per token
+    const MAX_CLIP_TOKENS = 77; // CLIP hard limit - everything after is truncated
+    const promptTooLong = estimatedTokens > MAX_CLIP_TOKENS;
     
     if (promptTooLong) {
-      console.warn(`⚠️ VALIDATION: Prompt is ${promptLength} chars, exceeds recommended ${MAX_PROMPT_LENGTH} chars`);
+      console.warn(`⚠️ VALIDATION: Prompt estimated at ${estimatedTokens} CLIP tokens, exceeds ${MAX_CLIP_TOKENS} token limit! Will be truncated.`);
+      console.warn(`⚠️ VALIDATION: Prompt length: ${promptLength} chars`);
+    } else {
+      console.log(`✅ VALIDATION: Prompt estimated at ${estimatedTokens} CLIP tokens (within ${MAX_CLIP_TOKENS} limit)`);
     }
     
     console.log('🎬 Replicate request received:', {

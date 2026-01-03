@@ -2173,6 +2173,18 @@ const sceneContext = analyzeSceneContent(response);
 
     console.log('🎨 Enhanced scene prompt with visual context:', enhancedScenePrompt.substring(0, 150) + '...');
     
+    // ✅ CRITICAL FIX: Optimize prompt for CLIP's 77-token limit
+    // CLIP tokenizes prompts and truncates everything after 77 tokens
+    // We need to compress the prompt while preserving the most important parts (scenario)
+    const optimizedPrompt = optimizePromptForCLIP(enhancedScenePrompt, scenePrompt);
+    console.log('🔧 CLIP optimization:', {
+      original_length: enhancedScenePrompt.length,
+      optimized_length: optimizedPrompt.length,
+      original_estimated_tokens: estimateCLIPTokens(enhancedScenePrompt),
+      optimized_estimated_tokens: estimateCLIPTokens(optimizedPrompt),
+      scenario_preserved: optimizedPrompt.includes(scenePrompt.substring(0, 50))
+    });
+    
     // ✅ ENHANCED: Determine image model and route accordingly
     let imageResponse;
     const useSDXL = !selectedImageModel || selectedImageModel === 'sdxl' || selectedImageModel === 'sdxl_image_high' || selectedImageModel === 'sdxl_image_fast';
@@ -2193,7 +2205,7 @@ const sceneContext = analyzeSceneContent(response);
       imageResponse = await supabase.functions.invoke('queue-job', {
         headers,
         body: {
-          prompt: enhancedScenePrompt,
+          prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
           job_type: 'sdxl_image_high',
           // NOTE: No seed specified - use random for scene variety while reference_image maintains character consistency
           reference_image_url: character.reference_image_url,
@@ -2241,7 +2253,7 @@ const sceneContext = analyzeSceneContent(response);
         // Fallback to SDXL
         imageResponse = await supabase.functions.invoke('queue-job', {
           body: {
-            prompt: enhancedScenePrompt,
+            prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
             job_type: 'sdxl_image_high',
             // No seed - use random for scene variety
             reference_image_url: character.reference_image_url,
@@ -2362,7 +2374,7 @@ const sceneContext = analyzeSceneContent(response);
           
           // ✅ AUDIT: Log what we're sending to replicate-image
           const requestBody = {
-            prompt: enhancedScenePrompt,
+            prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt (77 token limit)
             apiModelId: modelConfig.id,
             jobType: replicateJobType,
             reference_image_url: character.reference_image_url, // Top level for detection
@@ -2384,7 +2396,9 @@ const sceneContext = analyzeSceneContent(response);
               reference_strength: refStrength,
               denoise_strength: denoiseStrength,
               seed_locked: seedLocked,
-              seed: seedLocked // Also in metadata for fallback detection
+              seed: seedLocked, // Also in metadata for fallback detection
+              original_prompt_length: enhancedScenePrompt.length, // Store original for reference
+              optimized_prompt_length: optimizedPrompt.length
             }
           };
           
@@ -2397,7 +2411,10 @@ const sceneContext = analyzeSceneContent(response);
             reference_strength: refStrength,
             denoise_strength: denoiseStrength,
             seed_locked: seedLocked,
-            prompt_preview: enhancedScenePrompt.substring(0, 100) + '...',
+            prompt_preview: optimizedPrompt.substring(0, 100) + '...',
+            original_prompt_length: enhancedScenePrompt.length,
+            optimized_prompt_length: optimizedPrompt.length,
+            estimated_tokens: estimateCLIPTokens(optimizedPrompt),
             apiModelId: modelConfig.id,
             jobType: replicateJobType
           }, null, 2));
@@ -2417,7 +2434,7 @@ const sceneContext = analyzeSceneContent(response);
           imageResponse = await supabase.functions.invoke('queue-job', {
             headers,
             body: {
-              prompt: enhancedScenePrompt,
+              prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
               job_type: 'sdxl_image_high',
               // No seed - use random for scene variety
               reference_image_url: character.reference_image_url,
@@ -2455,7 +2472,7 @@ const sceneContext = analyzeSceneContent(response);
       console.log('🎨 No image model selected, using SDXL fallback');
       imageResponse = await supabase.functions.invoke('queue-job', {
         body: {
-          prompt: enhancedScenePrompt,
+          prompt: optimizedPrompt, // ✅ FIX: Use CLIP-optimized prompt
           job_type: 'sdxl_image_high',
           // No seed - use random for scene variety
           reference_image_url: character.reference_image_url,
@@ -2785,4 +2802,105 @@ async function loadCharacterWithVoice(supabase: any, characterId: string): Promi
     console.error('❌ Error loading character with voice data:', error);
     throw error;
   }
+}
+
+// ✅ CRITICAL: CLIP Token Optimization Functions
+// CLIP tokenizer has a hard limit of 77 tokens - everything after is truncated
+// We need to optimize prompts to fit within 77 tokens while preserving the most important content
+
+/**
+ * Estimate CLIP tokens (more accurate than character-based estimation)
+ * CLIP uses a specific tokenizer - average is ~4.2 chars per token
+ */
+function estimateCLIPTokens(text: string): number {
+  if (!text || typeof text !== 'string') return 0;
+  // CLIP tokenizer is more efficient with punctuation and special chars
+  // Average: 4.2 characters per token
+  return Math.ceil(text.length / 4.2);
+}
+
+/**
+ * Optimize prompt for CLIP's 77-token limit
+ * Priority: Scenario description > Character appearance > Composition instructions
+ */
+function optimizePromptForCLIP(fullPrompt: string, scenarioText: string): string {
+  const MAX_CLIP_TOKENS = 75; // Safety margin below 77 limit
+  const currentTokens = estimateCLIPTokens(fullPrompt);
+  
+  if (currentTokens <= MAX_CLIP_TOKENS) {
+    return fullPrompt; // Already within limit
+  }
+  
+  console.log(`⚠️ Prompt exceeds CLIP limit: ${currentTokens} tokens, optimizing to ${MAX_CLIP_TOKENS}...`);
+  
+  // Extract key components from the prompt
+  const scenarioMatch = fullPrompt.match(/in the following scenario: (.+?)(?:\. Both characters|\. The character|\. Composition|$)/s);
+  const scenario = scenarioMatch ? scenarioMatch[1].trim() : scenarioText;
+  
+  // Extract character descriptions (simplified)
+  const charMatch = fullPrompt.match(/showing (.+?) \(/);
+  const charName = charMatch ? charMatch[1] : '';
+  
+  // Build optimized prompt with priority:
+  // 1. Essential character tags (compressed)
+  // 2. Scenario (most important - preserve as much as possible)
+  // 3. Composition (minimal)
+  
+  // Compress character description to key tags only
+  const essentialTags = extractEssentialTags(fullPrompt);
+  
+  // Build scenario - prioritize first 200 chars (most important actions)
+  const optimizedScenario = scenario.length > 200 
+    ? scenario.substring(0, 200).replace(/\s+\w+$/, '') + '...'
+    : scenario;
+  
+  // Build optimized prompt
+  let optimized = '';
+  if (charName) {
+    optimized = `${charName}, ${essentialTags}, ${optimizedScenario}`;
+  } else {
+    optimized = `${essentialTags}, ${optimizedScenario}`;
+  }
+  
+  // If still too long, compress scenario further
+  let tokens = estimateCLIPTokens(optimized);
+  if (tokens > MAX_CLIP_TOKENS) {
+    const excessTokens = tokens - MAX_CLIP_TOKENS;
+    const charsToRemove = excessTokens * 4.2;
+    optimized = optimized.substring(0, optimized.length - Math.ceil(charsToRemove) - 10) + '...';
+    tokens = estimateCLIPTokens(optimized);
+  }
+  
+  console.log(`✅ Optimized prompt: ${tokens} tokens (was ${currentTokens})`);
+  return optimized;
+}
+
+/**
+ * Extract essential tags from character description
+ * Removes redundant words and keeps only key visual descriptors
+ */
+function extractEssentialTags(prompt: string): string {
+  // Extract appearance tags from parentheses
+  const appearanceMatch = prompt.match(/\(([^)]+)\)/);
+  if (!appearanceMatch) return '';
+  
+  const appearanceText = appearanceMatch[1];
+  
+  // Split by commas and filter
+  const tags = appearanceText
+    .split(',')
+    .map(tag => tag.trim())
+    .filter(tag => {
+      // Remove personality/behavior descriptions (keep only visual)
+      const lower = tag.toLowerCase();
+      return !lower.includes('leader') && 
+             !lower.includes('commands') && 
+             !lower.includes('seeks') &&
+             !lower.includes('direct') &&
+             !lower.includes('loves') &&
+             tag.length > 2;
+    })
+    .slice(0, 12); // Limit to 12 most important tags
+  
+  return tags.join(', ');
 }
