@@ -177,8 +177,30 @@ serve(async (req) => {
     }
 
     // Extract job parameters
-    const jobType = body.job_type || body.jobType || (isVideo ? 'fal_video' : 'fal_image');
     const quality = body.quality || 'high';
+
+    // Normalize job_type for database constraint compatibility
+    // Valid job types include: image_high, image_fast, video_high, video_fast, etc.
+    const normalizeJobType = (jobType: string | undefined, isVideo: boolean, quality: string): string => {
+      // If a valid job_type was passed, use it
+      if (jobType) {
+        // Check if it's already a valid format
+        if (['image_high', 'image_fast', 'video_high', 'video_fast', 'wan_standard', 'wan_enhanced'].includes(jobType)) {
+          return jobType;
+        }
+        // Map fal-specific types to valid types
+        if (jobType === 'fal_image') return quality === 'fast' ? 'image_fast' : 'image_high';
+        if (jobType === 'fal_video') return quality === 'fast' ? 'video_fast' : 'video_high';
+      }
+
+      // Default based on modality and quality
+      if (isVideo) {
+        return quality === 'fast' ? 'video_fast' : 'video_high';
+      }
+      return quality === 'fast' ? 'image_fast' : 'image_high';
+    };
+
+    const jobType = normalizeJobType(body.job_type || body.jobType, isVideo, quality);
     const contentMode = body.metadata?.contentType || 'sfw';
 
     // Detect if this is an i2i request
@@ -204,7 +226,7 @@ serve(async (req) => {
         status: 'queued',
         quality: quality,
         api_model_id: apiModel.id,
-        model_type: 'fal', // Generic fal model type
+        model_type: 'sdxl', // fal Seedream maps to sdxl for constraint compatibility
         format: isVideo ? 'video' : 'image',
         metadata: {
           ...body.metadata,
