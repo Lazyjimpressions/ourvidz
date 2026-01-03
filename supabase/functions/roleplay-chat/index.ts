@@ -2024,7 +2024,11 @@ async function generateSceneNarrativeWithOpenRouter(
     // ✅ Extract consistency settings from UI with defaults
     const refStrength = consistencySettings?.reference_strength ?? 0.65;
     const denoiseStrength = consistencySettings?.denoise_strength ?? 0.65;
-    const seedLocked = consistencySettings?.method === 'seed_locked' ? (consistencySettings?.seed_value ?? character.seed_locked) : null;
+    // ✅ FIX: Hybrid mode also needs seed - extract for both seed_locked and hybrid methods
+    const finalConsistencyMethod = consistencySettings?.method || consistencyMethod;
+    const seedLocked = (finalConsistencyMethod === 'seed_locked' || finalConsistencyMethod === 'hybrid') 
+      ? (consistencySettings?.seed_value ?? character.seed_locked) 
+      : null;
 
     console.log('🎬 Using consistency settings from UI:', {
       method: consistencySettings?.method || 'hybrid',
@@ -2331,7 +2335,7 @@ const sceneContext = analyzeSceneContent(response);
           }
           
           // ✅ FIX: Determine consistency method and build input object accordingly
-          const finalConsistencyMethod = consistencySettings?.method || consistencyMethod;
+          // Note: finalConsistencyMethod already declared above when extracting seedLocked
           const requiresSeed = finalConsistencyMethod === 'seed_locked' || finalConsistencyMethod === 'hybrid';
           const requiresI2I = finalConsistencyMethod === 'i2i_reference' || finalConsistencyMethod === 'hybrid';
           
