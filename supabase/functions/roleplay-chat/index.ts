@@ -1950,19 +1950,32 @@ async function generateSceneNarrativeWithOpenRouter(
   }
 
   // Build scene generation prompt using template
-  const conversationContext = conversationHistory.slice(-3).join(' | ');
+  // ✅ ENHANCED: Use more conversation history (10 messages) for better storyline context
+  const conversationContext = conversationHistory.slice(-10).join(' | ');
+
+  // ✅ ENHANCED: Extract storyline elements from full conversation
+  const storylineContext = extractStorylineContext(conversationHistory);
+  const storylineLocation = storylineContext.locations.length > 0
+    ? storylineContext.locations[storylineContext.locations.length - 1] // Most recent location
+    : sceneContext.setting;
+
   const scenePrompt = template.system_prompt
     .replace(/\{\{character_name\}\}/g, character.name)
     .replace(/\{\{character_description\}\}/g, characterVisualDescription)
     .replace(/\{\{character_personality\}\}/g, character.persona || character.traits || 'engaging')
-    + `\n\nCURRENT SCENE CONTEXT:\n`
+    + `\n\nSTORYLINE CONTEXT (from full conversation):\n`
+    + `Location: ${storylineLocation}\n`
+    + `Key Events: ${storylineContext.keyEvents.join(', ') || 'conversation'}\n`
+    + `Relationship Tone: ${storylineContext.relationshipProgression}\n`
+    + `Current Activity: ${storylineContext.currentActivity}\n`
+    + `\nCURRENT SCENE CONTEXT:\n`
     + `Setting: ${sceneContext.setting}\n`
     + `Mood: ${sceneContext.mood}\n`
     + `Actions: ${sceneContext.actions.join(', ')}\n`
     + `Visual Elements: ${sceneContext.visualElements.join(', ')}\n`
     + `Positioning: ${sceneContext.positioning.join(', ')}\n`
-    + `\nRECENT CONVERSATION:\n${conversationContext}\n\n`
-    + `Generate a concise, immersive scene description (2-4 sentences) that captures the current moment.`;
+    + `\nRECENT CONVERSATION (last 10 exchanges):\n${conversationContext}\n\n`
+    + `IMPORTANT: Generate a scene description that reflects the storyline progression and current location (${storylineLocation}). The scene must be consistent with what has happened in the conversation.`;
 
   console.log('🎬 Scene generation prompt built, calling OpenRouter with model:', modelKey);
 
@@ -2064,14 +2077,20 @@ const sceneContext = analyzeSceneContent(response);
       }
     } catch (narrativeError) {
       console.log('🎬 Fallback to enhanced scene extraction:', narrativeError.message);
-      // Fallback to enhanced scene extraction
+      // Fallback to enhanced scene extraction with storyline context
       const extractedScene = extractSceneFromResponse(response);
+      const fallbackStoryline = extractStorylineContext(conversationHistory);
+      const fallbackLocation = fallbackStoryline.locations.length > 0
+        ? fallbackStoryline.locations[fallbackStoryline.locations.length - 1]
+        : 'intimate setting';
+
       if (!extractedScene) {
-        console.log('🎬 No specific scene description found, using conversation context for scene generation');
-        // Use conversation context as scene prompt if no specific scene is detected
-        scenePrompt = `A scene showing ${character.name} in conversation context: ${conversationHistory.slice(-2).join(' | ')}`;
+        console.log('🎬 No specific scene description found, using storyline context for scene generation');
+        // Use storyline context as scene prompt if no specific scene is detected
+        scenePrompt = `A scene showing ${character.name} at ${fallbackLocation}, ${fallbackStoryline.currentActivity}. The mood is ${fallbackStoryline.relationshipProgression}. Recent context: ${conversationHistory.slice(-5).join(' | ')}`;
       } else {
-        scenePrompt = extractedScene;
+        // Enhance extracted scene with storyline location
+        scenePrompt = `${extractedScene}. Location: ${fallbackLocation}.`;
       }
     }
 
@@ -2428,6 +2447,56 @@ interface SceneContext {
   isNSFW: boolean;
   visualElements: string[];
   positioning: string[];
+}
+
+// Extract key storyline elements from full conversation history for scene generation
+function extractStorylineContext(conversationHistory: string[]): {
+  locations: string[];
+  keyEvents: string[];
+  relationshipProgression: string;
+  currentActivity: string;
+} {
+  const fullText = conversationHistory.join(' ').toLowerCase();
+
+  // Extract locations mentioned in conversation
+  const locationPatterns = [
+    'beach', 'bedroom', 'kitchen', 'living room', 'office', 'cafe', 'restaurant',
+    'park', 'garden', 'pool', 'bathroom', 'shower', 'hotel', 'bar', 'club',
+    'car', 'couch', 'sofa', 'bed', 'balcony', 'rooftop', 'street', 'home',
+    'apartment', 'house', 'library', 'gym', 'studio', 'spa', 'cabin', 'forest'
+  ];
+  const locations = locationPatterns.filter(loc => fullText.includes(loc));
+
+  // Extract key events/activities from conversation
+  const eventPatterns = [
+    'dinner', 'date', 'movie', 'dancing', 'massage', 'cooking', 'watching',
+    'drinking', 'eating', 'talking', 'cuddling', 'kissing', 'swimming',
+    'walking', 'meeting', 'surprise', 'gift', 'celebration', 'party'
+  ];
+  const keyEvents = eventPatterns.filter(evt => fullText.includes(evt));
+
+  // Detect relationship progression
+  let relationshipProgression = 'casual conversation';
+  if (fullText.includes('love') || fullText.includes('passionate')) {
+    relationshipProgression = 'romantic and passionate';
+  } else if (fullText.includes('flirt') || fullText.includes('teas')) {
+    relationshipProgression = 'flirtatious and playful';
+  } else if (fullText.includes('intim') || fullText.includes('close')) {
+    relationshipProgression = 'intimate and close';
+  }
+
+  // Get current activity from most recent messages
+  const recentText = conversationHistory.slice(-2).join(' ').toLowerCase();
+  let currentActivity = 'engaged in conversation';
+  if (recentText.includes('*')) {
+    // Extract action from asterisks
+    const actionMatch = recentText.match(/\*([^*]+)\*/);
+    if (actionMatch) {
+      currentActivity = actionMatch[1].trim();
+    }
+  }
+
+  return { locations, keyEvents, relationshipProgression, currentActivity };
 }
 
 function analyzeSceneContent(response: string): SceneContext {

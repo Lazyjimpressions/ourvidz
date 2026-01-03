@@ -1372,17 +1372,38 @@ const MobileRoleplayChat: React.FC = () => {
           onSceneStyleChange={setSceneStyle}
         />
 
-        {/* Quick Settings Drawer (Mobile) */}
+        {/* Quick Settings Drawer (Mobile) - Auto-saves to localStorage */}
         <QuickSettingsDrawer
           isOpen={showQuickSettings}
           onClose={() => setShowQuickSettings(false)}
           onAdvancedSettingsClick={() => setShowSettingsModal(true)}
           modelProvider={modelProvider}
-          onModelProviderChange={setModelProvider}
+          onModelProviderChange={(value) => {
+            setModelProvider(value);
+            // Auto-save to localStorage
+            const savedSettings = localStorage.getItem('roleplay-settings');
+            const settings = savedSettings ? JSON.parse(savedSettings) : {};
+            settings.modelProvider = value;
+            localStorage.setItem('roleplay-settings', JSON.stringify(settings));
+          }}
           selectedImageModel={selectedImageModel}
-          onSelectedImageModelChange={setSelectedImageModel}
+          onSelectedImageModelChange={(value) => {
+            setSelectedImageModel(value);
+            // Auto-save to localStorage
+            const savedSettings = localStorage.getItem('roleplay-settings');
+            const settings = savedSettings ? JSON.parse(savedSettings) : {};
+            settings.selectedImageModel = value;
+            localStorage.setItem('roleplay-settings', JSON.stringify(settings));
+          }}
           sceneStyle={sceneStyle}
-          onSceneStyleChange={setSceneStyle}
+          onSceneStyleChange={(value) => {
+            setSceneStyle(value);
+            // Auto-save to localStorage
+            const savedSettings = localStorage.getItem('roleplay-settings');
+            const settings = savedSettings ? JSON.parse(savedSettings) : {};
+            settings.sceneStyle = value;
+            localStorage.setItem('roleplay-settings', JSON.stringify(settings));
+          }}
           chatModels={roleplayModelOptions}
           imageModels={imageModelOptions}
           chatWorkerHealthy={chatWorkerHealthy}
