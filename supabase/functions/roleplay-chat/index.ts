@@ -16,6 +16,14 @@ const CONFIG_TTL_MS = 60_000;
 const adminRoleCache = new Map<string, { isAdmin: boolean; ts: number }>();
 const ADMIN_ROLE_TTL_MS = 60_000;
 
+interface ConsistencySettings {
+  method: 'seed_locked' | 'i2i_reference' | 'hybrid';
+  seed_value?: number;
+  reference_strength?: number;
+  denoise_strength?: number;
+  modify_strength?: number;
+}
+
 interface RoleplayChatRequest {
   message?: string; // Optional for kickoff
   conversation_id: string;
@@ -33,6 +41,7 @@ interface RoleplayChatRequest {
   prompt_template_name?: string; // Prompt template name for logging
   selected_image_model?: string; // Selected image model for scene generation
   scene_style?: 'character_only' | 'pov' | 'both_characters'; // Scene composition style
+  consistency_settings?: ConsistencySettings; // User's consistency settings from UI
 }
 
 // User character interface for scene generation
@@ -456,7 +465,8 @@ serve(async (req) => {
         requestBody.selected_image_model,
         authHeader,
         conversation.user_character as UserCharacterForScene | null,
-        requestBody.scene_style || 'character_only'
+        requestBody.scene_style || 'character_only',
+        requestBody.consistency_settings // Pass user's consistency settings from UI
       );
       sceneGenerated = sceneResult.success;
       consistencyScore = sceneResult.consistency_score || 0;
@@ -1872,7 +1882,8 @@ async function generateScene(
   selectedImageModel?: string,
   authHeader?: string,
   userCharacter?: UserCharacterForScene | null,
-  sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only'
+  sceneStyle: 'character_only' | 'pov' | 'both_characters' = 'character_only',
+  consistencySettings?: ConsistencySettings
 ): Promise<{ success: boolean; consistency_score?: number; job_id?: string }> {
   try {
     console.log('🎬 Starting scene generation:', {
@@ -1995,6 +2006,18 @@ async function generateSceneNarrativeWithOpenRouter(
   return narrative;
 }
 
+    // ✅ Extract consistency settings from UI with defaults
+    const refStrength = consistencySettings?.reference_strength ?? 0.65;
+    const denoiseStrength = consistencySettings?.denoise_strength ?? 0.65;
+    const seedLocked = consistencySettings?.method === 'seed_locked' ? (consistencySettings?.seed_value ?? character.seed_locked) : null;
+
+    console.log('🎬 Using consistency settings from UI:', {
+      method: consistencySettings?.method || 'hybrid',
+      reference_strength: refStrength,
+      denoise_strength: denoiseStrength,
+      seed_locked: seedLocked
+    });
+
 // Enhanced scene analysis with comprehensive context
 const sceneContext = analyzeSceneContent(response);
     console.log('🎬 Scene context analyzed:', {
@@ -2115,12 +2138,13 @@ const sceneContext = analyzeSceneContent(response);
             character_id: characterId,
             character_name: character.name,
             scene_type: 'chat_scene',
-            consistency_method: character.consistency_method || consistencyMethod,
-            reference_strength: 0.45,
-            denoise_strength: 0.65,
+            consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
+            reference_strength: refStrength,
+            denoise_strength: denoiseStrength,
             skip_enhancement: false,
             reference_mode: 'modify',
-            seed_locked: false, // Random seed for scene variety
+            seed_locked: seedLocked,
+            seed: seedLocked, // Pass seed for seed_locked method
             contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
             scene_context: JSON.stringify(sceneContext)
           }
@@ -2160,12 +2184,13 @@ const sceneContext = analyzeSceneContent(response);
               character_id: characterId,
               character_name: character.name,
               scene_type: 'chat_scene',
-              consistency_method: character.consistency_method || consistencyMethod,
-              reference_strength: 0.45,
-              denoise_strength: 0.65,
+              consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
+              reference_strength: refStrength,
+              denoise_strength: denoiseStrength,
               skip_enhancement: false,
               reference_mode: 'modify',
-              seed_locked: false,
+              seed_locked: seedLocked,
+              seed: seedLocked,
               contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
               scene_context: JSON.stringify(sceneContext),
               fallback_reason: 'api_model_not_found'
@@ -2194,12 +2219,13 @@ const sceneContext = analyzeSceneContent(response);
                 character_id: characterId,
                 character_name: character.name,
                 scene_type: 'chat_scene',
-                consistency_method: character.consistency_method || consistencyMethod,
-                reference_strength: 0.45,
-                denoise_strength: 0.65,
+                consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
+                reference_strength: refStrength,
+                denoise_strength: denoiseStrength,
                 skip_enhancement: false,
                 reference_mode: 'modify',
-                seed_locked: false,
+                seed_locked: seedLocked,
+                seed: seedLocked,
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',
@@ -2251,15 +2277,17 @@ const sceneContext = analyzeSceneContent(response);
                 character_id: characterId,
                 character_name: character.name,
                 scene_type: 'chat_scene',
-                consistency_method: consistencyMethod,
+                consistency_method: consistencySettings?.method || consistencyMethod,
                 model_used: modelConfig.model_key,
                 model_display_name: modelConfig.display_name,
                 provider_name: providerName,
                 contentType: sceneContext.isNSFW ? 'nsfw' : 'sfw',
                 scene_context: JSON.stringify(sceneContext),
                 character_visual_description: characterVisualDescription,
-                reference_strength: 0.45,
-                denoise_strength: 0.65
+                reference_strength: refStrength,
+                denoise_strength: denoiseStrength,
+                seed_locked: seedLocked,
+                seed: seedLocked
               }
             }
           });
@@ -2283,12 +2311,13 @@ const sceneContext = analyzeSceneContent(response);
                 character_id: characterId,
                 character_name: character.name,
                 scene_type: 'chat_scene',
-                consistency_method: character.consistency_method || consistencyMethod,
-                reference_strength: 0.45,
-                denoise_strength: 0.65,
+                consistency_method: consistencySettings?.method || character.consistency_method || consistencyMethod,
+                reference_strength: refStrength,
+                denoise_strength: denoiseStrength,
                 skip_enhancement: false,
                 reference_mode: 'modify',
-                seed_locked: false,
+                seed_locked: seedLocked,
+                seed: seedLocked,
                 model_used: 'sdxl',
                 model_display_name: 'SDXL (Fallback)',
                 provider_name: 'local',

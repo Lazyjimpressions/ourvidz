@@ -565,7 +565,9 @@ const MobileRoleplayChat: React.FC = () => {
             // Add image model selection (with fallback)
             selected_image_model: getValidImageModel(),
             // Scene style for user representation in images
-            scene_style: sceneStyle
+            scene_style: sceneStyle,
+            // ✅ Pass consistency settings from UI
+            consistency_settings: consistencySettings
           }
         });
 
@@ -770,7 +772,9 @@ const MobileRoleplayChat: React.FC = () => {
           // ✅ ADD IMAGE MODEL SELECTION (only if valid):
           selected_image_model: validImageModel,
           // ✅ Scene style for user representation in images
-          scene_style: sceneStyle
+          scene_style: sceneStyle,
+          // ✅ Pass consistency settings from UI
+          consistency_settings: consistencySettings
         }
       });
 
@@ -870,7 +874,9 @@ const MobileRoleplayChat: React.FC = () => {
           prompt_template_id: promptTemplate?.id || null,
           prompt_template_name: promptTemplate?.template_name || null,
           selected_image_model: getValidImageModel(), // ✅ Use selected image model (with fallback)
-          scene_style: sceneStyle // ✅ Scene style for user representation
+          scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Pass consistency settings from UI
+          consistency_settings: consistencySettings
         }
       });
 
@@ -966,7 +972,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
           selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle // ✅ Scene style for user representation
+          scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Pass consistency settings from UI
+          consistency_settings: consistencySettings
         }
       });
 
@@ -1079,7 +1087,9 @@ const MobileRoleplayChat: React.FC = () => {
           scene_system_prompt: selectedScene?.system_prompt || null,
           user_id: user.id,
           selected_image_model: getValidImageModel(),
-          scene_style: sceneStyle // ✅ Scene style for user representation
+          scene_style: sceneStyle, // ✅ Scene style for user representation
+          // ✅ Pass consistency settings from UI
+          consistency_settings: consistencySettings
         }
       });
 
