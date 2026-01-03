@@ -233,10 +233,10 @@ INSERT INTO api_providers (
 
 | Model | model_key | Modality | char_limit |
 |-------|-----------|----------|------------|
-| Seedream v4 | `fal-ai/seedream-v4` | image | 10,000 |
-| Seedream v4 Edit | `fal-ai/seedream-v4/edit` | image | 10,000 |
-| Seedream v4.5 Edit | `fal-ai/seedream-v4-5/edit` | image | 10,000 |
-| WAN 2.1 I2V | `fal-ai/wan/v2.1/i2v` | video | 1,500 |
+| Seedream v4 | `fal-ai/bytedance/seedream/v4/text-to-image` | image | 10,000 |
+| Seedream v4 Edit | `fal-ai/bytedance/seedream/v4/edit` | image | 10,000 |
+| Seedream v4.5 Edit | `fal-ai/bytedance/seedream/v4.5/edit` | image | 10,000 |
+| WAN 2.1 I2V | `fal-ai/wan/v2.1/image-to-video` | video | 1,500 |
 
 **Query configured models:**
 ```sql
