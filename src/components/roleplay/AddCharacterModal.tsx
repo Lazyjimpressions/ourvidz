@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -8,11 +8,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useGeneration } from '@/hooks/useGeneration';
+import { useImageModels } from '@/hooks/useImageModels';
+import { useRoleplayModels } from '@/hooks/useRoleplayModels';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Save, Users, Sparkles, X, Wand2, Loader2 } from 'lucide-react';
+import { buildCharacterPortraitPrompt } from '@/utils/characterPromptBuilder';
+import { UnifiedUrlService } from '@/lib/services/UnifiedUrlService';
+import { Plus, Save, Users, Sparkles, X, Wand2, Loader2, ImageIcon, RefreshCw, User } from 'lucide-react';
 import type { ContentRating, CharacterLayers, VoiceTone } from '@/types/roleplay';
 
 interface AddCharacterModalProps {
@@ -63,9 +69,108 @@ export const AddCharacterModal = ({
   const [newTag, setNewTag] = useState('');
   const [newVoiceExample, setNewVoiceExample] = useState('');
   const [newForbiddenPhrase, setNewForbiddenPhrase] = useState('');
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [selectedImageModel, setSelectedImageModel] = useState<string>('');
+  const [selectedRoleplayModel, setSelectedRoleplayModel] = useState<string>('');
   const { createUserCharacter } = useUserCharacters();
   const { characters: publicCharacters, isLoading: loadingPublic } = usePublicCharacters();
   const { toast } = useToast();
+  const { generateContent, isGenerating, currentJob, generationProgress } = useGeneration();
+  const { imageModels, defaultImageModel } = useImageModels();
+  const { allModelOptions: roleplayModels, defaultModel: defaultRoleplayModel } = useRoleplayModels();
+
+  // Set default image model when available
+  useEffect(() => {
+    if (defaultImageModel && !selectedImageModel) {
+      setSelectedImageModel(defaultImageModel.id);
+    }
+  }, [defaultImageModel, selectedImageModel]);
+
+  // Set default roleplay model when available
+  useEffect(() => {
+    if (defaultRoleplayModel && !selectedRoleplayModel) {
+      setSelectedRoleplayModel(defaultRoleplayModel.value);
+    }
+  }, [defaultRoleplayModel, selectedRoleplayModel]);
+
+  // Listen for generation completion events
+  useEffect(() => {
+    const handleGenerationComplete = async (event: CustomEvent) => {
+      const { imageUrl, bucket, jobId } = event.detail;
+      console.log('🎨 Character image generation completed:', { imageUrl, bucket, jobId });
+
+      if (imageUrl && bucket) {
+        try {
+          // Get signed URL for the generated image
+          const signedUrl = await UnifiedUrlService.getSignedUrl(bucket, imageUrl, 3600);
+          if (signedUrl) {
+            setGeneratedImageUrl(signedUrl);
+            setFormData(prev => ({
+              ...prev,
+              image_url: signedUrl,
+              reference_image_url: signedUrl
+            }));
+            toast({
+              title: 'Image Generated',
+              description: 'Your character portrait is ready!'
+            });
+          }
+        } catch (error) {
+          console.error('Failed to get signed URL:', error);
+        }
+      }
+    };
+
+    window.addEventListener('generation-completed', handleGenerationComplete as EventListener);
+    return () => {
+      window.removeEventListener('generation-completed', handleGenerationComplete as EventListener);
+    };
+  }, [toast]);
+
+  // Generate character portrait using AI
+  const generateCharacterImage = useCallback(async () => {
+    if (!formData.name || !formData.description) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please provide a name and description before generating an image.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Build optimized prompt for character portrait
+    const prompt = buildCharacterPortraitPrompt({
+      name: formData.name,
+      description: formData.description,
+      appearance_tags: formData.appearance_tags,
+      traits: formData.traits,
+      persona: formData.persona,
+      gender: formData.gender
+    });
+
+    console.log('🎨 Generating character portrait with prompt:', prompt);
+
+    try {
+      await generateContent({
+        format: 'sdxl_image_high',
+        prompt,
+        projectId: '00000000-0000-0000-0000-000000000000', // Default project for character images
+        metadata: {
+          contentType: formData.content_rating,
+          destination: 'character_portrait',
+          characterName: formData.name,
+          apiModelId: selectedImageModel || undefined
+        }
+      });
+    } catch (error) {
+      console.error('Failed to start image generation:', error);
+      toast({
+        title: 'Generation Failed',
+        description: 'Could not start image generation. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  }, [formData, selectedImageModel, generateContent, toast]);
 
   // AI Suggestion function
   const fetchSuggestions = useCallback(async (
@@ -79,7 +184,8 @@ export const AddCharacterModal = ({
           characterName: formData.name || undefined,
           existingTraits: formData.traits ? formData.traits.split(',').map(t => t.trim()) : undefined,
           existingAppearance: formData.appearance_tags.length > 0 ? formData.appearance_tags : undefined,
-          contentRating: formData.content_rating
+          contentRating: formData.content_rating,
+          modelKey: selectedRoleplayModel || undefined
         }
       });
 
@@ -141,7 +247,7 @@ export const AddCharacterModal = ({
     } finally {
       setIsLoadingSuggestion(null);
     }
-  }, [formData, toast]);
+  }, [formData, toast, selectedRoleplayModel]);
 
   const handleCreate = async () => {
     if (!formData.name.trim() || !formData.description.trim()) {
@@ -207,6 +313,7 @@ export const AddCharacterModal = ({
     setNewVoiceExample('');
     setNewForbiddenPhrase('');
     setCreationMode('quick');
+    setGeneratedImageUrl(null);
   };
 
   const addVoiceExample = () => {
@@ -339,8 +446,40 @@ export const AddCharacterModal = ({
               </div>
             </div>
 
-            {/* AI Enhance All Button */}
-            <div className="flex justify-end">
+            {/* AI Enhance Section with Model Selector */}
+            <div className="flex items-center justify-between gap-3">
+              {/* Roleplay Model Selector */}
+              {roleplayModels && roleplayModels.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground whitespace-nowrap">AI Model:</Label>
+                  <Select value={selectedRoleplayModel} onValueChange={setSelectedRoleplayModel}>
+                    <SelectTrigger className="w-[200px] h-8 text-xs">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roleplayModels
+                        .filter(model => model.isAvailable)
+                        .map((model) => (
+                          <SelectItem
+                            key={model.value}
+                            value={model.value}
+                            className="text-xs"
+                          >
+                            <div className="flex flex-col">
+                              <span>{model.label}</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {model.provider}
+                                {model.capabilities?.cost === 'free' && ' • Free'}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* AI Enhance All Button */}
               <Button
                 type="button"
                 variant="outline"
@@ -584,26 +723,137 @@ export const AddCharacterModal = ({
               </>
             )}
 
-            {/* Image URLs */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="image_url">Avatar URL</Label>
-                <Input
-                  id="image_url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
-                  placeholder="https://..."
-                />
+            {/* Character Image Section */}
+            <div className="border border-border rounded-lg p-4 space-y-4 bg-gradient-to-br from-muted/30 to-muted/10">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-medium flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Character Portrait
+                </Label>
+                {imageModels && imageModels.length > 0 && (
+                  <Select value={selectedImageModel} onValueChange={setSelectedImageModel}>
+                    <SelectTrigger className="w-[180px] h-8 text-xs">
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {imageModels.map((model) => (
+                        <SelectItem key={model.id} value={model.id} className="text-xs">
+                          {model.display_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
-              <div>
-                <Label htmlFor="reference_image_url">Reference Image URL</Label>
-                <Input
-                  id="reference_image_url"
-                  value={formData.reference_image_url}
-                  onChange={(e) => setFormData(prev => ({ ...prev, reference_image_url: e.target.value }))}
-                  placeholder="https://..."
-                />
+
+              <div className="flex gap-4">
+                {/* Image Preview */}
+                <div className="relative w-32 h-32 flex-shrink-0 bg-muted rounded-lg overflow-hidden border border-border">
+                  {(generatedImageUrl || formData.image_url) ? (
+                    <img
+                      src={generatedImageUrl || formData.image_url}
+                      alt={formData.name || 'Character preview'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <User className="w-12 h-12 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  {isGenerating && (
+                    <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary mb-2" />
+                      <span className="text-xs text-muted-foreground">Generating...</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Generation Controls */}
+                <div className="flex-1 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Generate a portrait based on your character's description and appearance tags, or paste an image URL below.
+                  </p>
+
+                  {/* Generate Button */}
+                  <Button
+                    type="button"
+                    onClick={generateCharacterImage}
+                    disabled={isGenerating || (!formData.name && !formData.description)}
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                    size="sm"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generating Portrait...
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="w-4 h-4 mr-2" />
+                        Generate AI Portrait
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Generation Progress */}
+                  {isGenerating && currentJob && (
+                    <div className="space-y-1">
+                      <Progress value={generationProgress} className="h-1.5" />
+                      <p className="text-xs text-muted-foreground text-center">
+                        {currentJob.status === 'queued' ? 'Queued...' :
+                         currentJob.status === 'processing' ? 'Processing...' :
+                         'Preparing...'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Regenerate Button */}
+                  {generatedImageUrl && !isGenerating && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={generateCharacterImage}
+                      className="w-full text-xs"
+                    >
+                      <RefreshCw className="w-3 h-3 mr-1" />
+                      Regenerate
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {/* Manual URL Input (collapsible) */}
+              <details className="group">
+                <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  Or enter image URL manually ▾
+                </summary>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="image_url" className="text-xs">Avatar URL</Label>
+                    <Input
+                      id="image_url"
+                      value={formData.image_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
+                      placeholder="https://..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="reference_image_url" className="text-xs">Reference URL</Label>
+                    <Input
+                      id="reference_image_url"
+                      value={formData.reference_image_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, reference_image_url: e.target.value }))}
+                      placeholder="https://..."
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+              </details>
             </div>
 
             {/* Actions */}

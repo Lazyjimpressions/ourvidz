@@ -200,21 +200,6 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     }
   });
   
-  // Wrapper to persist changes
-  const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => {
-    if (!newModel) return;
-    console.log('🔄 Model selection changed to:', newModel);
-    
-    // Save full model object (new format)
-    localStorage.setItem('workspace-selected-model', JSON.stringify(newModel));
-    
-    // Keep old format for backwards compatibility 
-    const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
-    localStorage.setItem('workspace-model-type', saveValue);
-    
-    setSelectedModelInternal(newModel);
-  }, []);
-  
   // Video-specific State
   const [beginningRefImage, setBeginningRefImage] = useState<File | null>(null);
   const [endingRefImage, setEndingRefImage] = useState<File | null>(null);
@@ -242,6 +227,74 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   const [useOriginalParams, setUseOriginalParams] = useState<boolean>(false);
   const [lockSeed, setLockSeed] = useState<boolean>(false);
   const [wasSetByExactCopy, setWasSetByExactCopy] = useState<boolean>(false);
+  
+  // Wrapper to persist changes and handle I2I/T2I mode switching
+  // Moved here after all state declarations to avoid initialization order issues
+  const setSelectedModel = useCallback((newModel: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => {
+    if (!newModel) return;
+    console.log('🔄 Model selection changed to:', newModel);
+    
+    // Save full model object (new format) - do this synchronously first
+    localStorage.setItem('workspace-selected-model', JSON.stringify(newModel));
+    
+    // Keep old format for backwards compatibility 
+    const saveValue = newModel.type === 'replicate' ? 'replicate_rv51' : 'sdxl';
+    localStorage.setItem('workspace-model-type', saveValue);
+    
+    // Update state immediately (synchronous)
+    setSelectedModelInternal(newModel);
+    
+    // Check I2I support asynchronously (fire-and-forget)
+    // This prevents blocking the UI while checking model capabilities
+    (async () => {
+      try {
+        // Check if the new model supports I2I
+        // SDXL always supports I2I, but API models need to be checked
+        let modelSupportsI2I = false;
+        
+        if (newModel.id === 'sdxl' || newModel.type === 'sdxl') {
+          // SDXL always supports I2I
+          modelSupportsI2I = true;
+        } else {
+          // For API models, check capabilities from database
+          const { data: modelData, error } = await supabase
+            .from('api_models')
+            .select('capabilities, model_key')
+            .eq('id', newModel.id)
+            .single();
+          
+          if (!error && modelData) {
+            const capabilities = modelData.capabilities as any;
+            // Check if model supports I2I
+            modelSupportsI2I = capabilities?.supports_i2i === true || 
+                              capabilities?.reference_images === true ||
+                              // Seedream edit models always support I2I
+                              (modelData.model_key?.toLowerCase().includes('seedream') && 
+                               modelData.model_key?.toLowerCase().includes('edit'));
+          }
+        }
+        
+        // If model doesn't support I2I and we have a reference image, clear it
+        if (!modelSupportsI2I && (referenceImage || referenceImageUrl)) {
+          console.log('🧹 Clearing reference image - selected model does not support I2I');
+          setReferenceImage(null);
+          setReferenceImageUrl(null);
+          setReferenceMetadata(null);
+          setExactCopyMode(false);
+        }
+      } catch (err) {
+        console.warn('⚠️ Could not check model capabilities:', err);
+        // On error, assume T2I and clear reference image if present
+        if (referenceImage || referenceImageUrl) {
+          console.log('🧹 Clearing reference image - error checking model capabilities, assuming T2I');
+          setReferenceImage(null);
+          setReferenceImageUrl(null);
+          setReferenceMetadata(null);
+          setExactCopyMode(false);
+        }
+      }
+    })();
+  }, [referenceImage, referenceImageUrl]);
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
@@ -815,6 +868,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             description: "Please select a valid Replicate model and try again",
             variant: "destructive",
           });
+          setIsGenerating(false);
           return;
         }
         
@@ -865,6 +919,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             description: "Please select a valid fal.ai model and try again",
             variant: "destructive",
           });
+          setIsGenerating(false);
           return;
         }
 
@@ -881,14 +936,20 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // Build fal.ai-specific payload (supports both image and video)
         const isFalVideo = mode === 'video';
         
-        // Validate reference image URL for I2I requests
-        if (!isFalVideo && !effRefUrl) {
+        // Validate reference image URL ONLY for I2I requests (not T2I)
+        // Check if this is an I2I-capable model that requires a reference image
+        const hasReferenceImage = !!(referenceImage || referenceImageUrl || effRefUrl);
+        const isI2IRequest = hasReferenceImage && !isFalVideo;
+        
+        // Only validate reference image for I2I requests to fal.ai edit models
+        if (isI2IRequest && !effRefUrl) {
           console.error('❌ I2I request to fal.ai but no reference image URL available');
           toast({
             title: "Reference Image Required",
             description: "Please select or upload a reference image for I2I generation",
             variant: "destructive",
           });
+          setIsGenerating(false);
           return;
         }
         

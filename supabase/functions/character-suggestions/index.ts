@@ -1,9 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Initialize Supabase client
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 /**
  * AI Suggestion types for character creation "sprinkle" feature
@@ -26,6 +32,19 @@ interface CharacterSuggestionRequest {
   };
   existingAppearance?: string[];
   contentRating: ContentRating;
+  modelId?: string;  // UUID from api_models table
+  modelKey?: string; // Alternative: model_key string
+}
+
+interface ModelConfig {
+  model_key: string;
+  display_name: string;
+  input_defaults: {
+    max_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    stream?: boolean;
+  };
 }
 
 interface CharacterSuggestionResponse {
@@ -41,7 +60,63 @@ interface CharacterSuggestionResponse {
   };
   error?: string;
   model_used?: string;
+  model_display_name?: string;
   processing_time_ms?: number;
+}
+
+/**
+ * Fetch model configuration from api_models table
+ */
+async function getModelConfig(modelId?: string, modelKey?: string): Promise<ModelConfig> {
+  // Default fallback model
+  const defaultModelKey = 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free';
+  const defaultConfig: ModelConfig = {
+    model_key: defaultModelKey,
+    display_name: 'Dolphin Mistral 24B Venice',
+    input_defaults: {
+      max_tokens: 500,
+      temperature: 0.8,
+      top_p: 0.9
+    }
+  };
+
+  try {
+    let query = supabase
+      .from('api_models')
+      .select('model_key, display_name, input_defaults')
+      .eq('modality', 'roleplay')
+      .eq('is_active', true);
+
+    if (modelId) {
+      query = query.eq('id', modelId);
+    } else if (modelKey) {
+      query = query.eq('model_key', modelKey);
+    } else {
+      // Get the default model
+      query = query.eq('is_default', true);
+    }
+
+    const { data, error } = await query.limit(1).single();
+
+    if (error || !data) {
+      console.log('⚠️ Model not found, using default:', { modelId, modelKey, error: error?.message });
+      return defaultConfig;
+    }
+
+    console.log('✅ Model config loaded:', {
+      model_key: data.model_key,
+      display_name: data.display_name
+    });
+
+    return {
+      model_key: data.model_key,
+      display_name: data.display_name,
+      input_defaults: (data.input_defaults as ModelConfig['input_defaults']) || defaultConfig.input_defaults
+    };
+  } catch (error) {
+    console.error('❌ Error fetching model config:', error);
+    return defaultConfig;
+  }
 }
 
 /**
@@ -144,32 +219,37 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
 }
 
 /**
- * Call OpenRouter API for suggestions
+ * Call OpenRouter API for suggestions using model config
  */
 async function callOpenRouter(
   systemPrompt: string,
-  userPrompt: string
-): Promise<{ content: string; model: string }> {
+  userPrompt: string,
+  modelConfig: ModelConfig
+): Promise<{ content: string; model: string; display_name: string }> {
   const openRouterKey = Deno.env.get('OpenRouter_Roleplay_API_KEY');
   if (!openRouterKey) {
     throw new Error('OpenRouter API key not configured');
   }
 
+  const defaults = modelConfig.input_defaults || {};
   const payload = {
-    model: 'cognitivecomputations/dolphin3.0-r1-mistral-24b:free',
+    model: modelConfig.model_key,
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ],
-    max_tokens: 500,
-    temperature: 0.8,
-    top_p: 0.9
+    max_tokens: defaults.max_tokens || 500,
+    temperature: defaults.temperature || 0.8,
+    top_p: defaults.top_p || 0.9,
+    stream: false
   };
 
   console.log('📤 Sending to OpenRouter for character suggestions:', {
     model: payload.model,
+    display_name: modelConfig.display_name,
     systemPromptLength: systemPrompt.length,
-    userPromptLength: userPrompt.length
+    userPromptLength: userPrompt.length,
+    settings: { max_tokens: payload.max_tokens, temperature: payload.temperature }
   });
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -192,12 +272,14 @@ async function callOpenRouter(
 
   console.log('✅ OpenRouter response received:', {
     contentLength: content.length,
+    model: modelConfig.model_key,
     preview: content.substring(0, 100) + '...'
   });
 
   return {
     content,
-    model: payload.model
+    model: modelConfig.model_key,
+    display_name: modelConfig.display_name
   };
 }
 
@@ -297,8 +379,16 @@ serve(async (req) => {
     const systemPrompt = buildSystemPrompt(contentRating, requestBody.type);
     const userPrompt = buildUserPrompt(requestBody);
 
-    // Call OpenRouter
-    const { content, model } = await callOpenRouter(systemPrompt, userPrompt);
+    // Get model configuration from api_models table
+    const modelConfig = await getModelConfig(requestBody.modelId, requestBody.modelKey);
+
+    console.log('🎭 Using model for suggestions:', {
+      model_key: modelConfig.model_key,
+      display_name: modelConfig.display_name
+    });
+
+    // Call OpenRouter with model config
+    const { content, model, display_name } = await callOpenRouter(systemPrompt, userPrompt, modelConfig);
 
     // Parse response
     const suggestions = parseAISuggestions(content);
@@ -307,6 +397,7 @@ serve(async (req) => {
       success: true,
       suggestions: suggestions as CharacterSuggestionResponse['suggestions'],
       model_used: model,
+      model_display_name: display_name,
       processing_time_ms: Date.now() - startTime
     };
 
