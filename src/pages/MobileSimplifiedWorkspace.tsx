@@ -63,8 +63,22 @@ const MobileSimplifiedWorkspace = () => {
       fileName: file.name,
       fileSize: file.size,
       fileType: file.type,
-      lastModified: file.lastModified
+      lastModified: file.lastModified,
+      isValidImage: file.type.startsWith('image/')
     });
+    
+    // Additional validation
+    if (!file.type.startsWith('image/')) {
+      console.error('❌ MOBILE: Invalid file type, not an image:', file.type);
+      toast.error('Selected file is not an image');
+      return;
+    }
+    
+    if (file.size === 0) {
+      console.error('❌ MOBILE: File is empty');
+      toast.error('Selected image file is empty');
+      return;
+    }
     
     switch (type) {
       case 'single':
@@ -73,9 +87,11 @@ const MobileSimplifiedWorkspace = () => {
         break;
       case 'start':
         setBeginningRefImage(file);
+        console.log('✅ MOBILE: Beginning reference image File set in hook state');
         break;
       case 'end':
         setEndingRefImage(file);
+        console.log('✅ MOBILE: Ending reference image File set in hook state');
         break;
     }
   }, [setReferenceImage, setBeginningRefImage, setEndingRefImage]);

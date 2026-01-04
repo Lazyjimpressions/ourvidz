@@ -75,18 +75,147 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     onCollapsedChange?.(expanded);
   };
 
-  const handleFileSelect = (type: 'single' | 'start' | 'end') => {
+  const handleFileSelect = async (type: 'single' | 'start' | 'end') => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        onReferenceImageSet?.(file, type);
-        toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
+      if (!file) return;
+
+      console.log('📱 MOBILE: File selected:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified
+      });
+
+      // Check if it's a HEIC/HEIF file (iPhone format)
+      const isHeic = file.type === 'image/heic' || 
+                     file.type === 'image/heif' ||
+                     file.name.toLowerCase().endsWith('.heic') ||
+                     file.name.toLowerCase().endsWith('.heif');
+      
+      let processedFile: File = file;
+
+      if (isHeic) {
+        console.log('🔄 MOBILE: Converting HEIC/HEIF to JPEG...');
+        try {
+          // Convert HEIC to JPEG using canvas
+          const convertedFile = await convertHeicToJpeg(file);
+          processedFile = convertedFile;
+          console.log('✅ MOBILE: HEIC converted to JPEG:', {
+            originalSize: file.size,
+            convertedSize: convertedFile.size,
+            newType: convertedFile.type
+          });
+          toast.success('Image converted from HEIC to JPEG');
+        } catch (error) {
+          console.error('❌ MOBILE: Failed to convert HEIC:', error);
+          toast.error('Failed to convert HEIC image. Please try a JPEG or PNG image.');
+          return;
+        }
       }
+
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      if (!validTypes.includes(processedFile.type)) {
+        console.error('❌ MOBILE: Invalid file type:', processedFile.type);
+        toast.error(`Unsupported image format: ${processedFile.type}. Please use JPEG, PNG, or WebP.`);
+        return;
+      }
+
+      // Validate file size (max 10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      if (processedFile.size > maxSize) {
+        console.error('❌ MOBILE: File too large:', processedFile.size);
+        toast.error('Image is too large. Maximum size is 10MB.');
+        return;
+      }
+
+      onReferenceImageSet?.(processedFile, type);
+      toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
     };
     input.click();
+  };
+
+  // Helper function to convert HEIC/HEIF to JPEG
+  // Note: Browser support for HEIC is limited, so this may not work for all HEIC files
+  // If conversion fails, user will need to convert the image manually
+  const convertHeicToJpeg = async (file: File): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        const img = new Image();
+        let timeoutId: NodeJS.Timeout;
+        
+        img.onload = () => {
+          clearTimeout(timeoutId);
+          try {
+            // Create canvas and draw image
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              reject(new Error('Failed to get canvas context'));
+              return;
+            }
+            
+            ctx.drawImage(img, 0, 0);
+            
+            // Convert to blob (JPEG)
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                reject(new Error('Failed to convert image to blob'));
+                return;
+              }
+              
+              // Create new File object with JPEG extension
+              const jpegFile = new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), {
+                type: 'image/jpeg',
+                lastModified: file.lastModified
+              });
+              
+              console.log('✅ MOBILE: HEIC successfully converted to JPEG');
+              resolve(jpegFile);
+            }, 'image/jpeg', 0.95); // 95% quality
+          } catch (error) {
+            reject(error);
+          }
+        };
+        
+        img.onerror = (error) => {
+          clearTimeout(timeoutId);
+          console.error('❌ MOBILE: Image load error:', error);
+          reject(new Error('Browser cannot decode HEIC image. Please convert to JPEG or PNG first.'));
+        };
+        
+        // Set timeout for image loading (10 seconds)
+        timeoutId = setTimeout(() => {
+          reject(new Error('Image conversion timed out. The HEIC file may not be supported by your browser.'));
+        }, 10000);
+        
+        // Try to load the image
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) {
+          clearTimeout(timeoutId);
+          reject(new Error('Failed to read file data'));
+          return;
+        }
+        
+        img.src = dataUrl;
+      };
+      
+      reader.onerror = (error) => {
+        console.error('❌ MOBILE: FileReader error:', error);
+        reject(new Error('Failed to read file'));
+      };
+      
+      reader.readAsDataURL(file);
+    });
   };
 
   const removeReferenceImage = (type: 'single' | 'start' | 'end') => {
@@ -297,55 +426,40 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
             <div className="space-y-2">
               {currentMode === 'image' ? (
                 // Single reference for images
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFileSelect('single')}
-                    className="flex items-center gap-1 flex-1"
-                  >
-                    <Upload className="h-4 w-4" />
-                    Reference Image
-                  </Button>
-                  {referenceImage && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeReferenceImage('single')}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
-                videoModelSettings?.settings?.referenceMode === 'single' ? (
+                <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => handleFileSelect('start')}
+                      onClick={() => handleFileSelect('single')}
                       className="flex items-center gap-1 flex-1"
                     >
-                      <Image className="h-4 w-4" />
-                      Reference Image
+                      <Upload className="h-4 w-4" />
+                      {referenceImage ? 'Change Reference' : 'Reference Image'}
                     </Button>
-                    {beginningRefImage && (
+                    {referenceImage && (
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={() => removeReferenceImage('start')}
+                        onClick={() => removeReferenceImage('single')}
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     )}
                   </div>
-                ) : (
-                  // Dual reference for other models
+                  {referenceImage && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Image className="h-3 w-3" />
+                      <span className="truncate flex-1">{referenceImage.name}</span>
+                      <span className="text-xs">({(referenceImage.size / 1024).toFixed(0)}KB)</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
+                videoModelSettings?.settings?.referenceMode === 'single' ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Button
@@ -356,7 +470,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         className="flex items-center gap-1 flex-1"
                       >
                         <Image className="h-4 w-4" />
-                        Start Frame
+                        {beginningRefImage ? 'Change Reference' : 'Reference Image'}
                       </Button>
                       {beginningRefImage && (
                         <Button
@@ -369,26 +483,77 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleFileSelect('end')}
-                        className="flex items-center gap-1 flex-1"
-                      >
-                        <Image className="h-4 w-4" />
-                        End Frame
-                      </Button>
-                      {endingRefImage && (
+                    {beginningRefImage && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Image className="h-3 w-3" />
+                        <span className="truncate flex-1">{beginningRefImage.name}</span>
+                        <span className="text-xs">({(beginningRefImage.size / 1024).toFixed(0)}KB)</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  // Dual reference for other models
+                  <div className="space-y-2">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          onClick={() => removeReferenceImage('end')}
+                          onClick={() => handleFileSelect('start')}
+                          className="flex items-center gap-1 flex-1"
                         >
-                          <X className="h-4 w-4" />
+                          <Image className="h-4 w-4" />
+                          {beginningRefImage ? 'Change Start' : 'Start Frame'}
                         </Button>
+                        {beginningRefImage && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeReferenceImage('start')}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {beginningRefImage && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Image className="h-3 w-3" />
+                          <span className="truncate flex-1">{beginningRefImage.name}</span>
+                          <span className="text-xs">({(beginningRefImage.size / 1024).toFixed(0)}KB)</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleFileSelect('end')}
+                          className="flex items-center gap-1 flex-1"
+                        >
+                          <Image className="h-4 w-4" />
+                          {endingRefImage ? 'Change End' : 'End Frame'}
+                        </Button>
+                        {endingRefImage && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeReferenceImage('end')}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      {endingRefImage && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Image className="h-3 w-3" />
+                          <span className="truncate flex-1">{endingRefImage.name}</span>
+                          <span className="text-xs">({(endingRefImage.size / 1024).toFixed(0)}KB)</span>
+                        </div>
                       )}
                     </div>
                   </div>
