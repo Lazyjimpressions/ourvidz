@@ -14,12 +14,13 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 /**
  * AI Suggestion types for character creation "sprinkle" feature
  */
-type SuggestionType = 'traits' | 'voice' | 'appearance' | 'backstory' | 'voice_examples' | 'all';
+type SuggestionType = 'traits' | 'voice' | 'appearance' | 'backstory' | 'voice_examples' | 'description' | 'all';
 type ContentRating = 'sfw' | 'nsfw';
 
 interface CharacterSuggestionRequest {
   type: SuggestionType;
   characterName?: string;
+  existingDescription?: string;
   existingTraits?: string[];
   existingPersonality?: {
     emotionalBaseline?: string;
@@ -50,6 +51,7 @@ interface ModelConfig {
 interface CharacterSuggestionResponse {
   success: boolean;
   suggestions?: {
+    suggestedDescription?: string;
     suggestedTraits?: string[];
     suggestedVoiceTone?: string;
     suggestedAppearance?: string[];
@@ -141,7 +143,8 @@ IMPORTANT RULES:
     appearance: `\n\nFOCUS: Suggest 4-6 visual appearance tags. Include hair, clothing style, body type hints, and distinctive features. Keep tags suitable for image generation.`,
     backstory: `\n\nFOCUS: Generate 3-5 backstory points as bullet points. Focus on motivations and values, not lengthy history.`,
     voice_examples: `\n\nFOCUS: Generate 2-3 example lines the character might say. These should capture their voice, personality, and speaking style.`,
-    all: `\n\nFOCUS: Generate a complete character suggestion package including traits, voice tone, appearance, backstory, and example dialogue.`
+    description: `\n\nFOCUS: Write a compelling 2-4 sentence character description that captures their essence, personality, appearance, and role. Make it vivid and engaging for roleplay.`,
+    all: `\n\nFOCUS: Generate a complete character suggestion package including description, traits, voice tone, appearance, backstory, and example dialogue.`
   };
 
   return basePrompt + nsfwAddendum + (typeGuidance[suggestionType] || typeGuidance.all);
@@ -155,6 +158,10 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
 
   if (request.characterName) {
     parts.push(`Character Name: ${request.characterName}`);
+  }
+
+  if (request.existingDescription) {
+    parts.push(`Existing Description: ${request.existingDescription}`);
   }
 
   if (request.existingTraits && request.existingTraits.length > 0) {
@@ -204,7 +211,9 @@ function buildUserPrompt(request: CharacterSuggestionRequest): string {
     appearance: `Generate 4-6 appearance tags. Return as JSON: { "suggestedAppearance": ["tag1", "tag2", ...] }`,
     backstory: `Generate 3-5 backstory bullet points. Return as JSON: { "suggestedBackstory": ["point1", "point2", ...] }`,
     voice_examples: `Generate 2-3 example dialogue lines. Return as JSON: { "suggestedVoiceExamples": ["example1", "example2", ...] }`,
+    description: `Write a compelling 2-4 sentence character description. Return as JSON: { "suggestedDescription": "Your vivid character description here..." }`,
     all: `Generate complete suggestions. Return as JSON: {
+      "suggestedDescription": "2-4 sentence character description",
       "suggestedTraits": ["trait1", "trait2", ...],
       "suggestedVoiceTone": "tone",
       "suggestedAppearance": ["tag1", "tag2", ...],

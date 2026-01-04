@@ -127,6 +127,9 @@ export const AddCharacterModal = ({
     };
   }, [toast]);
 
+  // Local state for portrait generation (when using fal-image directly)
+  const [isGeneratingPortrait, setIsGeneratingPortrait] = useState(false);
+
   // Generate character portrait using AI
   const generateCharacterImage = useCallback(async () => {
     if (!formData.name || !formData.description) {
@@ -150,31 +153,93 @@ export const AddCharacterModal = ({
 
     console.log('🎨 Generating character portrait with prompt:', prompt);
 
-    try {
-      await generateContent({
-        format: 'sdxl_image_high',
-        prompt,
-        projectId: '00000000-0000-0000-0000-000000000000', // Default project for character images
-        metadata: {
-          contentType: formData.content_rating,
-          destination: 'character_portrait',
-          characterName: formData.name,
-          apiModelId: selectedImageModel || undefined
+    // Check if selected model is from fal.ai (default model is Seedream from fal.ai)
+    const selectedModel = imageModels?.find(m => m.id === selectedImageModel);
+    const isFalModel = selectedModel?.model_key?.includes('fal-ai') ||
+                       selectedModel?.model_key?.includes('seedream') ||
+                       !selectedImageModel; // Default model is fal.ai Seedream
+
+    if (isFalModel) {
+      // Use fal-image edge function directly for fal.ai models
+      setIsGeneratingPortrait(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('fal-image', {
+          body: {
+            prompt,
+            apiModelId: selectedImageModel || undefined, // Will use default fal.ai model if not specified
+            quality: 'high',
+            metadata: {
+              contentType: formData.content_rating,
+              destination: 'character_portrait',
+              characterName: formData.name
+            }
+          }
+        });
+
+        if (error) {
+          console.error('❌ fal-image error:', error);
+          throw new Error(error.message || 'Failed to generate image');
         }
-      });
-    } catch (error) {
-      console.error('Failed to start image generation:', error);
-      toast({
-        title: 'Generation Failed',
-        description: 'Could not start image generation. Please try again.',
-        variant: 'destructive'
-      });
+
+        if (data?.status === 'completed' && data?.resultUrl) {
+          console.log('✅ Portrait generated successfully:', data.resultUrl);
+          setGeneratedImageUrl(data.resultUrl);
+          setFormData(prev => ({
+            ...prev,
+            image_url: data.resultUrl,
+            reference_image_url: data.resultUrl
+          }));
+          toast({
+            title: 'Image Generated',
+            description: 'Your character portrait is ready!'
+          });
+        } else if (data?.status === 'queued') {
+          // Handle async response (rare for Seedream)
+          toast({
+            title: 'Generating...',
+            description: 'Image is being generated. This may take a moment.'
+          });
+        } else {
+          throw new Error('Unexpected response from image generation');
+        }
+      } catch (error) {
+        console.error('Failed to generate portrait:', error);
+        toast({
+          title: 'Generation Failed',
+          description: error instanceof Error ? error.message : 'Could not generate image. Please try again.',
+          variant: 'destructive'
+        });
+      } finally {
+        setIsGeneratingPortrait(false);
+      }
+    } else {
+      // Fall back to useGeneration hook for other models (SDXL, Replicate)
+      try {
+        await generateContent({
+          format: 'sdxl_image_high',
+          prompt,
+          projectId: '00000000-0000-0000-0000-000000000000',
+          metadata: {
+            contentType: formData.content_rating,
+            destination: 'character_portrait',
+            characterName: formData.name,
+            apiModelId: selectedImageModel || undefined
+          }
+        });
+      } catch (error) {
+        console.error('Failed to start image generation:', error);
+        toast({
+          title: 'Generation Failed',
+          description: 'Could not start image generation. Please try again.',
+          variant: 'destructive'
+        });
+      }
     }
-  }, [formData, selectedImageModel, generateContent, toast]);
+  }, [formData, selectedImageModel, imageModels, generateContent, toast]);
 
   // AI Suggestion function
   const fetchSuggestions = useCallback(async (
-    type: 'traits' | 'voice' | 'appearance' | 'backstory' | 'voice_examples' | 'all'
+    type: 'traits' | 'voice' | 'appearance' | 'backstory' | 'voice_examples' | 'description' | 'all'
   ) => {
     setIsLoadingSuggestion(type);
     try {
@@ -182,6 +247,7 @@ export const AddCharacterModal = ({
         body: {
           type,
           characterName: formData.name || undefined,
+          existingDescription: formData.description || undefined,
           existingTraits: formData.traits ? formData.traits.split(',').map(t => t.trim()) : undefined,
           existingAppearance: formData.appearance_tags.length > 0 ? formData.appearance_tags : undefined,
           contentRating: formData.content_rating,
@@ -223,10 +289,16 @@ export const AddCharacterModal = ({
           toast({ title: 'Voice Examples Suggested', description: `Added ${suggestions.suggestedVoiceExamples.length} example lines` });
         }
 
+        if (type === 'description' && suggestions.suggestedDescription) {
+          setFormData(prev => ({ ...prev, description: suggestions.suggestedDescription }));
+          toast({ title: 'Description Generated', description: 'AI-generated character description applied' });
+        }
+
         if (type === 'all') {
           // Apply all suggestions at once
           setFormData(prev => ({
             ...prev,
+            description: suggestions.suggestedDescription || prev.description,
             traits: suggestions.suggestedTraits?.join(', ') || prev.traits,
             voice_tone: (suggestions.suggestedVoiceTone as VoiceTone) || prev.voice_tone,
             persona: suggestions.suggestedPersona || prev.persona,
@@ -351,7 +423,7 @@ export const AddCharacterModal = ({
   };
 
   // Suggestion button component for reuse
-  const SuggestButton = ({ type, disabled }: { type: 'traits' | 'voice' | 'appearance' | 'voice_examples'; disabled?: boolean }) => (
+  const SuggestButton = ({ type, disabled }: { type: 'traits' | 'voice' | 'appearance' | 'voice_examples' | 'description'; disabled?: boolean }) => (
     <Button
       type="button"
       variant="ghost"
@@ -525,7 +597,10 @@ export const AddCharacterModal = ({
             </div>
 
             <div>
-              <Label htmlFor="description">Description *</Label>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="description">Description *</Label>
+                <SuggestButton type="description" disabled={!formData.name} />
+              </div>
               <Textarea
                 id="description"
                 value={formData.description}
@@ -781,11 +856,11 @@ export const AddCharacterModal = ({
                   <Button
                     type="button"
                     onClick={generateCharacterImage}
-                    disabled={isGenerating || (!formData.name && !formData.description)}
+                    disabled={isGenerating || isGeneratingPortrait || (!formData.name && !formData.description)}
                     className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                     size="sm"
                   >
-                    {isGenerating ? (
+                    {(isGenerating || isGeneratingPortrait) ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         Generating Portrait...
@@ -799,19 +874,27 @@ export const AddCharacterModal = ({
                   </Button>
 
                   {/* Generation Progress */}
-                  {isGenerating && currentJob && (
+                  {(isGenerating || isGeneratingPortrait) && (
                     <div className="space-y-1">
-                      <Progress value={generationProgress} className="h-1.5" />
-                      <p className="text-xs text-muted-foreground text-center">
-                        {currentJob.status === 'queued' ? 'Queued...' :
-                         currentJob.status === 'processing' ? 'Processing...' :
-                         'Preparing...'}
-                      </p>
+                      {isGenerating && currentJob ? (
+                        <>
+                          <Progress value={generationProgress} className="h-1.5" />
+                          <p className="text-xs text-muted-foreground text-center">
+                            {currentJob.status === 'queued' ? 'Queued...' :
+                             currentJob.status === 'processing' ? 'Processing...' :
+                             'Preparing...'}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center">
+                          Generating with fal.ai...
+                        </p>
+                      )}
                     </div>
                   )}
 
                   {/* Regenerate Button */}
-                  {generatedImageUrl && !isGenerating && (
+                  {generatedImageUrl && !isGenerating && !isGeneratingPortrait && (
                     <Button
                       type="button"
                       variant="outline"
