@@ -22,6 +22,7 @@ interface Character {
   forbidden_phrases?: string[];
   scene_behavior_rules?: any;
   user_id?: string;
+  is_public?: boolean;
 }
 
 interface CharacterGridProps {

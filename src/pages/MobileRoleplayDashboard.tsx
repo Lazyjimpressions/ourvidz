@@ -6,7 +6,7 @@ import { CharacterGrid } from '@/components/roleplay/CharacterGrid';
 import { QuickStartSection } from '@/components/roleplay/QuickStartSection';
 import { SearchAndFilters } from '@/components/roleplay/SearchAndFilters';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Clock, Settings, Sparkles } from 'lucide-react';
+import { Plus, Clock, Settings, Sparkles, User, Globe, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
 import { useUserCharacters } from '@/hooks/useUserCharacters';
@@ -63,26 +63,30 @@ const MobileRoleplayDashboard = () => {
     loadUserCharacters();
   };
 
-  // Combine user characters (first) with public characters (deduplicated)
-  const allCharacters = useMemo(() => {
+  // Separate user's own characters from public characters by others
+  const myCharacters = useMemo(() => userCharacters, [userCharacters]);
+
+  const publicFromOthers = useMemo(() => {
     const userIds = new Set(userCharacters.map(c => c.id));
-    return [
-      ...userCharacters, // User's characters first (including private ones)
-      ...publicCharacters.filter(c => !userIds.has(c.id)) // Then public ones not created by user
-    ];
+    return publicCharacters.filter(c => !userIds.has(c.id));
   }, [userCharacters, publicCharacters]);
+
+  // Combined list for lookups (e.g., recent chats)
+  const allCharacters = useMemo(() => {
+    return [...myCharacters, ...publicFromOthers];
+  }, [myCharacters, publicFromOthers]);
 
   const isLoading = publicLoading || userLoading;
   const error = publicError;
 
-  // Transform combined characters to display format with all required fields
-  const displayCharacters = allCharacters.map(char => ({
+  // Transform character to display format with all required fields
+  const toDisplayFormat = (char: typeof userCharacters[0]) => ({
     id: char.id,
     name: char.name,
     description: char.description,
     image_url: char.image_url,
-    preview_image_url: char.reference_image_url || char.image_url, // Use reference_image_url as preview
-    quick_start: char.interaction_count > 50, // Popular characters as quick start
+    preview_image_url: char.reference_image_url || char.image_url,
+    quick_start: char.interaction_count > 50,
     category: char.content_rating === 'nsfw' ? 'nsfw' : 'sfw',
     consistency_method: (char as any).consistency_method || 'i2i_reference',
     interaction_count: char.interaction_count,
@@ -95,13 +99,16 @@ const MobileRoleplayDashboard = () => {
     persona: char.persona,
     reference_image_url: char.reference_image_url,
     seed_locked: (char as any).seed_locked,
-    // New voice-related fields
     voice_examples: char.voice_examples || [],
     forbidden_phrases: char.forbidden_phrases || [],
     scene_behavior_rules: char.scene_behavior_rules || {},
-    // User ownership for delete permission
-    user_id: char.user_id
-  }));
+    user_id: char.user_id,
+    is_public: char.is_public
+  });
+
+  // Separate display arrays
+  const myDisplayCharacters = myCharacters.map(toDisplayFormat);
+  const publicDisplayCharacters = publicFromOthers.map(toDisplayFormat);
 
   const handleCharacterSelect = (characterId: string) => {
     navigate(`/roleplay/chat/${characterId}`);
@@ -133,15 +140,19 @@ const MobileRoleplayDashboard = () => {
     }
   };
 
-  const filteredCharacters = displayCharacters.filter((character: any) => {
-    const matchesSearch = character.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         character.description.toLowerCase().includes(searchQuery.toLowerCase());
-    // Use contentFilter from settings for content type filtering
-    const matchesContentFilter = contentFilter === 'all' || character.category === contentFilter;
-    // Also support the SearchAndFilters component filter
-    const matchesSearchFilter = selectedFilter === 'all' || character.category === selectedFilter;
-    return matchesSearch && matchesContentFilter && matchesSearchFilter;
-  });
+  // Filter function for both sections
+  const filterCharacters = (characters: typeof myDisplayCharacters) => {
+    return characters.filter((character: any) => {
+      const matchesSearch = character.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                           character.description.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesContentFilter = contentFilter === 'all' || character.category === contentFilter;
+      const matchesSearchFilter = selectedFilter === 'all' || character.category === selectedFilter;
+      return matchesSearch && matchesContentFilter && matchesSearchFilter;
+    });
+  };
+
+  const filteredMyCharacters = filterCharacters(myDisplayCharacters);
+  const filteredPublicCharacters = filterCharacters(publicDisplayCharacters);
 
   if (isLoading) {
     return (
@@ -272,20 +283,65 @@ const MobileRoleplayDashboard = () => {
         </div>
 
         {/* Search and Filters */}
-        <SearchAndFilters 
+        <SearchAndFilters
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           selectedFilter={selectedFilter}
           setSelectedFilter={setSelectedFilter}
         />
-        
-        {/* Character Grid */}
-        <CharacterGrid
-          characters={filteredCharacters}
-          onCharacterSelect={handleCharacterSelect}
-          onCharacterPreview={handleCharacterPreview}
-          onCharacterDelete={handleDeleteCharacter}
-        />
+
+        {/* My Characters Section */}
+        {filteredMyCharacters.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="w-4 h-4 text-blue-400" />
+              <h2 className="text-base font-medium text-white">My Characters</h2>
+              <span className="text-xs text-muted-foreground">({filteredMyCharacters.length})</span>
+            </div>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {filteredMyCharacters.map((character) => (
+                <div key={character.id} className="relative">
+                  <MobileCharacterCard
+                    character={character}
+                    onSelect={() => handleCharacterSelect(character.id)}
+                    onPreview={() => handleCharacterPreview(character.id)}
+                    onDelete={handleDeleteCharacter}
+                  />
+                  {/* Private/Public indicator */}
+                  {!character.is_public && (
+                    <div className="absolute top-2 right-8 z-10">
+                      <Shield className="w-3.5 h-3.5 text-yellow-400" title="Private" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Explore Public Characters Section */}
+        {filteredPublicCharacters.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Globe className="w-4 h-4 text-green-400" />
+              <h2 className="text-base font-medium text-white">Explore Public</h2>
+              <span className="text-xs text-muted-foreground">({filteredPublicCharacters.length})</span>
+            </div>
+            <CharacterGrid
+              characters={filteredPublicCharacters}
+              onCharacterSelect={handleCharacterSelect}
+              onCharacterPreview={handleCharacterPreview}
+              onCharacterDelete={handleDeleteCharacter}
+            />
+          </div>
+        )}
+
+        {/* Empty State */}
+        {filteredMyCharacters.length === 0 && filteredPublicCharacters.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            <p>No characters found matching your criteria.</p>
+          </div>
+        )}
 
         {/* Add Character Modal */}
         <AddCharacterModal

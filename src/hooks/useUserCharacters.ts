@@ -186,11 +186,18 @@ export const useUserCharacters = () => {
 
   const deleteUserCharacter = async (id: string) => {
     try {
-      const { error } = await supabase
+      // Build query - admin can delete any character, regular users can only delete their own
+      let query = supabase
         .from('characters')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user?.id);
+        .eq('id', id);
+
+      // Only add user_id filter if not admin
+      if (!isAdmin) {
+        query = query.eq('user_id', user?.id);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
 

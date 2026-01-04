@@ -25,7 +25,9 @@ export interface LibraryFirstWorkspaceState {
   
   // Video-specific State
   beginningRefImage: File | null;
+  beginningRefImageUrl: string | null;
   endingRefImage: File | null;
+  endingRefImageUrl: string | null;
   videoDuration: number;
   motionIntensity: number;
   soundEnabled: boolean;
@@ -88,7 +90,9 @@ export interface LibraryFirstWorkspaceActions {
   setQuality: (quality: 'fast' | 'high') => void;
   setSelectedModel: (model: { id: string; type: 'sdxl' | 'replicate' | 'fal'; display_name: string } | null) => void;
   setBeginningRefImage: (image: File | null) => void;
+  setBeginningRefImageUrl: (url: string | null) => void;
   setEndingRefImage: (image: File | null) => void;
+  setEndingRefImageUrl: (url: string | null) => void;
   setVideoDuration: (duration: number) => void;
   setMotionIntensity: (intensity: number) => void;
   setSoundEnabled: (enabled: boolean) => void;
@@ -202,7 +206,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
   
   // Video-specific State
   const [beginningRefImage, setBeginningRefImage] = useState<File | null>(null);
+  const [beginningRefImageUrl, setBeginningRefImageUrl] = useState<string | null>(null);
   const [endingRefImage, setEndingRefImage] = useState<File | null>(null);
+  const [endingRefImageUrl, setEndingRefImageUrl] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState(5);
   const [motionIntensity, setMotionIntensity] = useState(0.5);
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -295,6 +301,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       }
     })();
   }, [referenceImage, referenceImageUrl]);
+  
+  // Sync referenceImageUrl with beginningRefImageUrl so it persists across image/video modes
+  // When referenceImageUrl is set, also set beginningRefImageUrl (for video mode)
+  useEffect(() => {
+    if (referenceImageUrl && referenceImageUrl !== beginningRefImageUrl) {
+      setBeginningRefImageUrl(referenceImageUrl);
+      console.log('🔄 Synced referenceImageUrl to beginningRefImageUrl:', referenceImageUrl.substring(0, 60) + '...');
+    }
+  }, [referenceImageUrl, beginningRefImageUrl]);
+  
+  // Sync beginningRefImageUrl back to referenceImageUrl when switching to image mode
+  useEffect(() => {
+    if (mode === 'image' && beginningRefImageUrl && beginningRefImageUrl !== referenceImageUrl) {
+      setReferenceImageUrl(beginningRefImageUrl);
+      console.log('🔄 Synced beginningRefImageUrl to referenceImageUrl (switched to image mode):', beginningRefImageUrl.substring(0, 60) + '...');
+    }
+  }, [mode, beginningRefImageUrl, referenceImageUrl]);
   
   // Enhancement Model Selection
   const [enhancementModel, setEnhancementModel] = useState<'qwen_base' | 'qwen_instruct' | 'none'>('qwen_instruct');
@@ -1567,7 +1590,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     quality,
     selectedModel,
     beginningRefImage,
+    beginningRefImageUrl,
     endingRefImage,
+    endingRefImageUrl,
     videoDuration,
     motionIntensity,
     soundEnabled,
@@ -1629,7 +1654,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     setQuality,
     setSelectedModel,
     setBeginningRefImage,
+    setBeginningRefImageUrl,
     setEndingRefImage,
+    setEndingRefImageUrl,
     setVideoDuration,
     setMotionIntensity,
     setSoundEnabled,

@@ -12,6 +12,7 @@ import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { useNavigate } from 'react-router-dom';
 import { CharacterScene } from '@/types/roleplay';
 import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
 
 interface Character {
   id: string;
@@ -38,6 +39,7 @@ interface Character {
   scene_behavior_rules?: any;
   // User ownership
   user_id?: string;
+  is_public?: boolean;
 }
 
 interface MobileCharacterCardProps {
@@ -62,6 +64,26 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Check if user is admin
+  const { data: isAdmin } = useQuery({
+    queryKey: ['user-admin-role', user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  // Determine if user can delete this character (owner OR admin)
+  const isOwner = !!user && character.user_id === user.id;
+  const canDeleteCharacter = !!onDelete && (isOwner || !!isAdmin);
 
   const imageUrl = character.image_url || character.preview_image_url;
 
@@ -413,7 +435,7 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         onFavorite={undefined} // TODO: Add favorite functionality if needed
         isFavorite={false}
         onDelete={onDelete ? () => onDelete(character.id) : undefined}
-        canDelete={!!onDelete && !!user && character.user_id === user.id}
+        canDelete={canDeleteCharacter}
       />
     </>
   );

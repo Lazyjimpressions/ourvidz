@@ -55,7 +55,9 @@ export const SimplifiedWorkspace: React.FC = () => {
     selectedModel,
     // Video State
     beginningRefImage,
+    beginningRefImageUrl,
     endingRefImage,
+    endingRefImageUrl,
     videoDuration,
     motionIntensity,
     soundEnabled,
@@ -94,7 +96,9 @@ export const SimplifiedWorkspace: React.FC = () => {
     setQuality,
     setSelectedModel,
     setBeginningRefImage,
+    setBeginningRefImageUrl,
     setEndingRefImage,
+    setEndingRefImageUrl,
     setVideoDuration,
     setMotionIntensity,
     setSoundEnabled,
@@ -349,12 +353,15 @@ export const SimplifiedWorkspace: React.FC = () => {
       // Clear any existing reference image first
       setReferenceImage(null);
       setReferenceImageUrl(null);
+      setBeginningRefImage(null);
+      setBeginningRefImageUrl(null);
       
       // Small delay to ensure state clears before setting new value
       await new Promise(resolve => setTimeout(resolve, 10));
       
-      // Set as reference URL (modify mode by default)
+      // Set as reference URL (modify mode by default) - for both image and video modes
       setReferenceImageUrl(originalUrl);
+      setBeginningRefImageUrl(originalUrl); // Also set for video mode start box
       
       // Explicitly set modify mode (not exact copy)
       setExactCopyMode(false);
@@ -423,12 +430,15 @@ export const SimplifiedWorkspace: React.FC = () => {
         // Clear any existing reference image first
         setReferenceImage(null);
         setReferenceImageUrl(null);
+        setBeginningRefImage(null);
+        setBeginningRefImageUrl(null);
         
         // Small delay to ensure state clears before setting new value
         await new Promise(resolve => setTimeout(resolve, 10));
         
-        // Set new reference image URL
+        // Set new reference image URL (for both image and video modes)
         setReferenceImageUrl(originalUrl);
+        setBeginningRefImageUrl(originalUrl); // Also set for video mode start box
         
         // Explicitly set modify mode (not exact copy)
         setExactCopyMode(false);
@@ -527,8 +537,12 @@ export const SimplifiedWorkspace: React.FC = () => {
               onReferenceStrengthChange={setReferenceStrength}
             beginningRefImage={beginningRefImage}
             onBeginningRefImageChange={setBeginningRefImage}
+            beginningRefImageUrl={beginningRefImageUrl}
+            onBeginningRefImageUrlChange={setBeginningRefImageUrl}
             endingRefImage={endingRefImage}
             onEndingRefImageChange={setEndingRefImage}
+            endingRefImageUrl={endingRefImageUrl}
+            onEndingRefImageUrlChange={setEndingRefImageUrl}
             videoDuration={videoDuration}
             onVideoDurationChange={setVideoDuration}
             motionIntensity={motionIntensity}

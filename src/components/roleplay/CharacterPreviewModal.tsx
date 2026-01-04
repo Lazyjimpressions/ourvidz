@@ -23,6 +23,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { CharacterScene } from '@/types/roleplay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
 
 interface Character {
   id: string;
@@ -77,8 +78,25 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   const [sceneToDelete, setSceneToDelete] = useState<string | null>(null);
   const [isDeletingScene, setIsDeletingScene] = useState(false);
 
-  // Check if user can manage this character's scenes
-  const canManageScenes = !!user && !!character?.user_id && character.user_id === user.id;
+  // Check if user is admin
+  const { data: isAdmin } = useQuery({
+    queryKey: ['user-admin-role', user?.id],
+    queryFn: async () => {
+      if (!user) return false;
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('role', 'admin')
+        .single();
+      return !!data;
+    },
+    enabled: !!user,
+  });
+
+  // Check if user can manage this character's scenes (owner OR admin)
+  const isOwner = !!user && !!character?.user_id && character.user_id === user.id;
+  const canManageScenes = isOwner || !!isAdmin;
 
   // Removed excessive debug logging to prevent console spam
 
