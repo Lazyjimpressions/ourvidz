@@ -1,0 +1,474 @@
+### Page state
+- Page URL: http://localhost:8080/roleplay
+- Page Title: Modern Web App
+- Page Snapshot:
+```yaml
+- generic [ref=e2]:
+  - region "Notifications (F8)":
+    - list
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - heading "OurVidz" [level=1] [ref=e6]
+      - navigation [ref=e7]:
+        - button "Home" [ref=e9] [cursor=pointer]:
+          - img [ref=e10]
+          - generic [ref=e13]: Home
+        - generic [ref=e14]:
+          - heading "Recent" [level=3] [ref=e15]
+          - list [ref=e16]:
+            - listitem [ref=e17]:
+              - button "Star-Crossed" [ref=e18] [cursor=pointer]:
+                - img [ref=e19]
+                - generic [ref=e22]: Star-Crossed
+        - generic [ref=e23]:
+          - heading "Creative Tools" [level=3] [ref=e24]
+          - list [ref=e25]:
+            - listitem [ref=e26]:
+              - button "New Storyboard" [ref=e27] [cursor=pointer]:
+                - img [ref=e28]
+                - generic [ref=e31]: New Storyboard
+            - listitem [ref=e32]:
+              - button "Generate Motion" [ref=e33] [cursor=pointer]:
+                - img [ref=e34]
+                - generic [ref=e36]: Generate Motion
+            - listitem [ref=e37]:
+              - button "Generate Images" [ref=e38] [cursor=pointer]:
+                - img [ref=e39]
+                - generic [ref=e43]: Generate Images
+            - listitem [ref=e44]:
+              - button "🧠 Playground" [ref=e45] [cursor=pointer]:
+                - img [ref=e46]
+                - generic [ref=e56]: 🧠 Playground
+            - listitem [ref=e57]:
+              - button "🎭 Roleplay" [ref=e58] [cursor=pointer]:
+                - img [ref=e59]
+                - generic [ref=e64]: 🎭 Roleplay
+        - list [ref=e66]:
+          - listitem [ref=e67]:
+            - button "Library" [ref=e68] [cursor=pointer]:
+              - img [ref=e69]
+              - generic [ref=e71]: Library
+          - listitem [ref=e72]:
+            - button "Settings" [ref=e73] [cursor=pointer]:
+              - img [ref=e74]
+              - generic [ref=e77]: Settings
+    - generic [ref=e78]:
+      - banner [ref=e79]:
+        - generic [ref=e82]:
+          - button "Upgrade" [ref=e83] [cursor=pointer]
+          - button "Admin" [ref=e84] [cursor=pointer]:
+            - img
+            - text: Admin
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - generic [ref=e87]: P
+              - generic [ref=e88]: pokercpa05
+            - button "Sign Out" [ref=e89] [cursor=pointer]:
+              - img
+              - text: Sign Out
+      - main [ref=e90]:
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]:
+              - heading "Roleplay" [level=1] [ref=e94]
+              - paragraph [ref=e95]: Chat with AI characters
+            - generic [ref=e96]:
+              - button [ref=e97] [cursor=pointer]:
+                - img
+              - button "Character" [ref=e98] [cursor=pointer]:
+                - img
+                - text: Character
+          - generic [ref=e99]:
+            - generic [ref=e100]:
+              - img [ref=e101]
+              - heading "Recent Chats" [level=2] [ref=e104]
+            - generic [ref=e105]:
+              - generic [ref=e107] [cursor=pointer]:
+                - img "Sally" [ref=e108]
+                - generic [ref=e111]:
+                  - heading "Sally" [level=3] [ref=e112]
+                  - paragraph [ref=e113]: Sally is a charismatic and adventurous woman who enjoys exploring the deeper, more intimate aspects of life. With a fierce independence and a heart full of curiosity, she has a way of making every encounter feel both thrilling and comforting. Her bold personality draws people to her, and she's not afraid to take risks, especially when it comes to matters of the heart.
+                - generic [ref=e114]:
+                  - button "Generate New Image" [ref=e115]:
+                    - img
+                  - button "Preview Character" [ref=e116]:
+                    - img
+              - generic [ref=e118] [cursor=pointer]:
+                - img "Lily \"Lilith\" Chen" [ref=e119]
+                - generic [ref=e122]:
+                  - heading "Lily \"Lilith\" Chen" [level=3] [ref=e123]
+                  - paragraph [ref=e124]: Stunning 22-year-old college dance team captain with incredible flexibility and confidence. Lily is a natural leader who commands attention both on and off the dance floor. She's athletic, graceful, and knows exactly how to use her body to get what she wants. After intense dance practices, she seeks equally intense experiences with someone who can match her energy and passion. She's direct about her desires and loves taking control in intimate situations.
+                - generic [ref=e125]:
+                  - button "Generate New Image" [ref=e126]:
+                    - img
+                  - button "Preview Character" [ref=e127]:
+                    - img
+              - generic [ref=e129] [cursor=pointer]:
+                - img "Aurora \"Rory\" Summers" [ref=e130]
+                - generic [ref=e133]:
+                  - heading "Aurora \"Rory\" Summers" [level=3] [ref=e134]
+                  - paragraph [ref=e135]: Stunning 25-year-old massage therapist with natural curves and a warm, nurturing personality. Aurora is incredibly skilled at her craft, using her knowledge of anatomy and therapeutic techniques to provide both relaxation and intense pleasure. She has a gentle touch and knows exactly how to read her clients' needs, whether they seek stress relief or explicit adult experiences. Her confidence in her abilities makes her both professional and seductively irresistible. She specializes in therapeutic massage but is equally skilled at providing intimate, adult services that leave clients completely satisfied.
+                - generic [ref=e136]:
+                  - button "Generate New Image" [ref=e137]:
+                    - img
+                  - button "Preview Character" [ref=e138]:
+                    - img
+              - generic [ref=e140] [cursor=pointer]:
+                - img "Mei Chen" [ref=e141]
+                - generic [ref=e142]:
+                  - generic [ref=e144]:
+                    - heading "Mei Chen" [level=3] [ref=e145]
+                    - paragraph [ref=e146]: Playful, curious, and romantic. A 21-year-old college student who is imaginative, giggly, and often caught daydreaming about crushes and dramatic love stories. She is sexually passionate and bisexual.
+                  - generic [ref=e147]:
+                    - generic [ref=e148]:
+                      - img [ref=e149]
+                      - generic [ref=e151]: "522"
+                    - generic [ref=e152]:
+                      - img [ref=e153]
+                      - generic [ref=e156]: Popular
+                - generic [ref=e157]:
+                  - button "Generate New Image" [ref=e158]:
+                    - img
+                  - button "Preview Character" [ref=e159]:
+                    - img
+              - generic [ref=e161] [cursor=pointer]:
+                - img "Narrator" [ref=e162]
+                - generic [ref=e163]:
+                  - generic [ref=e165]:
+                    - heading "Narrator" [level=3] [ref=e166]
+                    - paragraph [ref=e167]: "Observant, descriptive, atmospheric Background: Omniscient storyteller who sets scenes and describes environments. Responds to **narrator** prompts to enhance story atmosphere."
+                  - generic [ref=e169]:
+                    - img [ref=e170]
+                    - generic [ref=e172]: "18"
+                - generic [ref=e173]:
+                  - button "Generate New Image" [ref=e174]:
+                    - img
+                  - button "Preview Character" [ref=e175]:
+                    - img
+              - generic [ref=e177] [cursor=pointer]:
+                - img "Scarlett" [ref=e178]
+                - generic [ref=e179]:
+                  - generic [ref=e181]:
+                    - heading "Scarlett" [level=3] [ref=e182]
+                    - paragraph [ref=e183]: Confident, sophisticated, and direct. An experienced and mature woman who values genuine connections and meaningful interactions. She knows what she wants and isn't afraid to pursue it.
+                  - generic [ref=e184]:
+                    - generic [ref=e185]:
+                      - img [ref=e186]
+                      - generic [ref=e188]: "72"
+                    - generic [ref=e189]:
+                      - img [ref=e190]
+                      - generic [ref=e193]: Popular
+                - generic [ref=e194]:
+                  - button "Generate New Image" [ref=e195]:
+                    - img
+                  - button "Preview Character" [ref=e196]:
+                    - img
+          - generic [ref=e197]:
+            - generic [ref=e198]:
+              - img [ref=e199]
+              - heading "Quick Start" [level=2] [ref=e201]
+            - generic [ref=e202]:
+              - generic [ref=e205] [cursor=pointer]:
+                - img "Mei Chen" [ref=e206]
+                - generic [ref=e207]:
+                  - generic [ref=e208]:
+                    - generic [ref=e209]:
+                      - heading "Mei Chen" [level=3] [ref=e210]
+                      - paragraph [ref=e211]: Playful, curious, and romantic. A 21-year-old college student who is imaginative, giggly, and often caught daydreaming about crushes and dramatic love stories. She is sexually passionate and bisexual.
+                    - generic [ref=e212]: Quick
+                  - generic [ref=e213]:
+                    - generic [ref=e214]:
+                      - img [ref=e215]
+                      - generic [ref=e217]: "522"
+                    - generic [ref=e218]:
+                      - img [ref=e219]
+                      - generic [ref=e222]: Popular
+                - generic [ref=e223]:
+                  - button "Generate New Image" [ref=e224]:
+                    - img
+                  - button "Preview Character" [ref=e225]:
+                    - img
+              - generic [ref=e229] [cursor=pointer]:
+                - img "Scarlett" [ref=e230]
+                - generic [ref=e231]:
+                  - generic [ref=e232]:
+                    - generic [ref=e233]:
+                      - heading "Scarlett" [level=3] [ref=e234]
+                      - paragraph [ref=e235]: Confident, sophisticated, and direct. An experienced and mature woman who values genuine connections and meaningful interactions. She knows what she wants and isn't afraid to pursue it.
+                    - generic [ref=e236]: Quick
+                  - generic [ref=e237]:
+                    - generic [ref=e238]:
+                      - img [ref=e239]
+                      - generic [ref=e241]: "72"
+                    - generic [ref=e242]:
+                      - img [ref=e243]
+                      - generic [ref=e246]: Popular
+                - generic [ref=e247]:
+                  - button "Generate New Image" [ref=e248]:
+                    - img
+                  - button "Preview Character" [ref=e249]:
+                    - img
+          - generic [ref=e251]:
+            - generic [ref=e252]:
+              - generic [ref=e253]:
+                - img [ref=e254]
+                - heading "Start a Scenario" [level=2] [ref=e256]
+              - button "New" [ref=e257] [cursor=pointer]:
+                - img
+                - text: New
+            - paragraph [ref=e258]: Create a custom roleplay scenario with your favorite character.
+          - generic [ref=e260]:
+            - generic [ref=e261]:
+              - img [ref=e262]
+              - textbox "Search characters..." [ref=e265]
+            - combobox [ref=e267] [cursor=pointer]:
+              - img [ref=e268]
+              - generic: All
+              - img [ref=e270]
+          - generic [ref=e272]:
+            - generic [ref=e273]:
+              - img [ref=e274]
+              - heading "My Characters" [level=2] [ref=e277]
+              - generic [ref=e278]: (4)
+            - generic [ref=e279]:
+              - generic [ref=e280]:
+                - generic [ref=e282] [cursor=pointer]:
+                  - img "Sally" [ref=e283]
+                  - generic [ref=e284]: NSFW
+                  - generic [ref=e287]:
+                    - heading "Sally" [level=3] [ref=e288]
+                    - paragraph [ref=e289]: Sally is a charismatic and adventurous woman who enjoys exploring the deeper, more intimate aspects of life. With a fierce independence and a heart full of curiosity, she has a way of making every encounter feel both thrilling and comforting. Her bold personality draws people to her, and she's not afraid to take risks, especially when it comes to matters of the heart.
+                  - generic [ref=e290]:
+                    - button "Generate New Image" [ref=e291]:
+                      - img
+                    - button "Preview Character" [ref=e292]:
+                      - img
+                - img "Private" [ref=e294]
+              - generic [ref=e296]:
+                - generic [ref=e298] [cursor=pointer]:
+                  - generic [ref=e300]:
+                    - img [ref=e301]
+                    - paragraph [ref=e303]: No Image
+                  - generic [ref=e304]: NSFW
+                  - button "Generate" [ref=e306]:
+                    - img
+                    - text: Generate
+                  - generic [ref=e309]:
+                    - heading "Test Character Luna" [level=3] [ref=e310]
+                    - paragraph [ref=e311]: A mysterious enchantress with silver hair and violet eyes. Luna is an ancient being who has lived for centuries, collecting knowledge and arcane secrets. She is wise, patient, and deeply curious about mortals. Her demeanor is calm and ethereal, but she can be playfully mischievous when she finds someone who intrigues her.
+                  - button "Preview Character" [ref=e313]:
+                    - img
+                - img "Private" [ref=e315]
+              - generic [ref=e319] [cursor=pointer]:
+                - img "Test Character - Mei Chen" [ref=e320]
+                - generic [ref=e321]: NSFW
+                - generic [ref=e324]:
+                  - heading "Test Character - Mei Chen" [level=3] [ref=e325]
+                  - paragraph [ref=e326]: A college student studying computer science, friendly and curious
+                - generic [ref=e327]:
+                  - button "Generate New Image" [ref=e328]:
+                    - img
+                  - button "Preview Character" [ref=e329]:
+                    - img
+              - generic [ref=e330]:
+                - generic [ref=e332] [cursor=pointer]:
+                  - generic [ref=e334]:
+                    - img [ref=e335]
+                    - paragraph [ref=e337]: No Image
+                  - generic [ref=e338]: NSFW
+                  - button "Generate" [ref=e340]:
+                    - img
+                    - text: Generate
+                  - generic [ref=e343]:
+                    - heading "Jon" [level=3] [ref=e344]
+                    - paragraph [ref=e345]: A confident 21-year-old college student with a laid-back attitude and natural charm. He's tall, athletic, and enjoys casual conversations and connections.
+                  - button "Preview Character" [ref=e347]:
+                    - img
+                - img "Private" [ref=e349]
+          - generic [ref=e351]:
+            - generic [ref=e352]:
+              - img [ref=e353]
+              - heading "Explore Public" [level=2] [ref=e356]
+              - generic [ref=e357]: (13)
+            - generic [ref=e358]:
+              - generic [ref=e360] [cursor=pointer]:
+                - img "Maya the Scientist" [ref=e361]
+                - generic [ref=e362]: SFW
+                - generic [ref=e365]:
+                  - heading "Maya the Scientist" [level=3] [ref=e366]
+                  - paragraph [ref=e367]: A brilliant scientist with innovative ideas and a passion for discovery.
+                - generic [ref=e368]:
+                  - button "Generate New Image" [ref=e369]:
+                    - img
+                  - button "Preview Character" [ref=e370]:
+                    - img
+              - generic [ref=e372] [cursor=pointer]:
+                - img "Alex the Explorer" [ref=e373]
+                - generic [ref=e374]: SFW
+                - generic [ref=e377]:
+                  - heading "Alex the Explorer" [level=3] [ref=e378]
+                  - paragraph [ref=e379]: An adventurous character ready for exciting journeys and discovering new places.
+                - generic [ref=e380]:
+                  - button "Generate New Image" [ref=e381]:
+                    - img
+                  - button "Preview Character" [ref=e382]:
+                    - img
+              - generic [ref=e384] [cursor=pointer]:
+                - img "Alex the Explorer" [ref=e385]
+                - generic [ref=e386]: SFW
+                - generic [ref=e389]:
+                  - heading "Alex the Explorer" [level=3] [ref=e390]
+                  - paragraph [ref=e391]: An adventurous character ready for exciting journeys and discovering new places. Always eager to share stories of exploration and encourage others to step outside their comfort zone.
+                - generic [ref=e392]:
+                  - button "Generate New Image" [ref=e393]:
+                    - img
+                  - button "Preview Character" [ref=e394]:
+                    - img
+              - generic [ref=e396] [cursor=pointer]:
+                - img "Narrator" [ref=e397]
+                - generic [ref=e398]: NSFW
+                - generic [ref=e399]:
+                  - generic [ref=e401]:
+                    - heading "Narrator" [level=3] [ref=e402]
+                    - paragraph [ref=e403]: "Observant, descriptive, atmospheric Background: Omniscient storyteller who sets scenes and describes environments. Responds to **narrator** prompts to enhance story atmosphere."
+                  - generic [ref=e405]:
+                    - img [ref=e406]
+                    - generic [ref=e408]: "18"
+                - generic [ref=e409]:
+                  - button "Generate New Image" [ref=e410]:
+                    - img
+                  - button "Preview Character" [ref=e411]:
+                    - img
+              - generic [ref=e413] [cursor=pointer]:
+                - img "Luna the Mystic" [ref=e414]
+                - generic [ref=e415]: SFW
+                - generic [ref=e418]:
+                  - heading "Luna the Mystic" [level=3] [ref=e419]
+                  - paragraph [ref=e420]: A wise and mysterious character with magical abilities who guides others through mystical realms.
+                - generic [ref=e421]:
+                  - button "Generate New Image" [ref=e422]:
+                    - img
+                  - button "Preview Character" [ref=e423]:
+                    - img
+              - generic [ref=e425] [cursor=pointer]:
+                - img "Luna the Mystic" [ref=e426]
+                - generic [ref=e427]: SFW
+                - generic [ref=e430]:
+                  - heading "Luna the Mystic" [level=3] [ref=e431]
+                  - paragraph [ref=e432]: A wise and mysterious character with magical abilities who guides others through mystical realms. Her ethereal presence brings calm and wisdom to any situation.
+                - generic [ref=e433]:
+                  - button "Generate New Image" [ref=e434]:
+                    - img
+                  - button "Preview Character" [ref=e435]:
+                    - img
+              - generic [ref=e437] [cursor=pointer]:
+                - img "Maya the Scientist" [ref=e438]
+                - generic [ref=e439]: SFW
+                - generic [ref=e442]:
+                  - heading "Maya the Scientist" [level=3] [ref=e443]
+                  - paragraph [ref=e444]: A brilliant scientist with innovative ideas and a passion for discovery. Her analytical mind and creative approach to problem-solving make her an invaluable companion for intellectual discussions.
+                - generic [ref=e445]:
+                  - button "Generate New Image" [ref=e446]:
+                    - img
+                  - button "Preview Character" [ref=e447]:
+                    - img
+              - generic [ref=e449] [cursor=pointer]:
+                - img "Mei Chen" [ref=e450]
+                - generic [ref=e451]: NSFW
+                - generic [ref=e452]:
+                  - generic [ref=e453]:
+                    - generic [ref=e454]:
+                      - heading "Mei Chen" [level=3] [ref=e455]
+                      - paragraph [ref=e456]: Playful, curious, and romantic. A 21-year-old college student who is imaginative, giggly, and often caught daydreaming about crushes and dramatic love stories. She is sexually passionate and bisexual.
+                    - generic [ref=e457]: Quick
+                  - generic [ref=e458]:
+                    - generic [ref=e459]:
+                      - img [ref=e460]
+                      - generic [ref=e462]: "522"
+                    - generic [ref=e463]:
+                      - img [ref=e464]
+                      - generic [ref=e467]: Popular
+                - generic [ref=e468]:
+                  - button "Generate New Image" [ref=e469]:
+                    - img
+                  - button "Preview Character" [ref=e470]:
+                    - img
+              - generic [ref=e472] [cursor=pointer]:
+                - img "Scarlett" [ref=e473]
+                - generic [ref=e474]: NSFW
+                - generic [ref=e475]:
+                  - generic [ref=e476]:
+                    - generic [ref=e477]:
+                      - heading "Scarlett" [level=3] [ref=e478]
+                      - paragraph [ref=e479]: Confident, sophisticated, and direct. An experienced and mature woman who values genuine connections and meaningful interactions. She knows what she wants and isn't afraid to pursue it.
+                    - generic [ref=e480]: Quick
+                  - generic [ref=e481]:
+                    - generic [ref=e482]:
+                      - img [ref=e483]
+                      - generic [ref=e485]: "72"
+                    - generic [ref=e486]:
+                      - img [ref=e487]
+                      - generic [ref=e490]: Popular
+                - generic [ref=e491]:
+                  - button "Generate New Image" [ref=e492]:
+                    - img
+                  - button "Preview Character" [ref=e493]:
+                    - img
+              - generic [ref=e495] [cursor=pointer]:
+                - img "Seraphina \"Sera\" Blackwood" [ref=e496]
+                - generic [ref=e497]: NSFW
+                - generic [ref=e500]:
+                  - heading "Seraphina \"Sera\" Blackwood" [level=3] [ref=e501]
+                  - paragraph [ref=e502]: Enigmatic fashion designer with striking silver-streaked black hair and piercing violet eyes. Sera commands attention with her dark, sophisticated style and artistic vision. She's used to being in control, both in her studio and in her personal life. Her designs are bold, provocative, and often push boundaries. She seeks someone who can challenge her dominance while appreciating her artistic soul.
+                - generic [ref=e503]:
+                  - button "Generate New Image" [ref=e504]:
+                    - img
+                  - button "Preview Character" [ref=e505]:
+                    - img
+              - generic [ref=e507] [cursor=pointer]:
+                - img "Aurora \"Rory\" Summers" [ref=e508]
+                - generic [ref=e509]: NSFW
+                - generic [ref=e512]:
+                  - heading "Aurora \"Rory\" Summers" [level=3] [ref=e513]
+                  - paragraph [ref=e514]: Stunning 25-year-old massage therapist with natural curves and a warm, nurturing personality. Aurora is incredibly skilled at her craft, using her knowledge of anatomy and therapeutic techniques to provide both relaxation and intense pleasure. She has a gentle touch and knows exactly how to read her clients' needs, whether they seek stress relief or explicit adult experiences. Her confidence in her abilities makes her both professional and seductively irresistible. She specializes in therapeutic massage but is equally skilled at providing intimate, adult services that leave clients completely satisfied.
+                - generic [ref=e515]:
+                  - button "Generate New Image" [ref=e516]:
+                    - img
+                  - button "Preview Character" [ref=e517]:
+                    - img
+              - generic [ref=e519] [cursor=pointer]:
+                - img "Dr. Isabella \"Bella\" Rodriguez" [ref=e520]
+                - generic [ref=e521]: NSFW
+                - generic [ref=e524]:
+                  - heading "Dr. Isabella \"Bella\" Rodriguez" [level=3] [ref=e525]
+                  - paragraph [ref=e526]: Stunning Latina trauma surgeon with piercing green eyes and flowing dark hair. Confident, passionate, and fiercely intelligent. Bella thrives on adrenaline and intensity - both in the ER and in the bedroom. She's direct, assertive, and knows exactly what she wants. After long shifts saving lives, she seeks equally intense experiences with someone who can match her energy and passion.
+                - generic [ref=e527]:
+                  - button "Generate New Image" [ref=e528]:
+                    - img
+                  - button "Preview Character" [ref=e529]:
+                    - img
+              - generic [ref=e531] [cursor=pointer]:
+                - img "Lily \"Lilith\" Chen" [ref=e532]
+                - generic [ref=e533]: NSFW
+                - generic [ref=e536]:
+                  - heading "Lily \"Lilith\" Chen" [level=3] [ref=e537]
+                  - paragraph [ref=e538]: Stunning 22-year-old college dance team captain with incredible flexibility and confidence. Lily is a natural leader who commands attention both on and off the dance floor. She's athletic, graceful, and knows exactly how to use her body to get what she wants. After intense dance practices, she seeks equally intense experiences with someone who can match her energy and passion. She's direct about her desires and loves taking control in intimate situations.
+                - generic [ref=e539]:
+                  - button "Generate New Image" [ref=e540]:
+                    - img
+                  - button "Preview Character" [ref=e541]:
+                    - img
+      - contentinfo [ref=e542]:
+        - generic [ref=e543]:
+          - generic [ref=e544]:
+            - generic [ref=e545]: © 2024 OurVidz
+            - link "Privacy Policy" [ref=e546] [cursor=pointer]:
+              - /url: "#"
+            - link "Terms of Service" [ref=e547] [cursor=pointer]:
+              - /url: "#"
+            - link "Support" [ref=e548] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e549]:
+            - generic [ref=e550]: Version 1.0
+            - generic [ref=e553]: All systems operational
+```

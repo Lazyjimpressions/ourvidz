@@ -52,7 +52,14 @@ const MobileRoleplayDashboard = () => {
 
   // Load both public characters AND user's own characters
   const { characters: publicCharacters, isLoading: publicLoading, error: publicError, loadPublicCharacters } = usePublicCharacters();
-  const { characters: userCharacters, isLoading: userLoading, loadUserCharacters, deleteUserCharacter } = useUserCharacters();
+  const {
+    characters: userCharacters,
+    aiCompanions,  // Characters to chat WITH (excludes user personas like "Jon")
+    userPersonas,  // User's own personas (for settings)
+    isLoading: userLoading,
+    loadUserCharacters,
+    deleteUserCharacter
+  } = useUserCharacters();
   const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
 
   // Handle character deletion
@@ -63,8 +70,8 @@ const MobileRoleplayDashboard = () => {
     loadUserCharacters();
   };
 
-  // Separate user's own characters from public characters by others
-  const myCharacters = useMemo(() => userCharacters, [userCharacters]);
+  // Use AI companions for "My Characters" (excludes user personas like Jon)
+  const myCharacters = useMemo(() => aiCompanions, [aiCompanions]);
 
   const publicFromOthers = useMemo(() => {
     const userIds = new Set(userCharacters.map(c => c.id));

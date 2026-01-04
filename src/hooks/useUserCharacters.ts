@@ -32,6 +32,7 @@ export interface UserCharacter {
 export const useUserCharacters = () => {
   const { user } = useAuth();
   const [characters, setCharacters] = useState<UserCharacter[]>([]);
+  const [userPersonaIds, setUserPersonaIds] = useState<Set<string>>(new Set());
   const [defaultCharacterId, setDefaultCharacterId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,23 +52,50 @@ export const useUserCharacters = () => {
     enabled: !!user,
   });
 
+  // Load which of the user's characters are used as personas (user_character_id in conversations)
+  const loadUserPersonaIds = async () => {
+    if (!user?.id) return new Set<string>();
+
+    try {
+      // Find characters that have been used as user_character_id in any conversation
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('user_character_id')
+        .eq('user_id', user.id)
+        .not('user_character_id', 'is', null);
+
+      if (error) throw error;
+
+      const personaIds = new Set(data?.map(c => c.user_character_id).filter(Boolean) as string[]);
+      setUserPersonaIds(personaIds);
+      return personaIds;
+    } catch (err) {
+      console.error('Error loading user persona IDs:', err);
+      return new Set<string>();
+    }
+  };
+
   const loadUserCharacters = async () => {
     if (!user?.id) return;
-    
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
+      // Load ALL characters the user created (any role: 'user', 'ai', etc.)
+      // This ensures characters appear in "My Characters" regardless of role
       const { data, error } = await supabase
         .from('characters')
         .select('*')
         .eq('user_id', user.id)
-        .eq('role', 'user')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       setCharacters(data || []);
+
+      // Also load which are personas
+      await loadUserPersonaIds();
     } catch (err) {
       console.error('Error loading user characters:', err);
       setError(err instanceof Error ? err.message : 'Failed to load characters');
@@ -208,7 +236,7 @@ export const useUserCharacters = () => {
         setDefaultCharacterId(null);
       }
     } catch (err) {
-      console.error('Error deleting character:', err);
+      console.error('❌ Error deleting character:', err);
       throw err;
     }
   };
@@ -268,10 +296,28 @@ export const useUserCharacters = () => {
     loadDefaultCharacter();
   }, [user?.id]);
 
+  // Filter characters into AI companions vs user personas
+  // AI companions: Characters to roleplay WITH (shown in "My Characters")
+  // User personas: Characters that represent the user in roleplay (shown in settings)
+  const aiCompanions = characters.filter(c =>
+    !userPersonaIds.has(c.id) && c.id !== defaultCharacterId
+  );
+
+  const userPersonas = characters.filter(c =>
+    userPersonaIds.has(c.id) || c.id === defaultCharacterId
+  );
+
   return {
+    // All characters (raw, unfiltered)
     characters,
+    // Filtered lists
+    aiCompanions,      // Characters to chat WITH (for "My Characters" grid)
+    userPersonas,      // User's own personas (for settings/profile)
+    userPersonaIds,    // Set of persona IDs for checking
+    // Loading/error state
     isLoading,
     error,
+    // CRUD operations
     loadUserCharacters,
     createUserCharacter,
     updateUserCharacter,

@@ -195,14 +195,28 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   };
 
   const handleDeleteConfirm = async () => {
-    if (!onDelete) return;
+    if (!onDelete) {
+      console.log('❌ No onDelete handler provided');
+      return;
+    }
 
+    console.log('🗑️ Starting character deletion for:', character?.id);
     setIsDeleting(true);
     try {
       await onDelete();
+      console.log('✅ Character deleted successfully');
+      toast({
+        title: 'Character Deleted',
+        description: `${character?.name} has been deleted.`,
+      });
       handleClose();
     } catch (error) {
-      console.error('Error deleting character:', error);
+      console.error('❌ Error deleting character:', error);
+      toast({
+        title: 'Delete Failed',
+        description: error instanceof Error ? error.message : 'Failed to delete character. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
