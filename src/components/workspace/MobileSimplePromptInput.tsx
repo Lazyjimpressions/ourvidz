@@ -133,6 +133,31 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
         return;
       }
 
+      // CRITICAL: Validate file is readable by creating preview
+      try {
+        const previewUrl = URL.createObjectURL(processedFile);
+        // Test if image actually loads
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            URL.revokeObjectURL(previewUrl);
+            resolve();
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(previewUrl);
+            reject(new Error('Image failed to load'));
+          };
+          img.src = previewUrl;
+        });
+        
+        console.log('✅ MOBILE: File validated - image loads successfully');
+      } catch (error) {
+        console.error('❌ MOBILE: File validation failed:', error);
+        toast.error('Invalid image file. The file may be corrupted or unsupported. Please try another image.');
+        return;
+      }
+
+      // Only set file if validation succeeded
       onReferenceImageSet?.(processedFile, type);
       toast.success(`${type === 'single' ? 'Reference' : type === 'start' ? 'Start frame' : 'End frame'} image selected`);
     };
@@ -450,10 +475,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                     )}
                   </div>
                   {referenceImage && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Image className="h-3 w-3" />
-                      <span className="truncate flex-1">{referenceImage.name}</span>
-                      <span className="text-xs">({(referenceImage.size / 1024).toFixed(0)}KB)</span>
+                    <div className="flex items-center gap-2">
+                      <MobileReferenceImagePreview
+                        file={referenceImage}
+                        onRemove={() => removeReferenceImage('single')}
+                        onError={(error) => {
+                          console.error('Preview error:', error);
+                          toast.error('Image preview failed. File may be corrupted.');
+                        }}
+                        sizeClass="h-16 w-16"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate">{referenceImage.name}</div>
+                        <div className="text-xs text-muted-foreground">{(referenceImage.size / 1024).toFixed(0)}KB</div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -484,10 +519,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       )}
                     </div>
                     {beginningRefImage && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Image className="h-3 w-3" />
-                        <span className="truncate flex-1">{beginningRefImage.name}</span>
-                        <span className="text-xs">({(beginningRefImage.size / 1024).toFixed(0)}KB)</span>
+                      <div className="flex items-center gap-2">
+                        <MobileReferenceImagePreview
+                          file={beginningRefImage}
+                          onRemove={() => removeReferenceImage('start')}
+                          onError={(error) => {
+                            console.error('Preview error:', error);
+                            toast.error('Image preview failed. File may be corrupted.');
+                          }}
+                          sizeClass="h-16 w-16"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium truncate">{beginningRefImage.name}</div>
+                          <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -518,10 +563,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         )}
                       </div>
                       {beginningRefImage && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Image className="h-3 w-3" />
-                          <span className="truncate flex-1">{beginningRefImage.name}</span>
-                          <span className="text-xs">({(beginningRefImage.size / 1024).toFixed(0)}KB)</span>
+                        <div className="flex items-center gap-2">
+                          <MobileReferenceImagePreview
+                            file={beginningRefImage}
+                            onRemove={() => removeReferenceImage('start')}
+                            onError={(error) => {
+                              console.error('Preview error:', error);
+                              toast.error('Image preview failed. File may be corrupted.');
+                            }}
+                            sizeClass="h-16 w-16"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium truncate">{beginningRefImage.name}</div>
+                            <div className="text-xs text-muted-foreground">{(beginningRefImage.size / 1024).toFixed(0)}KB</div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -549,10 +604,20 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                         )}
                       </div>
                       {endingRefImage && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Image className="h-3 w-3" />
-                          <span className="truncate flex-1">{endingRefImage.name}</span>
-                          <span className="text-xs">({(endingRefImage.size / 1024).toFixed(0)}KB)</span>
+                        <div className="flex items-center gap-2">
+                          <MobileReferenceImagePreview
+                            file={endingRefImage}
+                            onRemove={() => removeReferenceImage('end')}
+                            onError={(error) => {
+                              console.error('Preview error:', error);
+                              toast.error('Image preview failed. File may be corrupted.');
+                            }}
+                            sizeClass="h-16 w-16"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium truncate">{endingRefImage.name}</div>
+                            <div className="text-xs text-muted-foreground">{(endingRefImage.size / 1024).toFixed(0)}KB</div>
+                          </div>
                         </div>
                       )}
                     </div>

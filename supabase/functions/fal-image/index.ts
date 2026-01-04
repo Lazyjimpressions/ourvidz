@@ -250,7 +250,14 @@ serve(async (req) => {
       input_image_url: body.input?.image_url ? 'present' : 'missing',
       input_image: body.input?.image ? 'present' : 'missing',
       metadata_referenceImage: body.metadata?.referenceImage ? 'present' : 'missing',
-      metadata_reference_image_url: body.metadata?.reference_image_url ? 'present' : 'missing'
+      metadata_reference_image_url: body.metadata?.reference_image_url ? 'present' : 'missing',
+      // CRITICAL DEBUG: Log full request body structure
+      request_body_keys: Object.keys(body),
+      input_keys: body.input ? Object.keys(body.input) : 'no input',
+      metadata_keys: body.metadata ? Object.keys(body.metadata) : 'no metadata',
+      // Log actual values (masked)
+      input_image_url_value: body.input?.image_url ? `${String(body.input.image_url).substring(0, 60)}...` : null,
+      metadata_reference_image_url_value: body.metadata?.reference_image_url ? `${String(body.metadata.reference_image_url).substring(0, 60)}...` : null
     });
 
     // Create job record

@@ -548,24 +548,50 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         console.log('📤 MOBILE DEBUG: Starting reference image upload:', {
           fileName: file.name,
           fileSize: file.size,
-          fileType: file.type
+          fileType: file.type,
+          isValidFile: file instanceof File,
+          hasName: !!file.name,
+          hasSize: file.size > 0
         });
+        
+        if (!file || !(file instanceof File)) {
+          throw new Error('Invalid file object provided');
+        }
+        
+        if (file.size === 0) {
+          throw new Error('File is empty');
+        }
         
         const res = await uploadReferenceFile(file);
         if (res.error || !res.data?.path) {
-          console.error('❌ MOBILE DEBUG: Reference image upload failed:', res.error);
+          console.error('❌ MOBILE DEBUG: Reference image upload failed:', {
+            error: res.error,
+            hasData: !!res.data,
+            hasPath: !!res.data?.path,
+            path: res.data?.path
+          });
           throw (res as any).error || new Error('Failed to upload reference image');
         }
         
         console.log('✅ MOBILE DEBUG: Reference image uploaded to:', res.data.path);
         
         const signed = await getReferenceImageUrl(res.data.path);
-        if (!signed) {
-          console.error('❌ MOBILE DEBUG: Failed to sign reference image URL');
+        if (!signed || typeof signed !== 'string' || signed.trim() === '') {
+          console.error('❌ MOBILE DEBUG: Failed to sign reference image URL:', {
+            signed,
+            type: typeof signed,
+            isEmpty: signed === '',
+            isNull: signed === null,
+            isUndefined: signed === undefined
+          });
           throw new Error('Failed to sign reference image URL');
         }
         
-        console.log('✅ MOBILE DEBUG: Reference image URL signed:', signed.substring(0, 60) + '...');
+        console.log('✅ MOBILE DEBUG: Reference image URL signed:', {
+          url: signed.substring(0, 60) + '...',
+          fullLength: signed.length,
+          isValidUrl: signed.startsWith('http://') || signed.startsWith('https://')
+        });
         return signed;
       };
 
@@ -1083,9 +1109,22 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         };
         
         // I2I parameters for reference images (image mode)
-        if (!isFalVideo && effRefUrl) {
-          inputObj.image_url = effRefUrl;
-          inputObj.strength = computedReferenceStrength;
+        // CRITICAL: Always include image_url if effRefUrl exists (even if empty string, check explicitly)
+        if (!isFalVideo) {
+          if (effRefUrl && typeof effRefUrl === 'string' && effRefUrl.trim() !== '') {
+            inputObj.image_url = effRefUrl;
+            inputObj.strength = computedReferenceStrength;
+            console.log('✅ MOBILE DEBUG: Added image_url to inputObj:', effRefUrl.substring(0, 60) + '...');
+          } else {
+            console.error('❌ MOBILE DEBUG: effRefUrl is missing or invalid:', {
+              effRefUrl,
+              type: typeof effRefUrl,
+              isString: typeof effRefUrl === 'string',
+              isEmpty: effRefUrl === '',
+              isUndefined: effRefUrl === undefined,
+              isNull: effRefUrl === null
+            });
+          }
         }
         
         // Video-specific parameters
@@ -1113,6 +1152,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           }
         }
         
+        // CRITICAL DEBUG: Log the payload before sending
+        console.log('📤 MOBILE DEBUG - Payload before sending to fal-image:', {
+          hasEffRefUrl: !!effRefUrl,
+          effRefUrl: effRefUrl ? `${effRefUrl.substring(0, 60)}...` : 'MISSING',
+          hasStartRefUrl: !!startRefUrl,
+          hasEndRefUrl: !!endRefUrl,
+          inputObj: {
+            ...inputObj,
+            image_url: inputObj.image_url ? `${inputObj.image_url.substring(0, 60)}...` : 'missing',
+            image: inputObj.image ? `${inputObj.image.substring(0, 60)}...` : 'missing'
+          },
+          metadata: {
+            ...generationRequest.metadata,
+            reference_image_url: effRefUrl ? `${effRefUrl.substring(0, 60)}...` : 'missing'
+          }
+        });
+        
         requestPayload = {
           prompt: finalPrompt,
           apiModelId: selectedModel.id,
@@ -1133,6 +1189,29 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             is_wan_i2v: isWanI2V // Flag for edge function
           }
         };
+        
+        // CRITICAL DEBUG: Log the final payload
+        console.log('📤 MOBILE DEBUG - Final payload:', {
+          input_image_url: requestPayload.input?.image_url ? 'PRESENT' : 'MISSING',
+          input_image: requestPayload.input?.image ? 'PRESENT' : 'MISSING',
+          metadata_reference_image_url: requestPayload.metadata?.reference_image_url ? 'PRESENT' : 'MISSING',
+          metadata_start_reference_url: requestPayload.metadata?.start_reference_url ? 'PRESENT' : 'MISSING',
+          // Log actual values for debugging
+          input_image_url_value: requestPayload.input?.image_url ? `${String(requestPayload.input.image_url).substring(0, 60)}...` : null,
+          metadata_reference_image_url_value: requestPayload.metadata?.reference_image_url ? `${String(requestPayload.metadata.reference_image_url).substring(0, 60)}...` : null,
+          // Log input object keys
+          input_keys: Object.keys(requestPayload.input || {}),
+          metadata_keys: Object.keys(requestPayload.metadata || {})
+        });
+        
+        // CRITICAL: Double-check that image_url is included for I2I requests
+        if (!isFalVideo && effRefUrl && !requestPayload.input?.image_url) {
+          console.error('❌ MOBILE DEBUG: CRITICAL - effRefUrl exists but image_url is missing from payload!');
+          console.error('❌ MOBILE DEBUG: Adding image_url to payload now...');
+          requestPayload.input = requestPayload.input || {};
+          requestPayload.input.image_url = effRefUrl;
+          requestPayload.input.strength = computedReferenceStrength;
+        }
       } else {
         // Use original payload for SDXL/WAN
         requestPayload = generationRequest;
