@@ -31,17 +31,14 @@ export class CharacterImageService {
         gender: params.gender
       });
       
-      // Determine job type - use API model if specified, otherwise default to SDXL
-      const useApiModel = params.apiModelId && params.apiModelId !== 'sdxl';
-
-      // Generate image using optimized workflow
+      // Character portraits always use SDXL for consistency and quality
+      // The api_model_id is stored in metadata for potential future routing
       const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
         body: {
           prompt: characterPrompt,
-          job_type: useApiModel ? 'api_image' : 'sdxl_image_high',
+          job_type: 'sdxl_image_high', // Always use SDXL high quality for character portraits
           reference_image_url: params.referenceImageUrl,
           seed: params.seedLocked,
-          api_model_id: useApiModel ? params.apiModelId : undefined, // Pass model ID for API routing
           metadata: {
             destination: 'character_portrait',
             character_id: params.characterId,
@@ -51,7 +48,7 @@ export class CharacterImageService {
             base_prompt: characterPrompt,
             seed_locked: params.seedLocked || false,
             contentType: 'sfw', // Character portraits are SFW by default
-            api_model_id: useApiModel ? params.apiModelId : undefined
+            requested_model_id: params.apiModelId // Store for future model routing support
           }
         }
       });

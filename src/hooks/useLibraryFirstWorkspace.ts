@@ -651,39 +651,12 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           finalPrompt,
           hasModification: !!prompt.trim()
         });
-      } else if (!exactCopyMode && (referenceImageUrl || referenceImage)) {
-        // MODIFY MODE: Handle reference images for modification
-        console.log('🎯 MODIFY MODE: Processing reference image for modification');
-        
-        if (referenceMetadata && prompt.trim()) {
-          // Workspace item with metadata and user modification
-          console.log('🎯 MODIFY MODE: Workspace item with modification');
-          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
-        } else if (prompt.trim()) {
-          // Uploaded image or workspace item without metadata, with user modification
-          console.log('🎯 MODIFY MODE: Reference image with modification');
-          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
-        } else {
-          // Reference image but no modification prompt
-          console.log('🎯 MODIFY MODE: Reference image without modification');
-          finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
-        }
-        
-        // Guard against seed-based near copies: clear lockSeed if it was set by exact copy
-        finalSeed = (lockSeed && seed && !wasSetByExactCopy) ? seed : undefined;
-        
-        console.log('🎯 MODIFY MODE - ACTIVE:', {
-          finalPrompt,
-          finalSeed,
-          hasReferenceMetadata: !!referenceMetadata,
-          userModification: prompt.trim()
-        });
       } else {
-        // Normal generation flow (no reference image)
+        // Normal generation flow (no reference image) - prompt will be enhanced later if reference image is found
         finalPrompt = prompt.trim() || '';
         finalSeed = lockSeed && seed ? seed : undefined;
         
-        console.log('🎯 NORMAL GENERATION MODE:', {
+        console.log('🎯 NORMAL GENERATION MODE (will check for reference image later):', {
           finalPrompt,
           finalSeed,
           style,
@@ -700,7 +673,7 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
         : undefined;
 
-      // FIX: Compute effective reference URL (not shadowed by parameter)
+      // FIX: Compute effective reference URL BEFORE prompt enhancement (so we know if we have a reference image)
       console.log('🔍 MOBILE DEBUG - Reference image state before upload:', {
         hasOverrideUrl: !!overrideReferenceImageUrl,
         hasReferenceImageUrl: !!referenceImageUrl,
@@ -743,6 +716,37 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         effRefUrlLength: effRefUrl?.length || 0,
         isValidUrl: effRefUrl ? (effRefUrl.startsWith('http://') || effRefUrl.startsWith('https://')) : false
       });
+      
+      // NOW enhance prompt if we have a reference image (but not in exact copy mode)
+      if (!exactCopyMode && effRefUrl) {
+        // MODIFY MODE: Handle reference images for modification
+        console.log('🎯 MODIFY MODE: Processing reference image for modification (after upload)');
+        
+        if (referenceMetadata && prompt.trim()) {
+          // Workspace item with metadata and user modification
+          console.log('🎯 MODIFY MODE: Workspace item with modification');
+          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
+        } else if (prompt.trim()) {
+          // Uploaded image or workspace item without metadata, with user modification
+          console.log('🎯 MODIFY MODE: Reference image with modification');
+          finalPrompt = `preserve the same person/identity and facial features from the reference image, ${prompt.trim()}, maintaining similar quality and detail level`;
+        } else {
+          // Reference image but no modification prompt
+          console.log('🎯 MODIFY MODE: Reference image without modification');
+          finalPrompt = 'preserve the same person/identity and facial features from the reference image, maintaining similar quality and detail level';
+        }
+        
+        // Guard against seed-based near copies: clear lockSeed if it was set by exact copy
+        finalSeed = (lockSeed && seed && !wasSetByExactCopy) ? seed : undefined;
+        
+        console.log('🎯 MODIFY MODE - ACTIVE (after upload):', {
+          finalPrompt,
+          finalSeed,
+          hasReferenceMetadata: !!referenceMetadata,
+          userModification: prompt.trim(),
+          hasEffRefUrl: !!effRefUrl
+        });
+      }
 
       // Use the already computed reference strength from above
 
@@ -1020,8 +1024,10 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             // I2I parameters for reference images (image mode)
             // CRITICAL: For I2I requests, image_url MUST be set (not undefined)
             // The edge function checks for body.input.image_url OR body.metadata.reference_image_url
-            ...(!isFalVideo && effRefUrl ? { image_url: effRefUrl } : {}),
-            strength: !isFalVideo && effRefUrl ? computedReferenceStrength : undefined,
+            ...(!isFalVideo && effRefUrl ? { 
+              image_url: effRefUrl,
+              strength: computedReferenceStrength 
+            } : {}),
             // Video-specific parameters
             ...(isFalVideo && {
               // For WAN I2V: start image is the reference image

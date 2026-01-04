@@ -443,6 +443,7 @@ export interface ScenarioSessionPayload {
     templateName?: string;
   };
   contentTier: ContentRating;  // Default: 'nsfw'
+  aiCharacterId?: string;  // ID of the selected AI character
 }
 
 /**

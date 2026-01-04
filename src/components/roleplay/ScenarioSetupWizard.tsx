@@ -1,11 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { usePublicCharacters } from '@/hooks/usePublicCharacters';
+import { useUserCharacters } from '@/hooks/useUserCharacters';
 import {
   ChevronLeft,
   ChevronRight,
@@ -22,24 +22,15 @@ import {
   Crown,
   Sparkles,
   Flame,
-  Play
+  Play,
+  User
 } from 'lucide-react';
 import type {
   ScenarioType,
-  ScenarioWizardStep,
   ScenarioSessionPayload,
   ScenarioIntensity,
   ScenarioPacing,
-  WritingPerspective,
-  MessageLength,
-  DialogueWeight,
-  ConversationInitiator,
-  ScenarioHookTemplate,
-  ContentRating
-} from '@/types/roleplay';
-import {
-  SCENARIO_TYPE_METADATA,
-  SCENARIO_HOOK_TEMPLATES
+  ScenarioHookTemplate
 } from '@/types/roleplay';
 
 interface ScenarioSetupWizardProps {
@@ -49,29 +40,16 @@ interface ScenarioSetupWizardProps {
   preselectedCharacterId?: string;
 }
 
-// Step configuration
-const STEPS: ScenarioWizardStep[] = [
-  'mode_select',
-  'age_gate',
-  'scenario_type',
-  'characters',
-  'setting',
-  'consent',
-  'style',
-  'hook',
-  'review'
-];
+// Streamlined 4-step wizard
+type WizardStep = 'character' | 'scenario' | 'vibe' | 'start';
 
-const STEP_LABELS: Record<ScenarioWizardStep, string> = {
-  mode_select: 'Start',
-  age_gate: 'Verify',
-  scenario_type: 'Type',
-  characters: 'Characters',
-  setting: 'Setting',
-  consent: 'Consent',
-  style: 'Style',
-  hook: 'Hook',
-  review: 'Review'
+const STEPS: WizardStep[] = ['character', 'scenario', 'vibe', 'start'];
+
+const STEP_LABELS: Record<WizardStep, string> = {
+  character: 'Character',
+  scenario: 'Scenario',
+  vibe: 'Vibe',
+  start: 'Start'
 };
 
 // Scenario type icons
@@ -83,12 +61,29 @@ const SCENARIO_ICONS: Record<ScenarioType, React.ReactNode> = {
   slow_burn: <Flame className="w-4 h-4" />
 };
 
+const SCENARIO_DESCRIPTIONS: Record<ScenarioType, string> = {
+  stranger: 'First meeting with unknown chemistry',
+  relationship: 'Partners with history and comfort',
+  power_dynamic: 'Consensual role-based dynamics',
+  fantasy: 'Otherworldly settings and scenarios',
+  slow_burn: 'Building tension over time'
+};
+
+const HOOK_DESCRIPTIONS: Record<ScenarioHookTemplate, string> = {
+  misunderstanding: 'Something needs clarification',
+  reunion: 'Coming together after time apart',
+  secret: 'Something hidden wants to come out',
+  challenge: 'A bet, dare, or game',
+  confession: 'Admitting something vulnerable',
+  custom: 'Write your own opening'
+};
+
 // Default payload values
 const DEFAULT_PAYLOAD: Partial<ScenarioSessionPayload> = {
   atmosphere: { romance: 50, playfulness: 50, tension: 30, drama: 30 },
   consent: {
-    adultOnlyConfirmed: false,
-    fictionalConfirmed: false,
+    adultOnlyConfirmed: true,
+    fictionalConfirmed: true,
     intensity: 'moderate',
     pacing: 'balanced',
     limits: { hard: [], soft: [] },
@@ -100,7 +95,7 @@ const DEFAULT_PAYLOAD: Partial<ScenarioSessionPayload> = {
     dialogueWeight: 'balanced',
     initiator: 'partner'
   },
-  contentTier: 'nsfw'  // Default to NSFW
+  contentTier: 'nsfw'
 };
 
 export const ScenarioSetupWizard = ({
@@ -109,14 +104,22 @@ export const ScenarioSetupWizard = ({
   onComplete,
   preselectedCharacterId
 }: ScenarioSetupWizardProps) => {
-  const [currentStep, setCurrentStep] = useState<ScenarioWizardStep>('mode_select');
-  const [isQuickStart, setIsQuickStart] = useState(false);
+  const [currentStep, setCurrentStep] = useState<WizardStep>('character');
   const [payload, setPayload] = useState<Partial<ScenarioSessionPayload>>(DEFAULT_PAYLOAD);
   const [newHardLimit, setNewHardLimit] = useState('');
-  const [newSoftLimit, setNewSoftLimit] = useState('');
 
   const { characters: publicCharacters } = usePublicCharacters();
+  const { characters: userCharacters } = useUserCharacters();
   const { toast } = useToast();
+
+  // Combine user and public characters
+  const allCharacters = useMemo(() => {
+    const userIds = new Set(userCharacters.map(c => c.id));
+    return [
+      ...userCharacters,
+      ...publicCharacters.filter(c => !userIds.has(c.id))
+    ];
+  }, [userCharacters, publicCharacters]);
 
   const currentStepIndex = STEPS.indexOf(currentStep);
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100;
@@ -124,24 +127,14 @@ export const ScenarioSetupWizard = ({
   // Navigation helpers
   const canGoNext = useCallback(() => {
     switch (currentStep) {
-      case 'mode_select':
-        return true;
-      case 'age_gate':
-        return payload.consent?.adultOnlyConfirmed && payload.consent?.fictionalConfirmed;
-      case 'scenario_type':
-        return !!payload.type;
-      case 'characters':
+      case 'character':
         return !!payload.characters?.partnerRole?.name;
-      case 'setting':
-        return !!payload.setting?.location;
-      case 'consent':
+      case 'scenario':
+        return !!payload.type && !!payload.setting?.location;
+      case 'vibe':
         return true; // Has defaults
-      case 'style':
-        return true; // Has defaults
-      case 'hook':
+      case 'start':
         return !!payload.hook?.templateId || !!payload.hook?.customText;
-      case 'review':
-        return true;
       default:
         return false;
     }
@@ -149,21 +142,8 @@ export const ScenarioSetupWizard = ({
 
   const goNext = () => {
     const currentIndex = STEPS.indexOf(currentStep);
-
-    // Skip age_gate if already confirmed NSFW
-    let nextIndex = currentIndex + 1;
-    if (STEPS[nextIndex] === 'age_gate' && payload.consent?.adultOnlyConfirmed) {
-      nextIndex++;
-    }
-
-    // Quick start skips to consent directly after characters
-    if (isQuickStart && currentStep === 'characters') {
-      setCurrentStep('consent');
-      return;
-    }
-
-    if (nextIndex < STEPS.length) {
-      setCurrentStep(STEPS[nextIndex]);
+    if (currentIndex < STEPS.length - 1) {
+      setCurrentStep(STEPS[currentIndex + 1]);
     }
   };
 
@@ -184,6 +164,9 @@ export const ScenarioSetupWizard = ({
       return;
     }
 
+    // Find the character to get the aiCharacterId
+    const selectedChar = allCharacters.find(c => c.id === payload.characters?.partnerRole?.id);
+
     const finalPayload: ScenarioSessionPayload = {
       type: payload.type!,
       characters: {
@@ -203,7 +186,8 @@ export const ScenarioSetupWizard = ({
       },
       style: payload.style || DEFAULT_PAYLOAD.style!,
       hook: payload.hook || { templateId: 'custom' },
-      contentTier: payload.contentTier || 'nsfw'
+      contentTier: payload.contentTier || 'nsfw',
+      aiCharacterId: selectedChar?.id
     };
 
     onComplete(finalPayload);
@@ -212,9 +196,9 @@ export const ScenarioSetupWizard = ({
   };
 
   const resetWizard = () => {
-    setCurrentStep('mode_select');
-    setIsQuickStart(false);
+    setCurrentStep('character');
     setPayload(DEFAULT_PAYLOAD);
+    setNewHardLimit('');
   };
 
   const addHardLimit = () => {
@@ -233,132 +217,20 @@ export const ScenarioSetupWizard = ({
     }
   };
 
-  const addSoftLimit = () => {
-    if (newSoftLimit.trim()) {
-      setPayload(prev => ({
-        ...prev,
-        consent: {
-          ...prev.consent!,
-          limits: {
-            ...prev.consent!.limits,
-            soft: [...(prev.consent?.limits?.soft || []), newSoftLimit.trim()]
-          }
-        }
-      }));
-      setNewSoftLimit('');
-    }
-  };
-
   // Render step content
   const renderStepContent = () => {
     switch (currentStep) {
-      case 'mode_select':
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">How would you like to start?</p>
-            <RadioGroup
-              value={isQuickStart ? 'quick' : 'wizard'}
-              onValueChange={(v) => setIsQuickStart(v === 'quick')}
-              className="space-y-2"
-            >
-              <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50">
-                <RadioGroupItem value="wizard" id="wizard" />
-                <div className="flex-1">
-                  <Label htmlFor="wizard" className="font-medium">Guided Setup</Label>
-                  <p className="text-xs text-muted-foreground">Full customization with all options</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50">
-                <RadioGroupItem value="quick" id="quick" />
-                <div className="flex-1">
-                  <Label htmlFor="quick" className="font-medium">Quick Start</Label>
-                  <p className="text-xs text-muted-foreground">Minimal setup with smart defaults</p>
-                </div>
-              </div>
-            </RadioGroup>
-          </div>
-        );
-
-      case 'age_gate':
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">Please confirm the following:</p>
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3 p-3 border rounded-lg">
-                <Checkbox
-                  id="adult"
-                  checked={payload.consent?.adultOnlyConfirmed}
-                  onCheckedChange={(checked) => setPayload(prev => ({
-                    ...prev,
-                    consent: { ...prev.consent!, adultOnlyConfirmed: checked === true }
-                  }))}
-                />
-                <Label htmlFor="adult" className="text-sm leading-tight">
-                  All participants and characters are adults (18+)
-                </Label>
-              </div>
-              <div className="flex items-start space-x-3 p-3 border rounded-lg">
-                <Checkbox
-                  id="fictional"
-                  checked={payload.consent?.fictionalConfirmed}
-                  onCheckedChange={(checked) => setPayload(prev => ({
-                    ...prev,
-                    consent: { ...prev.consent!, fictionalConfirmed: checked === true }
-                  }))}
-                />
-                <Label htmlFor="fictional" className="text-sm leading-tight">
-                  This is fictional role-play for entertainment
-                </Label>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'scenario_type':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">What type of scenario?</p>
-            <RadioGroup
-              value={payload.type}
-              onValueChange={(v: ScenarioType) => setPayload(prev => ({
-                ...prev,
-                type: v,
-                relationshipContext: getDefaultRelationshipContext(v)
-              }))}
-              className="space-y-2"
-            >
-              {(['stranger', 'relationship', 'power_dynamic', 'fantasy', 'slow_burn'] as ScenarioType[]).map((type) => (
-                <div
-                  key={type}
-                  className={`flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 cursor-pointer ${
-                    payload.type === type ? 'border-primary bg-primary/5' : ''
-                  }`}
-                >
-                  <RadioGroupItem value={type} id={type} />
-                  <div className="text-muted-foreground">{SCENARIO_ICONS[type]}</div>
-                  <div className="flex-1">
-                    <Label htmlFor={type} className="font-medium capitalize cursor-pointer">
-                      {type.replace('_', ' ')}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {getScenarioDescription(type)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
-        );
-
-      case 'characters':
+      // Step 1: Character Selection
+      case 'character':
         return (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Partner Character *</Label>
+              <Label className="text-sm font-medium">Partner Character *</Label>
+              <p className="text-xs text-muted-foreground mb-2">Choose who you want to roleplay with</p>
               <Select
                 value={payload.characters?.partnerRole?.id || ''}
                 onValueChange={(id) => {
-                  const char = publicCharacters.find(c => c.id === id);
+                  const char = allCharacters.find(c => c.id === id);
                   if (char) {
                     setPayload(prev => ({
                       ...prev,
@@ -370,13 +242,23 @@ export const ScenarioSetupWizard = ({
                   }
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-10">
                   <SelectValue placeholder="Select a character" />
                 </SelectTrigger>
                 <SelectContent>
-                  {publicCharacters.map((char) => (
+                  {allCharacters.map((char) => (
                     <SelectItem key={char.id} value={char.id}>
-                      {char.name}
+                      <div className="flex items-center gap-2">
+                        {char.image_url ? (
+                          <img src={char.image_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                        ) : (
+                          <User className="w-6 h-6 text-muted-foreground" />
+                        )}
+                        <span>{char.name}</span>
+                        {char.content_rating === 'nsfw' && (
+                          <Badge variant="outline" className="text-[10px] px-1">NSFW</Badge>
+                        )}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -384,7 +266,7 @@ export const ScenarioSetupWizard = ({
             </div>
 
             <div>
-              <Label className="text-sm">Your Role (optional)</Label>
+              <Label className="text-sm font-medium">Your Role <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input
                 value={payload.characters?.userRole?.name || ''}
                 onChange={(e) => setPayload(prev => ({
@@ -395,28 +277,61 @@ export const ScenarioSetupWizard = ({
                   }
                 }))}
                 placeholder="Your character name (or leave blank)"
+                className="h-9 mt-1"
               />
             </div>
 
             <div>
-              <Label className="text-sm">Relationship</Label>
+              <Label className="text-sm font-medium">Relationship Context</Label>
               <Input
                 value={payload.relationshipContext || ''}
                 onChange={(e) => setPayload(prev => ({
                   ...prev,
                   relationshipContext: e.target.value
                 }))}
-                placeholder="e.g., Just met, Partners, Rivals"
+                placeholder="e.g., Just met, Partners, Rivals..."
+                className="h-9 mt-1"
               />
             </div>
           </div>
         );
 
-      case 'setting':
+      // Step 2: Scenario Type + Setting
+      case 'scenario':
         return (
           <div className="space-y-4">
+            {/* Scenario Type */}
             <div>
-              <Label className="text-sm">Location *</Label>
+              <Label className="text-sm font-medium">Scenario Type *</Label>
+              <RadioGroup
+                value={payload.type}
+                onValueChange={(v: ScenarioType) => setPayload(prev => ({ ...prev, type: v }))}
+                className="grid grid-cols-1 gap-2 mt-2"
+              >
+                {(['stranger', 'relationship', 'power_dynamic', 'fantasy', 'slow_burn'] as ScenarioType[]).map((type) => (
+                  <label
+                    key={type}
+                    className={`flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                      payload.type === type ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <RadioGroupItem value={type} id={type} className="sr-only" />
+                    <div className="text-muted-foreground">{SCENARIO_ICONS[type]}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm capitalize">{type.replace('_', ' ')}</div>
+                      <div className="text-xs text-muted-foreground truncate">{SCENARIO_DESCRIPTIONS[type]}</div>
+                    </div>
+                    {payload.type === type && (
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    )}
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            {/* Location */}
+            <div>
+              <Label className="text-sm font-medium">Location *</Label>
               <Select
                 value={payload.setting?.location || ''}
                 onValueChange={(v) => setPayload(prev => ({
@@ -424,7 +339,7 @@ export const ScenarioSetupWizard = ({
                   setting: { ...prev.setting, location: v }
                 }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-9 mt-1">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -439,67 +354,47 @@ export const ScenarioSetupWizard = ({
               </Select>
             </div>
 
+            {/* Quick Atmosphere */}
             <div>
-              <Label className="text-sm">Time of Day</Label>
-              <RadioGroup
-                value={payload.setting?.timeOfDay || 'night'}
-                onValueChange={(v: 'morning' | 'afternoon' | 'night') => setPayload(prev => ({
-                  ...prev,
-                  setting: { ...prev.setting!, timeOfDay: v }
-                }))}
-                className="flex gap-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="morning" id="morning" />
-                  <Label htmlFor="morning" className="text-sm">Morning</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="afternoon" id="afternoon" />
-                  <Label htmlFor="afternoon" className="text-sm">Afternoon</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="night" id="night" />
-                  <Label htmlFor="night" className="text-sm">Night</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm">Atmosphere</Label>
-              {[
-                { key: 'romance', label: 'Romance' },
-                { key: 'playfulness', label: 'Playfulness' },
-                { key: 'tension', label: 'Tension' },
-                { key: 'drama', label: 'Drama' }
-              ].map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-3">
-                  <span className="text-xs w-20">{label}</span>
-                  <Slider
-                    value={[(payload.atmosphere as any)?.[key] || 50]}
-                    onValueChange={([v]) => setPayload(prev => ({
-                      ...prev,
-                      atmosphere: { ...prev.atmosphere!, [key]: v }
-                    }))}
-                    max={100}
-                    step={10}
-                    className="flex-1"
-                  />
-                  <span className="text-xs w-8 text-right">{(payload.atmosphere as any)?.[key] || 50}</span>
-                </div>
-              ))}
+              <Label className="text-sm font-medium">Atmosphere</Label>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                {[
+                  { key: 'romance', label: 'Romance', icon: '💕' },
+                  { key: 'tension', label: 'Tension', icon: '⚡' }
+                ].map(({ key, label, icon }) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <span className="text-sm">{icon}</span>
+                    <Slider
+                      value={[(payload.atmosphere as any)?.[key] || 50]}
+                      onValueChange={([v]) => setPayload(prev => ({
+                        ...prev,
+                        atmosphere: { ...prev.atmosphere!, [key]: v }
+                      }))}
+                      max={100}
+                      step={10}
+                      className="flex-1"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         );
 
-      case 'consent':
+      // Step 3: Vibe (Intensity, Pacing, Content Tier)
+      case 'vibe':
         return (
           <div className="space-y-4">
-            <div>
-              <Label className="text-sm">Content Rating</Label>
-              <div className="flex items-center gap-2 mt-2">
-                <Label className="text-sm text-muted-foreground">
-                  {payload.contentTier === 'nsfw' ? 'NSFW' : 'SFW'}
-                </Label>
+            {/* Content Tier */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+              <div>
+                <Label className="text-sm font-medium">Content Rating</Label>
+                <p className="text-xs text-muted-foreground">
+                  {payload.contentTier === 'nsfw' ? 'Adult content enabled' : 'Safe for work only'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">SFW</span>
                 <Switch
                   checked={payload.contentTier === 'nsfw'}
                   onCheckedChange={(checked) => setPayload(prev => ({
@@ -507,208 +402,141 @@ export const ScenarioSetupWizard = ({
                     contentTier: checked ? 'nsfw' : 'sfw'
                   }))}
                 />
+                <span className="text-xs text-muted-foreground">NSFW</span>
               </div>
             </div>
 
+            {/* Intensity */}
             <div>
-              <Label className="text-sm">Intensity</Label>
+              <Label className="text-sm font-medium">Intensity</Label>
               <RadioGroup
                 value={payload.consent?.intensity || 'moderate'}
                 onValueChange={(v: ScenarioIntensity) => setPayload(prev => ({
                   ...prev,
                   consent: { ...prev.consent!, intensity: v }
                 }))}
-                className="flex gap-4 mt-2"
+                className="flex gap-2 mt-2"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="gentle" id="gentle" />
-                  <Label htmlFor="gentle" className="text-sm">Gentle</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="moderate" id="moderate" />
-                  <Label htmlFor="moderate" className="text-sm">Moderate</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="intense" id="intense" />
-                  <Label htmlFor="intense" className="text-sm">Intense</Label>
-                </div>
+                {(['gentle', 'moderate', 'intense'] as ScenarioIntensity[]).map((level) => (
+                  <label
+                    key={level}
+                    className={`flex-1 text-center py-2 px-3 border rounded-lg cursor-pointer text-sm transition-colors ${
+                      payload.consent?.intensity === level ? 'border-primary bg-primary/5 font-medium' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <RadioGroupItem value={level} className="sr-only" />
+                    <span className="capitalize">{level}</span>
+                  </label>
+                ))}
               </RadioGroup>
             </div>
 
+            {/* Pacing */}
             <div>
-              <Label className="text-sm">Pacing</Label>
+              <Label className="text-sm font-medium">Pacing</Label>
               <RadioGroup
                 value={payload.consent?.pacing || 'balanced'}
                 onValueChange={(v: ScenarioPacing) => setPayload(prev => ({
                   ...prev,
                   consent: { ...prev.consent!, pacing: v }
                 }))}
-                className="flex gap-4 mt-2"
+                className="flex gap-2 mt-2"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="slow" id="slow" />
-                  <Label htmlFor="slow" className="text-sm">Slow</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="balanced" id="balanced" />
-                  <Label htmlFor="balanced" className="text-sm">Balanced</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="fast" id="fast" />
-                  <Label htmlFor="fast" className="text-sm">Fast</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div>
-              <Label className="text-sm">Hard Limits</Label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={newHardLimit}
-                  onChange={(e) => setNewHardLimit(e.target.value)}
-                  placeholder="Add hard limit"
-                  onKeyPress={(e) => e.key === 'Enter' && addHardLimit()}
-                  className="flex-1"
-                />
-                <Button size="sm" variant="outline" onClick={addHardLimit}>+</Button>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-2">
-                {payload.consent?.limits?.hard?.map((limit, idx) => (
-                  <Badge key={idx} variant="destructive" className="text-xs">
-                    {limit}
-                    <button
-                      className="ml-1"
-                      onClick={() => setPayload(prev => ({
-                        ...prev,
-                        consent: {
-                          ...prev.consent!,
-                          limits: {
-                            ...prev.consent!.limits,
-                            hard: prev.consent!.limits.hard.filter((_, i) => i !== idx)
-                          }
-                        }
-                      }))}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
+                {(['slow', 'balanced', 'fast'] as ScenarioPacing[]).map((pace) => (
+                  <label
+                    key={pace}
+                    className={`flex-1 text-center py-2 px-3 border rounded-lg cursor-pointer text-sm transition-colors ${
+                      payload.consent?.pacing === pace ? 'border-primary bg-primary/5 font-medium' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <RadioGroupItem value={pace} className="sr-only" />
+                    <span className="capitalize">{pace}</span>
+                  </label>
                 ))}
+              </RadioGroup>
+            </div>
+
+            {/* Limits (collapsible) */}
+            <details className="group">
+              <summary className="text-sm font-medium cursor-pointer flex items-center gap-1">
+                <span>Limits</span>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+                <ChevronRight className="w-4 h-4 ml-auto transition-transform group-open:rotate-90" />
+              </summary>
+              <div className="mt-2 space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    value={newHardLimit}
+                    onChange={(e) => setNewHardLimit(e.target.value)}
+                    placeholder="Add a limit..."
+                    onKeyPress={(e) => e.key === 'Enter' && addHardLimit()}
+                    className="h-8 text-sm flex-1"
+                  />
+                  <Button size="sm" variant="outline" onClick={addHardLimit} className="h-8 px-2">+</Button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {payload.consent?.limits?.hard?.map((limit, idx) => (
+                    <Badge key={idx} variant="secondary" className="text-xs pr-1">
+                      {limit}
+                      <button
+                        className="ml-1 hover:text-destructive"
+                        onClick={() => setPayload(prev => ({
+                          ...prev,
+                          consent: {
+                            ...prev.consent!,
+                            limits: {
+                              ...prev.consent!.limits,
+                              hard: prev.consent!.limits.hard.filter((_, i) => i !== idx)
+                            }
+                          }
+                        }))}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
               </div>
-            </div>
+            </details>
           </div>
         );
 
-      case 'style':
+      // Step 4: Hook + Launch
+      case 'start':
         return (
           <div className="space-y-4">
             <div>
-              <Label className="text-sm">Perspective</Label>
+              <Label className="text-sm font-medium">Opening Hook *</Label>
+              <p className="text-xs text-muted-foreground mb-2">How should the scenario begin?</p>
               <RadioGroup
-                value={payload.style?.perspective || 'first'}
-                onValueChange={(v: WritingPerspective) => setPayload(prev => ({
+                value={payload.hook?.templateId || ''}
+                onValueChange={(v: ScenarioHookTemplate) => setPayload(prev => ({
                   ...prev,
-                  style: { ...prev.style!, perspective: v }
+                  hook: { ...prev.hook, templateId: v, customText: v === 'custom' ? prev.hook?.customText : undefined }
                 }))}
-                className="flex gap-4 mt-2"
+                className="space-y-2"
               >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="first" id="first" />
-                  <Label htmlFor="first" className="text-sm">First Person</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="third" id="third" />
-                  <Label htmlFor="third" className="text-sm">Third Person</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="mixed" id="mixed" />
-                  <Label htmlFor="mixed" className="text-sm">Mixed</Label>
-                </div>
+                {(['misunderstanding', 'reunion', 'challenge', 'confession', 'custom'] as ScenarioHookTemplate[]).map((hook) => (
+                  <label
+                    key={hook}
+                    className={`flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                      payload.hook?.templateId === hook ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <RadioGroupItem value={hook} className="sr-only" />
+                    <div className="flex-1">
+                      <div className="font-medium text-sm capitalize">
+                        {hook === 'custom' ? 'Custom Opening' : `A ${hook.replace('_', ' ')}`}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{HOOK_DESCRIPTIONS[hook]}</div>
+                    </div>
+                    {payload.hook?.templateId === hook && (
+                      <div className="w-2 h-2 rounded-full bg-primary" />
+                    )}
+                  </label>
+                ))}
               </RadioGroup>
             </div>
-
-            <div>
-              <Label className="text-sm">Message Length</Label>
-              <RadioGroup
-                value={payload.style?.messageLength || 'medium'}
-                onValueChange={(v: MessageLength) => setPayload(prev => ({
-                  ...prev,
-                  style: { ...prev.style!, messageLength: v }
-                }))}
-                className="flex gap-4 mt-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="short" id="short" />
-                  <Label htmlFor="short" className="text-sm">Short</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="medium" id="medium" />
-                  <Label htmlFor="medium" className="text-sm">Medium</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="long" id="long" />
-                  <Label htmlFor="long" className="text-sm">Long</Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div>
-              <Label className="text-sm">Who Starts?</Label>
-              <RadioGroup
-                value={payload.style?.initiator || 'partner'}
-                onValueChange={(v: ConversationInitiator) => setPayload(prev => ({
-                  ...prev,
-                  style: { ...prev.style!, initiator: v }
-                }))}
-                className="flex gap-4 mt-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="user" id="user-starts" />
-                  <Label htmlFor="user-starts" className="text-sm">You</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="partner" id="partner-starts" />
-                  <Label htmlFor="partner-starts" className="text-sm">Partner</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="alternating" id="alternating" />
-                  <Label htmlFor="alternating" className="text-sm">Alternating</Label>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-        );
-
-      case 'hook':
-        return (
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">How should the scenario begin?</p>
-            <RadioGroup
-              value={payload.hook?.templateId || ''}
-              onValueChange={(v: ScenarioHookTemplate) => setPayload(prev => ({
-                ...prev,
-                hook: { ...prev.hook, templateId: v, customText: v === 'custom' ? prev.hook?.customText : undefined }
-              }))}
-              className="space-y-2"
-            >
-              {(['misunderstanding', 'reunion', 'secret', 'challenge', 'confession', 'custom'] as ScenarioHookTemplate[]).map((hook) => (
-                <div
-                  key={hook}
-                  className={`flex items-center space-x-3 p-3 border rounded-lg hover:bg-muted/50 ${
-                    payload.hook?.templateId === hook ? 'border-primary bg-primary/5' : ''
-                  }`}
-                >
-                  <RadioGroupItem value={hook} id={hook} />
-                  <div className="flex-1">
-                    <Label htmlFor={hook} className="font-medium capitalize cursor-pointer">
-                      {hook === 'custom' ? 'Custom' : `A ${hook.replace('_', ' ')}`}
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      {getHookDescription(hook)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </RadioGroup>
 
             {payload.hook?.templateId === 'custom' && (
               <Textarea
@@ -718,41 +546,28 @@ export const ScenarioSetupWizard = ({
                   hook: { ...prev.hook!, customText: e.target.value }
                 }))}
                 placeholder="Write your custom opening hook..."
-                className="min-h-[80px]"
+                className="min-h-[80px] text-sm"
               />
             )}
-          </div>
-        );
 
-      case 'review':
-        return (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">Review your scenario</p>
-
-            <div className="space-y-2 p-3 bg-muted/50 rounded-lg text-sm">
+            {/* Summary Preview */}
+            <div className="p-3 rounded-lg bg-muted/30 space-y-1.5 text-sm">
+              <div className="font-medium text-xs text-muted-foreground uppercase tracking-wide">Summary</div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Type:</span>
-                <span className="font-medium capitalize">{payload.type?.replace('_', ' ')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Partner:</span>
+                <span className="text-muted-foreground">With:</span>
                 <span className="font-medium">{payload.characters?.partnerRole?.name}</span>
               </div>
               <div className="flex justify-between">
+                <span className="text-muted-foreground">Type:</span>
+                <span className="capitalize">{payload.type?.replace('_', ' ')}</span>
+              </div>
+              <div className="flex justify-between">
                 <span className="text-muted-foreground">Setting:</span>
-                <span className="font-medium capitalize">{payload.setting?.location}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Intensity:</span>
-                <span className="font-medium capitalize">{payload.consent?.intensity}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Pacing:</span>
-                <span className="font-medium capitalize">{payload.consent?.pacing}</span>
+                <span className="capitalize">{payload.setting?.location}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Content:</span>
-                <Badge variant={payload.contentTier === 'nsfw' ? 'destructive' : 'secondary'}>
+                <Badge variant={payload.contentTier === 'nsfw' ? 'destructive' : 'secondary'} className="text-[10px] h-5">
                   {payload.contentTier?.toUpperCase()}
                 </Badge>
               </div>
@@ -767,34 +582,34 @@ export const ScenarioSetupWizard = ({
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[85vh] rounded-t-xl">
-        <SheetHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="text-lg">
-              {currentStep === 'review' ? 'Ready to Start' : `Step ${currentStepIndex + 1}: ${STEP_LABELS[currentStep]}`}
-            </SheetTitle>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-          <Progress value={progress} className="h-1" />
+      <SheetContent side="bottom" className="h-[80vh] flex flex-col rounded-t-xl">
+        <SheetHeader className="flex-shrink-0 pb-2">
+          <SheetTitle className="text-base">
+            Step {currentStepIndex + 1}: {STEP_LABELS[currentStep]}
+          </SheetTitle>
+          <Progress value={progress} className="h-1 mt-2" />
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto py-4">
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto py-4 px-1">
           {renderStepContent()}
         </div>
 
-        {/* Navigation */}
-        <div className="flex gap-2 pt-4 border-t">
+        {/* Fixed navigation footer */}
+        <div className="flex-shrink-0 flex gap-2 pt-3 border-t">
           {currentStepIndex > 0 && (
-            <Button variant="outline" onClick={goBack} className="flex-1">
+            <Button variant="outline" onClick={goBack} className="flex-1 h-10">
               <ChevronLeft className="w-4 h-4 mr-1" />
               Back
             </Button>
           )}
 
-          {currentStep === 'review' ? (
-            <Button onClick={handleComplete} className="flex-1">
+          {currentStep === 'start' ? (
+            <Button
+              onClick={handleComplete}
+              className="flex-1 h-10"
+              disabled={!canGoNext()}
+            >
               <Play className="w-4 h-4 mr-1" />
               Start Scenario
             </Button>
@@ -802,7 +617,7 @@ export const ScenarioSetupWizard = ({
             <Button
               onClick={goNext}
               disabled={!canGoNext()}
-              className="flex-1"
+              className="flex-1 h-10"
             >
               Next
               <ChevronRight className="w-4 h-4 ml-1" />
@@ -813,40 +628,5 @@ export const ScenarioSetupWizard = ({
     </Sheet>
   );
 };
-
-// Helper functions
-function getDefaultRelationshipContext(type: ScenarioType): string {
-  const contexts: Record<ScenarioType, string> = {
-    stranger: 'Just met',
-    relationship: 'Partners',
-    power_dynamic: 'Role-based dynamic',
-    fantasy: 'World-dependent',
-    slow_burn: 'Unspoken tension'
-  };
-  return contexts[type] || '';
-}
-
-function getScenarioDescription(type: ScenarioType): string {
-  const descriptions: Record<ScenarioType, string> = {
-    stranger: 'First meeting with unknown chemistry',
-    relationship: 'Partners with history and comfort',
-    power_dynamic: 'Consensual role-based dynamics',
-    fantasy: 'Otherworldly settings and scenarios',
-    slow_burn: 'Building tension over time'
-  };
-  return descriptions[type] || '';
-}
-
-function getHookDescription(hook: ScenarioHookTemplate): string {
-  const descriptions: Record<ScenarioHookTemplate, string> = {
-    misunderstanding: 'Something needs clarification',
-    reunion: 'Coming together after time apart',
-    secret: 'Something hidden wants to come out',
-    challenge: 'A bet, dare, or game',
-    confession: 'Admitting something vulnerable',
-    custom: 'Write your own opening'
-  };
-  return descriptions[hook] || '';
-}
 
 export default ScenarioSetupWizard;
