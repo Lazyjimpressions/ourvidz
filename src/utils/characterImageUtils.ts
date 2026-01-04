@@ -24,16 +24,21 @@ interface CharacterImageGenerationResult {
   prompt?: string;
 }
 
+interface GenerationOptions {
+  apiModelId?: string; // Optional: Use specific image model from settings
+}
+
 /**
  * Generate a character portrait using optimized prompt building and service
  */
 export const generateCharacterPortrait = async (
   character: Character,
-  userId: string
+  userId: string,
+  options?: GenerationOptions
 ): Promise<CharacterImageGenerationResult> => {
   try {
-    console.log('🎨 Generating character portrait for:', character.name);
-    
+    console.log('🎨 Generating character portrait for:', character.name, options?.apiModelId ? `using model: ${options.apiModelId}` : '');
+
     // Use the CharacterImageService for consistent generation
     const result = await CharacterImageService.generateCharacterPortrait({
       characterId: character.id,
@@ -45,7 +50,8 @@ export const generateCharacterPortrait = async (
       gender: character.gender,
       referenceImageUrl: character.reference_image_url,
       seedLocked: character.seed_locked,
-      consistencyMethod: character.consistency_method || 'i2i_reference'
+      consistencyMethod: character.consistency_method || 'i2i_reference',
+      apiModelId: options?.apiModelId
     });
 
     return result;

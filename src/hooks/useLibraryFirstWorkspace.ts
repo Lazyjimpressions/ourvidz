@@ -522,14 +522,27 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
     try {
       // Helper: upload reference file to reference_images and return signed URL
       const uploadAndSignReference = async (file: File): Promise<string> => {
+        console.log('📤 MOBILE DEBUG: Starting reference image upload:', {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type
+        });
+        
         const res = await uploadReferenceFile(file);
         if (res.error || !res.data?.path) {
+          console.error('❌ MOBILE DEBUG: Reference image upload failed:', res.error);
           throw (res as any).error || new Error('Failed to upload reference image');
         }
+        
+        console.log('✅ MOBILE DEBUG: Reference image uploaded to:', res.data.path);
+        
         const signed = await getReferenceImageUrl(res.data.path);
         if (!signed) {
+          console.error('❌ MOBILE DEBUG: Failed to sign reference image URL');
           throw new Error('Failed to sign reference image URL');
         }
+        
+        console.log('✅ MOBILE DEBUG: Reference image URL signed:', signed.substring(0, 60) + '...');
         return signed;
       };
 
@@ -688,9 +701,48 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         : undefined;
 
       // FIX: Compute effective reference URL (not shadowed by parameter)
-      const effRefUrl = (overrideReferenceImageUrl || referenceImageUrl || referenceImage) 
-        ? (overrideReferenceImageUrl || referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined))
-        : undefined;
+      console.log('🔍 MOBILE DEBUG - Reference image state before upload:', {
+        hasOverrideUrl: !!overrideReferenceImageUrl,
+        hasReferenceImageUrl: !!referenceImageUrl,
+        hasReferenceImageFile: !!referenceImage,
+        referenceImageFileName: referenceImage?.name,
+        referenceImageFileSize: referenceImage?.size,
+        referenceImageFileType: referenceImage?.type
+      });
+      
+      let effRefUrl: string | undefined;
+      
+      try {
+        if (overrideReferenceImageUrl) {
+          effRefUrl = overrideReferenceImageUrl;
+          console.log('✅ MOBILE DEBUG: Using override reference URL');
+        } else if (referenceImageUrl) {
+          effRefUrl = referenceImageUrl;
+          console.log('✅ MOBILE DEBUG: Using existing reference URL');
+        } else if (referenceImage) {
+          console.log('📤 MOBILE DEBUG: Uploading reference image File...');
+          effRefUrl = await uploadAndSignReference(referenceImage);
+          console.log('✅ MOBILE DEBUG: Reference image uploaded successfully');
+        } else {
+          effRefUrl = undefined;
+          console.log('⚠️ MOBILE DEBUG: No reference image provided');
+        }
+      } catch (uploadError) {
+        console.error('❌ MOBILE DEBUG: Reference image upload failed:', uploadError);
+        toast({
+          title: "Reference Image Upload Failed",
+          description: "Failed to upload reference image. Please try again.",
+          variant: "destructive",
+        });
+        setIsGenerating(false);
+        return;
+      }
+      
+      console.log('🔍 MOBILE DEBUG - Effective reference URL after upload:', {
+        effRefUrl: effRefUrl ? `${effRefUrl.substring(0, 60)}...` : 'MISSING',
+        effRefUrlLength: effRefUrl?.length || 0,
+        isValidUrl: effRefUrl ? (effRefUrl.startsWith('http://') || effRefUrl.startsWith('https://')) : false
+      });
 
       // Use the already computed reference strength from above
 
@@ -966,8 +1018,9 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             negative_prompt: negativePrompt,
             seed: lockSeed && finalSeed ? finalSeed : undefined,
             // I2I parameters for reference images (image mode)
-            // Ensure image_url is always a valid string for I2I requests
-            image_url: !isFalVideo && effRefUrl ? effRefUrl : undefined,
+            // CRITICAL: For I2I requests, image_url MUST be set (not undefined)
+            // The edge function checks for body.input.image_url OR body.metadata.reference_image_url
+            ...(!isFalVideo && effRefUrl ? { image_url: effRefUrl } : {}),
             strength: !isFalVideo && effRefUrl ? computedReferenceStrength : undefined,
             // Video-specific parameters
             ...(isFalVideo && {

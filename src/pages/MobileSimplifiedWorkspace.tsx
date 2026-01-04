@@ -59,11 +59,17 @@ const MobileSimplifiedWorkspace = () => {
   } = useLibraryFirstWorkspace();
 
   const handleReferenceImageSet = useCallback((file: File, type: 'single' | 'start' | 'end') => {
-    console.log('🖼️ MOBILE: Setting reference image:', type, file.name);
+    console.log('🖼️ MOBILE: Setting reference image:', type, {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      lastModified: file.lastModified
+    });
     
     switch (type) {
       case 'single':
         setReferenceImage(file);
+        console.log('✅ MOBILE: Reference image File set in hook state');
         break;
       case 'start':
         setBeginningRefImage(file);
@@ -97,6 +103,12 @@ const MobileSimplifiedWorkspace = () => {
     console.log('📸 MOBILE WORKSPACE: Generation options:', options);
     console.log('📸 MOBILE WORKSPACE: Selected model:', selectedModel);
     console.log('📸 MOBILE WORKSPACE: Quality:', quality);
+    console.log('🖼️ MOBILE WORKSPACE: Reference image state:', {
+      hasReferenceImage: !!referenceImage,
+      referenceImageName: referenceImage?.name,
+      referenceImageSize: referenceImage?.size,
+      referenceImageType: referenceImage?.type
+    });
     
     // Set the prompt first, then generate
     setPrompt(inputPrompt);

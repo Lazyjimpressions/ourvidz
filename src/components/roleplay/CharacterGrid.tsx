@@ -1,5 +1,4 @@
 import React from 'react';
-import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { MobileCharacterCard } from './MobileCharacterCard';
 
 interface Character {
@@ -11,7 +10,6 @@ interface Character {
   quick_start?: boolean;
   category?: string;
   consistency_method?: string;
-  // Additional fields for enhanced display
   interaction_count?: number;
   likes_count?: number;
   content_rating?: string;
@@ -20,7 +18,6 @@ interface Character {
   appearance_tags?: string[];
   traits?: string;
   persona?: string;
-  // New voice-related fields
   voice_examples?: string[];
   forbidden_phrases?: string[];
   scene_behavior_rules?: any;
@@ -37,34 +34,12 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
   onCharacterSelect,
   onCharacterPreview
 }) => {
-  const { isMobile, isTablet, isDesktop } = useMobileDetection();
-
-  const getGridColumns = () => {
-    if (isMobile) {
-      return 'grid-cols-1 sm:grid-cols-2';
-    } else if (isTablet) {
-      return 'grid-cols-2 md:grid-cols-3';
-    } else {
-      return 'grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
-    }
-  };
-
-  const getGapSize = () => {
-    if (isMobile) {
-      return 'gap-4';
-    } else if (isTablet) {
-      return 'gap-5';
-    } else {
-      return 'gap-6';
-    }
-  };
-
   if (characters.length === 0) {
     return null;
   }
 
   return (
-    <div className={`grid ${getGridColumns()} ${getGapSize()} mb-8`}>
+    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 mb-6">
       {characters.map((character) => (
         <MobileCharacterCard
           key={character.id}

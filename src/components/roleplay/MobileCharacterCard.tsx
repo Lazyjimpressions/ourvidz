@@ -124,15 +124,20 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   const generateCharacterImage = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (isGenerating || !user) return;
-    
+
     setIsGenerating(true);
-    
+
     try {
-      // Use the new character image utility
-      const result = await generateCharacterPortrait(character, user.id);
-      
+      // Read selected image model from localStorage (set by DashboardSettings)
+      const selectedImageModel = localStorage.getItem('roleplay_image_model') || undefined;
+
+      // Use the new character image utility with selected model
+      const result = await generateCharacterPortrait(character, user.id, {
+        apiModelId: selectedImageModel
+      });
+
       if (result.success) {
         console.log('✅ Character portrait generation started:', result.jobId);
         setLastJobId(result.jobId || null);
@@ -232,16 +237,16 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
 
   return (
     <>
-      <div 
+      <div
         className={cn(
           "relative group cursor-pointer",
-          isMobile ? 'aspect-square' : 'aspect-[4/5]',
-          "rounded-xl overflow-hidden",
+          "aspect-[3/4]", // Consistent portrait orientation across all contexts
+          "rounded-lg overflow-hidden",
           "bg-card border border-border",
-          "transition-all duration-300",
-          "hover:shadow-2xl hover:scale-[1.03] hover:border-blue-500/50",
+          "transition-all duration-200",
+          "hover:shadow-lg hover:scale-[1.01] hover:border-blue-500/50",
           isTouchDevice && 'touch-manipulation',
-          "shadow-md"
+          "shadow-sm"
         )}
         onClick={handleCardClick}
       >
