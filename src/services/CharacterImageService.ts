@@ -18,6 +18,7 @@ export interface CharacterImageGenerationParams {
 export class CharacterImageService {
   /**
    * Generate a character portrait image using the optimized prompt builder
+   * Routes to fal-image (cloud) for reliable generation
    */
   static async generateCharacterPortrait(params: CharacterImageGenerationParams) {
     try {
@@ -30,25 +31,31 @@ export class CharacterImageService {
         persona: params.persona,
         gender: params.gender
       });
-      
-      // Character portraits always use SDXL for consistency and quality
-      // The api_model_id is stored in metadata for potential future routing
-      const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
+
+      // Use fal-image edge function for cloud model generation
+      // This is more reliable than queue-job which requires local SDXL worker
+      const { data: jobData, error: jobError } = await supabase.functions.invoke('fal-image', {
         body: {
           prompt: characterPrompt,
-          job_type: 'sdxl_image_high', // Always use SDXL high quality for character portraits
-          reference_image_url: params.referenceImageUrl,
-          seed: params.seedLocked,
+          apiModelId: params.apiModelId, // Use selected model or fal-image will use default
+          quality: 'high',
+          input: {
+            // Reference image for I2I if provided
+            image_url: params.referenceImageUrl,
+            seed: params.seedLocked,
+            // Strength for I2I (lower = more like original)
+            strength: params.referenceImageUrl ? 0.65 : undefined
+          },
           metadata: {
             destination: 'character_portrait',
             character_id: params.characterId,
             character_name: params.characterName,
             consistency_method: params.consistencyMethod || 'i2i_reference',
             reference_strength: params.referenceImageUrl ? 0.35 : undefined,
+            reference_image_url: params.referenceImageUrl,
             base_prompt: characterPrompt,
             seed_locked: params.seedLocked || false,
-            contentType: 'sfw', // Character portraits are SFW by default
-            requested_model_id: params.apiModelId // Store for future model routing support
+            contentType: 'sfw' // Character portraits are SFW by default
           }
         }
       });
@@ -59,10 +66,10 @@ export class CharacterImageService {
 
       return {
         success: true,
-        jobId: jobData?.job_id,
+        jobId: jobData?.jobId,
         message: `Image generation started for ${params.characterName}`
       };
-      
+
     } catch (error) {
       console.error('Error generating character image:', error);
       return {
@@ -153,25 +160,29 @@ export class CharacterImageService {
         throw sceneError;
       }
 
-      // Queue generation job with character consistency
-      const { data: jobData, error: jobError } = await supabase.functions.invoke('queue-job', {
+      // Queue generation job with character consistency using fal-image (cloud)
+      const { data: jobData, error: jobError } = await supabase.functions.invoke('fal-image', {
         body: {
           prompt: fullScenePrompt,
-          job_type: 'sdxl_image_high', // ✅ UPGRADE TO HIGH QUALITY
-          seed: character.seed_locked, // ✅ ADD CHARACTER SEED FOR CONSISTENCY
-          reference_image_url: character.reference_image_url, // ✅ ADD CHARACTER REFERENCE IMAGE
+          quality: 'high',
+          input: {
+            image_url: character.reference_image_url,
+            seed: character.seed_locked,
+            strength: 0.55 // Balance between scene changes and character consistency
+          },
           metadata: {
             destination: 'character_scene',
             character_id: characterId,
             scene_id: scene.id,
             conversation_id: conversationId,
             consistency_method: character.consistency_method || 'i2i_reference',
-            reference_strength: 0.45, // ✅ INCREASE REFERENCE STRENGTH
-            denoise_strength: 0.65, // ✅ ADD DENOISE STRENGTH
-            seed_locked: true, // ✅ ADD SEED LOCK FLAG
-            character_name: character.name, // ✅ ADD CHARACTER NAME FOR CONTEXT
+            reference_strength: 0.45,
+            reference_image_url: character.reference_image_url,
+            seed_locked: true,
+            character_name: character.name,
             base_prompt: fullScenePrompt,
-            update_scene_image: true
+            update_scene_image: true,
+            contentType: 'sfw'
           }
         }
       });
@@ -183,13 +194,13 @@ export class CharacterImageService {
       // Update scene with job ID
       await supabase
         .from('character_scenes')
-        .update({ job_id: jobData?.job_id })
+        .update({ job_id: jobData?.jobId })
         .eq('id', scene.id);
 
       return {
         success: true,
         sceneId: scene.id,
-        jobId: jobData?.job_id,
+        jobId: jobData?.jobId,
         message: 'Scene generation started'
       };
       

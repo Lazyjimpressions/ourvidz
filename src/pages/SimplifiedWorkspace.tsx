@@ -346,9 +346,15 @@ export const SimplifiedWorkspace: React.FC = () => {
         return;
       }
 
+      // Clear any existing reference image first
+      setReferenceImage(null);
+      setReferenceImageUrl(null);
+      
+      // Small delay to ensure state clears before setting new value
+      await new Promise(resolve => setTimeout(resolve, 10));
+      
       // Set as reference URL (modify mode by default)
       setReferenceImageUrl(originalUrl);
-      setReferenceImage(null);
       
       // Explicitly set modify mode (not exact copy)
       setExactCopyMode(false);
@@ -362,7 +368,7 @@ export const SimplifiedWorkspace: React.FC = () => {
         exactCopyMode: false,
         lockSeed: false,
         referenceStrength: 0.6,
-        originalUrl,
+        originalUrl: originalUrl.substring(0, 60) + '...',
         entryPath: 'lightbox_use_as_ref'
       });
       
@@ -385,13 +391,44 @@ export const SimplifiedWorkspace: React.FC = () => {
     try {
       // Sign the original image to get the proper URL
       let originalUrl = item.url;
+      
+      // Try signOriginal first if available
       if ((item as any).signOriginal) {
-        originalUrl = await (item as any).signOriginal();
+        try {
+          originalUrl = await (item as any).signOriginal();
+        } catch (err) {
+          console.warn('⚠️ signOriginal failed, falling back to direct signing:', err);
+        }
+      }
+      
+      // If still a storage path (not http/https), sign it directly
+      if (originalUrl && !originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+        try {
+          const { UrlCache } = await import('@/lib/services/UrlCache');
+          const bucket = (item as any).bucketHint || 'workspace-temp';
+          const path = originalUrl.startsWith('workspace-temp/') 
+            ? originalUrl.replace('workspace-temp/', '')
+            : originalUrl.startsWith('user-library/')
+            ? originalUrl.replace('user-library/', '')
+            : originalUrl;
+          originalUrl = await UrlCache.getSignedUrl(bucket, path, 3600);
+          console.log('🔏 Signed reference image URL directly:', originalUrl?.substring(0, 60) + '...');
+        } catch (err) {
+          console.error('❌ Failed to sign reference image URL:', err);
+          // Continue with originalUrl - component will handle signing
+        }
       }
       
       if (originalUrl) {
-        setReferenceImageUrl(originalUrl);
+        // Clear any existing reference image first
         setReferenceImage(null);
+        setReferenceImageUrl(null);
+        
+        // Small delay to ensure state clears before setting new value
+        await new Promise(resolve => setTimeout(resolve, 10));
+        
+        // Set new reference image URL
+        setReferenceImageUrl(originalUrl);
         
         // Explicitly set modify mode (not exact copy)
         setExactCopyMode(false);
@@ -405,7 +442,7 @@ export const SimplifiedWorkspace: React.FC = () => {
           exactCopyMode: false,
           lockSeed: false,
           referenceStrength: 0.6,
-          originalUrl,
+          originalUrl: originalUrl.substring(0, 60) + '...',
           entryPath: 'tile_add_to_ref'
         });
         

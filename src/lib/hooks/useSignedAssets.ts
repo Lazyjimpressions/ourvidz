@@ -41,9 +41,20 @@ export function useSignedAssets(
     const originalPaths: string[] = [];
     
     for (const asset of assets) {
-      const p = asset.thumbPath;
-      if (p && !p.startsWith('.') && p.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
-        thumbPaths.push(p);
+      // For images, use originalPath as thumbnail if no thumbPath exists
+      // For videos, only use thumbPath if it exists
+      if (asset.type === 'image') {
+        // Images: use thumbPath if available, otherwise use originalPath as thumbnail
+        const thumbPath = asset.thumbPath || asset.originalPath;
+        if (thumbPath && !thumbPath.startsWith('.') && thumbPath.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
+          thumbPaths.push(thumbPath);
+        }
+      } else {
+        // Videos: only use thumbPath if explicitly provided
+        const p = asset.thumbPath;
+        if (p && !p.startsWith('.') && p.includes('/') && !signedUrls[asset.id]?.thumbUrl) {
+          thumbPaths.push(p);
+        }
       }
       // Don't pre-sign originals - they're signed on-demand in lightbox
     }
@@ -64,9 +75,18 @@ export function useSignedAssets(
         
         // Map paths to asset IDs
         for (const asset of assets) {
-          const p = asset.thumbPath;
-          if (p && !p.startsWith('.') && p.includes('/')) {
-            pathToAssetMap.set(p, asset.id);
+          if (asset.type === 'image') {
+            // Images: use thumbPath if available, otherwise use originalPath
+            const thumbPath = asset.thumbPath || asset.originalPath;
+            if (thumbPath && !thumbPath.startsWith('.') && thumbPath.includes('/')) {
+              pathToAssetMap.set(thumbPath, asset.id);
+            }
+          } else {
+            // Videos: only use thumbPath if explicitly provided
+            const p = asset.thumbPath;
+            if (p && !p.startsWith('.') && p.includes('/')) {
+              pathToAssetMap.set(p, asset.id);
+            }
           }
         }
 
@@ -147,13 +167,21 @@ export function useSignedAssets(
 
   // Combine assets with signed URLs
   const signedAssets = useMemo((): SignedAsset[] => {
-    return assets.map(asset => ({
-      ...asset,
-      thumbUrl: signedUrls[asset.id]?.thumbUrl || null,
-      url: signedUrls[asset.id]?.url || null,
-      // Add the signOriginal function to metadata for lightbox use
-      signOriginal: () => signOriginal(asset)
-    }));
+    return assets.map(asset => {
+      // For videos without thumbnails, use placeholder
+      let thumbUrl = signedUrls[asset.id]?.thumbUrl || null;
+      if (asset.type === 'video' && !thumbUrl && !asset.thumbPath) {
+        thumbUrl = '/video-thumbnail-placeholder.svg';
+      }
+      
+      return {
+        ...asset,
+        thumbUrl,
+        url: signedUrls[asset.id]?.url || null,
+        // Add the signOriginal function to metadata for lightbox use
+        signOriginal: () => signOriginal(asset)
+      };
+    });
   }, [assets, signedUrls, signOriginal]);
 
   return {

@@ -21,18 +21,21 @@ interface Character {
   voice_examples?: string[];
   forbidden_phrases?: string[];
   scene_behavior_rules?: any;
+  user_id?: string;
 }
 
 interface CharacterGridProps {
   characters: Character[];
   onCharacterSelect: (characterId: string) => void;
   onCharacterPreview: (characterId: string) => void;
+  onCharacterDelete?: (characterId: string) => Promise<void>;
 }
 
 export const CharacterGrid: React.FC<CharacterGridProps> = ({
   characters,
   onCharacterSelect,
-  onCharacterPreview
+  onCharacterPreview,
+  onCharacterDelete
 }) => {
   if (characters.length === 0) {
     return null;
@@ -46,6 +49,7 @@ export const CharacterGrid: React.FC<CharacterGridProps> = ({
           character={character}
           onSelect={() => onCharacterSelect(character.id)}
           onPreview={() => onCharacterPreview(character.id)}
+          onDelete={onCharacterDelete}
         />
       ))}
     </div>

@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle } from 'lucide-react';
+import { Eye, Download, Save, Trash2, Image, Shuffle, ArrowRight, Copy, ExternalLink, XCircle, Video } from 'lucide-react';
 import type { SharedAsset } from '@/lib/services/AssetMappers';
 import type { SignedAsset } from '@/lib/hooks/useSignedAssets';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -297,6 +297,14 @@ const SharedGridCard: React.FC<SharedGridCardProps> = ({
             loading="lazy"
             decoding="async"
           />
+        ) : asset.type === 'video' ? (
+          // Video placeholder when no thumbnail
+          <div className="w-full h-full flex items-center justify-center bg-muted/50">
+            <div className="flex flex-col items-center gap-2">
+              <Video className="w-8 h-8 text-muted-foreground/50" />
+              <span className="text-xs text-muted-foreground/50">Video</span>
+            </div>
+          </div>
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Image className="w-6 h-6 text-muted-foreground/50" />

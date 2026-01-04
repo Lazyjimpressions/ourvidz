@@ -66,7 +66,7 @@ export const QuickStartSection: React.FC<QuickStartSectionProps> = ({
         <h2 className="text-base font-medium text-white">Quick Start</h2>
       </div>
       
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {quickStartCharacters.map((character) => (
           <div key={character.id} className="relative">
             <MobileCharacterCard

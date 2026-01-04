@@ -10,8 +10,11 @@ import { modifyOriginalPrompt } from '@/utils/promptModification';
 import { useBaseNegativePrompt } from '@/hooks/useBaseNegativePrompt';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
+import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 import { useToast } from '@/hooks/use-toast';
 import { NegativePromptPresets } from '@/components/ui/negative-prompt-presets';
+import { UrlCache } from '@/lib/services/UrlCache';
+import { supabase } from '@/integrations/supabase/client';
 
 // Compact reference upload component with sizing
 const ReferenceImageUpload: React.FC<{
@@ -34,6 +37,68 @@ const ReferenceImageUpload: React.FC<{
   setExactCopyMode
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [signedImageUrl, setSignedImageUrl] = useState<string | null>(null);
+  
+  // Sign storage paths automatically
+  useEffect(() => {
+    const signStoragePath = async () => {
+      // Clear signed URL if imageUrl is cleared
+      if (!imageUrl) {
+        setSignedImageUrl(null);
+        console.log('🖼️ REF IMAGE: No imageUrl provided, cleared signed URL');
+        return;
+      }
+      
+      console.log('🖼️ REF IMAGE: Processing imageUrl:', imageUrl.substring(0, 80) + '...');
+      
+      // If already a signed URL (http/https), use it directly
+      if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:')) {
+        setSignedImageUrl(imageUrl);
+        console.log('🖼️ REF IMAGE: Using signed URL directly');
+        return;
+      }
+      
+      // It's a storage path - need to sign it
+      try {
+        // Determine bucket from path
+        let bucket: 'workspace-temp' | 'user-library' = 'workspace-temp';
+        let path = imageUrl;
+        
+        if (imageUrl.startsWith('workspace-temp/')) {
+          bucket = 'workspace-temp';
+          path = imageUrl.replace('workspace-temp/', '');
+        } else if (imageUrl.startsWith('user-library/')) {
+          bucket = 'user-library';
+          path = imageUrl.replace('user-library/', '');
+        }
+        
+        console.log('🔏 REF IMAGE: Signing storage path:', { bucket, path: path.substring(0, 60) + '...' });
+        
+        // Sign the URL
+        const signed = await UrlCache.getSignedUrl(bucket, path, 3600);
+        if (signed) {
+          setSignedImageUrl(signed);
+          console.log('✅ REF IMAGE: Successfully signed URL:', signed.substring(0, 60) + '...');
+        } else {
+          console.warn('⚠️ REF IMAGE: Failed to sign reference image URL:', imageUrl);
+          setSignedImageUrl(null);
+        }
+      } catch (error) {
+        console.error('❌ REF IMAGE: Error signing reference image URL:', error);
+        setSignedImageUrl(null);
+      }
+    };
+    
+    signStoragePath();
+  }, [imageUrl]);
+  
+  // Clear signed URL when file is set (file takes precedence)
+  useEffect(() => {
+    if (file) {
+      setSignedImageUrl(null);
+    }
+  }, [file]);
+  
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const uploadedFile = event.target.files?.[0];
     if (uploadedFile) {
@@ -75,22 +140,27 @@ const ReferenceImageUpload: React.FC<{
       return;
     }
 
-    // Handle workspace item drops with metadata extraction
-    try {
-      const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
-      console.log('🎯 DRAG-DROP: Parsed workspace item:', {
-        hasUrl: !!workspaceItem.url,
-        type: workspaceItem.type,
-        id: workspaceItem.id,
-        metadata: workspaceItem.metadata,
-        enhancedPrompt: workspaceItem.enhancedPrompt
-      });
-      if (workspaceItem.url && workspaceItem.type === 'image') {
-        if (onImageUrlChange) {
-          onImageUrlChange(workspaceItem.url);
-          console.log('🎯 DRAG-DROP: Set reference image URL:', workspaceItem.url);
-        }
-        onFileChange(null);
+      // Handle workspace item drops with metadata extraction
+      try {
+        const workspaceItem = JSON.parse(e.dataTransfer.getData('application/json'));
+        console.log('🎯 DRAG-DROP: Parsed workspace item:', {
+          hasUrl: !!workspaceItem.url,
+          type: workspaceItem.type,
+          id: workspaceItem.id,
+          url: workspaceItem.url?.substring(0, 60) + '...',
+          metadata: workspaceItem.metadata,
+          enhancedPrompt: workspaceItem.enhancedPrompt
+        });
+        if (workspaceItem.url && workspaceItem.type === 'image') {
+          // Clear file first, then set URL - component will sign it if needed
+          onFileChange(null);
+          // Small delay to ensure file state clears
+          setTimeout(() => {
+            if (onImageUrlChange) {
+              onImageUrlChange(workspaceItem.url);
+              console.log('🎯 DRAG-DROP: Set reference image URL:', workspaceItem.url?.substring(0, 60) + '...');
+            }
+          }, 10);
 
         // CRITICAL FIX: Extract metadata for exact copy mode on drag-drop
         console.log('🎯 DRAG-DROP: Triggering metadata extraction for workspace item:', workspaceItem.id);
@@ -121,12 +191,25 @@ const ReferenceImageUpload: React.FC<{
     }
   };
   const clearReference = () => {
+    // Clear both file and URL
     onFileChange(null);
     if (onImageUrlChange) {
       onImageUrlChange(null);
     }
+    // Clear signed URL state
+    setSignedImageUrl(null);
+    console.log('🧹 REF IMAGE: Cleared reference image (file, URL, and signed URL)');
   };
-  const displayImage = file ? URL.createObjectURL(file) : imageUrl;
+  const displayImage = file ? URL.createObjectURL(file) : (signedImageUrl || imageUrl);
+  
+  // Debug logging
+  useEffect(() => {
+    if (displayImage) {
+      console.log('🖼️ REF IMAGE DISPLAY: Image ready to display:', displayImage.substring(0, 80) + '...');
+    } else {
+      console.log('🖼️ REF IMAGE DISPLAY: No image to display', { file: !!file, signedImageUrl: !!signedImageUrl, imageUrl: !!imageUrl });
+    }
+  }, [displayImage, file, signedImageUrl, imageUrl]);
   return <div className={`border border-border/30 bg-muted/10 rounded ${sizeClass} transition-all duration-200 overflow-hidden ${isDragOver ? 'border-primary bg-primary/10' : ''}`} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
       {displayImage ? <div className="relative w-full h-full">
           <img src={displayImage} alt={label} className="w-full h-full object-cover" />
@@ -323,6 +406,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
     !!referenceImage || !!referenceImageUrl  // NEW: Pass reference state for dynamic filtering
   );
   const { data: videoModels = [], isLoading: videoModelsLoading } = useVideoModels();
+  
+  // Get video model settings for selected model (dynamic duration, resolution, etc.)
+  const videoModelSettings = useVideoModelSettings(
+    mode === 'video' && selectedModel?.type === 'fal' ? selectedModel.id : null
+  );
 
   // Base negative prompt hook - use 'sdxl' for both model types to ensure consistency  
   const negativePromptModelType = mode === 'image' ? 'sdxl' : 'ltx';
@@ -345,6 +433,7 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
   const [showModelPopup, setShowModelPopup] = useState(false);
   const [showVideoModelPopup, setShowVideoModelPopup] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [showDurationPopup, setShowDurationPopup] = useState(false);
 
   const { toast } = useToast();
 
@@ -410,7 +499,11 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
 
   // LTX-Style Control Handlers
   const handleAspectRatioToggle = () => {
-    const ratios: ('16:9' | '1:1' | '9:16')[] = ['16:9', '1:1', '9:16'];
+    // Use model-specific aspect ratios if available, otherwise default
+    const availableRatios = videoModelSettings?.settings?.aspectRatioOptions || ['16:9', '1:1', '9:16'];
+    // Filter to only valid ratios for our type
+    const validRatios = availableRatios.filter(r => ['16:9', '1:1', '9:16'].includes(r)) as ('16:9' | '1:1' | '9:16')[];
+    const ratios = validRatios.length > 0 ? validRatios : ['16:9', '1:1', '9:16'];
     const currentIndex = ratios.indexOf(aspectRatio);
     const nextIndex = (currentIndex + 1) % ratios.length;
     onAspectRatioChange?.(ratios[nextIndex]);
@@ -583,24 +676,36 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                     )}
                   </div>
                 ) : (
-                  <>
+                  // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
+                  videoModelSettings?.settings?.referenceMode === 'single' ? (
                     <ReferenceImageUpload 
                       file={beginningRefImage || null} 
                       onFileChange={onBeginningRefImageChange || (() => {})} 
                       imageUrl={beginningRefImageUrl} 
                       onImageUrlChange={onBeginningRefImageUrlChange} 
-                      label="START" 
+                      label="REF" 
                       sizeClass="h-14 w-12"
                     />
-                    <ReferenceImageUpload 
-                      file={endingRefImage || null} 
-                      onFileChange={onEndingRefImageChange || (() => {})} 
-                      imageUrl={endingRefImageUrl} 
-                      onImageUrlChange={onEndingRefImageUrlChange} 
-                      label="END" 
-                      sizeClass="h-14 w-12"
-                    />
-                  </>
+                  ) : (
+                    <>
+                      <ReferenceImageUpload 
+                        file={beginningRefImage || null} 
+                        onFileChange={onBeginningRefImageChange || (() => {})} 
+                        imageUrl={beginningRefImageUrl} 
+                        onImageUrlChange={onBeginningRefImageUrlChange} 
+                        label="START" 
+                        sizeClass="h-14 w-12"
+                      />
+                      <ReferenceImageUpload 
+                        file={endingRefImage || null} 
+                        onFileChange={onEndingRefImageChange || (() => {})} 
+                        imageUrl={endingRefImageUrl} 
+                        onImageUrlChange={onEndingRefImageUrlChange} 
+                        label="END" 
+                        sizeClass="h-14 w-12"
+                      />
+                    </>
+                  )
                 )}
               </div>
 
@@ -642,9 +747,28 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
               {/* Generate button - Compact size */}
               <button 
                 onClick={handleSubmit} 
-                disabled={isGenerating || (mode === 'video' ? !prompt.trim() : (!prompt.trim() && !exactCopyMode))}
+                disabled={
+                  isGenerating || 
+                  (mode === 'video' ? !prompt.trim() : (!prompt.trim() && !exactCopyMode)) ||
+                  // Disable if WAN 2.1 i2v is selected without a reference image
+                  (mode === 'video' && 
+                   videoModelSettings?.settings?.referenceMode === 'single' && 
+                   !beginningRefImage && 
+                   !beginningRefImageUrl && 
+                   !referenceImage && 
+                   !referenceImageUrl)
+                }
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed rounded h-14 w-14 flex items-center justify-center shrink-0"
-                title="Generate"
+                title={
+                  mode === 'video' && 
+                  videoModelSettings?.settings?.referenceMode === 'single' && 
+                  !beginningRefImage && 
+                  !beginningRefImageUrl && 
+                  !referenceImage && 
+                  !referenceImageUrl
+                    ? "Reference image required for WAN 2.1 i2v"
+                    : "Generate"
+                }
               >
                 <Play size={14} fill="currentColor" />
               </button>
@@ -945,13 +1069,34 @@ export const SimplePromptInput: React.FC<SimplePromptInputProps> = ({
                       )}
                     </div>
 
-                    {/* Length */}
-                    <button 
-                      onClick={() => onVideoDurationChange?.(videoDuration === 5 ? 10 : 5)} 
-                      className="px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
-                    >
-                      {videoDuration}S
-                    </button>
+                    {/* Length - Dynamic based on model capabilities */}
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowDurationPopup(!showDurationPopup)}
+                        className="px-2 py-1 bg-muted text-muted-foreground hover:bg-muted/80 rounded text-[10px] font-medium transition-colors"
+                      >
+                        {videoDuration}S
+                        <ChevronDown size={8} className="inline ml-0.5" />
+                      </button>
+                      {showDurationPopup && (
+                        <div className="absolute bottom-full mb-1 left-0 bg-background border border-border rounded shadow-lg z-[60] min-w-[60px] max-h-32 overflow-y-auto">
+                          {(videoModelSettings?.settings?.durationOptions || [3, 5, 8, 10, 12, 15, 18, 20]).map((duration) => (
+                            <button
+                              key={duration}
+                              onClick={() => {
+                                onVideoDurationChange?.(duration);
+                                setShowDurationPopup(false);
+                              }}
+                              className={`w-full text-left px-2 py-1 text-[10px] hover:bg-muted transition-colors ${
+                                videoDuration === duration ? 'bg-muted' : ''
+                              }`}
+                            >
+                              {duration}s
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
                     {/* Content Type */}
                     <button 

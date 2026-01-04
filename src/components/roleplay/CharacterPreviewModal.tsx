@@ -4,21 +4,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { 
-  Play, 
-  Settings, 
-  Heart, 
-  Sparkles, 
-  User, 
+import {
+  Play,
+  Settings,
+  Heart,
+  Sparkles,
+  User,
   MessageCircle,
   Star,
   X,
-  Image
+  Image,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { useMobileDetection } from '@/hooks/useMobileDetection';
 import { urlSigningService } from '@/lib/services/UrlSigningService';
 import { supabase } from '@/integrations/supabase/client';
 import { CharacterScene } from '@/types/roleplay';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface Character {
   id: string;
@@ -35,6 +39,7 @@ interface Character {
   gender?: string;
   role?: string;
   quick_start?: boolean;
+  user_id?: string;
 }
 
 interface CharacterPreviewModalProps {
@@ -45,6 +50,8 @@ interface CharacterPreviewModalProps {
   onEditCharacter?: () => void;
   onFavorite?: () => void;
   isFavorite?: boolean;
+  onDelete?: () => Promise<void>;
+  canDelete?: boolean;
 }
 
 export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
@@ -54,13 +61,24 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
   onStartChat,
   onEditCharacter,
   onFavorite,
-  isFavorite = false
+  isFavorite = false,
+  onDelete,
+  canDelete = false
 }) => {
   const { isMobile } = useMobileDetection();
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [signedImageUrl, setSignedImageUrl] = useState<string>('');
   const [characterScenes, setCharacterScenes] = useState<CharacterScene[]>([]);
   const [selectedScene, setSelectedScene] = useState<CharacterScene | null>(null);
   const [isLoadingScenes, setIsLoadingScenes] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [sceneToDelete, setSceneToDelete] = useState<string | null>(null);
+  const [isDeletingScene, setIsDeletingScene] = useState(false);
+
+  // Check if user can manage this character's scenes
+  const canManageScenes = !!user && !!character?.user_id && character.user_id === user.id;
 
   // Removed excessive debug logging to prevent console spam
 
@@ -150,7 +168,78 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
   const handleClose = () => {
     setSelectedScene(null); // Reset selection on close
+    setShowDeleteConfirm(false); // Reset delete confirmation
     onClose();
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!onDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete();
+      handleClose();
+    } catch (error) {
+      console.error('Error deleting character:', error);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
+  };
+
+  // Scene deletion handlers
+  const handleDeleteSceneClick = (sceneId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent scene selection
+    setSceneToDelete(sceneId);
+  };
+
+  const handleDeleteSceneConfirm = async () => {
+    if (!sceneToDelete) return;
+
+    setIsDeletingScene(true);
+    try {
+      const { error } = await supabase
+        .from('character_scenes')
+        .delete()
+        .eq('id', sceneToDelete);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setCharacterScenes(prev => prev.filter(s => s.id !== sceneToDelete));
+
+      // Clear selected scene if it was the deleted one
+      if (selectedScene?.id === sceneToDelete) {
+        setSelectedScene(null);
+      }
+
+      toast({
+        title: 'Scene Deleted',
+        description: 'The scenario has been deleted successfully.',
+      });
+    } catch (error) {
+      console.error('Error deleting scene:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Failed to delete the scenario. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeletingScene(false);
+      setSceneToDelete(null);
+    }
+  };
+
+  const handleDeleteSceneCancel = () => {
+    setSceneToDelete(null);
   };
 
   const handleSceneSelect = (scene: CharacterScene) => {
@@ -288,62 +377,107 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
                 </h4>
                 <div className="space-y-2">
                   {characterScenes.map(scene => (
-                    <div 
+                    <div
                       key={scene.id}
-                      onClick={() => handleSceneSelect(scene)}
+                      onClick={() => sceneToDelete !== scene.id && handleSceneSelect(scene)}
                       className={`
-                        text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors
-                        ${selectedScene?.id === scene.id 
-                          ? 'bg-blue-600/20 border-blue-500/50 text-blue-200' 
+                        text-xs text-gray-300 p-3 rounded border cursor-pointer transition-colors relative
+                        ${selectedScene?.id === scene.id
+                          ? 'bg-blue-600/20 border-blue-500/50 text-blue-200'
                           : 'border-gray-600 hover:bg-gray-800/50 hover:border-gray-500'
                         }
+                        ${sceneToDelete === scene.id ? 'border-red-500/50 bg-red-600/10' : ''}
                       `}
                     >
-                      {/* Scene Name and Description */}
-                      <div className="mb-2">
-                        <div className="font-medium text-gray-200">
-                          {scene.scene_name || 'Unnamed Scene'}
-                        </div>
-                        {scene.scene_description && (
-                          <div className="text-gray-400 mt-1 line-clamp-2">
-                            {scene.scene_description}
+                      {/* Delete Confirmation for this Scene */}
+                      {sceneToDelete === scene.id ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-red-400 text-xs">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>Delete this scenario?</span>
                           </div>
-                        )}
-                      </div>
-                      
-                      {/* Scene Prompt */}
-                      <div className="line-clamp-2 leading-tight mb-2">
-                        {scene.scene_prompt}
-                      </div>
-                      
-                      {/* Scene Rules */}
-                      {scene.scene_rules && (
-                        <div className="text-gray-400 text-xs mb-2 p-2 bg-gray-800/50 rounded">
-                          <span className="font-medium">Rules:</span> {scene.scene_rules}
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSceneCancel(); }}
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-7 text-xs border-gray-600"
+                              disabled={isDeletingScene}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSceneConfirm(); }}
+                              variant="destructive"
+                              size="sm"
+                              className="flex-1 h-7 text-xs"
+                              disabled={isDeletingScene}
+                            >
+                              {isDeletingScene ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          </div>
                         </div>
-                      )}
-                      
-                      {/* Scene Starters */}
-                      {scene.scene_starters && scene.scene_starters.length > 0 && (
-                        <div className="text-gray-400 text-xs">
-                          <span className="font-medium">Starters:</span>
-                          <div className="mt-1 space-y-1">
-                            {scene.scene_starters.slice(0, 2).map((starter, index) => (
-                              <div key={index} className="italic">"{starter}"</div>
-                            ))}
-                            {scene.scene_starters.length > 2 && (
-                              <div className="text-gray-500">+{scene.scene_starters.length - 2} more</div>
+                      ) : (
+                        <>
+                          {/* Scene Name and Description with Delete Button */}
+                          <div className="mb-2 flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium text-gray-200">
+                                {scene.scene_name || 'Unnamed Scene'}
+                              </div>
+                              {scene.scene_description && (
+                                <div className="text-gray-400 mt-1 line-clamp-2">
+                                  {scene.scene_description}
+                                </div>
+                              )}
+                            </div>
+                            {canManageScenes && (
+                              <Button
+                                onClick={(e) => handleDeleteSceneClick(scene.id, e)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-gray-500 hover:text-red-400 hover:bg-red-600/10 flex-shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
                             )}
                           </div>
-                        </div>
-                      )}
-                      
-                      {/* Scene Image Indicator */}
-                      {scene.image_url && (
-                        <div className="flex items-center gap-1 mt-2 text-gray-400">
-                          <Image className="w-2 h-2" />
-                          <span className="text-xs">Has image</span>
-                        </div>
+
+                          {/* Scene Prompt */}
+                          <div className="line-clamp-2 leading-tight mb-2">
+                            {scene.scene_prompt}
+                          </div>
+
+                          {/* Scene Rules */}
+                          {scene.scene_rules && (
+                            <div className="text-gray-400 text-xs mb-2 p-2 bg-gray-800/50 rounded">
+                              <span className="font-medium">Rules:</span> {scene.scene_rules}
+                            </div>
+                          )}
+
+                          {/* Scene Starters */}
+                          {scene.scene_starters && scene.scene_starters.length > 0 && (
+                            <div className="text-gray-400 text-xs">
+                              <span className="font-medium">Starters:</span>
+                              <div className="mt-1 space-y-1">
+                                {scene.scene_starters.slice(0, 2).map((starter, index) => (
+                                  <div key={index} className="italic">"{starter}"</div>
+                                ))}
+                                {scene.scene_starters.length > 2 && (
+                                  <div className="text-gray-500">+{scene.scene_starters.length - 2} more</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Scene Image Indicator */}
+                          {scene.image_url && (
+                            <div className="flex items-center gap-1 mt-2 text-gray-400">
+                              <Image className="w-2 h-2" />
+                              <span className="text-xs">Has image</span>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
@@ -402,27 +536,68 @@ export const CharacterPreviewModal: React.FC<CharacterPreviewModalProps> = ({
 
         {/* Action Buttons - Fixed at bottom */}
         <div className="p-4 pt-2 border-t border-border flex-shrink-0 bg-card">
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleStartChat}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
-              size="lg"
-            >
-              <Play className="w-4 h-4 mr-2" />
-              {selectedScene ? 'Start Scene' : 'Start Chat'}
-            </Button>
-            
-            {onEditCharacter && (
-              <Button 
-                onClick={onEditCharacter}
-                variant="outline"
+          {/* Delete Confirmation UI */}
+          {showDeleteConfirm ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-red-400 text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Delete "{character.name}"? This cannot be undone.</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleDeleteCancel}
+                  variant="outline"
+                  size="lg"
+                  className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-800"
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleDeleteConfirm}
+                  variant="destructive"
+                  size="lg"
+                  className="flex-1"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                onClick={handleStartChat}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium"
                 size="lg"
-                className="border-gray-600 text-gray-300 hover:bg-gray-800"
               >
-                <Settings className="w-4 h-4" />
+                <Play className="w-4 h-4 mr-2" />
+                {selectedScene ? 'Start Scene' : 'Start Chat'}
               </Button>
-            )}
-          </div>
+
+              {onEditCharacter && (
+                <Button
+                  onClick={onEditCharacter}
+                  variant="outline"
+                  size="lg"
+                  className="border-gray-600 text-gray-300 hover:bg-gray-800"
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              )}
+
+              {canDelete && onDelete && (
+                <Button
+                  onClick={handleDeleteClick}
+                  variant="outline"
+                  size="lg"
+                  className="border-red-600/50 text-red-400 hover:bg-red-600/20 hover:border-red-500"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

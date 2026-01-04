@@ -9,6 +9,7 @@ import { Camera, Video, Upload, X, Image, ChevronUp, ChevronDown, Settings } fro
 import { toast } from 'sonner';
 import { useImageModels } from '@/hooks/useImageModels';
 import { useVideoModels } from '@/hooks/useApiModels';
+import { useVideoModelSettings } from '@/hooks/useVideoModelSettings';
 
 export interface MobileSimplePromptInputProps {
   prompt: string;
@@ -61,6 +62,12 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
     hasReferenceImage  // Pass reference state for dynamic filtering
   );
   const { data: videoModels, isLoading: videoModelsLoading } = useVideoModels();
+  
+  // Get video model settings for selected model (dynamic reference mode)
+  const videoModelSettings = useVideoModelSettings(
+    currentMode === 'video' && selectedModel?.type === 'fal' ? selectedModel.id : null
+  );
+  
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleExpandedChange = (expanded: boolean) => {
@@ -313,8 +320,8 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                   )}
                 </div>
               ) : (
-                // Start/End references for videos
-                <div className="space-y-2">
+                // Video mode: Show single reference for WAN 2.1 i2v, dual for other models
+                videoModelSettings?.settings?.referenceMode === 'single' ? (
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -324,7 +331,7 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       className="flex items-center gap-1 flex-1"
                     >
                       <Image className="h-4 w-4" />
-                      Start Frame
+                      Reference Image
                     </Button>
                     {beginningRefImage && (
                       <Button
@@ -337,29 +344,55 @@ export const MobileSimplePromptInput: React.FC<MobileSimplePromptInputProps> = (
                       </Button>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleFileSelect('end')}
-                      className="flex items-center gap-1 flex-1"
-                    >
-                      <Image className="h-4 w-4" />
-                      End Frame
-                    </Button>
-                    {endingRefImage && (
+                ) : (
+                  // Dual reference for other models
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => removeReferenceImage('end')}
+                        onClick={() => handleFileSelect('start')}
+                        className="flex items-center gap-1 flex-1"
                       >
-                        <X className="h-4 w-4" />
+                        <Image className="h-4 w-4" />
+                        Start Frame
                       </Button>
-                    )}
+                      {beginningRefImage && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeReferenceImage('start')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleFileSelect('end')}
+                        className="flex items-center gap-1 flex-1"
+                      >
+                        <Image className="h-4 w-4" />
+                        End Frame
+                      </Button>
+                      {endingRefImage && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeReferenceImage('end')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )
               )}
             </div>
           </div>

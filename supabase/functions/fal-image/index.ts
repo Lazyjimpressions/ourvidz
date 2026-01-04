@@ -220,9 +220,24 @@ serve(async (req) => {
     // Default to NSFW for this platform - safety checker off by default
     const contentMode = body.metadata?.contentType || 'nsfw';
 
-    // Detect if this is an i2i request
-    const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url);
-    const generationMode = hasReferenceImage ? 'i2i' : 'txt2img';
+    // Detect if this is an i2i/i2v request
+    const hasReferenceImage = !!(body.input?.image_url || body.input?.image || body.metadata?.referenceImage || body.metadata?.reference_image_url || body.metadata?.start_reference_url);
+    const generationMode = hasReferenceImage ? (isVideo ? 'i2v' : 'i2i') : (isVideo ? 'txt2vid' : 'txt2img');
+    
+    // Check if this is WAN 2.1 i2v model (requires reference image)
+    const isWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+    
+    // Validate reference image for WAN 2.1 i2v
+    if (isVideo && isWanI2V && !hasReferenceImage) {
+      console.error('❌ WAN 2.1 i2v requires a reference image');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Reference image required',
+          details: 'WAN 2.1 i2v requires a reference image to generate video. Please provide an image_url in input or reference_image_url in metadata.'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
 
     console.log('🎯 Job parameters:', {
       jobType,
@@ -424,14 +439,129 @@ serve(async (req) => {
 
       // Video-specific params
       if (isVideo) {
-        if (body.input.num_frames !== undefined) {
-          modelInput.num_frames = body.input.num_frames;
-        }
-        if (body.input.resolution) {
-          modelInput.resolution = body.input.resolution;
-        }
-        if (body.input.fps !== undefined) {
-          modelInput.fps = body.input.fps;
+        // Check if this is WAN 2.1 i2v model (already detected above, but check again for safety)
+        const isWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+        
+        if (isWanI2V) {
+          // WAN 2.1 i2v uses specific parameter names
+          // Map duration to num_frames and frames_per_second
+          if (body.metadata?.duration) {
+            const targetDuration = body.metadata.duration;
+            // Default: 81 frames at 16 fps = 5 seconds
+            // Calculate optimal num_frames and fps to match target duration
+            const defaultFps = 16;
+            const defaultNumFrames = 81;
+            const calculatedNumFrames = Math.round(targetDuration * defaultFps);
+            // Clamp to valid range: 81-100
+            const numFrames = Math.max(81, Math.min(100, calculatedNumFrames));
+            modelInput.num_frames = numFrames;
+            modelInput.frames_per_second = defaultFps;
+            console.log(`🎬 WAN I2V: Mapped duration ${targetDuration}s to num_frames=${numFrames}, fps=${defaultFps}`);
+          } else {
+            // Use defaults from input_defaults
+            modelInput.num_frames = modelInput.num_frames || 81;
+            modelInput.frames_per_second = modelInput.frames_per_second || 16;
+          }
+          
+          // Map quality to resolution
+          if (body.quality === 'fast') {
+            modelInput.resolution = '480p';
+          } else if (body.quality === 'high') {
+            modelInput.resolution = '720p';
+          } else if (body.input?.resolution) {
+            modelInput.resolution = body.input.resolution;
+          } else {
+            modelInput.resolution = modelInput.resolution || '720p';
+          }
+          
+          // Set aspect_ratio from metadata or input
+          if (body.metadata?.aspectRatio) {
+            modelInput.aspect_ratio = body.metadata.aspectRatio === 'auto' ? 'auto' : body.metadata.aspectRatio;
+          } else if (body.input?.aspect_ratio) {
+            modelInput.aspect_ratio = body.input.aspect_ratio;
+          }
+          
+          // Guide scale (motion intensity can map to this)
+          if (body.input?.guide_scale !== undefined) {
+            modelInput.guide_scale = body.input.guide_scale;
+          } else if (body.metadata?.motion_intensity !== undefined) {
+            // Map motion intensity to guide_scale (0-1 -> 1-20, default 5)
+            const motionIntensity = body.metadata.motion_intensity;
+            const guideScale = 1 + (motionIntensity * 19); // Map 0-1 to 1-20
+            modelInput.guide_scale = Math.round(guideScale * 10) / 10; // Round to 1 decimal
+          }
+          
+          // WAN 2.1 i2v uses image_url (not image) for reference - REQUIRED
+          let wanImageUrl: string | undefined;
+          if (body.input?.image) {
+            wanImageUrl = body.input.image;
+            delete modelInput.image; // Remove 'image' if it exists
+          } else if (body.input?.image_url) {
+            wanImageUrl = body.input.image_url;
+          } else if (body.metadata?.reference_image_url || body.metadata?.start_reference_url) {
+            wanImageUrl = body.metadata.reference_image_url || body.metadata.start_reference_url;
+          }
+          
+          // CRITICAL: WAN 2.1 i2v REQUIRES image_url - validate before proceeding
+          if (!wanImageUrl || (typeof wanImageUrl === 'string' && wanImageUrl.trim() === '')) {
+            console.error('❌ WAN 2.1 i2v requires image_url but it is missing!');
+            return new Response(
+              JSON.stringify({ 
+                error: 'Reference image required for WAN 2.1 i2v',
+                details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+          
+          // Sign URL if it's a Supabase storage path
+          let finalWanImageUrl = wanImageUrl;
+          if (typeof wanImageUrl === 'string' && !wanImageUrl.startsWith('http') && !wanImageUrl.startsWith('data:')) {
+            const knownBuckets = ['user-library', 'workspace-temp', 'reference_images'];
+            const parts = wanImageUrl.split('/');
+            let bucket = '';
+            let path = '';
+            if (knownBuckets.includes(parts[0])) {
+              bucket = parts[0];
+              path = parts.slice(1).join('/');
+            } else {
+              bucket = 'user-library';
+              path = wanImageUrl;
+            }
+            const { data: signed, error: signError } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+            if (!signError && signed?.signedUrl) {
+              finalWanImageUrl = signed.signedUrl;
+              console.log(`🔏 Signed WAN i2v image URL for bucket "${bucket}"`);
+            } else {
+              console.warn(`⚠️ Failed to sign WAN i2v image URL for bucket "${bucket}":`, signError);
+            }
+          }
+          
+          // Validate final image URL format
+          if (!finalWanImageUrl || (!finalWanImageUrl.startsWith('http://') && !finalWanImageUrl.startsWith('https://') && !finalWanImageUrl.startsWith('data:'))) {
+            console.error('❌ Invalid WAN i2v image URL format:', finalWanImageUrl?.substring(0, 100));
+            return new Response(
+              JSON.stringify({ 
+                error: 'Invalid reference image URL for WAN 2.1 i2v',
+                details: 'Image URL must be a valid HTTP/HTTPS URL or data URI'
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            );
+          }
+          
+          modelInput.image_url = finalWanImageUrl;
+          console.log(`✅ WAN I2V: Set image_url: ${finalWanImageUrl.substring(0, 60)}...`);
+        } else {
+          // Other video models (non-WAN i2v)
+          if (body.input.num_frames !== undefined) {
+            modelInput.num_frames = body.input.num_frames;
+          }
+          if (body.input.resolution) {
+            modelInput.resolution = body.input.resolution;
+          }
+          if (body.input.fps !== undefined) {
+            modelInput.fps = body.input.fps;
+          }
         }
       }
     }
@@ -550,9 +680,23 @@ serve(async (req) => {
       }
     });
 
+    // FINAL VALIDATION: WAN 2.1 i2v MUST have image_url
+    const finalIsWanI2V = modelKey.toLowerCase().includes('wan-i2v') || modelKey.toLowerCase().includes('wan/v2.1') || body.metadata?.is_wan_i2v === true;
+    if (isVideo && finalIsWanI2V && !modelInput.image_url) {
+      console.error('❌ FINAL VALIDATION: WAN 2.1 i2v requires image_url but it is missing!');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Reference image required for WAN 2.1 i2v',
+          details: 'WAN 2.1 i2v is an image-to-video model and requires a reference image. Please provide image_url in input or reference_image_url/start_reference_url in metadata.'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+    
     console.log('🔧 fal.ai input configuration (FINAL):', {
       model_key: apiModel.model_key,
       is_seedream_edit: isSeedreamEdit,
+      is_wan_i2v: finalIsWanI2V,
       has_reference_image: hasReferenceImage,
       // Mask sensitive URLs in logs
       image_url: modelInput.image_url ? `${modelInput.image_url.substring(0, 60)}...` : (modelInput.image_urls ? 'present (array)' : 'missing'),
@@ -675,17 +819,17 @@ serve(async (req) => {
       }
 
       // Handle immediate response (fast models)
-      let resultUrl = null;
+      let resultUrl: string | null = null;
       let resultType = 'image';
 
       if (falResult.images && falResult.images.length > 0) {
-        resultUrl = falResult.images[0].url;
+        resultUrl = falResult.images[0].url as string;
         resultType = 'image';
       } else if (falResult.video?.url) {
-        resultUrl = falResult.video.url;
+        resultUrl = falResult.video.url as string;
         resultType = 'video';
       } else if (falResult.output?.url) {
-        resultUrl = falResult.output.url;
+        resultUrl = falResult.output.url as string;
         resultType = isVideo ? 'video' : 'image';
       }
 
@@ -802,6 +946,58 @@ serve(async (req) => {
         console.warn('⚠️ Failed to create workspace asset:', assetError);
       } else {
         console.log('✅ Workspace asset created with temp_storage_path');
+      }
+
+      // Handle character portrait destination - update character's image_url automatically
+      if (body.metadata?.destination === 'character_portrait' && body.metadata?.character_id) {
+        console.log('🖼️ Updating character portrait for:', body.metadata.character_id);
+
+        // Determine the full image path - only prepend bucket if it's a storage path (not external URL)
+        const fullImagePath = storagePath.startsWith('http') ? storagePath : `workspace-temp/${storagePath}`;
+
+        const characterUpdateData: Record<string, any> = {
+          image_url: fullImagePath,
+          reference_image_url: fullImagePath, // Use same image as reference for consistency
+          updated_at: new Date().toISOString()
+        };
+
+        // If we have a seed, lock it for character consistency
+        if (generationSeed) {
+          characterUpdateData.seed_locked = generationSeed;
+        }
+
+        const { error: charUpdateError } = await supabase
+          .from('characters')
+          .update(characterUpdateData)
+          .eq('id', body.metadata.character_id);
+
+        if (charUpdateError) {
+          console.warn('⚠️ Failed to update character image:', charUpdateError);
+        } else {
+          console.log('✅ Character portrait updated successfully');
+        }
+      }
+
+      // Handle character scene destination - update scene's image_url
+      if (body.metadata?.destination === 'character_scene' && body.metadata?.scene_id) {
+        console.log('🎬 Updating character scene for:', body.metadata.scene_id);
+
+        // Determine the full image path - only prepend bucket if it's a storage path (not external URL)
+        const sceneImagePath = storagePath.startsWith('http') ? storagePath : `workspace-temp/${storagePath}`;
+
+        const { error: sceneUpdateError } = await supabase
+          .from('character_scenes')
+          .update({
+            image_url: sceneImagePath,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', body.metadata.scene_id);
+
+        if (sceneUpdateError) {
+          console.warn('⚠️ Failed to update character scene:', sceneUpdateError);
+        } else {
+          console.log('✅ Character scene updated successfully');
+        }
       }
 
       return new Response(JSON.stringify({

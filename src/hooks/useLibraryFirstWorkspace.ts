@@ -666,8 +666,11 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
       }
 
       // Precompute signed reference URLs when needed
+      // For video mode, use beginningRefImage or referenceImage (for WAN 2.1 i2v single reference)
       const startRefUrl = mode === 'video'
-        ? (beginningRefImageUrl || (beginningRefImage ? await uploadAndSignReference(beginningRefImage) : undefined))
+        ? (beginningRefImageUrl || 
+           (beginningRefImage ? await uploadAndSignReference(beginningRefImage) : undefined) ||
+           (referenceImageUrl || (referenceImage ? await uploadAndSignReference(referenceImage) : undefined)))
         : undefined;
       const endRefUrl = mode === 'video'
         ? (endingRefImageUrl || (endingRefImage ? await uploadAndSignReference(endingRefImage) : undefined))
@@ -992,12 +995,50 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         // Build fal.ai-specific payload (supports both image and video)
         const isFalVideo = mode === 'video';
         
+        // Check if this is WAN 2.1 i2v model (need to fetch model_key from database)
+        let isWanI2V = false;
+        if (isFalVideo && selectedModel.id) {
+          try {
+            const { data: modelData } = await supabase
+              .from('api_models')
+              .select('model_key, capabilities')
+              .eq('id', selectedModel.id)
+              .single();
+            
+            if (modelData) {
+              const modelKey = (modelData.model_key || '').toLowerCase();
+              isWanI2V = modelKey.includes('wan-i2v') || modelKey.includes('wan/v2.1');
+              
+              // Also check capabilities for reference_mode
+              const capabilities = modelData.capabilities as any;
+              if (capabilities?.video?.reference_mode === 'single') {
+                isWanI2V = true;
+              }
+            }
+          } catch (err) {
+            console.warn('⚠️ Could not check model type, assuming non-WAN i2v');
+          }
+        }
+        
         // Validate reference image URL ONLY for I2I requests (not T2I)
         // Check if this is an I2I-capable model that requires a reference image
-        const hasReferenceImage = !!(referenceImage || referenceImageUrl || effRefUrl);
+        const hasReferenceImage = !!(referenceImage || referenceImageUrl || effRefUrl || startRefUrl);
         const isI2IRequest = hasReferenceImage && !isFalVideo;
+        const isI2VRequest = hasReferenceImage && isFalVideo;
         
-        // Only validate reference image for I2I requests to fal.ai edit models
+        // CRITICAL: WAN 2.1 i2v ALWAYS requires a reference image (it's image-to-video, not text-to-video)
+        if (isFalVideo && isWanI2V && !startRefUrl && !effRefUrl) {
+          console.error('❌ WAN 2.1 i2v requires a reference image');
+          toast({
+            title: "Reference Image Required",
+            description: "WAN 2.1 i2v is an image-to-video model and requires a reference image to generate video",
+            variant: "destructive",
+          });
+          setIsGenerating(false);
+          return;
+        }
+        
+        // Validate reference image for I2I requests
         if (isI2IRequest && !effRefUrl) {
           console.error('❌ I2I request to fal.ai but no reference image URL available');
           toast({
@@ -1009,34 +1050,53 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           return;
         }
         
+        // Build input object
+        const inputObj: any = {
+          image_size: dimensions,
+          num_inference_steps: steps,
+          guidance_scale: guidanceScale,
+          negative_prompt: negativePrompt,
+          seed: lockSeed && finalSeed ? finalSeed : undefined,
+        };
+        
+        // I2I parameters for reference images (image mode)
+        if (!isFalVideo && effRefUrl) {
+          inputObj.image_url = effRefUrl;
+          inputObj.strength = computedReferenceStrength;
+        }
+        
+        // Video-specific parameters
+        if (isFalVideo) {
+          if (isWanI2V) {
+            // WAN 2.1 i2v uses image_url (not image) and specific parameters
+            const refImageUrl = startRefUrl || effRefUrl;
+            if (refImageUrl) {
+              inputObj.image_url = refImageUrl; // WAN 2.1 i2v uses image_url
+            }
+            
+            // Map motion intensity to guide_scale (0-1 -> 1-20, default 5)
+            if (motionIntensity !== undefined) {
+              const guideScale = 1 + (motionIntensity * 19); // Map 0-1 to 1-20
+              inputObj.guide_scale = Math.round(guideScale * 10) / 10; // Round to 1 decimal
+            }
+            
+            // Don't set duration here - edge function will calculate num_frames and fps
+            // Don't set num_inference_steps - WAN 2.1 i2v uses its own defaults
+          } else {
+            // Other video models (non-WAN i2v)
+            inputObj.image = startRefUrl || effRefUrl || undefined;
+            inputObj.duration = videoDuration || 5;
+            inputObj.num_inference_steps = Math.round(25 + (motionIntensity || 0.5) * 25);
+          }
+        }
+        
         requestPayload = {
           prompt: finalPrompt,
           apiModelId: selectedModel.id,
           job_type: isFalVideo ? 'fal_video' : 'fal_image',
           modality: isFalVideo ? 'video' : 'image',
           quality: quality,
-          input: {
-            image_size: dimensions,
-            num_inference_steps: steps,
-            guidance_scale: guidanceScale,
-            negative_prompt: negativePrompt,
-            seed: lockSeed && finalSeed ? finalSeed : undefined,
-            // I2I parameters for reference images (image mode)
-            // CRITICAL: For I2I requests, image_url MUST be set (not undefined)
-            // The edge function checks for body.input.image_url OR body.metadata.reference_image_url
-            ...(!isFalVideo && effRefUrl ? { 
-              image_url: effRefUrl,
-              strength: computedReferenceStrength 
-            } : {}),
-            // Video-specific parameters
-            ...(isFalVideo && {
-              // For WAN I2V: start image is the reference image
-              image: startRefUrl || effRefUrl || undefined,
-              duration: videoDuration || 5,
-              // Motion intensity maps to num_inference_steps for video
-              num_inference_steps: Math.round(25 + (motionIntensity || 0.5) * 25)
-            })
-          },
+          input: inputObj,
           metadata: {
             ...generationRequest.metadata,
             reference_image_url: effRefUrl,
@@ -1046,7 +1106,8 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
             aspectRatio: finalAspectRatio,
             modality: isFalVideo ? 'video' : 'image',
             duration: isFalVideo ? videoDuration : undefined,
-            motion_intensity: isFalVideo ? motionIntensity : undefined
+            motion_intensity: isFalVideo ? motionIntensity : undefined,
+            is_wan_i2v: isWanI2V // Flag for edge function
           }
         };
       } else {

@@ -36,18 +36,22 @@ interface Character {
   voice_examples?: string[];
   forbidden_phrases?: string[];
   scene_behavior_rules?: any;
+  // User ownership
+  user_id?: string;
 }
 
 interface MobileCharacterCardProps {
   character: Character;
   onSelect: () => void;
   onPreview: () => void;
+  onDelete?: (characterId: string) => Promise<void>;
 }
 
 export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
   character,
   onSelect,
-  onPreview
+  onPreview,
+  onDelete
 }) => {
   const { isMobile, isTouchDevice } = useMobileDetection();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -408,6 +412,8 @@ export const MobileCharacterCard: React.FC<MobileCharacterCardProps> = ({
         onEditCharacter={undefined} // TODO: Add edit functionality if needed
         onFavorite={undefined} // TODO: Add favorite functionality if needed
         isFavorite={false}
+        onDelete={onDelete ? () => onDelete(character.id) : undefined}
+        canDelete={!!onDelete && !!user && character.user_id === user.id}
       />
     </>
   );

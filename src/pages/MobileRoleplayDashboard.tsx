@@ -52,8 +52,16 @@ const MobileRoleplayDashboard = () => {
 
   // Load both public characters AND user's own characters
   const { characters: publicCharacters, isLoading: publicLoading, error: publicError, loadPublicCharacters } = usePublicCharacters();
-  const { characters: userCharacters, isLoading: userLoading, loadUserCharacters } = useUserCharacters();
+  const { characters: userCharacters, isLoading: userLoading, loadUserCharacters, deleteUserCharacter } = useUserCharacters();
   const { sessions: ongoingSessions, isLoading: sessionsLoading } = useCharacterSessions();
+
+  // Handle character deletion
+  const handleDeleteCharacter = async (characterId: string) => {
+    await deleteUserCharacter(characterId);
+    // Refresh both lists after deletion
+    loadPublicCharacters();
+    loadUserCharacters();
+  };
 
   // Combine user characters (first) with public characters (deduplicated)
   const allCharacters = useMemo(() => {
@@ -90,7 +98,9 @@ const MobileRoleplayDashboard = () => {
     // New voice-related fields
     voice_examples: char.voice_examples || [],
     forbidden_phrases: char.forbidden_phrases || [],
-    scene_behavior_rules: char.scene_behavior_rules || {}
+    scene_behavior_rules: char.scene_behavior_rules || {},
+    // User ownership for delete permission
+    user_id: char.user_id
   }));
 
   const handleCharacterSelect = (characterId: string) => {
@@ -224,10 +234,12 @@ const MobileRoleplayDashboard = () => {
                       persona: character.persona,
                       gender: character.gender,
                       reference_image_url: character.reference_image_url,
-                      seed_locked: (character as any).seed_locked
+                      seed_locked: (character as any).seed_locked,
+                      user_id: character.user_id
                     }}
                     onSelect={() => navigate(`/roleplay/chat/${session.character_id}`)}
                     onPreview={() => console.log('Preview:', session.character_id)}
+                    onDelete={handleDeleteCharacter}
                   />
                 );
               })}
@@ -272,6 +284,7 @@ const MobileRoleplayDashboard = () => {
           characters={filteredCharacters}
           onCharacterSelect={handleCharacterSelect}
           onCharacterPreview={handleCharacterPreview}
+          onCharacterDelete={handleDeleteCharacter}
         />
 
         {/* Add Character Modal */}
