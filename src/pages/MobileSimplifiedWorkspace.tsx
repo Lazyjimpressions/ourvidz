@@ -117,6 +117,18 @@ const MobileSimplifiedWorkspace = () => {
     }
   }, [setReferenceImage, setBeginningRefImage, setEndingRefImage, setReferenceMetadata, setExactCopyMode]);
 
+  // DEBUG: Track reference image state changes
+  useEffect(() => {
+    console.log('🔄 MOBILE WORKSPACE: Reference image state changed:', {
+      hasReferenceImage: !!referenceImage,
+      referenceImageName: referenceImage?.name,
+      referenceImageSize: referenceImage?.size,
+      referenceImageType: referenceImage?.type,
+      hasReferenceImageUrl: !!referenceImageUrl,
+      referenceImageUrlPreview: referenceImageUrl ? `${referenceImageUrl.substring(0, 50)}...` : 'none'
+    });
+  }, [referenceImage, referenceImageUrl]);
+
   const handleGenerate = async (inputPrompt: string, options?: any) => {
     console.log('📸 MOBILE WORKSPACE: Starting generation with prompt:', inputPrompt);
     console.log('📸 MOBILE WORKSPACE: Generation options:', options);
@@ -124,17 +136,47 @@ const MobileSimplifiedWorkspace = () => {
     console.log('📸 MOBILE WORKSPACE: Quality:', quality);
     console.log('🖼️ MOBILE WORKSPACE: Reference image state:', {
       hasReferenceImage: !!referenceImage,
+      hasReferenceImageUrl: !!referenceImageUrl,
       referenceImageName: referenceImage?.name,
       referenceImageSize: referenceImage?.size,
       referenceImageType: referenceImage?.type,
       referenceImageIsFile: referenceImage instanceof File,
-      referenceImageIsValid: referenceImage && referenceImage.size > 0 && referenceImage.type.startsWith('image/')
+      referenceImageIsValid: referenceImage && referenceImage.size > 0 && referenceImage.type.startsWith('image/'),
+      referenceImageUrlPreview: referenceImageUrl ? `${referenceImageUrl.substring(0, 50)}...` : 'none'
+    });
+    
+    // CRITICAL: Check if this is an I2I-capable model
+    // Seedream edit models require a reference image
+    // Check both model ID and display name for Seedream edit models
+    const modelIdLower = (selectedModel?.id || '').toLowerCase();
+    const modelDisplayNameLower = (selectedModel?.display_name || '').toLowerCase();
+    const isI2IModel = selectedModel?.type === 'fal' && 
+                       mode === 'image' && 
+                       (modelIdLower.includes('seedream') || 
+                        modelDisplayNameLower.includes('seedream') ||
+                        modelDisplayNameLower.includes('edit'));
+    
+    console.log('🔍 MOBILE WORKSPACE: I2I model detection:', {
+      selectedModelId: selectedModel?.id,
+      selectedModelDisplayName: selectedModel?.display_name,
+      selectedModelType: selectedModel?.type,
+      mode,
+      isI2IModel,
+      hasReferenceImage: !!referenceImage,
+      hasReferenceImageUrl: !!referenceImageUrl,
+      referenceImageName: referenceImage?.name
     });
     
     // Validate reference image if I2I model is selected
-    if (selectedModel?.type === 'fal' && mode === 'image' && !referenceImage) {
-      console.error('❌ MOBILE WORKSPACE: I2I model selected but no reference image');
-      toast.error('Please select a reference image for I2I generation');
+    // Check BOTH file and URL - file will be uploaded, URL is already signed
+    if (isI2IModel && !referenceImage && !referenceImageUrl) {
+      console.error('❌ MOBILE WORKSPACE: I2I model selected but no reference image file or URL');
+      console.error('❌ MOBILE WORKSPACE: Model details:', {
+        id: selectedModel?.id,
+        displayName: selectedModel?.display_name,
+        type: selectedModel?.type
+      });
+      toast.error('Please select a reference image for I2I generation. The image preview should appear after selection.');
       return;
     }
     

@@ -271,12 +271,23 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
           
           if (!error && modelData) {
             const capabilities = modelData.capabilities as any;
-            // Check if model supports I2I
-            modelSupportsI2I = capabilities?.supports_i2i === true || 
-                              capabilities?.reference_images === true ||
-                              // Seedream edit models always support I2I
-                              (modelData.model_key?.toLowerCase().includes('seedream') && 
-                               modelData.model_key?.toLowerCase().includes('edit'));
+              // Check if model supports I2I
+              modelSupportsI2I = capabilities?.supports_i2i === true || 
+                                    capabilities?.reference_images === true ||
+                                    // Seedream edit models always support I2I
+                                    (modelData.model_key?.toLowerCase().includes('seedream') && 
+                                     modelData.model_key?.toLowerCase().includes('edit')) ||
+                                    // Also check display name for Seedream edit
+                                    (newModel.display_name?.toLowerCase().includes('seedream') && 
+                                     newModel.display_name?.toLowerCase().includes('edit'));
+              
+              console.log('🔍 Model I2I support check:', {
+                modelId: newModel.id,
+                modelKey: modelData.model_key,
+                displayName: newModel.display_name,
+                supportsI2I: modelSupportsI2I,
+                capabilities: capabilities
+              });
           }
         }
         
@@ -1075,6 +1086,19 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         const isI2IRequest = hasReferenceImage && !isFalVideo;
         const isI2VRequest = hasReferenceImage && isFalVideo;
         
+        // CRITICAL DEBUG: Log reference image state before validation
+        console.log('🔍 MOBILE DEBUG - Reference image validation check:', {
+          hasReferenceImageFile: !!referenceImage,
+          hasReferenceImageUrl: !!referenceImageUrl,
+          hasEffRefUrl: !!effRefUrl,
+          hasStartRefUrl: !!startRefUrl,
+          isI2IRequest,
+          isFalVideo,
+          selectedModelId: selectedModel.id,
+          selectedModelType: selectedModel.type,
+          selectedModelDisplayName: selectedModel.display_name
+        });
+        
         // CRITICAL: WAN 2.1 i2v ALWAYS requires a reference image (it's image-to-video, not text-to-video)
         if (isFalVideo && isWanI2V && !startRefUrl && !effRefUrl) {
           console.error('❌ WAN 2.1 i2v requires a reference image');
@@ -1088,13 +1112,25 @@ export const useLibraryFirstWorkspace = (config: LibraryFirstWorkspaceConfig = {
         }
         
         // Validate reference image for I2I requests
+        // IMPORTANT: effRefUrl is computed AFTER upload, so if we have referenceImage file, 
+        // it should be uploaded. But if upload fails, we need to check the file too.
         if (isI2IRequest && !effRefUrl) {
-          console.error('❌ I2I request to fal.ai but no reference image URL available');
-          toast({
-            title: "Reference Image Required",
-            description: "Please select or upload a reference image for I2I generation",
-            variant: "destructive",
-          });
+          // If we have a file but no URL, the upload might have failed
+          if (referenceImage) {
+            console.error('❌ I2I request: Reference image file exists but upload failed or URL not available');
+            toast({
+              title: "Reference Image Upload Failed",
+              description: "The reference image file was selected but couldn't be uploaded. Please try selecting it again.",
+              variant: "destructive",
+            });
+          } else {
+            console.error('❌ I2I request to fal.ai but no reference image URL available');
+            toast({
+              title: "Reference Image Required",
+              description: "Please select or upload a reference image for I2I generation",
+              variant: "destructive",
+            });
+          }
           setIsGenerating(false);
           return;
         }
